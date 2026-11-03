@@ -126,21 +126,21 @@ it('fails closed for funding when the savings runtime is off', async () => {
   expect(response.status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
 });
-it('keeps cancel PIN checks available through the recovery runtime when flags are off', async () => {
-  mocks.runtime.mockReturnValue(null);
-  expect((await call(cancel)).status).toBe(200);
-  expect(mocks.verify).toHaveBeenCalledWith(
-    expect.objectContaining({
-      binding: expect.objectContaining({
-        purpose: 'goal_cancel',
-        amountKobo: 1,
-      }),
-    })
-  );
+it.each([
+  'cancel',
+  'complete',
+] as const)('refuses %s before any PIN check until proofs bind to a server-issued operation', async (action) => {
+  const response = await call({ ...cancel, action });
+  expect(response.status).toBe(400);
+  expect((await response.json()).code).toBe('PIN_ACTION_NOT_AVAILABLE');
+  expect(mocks.verify).not.toHaveBeenCalled();
+  expect(mocks.goal).not.toHaveBeenCalled();
 });
-it('refuses complete when the runtime is off even if recovery is on', async () => {
+it('refuses cancel with the savings runtime off without a PIN check', async () => {
   mocks.runtime.mockReturnValue(null);
-  expect((await call({ ...cancel, action: 'complete' })).status).toBe(503);
+  const response = await call(cancel);
+  expect(response.status).toBe(400);
+  expect(mocks.verify).not.toHaveBeenCalled();
 });
 it('refuses a request for a different merchant than the configured one', async () => {
   mocks.runtime.mockReturnValue({
@@ -213,29 +213,5 @@ it('issues no funding proof for a goal that is not an active goal of this custom
 it('answers unavailable when the goal lookup fails', async () => {
   mocks.goal.mockRejectedValue(new Error('db'));
   expect((await call(fund)).status).toBe(503);
-  expect(mocks.verify).not.toHaveBeenCalled();
-});
-it('keeps cancel available with the feature off but only for an own active goal', async () => {
-  mocks.features.mockResolvedValue({ savingsEnabled: false });
-  expect((await call(cancel)).status).toBe(200);
-  expect(mocks.features).not.toHaveBeenCalled();
-  expect(mocks.goal).toHaveBeenCalledWith(
-    expect.objectContaining({ goalId, merchantId, customerId: 'c' })
-  );
-});
-it.each([
-  cancel,
-  { ...cancel, action: 'complete' },
-])('issues no $action proof for a goal that is not an active goal of this customer', async (body) => {
-  mocks.goal.mockResolvedValue(false);
-  const response = await call(body);
-  expect(response.status).toBe(404);
-  expect((await response.json()).code).toBe('GOAL_NOT_FOUND');
-  expect(mocks.verify).not.toHaveBeenCalled();
-});
-it('gates complete proofs on the customer savings feature', async () => {
-  mocks.features.mockResolvedValue({ savingsEnabled: false });
-  const response = await call({ ...cancel, action: 'complete' });
-  expect(response.status).toBe(403);
   expect(mocks.verify).not.toHaveBeenCalled();
 });

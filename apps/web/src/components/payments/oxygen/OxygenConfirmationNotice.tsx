@@ -42,7 +42,7 @@ export function OxygenConfirmationNotice({
           {identityCheck
             ? 'Your code was accepted, but we couldn’t confirm the result of Oxygen’s NIN check. Your details are saved. Please don’t submit them again.'
             : eligibilityCheck
-              ? 'We couldn’t confirm the result with Oxygen. Your application is saved. Please don’t submit this check again. Contact support if you need help.'
+              ? 'We couldn’t confirm the result with Oxygen. Your application is saved. Checking for an update only reads your saved status; it does not repeat the check. Please contact the store for help.'
               : 'We’re waiting for confirmation from Oxygen. You don’t need to submit this step again.'}
         </p>
       </div>

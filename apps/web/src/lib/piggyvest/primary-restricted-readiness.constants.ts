@@ -18,6 +18,8 @@ export const primaryRestrictedReadinessRequirements = {
     'PIGGYVEST_PRIMARY_DB_CA',
     'PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED',
     'PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD',
+    'PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS',
+    'PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID',
   ],
   capabilities: [
     {
@@ -41,6 +43,7 @@ export const primaryRestrictedReadinessRequirements = {
         'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text,text)',
         'piggyvest_primary.record_onboarding_ownership_hold(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding_review(jsonb)',
+        'piggyvest_primary.read_rollout_cohort_membership(jsonb)',
       ],
     },
     {

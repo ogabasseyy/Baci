@@ -12,10 +12,15 @@ describe('sitemap-data', () => {
 
   it('lists only inventory-qualified curated brand authority hubs', async () => {
     mockGetBrandAuthorityCategory.mockImplementation(
-      async (_merchantId: string, categorySlug: string) =>
-        categorySlug === 'smartphones'
-          ? { id: 'category-1', name: 'Smartphones' }
-          : null
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        if (categorySlug === 'laptops') {
+          return { id: 'category-2', name: 'Laptops' };
+        }
+        return null;
+      }
     );
     mockGetCachedBrandAuthorityInventory.mockImplementation(
       async (
@@ -52,16 +57,27 @@ describe('sitemap-data', () => {
     ]);
     expect(entries[0]?.lastModified).toEqual(new Date('2026-07-14T00:00:00Z'));
     expect(entries[1]?.lastModified).toBeUndefined();
-    // Pin the curated authority set explicitly for smartphones so taxonomy edits cannot silently expand sitemap fan-out.
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(9);
+    // Pin the curated authority set explicitly (9 smartphone brands +
+    // 4 laptop brands including Apple) so taxonomy edits cannot silently expand sitemap fan-out.
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(13);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledWith(
+      'merchant-1',
+      'laptops',
+      expect.objectContaining({ brandKey: 'apple' })
+    );
   });
 
   it('keeps successful authority hubs when a single brand query fails', async () => {
     mockGetBrandAuthorityCategory.mockImplementation(
-      async (_merchantId: string, categorySlug: string) =>
-        categorySlug === 'smartphones'
-          ? { id: 'category-1', name: 'Smartphones' }
-          : null
+      async (_merchantId: string, categorySlug: string) => {
+        if (categorySlug === 'smartphones') {
+          return { id: 'category-1', name: 'Smartphones' };
+        }
+        if (categorySlug === 'laptops') {
+          return { id: 'category-2', name: 'Laptops' };
+        }
+        return null;
+      }
     );
     mockGetCachedBrandAuthorityInventory.mockImplementation(
       async (

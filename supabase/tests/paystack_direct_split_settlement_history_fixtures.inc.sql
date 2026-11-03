@@ -132,5 +132,12 @@ VALUES (
   'paystack-direct-split-fixture'
 );
 
+-- GIGL orders need the carrier enabled for the merchant
+-- (private.enforce_merchant_shipping_provider_enabled).
+INSERT INTO public.merchant_feature_settings (merchant_id, shipping_providers)
+VALUES (pg_temp.merchant(), '["gigl"]'::jsonb)
+ON CONFLICT (merchant_id) DO UPDATE
+  SET shipping_providers = EXCLUDED.shipping_providers;
+
 INSERT INTO public.merchant_wallets (merchant_id, available_balance)
 VALUES (pg_temp.merchant(), 0);

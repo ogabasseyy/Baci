@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const reference = z.string().trim().min(1).max(256);
 const timestamp = z.iso.datetime({ offset: true, local: true });
-// Match supported NGN precision and safe integer kobo without rounding.
+// Preserve the existing bounded decimal input contract; this does not establish provider units.
 const decimal = /^(\d+)(?:\.(\d{1,2}))?$/;
 function supportedMoney(value: string | number): boolean {
   const match = decimal.exec(String(value));
@@ -21,7 +21,7 @@ const activatedLoan = z.object({
   loan_id: z.number().int().positive().safe(),
   loan_identifier: reference,
   loan_amount: numericMoney,
-  // Equity only here; approval's first_repayment includes charges.
+  // Preserve the provider field as supplied; its financial meaning needs confirmation.
   first_repayment: numericMoney,
   loan_tenure: z.number().int().positive(),
   activated_at: timestamp,

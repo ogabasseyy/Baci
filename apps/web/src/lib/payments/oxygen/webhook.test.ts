@@ -32,12 +32,12 @@ describe('Oxygen webhook contract', () => {
   )('recognises the official synthetic %s', (_name, sample) => {
     expect(parseOxygenWebhook(sample)).not.toBeNull();
   });
-  it('keeps principal and equity in the audit separate from the payout', () => {
+  it('keeps provider loan and repayment amounts separate from the payout', () => {
     const sample = samples['Vendor settlement callback'];
     expect(parseOxygenWebhook({ ...sample, amount: 400000 })).toMatchObject({
-      amountMinor: 40000000,
+      providerAmount: 400000,
       activationAudit: {
-        loans: [{ principalMinor: 7500000, equityMinor: 2500000 }],
+        loans: [{ providerLoanAmount: 75000, providerFirstRepayment: 25000 }],
       },
     });
   });
@@ -45,7 +45,7 @@ describe('Oxygen webhook contract', () => {
     expect(parseOxygenWebhook(transaction)).toMatchObject({
       kind: 'transaction',
       bookedLoanReference: transaction.loan_request_reference,
-      amountSentMinor: 14513500,
+      providerAmountSent: '145135.00',
       action: 'reconcile_payment_setup',
       deduplicationKey: 'transaction:txn-example-001',
     });
@@ -53,12 +53,28 @@ describe('Oxygen webhook contract', () => {
   it('uses the settlement payout rather than the unrelated partner-wide activation audit', () => {
     expect(parseOxygenWebhook(settlement)).toMatchObject({
       kind: 'settlement',
-      amountMinor: 40000000,
+      providerAmount: 400000,
       payoutStatus: 'submitted',
       action: 'record_submitted_settlement',
       deduplicationKey: 'settlement:47a7eae5-c128-4bd9-9bfb-d47cc2ec7996',
       occurredAt: '2026-10-20T11:00:00',
     });
+  });
+  it('preserves provider amounts without asserting a currency or unit', () => {
+    const transactionEvent = parseOxygenWebhook(transaction);
+    expect(transactionEvent).toMatchObject({
+      providerAmountDeducted: '145135.00',
+      providerAmountSent: '145135.00',
+    });
+    expect(transactionEvent).not.toHaveProperty('amountSentMinor');
+    const settlementEvent = parseOxygenWebhook(
+      samples['Vendor settlement callback']
+    );
+    expect(settlementEvent).not.toHaveProperty('amountMinor');
+    expect(
+      settlementEvent?.kind === 'settlement' &&
+        settlementEvent.activationAudit.loans[0]
+    ).not.toHaveProperty('principalMinor');
   });
   it('accepts vendor settlement separately from direct partner settlement', () => {
     const {

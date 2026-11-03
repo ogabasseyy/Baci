@@ -84,7 +84,7 @@ describe('Oxygen callback receiver', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ received: true });
     expect(accepted).toMatchObject([
-      { kind: 'transaction', amountSentMinor: 14513500 },
+      { kind: 'transaction', providerAmountSent: '145135.00' },
     ]);
   });
   it.each([

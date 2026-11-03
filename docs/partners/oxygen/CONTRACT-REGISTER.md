@@ -39,6 +39,9 @@ schemas. Nothing in this register authorises provider calls, deployment, or prod
 | CR-14 | Plan (5 Oct 2026) | Partner vs merchant account model | How merchant references are provisioned/bound to payout beneficiaries; multi-merchant hosting under one Baci partner | Phase 2 schema | Verified account model before persistence finalisation |
 | CR-15 | None | Test fixtures + non-functional contract | Test identities/OTPs, fixtures per outcome, rate limits/backoff, support ownership, privacy/consent/retention responsibilities | Sandbox calls for fixtures/rate limits; KYC collection for consent/retention | Provider-supplied sandbox pack |
 
+
+Callback evidence note (3 Nov 2026): Newly accepted transaction and settlement callbacks retain validated provider amount values without converting or assigning a currency or unit. Historical callback inbox rows with `*Minor` fields contain the earlier unconfirmed conversion; preserve those rows as historical evidence and do not use those fields for financial decisions or infer their original provider units. JSON numeric values retain their parsed numeric value, not their original textual formatting. CR-06 remains open.
+
 ## Change log
 
 - 5 Oct 2026: initial register from live-doc re-read; CR-01…CR-15 open; no provider

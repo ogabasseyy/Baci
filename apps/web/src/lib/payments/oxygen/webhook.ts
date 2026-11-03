@@ -2,9 +2,8 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 
 import { oxygenWebhookSchema } from '@/schemas/oxygen-webhook';
-import { toOxygenMinorUnits } from './money';
 
-/** Server-side contract normalisation only; it never changes a financial state. */
+/** Preserve validated provider values without inferring units or changing financial state. */
 export function parseOxygenWebhook(input: unknown) {
   const parsed = oxygenWebhookSchema.safeParse(input);
   if (!parsed.success) return null;
@@ -38,8 +37,8 @@ export function parseOxygenWebhook(input: unknown) {
       kind: 'transaction' as const,
       bookedLoanReference: event.loan_request_reference,
       transactionReference: event.transaction_reference,
-      amountDeductedMinor: toOxygenMinorUnits(event.amount_deducted, 'NGN'),
-      amountSentMinor: toOxygenMinorUnits(event.amount_sent, 'NGN'),
+      providerAmountDeducted: event.amount_deducted,
+      providerAmountSent: event.amount_sent,
       deduplicationKey: `transaction:${event.transaction_reference}`,
       action: 'reconcile_payment_setup' as const,
     };
@@ -59,7 +58,7 @@ export function parseOxygenWebhook(input: unknown) {
     ...recipient,
     eventId: event.event_id,
     partnerReference: event.partner_reference,
-    amountMinor: toOxygenMinorUnits(event.amount, 'NGN'),
+    providerAmount: event.amount,
     payoutStatus: 'submitted' as const,
     occurredAt: event.occurred_at, // Preserve unspecified timezone; never infer UTC.
     deduplicationKey: `settlement:${event.event_id}`,
@@ -73,8 +72,8 @@ export function parseOxygenWebhook(input: unknown) {
         bookedLoanReference: loan.loan_reference,
         applicationReference: loan.loan_request_reference,
         loanIdentifier: loan.loan_identifier,
-        principalMinor: toOxygenMinorUnits(loan.loan_amount, 'NGN'),
-        equityMinor: toOxygenMinorUnits(loan.first_repayment, 'NGN'),
+        providerLoanAmount: loan.loan_amount,
+        providerFirstRepayment: loan.first_repayment,
         tenure: loan.loan_tenure,
         activatedAt: loan.activated_at,
       })),

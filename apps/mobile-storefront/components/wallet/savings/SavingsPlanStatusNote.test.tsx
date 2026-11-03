@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
 
@@ -65,5 +65,56 @@ describe('SavingsPlanStatusNote', () => {
     expect(mockHook).toHaveBeenCalledWith(
       expect.objectContaining({ loadExisting: false })
     );
+  });
+
+  it.each([
+    'idle',
+    'loading',
+  ])('renders nothing while %s', (planFundingPhase) => {
+    mockHook.mockReturnValue({
+      planFundingPhase,
+      planFundingRequiresBvn: false,
+    });
+    expect(renderNote().toJSON()).toBeNull();
+  });
+
+  it('renders nothing while the capability verdict is missing', () => {
+    mockHook.mockReturnValue({
+      planFundingPhase: 'pending',
+      planFundingRequiresBvn: true,
+    });
+    expect(renderNote().toJSON()).toBeNull();
+  });
+
+  it('says setup is unavailable when the server cannot set the goal up', () => {
+    mockHook.mockReturnValue({
+      planFundingPhase: 'unavailable',
+      planFundingRequiresBvn: false,
+    });
+    renderNote();
+    expect(
+      screen.getByText('Setup is not available for this goal right now.')
+    ).toBeTruthy();
+    expect(screen.queryByText(/still being set up/)).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('offers a status-only retry when the lookup failed', () => {
+    const fetchExistingPlanFunding = jest.fn();
+    const fetchPlanFunding = jest.fn();
+    mockHook.mockReturnValue({
+      fetchExistingPlanFunding,
+      fetchPlanFunding,
+      planFundingPhase: 'error',
+      planFundingRequiresBvn: false,
+    });
+    renderNote();
+    expect(
+      screen.getByText("We couldn't check this goal's status.")
+    ).toBeTruthy();
+    expect(screen.queryByText(/still being set up/)).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
+    expect(fetchPlanFunding).not.toHaveBeenCalled();
   });
 });

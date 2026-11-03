@@ -1,4 +1,4 @@
-import { StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
@@ -29,14 +29,39 @@ export function SavingsPlanStatusNote({
     loadExisting: primary,
   });
   if (!primary || funding.planFundingRequiresBvn) return null;
-  if (funding.planFundingPhase === 'ready') return null;
+  const phase = funding.planFundingPhase;
+  if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
+  if (phase === 'error') {
+    return (
+      <View style={styles.section}>
+        <Text style={[styles.body, { color: colors.textSecondary }]}>
+          We couldn't check this goal's status.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+          onPress={() => void funding.fetchExistingPlanFunding()}
+          style={styles.retry}
+        >
+          <Text style={[styles.action, { color: colors.primary }]}>
+            Try again
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <Text style={[styles.body, { color: colors.textSecondary }]}>
-      This goal is still being set up. Please check back shortly.
+      {phase === 'unavailable'
+        ? 'Setup is not available for this goal right now.'
+        : 'This goal is still being set up. Please check back shortly.'}
     </Text>
   );
 }
 
 const styles = StyleSheet.create({
+  section: { gap: 6 },
   body: { fontSize: 14, lineHeight: 21 },
+  action: { fontSize: 14, fontWeight: '500' },
+  retry: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
 });

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import {
@@ -23,6 +23,13 @@ jest.mock('@/lib/savings-card-contribution-snapshot', () => ({
   clearTerminalSavingsCardContributionSnapshot: jest.fn(),
   readSavingsCardContributionSnapshot: jest.fn().mockResolvedValue(null),
   saveSavingsCardContributionSnapshot: jest.fn(),
+}));
+let mockPrimary = false;
+jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
+  isPiggyvestPrimaryMerchant: () => mockPrimary,
+}));
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: () => mockPrimary,
 }));
 jest.mock('@/lib/config', () => ({
   CONFIG: { MERCHANT_ID: 'merchant-1', MERCHANT_SLUG: 'savings-synthetic' },
@@ -73,8 +80,10 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = 'user-1';
   mockMerchantId = 'merchant-1';
+  mockPrimary = false;
   jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
 });
+const pending: SavingsPlanFundingResponse = { status: 'pending', accounts: [] };
 
 it('never fetches or shows the goal bank account, only wallet guidance', async () => {
   render(panel());
@@ -105,4 +114,75 @@ it('hides the guidance immediately when the user signs out', async () => {
   expect(
     screen.getByText('Sign in to add to this savings plan.')
   ).toBeOnTheScreen();
+});
+
+describe('sibling notes', () => {
+  beforeEach(() => {
+    mockPrimary = true;
+  });
+  const STATUS_COPY =
+    'This goal is still being set up. Please check back shortly.';
+
+  it('resets both notes on a goal switch without a duplicate-key warning', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(pending);
+    const onRefreshWallet = jest
+      .fn()
+      .mockRejectedValue(new Error('Wallet down'));
+    const element = (currentGoal: WalletActiveSavingsGoal) => (
+      <WalletSavingsPlanFunding
+        addAmount=""
+        colors={Colors.dark}
+        goal={currentGoal}
+        onAddAmountChange={jest.fn()}
+        onRefreshWallet={onRefreshWallet}
+      />
+    );
+    const view = render(element(goal));
+    await act(async () => {});
+    expect(screen.getByText(STATUS_COPY)).toBeOnTheScreen();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Refresh savings progress' })
+    );
+    await act(async () => {});
+    expect(screen.getByText('Wallet down')).toBeOnTheScreen();
+
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
+    view.rerender(element({ ...goal, id: 'goal-2' }));
+    // The wallet note remounted (its error is gone) and the status note
+    // remounted and looked up the new goal (now ready, so it is hidden).
+    expect(screen.queryByText('Wallet down')).toBeNull();
+    await act(async () => {});
+    expect(fetchExistingSavingsPlanFunding).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalId: 'goal-2' })
+    );
+    expect(screen.queryByText(STATUS_COPY)).toBeNull();
+    const keyWarnings = errorSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('same key')
+    );
+    expect(keyWarnings).toHaveLength(0);
+    errorSpy.mockRestore();
+  });
+
+  it('re-reads the goal status after a successful progress refresh', async () => {
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(pending);
+    render(
+      <WalletSavingsPlanFunding
+        addAmount=""
+        colors={Colors.dark}
+        goal={goal}
+        onAddAmountChange={jest.fn()}
+        onRefreshWallet={jest.fn().mockResolvedValue({ isError: false })}
+      />
+    );
+    await act(async () => {});
+    expect(screen.getByText(STATUS_COPY)).toBeOnTheScreen();
+    jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Refresh savings progress' })
+    );
+    await act(async () => {});
+    expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(STATUS_COPY)).toBeNull();
+  });
 });

@@ -23,7 +23,10 @@ const posts = (h: ReturnType<typeof makeHarness>) =>
     (c) => c.method === 'POST' && c.pathname === '/api/v1/transfer/wallet'
   );
 
-async function run(options: Parameters<typeof makeHarness>[0] = {}) {
+async function run(
+  options: Parameters<typeof makeHarness>[0] = {},
+  earlierSettled = true
+) {
   const h = makeHarness(options);
   dispose = h.dispose;
   await setupScenario(h.ctx);
@@ -33,7 +36,8 @@ async function run(options: Parameters<typeof makeHarness>[0] = {}) {
     h.ctx,
     b,
     h.state.mainWalletId as string,
-    h.state.goalWalletId as string
+    h.state.goalWalletId as string,
+    earlierSettled
   );
   return { h, b, result: b.build(h.ctx), before };
 }
@@ -255,5 +259,10 @@ describe('S8 timeout booking with a lagging balance', () => {
     });
     expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('unknown');
     expect(result.values.timeout_main_delta_kobo).toBeNull();
+  });
+
+  it('answers unknown while an earlier transfer is still unsettled', async () => {
+    const { result } = await run({}, false);
+    expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('unknown');
   });
 });

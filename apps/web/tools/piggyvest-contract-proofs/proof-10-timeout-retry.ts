@@ -58,7 +58,9 @@ export async function stepTimeoutRetry(
   ctx: ProofContext,
   b: ProofBuilder,
   main: string,
-  goal: string
+  goal: string,
+  /** False while an earlier mutation may still move these wallets. */
+  earlierSettled = true
 ): Promise<void> {
   const { api, qa, faults, redactor } = ctx;
   if (!faults)
@@ -194,7 +196,8 @@ export async function stepTimeoutRetry(
   // main delta is 0 by construction: it cannot show how often it was booked.
   const debit = mainDelta === null ? null : -mainDelta;
   const resumed = sent.kind === 'resumed';
-  const unmeasured = resumed || debit === null || rows === null;
+  const unmeasured =
+    resumed || !earlierSettled || debit === null || rows === null;
   const fee = unmeasured
     ? null
     : await readTransferFeeKobo(ctx, sent.reference, main);
@@ -211,14 +214,16 @@ export async function stepTimeoutRetry(
     TIMEOUT_BOOKED_ONCE,
     Q[TIMEOUT_BOOKED_ONCE],
     answer,
-    resumed
-      ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
-      : debit === null
-        ? 'the main balance never showed the booking within the polling budget'
-        : rows === null
-          ? 'the transaction list never showed the reference within the polling budget'
-          : answer === 'unknown'
-            ? 'the main debit exceeds the amount and the record shows no fee that explains it'
-            : undefined
+    !earlierSettled
+      ? 'an earlier transfer had not settled, so its balance movement cannot be told apart from this one'
+      : resumed
+        ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
+        : debit === null
+          ? 'the main balance never showed the booking within the polling budget'
+          : rows === null
+            ? 'the transaction list never showed the reference within the polling budget'
+            : answer === 'unknown'
+              ? 'the main debit exceeds the amount and the record shows no fee that explains it'
+              : undefined
   );
 }

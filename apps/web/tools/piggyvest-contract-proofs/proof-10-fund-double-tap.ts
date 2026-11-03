@@ -255,7 +255,10 @@ export async function stepDoubleTap(
   const accepted = again.outcome !== 'rejected';
   const secondSeen =
     (rowsAfter !== null && rowsAfter > 1) ||
-    (extraDebit !== null && extraDebit !== 0);
+    (extraDebit !== null && extraDebit > 0);
+  // A balance INCREASE (negative extra debit) is an unexplained credit, not a
+  // second booking: it is never `no` and never a clean `yes`.
+  const unexplainedCredit = extraDebit !== null && extraDebit < 0;
   // A usable list with fewer rows than the one already established is an
   // inconsistent read (lag, paging), not evidence about the repeat.
   const rowsShrank =
@@ -264,6 +267,7 @@ export async function stepDoubleTap(
     ? 'no'
     : rowsBefore === null ||
         rowsShrank ||
+        unexplainedCredit ||
         rowsAfter === null ||
         extraDebit === null ||
         accepted

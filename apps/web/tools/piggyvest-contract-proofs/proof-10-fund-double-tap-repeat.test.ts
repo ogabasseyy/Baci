@@ -98,6 +98,14 @@ describe('S8 double tap', () => {
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
   });
 
+  it('stays unknown, not no, when main is credited during the repeat window', async () => {
+    const { h, b, main, goal, fund } = await setup();
+    h.mock.sandbox.wallet(main)!.balance += 500;
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(b.build(h.ctx).values.double_tap_extra_debit_kobo).toBe(-500);
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+
   it('stays unknown when there is no accepted fund transfer to tap again', async () => {
     const { h, b, main, goal } = await setup();
     const posts = transferPosts(h);

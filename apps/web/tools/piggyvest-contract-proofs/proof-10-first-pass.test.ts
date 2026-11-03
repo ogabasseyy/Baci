@@ -107,4 +107,14 @@ describe('proof 10: S8 sandbox first pass', () => {
     expect(answerOf('s8_onboard_customer_and_main_wallet')).toBe('unknown');
     expect(answerOf('s8_goal_wallet_created')).toBe('unknown');
   });
+
+  it('leaves the timeout booking unknown while the goal funding is still unsettled', async () => {
+    const h = harness({ mock: { tsqPendingPolls: 7 }, maxPolls: 6 });
+    await setupScenario(h.ctx);
+    const result = await runProof10(h.ctx);
+    expect(
+      result.findings.find((f) => f.id === 's8_timeout_transfer_booked_once')
+        ?.answer
+    ).toBe('unknown');
+  });
 });

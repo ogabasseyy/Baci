@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_goal_pin_proofs.sql
+supabase/tests/piggyvest_goal_pin_proofs_behaviour.sql

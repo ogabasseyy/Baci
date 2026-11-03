@@ -10,7 +10,7 @@ function response(body) {
 }
 
 // Main is far ahead of expectedSha: the compare lists commitList (ending in currentSha) with 300 files.
-function farAheadFetch({ runs, pages, commitList = [currentSha], total, jobs = {}, urls = [], midpoint } = {}) {
+function farAheadFetch({ runs = [], pages, commitList = [currentSha], total, jobs = {}, urls = [], midpoint } = {}) {
   return async (url) => {
     urls.push(url);
     if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });

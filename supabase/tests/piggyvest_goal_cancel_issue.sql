@@ -124,6 +124,44 @@ BEGIN
   PERFORM pg_temp.gc_assert(v_issue2 ->> 'status' = 'issued' AND v_issue2 ->> 'operationId' = v_op,
     'a clean goal did not return its issued id again: ' || v_issue2::text);
 
+  -- 1d. A live issued attempt is reused only under the same integration AND
+  -- customer intent. One that belongs to another integration or intent is not
+  -- handed back (its id could not be reserved under this scope anyway), so the
+  -- caller gets a fresh id of its own.
+  INSERT INTO piggyvest_primary.integrations
+    (id, merchant_id, business_id, environment, executor_login, enabled)
+  VALUES ('f3860000-0000-4000-8000-0000000000a1', 'f3860000-0000-4000-8000-000000000002',
+    'synthetic-goalcancel-business-other', 'staging', 'retired-other-integration', false);
+  UPDATE piggyvest_primary.goal_cancel_operations
+     SET integration_id = 'f3860000-0000-4000-8000-0000000000a1' WHERE id = v_op::uuid;
+  v_issue2 := pg_temp.gc_issue_op();
+  PERFORM pg_temp.gc_assert(v_issue2 ->> 'status' = 'issued' AND v_issue2 ->> 'operationId' <> v_op,
+    'an issued attempt of another integration was reused: ' || v_issue2::text);
+  PERFORM pg_temp.gc_assert(
+    (SELECT integration_id FROM piggyvest_primary.goal_cancel_operations
+      WHERE id = (v_issue2 ->> 'operationId')::uuid) = 'f3860000-0000-4000-8000-000000000006',
+    'the fresh attempt was not issued under this integration');
+  DELETE FROM piggyvest_primary.goal_cancel_operations WHERE id = (v_issue2 ->> 'operationId')::uuid;
+  UPDATE piggyvest_primary.goal_cancel_operations
+     SET integration_id = 'f3860000-0000-4000-8000-000000000006' WHERE id = v_op::uuid;
+  INSERT INTO piggyvest_primary.onboarding_intents (
+    id, integration_id, merchant_id, customer_id, user_id, request_fingerprint, state,
+    provider_customer_id, provider_wallet_id
+  ) VALUES (
+    'f3860000-0000-4000-8000-0000000000a2', 'f3860000-0000-4000-8000-0000000000a1',
+    'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003',
+    'f3860000-0000-4000-8000-000000000001', repeat('e', 64), 'rejected',
+    'synthetic-goalcancel-customer-other', 'synthetic-goalcancel-main-other');
+  UPDATE piggyvest_primary.goal_cancel_operations
+     SET intent_id = 'f3860000-0000-4000-8000-0000000000a2' WHERE id = v_op::uuid;
+  v_issue2 := pg_temp.gc_issue_op();
+  PERFORM pg_temp.gc_assert(v_issue2 ->> 'status' = 'issued' AND v_issue2 ->> 'operationId' <> v_op,
+    'an issued attempt of another intent was reused: ' || v_issue2::text);
+  PERFORM pg_temp.gc_assert(
+    (SELECT intent_id FROM piggyvest_primary.goal_cancel_operations
+      WHERE id = (v_issue2 ->> 'operationId')::uuid) = 'f3860000-0000-4000-8000-000000000007',
+    'the fresh attempt was not issued under this intent');
+
 END
 $behaviour$;
 

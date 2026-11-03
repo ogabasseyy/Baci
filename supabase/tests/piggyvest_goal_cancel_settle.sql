@@ -61,7 +61,7 @@ BEGIN
       'a residual provider balance was settled as cancelled-at-zero or confirmed');
     PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'needs_review'
       AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active'
-      AND (SELECT current_amount FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 42
+      AND (SELECT current_amount FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 0
       AND (SELECT available_balance FROM public.customer_wallets
             WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
       AND EXISTS (SELECT 1 FROM public.customer_savings_events

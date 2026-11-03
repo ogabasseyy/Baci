@@ -17,6 +17,7 @@ DECLARE
   v_op2 text;
   v_result jsonb;
   v_text text;
+  v_cleared boolean;
 BEGIN
   -- Funding the books know about: 250000 kobo at the provider.
   PERFORM pg_temp.gc_fund('f4', 250000);
@@ -29,7 +30,7 @@ BEGIN
     pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":4200}'::jsonb) = 'conflict',
     'a residual provider balance was not routed to review');
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'needs_review'
-    AND pg_temp.gc_goal('status') = 'active' AND pg_temp.gc_goal('current_amount')::numeric = 42
+    AND pg_temp.gc_goal('status') = 'active' AND pg_temp.gc_goal('current_amount')::numeric = 0
     AND pg_temp.gc_goal('cancelled_at') IS NULL AND pg_temp.gc_goal('future_debits_cancelled_at') IS NULL,
     'review did not keep the goal open and unfenced');
   PERFORM pg_temp.gc_assert(pg_temp.gc_wallet() = 3500
@@ -98,8 +99,11 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     NOT piggyvest_primary.clear_goal_cancel_review('f3860000-0000-4000-8000-0000000000ee'::uuid, 'unknown'),
     'an unknown attempt was cleared');
-  PERFORM pg_temp.gc_assert(piggyvest_primary.clear_goal_cancel_review(v_op::uuid, '  operator checked the residual  '),
-    'the review attempt was not cleared');
+  -- The ops path: service_role (no schema usage) clears it through the wrapper.
+  SET LOCAL ROLE service_role;
+  v_cleared := public.clear_goal_cancel_review(v_op::uuid, '  operator checked the residual  ');
+  RESET ROLE;
+  PERFORM pg_temp.gc_assert(v_cleared, 'the review attempt was not cleared through the public wrapper');
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'reviewed'
     AND (SELECT review_note FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid) = 'operator checked the residual'
     AND (SELECT reviewed_at IS NOT NULL FROM piggyvest_primary.goal_cancel_operations WHERE id = v_op::uuid)

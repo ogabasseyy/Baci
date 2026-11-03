@@ -100,7 +100,7 @@ BEGIN
   -- ops-tooling entry points: service role only, never the API roles, never PUBLIC
   -- and never the executor logins.
   FOREACH v_signature IN ARRAY ARRAY[
-    'piggyvest_primary.clear_goal_cancel_review(uuid,text)',
+    'public.clear_goal_cancel_review(uuid,text)',
     'public.savings_goal_ids_bound_to_primary(uuid[])'
   ] LOOP
     v_oid := v_signature::regprocedure;
@@ -128,6 +128,19 @@ BEGIN
       RAISE EXCEPTION '% must not be executable by PUBLIC', v_signature;
     END IF;
   END LOOP;
+
+  -- The piggyvest_primary function behind the wrapper has no grant for any
+  -- API or ops role, and service_role has no schema usage to reach it.
+  v_oid := 'piggyvest_primary.clear_goal_cancel_review(uuid,text)'::regprocedure;
+  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role',
+                                'piggyvest_primary_authorizer', 'piggyvest_primary_evidence'] LOOP
+    IF pg_catalog.has_function_privilege(v_role, v_oid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'the schema-internal clearance must not be executable by %', v_role;
+    END IF;
+  END LOOP;
+  IF pg_catalog.has_schema_privilege('service_role', 'piggyvest_primary', 'USAGE') THEN
+    RAISE EXCEPTION 'service_role must not have usage on piggyvest_primary';
+  END IF;
 
   -- Provider references are unique, and review blocks a new cancel (the live
   -- index) until an operator clears it.

@@ -11,7 +11,7 @@
 --   3. reserve_goal_cancel_with_pin (PIN spent in the reservation transaction)
 --   4. manage_goal_cancel / read_goal_cancel_status / read_dispatched_goal_cancel
 --   5. settle_goal_cancel / release_failed_goal_cancel (evidence role)
---   6. clear_goal_cancel_review (operator step out of needs_review)
+--   6. clear_goal_cancel_review (operator step out of needs_review) + public wrapper
 --   7. fences: funding, redemption, legacy contribution, deletion triggers
 --   8. reserve_savings_before_interest (refund counts as available money)
 --   9. read_daily_reconciliation (expected balance net of refunds, never < 0)
@@ -196,6 +196,7 @@ BEGIN
   v_now := pg_catalog.clock_timestamp();
   SELECT fresh.* INTO v_operation FROM piggyvest_primary.goal_cancel_operations AS fresh
    WHERE fresh.goal_id = v_goal.id AND fresh.state = 'issued' AND fresh.expires_at > v_now
+     AND fresh.integration_id = (scope ->> 'integrationId')::uuid AND fresh.intent_id = v_intent_id
    ORDER BY fresh.issued_at DESC LIMIT 1;
   IF NOT FOUND THEN
     INSERT INTO piggyvest_primary.goal_cancel_operations
@@ -671,7 +672,10 @@ BEGIN
   -- The refund has reached the main wallet, so the goal no longer holds the
   -- refunded money. A goal row that is gone or already spent does not undo a
   -- settled transfer. Under review the goal stays open, drops by this refund's
-  -- own amount and keeps any residual the provider still holds.
+  -- own amount ONLY. The provider residual is never booked here: a funding
+  -- operation the provider already completed but that is not settled locally
+  -- is part of that residual and is booked once, when it settles. The residual
+  -- itself is left to the operator (needs_review).
   v_now := pg_catalog.clock_timestamp();
   UPDATE public.customer_savings_goals AS goal
      SET status = CASE WHEN v_review THEN goal.status ELSE 'cancelled' END,
@@ -679,9 +683,8 @@ BEGIN
          future_debits_cancelled_at = CASE WHEN v_review THEN goal.future_debits_cancelled_at
            ELSE COALESCE(goal.future_debits_cancelled_at, v_now) END,
          current_amount = CASE
-           WHEN v_late THEN GREATEST(goal.current_amount - v_operation.amount_kobo::numeric / 100,
-                                     v_residual::numeric / 100)
-           ELSE v_residual::numeric / 100 END,
+           WHEN v_review THEN GREATEST(0, goal.current_amount - v_operation.amount_kobo::numeric / 100)
+           ELSE 0 END,
          updated_at = v_now
    WHERE goal.id = v_operation.goal_id AND goal.customer_id = v_intent.customer_id
      AND goal.merchant_id = v_intent.merchant_id AND goal.status <> 'spent';
@@ -804,6 +807,18 @@ BEGIN
                     AND goal.merchant_id = v_intent.merchant_id);
   RETURN true;
 END;
+$$;
+
+-- service_role has no USAGE on schema piggyvest_primary (and must not get it),
+-- so ops tooling calls this thin public wrapper instead.
+CREATE FUNCTION public.clear_goal_cancel_review(p_operation_id uuid, p_note text)
+RETURNS boolean
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT piggyvest_primary.clear_goal_cancel_review(p_operation_id, p_note);
 $$;
 
 -- Funding may not be reserved for a goal whose cancel is in flight or done.
@@ -1175,14 +1190,16 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.block_unsettled_goal_cancel_customer_deletion(),
   piggyvest_primary.block_unsettled_goal_cancel_goal_deletion(),
   piggyvest_primary.block_redemption_during_goal_cancel(),
-  piggyvest_primary.clear_goal_cancel_review(uuid, text)
+  piggyvest_primary.clear_goal_cancel_review(uuid, text),
+  public.clear_goal_cancel_review(uuid, text)
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 REVOKE EXECUTE ON FUNCTION public.savings_goal_ids_bound_to_primary(uuid[])
   FROM PUBLIC, anon, authenticated, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 
--- Ops tooling (service role) is the only caller of the review clearance and
--- of the legacy auto-debit classification.
-GRANT EXECUTE ON FUNCTION piggyvest_primary.clear_goal_cancel_review(uuid, text) TO service_role;
+-- Ops tooling (service role) is the only caller of the review clearance (through
+-- the public wrapper; the piggyvest_primary function has no grant for any role)
+-- and of the legacy auto-debit classification.
+GRANT EXECUTE ON FUNCTION public.clear_goal_cancel_review(uuid, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.savings_goal_ids_bound_to_primary(uuid[]) TO service_role;
 
 GRANT EXECUTE ON FUNCTION piggyvest_primary.issue_goal_cancel(jsonb, uuid)

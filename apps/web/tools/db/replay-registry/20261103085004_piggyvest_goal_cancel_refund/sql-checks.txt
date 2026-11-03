@@ -7,3 +7,4 @@ supabase/tests/piggyvest_goal_cancel_settle.sql
 supabase/tests/piggyvest_goal_cancel_review.sql
 supabase/tests/piggyvest_goal_cancel_references.sql
 supabase/tests/piggyvest_goal_cancel_interest.sql
+supabase/tests/piggyvest_goal_cancel_residual.sql

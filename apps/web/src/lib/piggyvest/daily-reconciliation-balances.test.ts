@@ -103,45 +103,22 @@ describe('shortfall confirmation re-read', () => {
   });
 });
 
-describe('large surplus', () => {
-  const surplus = (providerKobo: number, surplusPageKobo?: number) =>
+describe('surplus', () => {
+  const surplus = (providerKobo: number) =>
     runDailyReconciliation(
-      ports(oneWallet, {
-        readWalletBalance: vi.fn(async () => providerKobo),
-        ...(surplusPageKobo === undefined ? {} : { surplusPageKobo }),
-      })
+      ports(oneWallet, { readWalletBalance: vi.fn(async () => providerKobo) })
     );
 
-  it('pages at the named threshold', async () => {
-    const report = await surplus(1500 + 5000, 5000);
-    if (report.status === 'failed') throw new Error('unreachable');
-    expect(report.status).toBe('attention');
-    expect(report.reasons).toEqual(['balance_surplus_large']);
-    expect(report.balances[0]).toMatchObject({
-      kind: 'above_expected_large',
-      differenceKobo: 5000,
-    });
-  });
-
-  it('keeps a smaller surplus as a review, not a page', async () => {
-    const report = await surplus(1500 + 4999, 5000);
+  it.each([
+    1, 100_000, 10_000_000_000,
+  ])('never pages for a surplus of %i kobo', async (extra) => {
+    const report = await surplus(1500 + extra);
     if (report.status === 'failed') throw new Error('unreachable');
     expect(report.status).toBe('clean');
-    expect(report.balances[0]).toMatchObject({ kind: 'above_expected' });
-  });
-
-  it('defaults to 100000 kobo (N1,000)', async () => {
-    expect((await surplus(1500 + 99_999)).status).toBe('clean');
-    expect((await surplus(1500 + 100_000)).status).toBe('attention');
-  });
-
-  it.each([
-    0,
-    -5,
-    1.5,
-    Number.NaN,
-  ])('falls back to the default for an unusable threshold (%s)', async (bad) => {
-    expect((await surplus(1500 + 99_999, bad)).status).toBe('clean');
-    expect((await surplus(1500 + 100_000, bad)).status).toBe('attention');
+    expect(report.reasons).toEqual([]);
+    expect(report.balances[0]).toMatchObject({
+      kind: 'above_expected',
+      differenceKobo: extra,
+    });
   });
 });

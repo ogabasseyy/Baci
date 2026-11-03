@@ -40,8 +40,6 @@ function balanceLine(item: BalanceFinding): string {
     below_expected: 'BELOW what we recorded',
     above_expected:
       'above what we recorded (interest or an unrecorded credit, review)',
-    above_expected_large:
-      'a LARGE surplus over what we recorded (possibly an unmapped goal deposit, check today)',
   }[item.kind];
   return `- ${item.walletId}: PiggyVest ${formatKobo(item.providerKobo ?? 0)} vs recorded ${formatKobo(item.expectedKobo)}, difference ${formatKobo(item.differenceKobo ?? 0)}, ${label}.`;
 }
@@ -117,7 +115,5 @@ export function pageReasonOf(report: ReconciliationReport): string | null {
     report.balances.filter((balance) => balance.kind === kind).length;
   const truncated = report.truncated.stuck || report.truncated.wallets;
   const deadline = report.deadlineReached ? ' deadline=reached' : '';
-  const large = count('above_expected_large');
-  const surplus = large > 0 ? ` surplus_large=${large}` : '';
-  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${surplus}${deadline}`;
+  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${deadline}`;
 }

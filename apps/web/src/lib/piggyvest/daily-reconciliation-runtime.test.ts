@@ -25,15 +25,19 @@ describe('runPiggyvestDailyReconciliation', () => {
       expect(fn).not.toHaveBeenCalled();
   });
 
-  it('does nothing while the PiggyVest master kill switch is on', async () => {
+  it.each([
+    'true',
+    '',
+    'typo',
+  ])('still runs the read-only report when the kill switch is %j', async (kill) => {
     const { deps } = makeDeps();
     const result = await runPiggyvestDailyReconciliation({
-      env: { ...env, PIGGYVEST_KILL_SWITCH: 'true' } as never,
+      env: { ...env, PIGGYVEST_KILL_SWITCH: kill } as never,
       deps,
     });
-    expect(result).toEqual({ status: 'disabled' });
-    expect(deps.readRuntime).not.toHaveBeenCalled();
-    expect(deps.sendEmail).not.toHaveBeenCalled();
+    expect(result).not.toEqual({ status: 'disabled' });
+    expect(deps.readRuntime).toHaveBeenCalled();
+    expect(deps.sendEmail).toHaveBeenCalled();
   });
 
   it.each(['false', '1', 'TRUE', ''])('treats %j as off', async (value) => {
@@ -178,71 +182,6 @@ describe('runPiggyvestDailyReconciliation', () => {
     expect(await runPiggyvestDailyReconciliation({ env, deps })).toMatchObject({
       report: 'attention',
       paged: true,
-    });
-  });
-
-  describe('surplus threshold setting', () => {
-    const run = (value: string | undefined, balance: number) => {
-      const { deps } = makeDeps({
-        createExecutor: vi.fn(() =>
-          vi.fn(async () => ({
-            rows: [
-              {
-                result: snapshot({
-                  wallets: [{ walletId: 'goal-a', expectedKobo: 1500 }],
-                  walletsTotal: 1,
-                }),
-              },
-            ],
-          }))
-        ) as never,
-        retrieveWallet: vi.fn(async (_c: unknown, id: string) => ({
-          id,
-          business_id: 'synthetic-business',
-          balance,
-        })) as never,
-      });
-      return runPiggyvestDailyReconciliation({
-        env: {
-          ...env,
-          PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO: value,
-        } as never,
-        deps,
-      }).then((result) => ({ result, deps }));
-    };
-
-    it('pages a surplus at the configured threshold', async () => {
-      const { result, deps } = await run('2000', 3500);
-      expect(result).toMatchObject({ report: 'attention', paged: true });
-      expect(deps.emitAlert).toHaveBeenCalledWith(
-        'PIGGYVEST_RECONCILIATION_MISMATCH',
-        {
-          reason:
-            'stuck=0 below_expected=0 unreadable=0 truncated=no surplus_large=1',
-        }
-      );
-    });
-
-    it('only reviews a surplus below the configured threshold', async () => {
-      const { result } = await run('2000', 3499);
-      expect(result).toMatchObject({ report: 'clean', paged: false });
-    });
-
-    it.each([
-      undefined,
-      '',
-      'abc',
-      '0',
-      '-5',
-      '1.5',
-      '10 ',
-    ])('uses the N1,000 default for %j', async (value) => {
-      expect((await run(value, 1500 + 99_999)).result).toMatchObject({
-        report: 'clean',
-      });
-      expect((await run(value, 1500 + 100_000)).result).toMatchObject({
-        report: 'attention',
-      });
     });
   });
 });

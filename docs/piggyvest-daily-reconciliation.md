@@ -15,12 +15,9 @@ anything is wrong. It resends, settles and releases nothing.
 2. **Balances.** For every goal wallet we confirmed principal into, the balance
    at PiggyVest against the principal we recorded. Less at PiggyVest pages (after
    a confirming re-read). More is listed for review and the email subject says
-   REVIEW instead of all clear, because interest accrues there. A surplus at or
-   above `PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO` (default N1,000) pages,
-   since it may be an unmapped goal deposit. The recorded figure is principal
-   only, so once a wallet's cumulative interest passes the threshold it pages
-   daily until the owner raises the threshold; a baseline/delta rule is a
-   tracked follow-up.
+   REVIEW instead of all clear, because interest accrues there. A surplus never
+   pages, however large: the recorded figure is principal only, so interest
+   would page forever. It is an email REVIEW line only.
 
    The database snapshot is read first and the PiggyVest balances afterwards, so
    they can differ by a few minutes. A provider-side debit in that window could
@@ -49,13 +46,14 @@ pages if the report email cannot be sent.
 | --- | --- |
 | `PIGGYVEST_RECONCILIATION_ENABLED` | Must be exactly `true`. Anything else: the route answers `disabled` and does nothing. |
 | `PIGGYVEST_RECONCILIATION_REPORT_EMAIL` | Owner address the report is sent to. Missing or invalid pages instead. |
-| `PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO` | Optional. A goal wallet holding at least this many kobo MORE than recorded pages (it may be an unmapped goal deposit). Default `100000` (N1,000); a missing, zero, negative or non-integer value uses the default. Smaller surpluses stay an email review. |
 
 A balance below the record is read a second time (within the read budget) before it pages; it pages only if the shortfall persists. Report dates are UTC.
 
 The email goes out through the platform ZeptoMail token (`ZEPTOMAIL_TOKEN`) with
 a single attempt; a failed send pages. It reuses the `PIGGYVEST_PRIMARY_*` settings and the evidence database login.
-It runs even when the savings flags are off, so a rollback cannot hide a stuck
+It runs even when the savings flags are off and even when the master kill switch
+(`PIGGYVEST_KILL_SWITCH`) is engaged or mistyped: it only reads, so only its own flag
+turns it off. It runs even when the savings flags are off, so a rollback cannot hide a stuck
 transfer. Set values by REST upsert, not a pipe.
 
 ## Running it

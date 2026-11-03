@@ -1,12 +1,5 @@
 import type { BalanceFinding, BalanceKind } from './daily-reconciliation';
 
-/**
- * A surplus at or above this many kobo pages (N1,000): a large surplus can
- * mean a goal deposit we never mapped, not interest. Smaller ones are only
- * listed for review.
- */
-export const DEFAULT_SURPLUS_PAGE_KOBO = 100_000;
-
 export interface WalletExpectation {
   walletId: string;
   expectedKobo: number;
@@ -14,7 +7,6 @@ export interface WalletExpectation {
 
 export interface BalanceReader {
   readWalletBalance: (walletId: string) => Promise<number>;
-  surplusPageKobo?: number;
 }
 
 export function unreadableBalance(wallet: WalletExpectation): BalanceFinding {
@@ -25,15 +17,6 @@ export function unreadableBalance(wallet: WalletExpectation): BalanceFinding {
     differenceKobo: null,
     kind: 'unreadable',
   };
-}
-
-/** An unusable threshold (zero, negative, fractional, NaN) never disables it. */
-function surplusThreshold(configured: number | undefined): number {
-  return typeof configured === 'number' &&
-    Number.isSafeInteger(configured) &&
-    configured > 0
-    ? configured
-    : DEFAULT_SURPLUS_PAGE_KOBO;
 }
 
 export async function readBalance(
@@ -55,8 +38,6 @@ export async function readBalance(
   const differenceKobo = providerKobo - wallet.expectedKobo;
   let kind: BalanceKind = 'match';
   if (differenceKobo < 0) kind = 'below_expected';
-  else if (differenceKobo >= surplusThreshold(ports.surplusPageKobo))
-    kind = 'above_expected_large';
   else if (differenceKobo > 0) kind = 'above_expected';
   return {
     walletId: wallet.walletId,

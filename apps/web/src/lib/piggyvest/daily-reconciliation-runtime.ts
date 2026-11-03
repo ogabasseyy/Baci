@@ -9,7 +9,7 @@ import {
   pageReasonOf,
   renderReconciliationEmail,
 } from './daily-reconciliation-report';
-import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
+import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { readPrimaryWalletSavingsRecoveryRuntime } from './primary-wallet-savings-runtime';
@@ -80,20 +80,12 @@ export type DailyReconciliationResult =
       paged: boolean;
     };
 
-function buildPorts(
-  runtime: Runtime,
-  deps: DailyReconciliationDeps,
-  env: NodeJS.ProcessEnv
-) {
+function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
   const { environment, integrationId } = runtime.configuration;
   const token = runtime.providerToken;
   const baseUrl = getPrimaryWalletProviderOrigin(environment);
   const execute = deps.createExecutor(runtime.reconciliationConfiguration);
-  const surplus = schemas.surplusPageKobo.safeParse(
-    env.PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO
-  );
   return {
-    surplusPageKobo: surplus.success ? surplus.data : undefined,
     loadSnapshot: async () => {
       const { rows } = await execute(SNAPSHOT_STATEMENT, [
         integrationId,
@@ -153,7 +145,10 @@ export async function runPiggyvestDailyReconciliation(
   } = {}
 ): Promise<DailyReconciliationResult> {
   const env = options.env ?? process.env;
-  if (!isPiggyvestFeatureOn('daily_reconciliation', env))
+  // Deliberately NOT isPiggyvestFeatureOn: this report only reads, and it is
+  // what surfaces stuck transfers, so the master kill switch (or a mistyped
+  // value) must not silence it. Only its own flag turns it off.
+  if (!isPiggyvestFeatureFlagSet('daily_reconciliation', env))
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;
@@ -172,7 +167,7 @@ export async function runPiggyvestDailyReconciliation(
   } else {
     let ports: ReturnType<typeof buildPorts> | null = null;
     try {
-      ports = buildPorts(runtime, deps, env);
+      ports = buildPorts(runtime, deps);
     } catch {
       // Building the provider and database handles failed: not runnable.
       ports = null;

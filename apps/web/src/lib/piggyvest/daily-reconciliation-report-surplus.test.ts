@@ -21,33 +21,31 @@ const base: {
   truncated: { stuck: false, wallets: false },
 };
 
-const large: ReconciliationReport = {
+const huge: ReconciliationReport = {
   ...base,
-  status: 'attention',
+  status: 'clean',
   balances: [
     {
       walletId: 'goal-a',
       expectedKobo: 150000,
-      providerKobo: 350000,
-      differenceKobo: 200000,
-      kind: 'above_expected_large',
+      providerKobo: 99_950_000,
+      differenceKobo: 99_800_000,
+      kind: 'above_expected',
     },
   ],
-  reasons: ['balance_surplus_large'],
+  reasons: [],
 };
 
-describe('large surplus in the report', () => {
-  it('adds the surplus count to the page reason', () => {
-    expect(pageReasonOf(large)).toBe(
-      'stuck=0 below_expected=0 unreadable=0 truncated=no surplus_large=1'
-    );
+describe('a surplus is a review line, never a page', () => {
+  it('sends no page reason however large the surplus is', () => {
+    expect(pageReasonOf(huge)).toBeNull();
   });
 
-  it('says NEEDS ATTENTION and explains the line', () => {
-    const { subject, text } = renderReconciliationEmail(large);
-    expect(subject).toContain('NEEDS ATTENTION');
-    expect(text).toContain('LARGE surplus');
-    expect(text).toContain('₦2,000.00');
+  it('says REVIEW, not NEEDS ATTENTION, and shows the amount', () => {
+    const { subject, text } = renderReconciliationEmail(huge);
+    expect(subject).toContain('REVIEW balances above record');
+    expect(subject).not.toContain('NEEDS ATTENTION');
+    expect(text).toContain('₦998,000.00');
   });
 });
 

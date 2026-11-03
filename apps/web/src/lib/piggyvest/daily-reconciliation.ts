@@ -17,8 +17,8 @@ import {
  * we confirmed into it; a balance that could not be read; a list cut short.
  * A shortfall is re-read once before it counts. A wallet holding MORE is
  * normal while interest accrues, so a small surplus is listed for review
- * (`above_expected`); one at or above the surplus threshold pages
- * (`above_expected_large`), as it may be an unmapped goal deposit. A snapshot that cannot be
+ * (`above_expected`) and NEVER pages, however large: the recorded figure is
+ * principal only, so interest would page forever. A snapshot that cannot be
  * loaded or parsed is `failed`: never reported as clean.
  */
 export type TransferReading =
@@ -33,13 +33,11 @@ export type BalanceKind =
   | 'match'
   | 'below_expected'
   | 'above_expected'
-  | 'above_expected_large'
   | 'unreadable';
 
 export type AttentionReason =
   | 'stuck_transfers'
   | 'balance_below_expected'
-  | 'balance_surplus_large'
   | 'balance_unreadable'
   | 'list_truncated'
   | 'read_deadline_reached';
@@ -94,8 +92,6 @@ export interface ReconciliationPorts {
   ) => Promise<Exclude<TransferReading, 'not_dispatched'>>;
   /** The provider's balance for a wallet, in kobo. */
   readWalletBalance: (walletId: string) => Promise<number>;
-  /** Surplus (kobo) at or above which a wallet pages; see the balances module. */
-  surplusPageKobo?: number;
   /** Used only to stamp a failed report, which has no database time. */
   now: () => string;
   /**
@@ -234,8 +230,6 @@ export async function runDailyReconciliation(
     reasons.push('stuck_transfers');
   if (balances.some((balance) => balance.kind === 'below_expected'))
     reasons.push('balance_below_expected');
-  if (balances.some((balance) => balance.kind === 'above_expected_large'))
-    reasons.push('balance_surplus_large');
   if (balances.some((balance) => balance.kind === 'unreadable'))
     reasons.push('balance_unreadable');
   if (truncated.stuck || truncated.wallets) reasons.push('list_truncated');

@@ -150,6 +150,24 @@ describe('no direct reads of PiggyVest enable flags', () => {
     expect(file?.text).not.toMatch(/read\(\s*['"][^'"]*ENABLED/);
     expect(file?.text).toContain("isPiggyvestFeatureOn('plan_funding'");
   });
+  // DOCUMENTED EXCEPTION to "gate through isPiggyvestFeatureOn": the daily
+  // reconciliation only reads (never moves money) and exists to surface stuck
+  // transfers, so the master kill switch must not silence it. It uses the
+  // flag-only reader on purpose; no other module may follow it silently.
+  it('only the read-only daily reconciliation gates on the flag alone', () => {
+    const readOnlyReport = 'src/lib/piggyvest/daily-reconciliation-runtime.ts';
+    const file = sources.find((f) => f.path === readOnlyReport);
+    expect(file?.text).toContain(
+      "isPiggyvestFeatureFlagSet('daily_reconciliation'"
+    );
+    expect(file?.text).not.toMatch(/isPiggyvestFeatureOn\(/);
+    const flagOnlyReaders = sources
+      .filter((f) =>
+        /\bisPiggyvestFeatureFlagSet\(\s*['"]daily_reconciliation/.test(f.text)
+      )
+      .map((f) => f.path);
+    expect(flagOnlyReaders).toEqual([readOnlyReport]);
+  });
   it('no module reads an enable flag directly', () => {
     const offenders = sources
       .filter((file) => !allowed.has(file.path) && unsafeCode(file))

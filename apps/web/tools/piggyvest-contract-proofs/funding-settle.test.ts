@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AMOUNTS_KOBO } from './constants';
-import { fundingSettled } from './funding-settle';
+import { creditIdsOf, fundingSettled } from './funding-settle';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
 
@@ -17,9 +17,9 @@ describe('fundingSettled', () => {
     await setupScenario(h.ctx);
     const main = h.state.mainWalletId as string;
     // Setup funded 1_000_000 less a 5_000 fee: judged against a zero start.
-    expect(await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain)).toBe(
-      true
-    );
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(true);
   });
 
   it('rejects a balance below the funded level even when it holds still', async () => {
@@ -28,7 +28,7 @@ describe('fundingSettled', () => {
     await setupScenario(h.ctx);
     const main = h.state.mainWalletId as string;
     expect(
-      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain * 3)
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain * 3, new Set())
     ).toBe(false);
   });
 
@@ -41,9 +41,9 @@ describe('fundingSettled', () => {
     h.ctx.sleep = async () => {
       if (wallet) wallet.balance += 1;
     };
-    expect(await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain)).toBe(
-      false
-    );
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(false);
   });
 
   it('settles when the net credit lands first and its fee record appears a poll later', async () => {
@@ -60,9 +60,9 @@ describe('fundingSettled', () => {
       // The credit record is not listed yet on the first read.
       return lists === 1 ? { ...call, data: { ...data, edges: [] } } : call;
     };
-    expect(await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain)).toBe(
-      true
-    );
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(true);
     expect(lists).toBeGreaterThanOrEqual(2);
   });
 
@@ -77,9 +77,9 @@ describe('fundingSettled', () => {
       const data = (call.data ?? {}) as Record<string, unknown>;
       return { ...call, data: { ...data, edges: [] } };
     };
-    expect(await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain)).toBe(
-      false
-    );
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(false);
   });
 
   it('keeps a partial tranche unsettled even when it holds still', async () => {
@@ -96,8 +96,51 @@ describe('fundingSettled', () => {
         data: { ...data, balance: Math.floor(AMOUNTS_KOBO.fundMain / 2) },
       };
     };
-    expect(await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain)).toBe(
-      false
-    );
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(false);
+  });
+
+  it("never takes an earlier credit's fee for this funding: a partial tranche on a reused wallet stays unsettled", async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    // The setup funding left a credit row carrying a 5,000 fee.
+    const prior = await creditIdsOf(h.ctx, main);
+    expect(prior?.size).toBeGreaterThan(0);
+    const balanceBefore = h.mock.sandbox.wallet(main)?.balance ?? 0;
+    const real = h.api.wallet.bind(h.api);
+    h.api.wallet = async (id) => {
+      const call = await real(id);
+      const data = (call.data ?? {}) as Record<string, unknown>;
+      // Only gross minus that OLD fee has landed, and it holds still.
+      return {
+        ...call,
+        data: {
+          ...data,
+          balance: balanceBefore + AMOUNTS_KOBO.fundMain - 5_000,
+        },
+      };
+    };
+    expect(
+      await fundingSettled(
+        h.ctx,
+        main,
+        balanceBefore,
+        AMOUNTS_KOBO.fundMain,
+        prior
+      )
+    ).toBe(false);
+  });
+
+  it('cannot tell its own record apart when the earlier rows were unreadable, so it needs the full gross', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, null)
+    ).toBe(false);
   });
 });

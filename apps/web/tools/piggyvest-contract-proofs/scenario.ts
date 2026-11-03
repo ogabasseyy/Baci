@@ -1,6 +1,6 @@
 import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
 import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
-import { fundingSettled } from './funding-settle';
+import { creditIdsOf, fundingSettled } from './funding-settle';
 import {
   createDataSchema,
   isOwnedBy,
@@ -184,6 +184,8 @@ async function ensureFundedMain(
   }
   const balance = before.data.balance;
   if (balance >= FUNDING_FLOOR_KOBO) return;
+  // Older credits (and their fees) must never be taken for this funding's.
+  const priorCredits = await creditIdsOf(ctx, state.mainWalletId);
   const funded = await api.fundWallet(
     qa,
     state.mainWalletId,
@@ -208,7 +210,8 @@ async function ensureFundedMain(
       ctx,
       state.mainWalletId,
       balance,
-      AMOUNTS_KOBO.fundMain
+      AMOUNTS_KOBO.fundMain,
+      priorCredits
     )
   ) {
     ledger.append({ ...movement, settled: true });

@@ -1,3 +1,5 @@
+import { transferVerdict } from './verdict-rule';
+
 /**
  * The ONE settle rule for every place that marks a money movement settled
  * (a test funding, a measured deposit, a main -> goal transfer).
@@ -46,5 +48,22 @@ export function movementSettled(observation: {
   return (
     creditComplete(creditedKobo, grossKobo, feeKobo) &&
     previousCreditedKobo === creditedKobo
+  );
+}
+
+/**
+ * A repeat or second transfer has landed in full only when the source debit
+ * AND the destination credit each match ONE whole transfer of `amountKobo`
+ * (the amount, plus or minus the fee its own record shows). A partial,
+ * mismatched, one-sided or unexplained movement is never settled.
+ */
+export function oneFullTransferLanded(
+  amountKobo: number,
+  debitKobo: number,
+  creditKobo: number,
+  feeKobo: number | null
+): boolean {
+  return (
+    transferVerdict(amountKobo, debitKobo, creditKobo, feeKobo).answer === 'yes'
   );
 }

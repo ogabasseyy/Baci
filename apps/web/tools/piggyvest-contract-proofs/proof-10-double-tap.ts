@@ -1,3 +1,4 @@
+import { readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
 import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
@@ -6,6 +7,7 @@ import { answerOf, type ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
 import { pollSettled, usableList } from './read-rules';
+import { oneFullTransferLanded } from './settle-rule';
 import type { Answer } from './types';
 
 /**
@@ -193,7 +195,16 @@ export async function stepDoubleTap(
     extraDebit > 0 &&
     extraCredit > 0;
   const neitherMoved = extraDebit === 0 && extraCredit === 0;
-  const reconciled = bothMoved || (!accepted && neitherMoved);
+  // An accepted repeat that landed is reconciled only when each side matches
+  // ONE full transfer (the amount, within its own recorded fee): a partial or
+  // mismatched repeat may still be landing (settle-rule.ts).
+  const repeatFee = bothMoved
+    ? await readTransferFeeKobo(ctx, reference, main)
+    : null;
+  const landedInFull =
+    bothMoved &&
+    oneFullTransferLanded(fund.amountKobo, extraDebit, extraCredit, repeatFee);
+  const reconciled = landedInFull || (!accepted && neitherMoved);
   ledger.append({
     from: main,
     to: goal,

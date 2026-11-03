@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AMOUNTS_KOBO } from './constants';
+import { MovementLedger } from './movement-ledger';
 import {
   FUND_GOAL,
   stepDoubleTap,
@@ -165,5 +166,38 @@ describe('S8 stale balances after a terminal success', () => {
     await stepDoubleTap(h.ctx, b, main, goal, fund);
     expect(transferPosts(h)).toBe(before);
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+
+  it('keeps a partial, both-sided repeat unsettled and the ledger not quiet', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { duplicateReference: 'accept' },
+    });
+    expect(fund).not.toBeNull();
+    const mainBefore = fund?.mainBalanceKobo as number;
+    const goalBefore = fund?.goalBalanceKobo as number;
+    const half = AMOUNTS_KOBO.s8FundGoal / 2;
+    const real = h.ctx.api.wallet.bind(h.ctx.api);
+    let repeated = false;
+    const again = h.ctx.api.transferWalletAgain.bind(h.ctx.api);
+    h.ctx.api.transferWalletAgain = async (...args) => {
+      repeated = true;
+      return again(...args);
+    };
+    h.ctx.api.wallet = async (id) => {
+      const call = await real(id);
+      const data = (call.data ?? {}) as Record<string, unknown>;
+      if (!repeated) return call;
+      // Half of the repeat has landed on each side and holds still.
+      const balance =
+        id === main
+          ? mainBefore - half
+          : id === goal
+            ? goalBefore + half
+            : null;
+      return balance === null ? call : { ...call, data: { ...data, balance } };
+    };
+    const ledger = new MovementLedger();
+    expect(await stepDoubleTap(h.ctx, b, main, goal, fund, ledger)).toBe(false);
+    expect(ledger.isQuiet(main, goal)).toBe(false);
   });
 });

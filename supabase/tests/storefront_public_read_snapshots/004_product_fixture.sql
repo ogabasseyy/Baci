@@ -49,6 +49,22 @@ BEGIN
       0,
       'off',
       '[]'::jsonb
+    ),
+    (
+      '4d19ab10-0000-4000-8000-000000000021'::uuid,
+      '4d19ab10-0000-4000-8000-000000000001'::uuid,
+      '4d19ab10-0000-4000-8000-000000000002'::uuid,
+      NULL,
+      'Null Manage Stock Snapshot Phone',
+      'null-manage-stock-snapshot-phone',
+      190000,
+      'active',
+      false,
+      NULL,
+      0,
+      0,
+      'off',
+      '[]'::jsonb
     );
 
   INSERT INTO public.product_variants (

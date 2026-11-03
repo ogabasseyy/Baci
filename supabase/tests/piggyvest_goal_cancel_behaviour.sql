@@ -137,6 +137,7 @@ CREATE FUNCTION pg_temp.gc_key(p_op text) RETURNS text LANGUAGE sql AS $$
   SELECT 'f3860000-0000-4000-8000-000000000005:cancel:' || p_op;
 $$;
 
+CREATE TEMP TABLE gc_diag (ctx text, msg text, state text);
 DO $behaviour$
 DECLARE
   c_goal constant text := 'f3860000-0000-4000-8000-000000000005';
@@ -669,9 +670,9 @@ BEGIN
   END;
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_ctx = PG_EXCEPTION_CONTEXT;
-  EXECUTE pg_catalog.format('DO $x$ BEGIN RAISE EXCEPTION ''diag'' USING ERRCODE = %L; END $x$',
-    'P' || pg_catalog.lpad(COALESCE(pg_catalog.substring(v_ctx from 'inline_code_block line ([0-9]+)'), '9999'), 4, '0'));
+  INSERT INTO gc_diag VALUES (v_ctx, SQLERRM, SQLSTATE);
 END
 $behaviour$;
+SELECT 'GCDIAG' AS tag, state, msg, replace(ctx, E'\n', ' | ') AS ctx FROM gc_diag;
 
 ROLLBACK;

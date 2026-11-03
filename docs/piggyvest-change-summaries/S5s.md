@@ -13,7 +13,7 @@ The database already stores PINs, but nothing on the server could call it. The s
 - A customer picks their own hash. The server alone turns the PIN into a stored value using the secret pepper and signs every request, so the database refuses anything the server did not make.
 - A customer acts on another shop or account. The shop comes from the server's wallet configuration and the account from the sign-in, never from the request. A request carrying any extra field is rejected.
 - A PIN leaks. It is checked for shape, never logged, never returned, and never placed in an error. Tests check every response and log.
-- Guessing or heavy hashing load. The database locks after five wrong PINs, and the routes are limited per caller and stop working when the shared limiter is unavailable.
+- Guessing or heavy hashing load. The database locks after five wrong PINs, and the routes are limited per IP address and stop working when the shared limiter is unavailable.
 - Reset by a stolen old session. The database requires a recent sign-in.
 - A stale signing time. It is taken after hashing, right before the database call.
 - Unexpected database answers become "temporarily unavailable", never success.

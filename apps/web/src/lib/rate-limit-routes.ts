@@ -71,7 +71,7 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
     failClosedWithoutRedis: true,
   },
   // Each wallet PIN set, change or reset runs a 32 MiB scrypt derivation, so
-  // keep one caller's budget small and never fall back to a per-instance
+  // keep one IP address's budget small and never fall back to a per-instance
   // memory bucket that scaling would multiply. The database owns the wrong-PIN
   // lockout; this only bounds hashing cost.
   '/api/storefront/customer/wallet-pin': {

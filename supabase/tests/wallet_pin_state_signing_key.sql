@@ -19,7 +19,7 @@ BEGIN
     'keyed pepper keeps reporting not_set: ' || v_result::text);
 
   -- A pepper whose key row is absent: unavailable, for an enabled merchant.
-  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_state_sql('M1', 'nokey'));
+  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_state_sql('M1', 'unkeyed_pepper'));
   PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}',
     'unkeyed pepper is unavailable: ' || v_result::text);
 

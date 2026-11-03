@@ -1,0 +1,5 @@
+supabase/tests/piggyvest_goal_complete.sql
+supabase/tests/piggyvest_goal_complete_issue.sql
+supabase/tests/piggyvest_goal_complete_settle.sql
+supabase/tests/piggyvest_goal_complete_review.sql
+supabase/tests/piggyvest_goal_complete_fences.sql

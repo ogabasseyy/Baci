@@ -116,4 +116,34 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(geforceGraphicsCard.categorySlug).toBe('gaming');
   });
+
+  it('keeps Gaming and Laptops categories for accessory articles mentioning gaming laptops without promoting to gaming-laptops', () => {
+    const accessoriesGuide = inferContentClusterContext({
+      title: 'Best Gaming Laptop Accessories in Nigeria',
+      excerpt: 'Must-have peripherals and gear for your mobile gaming setup.',
+      category: 'Gaming',
+      tags: ['gaming', 'accessories', 'gaming laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(accessoriesGuide.categorySlug).toBe('gaming');
+
+    const coolingPadReview = inferContentClusterContext({
+      title: 'Gaming Laptop Cooling Pad Review and Temperature Benchmarks',
+      excerpt: 'Testing the best cooling pads for high-performance laptops.',
+      category: 'Laptops',
+      tags: ['laptops', 'cooling pad', 'gaming laptop'],
+      keywords: ['review'],
+    });
+    expect(coolingPadReview.categorySlug).toBe('laptops');
+
+    const laptopStandGuide = inferContentClusterContext({
+      title: 'Ergonomic Gaming Laptop Stand Buying Guide',
+      excerpt:
+        'Elevate your gaming laptop display for better thermals and posture.',
+      category: 'Gaming',
+      tags: ['gaming', 'stand', 'gaming laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(laptopStandGuide.categorySlug).toBe('gaming');
+  });
 });

@@ -199,4 +199,95 @@ describe('buildProductGuideLinks', () => {
     );
     expect(gamingLinks).toEqual([]);
   });
+
+  it('validates priority guides through buildCommercialGuideLinks rejecting cross-category priority posts', () => {
+    const tabletPost = {
+      slug: 'ipad-buyer-guide',
+      title: 'iPad Buyer Guide',
+      excerpt: null,
+      category: 'Tablets',
+      tags: ['tablets', 'apple'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: null,
+      reading_time_minutes: 4,
+    };
+
+    const links = buildProductGuideLinks(
+      makeInput({
+        categorySlug: 'smartphones',
+        categoryName: 'Smartphones',
+        currentProduct: {
+          slug: 'iphone-16e',
+          name: 'iPhone 16e',
+          price: 450_000,
+          brand: 'Apple',
+          condition: 'new',
+          stock: 4,
+          category_slug: 'smartphones',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [tabletPost.slug],
+        guidePosts: [tabletPost],
+      })
+    );
+    expect(links).toEqual([]);
+  });
+
+  it('rejects post with no valid guide kind in priorityGuidePostSlugs', () => {
+    const post = {
+      slug: 'company-news-announcement',
+      title: 'Company News Announcement',
+      excerpt: 'We have updated our store policies.',
+      category: 'Smartphones',
+      tags: ['announcement'],
+      keywords: ['news'],
+      featured_image_url: null,
+      published_at: null,
+      reading_time_minutes: 2,
+    };
+
+    const links = buildProductGuideLinks(
+      makeInput({
+        priorityGuidePostSlugs: [post.slug],
+        guidePosts: [post],
+      })
+    );
+    expect(links).toEqual([]);
+  });
+
+  it('preserves general category buyer guide for priority guide when product brand is unmapped', () => {
+    const generalPhoneGuide = {
+      slug: 'best-phones-in-nigeria',
+      title: 'Best Phones in Nigeria for 2026',
+      excerpt: 'Comprehensive buyer guide for all smartphones.',
+      category: 'Smartphones',
+      tags: ['smartphones'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-01T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+
+    const links = buildProductGuideLinks(
+      makeInput({
+        currentProduct: {
+          slug: 'unbranded-feature-phone',
+          name: 'Unbranded Feature Phone',
+          price: 25_000,
+          brand: 'GenericBrandXYZ',
+          condition: 'new',
+          stock: 10,
+          category_slug: 'smartphones',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [generalPhoneGuide.slug],
+        guidePosts: [generalPhoneGuide],
+      })
+    );
+    expect(links).toHaveLength(1);
+    expect(links[0].href).toBe(
+      'https://ogabassey.com/blog/best-phones-in-nigeria'
+    );
+  });
 });

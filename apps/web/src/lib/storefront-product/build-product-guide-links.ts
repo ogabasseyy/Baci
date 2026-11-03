@@ -1,7 +1,17 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
-import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
+import type {
+  PublishedClusterPost,
+  SupportedClusterCategory,
+} from '@/lib/storefront-content/content-cluster-types';
+import { getContextBrandKeys } from '@/lib/storefront-content/get-context-brand-keys';
+import { getPostTokenGroups } from '@/lib/storefront-content/get-post-token-groups';
+import { inferContentClusterContext } from '@/lib/storefront-content/infer-content-cluster-context';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
+
+const GAME_CATEGORY_PATTERN =
+  /^(?:gaming(?:-accessories)?|portable-gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
 
 function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
   const seen = new Set<string>();
@@ -16,31 +26,101 @@ function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
   });
 }
 
+function hasConfiguredPostBrandMismatch(
+  post: PublishedClusterPost,
+  categorySlug: SupportedClusterCategory,
+  productBrand: string | null | undefined,
+  productName: string
+): boolean {
+  if (GAME_CATEGORY_PATTERN.test(categorySlug)) {
+    return false;
+  }
+
+  const brandAliases = CONTENT_CLUSTER_SUPPORT[categorySlug].brandTokens;
+  const productBrands = productBrand ? [productBrand] : [];
+  const normalizedBrands = getContextBrandKeys(
+    productBrands,
+    [productName],
+    brandAliases
+  );
+  const configuredProductBrands = normalizedBrands.filter(
+    (brand) => brand in brandAliases
+  );
+
+  if (configuredProductBrands.length === 0) {
+    return false;
+  }
+
+  const inferred = inferContentClusterContext(post);
+  const configuredPostBrands = inferred.brands.filter(
+    (brand) => generateSlug(brand) in brandAliases
+  );
+
+  if (configuredPostBrands.length === 0) {
+    return false;
+  }
+
+  const hasBrandMatch =
+    inferred.brands.some((brand) =>
+      normalizedBrands.includes(generateSlug(brand))
+    ) ||
+    normalizedBrands.some((brand) => {
+      const brandTokens = brand.split('-').filter(Boolean);
+      return (
+        brandTokens.length > 0 &&
+        getPostTokenGroups(post).some((tokens) =>
+          tokens.some((_, idx) =>
+            brandTokens.every((token, offset) => tokens[idx + offset] === token)
+          )
+        )
+      );
+    });
+
+  return !hasBrandMatch;
+}
+
 export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
   if (!(input.categorySlug in CONTENT_CLUSTER_SUPPORT)) {
     return [];
   }
 
-  const guidePosts = (input.guidePosts ?? []).filter(
-    (post) =>
-      !(
-        post.merchant_intent === 'news' &&
-        (post.merchant_intent_source === 'merchant_declared' ||
-          post.merchant_intent_source === 'verified_receipt' ||
-          post.merchant_intent_source === 'reviewed')
+  const categorySlug = input.categorySlug as SupportedClusterCategory;
+
+  const validGuidePosts = (input.guidePosts ?? []).filter((post) => {
+    if (
+      post.merchant_intent === 'news' &&
+      (post.merchant_intent_source === 'merchant_declared' ||
+        post.merchant_intent_source === 'verified_receipt' ||
+        post.merchant_intent_source === 'reviewed')
+    ) {
+      return false;
+    }
+
+    if (
+      hasConfiguredPostBrandMismatch(
+        post,
+        categorySlug,
+        input.currentProduct.brand,
+        input.currentProduct.name
       )
-  );
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
   const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
-  const priorityGuidePosts = guidePosts.filter((post) =>
+  const priorityGuidePosts = validGuidePosts.filter((post) =>
     priorityGuidePostSlugs.has(post.slug)
   );
-  const fallbackGuidePosts = guidePosts.filter(
+  const fallbackGuidePosts = validGuidePosts.filter(
     (post) => !priorityGuidePostSlugs.has(post.slug)
   );
 
   const context = {
     pageKind: 'product' as const,
-    categorySlug: input.categorySlug as SupportedClusterCategory,
+    categorySlug,
     brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
     productNames: [input.currentProduct.name],
     productSlugs: [input.currentProduct.slug],

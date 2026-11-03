@@ -4,30 +4,114 @@ import {
 } from '@/config/storefront-content-clusters';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideDescription } from './build-commercial-guide-description';
-import {
-  buildGuideHref,
-  GAME_CATEGORY_PATTERN,
-  getContextBrandValues,
-  hasContextualFamilyMatch,
-  hasContiguousTokenSequence,
-  KIND_PREFERENCE,
-  tokenizeModelIdentifier,
-  tokenizeSlug,
-  toPublishedTimestamp,
-} from './build-commercial-guide-helpers';
 import type {
   BuildCommercialGuideLinksInput,
+  CommercialGuidePageKind,
+  ContentClusterKind,
   InformationalGuideLink,
 } from './content-cluster-types';
 import { getCompareGuideDiscriminatorOptions } from './get-compare-guide-discriminator-options';
 import { getCompareProductMatchRequirements } from './get-compare-product-match-requirements';
 import { getContextBrandKeys } from './get-context-brand-keys';
+import { getPostTokenGroups } from './get-post-token-groups';
 import { getProductConnectivityDiscriminators } from './get-product-connectivity-discriminator';
 import { getProductGuideMatchStrength } from './get-product-guide-match-strength';
 import { getProductGuideModelIdentifiers } from './get-product-guide-model-identifiers';
 import { hasDistinctCompareIdentifierOccurrences } from './has-distinct-compare-identifier-occurrences';
 import { inferContentClusterContext } from './infer-content-cluster-context';
 import { matchesProductGuideIdentifier } from './matches-product-guide-identifier';
+import { normalizeContentCurrencyTokens } from './normalize-content-currency-tokens';
+import { tokenizeContentText } from './tokenize-content-text';
+
+const KIND_PREFERENCE: Record<CommercialGuidePageKind, ContentClusterKind[]> = {
+  category: ['buyer-guide', 'best-in-nigeria'],
+  product: [],
+  compare: ['decision-support', 'buyer-guide'],
+  'price-band': ['best-in-nigeria', 'buyer-guide'],
+};
+
+const MODEL_FAMILY_CONTEXT_EXCLUSIONS = new Set(['and', 'or']);
+const GAME_CATEGORY_PATTERN =
+  /^(?:gaming(?:-accessories)?|portable-gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
+function toPublishedTimestamp(value: string | null) {
+  if (!value) {
+    return 0;
+  }
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function tokenizeSlug(slug: string) {
+  return normalizeContentCurrencyTokens(slug)
+    .split(/[^a-z0-9]+/i)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length > 2);
+}
+
+function tokenizeModelIdentifier(identifier: string) {
+  return normalizeContentCurrencyTokens(identifier)
+    .split(/[^a-z0-9]+/iu)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function hasContiguousTokenSequence(
+  post: BuildCommercialGuideLinksInput['posts'][number],
+  expectedTokens: string[]
+) {
+  if (expectedTokens.length === 0) {
+    return false;
+  }
+
+  const postTokenGroups = getPostTokenGroups(post);
+  return postTokenGroups.some((postTokens) =>
+    postTokens.some((_, startIndex) =>
+      expectedTokens.every(
+        (token, offset) => postTokens[startIndex + offset] === token
+      )
+    )
+  );
+}
+
+function hasContextualFamilyMatch(
+  post: BuildCommercialGuideLinksInput['posts'][number],
+  familyTokens: string[],
+  brands: string[]
+) {
+  if (familyTokens.length === 0) {
+    return false;
+  }
+
+  const brandTokens = brands
+    .flatMap(tokenizeContentText)
+    .filter(
+      (token) => token.length > 1 && !MODEL_FAMILY_CONTEXT_EXCLUSIONS.has(token)
+    );
+
+  return brandTokens.some(
+    (brandToken) =>
+      (familyTokens.includes(brandToken) &&
+        hasContiguousTokenSequence(post, familyTokens)) ||
+      hasContiguousTokenSequence(post, [brandToken, ...familyTokens]) ||
+      hasContiguousTokenSequence(post, [...familyTokens, brandToken])
+  );
+}
+
+function getContextBrandValues(
+  brands: string[],
+  brandAliases: Record<string, readonly string[]>
+) {
+  return Array.from(
+    new Set([
+      ...brands,
+      ...brands.flatMap((brand) => brandAliases[generateSlug(brand)] ?? []),
+    ])
+  );
+}
+
+function buildGuideHref(storeUrl: string, slug: string) {
+  return `${storeUrl}/blog/${slug}`;
+}
 
 export function buildCommercialGuideLinks(
   input: BuildCommercialGuideLinksInput
@@ -88,25 +172,6 @@ export function buildCommercialGuideLinks(
           inferred.brands.some((brand) =>
             normalizedBrands.includes(generateSlug(brand))
           ));
-
-      const configuredContextBrands = normalizedBrands.filter(
-        (brand) => brand in brandAliases
-      );
-      const configuredPostBrands = inferred.brands.filter(
-        (brand) => generateSlug(brand) in brandAliases
-      );
-      const hasConfiguredBrandMismatch =
-        configuredContextBrands.length > 0 &&
-        configuredPostBrands.length > 0 &&
-        !hasBrandMatch;
-
-      if (
-        input.context.pageKind === 'product' &&
-        !GAME_CATEGORY_PATTERN.test(input.context.categorySlug) &&
-        hasConfiguredBrandMismatch
-      ) {
-        return null;
-      }
       if (hasBrandMatch) {
         score += CONTENT_CLUSTER_SCORE.brandMatch;
       }
@@ -206,10 +271,7 @@ export function buildCommercialGuideLinks(
         score += CONTENT_CLUSTER_SCORE.titleTokenMatch;
       }
 
-      const passingScore =
-        input.minScore ?? CONTENT_CLUSTER_SCORE.categoryMatch;
-
-      if (score < passingScore) {
+      if (score < CONTENT_CLUSTER_SCORE.categoryMatch) {
         return null;
       }
 
@@ -226,10 +288,7 @@ export function buildCommercialGuideLinks(
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-    .filter(
-      (entry) =>
-        entry.score >= (input.minScore ?? CONTENT_CLUSTER_SCORE.categoryMatch)
-    )
+    .filter((entry) => entry.score >= 4)
     .sort(
       (left, right) =>
         right.score - left.score ||

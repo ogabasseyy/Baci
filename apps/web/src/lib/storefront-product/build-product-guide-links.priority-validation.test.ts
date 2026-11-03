@@ -26,62 +26,6 @@ function makeInput(
 }
 
 describe('buildProductGuideLinks - priority validation and ranking', () => {
-  it('validates priority guides through buildCommercialGuideLinks rejecting cross-category priority posts', () => {
-    const tabletPost = {
-      slug: 'ipad-buyer-guide',
-      title: 'iPad Buyer Guide',
-      excerpt: null,
-      category: 'Tablets',
-      tags: ['tablets', 'apple'],
-      keywords: ['buyer guide'],
-      featured_image_url: null,
-      published_at: null,
-      reading_time_minutes: 4,
-    };
-
-    const links = buildProductGuideLinks(
-      makeInput({
-        categorySlug: 'smartphones',
-        categoryName: 'Smartphones',
-        currentProduct: {
-          slug: 'iphone-16e',
-          name: 'iPhone 16e',
-          price: 450_000,
-          brand: 'Apple',
-          condition: 'new',
-          stock: 4,
-          category_slug: 'smartphones',
-          product_key_specs: {},
-        },
-        priorityGuidePostSlugs: [tabletPost.slug],
-        guidePosts: [tabletPost],
-      })
-    );
-    expect(links).toEqual([]);
-  });
-
-  it('rejects post with no valid guide kind in priorityGuidePostSlugs', () => {
-    const post = {
-      slug: 'company-news-announcement',
-      title: 'Company News Announcement',
-      excerpt: 'We have updated our store policies.',
-      category: 'Smartphones',
-      tags: ['announcement'],
-      keywords: ['news'],
-      featured_image_url: null,
-      published_at: null,
-      reading_time_minutes: 2,
-    };
-
-    const links = buildProductGuideLinks(
-      makeInput({
-        priorityGuidePostSlugs: [post.slug],
-        guidePosts: [post],
-      })
-    );
-    expect(links).toEqual([]);
-  });
-
   it('ranks legitimate priority guide ahead of fallback guides', () => {
     const priorityPost = {
       slug: 'iphone-buying-guide',
@@ -184,6 +128,90 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
     expect(isolatedLinks).toEqual([]);
   });
 
+  it('rejects Acer Predator gaming laptop guide on Dell Alienware PDP and rejects HP Omen guide on Acer Predator PDP', () => {
+    const acerPredatorGuide = {
+      slug: 'acer-predator-helios-gaming-laptop-buyer-guide',
+      title: 'Acer Predator Helios Gaming Laptop Buyer Guide',
+      excerpt: 'Comprehensive buyer guide for Acer Predator gaming laptops.',
+      category: 'Gaming',
+      tags: ['gaming', 'acer', 'predator', 'gaming laptop'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-01T00:00:00.000Z',
+      reading_time_minutes: 6,
+    };
+    const alienwareGuide = {
+      slug: 'alienware-m16-gaming-laptop-review-and-guide',
+      title: 'Alienware m16 Gaming Laptop Review & Buyer Guide',
+      excerpt: 'High-performance mobile gaming from Dell Alienware.',
+      category: 'Gaming',
+      tags: ['gaming', 'dell', 'alienware', 'gaming laptop'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-05T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    const hpOmenGuide = {
+      slug: 'hp-omen-16-gaming-laptop-guide',
+      title: 'HP Omen 16 Gaming Laptop Buying Guide',
+      excerpt: 'Reviewing HP Omen gaming laptops in Nigeria.',
+      category: 'Gaming',
+      tags: ['gaming', 'hp', 'omen', 'gaming laptop'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-06T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+
+    // On Dell Alienware PDP: Acer Predator guide is rejected, Alienware guide is returned
+    const alienwarePdpLinks = buildProductGuideLinks(
+      makeInput({
+        categorySlug: 'gaming-laptops',
+        categoryName: 'Gaming Laptops',
+        currentProduct: {
+          slug: 'dell-alienware-m16',
+          name: 'Dell Alienware m16 R2 Gaming Laptop',
+          price: 1_850_000,
+          brand: 'Dell',
+          condition: 'new',
+          stock: 3,
+          category_slug: 'gaming-laptops',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [acerPredatorGuide.slug],
+        guidePosts: [acerPredatorGuide, alienwareGuide],
+      })
+    );
+    expect(alienwarePdpLinks).toHaveLength(1);
+    expect(alienwarePdpLinks[0].href).toBe(
+      'https://ogabassey.com/blog/alienware-m16-gaming-laptop-review-and-guide'
+    );
+
+    // On Acer Predator PDP: HP Omen guide is rejected, Acer Predator guide is prioritized
+    const acerPdpLinks = buildProductGuideLinks(
+      makeInput({
+        categorySlug: 'gaming-laptops',
+        categoryName: 'Gaming Laptops',
+        currentProduct: {
+          slug: 'acer-predator-helios-16',
+          name: 'Acer Predator Helios 16 Gaming Laptop',
+          price: 1_650_000,
+          brand: 'Acer',
+          condition: 'new',
+          stock: 4,
+          category_slug: 'gaming-laptops',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [acerPredatorGuide.slug],
+        guidePosts: [hpOmenGuide, acerPredatorGuide],
+      })
+    );
+    expect(acerPdpLinks).toHaveLength(1);
+    expect(acerPdpLinks[0].href).toBe(
+      'https://ogabassey.com/blog/acer-predator-helios-gaming-laptop-buyer-guide'
+    );
+  });
+
   it('preserves same-category platform guide for PDP with unmapped publisher brand (EA Sports on PS5)', () => {
     const ps5BuyerGuide = {
       slug: 'best-ps5-games-buyer-guide',
@@ -197,7 +225,6 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
       reading_time_minutes: 6,
     };
 
-    // Priority placement
     const priorityLinks = buildProductGuideLinks(
       makeInput({
         categorySlug: 'playstation-5',
@@ -221,7 +248,6 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
       'https://ogabassey.com/blog/best-ps5-games-buyer-guide'
     );
 
-    // Fallback placement (non-priority)
     const fallbackLinks = buildProductGuideLinks(
       makeInput({
         categorySlug: 'playstation-5',
@@ -243,41 +269,6 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
     expect(fallbackLinks).toHaveLength(1);
     expect(fallbackLinks[0].href).toBe(
       'https://ogabassey.com/blog/best-ps5-games-buyer-guide'
-    );
-  });
-
-  it('preserves general category buyer guide for priority guide when product brand is unmapped', () => {
-    const generalPhoneGuide = {
-      slug: 'best-phones-in-nigeria',
-      title: 'Best Phones in Nigeria for 2026',
-      excerpt: 'Comprehensive buyer guide for all smartphones.',
-      category: 'Smartphones',
-      tags: ['smartphones'],
-      keywords: ['buyer guide'],
-      featured_image_url: null,
-      published_at: '2026-04-01T00:00:00.000Z',
-      reading_time_minutes: 5,
-    };
-
-    const links = buildProductGuideLinks(
-      makeInput({
-        currentProduct: {
-          slug: 'unbranded-feature-phone',
-          name: 'Unbranded Feature Phone',
-          price: 25_000,
-          brand: 'GenericBrandXYZ',
-          condition: 'new',
-          stock: 10,
-          category_slug: 'smartphones',
-          product_key_specs: {},
-        },
-        priorityGuidePostSlugs: [generalPhoneGuide.slug],
-        guidePosts: [generalPhoneGuide],
-      })
-    );
-    expect(links).toHaveLength(1);
-    expect(links[0].href).toBe(
-      'https://ogabassey.com/blog/best-phones-in-nigeria'
     );
   });
 });

@@ -56,6 +56,11 @@ function hasPhrase(haystack: string, needle: string) {
   }
 }
 
+type ClusterSupportEntry = [
+  SupportedClusterCategory,
+  (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
+];
+
 const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'omen',
   'legion',
@@ -75,6 +80,16 @@ const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'gpus',
   'graphics card',
   'graphics cards',
+  'accessories',
+  'accessory',
+  'cooling pad',
+  'dock',
+  'stand',
+  'backpack',
+  'sleeve',
+  'skin',
+  'charger',
+  'adapter',
 ] as const;
 
 function isDedicatedGamingLaptopContent(
@@ -114,10 +129,7 @@ function inferCategorySlug(
   title?: string
 ): SupportedClusterCategory | null {
   const explicitMatch = (
-    Object.entries(CONTENT_CLUSTER_SUPPORT) as [
-      SupportedClusterCategory,
-      (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
-    ][]
+    Object.entries(CONTENT_CLUSTER_SUPPORT) as ClusterSupportEntry[]
   )
     .flatMap(([categorySlug, support]) =>
       support.categoryNames.map((name) => ({ categorySlug, name }))
@@ -143,10 +155,7 @@ function inferCategorySlug(
 
   for (const [categorySlug, support] of Object.entries(
     CONTENT_CLUSTER_SUPPORT
-  ) as [
-    SupportedClusterCategory,
-    (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
-  ][]) {
+  ) as ClusterSupportEntry[]) {
     const score = support.articleTokens.filter(
       (token) => tokens.includes(token) || hasPhrase(haystack, token)
     ).length;
@@ -244,12 +253,7 @@ function inferPriceBands(
     return [];
   }
 
-  return (
-    Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases) as [
-      string,
-      readonly string[],
-    ][]
-  )
+  return Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases)
     .filter(([, aliases]) =>
       aliases.some((alias) => hasPhrase(haystack, alias))
     )
@@ -259,22 +263,15 @@ function inferPriceBands(
 export function inferContentClusterContext(
   input: InferContentClusterContextInput
 ): InferredContentClusterContext {
-  const haystack = normalizeText(
-    [
-      input.title,
-      input.excerpt,
-      input.category,
-      ...(input.tags ?? []),
-      ...(input.keywords ?? []),
-    ].join(' ')
-  );
-  const tokens = tokenize([
+  const combinedText = [
     input.title,
     input.excerpt,
     input.category,
     ...(input.tags ?? []),
     ...(input.keywords ?? []),
-  ]);
+  ];
+  const haystack = normalizeText(combinedText.join(' '));
+  const tokens = tokenize(combinedText);
   const explicitCategory = normalizeText(input.category);
   const categorySlug = inferCategorySlug(
     haystack,

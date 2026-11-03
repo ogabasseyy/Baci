@@ -21,6 +21,9 @@ const laptopBrands = {
   apple: ['apple', 'macbook'],
   asus: ['asus', 'rog', 'tuf'],
   msi: ['msi'],
+  acer: ['acer', 'predator', 'nitro'],
+  razer: ['razer', 'blade'],
+  gigabyte: ['gigabyte', 'aorus'],
 } as const;
 
 export const CORE_CONTENT_CLUSTER_SUPPORT = {
@@ -85,6 +88,8 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
       'legion',
       'msi',
       'alienware',
+      'predator',
+      'razer',
       'refresh rate',
     ],
     brandTokens: laptopBrands,

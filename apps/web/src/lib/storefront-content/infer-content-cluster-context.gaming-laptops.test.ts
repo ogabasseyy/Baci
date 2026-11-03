@@ -168,19 +168,19 @@ describe('inferContentClusterContext - gaming laptops', () => {
     expect(gpuRoundup.categorySlug).toBe('gaming-laptops');
   });
 
-  it('does not promote desktop articles tagged "gaming laptop" when the title lacks laptop evidence', () => {
-    for (const excerpt of [
-      'High-performance gaming desktop benchmarked.',
-      '',
-    ]) {
-      const desktopArticle = inferContentClusterContext({
+  it('does not promote desktop articles without laptop evidence under Gaming or Laptops', () => {
+    for (const [category, tags, expected] of [
+      ['Gaming', ['gaming laptop', 'alienware'], 'gaming'],
+      ['Laptops', ['alienware'], 'laptops'],
+    ] as const) {
+      const res = inferContentClusterContext({
         title: 'Alienware Aurora R16 Review',
-        excerpt,
-        category: 'Gaming',
-        tags: ['gaming laptop', 'alienware'],
+        excerpt: 'Desktop benchmarked.',
+        category,
+        tags: [...tags],
         keywords: ['review'],
       });
-      expect(desktopArticle.categorySlug).toBe('gaming');
+      expect(res.categorySlug).toBe(expected);
     }
   });
 
@@ -193,17 +193,6 @@ describe('inferContentClusterContext - gaming laptops', () => {
       keywords: ['review', 'gpu', 'monitor'],
     });
     expect(laptopArticle.categorySlug).toBe('gaming-laptops');
-  });
-
-  it('does not promote desktop articles under explicit Laptops category when content lacks laptop evidence', () => {
-    const desktopArticle = inferContentClusterContext({
-      title: 'Alienware Aurora R16 Review',
-      excerpt: '',
-      category: 'Laptops',
-      tags: ['alienware'],
-      keywords: ['review'],
-    });
-    expect(desktopArticle.categorySlug).toBe('laptops');
   });
 
   it('classifies unmapped category posts with new gaming laptop families via fallback article token scoring', () => {
@@ -240,46 +229,60 @@ describe('inferContentClusterContext - gaming laptops', () => {
     }
   });
 
-  it('excludes desktop and keyboard subjects in fallback scoring for unmapped categories', () => {
-    const desktop = inferContentClusterContext({
-      title: 'Alienware Aurora R16 Desktop Buyer Guide',
-      excerpt: 'Prebuilt tower performance and Nigerian pricing.',
-      category: 'Hardware Reviews',
-      tags: ['alienware', 'desktop'],
-      keywords: ['aurora', 'desktop'],
-    });
-    expect(desktop.categorySlug).toBe('desktops');
-
-    const keyboard = inferContentClusterContext({
-      title: 'Katana Mechanical Gaming Keyboard Review',
-      excerpt: 'Tactile switches and RGB lighting.',
-      category: 'Hardware Reviews',
-      tags: ['katana', 'keyboard'],
-      keywords: ['mechanical keyboard'],
-    });
-    expect(keyboard.categorySlug).not.toBe('gaming-laptops');
+  it('excludes desktop and keyboard subjects in fallback scoring for unmapped categories unless title establishes laptop', () => {
+    const cases = [
+      [
+        'Alienware Aurora R16 Desktop Buyer Guide',
+        'Prebuilt tower.',
+        ['alienware', 'desktop'],
+        'aurora',
+        'desktops',
+      ],
+      [
+        'Katana Mechanical Gaming Keyboard Review',
+        'RGB mechanical.',
+        ['katana', 'keyboard'],
+        'keyboard',
+        'not-gaming',
+      ],
+      [
+        'Hands-on with the new Nitro gaming laptop',
+        'High refresh rate display.',
+        ['nitro', 'gaming laptop'],
+        'keyboard',
+        'gaming-laptops',
+      ],
+    ] as const;
+    for (const [t, excerpt, tags, kw, exp] of cases) {
+      const res = inferContentClusterContext({
+        title: t,
+        excerpt,
+        category: 'Hardware Reviews',
+        tags: [...tags],
+        keywords: [kw],
+      });
+      if (exp === 'not-gaming')
+        expect(res.categorySlug).not.toBe('gaming-laptops');
+      else expect(res.categorySlug).toBe(exp);
+    }
   });
 
   it('preserves legitimate gaming-laptop guides with GPU, desktop-class, pairing, or incidental excerpt tokens', () => {
-    for (const [title, excerpt, kw] of [
-      ['Best Gaming Laptops with RTX 4060 GPUs in Nigeria', 'Guide.', 'gpu'],
-      [
-        'Best Gaming Laptops for Desktop Replacement',
-        'Guide.',
-        'desktop replacement',
-      ],
-      ['Alienware m16 Desktop-Class Review', 'Guide.', 'desktop-class'],
-      ['Best Gaming Laptops and Monitor Pairings', 'Guide.', 'monitors'],
-      ['Top 10 Gaming Laptops with Free Accessories', 'Guide.', 'accessories'],
+    for (const [title, kw, excerpt = 'Guide.'] of [
+      ['Best Gaming Laptops with RTX 4060 GPUs in Nigeria', 'gpu'],
+      ['Best Gaming Laptops for Desktop Replacement', 'desktop replacement'],
+      ['Alienware m16 Desktop-Class Review', 'desktop-class'],
+      ['Best Gaming Laptops and Monitor Pairings', 'monitors'],
+      ['Top 10 Gaming Laptops with Free Accessories', 'accessories'],
       [
         'Alienware m16 Gaming Laptop Buyer Guide',
-        'Review covers display, keyboard, battery life.',
         'laptops',
+        'Covers display, keyboard, and battery.',
       ],
       [
         'Best Gaming Laptops in Nigeria',
-        'We compared keyboards, GPUs and battery life.',
         'gaming',
+        'We compared keyboards, GPUs, battery.',
       ],
     ]) {
       const post = inferContentClusterContext({

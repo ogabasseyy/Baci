@@ -7,6 +7,10 @@ import {
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
   GAMING_LAPTOP_EXEMPT_PHRASES,
 } from '@/config/storefront-gaming-laptop-taxonomy';
+import {
+  MERCHANT_INTENT_CLUSTER_KIND_MAP,
+  VALID_MERCHANT_INTENT_SOURCES,
+} from '@/config/storefront-merchant-intent';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type {
   ContentClusterKind,
@@ -91,6 +95,11 @@ const hasTitleLaptopSubject = (t: string) =>
   (hasLaptopPhrase(t) &&
     DEDICATED_GAMING_LAPTOP_TOKENS.some((k) => hasPhrase(t, k)));
 
+const getSubjectTarget = (title?: string, excerpt?: string) =>
+  hasTitleLaptopSubject(title ?? '')
+    ? (title ?? '')
+    : [title, excerpt].filter(Boolean).join(' ');
+
 function isDedicatedGamingLaptopContent(
   title: string,
   content: string,
@@ -144,10 +153,10 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
-      const target = hasTitleLaptopSubject(title ?? '')
-        ? (title ?? '')
-        : [title, excerpt].filter(Boolean).join(' ');
-      return hasExcludedGamingLaptopSubject(target, true)
+      return hasExcludedGamingLaptopSubject(
+        getSubjectTarget(title, excerpt),
+        true
+      )
         ? 'laptops'
         : 'gaming-laptops';
     }
@@ -162,7 +171,7 @@ function inferCategorySlug(
   ) as ClusterSupportEntry[]) {
     if (
       categorySlug === 'gaming-laptops' &&
-      hasExcludedGamingLaptopSubject(haystack)
+      hasExcludedGamingLaptopSubject(getSubjectTarget(title, excerpt), true)
     ) {
       continue;
     }
@@ -200,15 +209,10 @@ function resolveKind(
   inferredKind: ContentClusterKind | null,
   haystack: string
 ): ContentClusterKind | null {
-  // The public RPC excludes stale classifications. Reject malformed metadata
-  // here too so older adapters and unclassified rows retain the heuristic path.
   const source = String(input.merchant_intent_source ?? '');
-  if (
-    source !== 'merchant_declared' &&
-    source !== 'verified_receipt' &&
-    source !== 'reviewed'
-  )
+  if (!VALID_MERCHANT_INTENT_SOURCES.has(source as never)) {
     return inferredKind;
+  }
   if (input.merchant_intent === 'buying-guide') {
     return inferredKind === 'best-in-nigeria' &&
       hasPhrase(haystack, 'nigeria') &&
@@ -216,14 +220,10 @@ function resolveKind(
       ? inferredKind
       : 'buyer-guide';
   }
-  const intentMap: Record<string, ContentClusterKind | null> = {
-    comparison: 'decision-support',
-    'repair-guide': 'troubleshooting',
-    news: null,
-  };
-  return typeof input.merchant_intent === 'string' &&
-    input.merchant_intent in intentMap
-    ? intentMap[input.merchant_intent]
+  const intent =
+    typeof input.merchant_intent === 'string' ? input.merchant_intent : '';
+  return Object.hasOwn(MERCHANT_INTENT_CLUSTER_KIND_MAP, intent)
+    ? MERCHANT_INTENT_CLUSTER_KIND_MAP[intent]
     : inferredKind;
 }
 

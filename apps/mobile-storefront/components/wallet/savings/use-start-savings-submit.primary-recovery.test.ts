@@ -118,7 +118,7 @@ describe('submitBankTransferContribution stored operation recovery', () => {
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
     expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(
-      expect.stringContaining('status')
+      expect.stringContaining('Could not confirm')
     );
   });
 

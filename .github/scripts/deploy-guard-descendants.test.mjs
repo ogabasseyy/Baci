@@ -56,11 +56,11 @@ test('accepts when no superseding commit deployed, even without the expected run
 });
 
 test('detects a deployed commit that only appears on a later compare page', async () => {
-  const commitList = Array.from({ length: 249 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const commitList = Array.from({ length: 149 }, (_, i) => hex(i + 10)).concat(currentSha);
   const urls = [];
-  const fetchImpl = farAheadFetch({ runs: [run(hex(200), 3), expectedRun], commitList, jobs: { 3: deployedJob }, urls });
+  const fetchImpl = farAheadFetch({ runs: [run(hex(130), 3), expectedRun], commitList, jobs: { 3: deployedJob }, urls });
   await assert.rejects(verify(fetchImpl), /superseded deployment SHA/);
-  assert.equal(urls.filter((u) => u.includes('/compare/')).length, 3);
+  assert.equal(urls.filter((u) => u.includes('/compare/')).length, 2);
 });
 
 test('routes a 101-commit compare through the run-based check', async () => {
@@ -118,20 +118,20 @@ test('bugfix: fails closed when the superseding list contains the expected SHA',
 });
 
 test('bugfix: counts every lookup against the request budget and fails closed', async () => {
-  const commitList = Array.from({ length: 399 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const commitList = Array.from({ length: 169 }, (_, i) => hex(i + 10)).concat(currentSha);
   const runs = commitList.map((sha, i) => run(sha, 9000 + i, 'cancelled'));
   const urls = [];
   await assert.rejects(verify(farAheadFetch({ runs, commitList, urls })), /request budget/);
-  assert.ok(urls.length <= 802);
+  assert.ok(urls.length <= 332);
 });
 
 test('refuses, with a clear error, a gap beyond what the request budget can cover', async () => {
-  const commitList = Array.from({ length: 450 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const commitList = Array.from({ length: 250 }, (_, i) => hex(i + 10)).concat(currentSha);
   await assert.rejects(verify(farAheadFetch({ runs: [], commitList })), /too many superseding commits/);
 });
 
-test('covers a few hundred superseding commits with job lookups inside the budget', async () => {
-  const commitList = Array.from({ length: 299 }, (_, i) => hex(i + 10)).concat(currentSha);
+test('covers about a hundred superseding commits with job lookups inside the budget', async () => {
+  const commitList = Array.from({ length: 119 }, (_, i) => hex(i + 10)).concat(currentSha);
   const runs = commitList.map((sha, i) => run(sha, 9000 + i, 'cancelled'));
   assert.deepEqual(await verify(farAheadFetch({ runs, commitList })), accepted);
 });

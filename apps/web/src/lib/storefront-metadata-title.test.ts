@@ -158,4 +158,14 @@ describe('buildStorefrontMetadataTitle', () => {
 
     expect(result.title).toBe('Gaming (PS5, PC)');
   });
+
+  it('preserves a platform parenthetical when title is empty and suffix is used', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 30,
+      suffix: 'Gaming (PS5, PC)',
+      title: '',
+    });
+
+    expect(result.title).toBe('Gaming (PS5, PC)');
+  });
 });

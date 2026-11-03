@@ -1593,8 +1593,10 @@ const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
 };
 
 export function isRedundantPlatformListParenthetical(content: string): boolean {
-  const parts = content
+  const normalized = content
     .toLowerCase()
+    .replace(/\b(xbox\s+)?series\s+[xs]\s*[/|]\s*[xs]\b/gu, 'xbox series x');
+  const parts = normalized
     .split(/\s*(?:[,/&+;|]|\band\b)(?:\s*(?:[,/&+;|]|\band\b))*\s*/u)
     .map((part) => part.replace(/\s+/gu, ' ').trim());
   if (parts.length < 2 || parts.some((part) => !part)) return false;
@@ -1612,14 +1614,26 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
 
 export function stripRedundantPlatformParentheticals(title: string): string {
   let stripped = false;
+  let strippedAtStart = false;
   let compacted = title.replace(
     /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*/gu,
-    (match, innerBeforePunct?: string, innerOther?: string) => {
+    (
+      match,
+      innerBeforePunct?: string,
+      innerOther?: string,
+      offset?: number
+    ) => {
       const inner = innerBeforePunct ?? innerOther ?? '';
       if (!isRedundantPlatformListParenthetical(inner)) {
         return match;
       }
       stripped = true;
+      if (
+        typeof offset === 'number' &&
+        title.slice(0, offset).trim().length === 0
+      ) {
+        strippedAtStart = true;
+      }
       return innerBeforePunct !== undefined ? '' : ' ';
     }
   );
@@ -1628,7 +1642,9 @@ export function stripRedundantPlatformParentheticals(title: string): string {
     return title;
   }
 
-  compacted = compacted.replace(/^[,\s:;.!?–—|-]+\s*/u, '');
+  if (strippedAtStart) {
+    compacted = compacted.replace(/^[,\s:;.!?–—|-]+\s*/u, '');
+  }
 
   return compacted.trim();
 }

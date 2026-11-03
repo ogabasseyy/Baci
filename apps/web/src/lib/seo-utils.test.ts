@@ -1588,6 +1588,16 @@ describe('generateMetaTitle', () => {
           }
         )
       ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria Today | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5, Xbox Series X|S) at Best Price Guaranteed',
+          {
+            maxLength: 65,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy Monster Hunter Wilds at Best Price Guaranteed | Ogabassey');
     });
 
     it('compacts unspaced parenthetical without token concatenation', () => {
@@ -1699,6 +1709,12 @@ describe('generateMetaTitle', () => {
         true
       );
       expect(isRedundantPlatformListParenthetical('PS5 | PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X|S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X/S')).toBe(
+        true
+      );
     });
 
     it('returns false for single-platform parentheticals', () => {
@@ -1710,6 +1726,12 @@ describe('generateMetaTitle', () => {
         false
       );
       expect(isRedundantPlatformListParenthetical('Xbox Series X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X|S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X/S')).toBe(
+        false
+      );
     });
 
     it('returns false for single-platform synonym lists with fewer than 2 distinct identities', () => {
@@ -1800,6 +1822,17 @@ describe('generateMetaTitle', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5, PS4) - Best Game Ever')
       ).toBe('Best Game Ever');
+    });
+
+    it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {
+      expect(
+        stripRedundantPlatformParentheticals('-30% Deal (PS5, PS4) Today')
+      ).toBe('-30% Deal Today');
+      expect(
+        stripRedundantPlatformParentheticals(
+          '| Special Offer (PS5, PS4) Right Now'
+        )
+      ).toBe('| Special Offer Right Now');
     });
 
     it('localizes spacing normalization without collapsing double spaces elsewhere', () => {

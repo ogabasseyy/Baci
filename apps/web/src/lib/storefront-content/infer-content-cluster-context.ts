@@ -109,11 +109,16 @@ function isDedicatedGamingLaptopContent(
   if ((hasLaptop && hasDedicated) || hasGamingLaptopPhrase(title)) {
     return !hasExcludedGamingLaptopSubject(title);
   }
-  if (hasDedicated && hasLaptopPhrase(content)) {
-    const combined = [title, excerpt].filter(Boolean).join(' ');
-    return !hasExcludedGamingLaptopSubject(combined, hasLaptopPhrase(combined));
-  }
-  return false;
+  if (!hasDedicated) return false;
+  const combined = [title, excerpt].filter(Boolean).join(' ');
+  const target = hasLaptopPhrase(combined)
+    ? combined
+    : hasLaptopPhrase(content)
+      ? content
+      : null;
+  return target
+    ? !hasExcludedGamingLaptopSubject(target, hasGamingLaptopPhrase(target))
+    : false;
 }
 
 function inferCategorySlug(
@@ -134,11 +139,9 @@ function inferCategorySlug(
     .find(({ name }) => hasPhrase(explicitCategory, name));
 
   if (explicitMatch) {
-    const isGamingOrLaptop =
-      explicitMatch.categorySlug === 'gaming' ||
-      explicitMatch.categorySlug === 'laptops';
+    const slug = explicitMatch.categorySlug;
     if (
-      isGamingOrLaptop &&
+      (slug === 'gaming' || slug === 'laptops') &&
       isDedicatedGamingLaptopContent(
         title ?? '',
         contentHaystack,
@@ -147,12 +150,12 @@ function inferCategorySlug(
     ) {
       return 'gaming-laptops';
     }
-    if (explicitMatch.categorySlug === 'gaming-laptops') {
+    if (slug === 'gaming-laptops') {
       return hasExcludedGamingLaptopSubject(title ?? '', true)
         ? 'laptops'
         : 'gaming-laptops';
     }
-    return explicitMatch.categorySlug;
+    return slug;
   }
 
   let bestCategory: SupportedClusterCategory | null = null;

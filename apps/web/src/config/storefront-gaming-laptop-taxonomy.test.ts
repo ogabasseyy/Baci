@@ -26,5 +26,11 @@ describe('storefront-gaming-laptop-taxonomy', () => {
 
     const subjectSet = new Set(EXCLUDED_GAMING_LAPTOP_SUBJECTS);
     expect(subjectSet.size).toBe(EXCLUDED_GAMING_LAPTOP_SUBJECTS.length);
+
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('cooling pads');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop stands');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('docking stations');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('gaming stands');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop chargers');
   });
 });

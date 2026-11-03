@@ -63,15 +63,15 @@ function resolveProductCardBadge(
     ? /playstation|ps5|ps4/.test(lower)
       ? 'bg-blue-600'
       : lower.includes('xbox')
-        ? 'bg-green-600'
+        ? 'bg-green-700'
         : /nintendo|switch/.test(lower)
           ? 'bg-red-600'
           : lower.includes('multi')
             ? 'bg-purple-600'
-            : 'bg-amber-500'
+            : 'bg-amber-700'
     : product.condition === 'New'
-      ? 'bg-emerald-500'
-      : 'bg-amber-500';
+      ? 'bg-emerald-700'
+      : 'bg-amber-700';
   return { colorClass, label: PLATFORM_LABELS[badgeText] ?? badgeText };
 }
 

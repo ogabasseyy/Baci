@@ -193,9 +193,14 @@ describe('BlogPostBody', () => {
       'https://ogabassey.usebaci.com/blog/my-post'
     );
 
-    expect(
-      screen.getByRole('link', { name: /share on twitter/i })
-    ).toHaveAttribute('href', expect.stringContaining(expectedShareUrl));
+    const twitterLink = screen.getByRole('link', {
+      name: 'Share on Twitter (opens in new tab)',
+    });
+    expect(twitterLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(expectedShareUrl)
+    );
+    expect(twitterLink).toHaveClass('min-h-11');
   });
 
   it('renders a lazy video panel when video metadata is provided', async () => {

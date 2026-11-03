@@ -99,18 +99,35 @@ describe('BlogPostBody legacy rendering', () => {
       'https://usebaci.com/ogabassey/blog/pixel-9-review'
     );
 
-    expect(
-      screen.getByRole('link', { name: /share on twitter/i })
-    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
-    expect(
-      screen.getByRole('link', { name: /share on twitter/i })
-    ).toHaveAttribute('href', expect.stringContaining(encodedTitle));
-    expect(
-      screen.getByRole('link', { name: /share on linkedin/i })
-    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
-    expect(
-      screen.getByRole('link', { name: /share on facebook/i })
-    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
+    const twitterLink = screen.getByRole('link', {
+      name: 'Share on Twitter (opens in new tab)',
+    });
+    const linkedInLink = screen.getByRole('link', {
+      name: 'Share on LinkedIn (opens in new tab)',
+    });
+    const facebookLink = screen.getByRole('link', {
+      name: 'Share on Facebook (opens in new tab)',
+    });
+
+    expect(twitterLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodedShareUrl)
+    );
+    expect(twitterLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodedTitle)
+    );
+    expect(twitterLink).toHaveClass('min-h-11');
+    expect(linkedInLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodedShareUrl)
+    );
+    expect(linkedInLink).toHaveClass('min-h-11');
+    expect(facebookLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(encodedShareUrl)
+    );
+    expect(facebookLink).toHaveClass('min-h-11');
     expect(mockResolveBlogPostContent).toHaveBeenCalledWith(
       '<p>Legacy HTML body</p>',
       {

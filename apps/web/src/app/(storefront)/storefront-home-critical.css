@@ -28,7 +28,7 @@
   }
 
   .ogabassey-home-products__eyebrow {
-    color: var(--ogabassey-shell-accent-text, #ff7377);
+    color: var(--store-primary, #d62027);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.05em;
@@ -37,7 +37,7 @@
   }
 
   .ogabassey-home-products__title {
-    color: var(--ogabassey-shell-text, var(--store-primary-text, #ffffff));
+    color: var(--ogabassey-surface-text, var(--store-background-text, #111827));
     font-size: 1.25rem;
     font-weight: 700;
     line-height: 1.75rem;
@@ -45,7 +45,11 @@
   }
 
   .ogabassey-home-products__count {
-    color: var(--ogabassey-shell-muted-text, #aeb7c4);
+    color: color-mix(
+      in srgb,
+      var(--ogabassey-surface-text, var(--store-background-text, #111827)) 75%,
+      transparent
+    );
     font-size: 0.875rem;
     line-height: 1.25rem;
   }
@@ -53,7 +57,7 @@
   .ogabassey-home-products__view-all {
     color: color-mix(
       in srgb,
-      var(--ogabassey-shell-text, var(--store-primary-text, #ffffff)) 70%,
+      var(--ogabassey-surface-text, var(--store-background-text, #111827)) 75%,
       transparent
     );
     display: none;
@@ -63,7 +67,7 @@
   }
 
   .ogabassey-home-products__view-all:hover {
-    color: var(--ogabassey-shell-text, var(--store-primary-text, #ffffff));
+    color: var(--ogabassey-surface-text, var(--store-background-text, #111827));
   }
 
   .ogabassey-home-products__grid {

@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES } from '@/schemas/piggyvest-primary-wallet-capability';
 
 // Every enable flag must be read through isPiggyvestFeatureOn so the master
 // kill switch cannot be bypassed. The scan is recursive over the whole web
@@ -93,6 +94,9 @@ const allowed = new Set([
   '../../tools/staging/prefunded-card/launch-public.ts',
   // Reads one unrelated attestation variable through a constant; not a flag.
   'src/lib/piggyvest/webhook-capture-attestation.ts',
+  // Reads the two minimum-client-build numbers, not enable flags; asserted
+  // below so a flag name can never be added to that variable map.
+  'src/lib/piggyvest/primary-client-build-floors.ts',
   // Reads its own non-enable settings through a prefix helper; the enable flag
   // goes through isPiggyvestFeatureOn (asserted below).
   'src/lib/piggyvest/customer-plan-funding-runtime.ts',
@@ -126,6 +130,12 @@ describe('no direct reads of PiggyVest enable flags', () => {
       expect(testFile.test(name), name).toBe(true);
     for (const name of ['latest-flag.test-reader.ts', 'a.ts', 'attest.tsx'])
       expect(testFile.test(name), name).toBe(false);
+  });
+  it('the build-floor variable names are not enable flags', () => {
+    for (const name of Object.values(
+      PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES
+    ))
+      expect(name).not.toMatch(/ENABLED/);
   });
   it('the plan-funding helper never reads an enable flag', () => {
     const file = sources.find(

@@ -18,6 +18,7 @@ export function OxygenSavedPlans({
   requestApprovalCode,
   approvePlan,
   approvalBusy = false,
+  resumeQueuedApproval = false,
   onAccept,
 }: {
   workflowId: string;
@@ -32,6 +33,7 @@ export function OxygenSavedPlans({
     onConfirmed?: () => Promise<void>
   ) => Promise<boolean>;
   approvalBusy?: boolean;
+  resumeQueuedApproval?: boolean;
   onAccept?: (reference: string) => void;
 }) {
   const [signingReference, setSigningReference] = useState<string>();
@@ -98,6 +100,7 @@ export function OxygenSavedPlans({
         requestCode={requestApprovalCode}
         approvePlan={approvePlan}
         busy={approvalBusy}
+        resumeQueuedApproval={resumeQueuedApproval}
       />
     );
   }

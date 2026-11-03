@@ -8,6 +8,8 @@ import { OxygenApprovalCodeHeading } from './OxygenApprovalCodeHeading';
 import { OxygenApprovalSignatureStep } from './OxygenApprovalSignatureStep';
 import { OxygenComparisonSummary } from './OxygenComparisonSummary';
 import { OxygenOtpField } from './OxygenOtpField';
+import { oxygenApprovalDueDate } from './oxygen-approval-due-date';
+import { oxygenApprovalWindowUsable } from './oxygen-approval-window-usable';
 import { useOxygenApprovalSignature } from './use-oxygen-approval-signature';
 import { useOxygenApprovalWindow } from './use-oxygen-approval-window';
 export function OxygenApprovalCode({
@@ -17,6 +19,7 @@ export function OxygenApprovalCode({
   requestCode,
   approvePlan,
   busy,
+  resumeQueuedApproval = false,
 }: {
   workflowId: string;
   reference: string;
@@ -29,6 +32,7 @@ export function OxygenApprovalCode({
     onConfirmed?: () => Promise<void>
   ) => Promise<boolean>;
   busy: boolean;
+  resumeQueuedApproval?: boolean;
 }) {
   const [code, setCode] = useState('');
   const signing = useOxygenApprovalSignature();
@@ -55,15 +59,7 @@ export function OxygenApprovalCode({
   const lock = useRef(false);
   const attempted = useRef('');
   const timing = useOxygenApprovalWindow(workflowId, reference);
-  const due = state.schedule?.[0]?.dueDate;
-  const nextPaymentDate = due
-    ? new Intl.DateTimeFormat('en-NG', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        timeZone: 'UTC',
-      }).format(new Date(Date.UTC(due[0], due[1] - 1, due[2])))
-    : undefined;
+  const nextPaymentDate = oxygenApprovalDueDate(state.schedule?.[0]?.dueDate);
   async function complete(otp: string, file: File) {
     const window = timing.window;
     if (
@@ -143,10 +139,19 @@ export function OxygenApprovalCode({
     lock.current = true;
     setError('');
     try {
-      const file = signature;
-      if (!mounted.current) return;
-      if (!file) {
-        setError('Add your signature before continuing.');
+      if (resumeQueuedApproval) {
+        if (
+          timing.loading ||
+          timing.error ||
+          !oxygenApprovalWindowUsable(timing.window, reference, Date.now())
+        ) {
+          setError(
+            'This saved approval code is unavailable or expired. Your approval is still queued; contact support to continue.'
+          );
+          return;
+        }
+        setCode('');
+        setCodeStep(true);
         return;
       }
       setSending(true);
@@ -197,6 +202,7 @@ export function OxygenApprovalCode({
               busy ||
               saving ||
               sending ||
+              (resumeQueuedApproval && timing.loading) ||
               !requestCode ||
               reference !== state.bookingReference
             }
@@ -245,7 +251,9 @@ export function OxygenApprovalCode({
               sentAt={
                 timing.window ? Date.parse(timing.window.sentAt) : undefined
               }
-              onResend={requestCode ? resend : undefined}
+              onResend={
+                requestCode && !resumeQueuedApproval ? resend : undefined
+              }
               hint={
                 timing.loading
                   ? 'Checking your saved code status…'

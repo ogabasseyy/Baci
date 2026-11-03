@@ -167,6 +167,10 @@ export function OxygenProviderStages({
             }
             approvePlan={approval.approvePlan}
             approvalBusy={disabled}
+            resumeQueuedApproval={
+              snapshot.pending?.action === 'approve_booking' &&
+              snapshot.pending.status === 'queued'
+            }
             requestApprovalCode={approval.requestApprovalCode}
           />
         ) : !['payment_required', 'ready_for_activation'].includes(

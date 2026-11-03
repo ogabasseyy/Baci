@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { buildPrimaryGoalWalletName } from '@/lib/piggyvest/primary-goal-wallet-name';
 import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS } from '@/lib/piggyvest/provider-wallet-name.constants';
+import { GOAL_ROUTING_VARIANTS } from './goal-interest-routing';
 import {
   goalWalletBaseName,
   goalWalletName,
-  p7GoalSuffix,
+  p7RoutingGoalName,
 } from './goal-wallet-names';
 import { dataOf, type MockCreated } from './mock-reply.test-support';
 import { MockSandbox } from './mock-sandbox';
@@ -18,13 +20,7 @@ const QA_KEYS = [
   proof7Key('qa-customer-1', 1),
   proof7Key(longestKey, 99),
 ];
-const SUFFIXES = [
-  '',
-  p7GoalSuffix('unset', 1),
-  p7GoalSuffix('explicit', 1),
-  p7GoalSuffix('unset', 99),
-  p7GoalSuffix('explicit', 99),
-];
+const SUFFIXES = ['', '-u1', '-x99'];
 
 describe('harness goal wallet names', () => {
   it.each(
@@ -54,10 +50,7 @@ describe('harness goal wallet names', () => {
 
   it('refuses a suffix that would push a readable name over the limit instead of sending it', () => {
     expect(() =>
-      goalWalletName(
-        goalWalletBaseName('q'.repeat(36)),
-        p7GoalSuffix('unset', 1)
-      )
+      goalWalletName(goalWalletBaseName('q'.repeat(36)), '-u1')
     ).toThrow();
   });
 
@@ -68,16 +61,38 @@ describe('harness goal wallet names', () => {
     expect(a).not.toBe(b);
   });
 
-  it('gives the two proof-7 variants distinct names', () => {
-    const base = qaIdentityFor(proof7Key('qa-customer-1', 2)).goalWalletName;
-    expect(goalWalletName(base, p7GoalSuffix('unset', 2))).not.toBe(
-      goalWalletName(base, p7GoalSuffix('explicit', 2))
-    );
-  });
-
   it('refuses to build a name over the limit instead of sending a certain 422', () => {
     expect(() => goalWalletName('x'.repeat(46), '-u100')).toThrow();
     expect(goalWalletName('x'.repeat(46), '-u99')).toHaveLength(50);
+  });
+});
+
+describe('proof-7 goal routing names (#3898 format)', () => {
+  const variants = GOAL_ROUTING_VARIANTS.map((v) => v.id);
+
+  it.each(
+    QA_KEYS.flatMap((qaKey) => [1, 99].map((attempt) => [qaKey, attempt]))
+  )('builds the 42-character baci-save- name for %j attempt %i', (qaKey, attempt) => {
+    for (const variant of variants) {
+      const name = p7RoutingGoalName(String(qaKey), variant, Number(attempt));
+      expect(name).toMatch(/^baci-save-[0-9a-f]{32}$/);
+      expect(name).toHaveLength(42);
+    }
+  });
+
+  it("is exactly the app's primary goal-wallet name for the derived goal key", () => {
+    expect(p7RoutingGoalName('qa-customer-1', 'a', 1)).toBe(
+      buildPrimaryGoalWalletName('qa-customer-1', 'p7-goal-a-attempt-1')
+    );
+  });
+
+  it('gives every variant and attempt its own name, deterministically', () => {
+    const key = proof7Key('qa-customer-1', 2);
+    const names = [1, 2].flatMap((attempt) =>
+      variants.map((variant) => p7RoutingGoalName(key, variant, attempt))
+    );
+    expect(new Set(names).size).toBe(names.length);
+    expect(p7RoutingGoalName(key, 'c', 2)).toBe(p7RoutingGoalName(key, 'c', 2));
   });
 });
 

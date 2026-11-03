@@ -1,8 +1,8 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-/** Narrow, read-only Chatwoot account-isolation check. No overall provider
- * qualification is possible from this probe. See the pinned Swagger contract
+/** Narrow, read-only Chatwoot cross-token conversation-detail status probe.
+ * It makes no isolation or overall provider qualification claim. See the pinned Swagger contract
  * recorded in docs/research/chatwoot-compatibility-results.md.
  */
 
@@ -17,9 +17,12 @@ export interface ChatwootProbeInput {
 
 export type IsolationProbeReport = {
   decision: 'unqualified';
-  check: 'observed-denial' | 'unknown';
+  check: 'observed-status' | 'unknown';
   outcome:
-    | 'A-200-B-403-or-404'
+    | 'positive-control-failed'
+    | 'cross-token-status-401-after-positive-controls'
+    | 'cross-token-status-403-after-positive-controls'
+    | 'cross-token-status-404-after-positive-controls'
     | 'unexpected-response'
     | 'request-failed'
     | 'invalid-configuration';
@@ -83,7 +86,9 @@ async function readStatus(
   }
 }
 
-/** Calls the same A-owned conversation path under A and B credentials. */
+/** Runs B's own-list positive control, A's detail positive control, then B's
+ * token against the same A-account conversation detail path.
+ */
 export async function runChatwootIsolationProbe(
   input: ChatwootProbeInput,
   fetcher: Fetcher = fetch
@@ -94,6 +99,26 @@ export async function runChatwootIsolationProbe(
       decision: 'unqualified',
       check: 'unknown',
       outcome: 'invalid-configuration',
+    };
+  }
+
+  const bListUrl = new URL(
+    `/api/v1/accounts/${input.accountBId}/conversations`,
+    baseUrl
+  );
+  const statusBList = await readStatus(bListUrl, input.accountBToken, fetcher);
+  if (statusBList === undefined) {
+    return {
+      decision: 'unqualified',
+      check: 'unknown',
+      outcome: 'request-failed',
+    };
+  }
+  if (statusBList !== 200) {
+    return {
+      decision: 'unqualified',
+      check: 'unknown',
+      outcome: 'positive-control-failed',
     };
   }
 
@@ -113,16 +138,16 @@ export async function runChatwootIsolationProbe(
     return {
       decision: 'unqualified',
       check: 'unknown',
-      outcome: 'unexpected-response',
+      outcome: 'positive-control-failed',
     };
   }
 
   const statusB = await readStatus(resourceUrl, input.accountBToken, fetcher);
-  if (statusB === 403 || statusB === 404) {
+  if (statusB === 401 || statusB === 403 || statusB === 404) {
     return {
       decision: 'unqualified',
-      check: 'observed-denial',
-      outcome: 'A-200-B-403-or-404',
+      check: 'observed-status',
+      outcome: `cross-token-status-${statusB}-after-positive-controls`,
     };
   }
   return {
@@ -150,7 +175,7 @@ async function main(): Promise<void> {
     inputFromEnvironment(process.env)
   );
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  process.exitCode = report.check === 'observed-denial' ? 0 : 1;
+  process.exitCode = report.check === 'observed-status' ? 0 : 1;
 }
 
 const modulePath = realpathSync(fileURLToPath(import.meta.url));

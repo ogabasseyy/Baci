@@ -263,17 +263,19 @@ test('fails closed on malformed identity, API responses, or response truncation'
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha', id: 1, status: 'completed' }]), /invalid workflow run SHA/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: null, status: 'completed' }]), /invalid workflow run id/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
-  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [] }]), /incomplete or invalid workflow job steps response/);
+  for (const [st, cc] of [['completed', 'failure'], ['in_progress', null]]) await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: cc, head_sha: currentSha, id: 1, status: st }], [{ sha: currentSha }], [{ conclusion: cc, name: 'deploy-production', status: st, steps: [] }]), /incomplete or invalid workflow job steps response/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ name: 'renamed-job', status: 'completed' }]), /missing deploy-production job/);
   for (const j of [[], [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [] }]]) assert.deepEqual(await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'cancelled', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], j), { currentSha, expectedSha });
   assert.deepEqual(await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: null, head_sha: currentSha, id: 1, status: 'in_progress' }], [{ sha: currentSha }], [{ name: 'vps-worker-sync', status: 'in_progress' }]), { currentSha, expectedSha });
   assert.deepEqual(await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_branch: 'feature-branch', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }]), { currentSha, expectedSha });
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ name: 'Other step' }] }]), /missing Deploy to Vercel step/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: null, head_sha: currentSha, id: 1, status: 'in_progress' }], [{ sha: currentSha }], [{ conclusion: null, name: 'deploy-production', status: 'in_progress', steps: [{ name: 'Other step' }] }]), /missing Deploy to Vercel step/);
-  const nonWebFetch = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
-    u.includes('/compare') ? makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]) :
-    u.includes('/commits') ? response({ files: [{ filename: 'docs/ops.md' }] }) : response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
-  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: nonWebFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), /does not deploy superseding web changes/);
+  for (const f of ['docs/ops.md', '.github/scripts/policy.json']) {
+    const fetcher = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
+      u.includes('/compare') ? makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]) :
+      u.includes('/commits') ? response({ files: [{ filename: f }] }) : response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
+    await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: fetcher, repository: 'ogabasseyy/Baci', token: 'test-token' }), /does not deploy superseding web changes/);
+  }
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {

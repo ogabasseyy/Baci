@@ -1,42 +1,40 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const ROOT_WEB_FILES = new Set([
-  '.npmrc', '.vercelignore', 'biome.json', 'next.config.test.ts',
-  'next.config.ts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
-  'turbo.json', 'vercel.json',
-]);
-const WEB_PREFIXES = [
-  '.github/actions/pnpm-install-cached/', '.github/actions/postdeploy-migrations/',
-  'apps/web/', 'infra/cwv-runner/', 'packages/shared/', 'public/badges/',
-  'public/guides/', 'supabase/migrations/',
-];
-const WEB_WORKFLOW_FILES = new Set([
-  '.github/filters/deploy.yml', '.github/scripts/assert-guide-prebuilt.mjs',
-  '.github/scripts/assert-guide-prebuilt.test.mjs', '.github/scripts/blog-smoke-check.mjs',
-  '.github/scripts/apply-atomic-migration-group.sh', '.github/scripts/apply-pending-migration.sh',
-  '.github/scripts/repair-sales-migration-collision.sh', '.github/scripts/apply-pending-migrations.sh',
-  '.github/scripts/cloudflare-purge-cache.mjs', '.github/scripts/current-main-deploy-guard.mjs',
-  '.github/scripts/deploy-with-retry.sh', '.github/scripts/deploy-with-retry-overlap.sh',
-  '.github/scripts/refuse-publish-on-promote-overlap.sh', '.github/scripts/probe-gigl-hook-reload.sh',
-  '.github/scripts/check-gigl-cutover-latch.sh', '.github/scripts/refresh-gigl-cutover-latch.sh',
-  '.github/scripts/check-production-release-outcome.mjs', '.github/scripts/resolve-gigl-latch-identity.sh',
-  '.github/scripts/smoke-gigl-worker-capability.sh', '.github/scripts/verify-gigl-fallback-token.sh',
-  '.github/scripts/verify-gigl-worker-final-state.sh', '.github/scripts/verify-coordinated-release.sh',
-  '.github/scripts/gigl-dotenv.sh', '.github/scripts/deferred-production-migrations.sh',
-  '.github/scripts/pending-postdeploy-migrations.sh', '.github/scripts/assert-vercel-pulled-sensitive-env.mjs',
-  '.github/scripts/assert-vercel-pulled-sensitive-env.test.mjs', '.github/scripts/normalize-vercel-sensitive-placeholders.mjs',
-  '.github/scripts/normalize-vercel-sensitive-placeholders.test.mjs', '.github/scripts/ensure-vercel-sensitive-env.mjs',
-  '.github/scripts/ensure-vercel-sensitive-env.test.mjs', '.github/scripts/inject-prebuilt-env-secret.mjs',
-  '.github/scripts/merge-static-union.sh', '.github/scripts/merge-static-union.test.sh',
-  '.github/scripts/pnpm-install-with-retry.sh', '.github/scripts/run-pinned-vercel.sh',
-  '.github/scripts/storefront-release-coherence.mjs', '.github/scripts/storefront-release-config.mjs',
-  '.github/scripts/storefront-release-marker.mjs', '.github/scripts/storefront-sitemap-purge.mjs',
-  '.github/scripts/sync-cloudflare-vercel-production-env.sh', '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs',
-  '.github/workflows/deploy.yml',
-]);
+
+function loadDeployPatterns() {
+  const text = readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8');
+  const patterns = [];
+  let inDeploySection = false;
+  for (const line of text.split('\n')) {
+    if (/^[a-z_]+:/.test(line)) {
+      inDeploySection = line.startsWith('web:') || line.startsWith('migrations:');
+    } else if (inDeploySection && /^\s*-\s*['"]?([^'"]+)['"]?/.test(line)) {
+      patterns.push(line.match(/^\s*-\s*['"]?([^'"]+)['"]?/)[1]);
+    }
+  }
+  if (patterns.length === 0) throw new Error('no deploy filter patterns loaded');
+  return patterns;
+}
+
+const DEPLOY_PATTERNS = loadDeployPatterns();
+
+function isWebDeployPath(path) {
+  for (const pat of DEPLOY_PATTERNS) {
+    if (pat.endsWith('/**')) {
+      if (path.startsWith(pat.slice(0, -2))) return true;
+    } else if (pat.includes('*')) {
+      const [prefix, suffix] = pat.split('*');
+      if (path.startsWith(prefix) && path.endsWith(suffix)) return true;
+    } else if (path === pat) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function required(value, label) {
   if (typeof value !== 'string' || value.length === 0) throw new Error(`missing ${label}`);
@@ -47,11 +45,6 @@ function safeApiUrl(value) {
   const url = new URL(value ?? 'https://api.github.com');
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('invalid GitHub API URL');
   return url.href.replace(/\/$/, '');
-}
-
-function isWebDeployPath(path) {
-  return ROOT_WEB_FILES.has(path) || WEB_WORKFLOW_FILES.has(path) ||
-    /^tsconfig[^/]*\.json$/.test(path) || WEB_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 async function githubJson(fetchImpl, url, token) {
@@ -126,7 +119,7 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
           deployStep.status === 'in_progress' ||
           (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
         if (attempted) return true;
-      } else if (deployJob.status === 'completed' && deployJob.conclusion !== 'cancelled') {
+      } else if (deployJob.status !== 'queued' && deployJob.conclusion !== 'cancelled') {
         throw new Error('incomplete or invalid workflow job steps response');
       }
     }

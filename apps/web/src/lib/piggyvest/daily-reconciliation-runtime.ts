@@ -161,21 +161,35 @@ export async function runPiggyvestDailyReconciliation(
       generatedAt: deps.now(),
     };
   } else {
+    let ports: ReturnType<typeof buildPorts> | null = null;
     try {
-      const ports = buildPorts(runtime, deps);
-      report = await runDailyReconciliation({
-        ...ports,
-        now: deps.now,
-        nowMs: deps.nowMs,
-        deadlineMs: deps.nowMs() + RECONCILIATION_READ_BUDGET_MS,
-      });
+      ports = buildPorts(runtime, deps);
     } catch {
       // Building the provider and database handles failed: not runnable.
+      ports = null;
+    }
+    if (!ports) {
       report = {
         status: 'failed',
         reason: 'not_configured',
         generatedAt: deps.now(),
       };
+    } else {
+      try {
+        report = await runDailyReconciliation({
+          ...ports,
+          now: deps.now,
+          nowMs: deps.nowMs,
+          deadlineMs: deps.nowMs() + RECONCILIATION_READ_BUDGET_MS,
+        });
+      } catch {
+        // The configuration was fine; the run itself threw.
+        report = {
+          status: 'failed',
+          reason: 'run_failed',
+          generatedAt: deps.now(),
+        };
+      }
     }
   }
   const address = schemas.reportEmail.safeParse(

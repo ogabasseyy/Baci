@@ -55,7 +55,11 @@ export interface BalanceFinding {
 export type ReconciliationReport =
   | {
       status: 'failed';
-      reason: 'not_configured' | 'snapshot_unavailable' | 'snapshot_invalid';
+      reason:
+        | 'not_configured'
+        | 'run_failed'
+        | 'snapshot_unavailable'
+        | 'snapshot_invalid';
       generatedAt: string;
     }
   | {
@@ -234,7 +238,11 @@ export async function runDailyReconciliation(
     snapshot.stuck,
     budget,
     (transfer) => readStuck(ports, snapshot.businessId, transfer),
-    (transfer) => stuckFinding(transfer, 'uncertain')
+    (transfer) =>
+      stuckFinding(
+        transfer,
+        transfer.state === 'reserved' ? 'not_dispatched' : 'uncertain'
+      )
   );
   const balances = await mapLimited(
     snapshot.wallets,

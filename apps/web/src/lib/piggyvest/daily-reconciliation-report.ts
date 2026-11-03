@@ -76,7 +76,7 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
         : `${report.stuckTotal} transfer(s) stuck past ${Math.floor(report.staleAfterSeconds / 60)} minutes:`,
       ...report.stuck.map(stuckLine),
       '',
-      `Goal wallet balances checked: ${report.balances.length} of ${report.walletsTotal}.`,
+      `Goal wallet balances checked: ${report.balances.filter((balance) => balance.kind !== 'unreadable').length} of ${report.walletsTotal}.`,
       ...report.balances.map(balanceLine),
     ];
     if (report.truncated.stuck || report.truncated.wallets)

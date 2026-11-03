@@ -165,4 +165,21 @@ describe('pageReasonOf', () => {
     );
     expect(renderReconciliationEmail(cutOff).text).toContain('NOT checked');
   });
+
+  it('counts only wallets whose balance was actually read as checked', () => {
+    const unread = (n: number) => ({
+      walletId: `goal-${n}`,
+      expectedKobo: 1,
+      providerKobo: null,
+      differenceKobo: null,
+      kind: 'unreadable' as const,
+    });
+    const email = renderReconciliationEmail({
+      ...attention,
+      walletsTotal: 3,
+      balances: [clean.balances[0] as never, unread(1), unread(2)],
+      deadlineReached: true as const,
+    });
+    expect(email.text).toContain('Goal wallet balances checked: 1 of 3.');
+  });
 });

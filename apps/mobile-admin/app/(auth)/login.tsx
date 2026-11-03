@@ -90,9 +90,10 @@ export default function LoginScreen() {
   const isAnyLoading = isAuthenticating;
 
   return (
+    // Scrolls so the form stays anchored when the keyboard changes height
+    // between fields; a fixed screen re-centred it and made it jump.
     <AppFormScreen
       contentContainerStyle={styles.content}
-      scrollEnabled={false}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />

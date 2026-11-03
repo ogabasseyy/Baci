@@ -6,6 +6,22 @@
 import path from 'node:path';
 
 const SCRIPT_REFERENCE = /[\w@./-]+\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)\b/g;
+// Extensionless scripts. Executed: the argument of bash/sh/zsh/source or a
+// ./relative command, which fail closed under .github/ when unreadable. Bare:
+// a command path through a scripts/ or .github/ directory, followed only when
+// it resolves to a file (it may just as well be a directory or a glob).
+const EXECUTED_REFERENCE = new RegExp(
+  [
+    String.raw`(?:^|[\s;&|(])(?:bash|sh|zsh|source|exec)\s+(?!-)["']?([\w@./-]*[\w@-])`,
+    String.raw`(?:^|[\s;&|("'])(\.\/[\w@./-]*[\w@-])`,
+  ].join('|'),
+  'gm'
+);
+const BARE_REFERENCE = /(?:^|[\s;&|("'])((?:\.github|(?:[\w@.-]+(?:\/[\w@.-]+)*\/)?scripts)\/[\w@./-]*[\w@-])(?=[\s;&|)"']|$)/gm;
+// A name with an extension that SCRIPT_REFERENCE does not know (.json, .yml, .rb
+// data) is not a script.
+const HAS_EXTENSION = /\.\w+$/;
+const SCRIPT_REFERENCE_ONLY = /\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)$/;
 const LOCAL_USES = /^\s*(?:-\s+)?uses:\s*['"]?\.\/(\.github\/(?:actions|workflows)\/[^\s'"#]+?)\/?['"]?\s*(?:#.*)?$/gm;
 const WORKING_DIRECTORY = /^\s*(?:-\s+)?working-directory:\s*(\S+)\s*$/gm;
 // The gate's own modules and every test file describe shipping commands as
@@ -49,11 +65,18 @@ export function expandReferences(text, readFile) {
       parts.push(content);
       visit(content, depth + 1);
     }
-    for (const [reference] of source.matchAll(SCRIPT_REFERENCE)) {
+    const references = [
+      ...[...source.matchAll(SCRIPT_REFERENCE)].map((match) => [match[0], true]),
+      ...[...source.matchAll(EXECUTED_REFERENCE)].map((match) => [match[1] ?? match[2], true]),
+      ...[...source.matchAll(BARE_REFERENCE)].map((match) => [match[1], false]),
+    ].filter(([reference]) => !HAS_EXTENSION.test(reference) || SCRIPT_REFERENCE_ONLY.test(reference));
+    for (const [reference, executed] of references) {
+      // Actions and workflows are followed through `uses:` above.
+      if (/^(?:\.\/)?\.github\/(?:actions|workflows)\//.test(reference)) continue;
       const found = candidates(reference, directories).find((file) => readFile(file) !== undefined);
       if (found === undefined) {
         const normalized = reference.replace(/^\.\//, '');
-        if (normalized.startsWith('.github/') && !missing.includes(normalized)) missing.push(normalized);
+        if (executed && normalized.startsWith('.github/') && !missing.includes(normalized)) missing.push(normalized);
         continue;
       }
       if (seen.has(found) || GATE_OWN_FILE.test(found) || TEST_FILE.test(found)) continue;

@@ -135,6 +135,20 @@ test('the OTA guard must stay in place and run before the source is selected', (
     `${OTA_WORKFLOW} "${OTA_GUARD_STEP}" must refuse sources that carry ${GATE_MARKER}`,
     `${OTA_WORKFLOW} "${OTA_GUARD_STEP}" must check SOURCE_SHA from inputs.source_sha`,
   ]);
+  // Keeping the marker path in a comment or echo while dropping the refusal must not pass.
+  const refusalFailure = `${OTA_WORKFLOW} "${OTA_GUARD_STEP}" must refuse sources that carry ${GATE_MARKER}`;
+  for (const [from, to] of [
+    ['          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- .github/storefront-release-gate.json)"', '          held=""  # .github/storefront-release-gate.json'],
+    ['          if [[ -n "$held" ]]; then', '          if false; then'],
+    ['          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then', '          if false; then'],
+    ['          if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then', '          if false; then'],
+    ['          set -euo pipefail\n          if ! [[', '          set -uo pipefail\n          if ! [['],
+    ['          held="$(git', '          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- x || true)"\n          held="$(git'],
+  ]) {
+    const mutated = guard.replace(from, to);
+    assert.notEqual(mutated, guard, `fixture must change: ${from}`);
+    assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: ota.replace(guard, mutated) })), [refusalFailure], from);
+  }
   const skippable = guard.replace('        env:', '        continue-on-error: true\n        env:');
   assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: ota.replace(guard, skippable) })), [
     `${OTA_WORKFLOW} "${OTA_GUARD_STEP}" must run unconditionally and fail the export`,

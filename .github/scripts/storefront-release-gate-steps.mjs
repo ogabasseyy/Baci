@@ -10,6 +10,36 @@ const CHECKOUT_STEP = 'Checkout';
 export const CI_GATE_STEP = 'Test storefront release gate';
 const CONDITION = /^\s*(?:if|continue-on-error)\s*:/m;
 
+// The refusal logic the OTA guard must keep, as exact script lines in order:
+// the SHA format check, the commit existence check, the marker lookup in the
+// source tree and the non-empty exit, each followed by an `exit 1`.
+function otaRefusalLines(marker) {
+  return [
+    'set -euo pipefail',
+    'if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then',
+    'if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then',
+    `held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- ${marker})"`,
+    'if [[ -n "$held" ]]; then',
+  ];
+}
+
+/** True when the guard script keeps its refusal constructs in order, outside comments, and cannot swallow a failure. */
+function keepsOtaRefusal(run, marker) {
+  const lines = (run ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+  let from = 0;
+  for (const required of otaRefusalLines(marker)) {
+    const at = lines.indexOf(required, from);
+    if (at === -1) return false;
+    from = at + 1;
+  }
+  const exits = lines.filter((line) => line === 'exit 1').length;
+  const reassigned = lines.filter((line) => /^held=/.test(line)).length;
+  return exits >= 3 && reassigned === 1 && !lines.some((line) => /\bset\s+\+e\b|\|\|\s*true\b/.test(line));
+}
+
 /** The iOS OTA export must refuse sources that carry `marker` before it selects one. */
 export function otaGuardFailures(workflow, text, marker) {
   const job = readJob(text, 'export') ?? '';
@@ -22,7 +52,7 @@ export function otaGuardFailures(workflow, text, marker) {
   }
   const guard = readStep(job, OTA_GUARD_STEP);
   const failures = [];
-  if (!guard.run?.includes(marker)) {
+  if (!keepsOtaRefusal(guard.run, marker)) {
     failures.push(`${workflow} "${OTA_GUARD_STEP}" must refuse sources that carry ${marker}`);
   }
   if (!/^\s*SOURCE_SHA: \$\{\{ inputs\.source_sha \}\}\s*$/m.test(guard.text)) {

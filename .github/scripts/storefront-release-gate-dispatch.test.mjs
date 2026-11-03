@@ -66,6 +66,8 @@ test('a file that creates a release tag or ref, or a release, fails because tags
     'run: git push origin "v${N}-storefront"',
     'run: git push --tags',
     'run: git push --follow-tags origin HEAD',
+    'run: git push origin --mirror',
+    'run: git push origin tag "$TAG"',
     'run: git push origin HEAD:refs/tags/v1-storefront',
     'run: git tag -a v1-storefront -m x',
     'run: gh release create v999-storefront-ios --target main',

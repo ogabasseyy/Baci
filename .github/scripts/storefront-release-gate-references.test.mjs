@@ -67,3 +67,25 @@ test('a local action or workflow that cannot be read fails closed; external uses
   );
   assert.deepEqual(missing, ['.github/actions/gone', '.github/workflows/gone.yml']);
 });
+
+test('extensionless scripts are followed and an unreadable .github one fails closed', () => {
+  const files = {
+    'apps/mobile-storefront/scripts/release': 'fastlane ios beta\n',
+    'scripts/deploy': 'eas submit\n',
+    '.github/scripts/ship': 'bundle exec fastlane android deploy\n',
+  };
+  for (const [yaml, expected] of [
+    ['run: bash apps/mobile-storefront/scripts/release', /fastlane ios beta/],
+    ['run: sh -e scripts/deploy\nrun: bash scripts/deploy', /eas submit/],
+    ['working-directory: apps/mobile-storefront\nrun: ./scripts/release', /fastlane ios beta/],
+    ['run: ./scripts/deploy --prod', /eas submit/],
+    ['run: scripts/deploy', /eas submit/],
+    ['run: .github/scripts/ship', /fastlane android deploy/],
+    ['run: source ./.github/scripts/ship', /fastlane android deploy/],
+  ]) {
+    assert.match(expandReferences(yaml, reader(files)).text, expected, yaml);
+  }
+  const { missing } = expandReferences('run: bash .github/scripts/gone && echo bash is fine', reader({}));
+  assert.deepEqual(missing, ['.github/scripts/gone']);
+  assert.deepEqual(expandReferences('run: echo hello && ./missing-tool', reader({})).missing, []);
+});

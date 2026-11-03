@@ -98,7 +98,7 @@ tested:
 The gate also reads the scripts a workflow or action runs (for example
 `bash .github/scripts/x.sh`), and the scripts those run, as part of that
 workflow, so delegating a build, upload or dispatch to a script does not hide
-it. The same applies to a local composite action or reusable workflow a file
+it. Extensionless scripts (`bash scripts/release`, `./scripts/deploy`) are followed too. The same applies to a local composite action or reusable workflow a file
 uses (`uses: ./.github/actions/x`): it is read as part of the caller, so
 splitting the shipping across files does not hide it. A `.github` script,
 action or workflow it cannot find fails the gate.

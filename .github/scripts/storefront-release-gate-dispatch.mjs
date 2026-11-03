@@ -57,7 +57,7 @@ export function readDispatchTargets(text) {
 // The store release workflows also start from an owner tag push, so creating a
 // tag, a ref or a release starts them just as a dispatch does.
 const TAG_COMMAND = /\bgit\s+tag\b|\bgh\s+release\s+(?:create|edit|upload)\b/;
-const PUSH_TAG = /\bgit\s+push\b.*(?:--tags\b|--follow-tags\b|refs\/tags\/|\bv[\w.*${}-]*-storefront(?:-ios)?\b)/;
+const PUSH_TAG = /\bgit\s+push\b.*(?:--tags\b|--follow-tags\b|--mirror\b|\btag\s+\S|refs\/tags\/|\bv[\w.*${}-]*-storefront(?:-ios)?\b)/;
 const REF_API = /\/git\/(?:refs|tags)\b|\bcreateRef\b|\bcreateTag\b|\bcreateRelease\b/;
 const RELEASE_API = /\b(?:gh\s+api|curl|fetch)\b.*\/releases\b(?!\/(?:latest|tags|download|\d+\/assets))/;
 const RELEASE_ACTION =

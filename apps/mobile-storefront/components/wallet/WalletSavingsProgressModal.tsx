@@ -10,8 +10,7 @@ import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 import { getSavingsProgress } from './get-savings-progress';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
-import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
-import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
+import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -239,27 +238,20 @@ export function WalletSavingsProgressModal({
             isChecking={isAdding}
             onCheck={onAddSavings}
           />
-        ) : canAddToSavings && usesPlanFunding ? (
-          visible ? (
-            <WalletSavingsPlanFunding
-              key={goal.id}
-              addAmount={addAmount}
-              colors={colors}
-              goal={goal}
-              onAddAmountChange={onAddAmountChange}
-              onRefreshWallet={onRefreshWallet}
-            />
-          ) : null
         ) : canAddToSavings ? (
-          <WalletSavingsContributionFlow
+          <WalletSavingsFundingSection
             addAmount={addAmount}
             colors={colors}
+            goal={goal}
             isAdding={isAdding}
             isFundPending={isFundPending}
             onAddAmountChange={onAddAmountChange}
             onAddSavings={onAddSavings}
             onFundWallet={onFundWallet}
+            onRefreshWallet={onRefreshWallet}
             remainingAmount={amountLeft}
+            usesPlanFunding={usesPlanFunding}
+            visible={visible}
             walletBalance={walletBalance}
           />
         ) : (

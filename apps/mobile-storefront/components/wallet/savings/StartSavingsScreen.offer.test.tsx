@@ -52,9 +52,7 @@ it('connects server observation through the real controller without acceptance o
   expect(screen.getByText(/Server observed: active/)).toBeOnTheScreen();
   expect(screen.getByText('Synthetic phone — 256GB — new')).toBeOnTheScreen();
   expect(screen.queryByRole('checkbox')).toBeNull();
-  expect(
-    screen.getByText('Funding details are unavailable.')
-  ).toBeOnTheScreen();
+  expect(screen.getByText('Savings status is unavailable.')).toBeOnTheScreen();
   await act(async () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Refresh protected offer' })
@@ -135,5 +133,6 @@ it('an invalid optional offer is unavailable without becoming a funding gate', (
     />
   );
   expect(screen.getByText('Protected offer unavailable.')).toBeOnTheScreen();
-  expect(screen.getByText('Synthetic bank')).toBeOnTheScreen();
+  expect(screen.getByText('Savings status')).toBeOnTheScreen();
+  expect(screen.queryByText('Synthetic bank')).toBeNull();
 });

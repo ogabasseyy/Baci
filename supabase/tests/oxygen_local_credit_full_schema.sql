@@ -8,6 +8,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('cb710000-0000-4000-8000-000000000002','cb710000-0000-4000-8000-000000000001','oxygen-credit-fixture@example.test','Credit fixture','oxygen-credit-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('cb710000-0000-4000-8000-000000000003','cb710000-0000-4000-8000-000000000002','cb710000-0000-4000-8000-000000000001','Credit','Fixture','oxygen-credit-fixture@example.test');
+-- Exercise the existing merchant-owner route-context gate for the order fixture.
+SELECT pg_catalog.set_config('request.jwt.claim.sub','cb710000-0000-4000-8000-000000000001',true);
 INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,wallet_amount_used)
 VALUES ('cb710000-0000-4000-8000-000000000004','cb710000-0000-4000-8000-000000000002','cb710000-0000-4000-8000-000000000003','OXYGEN-CREDIT-FIXTURE',100,100,'NGN','unpaid','oxygen',0,0,10);
 DO $$ BEGIN

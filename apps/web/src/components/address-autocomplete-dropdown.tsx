@@ -43,6 +43,9 @@ export function AddressAutocompleteDropdown({
                     ? 'bg-store-primary/5 text-gray-900'
                     : 'hover:bg-gray-50 hover:text-gray-900'
                 )}
+                // Keep focus on the input: WebKit can scroll a newly focused
+                // suggestion between pointer down and up, losing the click.
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onSelect(prediction)}
               >
                 <div className="mt-0.5 rounded-full bg-store-primary/10 p-1.5 text-store-primary">

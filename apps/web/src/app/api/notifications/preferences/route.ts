@@ -57,7 +57,14 @@ export async function GET() {
         'get_notification_preferences',
         { p_merchant_id: merchantId }
       );
-      if (!rpcError && viaRpc) return NextResponse.json(viaRpc);
+      if (rpcError) {
+        console.error('Error fetching preferences via RPC:', rpcError);
+        return NextResponse.json(
+          { error: 'Failed to fetch preferences' },
+          { status: 500 }
+        );
+      }
+      if (viaRpc) return NextResponse.json(viaRpc);
     }
 
     if (error && error.code !== 'PGRST116') {

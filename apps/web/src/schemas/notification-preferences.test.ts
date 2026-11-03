@@ -49,4 +49,12 @@ describe('notificationPreferencesPatchSchema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects an empty shipment_event_preferences object', () => {
+    expect(
+      notificationPreferencesPatchSchema.safeParse({
+        shipment_event_preferences: {},
+      }).success
+    ).toBe(false);
+  });
 });

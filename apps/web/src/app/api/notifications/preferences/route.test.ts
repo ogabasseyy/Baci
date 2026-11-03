@@ -143,6 +143,18 @@ describe('PATCH /api/notifications/preferences', () => {
     });
   });
 
+  it('bugfix: reports an error instead of defaults when the staff preferences read fails', async () => {
+    preferenceQuery.single.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST116', message: 'No rows found' },
+    });
+    rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'down' } });
+
+    const response = await GET();
+
+    expect(response.status).toBe(500);
+  });
+
   it('persists the follow-up alert toggle', async () => {
     const response = await PATCH(
       request({ follow_up_notifications_enabled: false })

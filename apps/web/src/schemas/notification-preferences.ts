@@ -31,17 +31,21 @@ export const SHIPMENT_EVENT_PREFERENCE_KEYS = [
   'waybill_changed',
 ] as const;
 
-export const shipmentEventPreferencesSchema = z.strictObject({
-  pickup_scheduled: z.boolean().optional(),
-  pickup_delayed: z.boolean().optional(),
-  picked_up: z.boolean().optional(),
-  out_for_delivery: z.boolean().optional(),
-  delivered: z.boolean().optional(),
-  failed: z.boolean().optional(),
-  returned: z.boolean().optional(),
-  cancelled: z.boolean().optional(),
-  waybill_changed: z.boolean().optional(),
-});
+export const shipmentEventPreferencesSchema = z
+  .strictObject({
+    pickup_scheduled: z.boolean().optional(),
+    pickup_delayed: z.boolean().optional(),
+    picked_up: z.boolean().optional(),
+    out_for_delivery: z.boolean().optional(),
+    delivered: z.boolean().optional(),
+    failed: z.boolean().optional(),
+    returned: z.boolean().optional(),
+    cancelled: z.boolean().optional(),
+    waybill_changed: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one shipment event preference is required',
+  });
 
 export const notificationPreferencesPatchSchema = z
   .strictObject({

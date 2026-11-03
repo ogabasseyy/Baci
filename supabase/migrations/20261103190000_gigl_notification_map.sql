@@ -62,6 +62,17 @@ BEGIN
     RAISE EXCEPTION 'invalid notification preferences'
       USING ERRCODE = '22023';
   END IF;
+  -- Mirror the route schema: a real IANA zone and HH:MM[:SS] times.
+  IF (p_fields ? 'quiet_hours_time_zone' AND NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_timezone_names AS zone
+        WHERE zone.name = p_fields ->> 'quiet_hours_time_zone'
+      ))
+    OR (p_fields ->> 'quiet_hours_start') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+    OR (p_fields ->> 'quiet_hours_end') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$'
+  THEN
+    RAISE EXCEPTION 'invalid quiet hours'
+      USING ERRCODE = '22023';
+  END IF;
   INSERT INTO public.notification_preferences AS preferences (
     merchant_id, shipment_event_preferences, in_app_enabled, banner_enabled,
     follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end,

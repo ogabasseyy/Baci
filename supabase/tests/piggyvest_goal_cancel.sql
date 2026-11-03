@@ -39,7 +39,9 @@ BEGIN
     'piggyvest_primary.check_goal_cancel_issued(jsonb,uuid,uuid)',
     'piggyvest_primary.block_unsettled_goal_cancel_customer_deletion()',
     'piggyvest_primary.block_unsettled_goal_cancel_goal_deletion()',
-    'piggyvest_primary.block_redemption_during_goal_cancel()'
+    'piggyvest_primary.block_redemption_during_goal_cancel()',
+    'piggyvest_primary.goal_cancel_needs_review(uuid)',
+    'piggyvest_primary.block_legacy_contribution_on_primary_goal()'
   ] LOOP
     v_oid := v_signature::regprocedure;
     IF NOT (SELECT proc.prosecdef FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid) THEN
@@ -121,6 +123,19 @@ BEGIN
                   WHERE trg.tgrelid = 'public.customer_savings_redemptions'::regclass
                     AND trg.tgname = 'block_redemption_during_goal_cancel' AND NOT trg.tgisinternal) THEN
     RAISE EXCEPTION 'redemption fence trigger is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
+                  WHERE trg.tgrelid = 'public.customer_savings_contributions'::regclass
+                    AND trg.tgname = 'block_legacy_contribution_on_primary_goal' AND NOT trg.tgisinternal
+                    AND trg.tgenabled = 'O') THEN
+    RAISE EXCEPTION 'legacy contribution fence trigger is missing';
+  END IF;
+  -- The needs-review helper is not callable by the executor logins directly.
+  IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.goal_cancel_needs_review(uuid)'::regprocedure, 'EXECUTE')
+     OR pg_catalog.has_function_privilege('piggyvest_primary_evidence',
+       'piggyvest_primary.goal_cancel_needs_review(uuid)'::regprocedure, 'EXECUTE') THEN
+    RAISE EXCEPTION 'goal_cancel_needs_review must not be executable by the executor logins';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
                   WHERE trg.tgrelid = 'public.customers'::regclass

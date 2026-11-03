@@ -12,6 +12,9 @@ import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-exe
 import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
 import { transferToWallet } from './transfers';
 import { retrievePiggyvestWallet } from './wallets';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+
+const LEGACY_FUNDS_REASON = 'legacy_funds_on_primary_goal';
 
 // Goal cancel is deliberately independent of the PiggyVest feature flags and
 // the master kill switch: the caller passes the recovery-style runtime, which
@@ -68,7 +71,12 @@ export async function issuePrimaryWalletGoalCancel(input: {
   goalId: unknown;
 }) {
   const { store } = bind(input);
-  return await store.issue(schemas.goalId.parse(input.goalId));
+  const issued = await store.issue(schemas.goalId.parse(input.goalId));
+  if (issued.status === 'needs_review')
+    emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+      reason: LEGACY_FUNDS_REASON,
+    });
+  return issued;
 }
 
 /**
@@ -117,6 +125,11 @@ export async function submitPrimaryWalletGoalCancel(input: {
   const result = await submitGoalCancel(request, {
     reserve: async (selection) => {
       const claim = await store.reserve(selection, pinProof);
+      if (claim.status === 'needs_review')
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+          reason: LEGACY_FUNDS_REASON,
+          operationId: request.operationId,
+        });
       if (claim.status === 'claimed') {
         const reservation = schemas.reservation.parse(claim.reservation);
         if (reservation.businessId !== scope.businessId)
@@ -164,9 +177,15 @@ export async function submitPrimaryWalletGoalCancel(input: {
   }
 }
 
+// A settlement conflict is never shown as released or as a plain wait: the
+// provider moved the money, so the customer is told it is under review and an
+// operator has already been paged (see the evidence store).
 function publicStatus(outcome: {
   status: 'confirmed' | 'cancelled' | 'pending';
+  needsReview?: boolean;
 }) {
+  if (outcome.needsReview === true && outcome.status === 'pending')
+    return { status: 'needs_review' } as const;
   return outcome.status === 'cancelled'
     ? ({ status: 'released' } as const)
     : ({ status: outcome.status } as const);
@@ -212,6 +231,8 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
       });
       if (outcome.status === 'confirmed')
         return { status: 'confirmed' as const };
+      if (outcome.needsReview === true)
+        return { status: 'needs_review' as const };
     } catch {
       // The status answer below is still the recorded state.
     }

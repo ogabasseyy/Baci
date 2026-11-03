@@ -106,12 +106,24 @@ it("issues the server operation id for the customer's own goal", async () => {
   expect(mocks.issue).toHaveBeenCalledWith(expect.objectContaining({ goalId }));
 });
 
-it('returns the live attempt when a double tap issues twice', async () => {
+// A pending issue answer carries the live attempt's id so the client polls the
+// PATCH status check with it. It is never a PIN-able id: the PIN verify route
+// only mints a proof for an id in the issued state (see its own test).
+it('returns the live attempt to poll when a double tap issues twice', async () => {
   mocks.issue.mockResolvedValue({ status: 'pending', operationId });
   expect(await (await post(issue)).json()).toEqual({
     status: 'pending',
     operationId,
   });
+});
+
+it('tells the customer a goal with legacy funds needs a review before any PIN', async () => {
+  mocks.issue.mockResolvedValue({ status: 'needs_review' });
+  const response = await post(issue);
+  expect(response.status).toBe(409);
+  const payload = await response.json();
+  expect(payload.code).toBe('GOAL_NEEDS_REVIEW');
+  expect(payload.operationId).toBeUndefined();
 });
 
 it('reports busy while a contribution is in flight', async () => {
@@ -176,6 +188,7 @@ it.each([
   [{ status: 'expired' }, 409, 'CANCEL_EXPIRED'],
   [{ status: 'busy' }, 409, 'CANCEL_BUSY'],
   [{ status: 'conflict' }, 409, 'CANCEL_CONFLICT'],
+  [{ status: 'needs_review' }, 409, 'GOAL_NEEDS_REVIEW'],
   [{ status: 'unavailable' }, 503, 'WALLET_UNAVAILABLE'],
 ])('maps %j to %i %s', async (result, status, code) => {
   mocks.submit.mockResolvedValue(result);
@@ -207,6 +220,16 @@ it('answers a status check without posting', async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ status: 'pending', operationId });
   expect(mocks.submit).not.toHaveBeenCalled();
+});
+
+it('passes a needs-review status check through, never as released', async () => {
+  mocks.status.mockResolvedValue({ status: 'needs_review' });
+  const response = await patch({ merchantId, operationId });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    status: 'needs_review',
+    operationId,
+  });
 });
 
 it('reports an unknown attempt as not found and rejects a bad status body', async () => {

@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   transfer: vi.fn(),
   retrieve: vi.fn(),
   lookup: vi.fn(),
+  alert: vi.fn(),
+}));
+vi.mock('./webhook-alerts', () => ({
+  emitPiggyvestWebhookAlert: mocks.alert,
 }));
 vi.mock('./primary-wallet-savings-executor', () => ({
   createPrimaryWalletSavingsExecutor: () => mocks.execute,
@@ -87,6 +91,37 @@ it('issues the server operation id', async () => {
   expect(
     await issuePrimaryWalletGoalCancel({ configuration, scope, goalId })
   ).toEqual({ status: 'issued', operationId, expiresAt: 'soon' });
+});
+
+it('pages an operator and returns needs_review when the goal holds legacy funds at issue', async () => {
+  dbAnswers({ status: 'needs_review' });
+  expect(
+    await issuePrimaryWalletGoalCancel({ configuration, scope, goalId })
+  ).toEqual({ status: 'needs_review' });
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    { reason: 'legacy_funds_on_primary_goal' }
+  );
+});
+
+it('pages an operator, sends nothing and spends no balance read when reserve says needs_review', async () => {
+  dbAnswers({ status: 'needs_review' });
+  const result = await submitPrimaryWalletGoalCancel({
+    configuration,
+    reconciliationConfiguration: evidence,
+    scope,
+    providerToken,
+    goalId,
+    operationId,
+    pinProof,
+  });
+  expect(result).toEqual({ status: 'needs_review' });
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+    { reason: 'legacy_funds_on_primary_goal', operationId }
+  );
+  expect(mocks.retrieve).not.toHaveBeenCalled();
+  expect(mocks.transfer).not.toHaveBeenCalled();
 });
 
 it('refuses a scope bound to another integration', async () => {
@@ -270,6 +305,19 @@ it.each([
   mocks.reconcile.mockResolvedValue(outcome);
   expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
     status: 'released',
+  });
+});
+
+// Late success while a newer attempt is live: the database refuses to settle
+// (conflict). It must never read as released: the money has moved at PiggyVest.
+it.each([
+  ['released'],
+  ['dispatched'],
+] as const)('reports needs_review, not released or pending, when settling a %s cancel conflicts', async (state) => {
+  dbAnswers(state);
+  mocks.reconcile.mockResolvedValue({ status: 'pending', needsReview: true });
+  expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
+    status: 'needs_review',
   });
 });
 

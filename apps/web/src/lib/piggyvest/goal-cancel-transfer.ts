@@ -10,7 +10,15 @@ import type { TransferReferenceLookup } from './transfer-reference-lookup';
 type Reservation = z.infer<typeof schemas.reservation>;
 type Claim =
   | { status: 'claimed'; reservation: unknown }
-  | { status: 'pending' | 'confirmed' | 'conflict' | 'expired' | 'busy' }
+  | {
+      status:
+        | 'pending'
+        | 'confirmed'
+        | 'conflict'
+        | 'expired'
+        | 'busy'
+        | 'needs_review';
+    }
   | { status: 'pin_refused'; reason: string };
 
 interface Ports {
@@ -101,6 +109,7 @@ export async function submitGoalCancel(
         | 'conflict'
         | 'expired'
         | 'busy'
+        | 'needs_review'
         | 'unavailable'
         | 'empty'
         | 'too_large'

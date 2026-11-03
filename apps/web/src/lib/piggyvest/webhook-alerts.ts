@@ -58,6 +58,12 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // wallet holding less at PiggyVest than we recorded, an unreadable balance,
   // or it could not run. Read-only: a person resolves it.
   'PIGGYVEST_RECONCILIATION_MISMATCH',
+  // A savings goal cancel that cannot finish by itself: either the goal also
+  // holds legacy contributions or order redemptions (the provider balance
+  // would disagree with the local one), or PiggyVest moved the refund but the
+  // database refused to settle it (for example a late success while a newer
+  // attempt is live). Nothing is resent or released; a person resolves it.
+  'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

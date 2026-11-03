@@ -133,6 +133,14 @@ it('accepts only the documented database answers', () => {
     schemas.issueRows.safeParse([{ result: { status: 'issued', operationId } }])
       .success
   ).toBe(false);
+  expect(
+    schemas.issueRows.safeParse([{ result: { status: 'needs_review' } }])
+      .success
+  ).toBe(true);
+  expect(
+    schemas.reservationRows.safeParse([{ result: { status: 'needs_review' } }])
+      .success
+  ).toBe(true);
   expect(schemas.issueRows.safeParse([]).success).toBe(false);
   expect(
     schemas.reservationRows.safeParse([

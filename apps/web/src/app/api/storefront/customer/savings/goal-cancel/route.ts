@@ -94,6 +94,13 @@ const UNAVAILABLE = (): NextResponse =>
     503
   );
 
+const NEEDS_REVIEW = (): NextResponse =>
+  refuse(
+    'This cancellation needs a quick review by our team before it can finish. Your savings are safe. Please do not try again.',
+    'GOAL_NEEDS_REVIEW',
+    409
+  );
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const guarded = await guard(request);
   if ('error' in guarded) return guarded.error;
@@ -131,6 +138,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           'CANCEL_BUSY',
           409
         );
+      if (issued.status === 'needs_review') return NEEDS_REVIEW();
+      // 'pending' means an attempt is already live: its id is for polling the
+      // PATCH status check, not for a PIN (the PIN route only accepts ids in
+      // the issued state).
       return respond(
         { status: issued.status, operationId: issued.operationId },
         200
@@ -193,6 +204,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           'CANCEL_EXPIRED',
           409
         );
+      case 'needs_review':
+        return NEEDS_REVIEW();
       case 'busy':
         return refuse(
           'A contribution is still processing. Please try again shortly.',

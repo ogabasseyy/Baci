@@ -6,6 +6,7 @@ import { GOAL_CANCEL_STATEMENTS as sql } from './goal-cancel-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Execute = (
   statement: string,
@@ -35,7 +36,20 @@ export function createGoalCancelEvidenceStore(input: {
       throw new Error('Goal cancel settlement unavailable');
     return row.result;
   }
+  // A conflict means PiggyVest answered but our books refused the conclusion
+  // (for example a late success while a newer attempt is live). The money may
+  // have moved, so a person is paged and the status path is told.
+  let conflicted = false;
+  function flagConflict(reason: string, proof: object) {
+    conflicted = true;
+    const { operationId } = proof as { operationId?: unknown };
+    emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+      reason,
+      ...(typeof operationId === 'string' ? { operationId } : {}),
+    });
+  }
   return {
+    hasConflict: () => conflicted,
     async loadDispatched(operationId: string) {
       const result = await run(
         sql.readDispatched,
@@ -62,6 +76,7 @@ export function createGoalCancelEvidenceStore(input: {
         result !== 'conflict'
       )
         throw new Error('Goal cancel settlement unavailable');
+      if (result === 'conflict') flagConflict('settle_conflict', receipt);
       return result;
     },
     async release(
@@ -75,6 +90,7 @@ export function createGoalCancelEvidenceStore(input: {
         result !== 'conflict'
       )
         throw new Error('Goal cancel settlement unavailable');
+      if (result === 'conflict') flagConflict('release_conflict', receipt);
       return result;
     },
   };
@@ -142,7 +158,7 @@ export async function runGoalCancelReconciliation(input: {
     environment: configuration.environment,
     execute: createPrimaryWalletEvidenceExecutor(configuration),
   });
-  return await reconcilePrimaryWalletSavings(input.operationId, {
+  const outcome = await reconcilePrimaryWalletSavings(input.operationId, {
     ...store,
     queryProvider: createSavingsVerifyQueryProvider({
       environment: configuration.environment,
@@ -150,4 +166,5 @@ export async function runGoalCancelReconciliation(input: {
       fetchImplementation: input.fetchImplementation,
     }),
   });
+  return { ...outcome, needsReview: store.hasConflict() };
 }

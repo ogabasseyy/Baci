@@ -69,6 +69,7 @@ export const piggyvestGoalCancelSchemas = {
             operationId: z.uuid(),
           }),
           z.strictObject({ status: z.literal('busy') }),
+          z.strictObject({ status: z.literal('needs_review') }),
         ]),
       })
     )
@@ -99,6 +100,7 @@ export const piggyvestGoalCancelSchemas = {
               'conflict',
               'expired',
               'busy',
+              'needs_review',
             ]),
           }),
         ]),

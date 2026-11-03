@@ -30,8 +30,17 @@
 --  * A trigger on savings_operations stops a funding reservation for a goal
 --    that has a cancel in flight or done, so money cannot be added mid-cancel.
 --  * A trigger on customer_savings_redemptions stops an order redemption of a
---    goal that has a cancel in flight or done, so the balance can never be
---    spent on an order and also refunded.
+--    goal that has a cancel in flight or done, and of any goal bound to a
+--    PiggyVest goal wallet (a redemption only lowers the local balance and
+--    never debits the provider wallet, so it would be refunded a second time).
+--  * A trigger on customer_savings_contributions stops a legacy (non
+--    PiggyVest) contribution to a goal bound to a PiggyVest goal wallet, so
+--    the local balance cannot hold money the provider wallet does not.
+--  * A goal bound to a PiggyVest goal wallet that ALREADY holds a legacy
+--    contribution or an unreversed redemption is refused at issue and at
+--    reservation (and dispatch) with 'needs_review': the provider balance
+--    would disagree with the local one, so a person reviews it; the whole
+--    provider balance is never refunded over a disagreeing local balance.
 --  * Settling credits the local main-wallet ledger (customer_wallets plus
 --    customer_wallet_transactions) in the SAME transaction as the
 --    confirmation, and the funding availability calculation counts a
@@ -130,6 +139,9 @@ BEGIN
      FOR UPDATE;
   IF FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'pending', 'operationId', v_operation.id);
+  END IF;
+  IF piggyvest_primary.goal_cancel_needs_review(v_goal.id) IS NOT FALSE THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'needs_review');
   END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
               WHERE funding.goal_id = v_goal.id AND funding.state IN ('reserved', 'dispatched')) THEN
@@ -237,6 +249,10 @@ BEGIN
   IF v_intent.provider_wallet_id IS NULL OR v_intent.provider_customer_id IS NULL
     OR v_intent.provider_wallet_id = v_destination.provider_wallet_id THEN
     RAISE EXCEPTION 'savings wallets unavailable' USING ERRCODE = '42501';
+  END IF;
+  -- Re-checked here, under the goal lock, before any PIN proof is spent.
+  IF piggyvest_primary.goal_cancel_needs_review(v_goal.id) IS NOT FALSE THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'needs_review');
   END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
               WHERE funding.goal_id = v_goal.id AND funding.state IN ('reserved', 'dispatched')) THEN
@@ -347,7 +363,8 @@ BEGIN
      FOR SHARE OF goal, destination, intent;
   IF NOT FOUND THEN RETURN false; END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
-              WHERE funding.goal_id = v_operation.goal_id AND funding.state IN ('reserved', 'dispatched')) THEN
+              WHERE funding.goal_id = v_operation.goal_id AND funding.state IN ('reserved', 'dispatched'))
+    OR piggyvest_primary.goal_cancel_needs_review(v_operation.goal_id) IS NOT FALSE THEN
     RETURN false;
   END IF;
   UPDATE piggyvest_primary.goal_cancel_operations
@@ -833,6 +850,13 @@ BEGIN
      WHERE cancel.goal_id = NEW.goal_id AND cancel.state IN ('reserved', 'dispatched', 'confirmed')) THEN
     RAISE EXCEPTION 'savings_goal_cancel_in_progress' USING ERRCODE = 'P0001';
   END IF;
+  -- A redemption lowers only the local balance and never debits the PiggyVest
+  -- goal wallet, so a goal bound to one can not be redeemed at all.
+  IF NEW.goal_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM piggyvest_primary.savings_destinations AS destination
+     WHERE destination.goal_id = NEW.goal_id) THEN
+    RAISE EXCEPTION 'savings_goal_primary_not_redeemable' USING ERRCODE = 'P0001';
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -840,7 +864,59 @@ CREATE TRIGGER block_redemption_during_goal_cancel
   BEFORE INSERT ON public.customer_savings_redemptions
   FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_redemption_during_goal_cancel();
 
+-- True when a goal bound to a PiggyVest goal wallet also holds money the
+-- provider wallet does not know about: a completed legacy contribution (the
+-- PiggyVest settlement marks its own with provider = 'piggyvest') or a
+-- redemption that has not been reversed. A missing marker counts as legacy
+-- and a missing reversal marker counts as unreversed.
+CREATE FUNCTION piggyvest_primary.goal_cancel_needs_review(p_goal_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT COALESCE(
+    EXISTS (
+      SELECT 1 FROM public.customer_savings_contributions AS contribution
+       WHERE contribution.goal_id = p_goal_id AND contribution.status = 'completed'
+         AND contribution.metadata ->> 'provider' IS DISTINCT FROM 'piggyvest')
+    OR EXISTS (
+      SELECT 1 FROM public.customer_savings_redemptions AS redemption
+       WHERE redemption.goal_id = p_goal_id AND redemption.metadata ->> 'reversed_at' IS NULL),
+    true);
+$$;
+
+-- A legacy contribution may not be allocated to a goal bound to a PiggyVest
+-- goal wallet: allocate_customer_savings_contribution (and the plan transfer
+-- functions) lock the goal row and then insert here, so the contribution is
+-- refused even if it races a cancel. PiggyVest's own settlement marks its
+-- contribution provider = 'piggyvest' and is not affected.
+CREATE FUNCTION piggyvest_primary.block_legacy_contribution_on_primary_goal()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.status IN ('pending', 'processing', 'completed')
+    AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status)
+    AND NEW.metadata ->> 'provider' IS DISTINCT FROM 'piggyvest'
+    AND EXISTS (
+      SELECT 1 FROM piggyvest_primary.savings_destinations AS destination
+       WHERE destination.goal_id = NEW.goal_id) THEN
+    RAISE EXCEPTION 'savings_goal_primary_not_allocatable' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER block_legacy_contribution_on_primary_goal
+  BEFORE INSERT OR UPDATE OF status ON public.customer_savings_contributions
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_legacy_contribution_on_primary_goal();
+
 REVOKE ALL ON FUNCTION
+  piggyvest_primary.goal_cancel_needs_review(uuid),
+  piggyvest_primary.block_legacy_contribution_on_primary_goal(),
   piggyvest_primary.issue_goal_cancel(jsonb, uuid),
   piggyvest_primary.reserve_goal_cancel_with_pin(jsonb, jsonb, text),
   piggyvest_primary.manage_goal_cancel(jsonb, uuid, text, bigint),

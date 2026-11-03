@@ -56,6 +56,7 @@ it.each([
   { status: 'conflict' },
   { status: 'expired' },
   { status: 'busy' },
+  { status: 'needs_review' },
 ])('returns %j without touching the provider', async (claim) => {
   const p = ports();
   p.reserve.mockResolvedValue(claim);

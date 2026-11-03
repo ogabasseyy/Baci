@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { checkRateLimit } from '@/ai/provider';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
 import { readOxygenSnapshot } from '@/lib/payments/oxygen/runtime-service';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import {
   oxygenBankProviderListSchema,
   oxygenBankRequestSchema,
@@ -27,10 +27,8 @@ export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid) return csrf.response ?? fail(403, 'Invalid request');
   if (
-    !checkRateLimit(`action:oxygen-bank-details:${auth.user.id}`, {
-      requests: 10,
-      windowMs: 60_000,
-    }).allowed
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'bank-details', 10))
+      .allowed
   )
     return fail(429, 'Too many requests');
   const body = await readBoundedJsonBody(request, 4096);

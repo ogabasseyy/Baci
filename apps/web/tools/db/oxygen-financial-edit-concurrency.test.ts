@@ -156,7 +156,7 @@ describe.skipIf(!enabled)('Oxygen financial edit admission', () => {
         [existingOrder, randomUUID()],
       ],
     ] as const) {
-      await expect(second.query(query, args)).rejects.toMatchObject({
+      await expect(second.query(query, [...args])).rejects.toMatchObject({
         code: '23514',
         message: 'oxygen_financial_edit_locked',
       });

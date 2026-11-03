@@ -322,8 +322,9 @@ jobs:
             "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
             --output "${SUPABASE_ARCHIVE}"
           echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
-          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase
-          sudo chmod 0755 /usr/local/bin/supabase
+          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go
+          sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go
+          test -x /usr/local/bin/supabase-go
           test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'

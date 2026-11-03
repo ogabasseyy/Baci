@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   order: vi.fn(),
   merchant: vi.fn(),
   from: vi.fn(),
+  flow: vi.fn(),
 }));
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -22,7 +23,10 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 vi.mock('@/components/payments/oxygen/OxygenProviderFlow', () => ({
-  OxygenProviderFlow: () => <p>Sign in to resume Oxygen</p>,
+  OxygenProviderFlow: () => {
+    mocks.flow();
+    return <p>Unexpected workflow request</p>;
+  },
 }));
 
 import { OxygenPaymentContent } from './oxygen-payment-content';
@@ -54,7 +58,10 @@ it('redirects an existing handoff to the merchant checkout on the same order', a
 it('keeps sign-in available before reading order information', async () => {
   mocks.auth.mockResolvedValue({ data: { user: null }, error: null });
   render(await OxygenPaymentContent(props));
-  expect(screen.getByText('Sign in to resume Oxygen')).toBeVisible();
+  expect(
+    screen.getByText(/Open this application from your store’s checkout/)
+  ).toBeVisible();
+  expect(mocks.flow).not.toHaveBeenCalled();
   expect(mocks.from).not.toHaveBeenCalled();
 });
 it('does not redirect when caller RLS does not expose the order', async () => {
@@ -85,4 +92,20 @@ it('does not redirect to another customer’s order even when it is readable', a
   });
   await expect(OxygenPaymentContent(props)).rejects.toThrow('not found');
   expect(mocks.from).not.toHaveBeenCalledWith('merchants');
+});
+
+it.each([
+  null,
+  { id: 'customer' },
+])('does not mount the workflow or query order data on auth error with user %s', async (user) => {
+  mocks.auth.mockResolvedValue({
+    data: { user },
+    error: { message: 'unavailable' },
+  });
+  render(await OxygenPaymentContent(props));
+  expect(
+    screen.getByText(/Open this application from your store’s checkout/)
+  ).toBeVisible();
+  expect(mocks.flow).not.toHaveBeenCalled();
+  expect(mocks.from).not.toHaveBeenCalled();
 });

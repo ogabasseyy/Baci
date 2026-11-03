@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
 import { z } from 'zod';
-import { OxygenProviderFlow } from '@/components/payments/oxygen/OxygenProviderFlow';
 import { createClient } from '@/lib/supabase/server';
 /** The API proves customer/order ownership on every read and mutation. No tokens in URLs. */
 export async function OxygenPaymentContent({
@@ -33,5 +32,9 @@ export async function OxygenPaymentContent({
       `/${encodeURIComponent(merchant.slug)}/checkout?oxygenOrderId=${orderId}`
     );
   }
-  return <OxygenProviderFlow orderId={orderId} />;
+  return (
+    <p className="text-sm leading-relaxed text-gray-600">
+      Open this application from your store’s checkout to sign in and continue.
+    </p>
+  );
 }

@@ -1,10 +1,6 @@
 import type { Metadata } from 'next';
-import {
-  generateMetaTitle,
-  normalizePlainText,
-  stringsMatchCaseInsensitive,
-  stripRedundantPlatformParentheticals,
-} from '@/lib/seo-utils';
+import { generateMetaTitle } from '@/lib/seo-utils';
+import { stripRedundantPlatformParentheticals } from './seo-meta-title-platform-compaction';
 
 const ELLIPSIS = '...';
 const ELLIPSIS_LENGTH = ELLIPSIS.length;
@@ -79,19 +75,16 @@ export function buildStorefrontMetadataTitle(input: {
   let effectiveTitle = fullTitle;
   if (fullTitle.length > maxLength) {
     const normalizedSuffix = input.suffix
-      ? normalizePlainText(input.suffix)
+      ? generateMetaTitle(input.suffix, { maxLength: Number.POSITIVE_INFINITY })
       : '';
     if (normalizedSuffix) {
-      if (stringsMatchCaseInsensitive(fullTitle, normalizedSuffix)) {
+      if (fullTitle.toLowerCase() === normalizedSuffix.toLowerCase()) {
         effectiveTitle = fullTitle;
       } else {
         const suffixFragment = ` | ${normalizedSuffix}`;
         const endsWithSuffix =
           fullTitle.length >= suffixFragment.length &&
-          stringsMatchCaseInsensitive(
-            fullTitle.slice(fullTitle.length - suffixFragment.length),
-            suffixFragment
-          );
+          fullTitle.toLowerCase().endsWith(suffixFragment.toLowerCase());
         if (endsWithSuffix) {
           const baseTitle = fullTitle.slice(
             0,

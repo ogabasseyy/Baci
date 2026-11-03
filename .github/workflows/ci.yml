@@ -339,6 +339,8 @@ jobs:
         run: bash supabase/tests/run-merchant-blog-classification.sh
       - name: Test Oxygen draft and workflow lock ordering
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_draft_workflow_first_concurrency.sh
+      - name: Test Oxygen queued phone verification claim race
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_phone_retirement_concurrency.sh
       - name: Test Oxygen financial edit concurrency
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_financial_edit_concurrency.sh
       - name: Test Oxygen activation recovery

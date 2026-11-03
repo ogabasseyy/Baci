@@ -8,6 +8,7 @@ import {
   type OxygenRuntimeSnapshot,
   oxygenRuntimeSnapshotSchema,
 } from '@/schemas/oxygen-runtime-view';
+import { retireQueuedPhoneVerification } from './oxygen-phone-recovery';
 import {
   decodeOxygenResponse as decode,
   OxygenInvalidOtpError,
@@ -94,7 +95,11 @@ export function useOxygenProvider(orderId: string) {
     if (locked.current || !snapshot?.executionEnabled) return false;
     if (
       snapshot.pending?.status === 'queued' &&
-      snapshot.pending.action !== command.action
+      snapshot.pending.action !== command.action &&
+      !(
+        snapshot.pending.action === 'validate_customer' &&
+        command.action === 'resend_customer_otp'
+      )
     ) {
       setError('Complete the previous step first.');
       return false;
@@ -133,6 +138,17 @@ export function useOxygenProvider(orderId: string) {
       key,
     };
     try {
+      if (
+        command.action === 'resend_customer_otp' &&
+        pending?.action === 'validate_customer' &&
+        pending.status === 'queued'
+      ) {
+        await retireQueuedPhoneVerification(
+          snapshot.workflowId,
+          snapshot.version,
+          pending.idempotencyKey
+        );
+      }
       const payload = {
         workflowId: snapshot.workflowId,
         version: snapshot.version,

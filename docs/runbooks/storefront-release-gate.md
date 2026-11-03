@@ -169,6 +169,9 @@ shapes are therefore accepted and not hardened further:
   is not treated as a dispatch.
 - The server-off rule covers `apps/mobile-storefront` only, not PiggyVest code
   in `packages/shared`.
+- A shell `cd apps/mobile-storefront` inside a `run:` block does not set the
+  directory used to resolve the package scripts that follow it; use
+  `working-directory:` (which the gate reads) instead.
 - A parent-relative script path (`bash ../x.sh`) is not followed outside the
   repository root.
 - The server-off test check reads test text heuristically: an all-inline

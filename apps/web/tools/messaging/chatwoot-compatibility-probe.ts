@@ -40,6 +40,8 @@ function validateInput(input: ChatwootProbeInput): URL | undefined {
     !input.baseUrl ||
     !input.accountAToken.trim() ||
     !input.accountBToken.trim() ||
+    input.accountAToken !== input.accountAToken.trim() ||
+    input.accountBToken !== input.accountBToken.trim() ||
     !isNumericId(input.accountAId) ||
     !isNumericId(input.accountBId) ||
     !isNumericId(input.conversationId) ||

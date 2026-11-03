@@ -200,6 +200,21 @@ describe('runChatwootIsolationProbe', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it('refuses tokens that differ only by surrounding whitespace before network access', async () => {
+    const fetcher = vi.fn();
+    const result = await runChatwootIsolationProbe(
+      { ...input, accountBToken: `${input.accountAToken} ` },
+      fetcher
+    );
+
+    expect(result).toMatchObject({
+      decision: 'unqualified',
+      check: 'unknown',
+      outcome: 'invalid-configuration',
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('does not treat an invalid B token as a cross-account status', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(response(401));
     const result = await runChatwootIsolationProbe(input, fetcher);

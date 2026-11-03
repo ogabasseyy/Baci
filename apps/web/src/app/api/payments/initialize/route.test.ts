@@ -176,7 +176,7 @@ function createMockSupabase() {
       if (name === 'reserve_storefront_redvault_payment_attempt_v3')
         return Promise.resolve(redvaultAttemptReserveResults.shift());
       if (
-        name === 'claim_storefront_redvault_payment_attempt_initialization_v3'
+        name === 'claim_storefront_redvault_payment_attempt_initialization_v4'
       )
         return Promise.resolve(redvaultAttemptClaimResults.shift());
       if (
@@ -522,6 +522,7 @@ describe('POST /api/payments/initialize', () => {
               authorization_url: null,
               bank_code: '033',
               initialization_claimed: true,
+              initialization_fresh: true,
               paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
               platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
@@ -657,6 +658,7 @@ describe('POST /api/payments/initialize', () => {
               authorization_url: null,
               bank_code: '033',
               initialization_claimed: true,
+              initialization_fresh: true,
               paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
               platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',

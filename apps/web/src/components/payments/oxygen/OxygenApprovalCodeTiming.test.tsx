@@ -1,5 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 
 const m = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -20,6 +34,13 @@ beforeAll(() =>
 );
 afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => vi.clearAllMocks());
+// input-otp schedules uncancelled selection updates up to 50 ms after render.
+// Drain them while the test DOM and React are still available.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  });
+});
 const id = '60000000-0000-4000-8000-000000000001';
 const ref = '70000000-0000-4000-8000-000000000025';
 const state: OxygenProviderState = {

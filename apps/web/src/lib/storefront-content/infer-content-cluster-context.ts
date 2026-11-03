@@ -2,6 +2,10 @@ import {
   CONTENT_CLUSTER_SUPPORT,
   CONTENT_KIND_TOKENS,
 } from '@/config/storefront-content-clusters';
+import {
+  DEDICATED_GAMING_LAPTOP_TOKENS,
+  EXCLUDED_GAMING_LAPTOP_SUBJECTS,
+} from '@/config/storefront-gaming-laptop-taxonomy';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type {
   ContentClusterKind,
@@ -60,41 +64,6 @@ type ClusterSupportEntry = [
   SupportedClusterCategory,
   (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
 ];
-
-const DEDICATED_GAMING_LAPTOP_TOKENS = [
-  'omen',
-  'legion',
-  'alienware',
-  'rtx',
-  'geforce',
-  'rog',
-  'tuf',
-] as const;
-
-const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
-  'monitor',
-  'monitors',
-  'desktop',
-  'desktops',
-  'gpu',
-  'gpus',
-  'graphics card',
-  'graphics cards',
-  'accessories',
-  'accessory',
-  'cooling pad',
-  'docking station',
-  'gaming dock',
-  'gaming stand',
-  'laptop adapter',
-  'laptop backpack',
-  'laptop charger',
-  'laptop dock',
-  'laptop skin',
-  'laptop sleeve',
-  'laptop stand',
-  'power adapter',
-] as const;
 
 function isDedicatedGamingLaptopContent(
   titleHaystack: string,

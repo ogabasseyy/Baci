@@ -157,4 +157,24 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(standOutRoundup.categorySlug).toBe('gaming-laptops');
   });
+
+  it('promotes dedicated gaming laptop articles for newly supported families (predator, aorus) to gaming-laptops', () => {
+    const predatorGuide = inferContentClusterContext({
+      title: 'Acer Predator Helios 16 Buyer Guide',
+      excerpt: 'Comprehensive buyer guide for mobile gamers.',
+      category: 'Gaming',
+      tags: ['gaming', 'laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(predatorGuide.categorySlug).toBe('gaming-laptops');
+
+    const aorusGuide = inferContentClusterContext({
+      title: 'Gigabyte Aorus 16X Buyer Guide',
+      excerpt: 'Testing thermals and frame rates on Aorus 16X.',
+      category: 'Gaming',
+      tags: ['gaming', 'laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(aorusGuide.categorySlug).toBe('gaming-laptops');
+  });
 });

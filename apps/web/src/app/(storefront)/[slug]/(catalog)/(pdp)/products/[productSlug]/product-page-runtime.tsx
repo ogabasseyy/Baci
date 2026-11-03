@@ -237,6 +237,8 @@ export async function ProductPageBelowFold({
     : scopedInventory.products.map((candidate) => ({
         ...candidate,
         category_slug: categorySlug,
+        canonical_category_slug:
+          candidate.canonical_category_slug ?? candidate.category_slug,
       }));
   const currentProduct = {
     slug: product.slug || String(product.id),

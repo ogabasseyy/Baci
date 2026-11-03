@@ -27,8 +27,9 @@ export function buildProductHref(
   storeUrl: string,
   product: ProductSemanticCandidate
 ) {
-  return product.category_slug
-    ? `${storeUrl}/${product.category_slug}/${product.slug}`
+  const categorySlug = product.canonical_category_slug ?? product.category_slug;
+  return categorySlug
+    ? `${storeUrl}/${categorySlug}/${product.slug}`
     : `${storeUrl}/products/${product.slug}`;
 }
 

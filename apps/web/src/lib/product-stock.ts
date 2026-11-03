@@ -45,7 +45,7 @@ export function matchesProductStockFilter(
   }
 
   if (filter === 'infinite') {
-    return stockBucket === 'unmanaged';
+    return item.manage_stock === false || item.manage_stock === null;
   }
 
   return true;

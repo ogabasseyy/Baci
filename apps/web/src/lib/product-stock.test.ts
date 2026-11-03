@@ -85,11 +85,11 @@ describe('matchesProductStockFilter', () => {
         infinite: true,
       },
       {
-        label: 'manage_stock: undefined (unmanaged)',
+        label: 'manage_stock: undefined (omitted column: not infinite)',
         item: { stock: 0, stock_quantity: 0 },
         inStock: true,
         outOfStock: false,
-        infinite: true,
+        infinite: false,
       },
       {
         label: 'manage_stock: true with zero stock (tracked sold-out)',

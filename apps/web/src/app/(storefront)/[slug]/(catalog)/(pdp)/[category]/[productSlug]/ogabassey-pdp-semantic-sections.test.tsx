@@ -2,6 +2,8 @@ import './ogabassey-pdp-semantic-sections.test-fixtures';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
+import { buildProductHref } from '@/lib/storefront-product/build-product-semantic-compare-support';
+import type { ProductSemanticCandidate } from '@/lib/storefront-product/product-semantic-types';
 import { OgabasseyPdpSemanticSections } from './ogabassey-pdp-semantic-sections';
 import {
   mockBuildProductSemanticModel,
@@ -296,9 +298,22 @@ describe('OgabasseyPdpSemanticSections', () => {
           expect.objectContaining({
             slug: 'gaming-laptop-1',
             category_slug: 'laptops',
+            canonical_category_slug: 'gaming-laptops',
           }),
         ],
       })
+    );
+
+    const firstCallInput = mockBuildProductSemanticModel.mock.calls[0]?.[0] as
+      | { inventory?: ProductSemanticCandidate[] }
+      | undefined;
+    const inventoryPassed = firstCallInput?.inventory ?? [];
+    const candidate = inventoryPassed.find((p) => p.slug === 'gaming-laptop-1');
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected candidate to be defined');
+    // Preserves canonical child URL so cards do not emit duplicate parent URLs
+    expect(buildProductHref('https://ogabassey.com', candidate)).toBe(
+      'https://ogabassey.com/gaming-laptops/gaming-laptop-1'
     );
   });
 

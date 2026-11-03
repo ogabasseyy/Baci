@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ...snapshot,
-        ninRetryAllowed: await readOxygenNinRetryStatus(
+        ninAttemptStatus: await readOxygenNinRetryStatus(
           auth.supabase,
           snapshot
         ),
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         ...snapshot,
-        ninRetryAllowed: await readOxygenNinRetryStatus(userClient, snapshot),
+        ninAttemptStatus: await readOxygenNinRetryStatus(userClient, snapshot),
       },
       { headers }
     );

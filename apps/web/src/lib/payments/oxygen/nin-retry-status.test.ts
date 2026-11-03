@@ -10,9 +10,11 @@ const snapshot = {
 
 describe('NIN retry status', () => {
   it('binds the read to the exact workflow and version', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-    expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBe(true);
-    expect(rpc).toHaveBeenCalledExactlyOnceWith('oxygen_nin_retry_status', {
+    const rpc = vi.fn().mockResolvedValue({ data: 'safe_retry', error: null });
+    expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBe(
+      'safe_retry'
+    );
+    expect(rpc).toHaveBeenCalledExactlyOnceWith('oxygen_nin_attempt_status', {
       p_workflow_id: snapshot.workflowId,
       p_version: 4,
     });
@@ -21,7 +23,9 @@ describe('NIN retry status', () => {
     const rpc = vi
       .fn()
       .mockResolvedValue({ data: null, error: { code: 'error' } });
-    expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBeNull();
+    expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBe(
+      'unavailable'
+    );
     rpc.mockClear();
     expect(
       await readOxygenNinRetryStatus(
@@ -35,7 +39,21 @@ describe('NIN retry status', () => {
           },
         }
       )
-    ).toBe(false);
+    ).toBe('blocked');
     expect(rpc).not.toHaveBeenCalled();
   });
+});
+
+it.each([
+  'first_attempt',
+  'blocked',
+  'safe_retry',
+] as const)('preserves the %s status', async (status) => {
+  const rpc = vi.fn().mockResolvedValue({ data: status, error: null });
+  expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBe(status);
+});
+
+it('fails closed for an unexpected server value', async () => {
+  const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+  expect(await readOxygenNinRetryStatus({ rpc }, snapshot)).toBe('unavailable');
 });

@@ -8,7 +8,9 @@ export const oxygenRuntimeSnapshotSchema = z
     version: z.number().int().nonnegative(),
     environment: z.enum(['staging', 'production']),
     executionEnabled: z.boolean(),
-    ninRetryAllowed: z.boolean().nullable().optional(),
+    ninAttemptStatus: z
+      .enum(['first_attempt', 'safe_retry', 'blocked', 'unavailable'])
+      .optional(),
     bookingBlock: z.literal('active_loan').nullable().optional(),
     state: oxygenProviderStateSchema
       .omit({ newUserToken: true, activityToken: true, phone: true })

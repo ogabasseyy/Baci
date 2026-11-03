@@ -152,6 +152,7 @@ export function useOxygenProvider(orderId: string) {
       command.action
     );
     const pending = snapshot.pending;
+    const isNin = command.action === 'validate_nin';
     const key =
       pending?.status === 'queued' && pending.action === command.action
         ? pending.idempotencyKey
@@ -159,7 +160,7 @@ export function useOxygenProvider(orderId: string) {
               pending?.status === 'executing' &&
               pendingReadRecovery(snapshot) === command.action
             ) &&
-            !(command.action === 'validate_nin' && snapshot.ninRetryAllowed) &&
+            !(isNin && snapshot.ninAttemptStatus === 'safe_retry') &&
             lastKey.current?.action === command.action &&
             lastKey.current.version === snapshot.version
           ? lastKey.current.key
@@ -228,7 +229,6 @@ export function useOxygenProvider(orderId: string) {
         snapshot.stage,
         command.action
       );
-      // Status reads never repeat the mutation or infer success from a redirect.
       let recovered: OxygenRuntimeSnapshot | null = null;
       try {
         recovered = await read();

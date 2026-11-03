@@ -76,9 +76,7 @@ export function OxygenGuidedVerification({
       snapshot.pending ||
       state.eligible === false ||
       eligibilityFailed ||
-      (ninRequired &&
-        snapshot.ninRetryAllowed !== false &&
-        snapshot.ninRetryAllowed !== undefined)
+      (ninRequired && snapshot.ninAttemptStatus !== 'first_attempt')
     )
       return;
     const count = (key: string) => attempts.current.get(key) ?? 0;
@@ -141,7 +139,7 @@ export function OxygenGuidedVerification({
     selfieRequired,
     expiredSelfie,
     eligibilityFailed,
-    snapshot.ninRetryAllowed,
+    snapshot.ninAttemptStatus,
     submit,
   ]);
 
@@ -165,8 +163,9 @@ export function OxygenGuidedVerification({
       </div>
     );
   const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
-  const ninRetry = Boolean(ninRequired && snapshot.ninRetryAllowed);
-  const retryStatus = ninRequired && snapshot.ninRetryAllowed === null;
+  const ninRetry = ninRequired && snapshot.ninAttemptStatus === 'safe_retry';
+  const retryStatus =
+    ninRequired && snapshot.ninAttemptStatus !== 'first_attempt' && !ninRetry;
   const recoverable =
     !selfie && (eligibilityFailed || review || ninRetry || retryStatus);
   async function retryCheck() {

@@ -39,7 +39,7 @@ export function OxygenWorkflowError({
   const retryNin = Boolean(
     action === 'validate_nin' &&
       snapshot?.executionEnabled &&
-      snapshot.ninRetryAllowed &&
+      snapshot.ninAttemptStatus === 'safe_retry' &&
       !snapshot.pending
   );
   const retryBreakdown = action === 'refresh_details' && !snapshot?.pending;

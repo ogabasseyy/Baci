@@ -63,6 +63,10 @@ export function createProviderJourney() {
       version: context.version,
       environment: 'staging',
       executionEnabled: true,
+      ninAttemptStatus:
+        state.eligible && !actions.includes('validate_nin')
+          ? 'first_attempt'
+          : 'blocked',
       state,
       approvalOtpReady: Boolean(context.state.activityToken),
       checkoutPhone: '',

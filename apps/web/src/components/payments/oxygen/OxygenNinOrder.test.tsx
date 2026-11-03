@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { OxygenGuidedVerification } from './OxygenGuidedVerification';
@@ -9,6 +9,7 @@ const snapshot: OxygenRuntimeSnapshot = {
   version: 4,
   environment: 'staging',
   executionEnabled: true,
+  ninAttemptStatus: 'first_attempt',
   activationEnabled: false,
   settlementEnabled: false,
   approvalOtpReady: false,
@@ -96,4 +97,42 @@ it.each([
   );
   await new Promise((resolve) => setTimeout(resolve, 30));
   expect(submit).not.toHaveBeenCalledWith({ action: 'validate_nin' });
+});
+
+it('polls KYC without repeating a blocked NIN mutation', async () => {
+  vi.useFakeTimers();
+  try {
+    const submit = vi.fn().mockResolvedValue(true);
+    const view = render(
+      <OxygenGuidedVerification
+        snapshot={{ ...snapshot, ninAttemptStatus: 'blocked' }}
+        busy={false}
+        error=""
+        submit={submit}
+      />
+    );
+    for (let version = 0; version < 7; version++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      view.rerender(
+        <OxygenGuidedVerification
+          snapshot={{
+            ...snapshot,
+            version: 10 + version,
+            state: { ...snapshot.state },
+            ninAttemptStatus: 'blocked',
+          }}
+          busy={false}
+          error=""
+          submit={submit}
+        />
+      );
+    }
+    expect(submit).toHaveBeenCalledTimes(5);
+    expect(submit).toHaveBeenCalledWith({ action: 'refresh_kyc' });
+    expect(submit).not.toHaveBeenCalledWith({ action: 'validate_nin' });
+  } finally {
+    vi.useRealTimers();
+  }
 });

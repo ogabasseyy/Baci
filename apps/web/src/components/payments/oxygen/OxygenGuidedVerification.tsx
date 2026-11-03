@@ -76,7 +76,9 @@ export function OxygenGuidedVerification({
       snapshot.pending ||
       state.eligible === false ||
       eligibilityFailed ||
-      (ninRequired && snapshot.ninAttemptStatus !== 'first_attempt')
+      (ninRequired &&
+        snapshot.ninAttemptStatus !== 'first_attempt' &&
+        snapshot.ninAttemptStatus !== 'blocked')
     )
       return;
     const count = (key: string) => attempts.current.get(key) ?? 0;
@@ -107,7 +109,11 @@ export function OxygenGuidedVerification({
     ) {
       action = 'refresh_eligibility';
       delay = count(action) ? 20_000 : 0;
-    } else if (ninRequired && !count('validate_nin')) {
+    } else if (
+      ninRequired &&
+      snapshot.ninAttemptStatus === 'first_attempt' &&
+      !count('validate_nin')
+    ) {
       action = 'validate_nin';
     } else {
       action = 'refresh_kyc';

@@ -20,6 +20,7 @@ const SENSITIVE_PAYMENT_LOG_KEYS = new Set([
   'phone_number',
   'postal_code',
   'state',
+  'tracking_token',
   'zip_code',
 ]);
 

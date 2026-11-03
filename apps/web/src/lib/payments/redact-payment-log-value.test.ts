@@ -3,6 +3,20 @@ import { describe, expect, it } from 'vitest';
 import { redactPaymentLogValue } from './redact-payment-log-value';
 
 describe('redactPaymentLogValue', () => {
+  it('redacts order tracking proofs in payment initialization logs', () => {
+    expect(
+      redactPaymentLogValue({
+        tracking_token: 'secret-proof',
+        nested: { trackingToken: 'another-secret-proof' },
+        order_id: 'order-123',
+      })
+    ).toEqual({
+      tracking_token: '[REDACTED]',
+      nested: { trackingToken: '[REDACTED]' },
+      order_id: 'order-123',
+    });
+  });
+
   it('redacts payment customer and billing PII without mutating the source value', () => {
     const source = {
       merchant_id: 'merchant-123',

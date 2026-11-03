@@ -10,7 +10,7 @@ import { OxygenSelfieButton } from './OxygenSelfieButton';
 import { OxygenVerificationActivity } from './OxygenVerificationActivity';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { oxygenVerificationHeading } from './oxygen-verification-heading';
-import { selfieLinkExpired } from './selfie-link-expired';
+import { selfieLinkExpiration, selfieLinkExpired } from './selfie-link-expired';
 
 type Props = {
   snapshot: OxygenRuntimeSnapshot;
@@ -29,10 +29,12 @@ export function OxygenGuidedVerification({
   enabled = true,
 }: Props) {
   const attempts = useRef(new Map<string, number>());
+  const lastUsableSelfie = useRef<string | null>(null);
   useEffect(() => {
     if (!enabled) attempts.current.clear();
   }, [enabled]);
   const [retrying, setRetrying] = useState(false);
+  const [expiryTick, setExpiryTick] = useState(0);
   const retryLock = useRef(false);
   const state = snapshot.state;
   const selfieConfirmed =
@@ -49,6 +51,21 @@ export function OxygenGuidedVerification({
   const expiredSelfie = Boolean(
     state.selfieUrl && selfieLinkExpired(state.selfieUrl)
   );
+  useEffect(() => {
+    if (state.selfieUrl && !expiredSelfie)
+      lastUsableSelfie.current = state.selfieUrl;
+  }, [state.selfieUrl, expiredSelfie]);
+  useEffect(() => {
+    if (!active || !selfieRequired || !state.selfieUrl || expiredSelfie) return;
+    const expiration = selfieLinkExpiration(state.selfieUrl);
+    if (expiration === null) return;
+    const delay = Math.min(
+      Math.max(expiration - Math.max(Date.now(), expiryTick), 1),
+      2_147_483_647
+    );
+    const timer = window.setTimeout(() => setExpiryTick(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [active, selfieRequired, state.selfieUrl, expiredSelfie, expiryTick]);
   // Oxygen confirms the bank during eligibility; bank status cannot gate that check.
   const identityComplete = oxygenEligibilityPrerequisites(state);
   const ninRequired =
@@ -94,12 +111,16 @@ export function OxygenGuidedVerification({
       | 'selfie_link'
       | 'validate_nin';
     let delay = 0;
+    // Expired replacements share a bound until a usable link is observed.
+    const selfieAttempt = state.selfieUrl
+      ? `selfie_link:expired:${lastUsableSelfie.current ?? ''}`
+      : 'selfie_link:missing';
     if (!state.kyc) {
       action = 'refresh_kyc';
     } else if (
       selfieRequired &&
       (!state.selfieUrl || expiredSelfie) &&
-      !count('selfie_link')
+      !count(selfieAttempt)
     ) {
       action = 'selfie_link';
     } else if (
@@ -120,13 +141,14 @@ export function OxygenGuidedVerification({
       delay = bankPending && !count('bank_confirmation') ? 0 : 20_000;
     }
     // Bound polling and never automatically repeat a failed or uncertain command.
+    const attemptKey = action === 'selfie_link' ? selfieAttempt : action;
     if (
-      count(action) >=
+      count(attemptKey) >=
       (action === 'refresh_kyc' ? 5 : action === 'refresh_eligibility' ? 3 : 1)
     )
       return;
     const timer = window.setTimeout(() => {
-      attempts.current.set(action, count(action) + 1);
+      attempts.current.set(attemptKey, count(attemptKey) + 1);
       if (action === 'refresh_kyc' && bankPending)
         attempts.current.set('bank_confirmation', 1);
       void submit({ action });

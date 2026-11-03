@@ -1,5 +1,6 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
 import { createPrimarySavingsProvisioningExecutor } from './primary-savings-provisioning-executor';
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';
@@ -21,10 +22,7 @@ export function readPrimarySavingsProvisioningRuntime(
   // intents, and the same preconditions, bindings, and credentials
   // still apply. Rolling back the flag must drain those orphans, not
   // strand them behind a 503 that no flag state can clear.
-  if (
-    mode === 'provision' &&
-    env.PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED !== 'true'
-  )
+  if (mode === 'provision' && !isPiggyvestFeatureOn('goal_provisioning', env))
     return null;
   const primary =
     mode === 'recover'

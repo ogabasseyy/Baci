@@ -34,7 +34,7 @@ INSERT INTO piggyvest_primary_card.intake_authority VALUES('10000000-0000-4000-8
 -- The checkout-reversal table (a later migration) exists in production; the
 -- settlement function references it, so the fixture carries an empty one.
 CREATE TABLE piggyvest_primary_card.checkout_reversals(operation_id uuid,resolution text);
-\ir ../../../../../supabase/migrations/20261103002753_piggyvest_deposits_ledger_only.sql
+\ir ../../../../../supabase/migrations/20261103025419_piggyvest_deposits_ledger_only.sql
 CREATE TABLE public.before_state AS
   SELECT (SELECT coalesce(sum(available_balance),0) FROM public.customer_wallets) AS balance,
          (SELECT count(*) FROM public.customer_wallet_transactions) AS transactions,

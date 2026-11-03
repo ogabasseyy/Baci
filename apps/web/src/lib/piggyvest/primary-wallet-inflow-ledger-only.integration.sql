@@ -72,7 +72,7 @@ DELETE FROM piggyvest_primary.inflow_receipts;
 CREATE TABLE piggyvest_primary_card.reservations();
 CREATE TABLE piggyvest_primary_card.treasury_policy();
 CREATE TABLE piggyvest_primary_card.settlements();
-\ir ../../../../../supabase/migrations/20261103002753_piggyvest_deposits_ledger_only.sql
+\ir ../../../../../supabase/migrations/20261103025419_piggyvest_deposits_ledger_only.sql
 UPDATE piggyvest_primary.onboarding_intents SET state='verified' WHERE provider_customer_id='customer' AND provider_wallet_id='wallet';
 SET SESSION AUTHORIZATION primary_evidence_fixture;
 DO $$

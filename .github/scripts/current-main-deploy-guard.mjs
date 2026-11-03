@@ -111,7 +111,54 @@ async function githubJson(fetchImpl, url, token) {
   return response.json();
 }
 
-async function supersedingChangesAreNonWeb({
+function collectSupersedingShas(comparison, currentSha) {
+  const shas = new Set([currentSha.toLowerCase()]);
+  if (Array.isArray(comparison.commits)) {
+    if (comparison.commits.length !== comparison.total_commits) {
+      throw new Error('incomplete superseding commit list');
+    }
+    for (const commit of comparison.commits) {
+      if (typeof commit?.sha !== 'string' || !SHA_PATTERN.test(commit.sha)) {
+        throw new Error('invalid superseding commit SHA');
+      }
+      shas.add(commit.sha.toLowerCase());
+    }
+  } else if (comparison.total_commits > 1) {
+    throw new Error('incomplete superseding commit list');
+  }
+  return shas;
+}
+
+async function hasSupersedingSuccessfulDeploy({
+  apiRoot,
+  fetchImpl,
+  repository,
+  supersedingShas,
+  token,
+}) {
+  const runsBody = await githubJson(
+    fetchImpl,
+    `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=50`,
+    token
+  );
+  if (!Array.isArray(runsBody?.workflow_runs)) {
+    throw new Error('invalid workflow runs response');
+  }
+  for (const run of runsBody.workflow_runs) {
+    if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
+      throw new Error('invalid workflow run SHA');
+    }
+    if (
+      (run.conclusion === undefined || run.conclusion === 'success') &&
+      supersedingShas.has(run.head_sha.toLowerCase())
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function supersedingChangesCanProceed({
   apiRoot,
   currentSha,
   expectedSha,
@@ -136,13 +183,26 @@ async function supersedingChangesAreNonWeb({
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
   }
+  let nonWebOnly = true;
   for (const file of comparison.files) {
     const paths = [file?.filename, file?.previous_filename].filter(Boolean);
     if (paths.length === 0 || paths.some((path) => isWebDeployPath(path))) {
-      return false;
+      nonWebOnly = false;
+      break;
     }
   }
-  return true;
+  if (nonWebOnly) {
+    return true;
+  }
+  const supersedingShas = collectSupersedingShas(comparison, currentSha);
+  const alreadyDeployed = await hasSupersedingSuccessfulDeploy({
+    apiRoot,
+    fetchImpl,
+    repository,
+    supersedingShas,
+    token,
+  });
+  return !alreadyDeployed;
 }
 
 export async function verifyCurrentMainDeployment({
@@ -174,7 +234,7 @@ export async function verifyCurrentMainDeployment({
     throw new Error('invalid current main SHA');
   }
   if (currentSha.toLowerCase() !== expectedSha.toLowerCase()) {
-    const nonWebOnly = await supersedingChangesAreNonWeb({
+    const canProceed = await supersedingChangesCanProceed({
       apiRoot,
       currentSha,
       expectedSha,
@@ -182,7 +242,7 @@ export async function verifyCurrentMainDeployment({
       repository,
       token,
     });
-    if (!nonWebOnly) {
+    if (!canProceed) {
       throw new Error(
         `superseded deployment SHA ${expectedSha}; current main is ${currentSha}`
       );

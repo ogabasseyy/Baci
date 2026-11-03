@@ -8,6 +8,8 @@ import { verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
 
 const expectedSha = 'a'.repeat(40);
 const currentSha = 'b'.repeat(40);
+const intermediateSha = 'c'.repeat(40);
+const olderDeployedSha = 'd'.repeat(40);
 
 test('tests helper-only sales repair changes and rejects deployments superseded by them', async () => {
   const helper = '.github/scripts/repair-sales-migration-collision.sh';
@@ -26,35 +28,39 @@ test('tests helper-only sales repair changes and rejects deployments superseded 
 });
 
 function response(body, { ok = true, status = 200 } = {}) {
-  return {
-    ok,
-    status,
-    async json() {
-      return body;
-    },
-  };
+  return { ok, status, async json() { return body; } };
 }
 
-async function verifySupersededFile(filename) {
+function makeCompareResponse(filename, commits = [{ sha: currentSha }]) {
+  return response({
+    commits,
+    files: [{ filename }],
+    merge_base_commit: { sha: expectedSha },
+    status: 'ahead',
+    total_commits: commits.length,
+  });
+}
+
+async function verifySupersededFile(
+  filename,
+  workflowRuns = [{ conclusion: 'success', head_sha: currentSha }],
+  commits = [{ sha: currentSha }]
+) {
   let call = 0;
   return verifyCurrentMainDeployment({
     expectedSha,
     fetchImpl: async () => {
       call += 1;
       if (call === 1) return response({ object: { sha: currentSha } });
-      return response({
-        files: [{ filename }],
-        merge_base_commit: { sha: expectedSha },
-        status: 'ahead',
-        total_commits: 1,
-      });
+      if (call === 2) return makeCompareResponse(filename, commits);
+      return response({ workflow_runs: workflowRuns });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
   });
 }
 
-test('accepts only when the deployment SHA is the current main ref', async () => {
+test('accepts when the deployment SHA is the current main ref', async () => {
   const calls = [];
   const result = await verifyCurrentMainDeployment({
     expectedSha,
@@ -67,31 +73,41 @@ test('accepts only when the deployment SHA is the current main ref', async () =>
   });
 
   assert.deepEqual(result, { currentSha: expectedSha, expectedSha });
-  assert.equal(
-    calls[0].url,
-    'https://api.github.com/repos/ogabasseyy/Baci/git/ref/heads/main'
-  );
+  assert.equal(calls[0].url, 'https://api.github.com/repos/ogabasseyy/Baci/git/ref/heads/main');
   assert.equal(calls[0].options.headers.authorization, 'Bearer test-token');
 });
 
-test('rejects a superseded deployment SHA', async () => {
-  let call = 0;
+test('rejects a superseded deployment SHA once a newer commit has deployed', async () => {
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx'), /superseded deployment SHA/);
+});
+
+test('accepts an in-flight ancestor when no superseding commit has deployed yet', async () => {
+  const urls = [];
+  const result = await verifyCurrentMainDeployment({
+    expectedSha,
+    fetchImpl: async (url) => {
+      urls.push(url);
+      if (urls.length === 1) return response({ object: { sha: currentSha } });
+      if (urls.length === 2) {
+        return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
+      }
+      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha }] });
+    },
+    repository: 'ogabasseyy/Baci',
+    token: 'test-token',
+  });
+
+  assert.deepEqual(result, { currentSha, expectedSha });
+  assert.match(urls[2], /\/actions\/workflows\/deploy\.yml\/runs\?branch=main&status=success/);
+});
+
+test('rejects an ancestor when an intermediate superseding commit has deployed', async () => {
   await assert.rejects(
-    verifyCurrentMainDeployment({
-      expectedSha,
-      fetchImpl: async () => {
-        call += 1;
-        if (call === 1) return response({ object: { sha: currentSha } });
-        return response({
-          files: [{ filename: 'apps/web/src/app/page.tsx' }],
-          merge_base_commit: { sha: expectedSha },
-          status: 'ahead',
-          total_commits: 1,
-        });
-      },
-      repository: 'ogabasseyy/Baci',
-      token: 'test-token',
-    }),
+    verifySupersededFile(
+      'apps/web/src/app/page.tsx',
+      [{ conclusion: 'success', head_sha: intermediateSha }],
+      [{ sha: intermediateSha }, { sha: currentSha }]
+    ),
     /superseded deployment SHA/
   );
 });
@@ -225,68 +241,48 @@ test('fails closed on malformed identity and GitHub API responses', async () => 
     }),
     /invalid current main SHA/
   );
+  await assert.rejects(
+    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha' }]),
+    /invalid workflow run SHA/
+  );
+  await assert.rejects(
+    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha }], [{ sha: 'bad-sha' }]),
+    /invalid superseding commit SHA/
+  );
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {
-  const workflow = readFileSync(
-    new URL('../workflows/deploy.yml', import.meta.url),
-    'utf8'
-  );
+  const workflow = readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8');
   const postdeployAction = readFileSync(
     new URL('../actions/postdeploy-migrations/action.yml', import.meta.url),
     'utf8'
   );
 
-  assert.match(
-    workflow,
-    /DEPLOY_CURRENT_MAIN_GUARD: \.github\/scripts\/current-main-deploy-guard\.mjs/
-  );
-  assert.match(
-    workflow,
-    /deploy --yes --prebuilt --prod --skip-domain --archive=tgz/
-  );
+  assert.match(workflow, /DEPLOY_CURRENT_MAIN_GUARD: \.github\/scripts\/current-main-deploy-guard\.mjs/);
+  assert.match(workflow, /deploy --yes --prebuilt --prod --skip-domain --archive=tgz/);
   const deployJob = workflow.slice(workflow.indexOf('  deploy-production:'));
-  const prebuildGuard = deployJob.indexOf(
-    '- name: Verify exact-main deployment authority before build'
-  );
+  const prebuildGuard = deployJob.indexOf('- name: Verify exact-main deployment authority before build');
   assert.ok(prebuildGuard > 0, 'missing prebuild exact-main guard');
-  const nodeSetup = deployJob.indexOf(
-    '- name: Setup Node.js for deployment authority guard'
-  );
-  assert.ok(nodeSetup > 0, 'missing Node setup for exact-main guard');
-  assert.ok(nodeSetup < prebuildGuard, 'Node must be set up before the guard');
+  const nodeSetup = deployJob.indexOf('- name: Setup Node.js for deployment authority guard');
+  assert.ok(nodeSetup > 0 && nodeSetup < prebuildGuard, 'Node must be set up before the guard');
   assert.ok(
-    prebuildGuard <
-      deployJob.indexOf('- uses: ./.github/actions/pnpm-install-cached'),
+    prebuildGuard < deployJob.indexOf('- uses: ./.github/actions/pnpm-install-cached'),
     'exact-main guard must run before dependency installation and build'
   );
-  const postdeployActionStep = deployJob.indexOf(
-    '- uses: ./.github/actions/postdeploy-migrations'
-  );
+  const postdeployActionStep = deployJob.indexOf('- uses: ./.github/actions/postdeploy-migrations');
   assert.ok(postdeployActionStep >= 0, 'postdeploy action must exist');
-  assert.match(
-    deployJob.slice(postdeployActionStep),
-    /supabase-access-token: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/
-  );
-  assert.match(
-    deployJob.slice(postdeployActionStep),
-    /supabase-project-ref: \$\{\{ secrets\.SUPABASE_PROJECT_REF \}\}/
-  );
-  const drainStep = postdeployAction.indexOf(
-    '- name: Drain previous storefront order requests'
-  );
+  assert.match(deployJob.slice(postdeployActionStep), /supabase-access-token: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
+  assert.match(deployJob.slice(postdeployActionStep), /supabase-project-ref: \$\{\{ secrets\.SUPABASE_PROJECT_REF \}\}/);
+  const drainStep = postdeployAction.indexOf('- name: Drain previous storefront order requests');
   const postdeployGuard = postdeployAction.indexOf(
     '- name: Verify exact-main deployment authority before postdeploy migrations'
   );
   const postdeployMigrations = postdeployAction.indexOf(
     '- name: Apply migrations deferred until application deploy'
   );
-  assert.ok(drainStep >= 0, 'drain step must exist');
-  assert.ok(postdeployGuard >= 0, 'postdeploy guard must exist');
-  assert.ok(postdeployMigrations >= 0, 'deferred migrations step must exist');
-  assert.ok(postdeployGuard > drainStep, 'postdeploy guard must run after drain');
+  assert.ok(drainStep >= 0 && postdeployGuard > drainStep, 'postdeploy guard must run after drain');
   assert.ok(
-    postdeployGuard < postdeployMigrations,
+    postdeployMigrations > postdeployGuard,
     'postdeploy guard must run immediately before deferred migrations'
   );
   assert.doesNotMatch(

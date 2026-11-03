@@ -177,32 +177,20 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(aorusGuide.categorySlug).toBe('gaming-laptops');
 
-    const bladeGuide = inferContentClusterContext({
-      title: 'Razer Blade 16 Laptop Review',
-      excerpt: 'Premium thin and light gaming laptop benchmarks.',
-      category: 'Laptops',
-      tags: ['laptops', 'razer'],
-      keywords: ['review'],
-    });
-    expect(bladeGuide.categorySlug).toBe('gaming-laptops');
-
-    const nitroGuide = inferContentClusterContext({
-      title: 'Acer Nitro 15 Laptop Review',
-      excerpt: 'Budget-friendly mobile gaming performance tested.',
-      category: 'Laptops',
-      tags: ['laptops', 'acer'],
-      keywords: ['review'],
-    });
-    expect(nitroGuide.categorySlug).toBe('gaming-laptops');
-
-    const katanaGuide = inferContentClusterContext({
-      title: 'MSI Katana 15 Laptop Review',
-      excerpt: 'Entry gaming laptop review with RTX graphics.',
-      category: 'Laptops',
-      tags: ['laptops', 'msi'],
-      keywords: ['review'],
-    });
-    expect(katanaGuide.categorySlug).toBe('gaming-laptops');
+    for (const [title, brand] of [
+      ['Razer Blade 16 Laptop Review', 'razer'],
+      ['Acer Nitro 15 Laptop Review', 'acer'],
+      ['MSI Katana 15 Laptop Review', 'msi'],
+    ]) {
+      const guide = inferContentClusterContext({
+        title,
+        excerpt: 'Mobile gaming review.',
+        category: 'Laptops',
+        tags: ['laptops', brand],
+        keywords: ['review'],
+      });
+      expect(guide.categorySlug).toBe('gaming-laptops');
+    }
   });
 
   it('promotes legitimate gaming-laptop roundups mentioning GPUs in the title to gaming-laptops', () => {
@@ -282,14 +270,23 @@ describe('inferContentClusterContext - gaming laptops', () => {
     expect(standArticle.categorySlug).toBe('laptops');
   });
 
-  it('preserves GPU mentions in explicit gaming-laptops category guides', () => {
-    const post = inferContentClusterContext({
+  it('preserves GPU and desktop replacement mentions in explicit gaming-laptops category guides', () => {
+    const gpuPost = inferContentClusterContext({
       title: 'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
       excerpt: 'Comparing portable machines with discrete graphics.',
       category: 'Gaming Laptops',
       tags: ['laptops'],
       keywords: ['gpu'],
     });
-    expect(post.categorySlug).toBe('gaming-laptops');
+    expect(gpuPost.categorySlug).toBe('gaming-laptops');
+
+    const desktopReplacementPost = inferContentClusterContext({
+      title: 'Best Gaming Laptops for Desktop Replacement',
+      excerpt: 'Heavy-duty gaming rigs replacing desktops.',
+      category: 'Gaming Laptops',
+      tags: ['laptops'],
+      keywords: ['desktop replacement'],
+    });
+    expect(desktopReplacementPost.categorySlug).toBe('gaming-laptops');
   });
 });

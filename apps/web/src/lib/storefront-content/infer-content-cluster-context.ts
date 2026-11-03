@@ -61,18 +61,26 @@ type ClusterSupportEntry = [
   (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
 ];
 
+const hasLaptopPhrase = (text: string) =>
+  hasPhrase(text, 'laptop') ||
+  hasPhrase(text, 'laptops') ||
+  hasPhrase(text, 'gaming laptop') ||
+  hasPhrase(text, 'gaming laptops');
+
 function hasExcludedGamingLaptopSubject(
   targetText: string,
   hasLaptopInContext = false
 ): boolean {
-  const hasLaptop =
-    hasLaptopInContext ||
-    hasPhrase(targetText, 'gaming laptop') ||
-    hasPhrase(targetText, 'gaming laptops');
-  const isGpu = (s: string) =>
-    s === 'gpu' || s === 'gpus' || s.startsWith('graphics card');
+  const hasLaptop = hasLaptopInContext || hasLaptopPhrase(targetText);
+  const isExempt = (s: string) =>
+    s === 'gpu' ||
+    s === 'gpus' ||
+    s.startsWith('graphics card') ||
+    ((s === 'desktop' || s === 'desktops') &&
+      hasPhrase(targetText, 'desktop replacement'));
+
   return EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-    (s) => !(hasLaptop && isGpu(s)) && hasPhrase(targetText, s)
+    (s) => !(hasLaptop && isExempt(s)) && hasPhrase(targetText, s)
   );
 }
 
@@ -81,37 +89,27 @@ function isDedicatedGamingLaptopContent(
   contentHaystack: string,
   excerptHaystack = ''
 ): boolean {
-  const hasTitleGamingLaptop =
-    hasPhrase(titleHaystack, 'gaming laptop') ||
-    hasPhrase(titleHaystack, 'gaming laptops');
-  const hasTitleLaptop =
-    hasPhrase(titleHaystack, 'laptop') || hasPhrase(titleHaystack, 'laptops');
-  const hasTitleDedicatedModel = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
+  const hasTitleLaptop = hasLaptopPhrase(titleHaystack);
+  const hasTitleDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
     hasPhrase(titleHaystack, token)
   );
 
-  if (hasTitleGamingLaptop || (hasTitleDedicatedModel && hasTitleLaptop)) {
+  if (
+    (hasTitleLaptop && hasTitleDedicated) ||
+    hasPhrase(titleHaystack, 'gaming laptop') ||
+    hasPhrase(titleHaystack, 'gaming laptops')
+  ) {
     return !hasExcludedGamingLaptopSubject(titleHaystack);
   }
 
-  const hasMetadataLaptop =
-    hasPhrase(contentHaystack, 'laptop') ||
-    hasPhrase(contentHaystack, 'laptops') ||
-    hasPhrase(contentHaystack, 'gaming laptop') ||
-    hasPhrase(contentHaystack, 'gaming laptops');
-
-  if (hasTitleDedicatedModel && hasMetadataLaptop) {
+  if (hasTitleDedicated && hasLaptopPhrase(contentHaystack)) {
     const titleAndExcerpt = [titleHaystack, excerptHaystack]
       .filter(Boolean)
       .join(' ');
-    const hasLaptop =
-      hasTitleLaptop ||
-      hasPhrase(excerptHaystack, 'laptop') ||
-      hasPhrase(excerptHaystack, 'laptops') ||
-      hasPhrase(excerptHaystack, 'gaming laptop') ||
-      hasPhrase(excerptHaystack, 'gaming laptops');
-
-    return !hasExcludedGamingLaptopSubject(titleAndExcerpt, hasLaptop);
+    return !hasExcludedGamingLaptopSubject(
+      titleAndExcerpt,
+      hasLaptopPhrase(titleAndExcerpt)
+    );
   }
 
   return false;
@@ -149,7 +147,7 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (explicitMatch.categorySlug === 'gaming-laptops') {
-      return hasExcludedGamingLaptopSubject(title ?? '')
+      return hasExcludedGamingLaptopSubject(title ?? '', true)
         ? 'laptops'
         : 'gaming-laptops';
     }

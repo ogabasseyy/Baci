@@ -104,6 +104,7 @@ quiz_db:
   - 'docs/runbooks/piggyvest-stuck-legacy-funds.md'
   - '.github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs'
   - 'apps/web/tools/db/replay-registry/**'
+  - 'apps/web/tools/db/oxygen-financial-edit-concurrency.test.ts'
   - 'apps/web/tools/db/replay-registry.ts'
   - 'apps/web/tools/db/replay-sql-check-registry.ts'
   - '.github/scripts/deferred-production-migrations.sh'

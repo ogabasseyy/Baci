@@ -1,19 +1,11 @@
 name: iOS Storefront Production Release
 
 on:
+  # Storefront release gate: while .github/storefront-release-gate.json exists,
+  # a store release starts only from an owner tag or a manual dispatch, never
+  # from a push to main. docs/runbooks/storefront-release-gate.md records the
+  # push trigger to restore when the gate ends.
   push:
-    branches:
-      - main
-    paths:
-      - 'apps/mobile-storefront/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      # pnpm patches ship native code (e.g. expo-modules-jsi); a patch or
-      # lockfile-only change must still trigger a release build.
-      - 'patches/**'
-      - 'pnpm-lock.yaml'
     tags:
       - 'v*-storefront-ios'
   workflow_dispatch:
@@ -62,7 +54,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history, so the next step can confirm the commit is on main.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Storefront release gate: a store release ships only a commit that is
+      # already on main, so it passed review and the gate's CI check. This
+      # runs before anything else; docs/runbooks/storefront-release-gate.md.
+      - name: Refuse release sources that are not on main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
+            echo '::error::This release commit is not on main. Store releases ship only reviewed commits from main; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"

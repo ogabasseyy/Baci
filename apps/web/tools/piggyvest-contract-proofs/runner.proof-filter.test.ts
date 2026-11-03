@@ -25,6 +25,15 @@ describe('--proof: run one proof only', () => {
     expect(parseRunConfig([], env).proof).toBeNull();
   });
 
+  it('accepts p10 (S8) alone, but never with --new-attempt', () => {
+    expect(parseRunConfig(['--proof', 'p10'], env).proof).toBe('p10');
+    expect(
+      refusalCode(() =>
+        parseRunConfig(['--proof', 'p10', '--new-attempt'], env)
+      )
+    ).toBe('USAGE');
+  });
+
   it('refuses an unknown proof id or a missing value', () => {
     expect(refusalCode(() => parseRunConfig(['--proof', 'p9'], env))).toBe(
       'USAGE'

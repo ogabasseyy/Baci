@@ -9,7 +9,8 @@ export type ProofId =
   | 'p6'
   | 'p7'
   | 'p8'
-  | 'p9';
+  | 'p9'
+  | 'p10';
 export type Answer = 'yes' | 'no' | 'unknown' | 'not_applicable';
 export type Scalar = string | number | boolean | null;
 

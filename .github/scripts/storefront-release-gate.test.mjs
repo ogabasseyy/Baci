@@ -44,11 +44,11 @@ test('the repository satisfies the storefront release gate', () => {
 test('the gate fails when a new PiggyVest mobile file lacks a server-off test', () => {
   const failures = collectGateFailures(withFiles({ [PIN_SHEET]: 'export function WalletPinSheet() {}' }));
   assert.deepEqual(failures, [
-    `${PIN_SHEET} is a new PiggyVest storefront file without a server-off test: add ${PIN_SHEET_SERVER_OFF} (see ${GATE_RUNBOOK})`,
+    `${PIN_SHEET} is a new or changed PiggyVest storefront file without a server-off test: add ${PIN_SHEET_SERVER_OFF} (see ${GATE_RUNBOOK})`,
   ]);
   const placeholder = withFiles({ [PIN_SHEET]: 'export function WalletPinSheet() {}', [PIN_SHEET_SERVER_OFF]: "test('off', () => {});" });
   assert.deepEqual(collectGateFailures(placeholder), [
-    `${PIN_SHEET} is a new PiggyVest storefront file whose server-off test ${PIN_SHEET_SERVER_OFF} does not import it (see ${GATE_RUNBOOK})`,
+    `${PIN_SHEET} is a new or changed PiggyVest storefront file whose server-off test ${PIN_SHEET_SERVER_OFF} does not import it (see ${GATE_RUNBOOK})`,
   ]);
   const covered = withFiles({
     [PIN_SHEET]: 'export function WalletPinSheet() {}',
@@ -118,7 +118,7 @@ test('the marker has exactly its documented fields', () => {
 
 test('the OTA guard must stay in place and run before the source is selected', () => {
   const ota = repository.readFile(OTA_WORKFLOW);
-  const misplaced = `${OTA_WORKFLOW} must run the "${OTA_GUARD_STEP}" step before "Validate and select reviewed source" in its export job`;
+  const misplaced = `${OTA_WORKFLOW} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "Validate and select reviewed source" in its export job`;
   const withoutGuard = ota.replace(`- name: ${OTA_GUARD_STEP}`, '- name: Renamed step');
   assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: withoutGuard })), [misplaced]);
   const guard = readStep(readJob(ota, 'export'), OTA_GUARD_STEP).text;
@@ -126,7 +126,10 @@ test('the OTA guard must stay in place and run before the source is selected', (
     .replace(`${guard}\n`, '')
     .replace('  export:\n', `  gate:\n    runs-on: ubuntu-24.04\n    steps:\n${guard}\n  export:\n`);
   assert.notEqual(ownJob, ota, 'fixture must move the guard');
-  assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: ownJob })), [misplaced]);
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: ownJob })), [
+    `${OTA_WORKFLOW} must keep a single job (found: gate, export): the gate guards cover one job`,
+    misplaced,
+  ]);
   const loosened = guard.replaceAll(GATE_MARKER, '.github/other.json').replace('${{ inputs.source_sha }}', "${{ github.sha }}");
   assert.deepEqual(collectGateFailures(withFiles({ [OTA_WORKFLOW]: ota.replace(guard, loosened) })), [
     `${OTA_WORKFLOW} "${OTA_GUARD_STEP}" must refuse sources that carry ${GATE_MARKER}`,

@@ -152,12 +152,30 @@ export function readJob(text, id) {
 
 const STEP_NAME = /^(\s*)- name:\s*(.+?)\s*$/;
 
-/** Step names in file order. */
+const STEP_START = /^\s*- (?:(name)|(?:run|uses|id|if|env|with|shell|working-directory|continue-on-error|timeout-minutes)):/;
+export const UNNAMED_STEP = '(unnamed step)';
+
+/** Step names in file order; a step that does not start with `name:` shows as UNNAMED_STEP. */
 export function readStepNames(text) {
   return text.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(STEP_NAME);
-    return match ? [unquote(match[2])] : [];
+    const match = line.match(STEP_START);
+    if (!match) return [];
+    return [match[1] ? unquote(line.match(STEP_NAME)?.[2] ?? UNNAMED_STEP) : UNNAMED_STEP];
   });
+}
+
+/** Ids of every job under the top-level `jobs:` block. */
+export function readJobIds(text) {
+  const lines = text.split(/\r?\n/);
+  const jobsAt = lines.findIndex((line) => /^jobs\s*:\s*(?:#.*)?$/.test(line));
+  if (jobsAt === -1) return [];
+  const ids = [];
+  for (const line of lines.slice(jobsAt + 1)) {
+    if (line.trim() !== '' && indentOf(line) === 0 && !line.trim().startsWith('#')) break;
+    const match = line.match(/^  ([\w-]+)\s*:\s*(?:#.*)?$/);
+    if (match) ids.push(match[1]);
+  }
+  return ids;
 }
 
 function blockScalar(lines, runIndex) {

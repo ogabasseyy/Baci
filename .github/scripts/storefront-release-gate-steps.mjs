@@ -1,7 +1,7 @@
 // Step-level rules of the storefront release gate. Each one reads a single job
 // block, so a guard moved into another job (which would no longer hold back
 // the job that ships) fails the gate.
-import { readJob, readStep, readStepNames } from './storefront-release-gate-workflows.mjs';
+import { readJob, readJobIds, readStep, readStepNames } from './storefront-release-gate-workflows.mjs';
 
 export const OTA_GUARD_STEP = 'Refuse sources held by the storefront release gate';
 const OTA_SELECTION_STEP = 'Validate and select reviewed source';
@@ -16,8 +16,9 @@ export function otaGuardFailures(workflow, text, marker) {
   const names = readStepNames(job);
   const guardAt = names.indexOf(OTA_GUARD_STEP);
   const selectionAt = names.indexOf(OTA_SELECTION_STEP);
-  if (guardAt === -1 || selectionAt === -1 || guardAt > selectionAt) {
-    return [`${workflow} must run the "${OTA_GUARD_STEP}" step before "${OTA_SELECTION_STEP}" in its export job`];
+  // Counting unnamed steps too: nothing but the checkout may run before the guard.
+  if (guardAt !== 1 || selectionAt === -1 || guardAt > selectionAt) {
+    return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its export job`];
   }
   const guard = readStep(job, OTA_GUARD_STEP);
   const failures = [];
@@ -40,6 +41,9 @@ export function otaGuardFailures(workflow, text, marker) {
 export function releaseGuardFailures(workflow, text, jobId) {
   const job = readJob(text, jobId);
   if (job === undefined) return [`${workflow} has no ${jobId} job`];
+  if (readJobIds(text).length !== 1) {
+    return [`${workflow} must keep ${jobId} as its only job: the on-main guard covers a single job`];
+  }
   const names = readStepNames(job);
   if (names[0] !== CHECKOUT_STEP || names[1] !== RELEASE_GUARD_STEP) {
     return [`${workflow} must run "${RELEASE_GUARD_STEP}" right after "${CHECKOUT_STEP}" in its ${jobId} job`];

@@ -88,16 +88,23 @@ tested:
 3. **No unapproved legal copy.** Terms, consent and fee wording comes from the
    server or has the owner's written approval in the pull request.
 4. **A server-off test for each new PiggyVest file.** The CI gate requires a
-   `*.server-off.test.tsx` test for every new storefront source file that is a
+   `*.server-off.test.tsx` test for every new or changed storefront source file that is a
    PiggyVest file, and that test must import the file it covers (with a
    relative path or the `@/` alias). The test shows the file behaves like
    production when the server keeps PiggyVest off. An empty placeholder test,
    or one that imports something else, does not count.
 
+The gate also reads the scripts a workflow or action runs (for example
+`bash .github/scripts/x.sh`), and the scripts those run, as part of that
+workflow, so delegating a build, upload or dispatch to a script does not hide
+it. A `.github` script it cannot find fails the gate. Test files and the
+gate's own modules are not followed. Each gated workflow keeps a single job,
+because its guards cover that one job.
+
 ### Which files count, and where the test goes
 
-A file counts when it is new since the gate's baseline commit (recorded in the
-gate file), is app source, and either has "PiggyVest", "wallet" or "savings"
+A file counts when it is new or changed since the gate's baseline commit
+(recorded in the gate file), is app source, and either has "PiggyVest", "wallet" or "savings"
 in its path or mentions PiggyVest in its code. These are not app source:
 tests, test helpers (`.test-support`, `.test-utils`, `.test-fixture`,
 `.test-fixtures` and `-test-harness` files), mocks, type declarations,

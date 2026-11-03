@@ -8,10 +8,11 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { expandReferences } from './storefront-release-gate-references.mjs';
 import { dispatchFailures } from './storefront-release-gate-dispatch.mjs';
 import { findMissingServerOffTests, STOREFRONT_ROOT } from './storefront-release-gate-server-off.mjs';
 import { ciGateFailures, otaGuardFailures, releaseGuardFailures } from './storefront-release-gate-steps.mjs';
-import { dispatchOnlyFailures, releaseTriggerFailures, shipsStorefront } from './storefront-release-gate-workflows.mjs';
+import { dispatchOnlyFailures, readJobIds, releaseTriggerFailures, shipsStorefront } from './storefront-release-gate-workflows.mjs';
 
 export { OTA_GUARD_STEP, RELEASE_GUARD_STEP } from './storefront-release-gate-steps.mjs';
 
@@ -61,10 +62,20 @@ function workflowFailures(repository) {
     const text = repository.readFile(workflow);
     failures.push(...(text === undefined ? [`${workflow} is missing`] : dispatchOnlyFailures(workflow, text)));
   }
+  // The guards cover one job each, so a gated workflow may hold no other job.
+  for (const workflow of GATED_WORKFLOWS) {
+    const jobs = readJobIds(repository.readFile(workflow) ?? '');
+    if (jobs.length > 1) failures.push(`${workflow} must keep a single job (found: ${jobs.join(', ')}): the gate guards cover one job`);
+  }
   // Composite actions run inside the workflow that uses them, so they follow
   // the same rules as workflows that are not gated.
   for (const file of [...repository.listWorkflows(), ...repository.listActions()].sort()) {
-    const text = repository.readFile(file) ?? '';
+    // The scripts a file runs count as part of it: delegating the build,
+    // upload or dispatch to a script must not hide it from the gate.
+    const { text, missing } = expandReferences(repository.readFile(file) ?? '', repository.readFile);
+    for (const script of missing) {
+      failures.push(`${file} runs ${script}, which is missing: the storefront release gate cannot read what it does`);
+    }
     if (!GATED_WORKFLOWS.includes(file) && shipsStorefront(text)) {
       failures.push(`${file} builds or ships the storefront app but is not covered by the storefront release gate`);
     }
@@ -92,23 +103,26 @@ function serverOffFailures(repository, baselineCommit) {
   }
   const existing = new Set(baseline);
   const tracked = repository.listTracked(STOREFRONT_ROOT);
-  const newFiles = tracked.filter((file) => !existing.has(file));
+  // New files and files changed since the baseline both need a server-off test:
+  // editing an existing wallet or savings file can land half-built UI too.
+  const changed = new Set(repository.listChanged(baselineCommit, STOREFRONT_ROOT));
+  const newFiles = tracked.filter((file) => !existing.has(file) || changed.has(file));
   return findMissingServerOffTests({
     newFiles,
     tracked,
     readContent: (file) => repository.readFile(file) ?? '',
   }).map(({ file, expected, test }) =>
     test === undefined
-      ? `${file} is a new PiggyVest storefront file without a server-off test: add ${expected} (see ${GATE_RUNBOOK})`
-      : `${file} is a new PiggyVest storefront file whose server-off test ${test} does not import it (see ${GATE_RUNBOOK})`
+      ? `${file} is a new or changed PiggyVest storefront file without a server-off test: add ${expected} (see ${GATE_RUNBOOK})`
+      : `${file} is a new or changed PiggyVest storefront file whose server-off test ${test} does not import it (see ${GATE_RUNBOOK})`
   );
 }
 
 /**
  * Every way the repository currently breaks the gate (empty when it holds).
  * `repository` supplies readFile(path) -> string | undefined, listWorkflows(),
- * listActions(), listTracked(directory) and listBaseline(commit, directory) ->
- * paths, or undefined unless the commit is on main and HEAD contains it.
+ * listActions(), listTracked(directory), listChanged(commit, directory) (files
+ * differing from that commit) and listBaseline(commit, directory) -> paths, or undefined unless the commit is on main and HEAD contains it.
  */
 export function collectGateFailures(repository) {
   const markerText = repository.readFile(GATE_MARKER);
@@ -136,13 +150,15 @@ export function gitRepository(root) {
       try {
         return readFileSync(path.join(root, file), 'utf8');
       } catch (error) {
-        if (error.code === 'ENOENT') return undefined;
+        if (error.code === 'ENOENT' || error.code === 'EISDIR') return undefined;
         throw error;
       }
     },
     listWorkflows: () => listFiles('.github/workflows').filter((file) => /\.ya?ml$/.test(file)),
     listActions: () => listFiles('.github/actions').filter((file) => /(?:^|\/)action\.ya?ml$/.test(file)),
     listTracked: listFiles,
+    listChanged: (commit, directory) =>
+      paths(git(['diff', '--name-only', '-z', '--diff-filter=AMR', commit, '--', directory])),
     listBaseline(commit, directory) {
       // A pull request's own commit is an ancestor of its CI merge commit but
       // never reaches main, so the baseline must also be on main.

@@ -39,7 +39,10 @@ BEGIN
         RAISE EXCEPTION '% must not be executable by %', v_signature, v_role;
       END IF;
     END LOOP;
-    IF NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_oid, 'EXECUTE') THEN
+    -- consume_goal_pin_proof was revoked from the authorizer by migration
+    -- 20261103071442 (see piggyvest_goal_pin_proof_consume_revoked.sql).
+    IF v_signature NOT LIKE '%consume_goal_pin_proof%'
+       AND NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_oid, 'EXECUTE') THEN
       RAISE EXCEPTION '% must be executable by piggyvest_primary_authorizer', v_signature;
     END IF;
     -- PUBLIC holds no EXECUTE: the ACL has no empty-grantee entry.

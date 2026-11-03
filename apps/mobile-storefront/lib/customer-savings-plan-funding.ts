@@ -8,6 +8,9 @@ import {
 } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
+export const PLAN_NOT_SET_UP_MESSAGE =
+  'This plan account has not been set up yet.';
+
 type Selection = {
   goalId: string;
   merchantId?: string | null;
@@ -54,8 +57,7 @@ async function primaryFunding(
     throw new Error(
       'This plan account needs review. Please contact support before trying again.'
     );
-  if (response.status === 'not_found')
-    throw new Error('This plan account has not been set up yet.');
+  if (response.status === 'not_found') throw new Error(PLAN_NOT_SET_UP_MESSAGE);
   return SavingsPlanFundingResponseSchema.parse(response);
 }
 

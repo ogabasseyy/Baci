@@ -13,6 +13,8 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   merchantSlug?: string;
   /** Reports the rail the operation id was sent on (legacy after fallback). */
   onRail?: (rail: 'primary' | 'legacy') => void;
+  /** False for an id already bound to primary: it must never reach legacy. */
+  allowLegacyFallback?: boolean;
 }) {
   const amountKobo = Math.round(input.amount * 100);
   if (
@@ -57,6 +59,10 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     // the contribution through the working legacy flow instead of failing.
     if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
       throw error;
+    if (input.allowLegacyFallback === false)
+      throw new Error(
+        'We are checking your earlier contribution. Please try again later.'
+      );
     // The primary POST may have dispatched before the server disabled
     // the rail: legacy dedupes only within its own rail, so retrying
     // there while a primary operation is still pending would debit

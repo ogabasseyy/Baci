@@ -75,6 +75,19 @@ describe('runBankTransferContribution', () => {
     expect(seen).toEqual({ operationId: 'fresh-op', rail });
   });
 
+  it('forbids legacy fallback for a kept primary id but not a fresh one', async () => {
+    mockCheckStatus.mockResolvedValue({ status: 'pending' });
+    const kept = { current: { operationId: 'old', rail: 'primary' } };
+    await run(kept, { initialContributionIdempotencyKey: 'old' });
+    expect(mockAddPrimary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ allowLegacyFallback: false })
+    );
+    await run({ current: null });
+    expect(mockAddPrimary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ allowLegacyFallback: true })
+    );
+  });
+
   it('sends a legacy-rail id to legacy only, even for a primary merchant', async () => {
     const railRef = { current: { operationId: 'old', rail: 'legacy' } };
     await run(railRef, { initialContributionIdempotencyKey: 'old' });

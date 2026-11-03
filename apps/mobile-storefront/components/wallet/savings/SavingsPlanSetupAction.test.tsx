@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { SavingsPlanSetupAction } from './SavingsPlanSetupAction';
 
 const mockFetchPlanFunding = jest.fn();
+const mockFetchExisting = jest.fn();
 const mockIsPrimary = jest.fn();
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: (id?: string) => mockIsPrimary(id),
@@ -14,6 +16,7 @@ jest.mock('./use-savings-plan-funding', () => ({
 
 const hookState = (overrides = {}) => ({
   fetchPlanFunding: mockFetchPlanFunding,
+  fetchExistingPlanFunding: mockFetchExisting,
   fundingError: null,
   planFundingPhase: 'idle',
   planFundingRequiresBvn: false,
@@ -60,10 +63,12 @@ describe('SavingsPlanSetupAction', () => {
     );
   });
 
-  it('runs the existing provisioning without a BVN when pressed', () => {
+  it('runs the existing provisioning without a BVN or interest when first set up', () => {
     renderAction();
     fireEvent.press(screen.getByRole('button', { name: 'Set up this goal' }));
-    expect(mockFetchPlanFunding).toHaveBeenCalledWith('');
+    expect(mockFetchPlanFunding).toHaveBeenCalledWith('', {
+      enableInterestAccrual: false,
+    });
   });
 
   it('shows ready state with no action and no account number', () => {
@@ -84,22 +89,36 @@ describe('SavingsPlanSetupAction', () => {
     expect(mockFetchPlanFunding).not.toHaveBeenCalled();
   });
 
-  it('tells the customer to check again while PiggyVest finishes', () => {
+  it('re-reads status, never re-provisions, while the goal is pending', () => {
     mockHook.mockReturnValue(hookState({ planFundingPhase: 'pending' }));
     renderAction();
     expect(screen.getByText(/still being set up/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Check again' }));
+    expect(mockFetchExisting).toHaveBeenCalledTimes(1);
+    expect(mockFetchPlanFunding).not.toHaveBeenCalled();
   });
 
-  it('shows a setup error and keeps the action available', () => {
+  it('offers setup when the status read reports nothing was set up', () => {
+    mockHook.mockReturnValue(
+      hookState({
+        planFundingPhase: 'error',
+        fundingError: PLAN_NOT_SET_UP_MESSAGE,
+      })
+    );
+    renderAction();
+    fireEvent.press(screen.getByRole('button', { name: 'Set up this goal' }));
+    expect(mockFetchPlanFunding).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows another error and re-reads status instead of provisioning', () => {
     mockHook.mockReturnValue(
       hookState({ planFundingPhase: 'error', fundingError: 'Try later' })
     );
     renderAction();
     expect(screen.getByText('Try later')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Set up this goal' })
-    ).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Check again' }));
+    expect(mockFetchExisting).toHaveBeenCalledTimes(1);
+    expect(mockFetchPlanFunding).not.toHaveBeenCalled();
   });
 
   it('renders nothing when this goal needs a BVN (legacy setup lives in the creation flow)', () => {

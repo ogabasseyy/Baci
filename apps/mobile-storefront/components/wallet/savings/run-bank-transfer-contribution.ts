@@ -96,6 +96,9 @@ export async function runBankTransferContribution(
           merchantSlug: input.activeMerchantSlug,
           ...(rail === 'primary'
             ? {
+                // An id the server already knows on primary never goes to
+                // legacy: only a fresh id may fall back.
+                allowLegacyFallback: !stored.operationId,
                 onRail: (used: ContributionRail) => {
                   ctx.railRef.current = {
                     operationId: idempotencyKey,

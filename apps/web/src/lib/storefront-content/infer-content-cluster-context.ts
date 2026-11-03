@@ -5,25 +5,17 @@ import {
 import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
+  GAMING_LAPTOP_EXEMPT_PHRASES,
 } from '@/config/storefront-gaming-laptop-taxonomy';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type {
   ContentClusterKind,
+  InferContentClusterContextInput,
   InferredContentClusterContext,
-  PublishedClusterPost,
   SupportedClusterCategory,
 } from './content-cluster-types';
 import { normalizeContentCurrencyTokens } from './normalize-content-currency-tokens';
 import { tokenizeContentText } from './tokenize-content-text';
-
-interface InferContentClusterContextInput
-  extends Pick<
-    PublishedClusterPost,
-    'category' | 'excerpt' | 'keywords' | 'tags' | 'title'
-  > {
-  merchant_intent?: unknown;
-  merchant_intent_source?: unknown;
-}
 
 const normalizeText = (v: string | null | undefined) =>
   normalizeContentCurrencyTokens(
@@ -69,18 +61,16 @@ const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
     ? hasGaming &&
       !hasPhrase(t, 'gaming laptop gpu') &&
       !hasPhrase(t, 'gaming laptop graphics card')
-    : s === 'desktop' || s === 'desktops'
-      ? hasPhrase(t, 'desktop replacement') || hasPhrase(t, 'desktop-class')
-      : s === 'monitor' || s === 'monitors'
+    : s.startsWith('desktop')
+      ? GAMING_LAPTOP_EXEMPT_PHRASES.desktop.some((p) => hasPhrase(t, p))
+      : s.startsWith('monitor')
         ? hasGaming &&
-          (hasPhrase(t, 'pairing') ||
-            hasPhrase(t, 'pairings') ||
-            hasPhrase(t, 'paired'))
-        : s === 'accessories' || s === 'accessory'
+          GAMING_LAPTOP_EXEMPT_PHRASES.monitor.some((p) => hasPhrase(t, p))
+        : s.startsWith('accessor')
           ? hasGaming &&
-            (hasPhrase(t, 'with free accessories') ||
-              hasPhrase(t, 'with accessories') ||
-              hasPhrase(t, 'bundled accessories'))
+            GAMING_LAPTOP_EXEMPT_PHRASES.accessories.some((p) =>
+              hasPhrase(t, p)
+            )
           : false;
 
 function hasExcludedGamingLaptopSubject(
@@ -96,18 +86,22 @@ function hasExcludedGamingLaptopSubject(
   );
 }
 
+const hasTitleLaptopSubject = (t: string) =>
+  hasGamingLaptopPhrase(t) ||
+  (hasLaptopPhrase(t) &&
+    DEDICATED_GAMING_LAPTOP_TOKENS.some((k) => hasPhrase(t, k)));
+
 function isDedicatedGamingLaptopContent(
   title: string,
   content: string,
   excerpt = ''
 ): boolean {
-  const hasLaptop = hasLaptopPhrase(title);
+  if (hasTitleLaptopSubject(title)) {
+    return !hasExcludedGamingLaptopSubject(title);
+  }
   const hasDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((t) =>
     hasPhrase(title, t)
   );
-  if ((hasLaptop && hasDedicated) || hasGamingLaptopPhrase(title)) {
-    return !hasExcludedGamingLaptopSubject(title);
-  }
   if (!hasDedicated) return false;
   const combined = [title, excerpt].filter(Boolean).join(' ');
   const target = hasLaptopPhrase(combined)
@@ -150,8 +144,10 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
-      const combined = [title, excerpt].filter(Boolean).join(' ');
-      return hasExcludedGamingLaptopSubject(combined, true)
+      const target = hasTitleLaptopSubject(title ?? '')
+        ? (title ?? '')
+        : [title, excerpt].filter(Boolean).join(' ');
+      return hasExcludedGamingLaptopSubject(target, true)
         ? 'laptops'
         : 'gaming-laptops';
     }
@@ -206,14 +202,13 @@ function resolveKind(
 ): ContentClusterKind | null {
   // The public RPC excludes stale classifications. Reject malformed metadata
   // here too so older adapters and unclassified rows retain the heuristic path.
-  const source = input.merchant_intent_source;
+  const source = String(input.merchant_intent_source ?? '');
   if (
     source !== 'merchant_declared' &&
     source !== 'verified_receipt' &&
     source !== 'reviewed'
-  ) {
+  )
     return inferredKind;
-  }
   if (input.merchant_intent === 'buying-guide') {
     return inferredKind === 'best-in-nigeria' &&
       hasPhrase(haystack, 'nigeria') &&

@@ -13,6 +13,16 @@ export const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'tuf',
 ] as const;
 
+export const GAMING_LAPTOP_EXEMPT_PHRASES = {
+  desktop: ['desktop replacement', 'desktop-class'],
+  monitor: ['pairing', 'pairings', 'paired'],
+  accessories: [
+    'with free accessories',
+    'with accessories',
+    'bundled accessories',
+  ],
+} as const;
+
 export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'accessories',
   'accessory',

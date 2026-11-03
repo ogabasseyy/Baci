@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
+  GAMING_LAPTOP_EXEMPT_PHRASES,
 } from './storefront-gaming-laptop-taxonomy';
 
 describe('storefront-gaming-laptop-taxonomy', () => {
@@ -35,5 +36,13 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop battery');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop keyboards');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('keyboard');
+  });
+
+  it('declares expected exempt phrases for desktop, monitor, and accessory contexts', () => {
+    expect(GAMING_LAPTOP_EXEMPT_PHRASES.desktop).toContain('desktop-class');
+    expect(GAMING_LAPTOP_EXEMPT_PHRASES.monitor).toContain('pairing');
+    expect(GAMING_LAPTOP_EXEMPT_PHRASES.accessories).toContain(
+      'with accessories'
+    );
   });
 });

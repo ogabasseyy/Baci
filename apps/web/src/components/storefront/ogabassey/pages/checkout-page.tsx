@@ -9,7 +9,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
-import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
+import { CheckoutResumeFallback } from './checkout/components/CheckoutResumeFallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
@@ -21,6 +21,7 @@ import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
 import { navigateCheckoutResult } from './checkout/navigate-checkout-result';
 import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
+import { shouldShowResumeGate } from './checkout/should-show-resume-gate';
 
 export type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
@@ -232,39 +233,32 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     },
     attempt: checkoutAttempt,
   });
-
   const isAutoTriggerProcessing =
     isHydrated &&
     checkoutCart.length === 0 &&
     resumedOrder &&
     !!preferredGateway &&
     !isProcessing;
-
   if (
-    (checkoutCart.length === 0 && isLoadingResumedOrder) ||
-    isAutoTriggerProcessing ||
-    (checkoutCart.length === 0 && resumeOrderId && resumeOrderError)
+    shouldShowResumeGate(
+      checkoutCart.length === 0,
+      isLoadingResumedOrder,
+      Boolean(isAutoTriggerProcessing),
+      Boolean(resumeOrderId && resumeOrderError)
+    )
   ) {
     return (
-      <CheckoutResumeGate
-        capacityRecovery={{
-          validatedResume: Boolean(
-            resumedOrder && resumedOrder.id === resumeOrderId
-          ),
-          onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
-        }}
+      <CheckoutResumeFallback
         cartEmpty={checkoutCart.length === 0}
         isAutoTriggerProcessing={isAutoTriggerProcessing}
         isLoadingResumedOrder={isLoadingResumedOrder}
-        onContactSupport={() => router.push(asRoute(getHref('/contact')))}
-        onGoHome={() => router.push(asRoute(getHref('/')))}
-        onRetry={() => window.location.reload()}
+        navigate={(path) => router.push(asRoute(getHref(path)))}
         resumeOrderError={resumeOrderError}
         resumeOrderId={resumeOrderId}
+        resumedOrderId={resumedOrder?.id}
       />
     );
   }
-
   const screenModel = deriveCheckoutScreenModel({
     sessions: {
       form: checkoutFormSession,
@@ -295,7 +289,6 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       redvaultAvailable,
     },
   });
-
   return (
     <CheckoutCartScreen
       model={{ ...screenModel, ...oxygenSlots }}

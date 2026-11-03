@@ -3,12 +3,24 @@ import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { runGoalCancelOutflowReconciliation } from './goal-cancel-reconciliation';
+import { runGoalCompleteOutflowReconciliation } from './goal-complete-reconciliation';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
-const GOAL_CANCEL_REFERENCE_PREFIX = 'pvb-cancel-';
+const GOAL_TRANSFER_KINDS = [
+  {
+    name: 'cancel',
+    prefix: 'pvb-cancel-',
+    reconcile: runGoalCancelOutflowReconciliation,
+  },
+  {
+    name: 'complete',
+    prefix: 'pvb-complete-',
+    reconcile: runGoalCompleteOutflowReconciliation,
+  },
+] as const;
 
 // Webhook-driven savings reconciliation: outflow webhooks attribute by
 // provider reference, so resolve each candidate to its dispatched operation
@@ -56,31 +68,35 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
     );
     return outcome.status;
   }
-  // Not a savings transfer: it may be a goal cancel refund (same evidence
-  // login, same proof), which would otherwise stay dispatched until the
-  // customer polls.
-  // Goal cancel is auxiliary to the savings path: a failure here (for
-  // example the lookup not yet deployed) must not 503 legacy outflow
-  // webhooks, and the cancel still reconciles from the client status path.
-  try {
-    return await runGoalCancelOutflowReconciliation({
-      configuration: input.configuration,
-      providerToken: input.providerToken,
-      references: input.references,
-      fetchImplementation: input.fetchImplementation,
-    });
-  } catch (error) {
-    console.warn(
-      '[PiggyVest Webhook] Goal cancel reconciliation skipped:',
-      error instanceof Error ? error.message : error
-    );
-    // A failed lookup of OUR cancel reference must stay retryable: calling it
-    // unmatched would mark the webhook processed and strand a refunded cancel
-    // until the customer polls. Unrelated legacy references stay unmatched.
-    return input.references.some((reference) =>
-      reference.startsWith(GOAL_CANCEL_REFERENCE_PREFIX)
-    )
-      ? 'pending'
-      : 'unmatched';
+  // Not a savings transfer: it may be a goal cancel refund or a goal complete
+  // transfer (same evidence login, same proof), which would otherwise stay
+  // dispatched until the customer polls.
+  // Goal cancel and complete are auxiliary to the savings path: a failure in
+  // one lookup (for example a function not yet deployed) must not 503 legacy
+  // outflow webhooks, must not hide the other kind, and the transfer still
+  // reconciles from the client status path. A failed lookup of OUR reference
+  // stays retryable instead: calling it unmatched would mark the webhook
+  // processed and strand a settled transfer until the customer polls.
+  let retryable = false;
+  for (const kind of GOAL_TRANSFER_KINDS) {
+    try {
+      const outcome = await kind.reconcile({
+        configuration: input.configuration,
+        providerToken: input.providerToken,
+        references: input.references,
+        fetchImplementation: input.fetchImplementation,
+      });
+      if (outcome !== 'unmatched') return outcome;
+    } catch (error) {
+      console.warn(
+        `[PiggyVest Webhook] Goal ${kind.name} reconciliation skipped:`,
+        error instanceof Error ? error.message : error
+      );
+      if (
+        input.references.some((reference) => reference.startsWith(kind.prefix))
+      )
+        retryable = true;
+    }
   }
+  return retryable ? 'pending' : 'unmatched';
 }

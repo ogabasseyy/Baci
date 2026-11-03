@@ -59,7 +59,9 @@ and PiggyVest references in the runbook record.
 ### Dry run on the real schema before any credit
 
 After the list is signed and BEFORE crediting anyone in PiggyVest, run
-`02-zero-out.sql` once as is (it ends with `ROLLBACK`) with the signed rows and
+`02-zero-out.sql` once as is (it ends with `ROLLBACK`), using
+`psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f docs/piggyvest-legacy-migration/02-zero-out.sql`,
+with the signed rows and
 placeholder references such as `DRY-RUN-1`, `DRY-RUN-2`. This checks the real
 production tables, constraints, triggers and balances while nothing has been
 paid yet. The CI tests use a simplified scratch schema and cannot do this. Do
@@ -100,8 +102,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 
 ## 5. Commit and verify
 
-1. Change the last line from `-- COMMIT;` to `COMMIT;` and remove the
-   `ROLLBACK;` line above it. Run the file again with the same
+1. Change the last line from `-- COMMIT;` to `COMMIT;`, remove the
+   `ROLLBACK;` line above it, and uncomment the COMMIT GUARD block
+   (it refuses placeholder references such as `DRY-RUN-1`). Run the file again with the same
    `-v ON_ERROR_STOP=1` option.
 2. Run `01-balance-list.sql` again. The migrated customers must be gone.
 3. Each migrated wallet has one ledger row of source

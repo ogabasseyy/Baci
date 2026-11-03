@@ -29,7 +29,7 @@
 --     then needs the ledger can deadlock with the run; PostgreSQL aborts one
 --     of them, and nothing is changed if it is the run.
 -- It ends with ROLLBACK. Read the printed result, then swap the last two lines
--- (delete ROLLBACK, uncomment the final COMMIT) and run it again. Nothing is
+-- (delete ROLLBACK, uncomment the COMMIT GUARD block and the final COMMIT) and run it again. Nothing is
 -- saved until then.
 BEGIN;
 
@@ -231,5 +231,21 @@ FROM legacy_zero_out_list l
 JOIN public.customer_wallets cw ON cw.id = l.wallet_id
 ORDER BY cw.id;
 
+-- COMMIT GUARD. The dry run may use placeholder references (DRY-RUN-1 ...).
+-- A COMMIT run must not. When you switch to COMMIT, uncomment every line from
+-- COMMIT-GUARD-BEGIN to COMMIT-GUARD-END as well; it refuses placeholder
+-- references, so a dry-run copy cannot be committed by mistake.
+-- COMMIT-GUARD-BEGIN
+-- DO $guard$
+-- BEGIN
+--   IF EXISTS (
+--     SELECT 1 FROM legacy_zero_out_list l
+--     WHERE btrim(l.piggyvest_credit_reference) ~* '^(dry[-_ ]?run|placeholder|test|sample|fake|todo|tbd|xxx)'
+--   ) THEN
+--     RAISE EXCEPTION 'placeholder PiggyVest reference found; use the real credit reference';
+--   END IF;
+-- END
+-- $guard$;
+-- COMMIT-GUARD-END
 ROLLBACK;
 -- COMMIT;

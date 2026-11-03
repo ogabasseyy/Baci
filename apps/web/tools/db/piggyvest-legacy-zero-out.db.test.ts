@@ -52,7 +52,14 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
       '-- <<< REVIEWED ROWS ABOVE',
       `${load(rows, declared)}\n-- <<<`
     );
-    if (commit) sql = sql.replace('ROLLBACK;\n-- COMMIT;', 'COMMIT;');
+    if (commit) {
+      sql = sql
+        .replace(
+          /-- COMMIT-GUARD-BEGIN\n([\s\S]*?)-- COMMIT-GUARD-END/,
+          (_m, body: string) => body.replace(/^-- /gm, '')
+        )
+        .replace('ROLLBACK;\n-- COMMIT;', 'COMMIT;');
+    }
     const file = join(s.dir, 'run.sql');
     writeFileSync(file, sql);
     return s.psql('', file);
@@ -186,6 +193,27 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
     const r = run([row(W1, C1, '500.00'), row(W2, C2, '0')], 2, true);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/legacy_zero_out_list_expected_balance_check/);
+    expect(balance(W1)).toBe('500.00');
+    expect(ledgerRows()).toBe('0');
+  });
+
+  it('allows placeholder references in the ROLLBACK dry run', () => {
+    reset([[W1, '500.00']]);
+    expect(run([row(W1, C1, '500.00', 'DRY-RUN-1')], 1).status).toBe(0);
+    expect(balance(W1)).toBe('500.00');
+  });
+
+  it.each([
+    'DRY-RUN-1',
+    'dry run 2',
+    'PLACEHOLDER',
+    'TEST-1',
+    'tbd',
+  ])('refuses placeholder reference %s on a COMMIT run', (ref) => {
+    reset([[W1, '500.00']]);
+    const r = run([row(W1, C1, '500.00', ref)], 1, true);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/placeholder PiggyVest reference/);
     expect(balance(W1)).toBe('500.00');
     expect(ledgerRows()).toBe('0');
   });

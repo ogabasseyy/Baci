@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import YAML from 'yaml';
-import { verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
+import { DEPLOY_PATTERNS, verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
 
 const [expectedSha, currentSha, intermediateSha, olderDeployedSha] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
 
@@ -26,8 +26,14 @@ async function verifySupersededFile(
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
       if (url.includes('/compare/')) return makeCompareResponse(filename, commits);
       if (url.includes('/commits/')) return response({ files: [{ filename }] });
-      if (url.includes('/jobs')) return response({ jobs });
-      return response({ workflow_runs: workflowRuns });
+      const jobMatch = url.match(/\/runs\/(\d+)\/jobs/);
+      if (jobMatch) {
+        const runJobs = Array.isArray(jobs) ? jobs : (jobs[Number(jobMatch[1])] ?? []);
+        return response({ jobs: runJobs, total_count: runJobs.length });
+      }
+      const shaMatch = url.match(/head_sha=([0-9a-f]{40})/);
+      const runs = shaMatch && workflowRuns.some((r) => r.head_sha === shaMatch[1]) ? workflowRuns.filter((r) => r.head_sha === shaMatch[1]) : workflowRuns;
+      return response({ total_count: runs.length, workflow_runs: runs });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
@@ -47,12 +53,7 @@ test('tests helper-only sales repair changes and rejects deployments superseded 
 
 test('accepts when the deployment SHA is the current main ref', async () => {
   const calls = [];
-  const result = await verifyCurrentMainDeployment({
-    expectedSha,
-    fetchImpl: async (url, options) => { calls.push({ options, url }); return response({ object: { sha: expectedSha } }); },
-    repository: 'ogabasseyy/Baci',
-    token: 'test-token',
-  });
+  const result = await verifyCurrentMainDeployment({ expectedSha, fetchImpl: async (url, options) => { calls.push({ options, url }); return response({ object: { sha: expectedSha } }); }, repository: 'ogabasseyy/Baci', token: 'test-token' });
   assert.deepEqual(result, { currentSha: expectedSha, expectedSha });
   assert.equal(calls[0].url, 'https://api.github.com/repos/ogabasseyy/Baci/git/ref/heads/main');
   assert.equal(calls[0].options.headers.authorization, 'Bearer test-token');
@@ -71,8 +72,7 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
       if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
       if (url.includes('/commits/')) return response({ files: [{ filename: 'apps/web/src/app/page.tsx' }] });
-      if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
-      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, id: 456, status: 'completed' }] });
+      return url.includes('/jobs') ? response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] }) : response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, id: 456, status: 'completed' }] });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
@@ -83,7 +83,18 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
 
 test('rejects an ancestor when an intermediate superseding commit has deployed', async () => {
   await assert.rejects(
-    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: intermediateSha, id: 789, status: 'completed' }], [{ sha: intermediateSha }, { sha: currentSha }]),
+    verifySupersededFile(
+      'apps/web/src/app/page.tsx',
+      [
+        { conclusion: null, head_sha: currentSha, id: 101, status: 'queued' },
+        { conclusion: 'success', head_sha: intermediateSha, id: 102, status: 'completed' },
+      ],
+      [{ sha: intermediateSha }, { sha: currentSha }],
+      {
+        101: [],
+        102: [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }],
+      }
+    ),
     /superseded deployment SHA/
   );
 });
@@ -188,23 +199,13 @@ test('fails closed when the superseding comparison is incomplete', async () => {
     { files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2, commits: [{ sha: currentSha }] },
   ]) {
-    await assert.rejects(
-      verifyCurrentMainDeployment({
-        expectedSha,
-        fetchImpl: async (url) => {
-          if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-          return response(comparison);
-        },
-        repository: 'ogabasseyy/Baci',
-        token: 'test-token',
-      }),
-      /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/
-    );
+    await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response(comparison), repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/);
   }
 });
 
 test('rejects every web path declared by the deploy filter', async (t) => {
   const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(DEPLOY_PATTERNS, [...deployment.web, ...deployment.migrations]);
   for (const pattern of deployment.web) {
     const candidate = pattern.endsWith('/**') ? `${pattern.slice(0, -3)}/nested/file.ts` : pattern.replaceAll('*', 'example');
     await t.test(pattern, async () => {
@@ -218,12 +219,8 @@ test('rejects migration-only superseding deployments', async () => {
 });
 
 test('gates Vercel deployment configuration in deploy and CI filters', () => {
-  const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
-  const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
-  for (const path of ['.vercelignore', 'vercel.json']) {
-    assert.ok(deployment.web.includes(path), `deploy filter must gate ${path}`);
-    assert.ok(ci.web.includes(path), `CI filter must gate ${path}`);
-  }
+  const [deployment, ci] = ['deploy.yml', 'ci.yml'].map((f) => YAML.parse(readFileSync(new URL(`../filters/${f}`, import.meta.url), 'utf8')));
+  for (const path of ['.vercelignore', 'vercel.json']) assert.ok(deployment.web.includes(path) && ci.web.includes(path), 'gates ' + path);
 });
 
 test('root public guide assets trigger web CI and production deployment', async () => {
@@ -235,19 +232,9 @@ test('root public guide assets trigger web CI and production deployment', async 
 });
 
 test('detects earlier successful deploy attempt when rerun is queued or failed', async () => {
+  const jobs = [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] }, { conclusion: 'success', name: 'deploy-production', status: 'completed' }];
   for (const { status, run_attempt } of [{ status: 'queued', run_attempt: 2 }, { status: 'queued', run_attempt: null }, { status: 'completed', run_attempt: 2 }]) {
-    await assert.rejects(
-      verifySupersededFile(
-        'apps/web/src/app/page.tsx',
-        [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt, status }],
-        [{ sha: currentSha }],
-        [
-          { conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] },
-          { conclusion: 'success', name: 'deploy-production', status: 'completed' },
-        ]
-      ),
-      /superseded deployment SHA/
-    );
+    await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt, status }], [{ sha: currentSha }], jobs), /superseded deployment SHA/);
   }
 });
 
@@ -276,6 +263,11 @@ test('fails closed on malformed identity, API responses, or response truncation'
       u.includes('/commits') ? response({ files: [{ filename: f }] }) : response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
     await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: fetcher, repository: 'ogabasseyy/Baci', token: 'test-token' }), /does not deploy superseding web changes/);
   }
+  const paginatedFetch = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
+    u.includes('/compare') ? makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]) :
+    u.includes('/commits') ? response({ files: u.includes('page=1&') ? new Array(100).fill({ filename: 'docs/ops.md' }) : [{ filename: 'apps/web/src/app/page.tsx' }] }) :
+    response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl: paginatedFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), { currentSha, expectedSha });
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {

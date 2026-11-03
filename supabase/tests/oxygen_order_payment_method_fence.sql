@@ -2,6 +2,7 @@
 BEGIN;
 INSERT INTO auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES ('ab120000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence@example.test','test',now(),now(),now(),'{}','{}');
+SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000001',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000001','fence@example.test','Fence fixture','oxygen-order-fence-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)

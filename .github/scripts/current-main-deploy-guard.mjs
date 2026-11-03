@@ -12,13 +12,17 @@ function loadDeployPatterns() {
   let webCount = 0;
   let migrationsCount = 0;
   for (const line of text.split('\n')) {
-    if (/^[a-z_]+:/.test(line)) {
+    if (/^[^\s#][^:\n]*:/.test(line)) {
       section = line.startsWith('web:') ? 'web' : line.startsWith('migrations:') ? 'migrations' : null;
     } else if (section && /^\s*-\s*['"]?([^'"]+)['"]?/.test(line)) {
       const pat = line.match(/^\s*-\s*['"]?([^'"]+)['"]?/)[1];
-      if (pat.includes('!') || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) throw new Error(`unsupported glob: ${pat}`);
+      if (pat.includes('!') || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
+        throw new Error(`unsupported glob: ${pat}`);
+      }
       patterns.push(pat);
       section === 'web' ? webCount++ : migrationsCount++;
+    } else if (section && line.trim() && !line.trim().startsWith('#')) {
+      throw new Error(`unsupported line format in deploy filter: ${line}`);
     }
   }
   if (webCount === 0 || migrationsCount === 0) throw new Error('deploy filter web or migrations patterns underloaded');
@@ -28,13 +32,14 @@ function loadDeployPatterns() {
 export const DEPLOY_PATTERNS = loadDeployPatterns();
 
 function isWebDeployPath(path) {
+  const normPath = path.replace(/\/+/g, '/');
   return DEPLOY_PATTERNS.some((pat) => {
-    if (pat.endsWith('/**')) return path.startsWith(pat.slice(0, -2));
+    if (pat.endsWith('/**')) return normPath.startsWith(pat.slice(0, -2));
     if (pat.includes('*')) {
       const [p, s] = pat.split('*');
-      return path.startsWith(p) && path.endsWith(s) && !path.slice(p.length, -s.length || undefined).includes('/');
+      return normPath.startsWith(p) && normPath.endsWith(s) && !normPath.slice(p.length, -s.length || undefined).includes('/');
     }
-    return path === pat;
+    return normPath === pat;
   });
 }
 
@@ -200,19 +205,6 @@ async function supersedingChangesCanProceed({
   }
   if (nonWebOnly) {
     return true;
-  }
-  if (comparison.total_commits > 1) {
-    let hasWebFile = false;
-    for (let page = 1; page <= 10; page++) {
-      const headCommit = await githubJson(fetchImpl, `${apiRoot}/repos/${repository}/commits/${currentSha}?page=${page}&per_page=100`, token);
-      const files = Array.isArray(headCommit?.files) ? headCommit.files : [];
-      if (files.some((f) => [f?.filename, f?.previous_filename].filter(Boolean).some(isWebDeployPath))) {
-        hasWebFile = true;
-        break;
-      }
-      if (files.length < 100) break;
-    }
-    if (!hasWebFile) throw new Error(`current main ${currentSha} does not deploy superseding web changes`);
   }
   const supersedingShas = collectSupersedingShas(comparison, currentSha);
   const alreadyDeployed = await hasSupersedingDeployment({

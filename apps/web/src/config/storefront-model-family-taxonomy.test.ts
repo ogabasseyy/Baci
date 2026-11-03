@@ -15,6 +15,7 @@ describe('MODEL_FAMILY_ALIAS_TOKENS', () => {
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('omen')).toBe(true);
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('predator')).toBe(true);
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('rog')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('tuf')).toBe(true);
   });
 
   it('contains expected non-gaming hardware families', () => {

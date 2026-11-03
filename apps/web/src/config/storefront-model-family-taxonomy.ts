@@ -24,6 +24,7 @@ export const MODEL_FAMILY_ALIAS_TOKENS = new Set([
   'rog',
   'series',
   'thinkpad',
+  'tuf',
   'watch',
   'xps',
 ]);

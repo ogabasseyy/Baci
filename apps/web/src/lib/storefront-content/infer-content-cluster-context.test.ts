@@ -248,4 +248,16 @@ describe('inferContentClusterContext', () => {
     expect(gigabyteLaptop.categorySlug).toBe('laptops');
     expect(gigabyteLaptop.brands).toContain('gigabyte');
   });
+
+  it('maps singular Gaming Laptop category to gaming-laptops with non-dedicated title', () => {
+    const post = inferContentClusterContext({
+      title: 'Best Budget Picks for Gamers in Nigeria',
+      excerpt:
+        'Affordable portable machines with solid graphics for casual gaming.',
+      category: 'Gaming Laptop',
+      tags: ['budget', 'nigeria'],
+      keywords: ['budget', 'gaming'],
+    });
+    expect(post.categorySlug).toBe('gaming-laptops');
+  });
 });

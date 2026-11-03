@@ -40,5 +40,12 @@ describe('getProductModelIdentifiers portable gaming', () => {
       productSlugs: ['razer-blade-16'],
     });
     expect(blade).toEqual(['blade 16']);
+
+    const tuf = getProductModelIdentifiers({
+      categorySlug: 'gaming-laptops',
+      brands: ['ASUS'],
+      productSlugs: ['asus-tuf-gaming-f15'],
+    });
+    expect(tuf).toEqual(['tuf f15']);
   });
 });

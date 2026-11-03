@@ -17,6 +17,35 @@ key row nothing works at all.
 Prerequisites, in order: the PIN routes and the spend hold that consumes
 proofs are merged and deployed with their own switches still off.
 
+Pre-enable prerequisite (owner decision before step 3): the PIN route limit is
+per IP address, not per customer, so one customer behind a shared address can
+be throttled by others and one attacker rotating addresses is not throttled by
+identity. The database lockout (five wrong PINs) still protects each PIN. Add
+a per-customer PIN limiter before switching any merchant on.
+
+The PIN routes (storefront customer, signed in, merchant taken from the
+server's primary-wallet configuration, never from the request):
+
+- `GET /api/storefront/customer/wallet-pin/status` answers `primary`,
+  `hasPin`, `resetRequired` and `available`. `available` is false while the
+  pepper or attestation key is unusable or the merchant is switched off.
+- `POST /api/storefront/customer/wallet-pin/set` sets the first PIN.
+- `POST /api/storefront/customer/wallet-pin/change` changes it, given the
+  current PIN.
+- `POST /api/storefront/customer/wallet-pin/reset` replaces it after a recent
+  sign-in.
+
+Set, change and reset answer 503 `PIN_UNAVAILABLE` while the pepper or
+attestation key is unusable. Status reports `available: false` in the same
+situation, including when the pepper's attestation key row is missing or has
+been deleted as an emergency stop. Rate limiting is applied once, by the API
+proxy: set, change and reset share 10 requests a minute per IP address (IPv6 clients are
+counted per /64 block, not per customer), and status
+reads have their own separate allowance. A limited request gets the proxy's
+standard 429 response. A failed forgery check answers 403 `CSRF_FAILED`. Stable refusal codes: `PIN_INCORRECT` (401, with attempts left),
+`PIN_LOCKED` (423), `PIN_NOT_SET`, `PIN_ALREADY_SET`, `PIN_RESET_REQUIRED`
+(409), `REAUTHENTICATION_REQUIRED` (403). A PIN is never logged or returned.
+
 ## 1. Provision the pepper (server secret)
 
 - Generate one random value of at least 32 characters, for example the output

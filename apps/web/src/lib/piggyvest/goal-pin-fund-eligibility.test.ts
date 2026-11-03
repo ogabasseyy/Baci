@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import {
   isActiveOwnGoal,
   isCancellableOwnGoal,
+  isCompletableOwnGoal,
 } from './goal-pin-fund-eligibility';
 
 function client(result: { data: unknown; error: unknown }) {
@@ -83,5 +84,30 @@ it('a cancellable goal is false when none is visible and throws on error', async
   const bad = cancelClient({ data: null, error: { message: 'x' } });
   await expect(
     isCancellableOwnGoal({ supabase: bad.supabase, ...ids })
+  ).rejects.toThrow();
+});
+
+it('a completable goal is an active, paused or completed goal of this customer and merchant', async () => {
+  const c = cancelClient({ data: { id: 'g' }, error: null });
+  expect(await isCompletableOwnGoal({ supabase: c.supabase, ...ids })).toBe(
+    true
+  );
+  expect(c.calls).toEqual(
+    expect.arrayContaining([
+      ['eq', 'id', 'g'],
+      ['eq', 'customer_id', 'c'],
+      ['eq', 'merchant_id', 'm'],
+      ['in', 'status', ['active', 'paused', 'completed']],
+    ])
+  );
+});
+it('a completable goal is false when none is visible and throws on error', async () => {
+  const none = cancelClient({ data: null, error: null });
+  expect(await isCompletableOwnGoal({ supabase: none.supabase, ...ids })).toBe(
+    false
+  );
+  const bad = cancelClient({ data: null, error: { message: 'x' } });
+  await expect(
+    isCompletableOwnGoal({ supabase: bad.supabase, ...ids })
   ).rejects.toThrow();
 });

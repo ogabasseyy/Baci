@@ -1,47 +1,48 @@
-export const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
-  ps5: 'ps5',
-  'playstation 5': 'ps5',
-  'ps5 pro': 'ps5',
-  'playstation 5 pro': 'ps5',
-  'ps5 slim': 'ps5',
-  'playstation 5 slim': 'ps5',
-  ps4: 'ps4',
-  'playstation 4': 'ps4',
-  'ps4 pro': 'ps4',
-  'playstation 4 pro': 'ps4',
-  'ps4 slim': 'ps4',
-  'playstation 4 slim': 'ps4',
-  ps3: 'ps3',
-  'playstation 3': 'ps3',
-  'ps vita': 'ps-vita',
-  'playstation vita': 'ps-vita',
-  xbox: 'xbox',
-  'xbox 360': 'xbox-360',
-  'xbox one': 'xbox-one',
-  'xbox one x': 'xbox-one',
-  'xbox one s': 'xbox-one',
-  'xbox series x': 'xbox-series',
-  'xbox series s': 'xbox-series',
-  'xbox series': 'xbox-series',
-  switch: 'switch',
-  'nintendo switch': 'switch',
-  'switch oled': 'switch',
-  'nintendo switch oled': 'switch',
-  'switch lite': 'switch',
-  'nintendo switch lite': 'switch',
-  'switch 2': 'switch-2',
-  'nintendo switch 2': 'switch-2',
-  'wii u': 'wii-u',
-  'nintendo wii u': 'wii-u',
-  wii: 'wii',
-  'nintendo wii': 'wii',
-  '3ds': '3ds',
-  'nintendo 3ds': '3ds',
-  pc: 'pc',
-  windows: 'pc',
-  steam: 'pc',
-  'steam deck': 'pc',
-};
+export const PLATFORM_ID_BY_ALIAS: Readonly<Record<string, string>> =
+  Object.freeze({
+    ps5: 'ps5',
+    'playstation 5': 'ps5',
+    'ps5 pro': 'ps5',
+    'playstation 5 pro': 'ps5',
+    'ps5 slim': 'ps5',
+    'playstation 5 slim': 'ps5',
+    ps4: 'ps4',
+    'playstation 4': 'ps4',
+    'ps4 pro': 'ps4',
+    'playstation 4 pro': 'ps4',
+    'ps4 slim': 'ps4',
+    'playstation 4 slim': 'ps4',
+    ps3: 'ps3',
+    'playstation 3': 'ps3',
+    'ps vita': 'ps-vita',
+    'playstation vita': 'ps-vita',
+    xbox: 'xbox',
+    'xbox 360': 'xbox-360',
+    'xbox one': 'xbox-one',
+    'xbox one x': 'xbox-one',
+    'xbox one s': 'xbox-one',
+    'xbox series x': 'xbox-series',
+    'xbox series s': 'xbox-series',
+    'xbox series': 'xbox-series',
+    switch: 'switch',
+    'nintendo switch': 'switch',
+    'switch oled': 'switch',
+    'nintendo switch oled': 'switch',
+    'switch lite': 'switch',
+    'nintendo switch lite': 'switch',
+    'switch 2': 'switch-2',
+    'nintendo switch 2': 'switch-2',
+    'wii u': 'wii-u',
+    'nintendo wii u': 'wii-u',
+    wii: 'wii',
+    'nintendo wii': 'wii',
+    '3ds': '3ds',
+    'nintendo 3ds': '3ds',
+    pc: 'pc',
+    windows: 'pc',
+    steam: 'pc',
+    'steam deck': 'pc',
+  });
 
 export function isRedundantPlatformListParenthetical(content: string): boolean {
   const normalized = content
@@ -83,7 +84,7 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
 }
 
 export function stripRedundantPlatformParentheticals(title: string): string {
-  if (!title.includes('(')) {
+  if (!title.includes('(') || !title.includes(')')) {
     return title;
   }
 
@@ -91,7 +92,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^)]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|\s*\(([^()]*)\)\s*/gu,
     (
       match,
       innerBeforePunctOrEnd?: string,

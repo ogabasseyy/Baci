@@ -23,6 +23,7 @@ describe('seo-meta-title-platform-compaction', () => {
       expect(PLATFORM_ID_BY_ALIAS.pc).toBe('pc');
       expect(PLATFORM_ID_BY_ALIAS.steam).toBe('pc');
       expect(PLATFORM_ID_BY_ALIAS['steam deck']).toBe('pc');
+      expect(Object.isFrozen(PLATFORM_ID_BY_ALIAS)).toBe(true);
     });
   });
 
@@ -187,6 +188,22 @@ describe('seo-meta-title-platform-compaction', () => {
       const elapsed = Date.now() - start;
       expect(result).toBe(`Game ${runOfSeparators} Sale`);
       expect(elapsed).toBeLessThan(50);
+    });
+
+    it('executes in linear time without quadratic rescans on unbalanced parentheses', () => {
+      const unbalancedNoClosing = '('.repeat(5000);
+      const start1 = Date.now();
+      expect(stripRedundantPlatformParentheticals(unbalancedNoClosing)).toBe(
+        unbalancedNoClosing
+      );
+      expect(Date.now() - start1).toBeLessThan(50);
+
+      const unbalancedWithClosing = `${'('.repeat(5000)})`;
+      const start2 = Date.now();
+      expect(stripRedundantPlatformParentheticals(unbalancedWithClosing)).toBe(
+        unbalancedWithClosing
+      );
+      expect(Date.now() - start2).toBeLessThan(50);
     });
   });
 });

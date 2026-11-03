@@ -174,3 +174,11 @@ it('accepts only the documented database answers', () => {
     schemas.referenceMatch.safeParse({ operationId, extra: 1 }).success
   ).toBe(false);
 });
+
+it('reads the review states the database records, and nothing else', () => {
+  for (const result of ['needs_review', 'reviewed'])
+    expect(schemas.statusRows.safeParse([{ result }]).success).toBe(true);
+  expect(schemas.statusRows.safeParse([{ result: 'review' }]).success).toBe(
+    false
+  );
+});

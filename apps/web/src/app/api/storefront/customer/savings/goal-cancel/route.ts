@@ -103,6 +103,21 @@ const NEEDS_REVIEW = (): NextResponse =>
     409
   );
 
+// The only attempt states a status check may show a customer.
+const PUBLIC_STATUSES: ReadonlySet<string> = new Set([
+  'pending',
+  'confirmed',
+  'needs_review',
+  'not_started',
+]);
+
+const REJECTED = (): NextResponse =>
+  refuse(
+    'PiggyVest did not accept the refund. Your savings are unchanged.',
+    'CANCEL_REJECTED',
+    409
+  );
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const guarded = await guard(request);
   if ('error' in guarded) return guarded.error;
@@ -189,11 +204,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           202
         );
       case 'released':
-        return refuse(
-          'PiggyVest did not accept the refund. Your savings are unchanged.',
-          'CANCEL_REJECTED',
-          409
-        );
+        return REJECTED();
       case 'empty':
         return refuse(
           'This goal has no balance to refund.',
@@ -260,6 +271,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     });
     if (result.status === 'not_found')
       return refuse('Cancellation not found.', 'CANCEL_NOT_FOUND', 404);
+    // Internal attempt states never leave the route: a released attempt is the
+    // same rejection POST reports, and only the public vocabulary is returned.
+    if (result.status === 'released') return REJECTED();
+    if (!PUBLIC_STATUSES.has(result.status)) return UNAVAILABLE();
     return respond(
       { status: result.status, operationId: body.data.operationId },
       200

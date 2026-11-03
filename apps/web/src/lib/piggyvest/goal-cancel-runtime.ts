@@ -219,6 +219,11 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   }
   if (state === null) return { status: 'not_found' as const };
   if (state === 'confirmed') return { status: 'confirmed' as const };
+  // Review is its own recorded state, whichever path (webhook or poll) settled
+  // it first: it is never reported as a completed cancellation. Once an
+  // operator has cleared it the refund itself is done, so it reads confirmed.
+  if (state === 'needs_review') return { status: 'needs_review' as const };
+  if (state === 'reviewed') return { status: 'confirmed' as const };
   if (state === 'released') {
     // A released attempt that WAS dispatched can still turn out to have
     // succeeded at the provider (indexed late). Re-check it: a verified

@@ -9,6 +9,20 @@ vi.mock('pg', () => ({
     end = mocks.end;
   },
 }));
+// The goal-cancel settle path re-reads the goal wallet at the provider; the
+// answer is mocked so no test depends on the network.
+const wallets = vi.hoisted(() => ({ retrieve: vi.fn() }));
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: wallets.retrieve }));
+beforeEach(() => {
+  wallets.retrieve.mockResolvedValue({
+    id: 'source',
+    api_customer_id: 'source-customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 0,
+  });
+});
 const operationId = '11111111-1111-4111-8111-111111111111';
 const configuration = {
   integrationId: '22222222-2222-4222-8222-222222222222',

@@ -225,3 +225,55 @@ it('still dispatches a balance exactly at the ceiling', async () => {
     9_999_999_999
   );
 });
+
+// A thrown release must not leave the attempt reserved with the PIN spent
+// (funding and new cancels would stay blocked until the stale sweep).
+it.each([
+  ['the provider wallet read fails', 'unavailable'],
+  ['the goal wallet is empty', 'empty'],
+  ['the balance is above the ceiling', 'too_large'],
+] as const)('retries a thrown release once when %s', async (_why, status) => {
+  const p = ports();
+  if (status === 'unavailable')
+    p.retrieveWallet.mockRejectedValue(new Error('provider down'));
+  if (status === 'empty')
+    p.retrieveWallet.mockImplementation(async (id: string) => ({
+      id,
+      api_customer_id: 'customer',
+      business_id: 'business',
+      currency: 'NGN',
+      status: 'active',
+      balance: 0,
+    }));
+  if (status === 'too_large')
+    p.retrieveWallet.mockImplementation(async (id: string) => ({
+      id,
+      api_customer_id: 'customer',
+      business_id: 'business',
+      currency: 'NGN',
+      status: 'active',
+      balance: id === 'goal-wallet' ? 10_000_000_000 : 1,
+    }));
+  p.cancelBeforeDispatch
+    .mockRejectedValueOnce(new Error('db blip'))
+    .mockResolvedValueOnce(true);
+  expect(await submitGoalCancel(request, p)).toEqual({ status });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledTimes(2);
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('gives up quietly after two thrown releases and leaves the stale sweep to free it', async () => {
+  const p = ports();
+  p.retrieveWallet.mockRejectedValue(new Error('provider down'));
+  p.cancelBeforeDispatch.mockRejectedValue(new Error('db down'));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'unavailable' });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledTimes(2);
+});
+
+it('does not retry a release the database answered with false', async () => {
+  const p = ports();
+  p.retrieveWallet.mockRejectedValue(new Error('provider down'));
+  p.cancelBeforeDispatch.mockResolvedValue(false);
+  await submitGoalCancel(request, p);
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledTimes(1);
+});

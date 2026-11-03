@@ -111,7 +111,15 @@ export const piggyvestGoalCancelSchemas = {
     .array(
       z.strictObject({
         result: z
-          .enum(['issued', 'reserved', 'dispatched', 'confirmed', 'released'])
+          .enum([
+            'issued',
+            'reserved',
+            'dispatched',
+            'confirmed',
+            'released',
+            'needs_review',
+            'reviewed',
+          ])
           .nullable(),
       })
     )

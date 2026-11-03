@@ -10,6 +10,25 @@ import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-recon
 import { retrievePiggyvestWallet } from './wallets';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
+/** The goal wallet the post-transfer balance read must be about. */
+export interface GoalBalanceTarget {
+  walletId: string;
+  businessId: string;
+  // Known once the dispatched attempt has been loaded; absent fails closed.
+  providerCustomerId: string | undefined;
+}
+
+/**
+ * PiggyVest answered, but about a different wallet than the one asked for. A
+ * balance from it must never decide whether the goal settles at zero.
+ */
+export class GoalBalanceMismatchError extends Error {
+  constructor() {
+    super('Goal wallet balance read does not match the requested wallet');
+    this.name = 'GoalBalanceMismatchError';
+  }
+}
+
 type Execute = (
   statement: string,
   parameters: readonly string[]
@@ -27,8 +46,11 @@ export function createGoalCancelEvidenceStore(input: {
   // Re-reads the goal wallet balance at PiggyVest (kobo) once a transfer is
   // verified successful. Anything above 0 means money is still there (a
   // credit landed between the snapshot and the transfer).
-  readGoalBalanceKobo?: (walletId: string) => Promise<number>;
+  readGoalBalanceKobo?: (target: GoalBalanceTarget) => Promise<number>;
 }) {
+  // The provider customer of each loaded attempt, so the balance read can be
+  // bound to the customer as well as to the wallet and business.
+  const providerCustomers = new Map<string, string>();
   async function run(statement: string, selection: string) {
     const result = await input.execute(statement, [
       input.integrationId,
@@ -54,6 +76,27 @@ export function createGoalCancelEvidenceStore(input: {
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
   }
+  // Reads the goal wallet balance left after a verified transfer. A transient
+  // failure (network, provider jitter) is NOT a settlement conflict: it is
+  // rethrown without paging, nothing is concluded, and the next status check
+  // retries. Only a read that answers about the wrong wallet is a verified
+  // mismatch, and that pages.
+  async function readResidual(receipt: Record<string, unknown>) {
+    if (!input.readGoalBalanceKobo) return 0;
+    const operationId = String(receipt.operationId);
+    try {
+      const residual = await input.readGoalBalanceKobo({
+        walletId: String(receipt.sourceWalletId),
+        businessId: String(receipt.businessId),
+        providerCustomerId: providerCustomers.get(operationId),
+      });
+      return Number.isSafeInteger(residual) && residual > 0 ? residual : 0;
+    } catch (error) {
+      if (error instanceof GoalBalanceMismatchError)
+        flagConflict('settle_balance_mismatch', receipt);
+      throw error;
+    }
+  }
   // Concludes a verified provider record. PiggyVest has already answered, so
   // a database failure here (a raise inside the settle function, a malformed
   // answer) is not a plain wait: a person is paged and the status path reports
@@ -66,20 +109,17 @@ export function createGoalCancelEvidenceStore(input: {
     kind: 'settle' | 'release'
   ): Promise<T> {
     const { status: _status, ...receipt } = proof as Record<string, unknown>;
+    // Only a settlement carries the residual: the database never settles a
+    // goal as cancelled-at-zero while the provider wallet still holds money,
+    // and never sends a second transfer. The value can only make the
+    // database stricter (review), never looser.
+    let body: Record<string, unknown> = receipt;
+    if (kind === 'settle') {
+      const residual = await readResidual(receipt);
+      if (residual > 0) body = { ...receipt, residualKobo: residual };
+    }
     let result: unknown;
     try {
-      // Only a settlement carries the residual: the database never settles a
-      // goal as cancelled-at-zero while the provider wallet still holds money,
-      // and never sends a second transfer. The value can only make the
-      // database stricter (review), never looser.
-      let body: Record<string, unknown> = receipt;
-      if (kind === 'settle' && input.readGoalBalanceKobo) {
-        const residual = await input.readGoalBalanceKobo(
-          String(receipt.sourceWalletId)
-        );
-        if (Number.isSafeInteger(residual) && residual > 0)
-          body = { ...receipt, residualKobo: residual };
-      }
       result = await run(statement, JSON.stringify(body));
       if (!allowed.includes(result as T))
         throw new Error('Goal cancel settlement unavailable');
@@ -97,9 +137,13 @@ export function createGoalCancelEvidenceStore(input: {
         sql.readDispatched,
         schemas.operationId.parse(operationId)
       );
-      return result === null
-        ? null
-        : schemas.dispatchedReservation.parse(result);
+      if (result === null) return null;
+      const reservation = schemas.dispatchedReservation.parse(result);
+      providerCustomers.set(
+        reservation.operationId,
+        reservation.providerCustomerId
+      );
+      return reservation;
     },
     // Webhook path: the attempt (dispatched, or released after dispatch)
     // whose provider reference an outflow event names, or null.
@@ -125,14 +169,20 @@ export function createGoalCancelEvidenceStore(input: {
 }
 
 function goalBalanceReader(environment: unknown, token: string) {
-  return async (walletId: string) => {
+  return async (target: GoalBalanceTarget) => {
     const wallet = await retrievePiggyvestWallet(
       { token, baseUrl: getPrimaryWalletProviderOrigin(environment) },
-      walletId
+      target.walletId
     );
-    return schemas.wallet.shape.balance.parse(
-      (wallet as { balance?: unknown }).balance
-    );
+    const read = schemas.wallet.parse(wallet);
+    if (
+      read.id !== target.walletId ||
+      read.business_id !== target.businessId ||
+      target.providerCustomerId === undefined ||
+      read.api_customer_id !== target.providerCustomerId
+    )
+      throw new GoalBalanceMismatchError();
+    return read.balance;
   };
 }
 

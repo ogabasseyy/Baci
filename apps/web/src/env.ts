@@ -290,7 +290,6 @@ const serverSchema = z
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
     PIGGYVEST_SECRET_KEY: z.string().optional(),
-    PIGGYVEST_GOAL_CANCEL_DISABLED: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -778,8 +777,6 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
         PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
-        PIGGYVEST_GOAL_CANCEL_DISABLED:
-          process.env.PIGGYVEST_GOAL_CANCEL_DISABLED,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,

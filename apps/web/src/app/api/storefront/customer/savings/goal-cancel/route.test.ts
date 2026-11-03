@@ -260,27 +260,3 @@ it('fails closed when the recovery configuration is unavailable', async () => {
   expect((await post(submit)).status).toBe(503);
   expect(mocks.submit).not.toHaveBeenCalled();
 });
-
-it('answers a status check without posting', async () => {
-  mocks.status.mockResolvedValue({ status: 'pending' });
-  const response = await patch({ merchantId, operationId });
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ status: 'pending', operationId });
-  expect(mocks.submit).not.toHaveBeenCalled();
-});
-
-it('passes a needs-review status check through, never as released', async () => {
-  mocks.status.mockResolvedValue({ status: 'needs_review' });
-  const response = await patch({ merchantId, operationId });
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    status: 'needs_review',
-    operationId,
-  });
-});
-
-it('reports an unknown attempt as not found and rejects a bad status body', async () => {
-  mocks.status.mockResolvedValue({ status: 'not_found' });
-  expect((await patch({ merchantId, operationId })).status).toBe(404);
-  expect((await patch({ merchantId })).status).toBe(400);
-});

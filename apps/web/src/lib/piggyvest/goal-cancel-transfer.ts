@@ -65,6 +65,26 @@ async function readGoalBalance(
   }
 }
 
+/**
+ * Frees a reservation that never dispatched. A thrown release is retried once
+ * so a transient database error does not leave the attempt reserved (and
+ * funding and new cancels blocked) until the stale sweep; if both tries throw,
+ * the stale-reservation sweep in the status check still releases it.
+ */
+async function releaseReservation(
+  operationId: string,
+  ports: Pick<Ports, 'cancelBeforeDispatch'>
+): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await ports.cancelBeforeDispatch(operationId);
+      return;
+    } catch {
+      // Retry once; the stale sweep is the backstop.
+    }
+  }
+}
+
 async function releaseIfDefinitivelyRejected(
   reservation: Reservation,
   amountKobo: number,
@@ -135,17 +155,17 @@ export async function submitGoalCancel(
     throw new Error('Goal cancel ownership unavailable');
   const amountKobo = await readGoalBalance(reservation, ports);
   if (amountKobo === null) {
-    await ports.cancelBeforeDispatch(request.operationId).catch(() => false);
+    await releaseReservation(request.operationId, ports);
     return { status: 'unavailable' };
   }
   if (amountKobo < 1) {
-    await ports.cancelBeforeDispatch(request.operationId).catch(() => false);
+    await releaseReservation(request.operationId, ports);
     return { status: 'empty' };
   }
   if (amountKobo > GOAL_CANCEL_MAX_AMOUNT_KOBO) {
     // Above the shared dispatch ceiling: release the reservation now so the
     // attempt is never left reserved with the PIN already spent.
-    await ports.cancelBeforeDispatch(request.operationId).catch(() => false);
+    await releaseReservation(request.operationId, ports);
     return { status: 'too_large' };
   }
   if (!(await ports.claimDispatch(request.operationId, amountKobo)))

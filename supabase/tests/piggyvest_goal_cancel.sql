@@ -96,6 +96,60 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- The operator review clearance and the legacy auto-debit classification are
+  -- ops-tooling entry points: service role only, never the API roles, never PUBLIC
+  -- and never the executor logins.
+  FOREACH v_signature IN ARRAY ARRAY[
+    'piggyvest_primary.clear_goal_cancel_review(uuid,text)',
+    'public.savings_goal_ids_bound_to_primary(uuid[])'
+  ] LOOP
+    v_oid := v_signature::regprocedure;
+    IF NOT (SELECT proc.prosecdef FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid) THEN
+      RAISE EXCEPTION '% must be SECURITY DEFINER', v_signature;
+    END IF;
+    IF NOT COALESCE((SELECT proc.proconfig @> ARRAY['search_path=""']
+                       FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid), false) THEN
+      RAISE EXCEPTION '% must pin an empty search_path', v_signature;
+    END IF;
+    IF NOT pg_catalog.has_function_privilege('service_role', v_oid, 'EXECUTE') THEN
+      RAISE EXCEPTION '% must be executable by service_role', v_signature;
+    END IF;
+    FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated',
+                                  'piggyvest_primary_authorizer', 'piggyvest_primary_evidence'] LOOP
+      IF pg_catalog.has_function_privilege(v_role, v_oid, 'EXECUTE') THEN
+        RAISE EXCEPTION '% must not be executable by %', v_signature, v_role;
+      END IF;
+    END LOOP;
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc AS proc,
+             pg_catalog.aclexplode(COALESCE(proc.proacl, pg_catalog.acldefault('f', proc.proowner))) AS acl
+       WHERE proc.oid = v_oid AND acl.grantee = 0
+    ) THEN
+      RAISE EXCEPTION '% must not be executable by PUBLIC', v_signature;
+    END IF;
+  END LOOP;
+
+  -- Provider references are unique, and review blocks a new cancel (the live
+  -- index) until an operator clears it.
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint AS con
+                  WHERE con.conrelid = 'piggyvest_primary.goal_cancel_operations'::regclass
+                    AND con.conname = 'goal_cancel_reference_key' AND con.contype = 'u') THEN
+    RAISE EXCEPTION 'the provider reference unique constraint is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_indexes AS idx
+                  WHERE idx.schemaname = 'piggyvest_primary'
+                    AND idx.indexname = 'goal_cancel_one_live_per_goal_idx'
+                    AND idx.indexdef LIKE '%needs_review%') THEN
+    RAISE EXCEPTION 'the live cancel index does not cover needs_review';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint AS con
+                  WHERE con.conrelid = 'piggyvest_primary.goal_cancel_operations'::regclass
+                    AND con.contype = 'c'
+                    AND pg_catalog.pg_get_constraintdef(con.oid) LIKE '%needs_review%'
+                    AND pg_catalog.pg_get_constraintdef(con.oid) LIKE '%reviewed%') THEN
+    RAISE EXCEPTION 'the state check does not know the review states';
+  END IF;
+
   -- The unbound consume path stays closed to the executor login: cancel is
   -- reachable only through the operation-bound wrapper above.
   IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
@@ -145,7 +199,7 @@ BEGIN
                     AND trg.tgname = 'primary_goal_cancel_block_unsettled_goal_deletion' AND NOT trg.tgisinternal) THEN
     RAISE EXCEPTION 'deletion guard triggers are missing';
   END IF;
-  -- Funding availability counts a confirmed refund.
+  -- Funding availability counts a settled refund.
   IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
      NOT LIKE '%goal_cancel_operations%' THEN
     RAISE EXCEPTION 'funding availability does not count a confirmed goal cancel refund';

@@ -3,6 +3,7 @@ import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/c
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { isPrimaryWalletGoalCancelIssued } from '@/lib/piggyvest/goal-cancel-runtime';
+import { isPiggyvestGoalCancelDisabled } from '@/lib/piggyvest/goal-cancel-switch';
 import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
 import {
   isActiveOwnGoal,
@@ -49,6 +50,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       'This PIN check is not available yet.',
       'PIN_ACTION_NOT_AVAILABLE',
       400
+    );
+  // The cancel-only emergency switch refuses NEW cancels, and a PIN check is
+  // the first step of one: no attempt is counted and no proof is minted.
+  if (input.action === 'cancel' && isPiggyvestGoalCancelDisabled())
+    return refuse(
+      'Goal cancellation is temporarily unavailable.',
+      'SAVINGS_UNAVAILABLE',
+      503
     );
   try {
     // Cancel-to-main stays available with the PiggyVest flags and the kill

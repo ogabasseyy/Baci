@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/customer/savings/customer-savings-feature-settings';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
+import { isActiveOwnGoal } from '@/lib/piggyvest/goal-pin-fund-eligibility';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import {
@@ -62,6 +64,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         409
       );
     const supabase = auth.supabase;
+    // A funding proof is only issued for funding that could proceed: the
+    // customer savings feature is on and the goal is theirs and active.
+    if (input.action === 'fund') {
+      const features = await getPrimaryCustomerSavingsFeatureSettings({
+        supabase,
+        merchantId: identity.merchantId,
+        customerId: identity.customerId,
+      });
+      if (!features.savingsEnabled)
+        return refuse(
+          'Savings is not enabled.',
+          'CUSTOMER_SAVINGS_DISABLED',
+          403
+        );
+      const owned = await isActiveOwnGoal({
+        supabase,
+        merchantId: identity.merchantId,
+        customerId: identity.customerId,
+        goalId: input.goalId,
+      });
+      if (!owned)
+        return refuse(
+          'That savings goal was not found.',
+          'GOAL_NOT_FOUND',
+          404
+        );
+    }
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

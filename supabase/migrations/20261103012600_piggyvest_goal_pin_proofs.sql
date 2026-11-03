@@ -8,9 +8,13 @@
 --    is not spent (missing, invalid, mismatch, used, expired or unavailable)
 --    the reservation is rolled back and the caller gets pin_refused, so no
 --    reservation can exist without a spent proof. A replay of an operation
---    that is already reserved, pending or confirmed needs no new proof.
+--    that is confirmed needs no new proof. A replay of one still pending
+--    needs none when a proof was spent for it, or PIN checking is off; if it
+--    was reserved with checking off and checking is now on, a proof is
+--    required before it can be sent.
 --  * piggyvest_primary.consume_goal_pin_proof: the same spend for the cancel
---    and complete flows, called inside their own transaction.
+--    and complete flows, called inside their own transaction. It RAISES
+--    (PVP01) on any outcome other than a spent proof.
 --
 -- The proof binding is derived here, never taken from the caller (theme D):
 -- customer and merchant come from the scope the reservation itself validates,
@@ -59,6 +63,7 @@ DECLARE
   v_amount bigint;
   v_result jsonb;
   v_outcome text;
+  v_status text;
 BEGIN
   IF scope IS NULL OR request IS NULL
     OR pg_catalog.jsonb_typeof(scope) <> 'object'
@@ -79,16 +84,36 @@ BEGIN
 
   BEGIN
     v_result := piggyvest_primary.reserve_savings(scope, request);
-    IF COALESCE(v_result ->> 'status', '') <> 'claimed' THEN
-      RETURN v_result;
-    END IF;
-    -- A merchant with PIN checking off funds with no proof presented, as it
-    -- did before PIN checks existed. This is read here, after the reservation
-    -- holds its locks, so it is the state at the transition. A proof that IS
-    -- presented is always judged below, and a merchant with checking on can
-    -- never reserve without one.
-    IF (pin_proof IS NULL OR pin_proof = '')
-      AND wallet_pin_private.merchant_enabled(v_merchant_id) IS NOT TRUE THEN
+    v_status := COALESCE(v_result ->> 'status', '');
+    -- Every read of the PIN state below happens after the reservation holds
+    -- its locks, so it is the state at the transition.
+    IF v_status = 'claimed' THEN
+      -- A merchant with PIN checking off funds with no proof presented, as it
+      -- did before PIN checks existed. A proof that IS presented is always
+      -- judged below, and a merchant with checking on can never reserve
+      -- without one.
+      IF (pin_proof IS NULL OR pin_proof = '')
+        AND wallet_pin_private.merchant_enabled(v_merchant_id) IS NOT TRUE THEN
+        RETURN v_result;
+      END IF;
+    ELSIF v_status = 'pending' THEN
+      -- A replay of a transfer that is still to be sent. It is let through
+      -- only when PIN checking is off, or a proof was already spent for this
+      -- exact goal, operation and amount. Otherwise (reserved while checking
+      -- was off, then checking was switched on) money would reach the
+      -- provider with no proof ever spent, so a proof is required now.
+      IF wallet_pin_private.merchant_enabled(v_merchant_id) IS NOT TRUE
+        OR EXISTS (
+          SELECT 1 FROM wallet_pin_private.proofs AS spent
+           WHERE spent.customer_id = v_customer_id
+             AND spent.merchant_id = v_merchant_id
+             AND spent.purpose = 'goal_fund'
+             AND spent.amount_kobo = v_amount
+             AND spent.idempotency_key_sha256 = pg_catalog.sha256(pg_catalog.convert_to(v_goal_id::text || ':' || v_operation, 'UTF8'))
+             AND spent.consumed_at IS NOT NULL) THEN
+        RETURN v_result;
+      END IF;
+    ELSE
       RETURN v_result;
     END IF;
     -- The proof is judged after the reservation holds its locks, and the
@@ -123,6 +148,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_purpose text;
+  v_outcome text;
 BEGIN
   IF scope IS NULL OR goal_id IS NULL
     OR pg_catalog.jsonb_typeof(scope) <> 'object'
@@ -148,11 +174,17 @@ BEGIN
     RAISE EXCEPTION 'savings goal unavailable' USING ERRCODE = '42501';
   END IF;
   v_purpose := 'goal_' || action;
-  RETURN wallet_pin_private.consume_wallet_pin_proof(
+  v_outcome := wallet_pin_private.consume_wallet_pin_proof(
     (scope ->> 'customerId')::uuid, (scope ->> 'merchantId')::uuid,
     v_purpose, 1,
     pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(goal_id::text || ':' || action, 'UTF8')), 'hex'),
     pin_proof);
+  -- Any outcome other than a spent proof raises, so a caller that forgets to
+  -- check the answer still rolls back its transaction (as pin_refused does).
+  IF v_outcome IS DISTINCT FROM 'consumed' THEN
+    RAISE EXCEPTION 'pin_refused:%', COALESCE(v_outcome, 'invalid') USING ERRCODE = 'PVP01';
+  END IF;
+  RETURN v_outcome;
 END;
 $$;
 

@@ -265,18 +265,33 @@ BEGIN
       c_goal::uuid, 'cancel', pg_temp.gp_token('cancel-ok')) = 'consumed',
     'cancel proof for the owned goal was not spent');
   PERFORM pg_temp.gp_assert(pg_temp.gp_spent('cancel-ok'), 'the cancel proof is not marked spent');
-  -- The same proof cannot be spent twice, and a complete proof does not fit cancel.
-  PERFORM pg_temp.gp_assert(
-    piggyvest_primary.consume_goal_pin_proof(
+  -- Any outcome other than a spent proof raises (PVP01), so the caller's
+  -- transaction rolls back: a spent proof, and a complete proof used for cancel.
+  BEGIN
+    PERFORM piggyvest_primary.consume_goal_pin_proof(
       pg_catalog.current_setting('test.goalpin_scope')::jsonb,
-      c_goal::uuid, 'cancel', pg_temp.gp_token('cancel-ok')) = 'used',
-    'a spent cancel proof was accepted again');
+      c_goal::uuid, 'cancel', pg_temp.gp_token('cancel-ok'));
+    RAISE EXCEPTION 'a spent cancel proof was accepted again';
+  EXCEPTION WHEN SQLSTATE 'PVP01' THEN
+    PERFORM pg_temp.gp_assert(SQLERRM = 'pin_refused:used', 'spent cancel proof: ' || SQLERRM);
+  END;
   PERFORM pg_temp.gp_issue('complete-ok', 'goal_complete', 1, c_goal || ':complete');
-  PERFORM pg_temp.gp_assert(
-    piggyvest_primary.consume_goal_pin_proof(
+  BEGIN
+    PERFORM piggyvest_primary.consume_goal_pin_proof(
       pg_catalog.current_setting('test.goalpin_scope')::jsonb,
-      c_goal::uuid, 'cancel', pg_temp.gp_token('complete-ok')) = 'mismatch',
-    'a complete proof was accepted for cancel');
+      c_goal::uuid, 'cancel', pg_temp.gp_token('complete-ok'));
+    RAISE EXCEPTION 'a complete proof was accepted for cancel';
+  EXCEPTION WHEN SQLSTATE 'PVP01' THEN
+    PERFORM pg_temp.gp_assert(SQLERRM = 'pin_refused:mismatch', 'complete proof for cancel: ' || SQLERRM);
+  END;
+  PERFORM pg_temp.gp_assert(NOT pg_temp.gp_spent('complete-ok'), 'a mismatched complete proof was spent');
+  BEGIN
+    PERFORM piggyvest_primary.consume_goal_pin_proof(
+      pg_catalog.current_setting('test.goalpin_scope')::jsonb, c_goal::uuid, 'cancel', NULL);
+    RAISE EXCEPTION 'a missing cancel proof was accepted';
+  EXCEPTION WHEN SQLSTATE 'PVP01' THEN
+    PERFORM pg_temp.gp_assert(SQLERRM = 'pin_refused:missing', 'missing cancel proof: ' || SQLERRM);
+  END;
   -- A merchant switched off after issue: unavailable, rolled back.
   PERFORM pg_temp.gp_issue('switched-off', 'goal_fund', 5000, c_goal || ':' || c_op5);
   UPDATE wallet_pin_private.merchant_authorities SET enabled = false
@@ -295,6 +310,31 @@ BEGIN
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'claimed', 'merchant off without proof: ' || v_result::text);
   PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 900
     AND NOT pg_temp.gp_spent('switched-off'), 'merchant off funding changed a proof or the hold');
+
+  -- The operation c_op5 was reserved while checking was off and is still
+  -- pending. Once checking is switched on, a replay may not be sent without a
+  -- proof; a wrong proof is refused; the exact proof is spent once and then
+  -- later replays pass without another.
+  UPDATE wallet_pin_private.merchant_authorities SET enabled = true
+   WHERE merchant_id = 'f3830000-0000-4000-8000-000000000002';
+  v_result := pg_temp.gp_call(c_op5, 5000, NULL);
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'missing',
+    'pending replay after enabling without proof: ' || v_result::text);
+  DELETE FROM wallet_pin_private.proofs
+   WHERE token_sha256 = pg_catalog.sha256(pg_catalog.decode(pg_temp.gp_token('switched-off'), 'hex'));
+  PERFORM pg_temp.gp_issue('replay-wrong', 'goal_fund', 5001, c_goal || ':' || c_op5);
+  v_result := pg_temp.gp_call(c_op5, 5000, pg_temp.gp_token('replay-wrong'));
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'mismatch',
+    'pending replay with a wrong proof: ' || v_result::text);
+  DELETE FROM wallet_pin_private.proofs
+   WHERE token_sha256 = pg_catalog.sha256(pg_catalog.decode(pg_temp.gp_token('replay-wrong'), 'hex'));
+  PERFORM pg_temp.gp_issue('replay-exact', 'goal_fund', 5000, c_goal || ':' || c_op5);
+  v_result := pg_temp.gp_call(c_op5, 5000, pg_temp.gp_token('replay-exact'));
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'pending replay with the exact proof: ' || v_result::text);
+  PERFORM pg_temp.gp_assert(pg_temp.gp_spent('replay-exact') AND pg_temp.gp_operations() = 1
+    AND pg_temp.gp_balance() = 900, 'the replay proof was not spent or the reservation changed');
+  v_result := pg_temp.gp_call(c_op5, 5000, NULL);
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'replay after the proof was spent: ' || v_result::text);
 END
 $behaviour$;
 

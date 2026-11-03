@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   identity: vi.fn(),
   verify: vi.fn(),
   rpc: vi.fn(),
+  features: vi.fn(),
+  goal: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -20,6 +22,13 @@ vi.mock('@/lib/piggyvest/primary-wallet-savings-runtime', () => ({
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
+}));
+vi.mock(
+  '@/app/api/storefront/customer/savings/customer-savings-feature-settings',
+  () => ({ getPrimaryCustomerSavingsFeatureSettings: mocks.features })
+);
+vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
+  isActiveOwnGoal: mocks.goal,
 }));
 vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
@@ -63,6 +72,8 @@ beforeEach(() => {
     customerId: 'c',
     userId: 'u',
   });
+  mocks.features.mockResolvedValue({ savingsEnabled: true });
+  mocks.goal.mockResolvedValue(true);
   mocks.verify.mockResolvedValue({
     status: 'verified',
     proof,
@@ -181,4 +192,31 @@ it('hides internal errors and answers unavailable', async () => {
   const response = await call(fund);
   expect(response.status).toBe(503);
   expect(JSON.stringify(await response.json())).not.toContain('private');
+});
+it('issues no funding proof when the customer savings feature is off', async () => {
+  mocks.features.mockResolvedValue({ savingsEnabled: false });
+  const response = await call(fund);
+  expect(response.status).toBe(403);
+  expect((await response.json()).code).toBe('CUSTOMER_SAVINGS_DISABLED');
+  expect(mocks.verify).not.toHaveBeenCalled();
+});
+it('issues no funding proof for a goal that is not an active goal of this customer', async () => {
+  mocks.goal.mockResolvedValue(false);
+  const response = await call(fund);
+  expect(response.status).toBe(404);
+  expect((await response.json()).code).toBe('GOAL_NOT_FOUND');
+  expect(mocks.goal).toHaveBeenCalledWith(
+    expect.objectContaining({ goalId, merchantId, customerId: 'c' })
+  );
+  expect(mocks.verify).not.toHaveBeenCalled();
+});
+it('answers unavailable when the goal lookup fails', async () => {
+  mocks.goal.mockRejectedValue(new Error('db'));
+  expect((await call(fund)).status).toBe(503);
+  expect(mocks.verify).not.toHaveBeenCalled();
+});
+it('does not apply the funding gates to cancel, which must stay available', async () => {
+  mocks.features.mockResolvedValue({ savingsEnabled: false });
+  expect((await call(cancel)).status).toBe(200);
+  expect(mocks.goal).not.toHaveBeenCalled();
 });

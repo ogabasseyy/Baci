@@ -1,0 +1,42 @@
+import { expect, it, vi } from 'vitest';
+import { isActiveOwnGoal } from './goal-pin-fund-eligibility';
+
+function client(result: { data: unknown; error: unknown }) {
+  const calls: [string, string, unknown][] = [];
+  const builder = {
+    select: vi.fn(() => builder),
+    eq: vi.fn((column: string, value: unknown) => {
+      calls.push(['eq', column, value]);
+      return builder;
+    }),
+    maybeSingle: vi.fn(async () => result),
+  };
+  const from = vi.fn(() => builder);
+  return { supabase: { from } as never, from, builder, calls };
+}
+const ids = { merchantId: 'm', customerId: 'c', goalId: 'g' };
+
+it('is true only for an active goal of this customer and merchant', async () => {
+  const c = client({ data: { id: 'g' }, error: null });
+  expect(await isActiveOwnGoal({ supabase: c.supabase, ...ids })).toBe(true);
+  expect(c.from).toHaveBeenCalledWith('customer_savings_goals');
+  expect(c.builder.select).toHaveBeenCalledWith('id');
+  expect(c.calls).toEqual(
+    expect.arrayContaining([
+      ['eq', 'id', 'g'],
+      ['eq', 'customer_id', 'c'],
+      ['eq', 'merchant_id', 'm'],
+      ['eq', 'status', 'active'],
+    ])
+  );
+});
+it('is false when no such goal is visible', async () => {
+  const c = client({ data: null, error: null });
+  expect(await isActiveOwnGoal({ supabase: c.supabase, ...ids })).toBe(false);
+});
+it('throws on a database error instead of passing', async () => {
+  const c = client({ data: null, error: { message: 'x' } });
+  await expect(
+    isActiveOwnGoal({ supabase: c.supabase, ...ids })
+  ).rejects.toThrow();
+});

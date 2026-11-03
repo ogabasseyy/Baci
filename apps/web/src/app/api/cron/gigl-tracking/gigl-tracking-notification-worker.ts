@@ -20,6 +20,9 @@ const claimedNotificationSchema = z.object({
   order_id: z.uuid().nullable(),
   // Projected by claim_shipment_tracking_notifications for orderless pickups.
   repair_id: z.uuid().nullable().optional(),
+  // Owner + orders.fulfill staff user ids, projected by the claim RPC for
+  // merchant rows. An empty array means nobody qualifies.
+  recipient_user_ids: z.array(z.uuid()).nullable().optional(),
   shipment_id: z.uuid(),
   tracking_event_id: z.uuid(),
 });
@@ -70,8 +73,16 @@ async function processNotification(
   if (eventError || !event)
     throw eventError ?? new Error('Tracking event missing');
 
-  const copy = copyFor(notification.notification_kind, event.description);
-  if (notification.notification_kind === 'delivered' && notification.order_id) {
+  const copy = copyFor(
+    notification.notification_kind,
+    event.description,
+    notification.audience
+  );
+  if (
+    notification.notification_kind === 'delivered' &&
+    notification.audience === 'customer' &&
+    notification.order_id
+  ) {
     await notifyDeliveredProtectionActivation(
       notification.order_id,
       notification.merchant_id
@@ -112,6 +123,9 @@ async function processNotification(
         onDeliveryStart,
         onDeliveryRejected,
         requiredShipmentUpdateCapability: SHIPMENT_UPDATE_CAPABILITY,
+        ...(notification.recipient_user_ids
+          ? { recipientUserIds: notification.recipient_user_ids }
+          : {}),
       }
     );
     return completeNotificationResult(
@@ -169,6 +183,7 @@ async function processNotification(
   const payload = {
     orderId: notification.order_id,
     type: 'shipment_tracking',
+    event: notification.notification_kind,
   };
   const result = await notifyCustomer(
     customer.user_id,

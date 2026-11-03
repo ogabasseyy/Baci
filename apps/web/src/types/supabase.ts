@@ -7589,6 +7589,7 @@ export type Database = {
           in_app_enabled: boolean | null;
           merchant_id: string;
           quiet_hours_end: string | null;
+          shipment_event_preferences: Json;
           quiet_hours_start: string | null;
           quiet_hours_time_zone: string;
           updated_at: string | null;
@@ -7599,6 +7600,7 @@ export type Database = {
           in_app_enabled?: boolean | null;
           merchant_id: string;
           quiet_hours_end?: string | null;
+          shipment_event_preferences?: Json;
           quiet_hours_start?: string | null;
           quiet_hours_time_zone?: string;
           updated_at?: string | null;
@@ -7609,6 +7611,7 @@ export type Database = {
           in_app_enabled?: boolean | null;
           merchant_id?: string;
           quiet_hours_end?: string | null;
+          shipment_event_preferences?: Json;
           quiet_hours_start?: string | null;
           quiet_hours_time_zone?: string;
           updated_at?: string | null;
@@ -17218,6 +17221,7 @@ export type Database = {
           merchant_id: string;
           notification_kind: string;
           order_id: string | null;
+          recipient_user_ids: string[] | null;
           repair_id: string | null;
           shipment_id: string;
           tracking_epoch_id: string;

@@ -10,7 +10,7 @@ vi.mock('@/lib/insurance/notify-activate-protection', () => ({
 }));
 vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
 
-const notification = {
+const merchantNotification = {
   audience: 'merchant' as const,
   id: '00000000-0000-4000-8000-000000000001',
   merchant_id: '00000000-0000-4000-8000-000000000002',
@@ -19,6 +19,8 @@ const notification = {
   shipment_id: '00000000-0000-4000-8000-000000000005',
   tracking_event_id: '00000000-0000-4000-8000-000000000004',
 };
+
+const notification = { ...merchantNotification, audience: 'customer' as const };
 
 function supabaseFor(event: unknown) {
   const builder = {
@@ -36,10 +38,15 @@ describe('GIGL delivered notification protection fanout', () => {
     vi.clearAllMocks();
     maybeNotifyActivateProtection.mockResolvedValue(undefined);
     notifyMerchant.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
+    notifyCustomer.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
   });
 
   it('fans out protection activation from the notification worker', async () => {
-    const supabase = supabaseFor({ description: 'Delivered' });
+    const supabase = supabaseFor({
+      description: 'Delivered',
+      customer_id: 'c1',
+      user_id: 'u1',
+    });
 
     const summary = await processClaimedGiglTrackingNotifications(
       supabase as never,
@@ -52,6 +59,17 @@ describe('GIGL delivered notification protection fanout', () => {
       notification.order_id,
       notification.merchant_id
     );
+    expect(notifyCustomer).toHaveBeenCalled();
+  });
+
+  it('does not repeat the protection prompt for the merchant delivered alert', async () => {
+    const supabase = supabaseFor({ description: 'Delivered' });
+    await processClaimedGiglTrackingNotifications(
+      supabase as never,
+      [merchantNotification],
+      'worker'
+    );
+    expect(maybeNotifyActivateProtection).not.toHaveBeenCalled();
     expect(notifyMerchant).toHaveBeenCalled();
   });
 
@@ -59,7 +77,11 @@ describe('GIGL delivered notification protection fanout', () => {
     maybeNotifyActivateProtection.mockRejectedValueOnce(
       new Error('push unavailable')
     );
-    const supabase = supabaseFor({ description: 'Delivered' });
+    const supabase = supabaseFor({
+      description: 'Delivered',
+      customer_id: 'c1',
+      user_id: 'u1',
+    });
 
     const summary = await processClaimedGiglTrackingNotifications(
       supabase as never,

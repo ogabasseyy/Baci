@@ -24,7 +24,7 @@ function supabaseFor(description: string) {
 }
 
 const merchantKinds = [
-  ['pickup_delayed', 'Pickup delayed'],
+  ['pickup_delayed', 'GIG pickup delayed'],
   ['failed', 'Delivery issue'],
   ['returned', 'Order returned'],
   ['cancelled', 'Shipment cancelled'],

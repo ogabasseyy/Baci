@@ -1,0 +1,1 @@
+supabase/migrations/tests/gigl_notification_map.sql

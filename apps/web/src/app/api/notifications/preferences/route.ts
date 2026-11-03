@@ -45,7 +45,7 @@ export async function GET() {
     const { data: preferences, error } = await supabase
       .from('notification_preferences')
       .select(
-        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
       )
       .eq('merchant_id', merchantId)
       .single();
@@ -66,6 +66,7 @@ export async function GET() {
         in_app_enabled: true,
         banner_enabled: true,
         follow_up_notifications_enabled: true,
+        shipment_event_preferences: {},
         quiet_hours_start: null,
         quiet_hours_end: null,
         quiet_hours_time_zone: 'Africa/Lagos',
@@ -152,6 +153,22 @@ export async function PATCH(request: NextRequest) {
     if (body.follow_up_notifications_enabled !== undefined)
       updates.follow_up_notifications_enabled =
         body.follow_up_notifications_enabled;
+    if (body.shipment_event_preferences !== undefined) {
+      // Merge so a partial toggle never wipes the other events' choices.
+      const { data: existing } = await supabase
+        .from('notification_preferences')
+        .select('shipment_event_preferences')
+        .eq('merchant_id', merchantId)
+        .maybeSingle();
+      updates.shipment_event_preferences = {
+        ...(existing?.shipment_event_preferences &&
+        typeof existing.shipment_event_preferences === 'object' &&
+        !Array.isArray(existing.shipment_event_preferences)
+          ? existing.shipment_event_preferences
+          : {}),
+        ...body.shipment_event_preferences,
+      };
+    }
     if (body.quiet_hours_start !== undefined)
       updates.quiet_hours_start = body.quiet_hours_start;
     if (body.quiet_hours_end !== undefined)
@@ -164,7 +181,7 @@ export async function PATCH(request: NextRequest) {
       .from('notification_preferences')
       .upsert(updates, { onConflict: 'merchant_id' })
       .select(
-        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
       )
       .single();
 

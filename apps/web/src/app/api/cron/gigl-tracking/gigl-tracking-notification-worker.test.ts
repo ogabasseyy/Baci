@@ -270,4 +270,103 @@ describe('processClaimedGiglTrackingNotifications', () => {
       expect.anything()
     );
   });
+
+  describe('merchant recipients and audience copy', () => {
+    it('limits merchant pushes to the claimed owner/fulfil-staff recipients', async () => {
+      const recipients = [
+        '00000000-0000-4000-8000-0000000000a1',
+        '00000000-0000-4000-8000-0000000000a2',
+      ];
+      const supabase = createGiglTrackingNotificationSupabase({
+        description: 'Picked up',
+        raw_status: 'MPIK',
+      });
+      await processClaimedGiglTrackingNotifications(
+        supabase as never,
+        [
+          {
+            ...notification,
+            notification_kind: 'picked_up',
+            recipient_user_ids: recipients,
+          },
+        ],
+        'worker'
+      );
+      expect(notifyMerchant).toHaveBeenCalledWith(
+        notification.merchant_id,
+        'Order picked up',
+        expect.any(String),
+        expect.any(Object),
+        'orders',
+        expect.objectContaining({ recipientUserIds: recipients })
+      );
+    });
+
+    it('sends nobody when no owner or fulfil staff qualifies', async () => {
+      const supabase = createGiglTrackingNotificationSupabase({
+        description: 'Picked up',
+        raw_status: 'MPIK',
+      });
+      await processClaimedGiglTrackingNotifications(
+        supabase as never,
+        [{ ...notification, recipient_user_ids: [] }],
+        'worker'
+      );
+      expect(notifyMerchant).toHaveBeenCalledWith(
+        notification.merchant_id,
+        expect.any(String),
+        expect.any(String),
+        expect.any(Object),
+        'orders',
+        expect.objectContaining({ recipientUserIds: [] })
+      );
+    });
+
+    it('uses the sale-complete copy for the merchant delivered push', async () => {
+      const supabase = createGiglTrackingNotificationSupabase({
+        description: 'Delivered',
+        raw_status: 'MAHD',
+      });
+      await processClaimedGiglTrackingNotifications(
+        supabase as never,
+        [{ ...notification, notification_kind: 'delivered' }],
+        'worker'
+      );
+      expect(notifyMerchant).toHaveBeenCalledWith(
+        notification.merchant_id,
+        'Sale complete',
+        expect.any(String),
+        expect.any(Object),
+        'orders',
+        expect.any(Object)
+      );
+    });
+
+    it('uses the has-shipped copy for the customer picked_up push', async () => {
+      const supabase = createGiglTrackingNotificationSupabase(
+        { description: 'Picked up', raw_status: 'MPIK' },
+        { customer_id: '00000000-0000-4000-8000-000000000005' },
+        { user_id: '00000000-0000-4000-8000-000000000006' }
+      );
+      await processClaimedGiglTrackingNotifications(
+        supabase as never,
+        [
+          {
+            ...notification,
+            audience: 'customer',
+            notification_kind: 'picked_up',
+          },
+        ],
+        'worker'
+      );
+      expect(notifyCustomer).toHaveBeenCalledWith(
+        '00000000-0000-4000-8000-000000000006',
+        'Your order has shipped',
+        expect.any(String),
+        expect.objectContaining({ type: 'shipment_tracking' }),
+        'orders',
+        expect.any(Object)
+      );
+    });
+  });
 });

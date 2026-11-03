@@ -11,6 +11,7 @@ import {
   type JournalOutcome,
   newReference,
   slotState,
+  walletsDigest,
 } from './mutation-journal';
 import {
   assertNoRecordingAccount,
@@ -152,7 +153,10 @@ export class MutationGate {
     if (
       reuse !== undefined &&
       (!intent.referenceField ||
-        !acceptedReference(journal, reuse, intent.qaKey, intent.op))
+        !acceptedReference(journal, reuse, intent.qaKey, intent.op, {
+          amountKobo: amount,
+          walletIds: intent.walletIds,
+        }))
     ) {
       throw new HarnessRefusal(
         'REFERENCE_REUSE',
@@ -172,6 +176,7 @@ export class MutationGate {
       reference,
       qaKey: intent.qaKey,
       amountKobo: amount,
+      walletsDigest: walletsDigest(intent.walletIds),
     });
     this.totalKobo += amount ?? 0;
     this.armed = { intent, reference, consumed: false };

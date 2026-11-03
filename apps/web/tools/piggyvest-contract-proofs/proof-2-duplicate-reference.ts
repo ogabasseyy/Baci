@@ -112,6 +112,14 @@ export async function runDuplicateReference(
     'tsq_after_duplicate_status',
     statusOf(await api.verify(reference, main))
   );
+  // An accepted repeat follows the provider's own pending/not-found lifecycle,
+  // and only status checks advance it: keep checking for the whole budget.
+  if (outcome === 'accepted') {
+    for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
+      await ctx.sleep(ctx.pollIntervalMs);
+      await api.verify(reference, main);
+    }
+  }
   // A second debit can lag: balances are read for the whole budget.
   const after = await settledWallets(ctx, [main, goal]);
   const sourceDelta =

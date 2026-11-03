@@ -155,17 +155,10 @@ export class MockLedger {
     }
   }
 
-  verify(query: URLSearchParams): MockReply {
-    const [txn, ...repeats] = this.txns.filter(
-      (t) => t.reference === query.get('reference')
-    );
-    const notFound = fail('Transaction not found', 404);
-    if (!txn) return notFound;
-    // A repeat booked under an accepted duplicate reference settles too.
-    for (const repeat of repeats)
-      if (repeat.status === 'pending') this.settle(repeat);
+  /** One status check: the same 404 / pending / settled progression for every booking. */
+  private advance(txn: Txn): 'not_found' | 'pending' | 'success' {
     txn.polls += 1;
-    if (txn.polls <= this.host.options.tsqNotFoundPolls) return notFound;
+    if (txn.polls <= this.host.options.tsqNotFoundPolls) return 'not_found';
     const pendingPolls =
       txn.category === 'bank-outflow'
         ? (this.host.options.tsqPendingPollsBank ??
@@ -174,10 +167,24 @@ export class MockLedger {
     if (txn.polls <= this.host.options.tsqNotFoundPolls + pendingPolls) {
       if (this.host.options.tsqSettleEarly && txn.status === 'pending')
         this.settle(txn);
-      return ok(this.tsqData(txn, 'pending'), 'Transaction status retrieved');
+      return 'pending';
     }
     if (txn.status === 'pending') this.settle(txn);
-    return ok(this.tsqData(txn, 'success'), 'Transaction status retrieved');
+    return 'success';
+  }
+
+  verify(query: URLSearchParams): MockReply {
+    const [txn, ...repeats] = this.txns.filter(
+      (t) => t.reference === query.get('reference')
+    );
+    const notFound = fail('Transaction not found', 404);
+    if (!txn) return notFound;
+    // A repeat booked under an accepted duplicate reference follows the same
+    // lifecycle as the original, on its own poll count.
+    for (const repeat of repeats) this.advance(repeat);
+    const state = this.advance(txn);
+    if (state === 'not_found') return notFound;
+    return ok(this.tsqData(txn, state), 'Transaction status retrieved');
   }
   private tsqData(txn: Txn, status: string) {
     const base = {

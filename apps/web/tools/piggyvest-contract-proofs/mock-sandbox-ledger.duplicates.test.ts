@@ -72,3 +72,42 @@ describe('MockLedger duplicate references', () => {
     expect(tsq.id).toBe(debitRows(s)[0]?.id);
   });
 });
+
+describe('MockLedger accepted repeats follow the pending/404 progression', () => {
+  const balance = (s: ReturnType<typeof funded>) =>
+    s.sandbox.wallet(s.main)?.balance;
+  const check = (s: ReturnType<typeof funded>) =>
+    s.sandbox.ledger.verify(q({ reference: 'pvbproof-dup-0001' }));
+
+  it('does not move the repeat money while the original is still pending', () => {
+    const s = funded({
+      duplicateReference: 'accept',
+      tsqNotFoundPolls: 0,
+      tsqPendingPolls: 3,
+    });
+    transfer(s);
+    transfer(s);
+    expect(balance(s)).toBe(500_000);
+    check(s);
+    check(s);
+    check(s);
+    expect(balance(s)).toBe(500_000);
+    check(s);
+    expect(balance(s)).toBe(300_000);
+  });
+
+  it('keeps answering 404 for the reference until the not-found polls pass', () => {
+    const s = funded({
+      duplicateReference: 'accept',
+      tsqNotFoundPolls: 2,
+      tsqPendingPolls: 0,
+    });
+    transfer(s);
+    transfer(s);
+    expect(check(s).status).toBe(404);
+    expect(check(s).status).toBe(404);
+    expect(balance(s)).toBe(500_000);
+    expect(check(s).status).toBe(200);
+    expect(balance(s)).toBe(300_000);
+  });
+});

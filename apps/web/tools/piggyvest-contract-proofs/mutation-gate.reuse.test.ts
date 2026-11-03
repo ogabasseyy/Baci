@@ -14,6 +14,10 @@ import { acceptedReference, slotState } from './mutation-journal';
  */
 
 const DUPLICATE_SLOT = 'p2/duplicate_reference';
+const EXPECTED = {
+  amountKobo: 100_000,
+  walletIds: ['qa-wallet-goal', 'qa-wallet-main'],
+};
 
 describe('MutationGate: deliberate reference reuse', () => {
   it('re-sends the original reference in its own slot and journals both', () => {
@@ -125,6 +129,32 @@ describe('MutationGate: deliberate reference reuse', () => {
   });
 });
 
+describe('MutationGate: reuse is bound to the original transfer', () => {
+  const reuseWith = (over: Parameters<typeof transfer>[0]) => {
+    const { gate } = makeGate();
+    const first = execute(gate, transfer());
+    return code(() =>
+      gate.begin(
+        transfer({
+          slot: DUPLICATE_SLOT,
+          reuseReference: first.reference,
+          ...over,
+        })
+      )
+    );
+  };
+
+  it('refuses reuse with a different amount', () => {
+    expect(reuseWith({ amountKobo: 200_000 })).toBe('REFERENCE_REUSE');
+  });
+
+  it('refuses reuse between different wallets', () => {
+    expect(
+      reuseWith({ walletIds: ['qa-wallet-main', 'qa-wallet-other'] })
+    ).toBe('REFERENCE_REUSE');
+  });
+});
+
 describe('acceptedReference', () => {
   it('is true only for an accepted send by that key and operation', () => {
     const { gate, journal } = makeGate();
@@ -134,7 +164,8 @@ describe('acceptedReference', () => {
         journal,
         first.reference,
         'qa-customer-1',
-        'wallet_transfer'
+        'wallet_transfer',
+        EXPECTED
       )
     ).toBe(true);
     expect(
@@ -142,7 +173,8 @@ describe('acceptedReference', () => {
         journal,
         first.reference,
         'qa-customer-1',
-        'bank_transfer'
+        'bank_transfer',
+        EXPECTED
       )
     ).toBe(false);
     expect(
@@ -150,7 +182,8 @@ describe('acceptedReference', () => {
         journal,
         first.reference,
         'qa-customer-2',
-        'wallet_transfer'
+        'wallet_transfer',
+        EXPECTED
       )
     ).toBe(false);
     expect(
@@ -158,7 +191,8 @@ describe('acceptedReference', () => {
         journal,
         'pvbproof-x',
         'qa-customer-1',
-        'wallet_transfer'
+        'wallet_transfer',
+        EXPECTED
       )
     ).toBe(false);
   });

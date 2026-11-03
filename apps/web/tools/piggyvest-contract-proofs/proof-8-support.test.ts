@@ -70,6 +70,40 @@ describe('selectDestinationRow', () => {
   });
 });
 
+describe('selectDestinationRow foreign references', () => {
+  it('never falls back to a same-amount credit naming another transfer', () => {
+    const match = selectDestinationRow(
+      [
+        {
+          id: 'x',
+          type: 'credit',
+          amount: 100_000,
+          third_party_reference: 'pvbproof-r1-wallet_transfer-0099',
+        },
+      ],
+      expected
+    );
+    expect(match).toEqual({ row: null, matchedBy: 'none', ambiguous: false });
+  });
+
+  it('still accepts a lone unreferenced credit beside a foreign one', () => {
+    const match = selectDestinationRow(
+      [
+        {
+          id: 'x',
+          type: 'credit',
+          amount: 100_000,
+          third_party_reference: 'other',
+        },
+        { id: 'y', type: 'credit', amount: 100_000 },
+      ],
+      expected
+    );
+    expect(match.row).toEqual(expect.objectContaining({ id: 'y' }));
+    expect(match.matchedBy).toBe('amount');
+  });
+});
+
 describe('sharedIdFields', () => {
   it('names the id-like fields both records hold with the same value', () => {
     expect(

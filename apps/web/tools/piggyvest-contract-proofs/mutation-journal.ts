@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -40,6 +40,11 @@ const entrySchema = z.strictObject({
   reference: z.string().regex(/^[A-Za-z0-9_-]{8,200}$/),
   qaKey: z.string().min(1).max(64),
   amountKobo: z.int().nonnegative().nullable(),
+  /** Digest of the sorted wallet ids the intent moves money between. */
+  walletsDigest: z
+    .string()
+    .regex(/^[0-9a-f]{16}$/)
+    .optional(),
   outcome: z.enum(JOURNAL_OUTCOMES).optional(),
   httpStatus: z.int().nullable().optional(),
 });
@@ -247,19 +252,36 @@ export function slotState(
  * Did this QA key send this reference for this operation, with an accepted
  * outcome? Only such a reference may be re-sent on purpose (proof 2).
  */
+/** Opaque, order-independent fingerprint of the wallets an intent touches. */
+export function walletsDigest(walletIds: readonly string[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify([...walletIds].sort()))
+    .digest('hex')
+    .slice(0, 16);
+}
+
+/**
+ * True only when this QA key already sent the reference for the same
+ * operation, it was accepted, and the original intent moved the same amount
+ * between the same wallets. A missing digest (older journal) never matches.
+ */
 export function acceptedReference(
   journal: Journal,
   reference: string,
   qaKey: string,
-  op: string
+  op: string,
+  expected: { amountKobo: number | null; walletIds: readonly string[] }
 ): boolean {
   const all = journal.entries();
+  const digest = walletsDigest(expected.walletIds);
   return all.some(
     (intent) =>
       intent.phase === 'intent' &&
       intent.reference === reference &&
       intent.qaKey === qaKey &&
       intent.op === op &&
+      intent.amountKobo === expected.amountKobo &&
+      intent.walletsDigest === digest &&
       all.some(
         (entry) =>
           entry.phase === 'outcome' &&

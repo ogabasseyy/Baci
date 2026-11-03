@@ -18,7 +18,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * Rows listed before the transfer never count. A row carrying our reference
- * wins; otherwise exactly one new credit row of the amount is accepted, and
+ * wins; otherwise exactly one new credit row of the amount that carries no
+ * other reference is accepted, and
  * two or more are ambiguous (no row is guessed).
  */
 export function selectDestinationRow(
@@ -41,7 +42,9 @@ export function selectDestinationRow(
   const byAmount = fresh.filter(
     (edge) =>
       pickString(edge, ['type']) === 'credit' &&
-      edge.amount === expected.amountKobo
+      edge.amount === expected.amountKobo &&
+      // A row naming a different transfer is never ours; keep polling.
+      !(pickString(edge, ['third_party_reference']) ?? '')
   );
   if (byAmount.length === 1)
     return { row: byAmount[0], matchedBy: 'amount', ambiguous: false };

@@ -7,8 +7,8 @@ VALUES
  ('efb10000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence-staff@example.test','test',now(),now(),now(),'{}','{}'),
  ('efb10000-0000-4000-8000-000000000004','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence-worker@example.test','test',now(),now(),now(),'{}','{}');
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
-INSERT INTO public.merchants(id,user_id,email,business_name,slug)
-VALUES ('efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000001','fence-owner@example.test','Fence merchant','oxygen-financial-fence-test');
+INSERT INTO public.merchants(id,user_id,email,business_name,slug,vat_registration_status)
+VALUES ('efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000001','fence-owner@example.test','Fence merchant','oxygen-financial-fence-test','registered');
 INSERT INTO public.staff_members(merchant_id,user_id,email,name,role,permissions,status)
 VALUES ('efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000003','fence-staff@example.test','Fence staff','sales_rep','{"orders":{"edit":true,"view":true}}','active');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
@@ -39,9 +39,10 @@ UPDATE public.order_items SET price=101 WHERE id='efb10000-0000-4000-8000-000000
 UPDATE public.order_items SET price=100 WHERE id='efb10000-0000-4000-8000-000000000061';
 UPDATE public.orders SET subtotal=100,total=100 WHERE id='efb10000-0000-4000-8000-000000000031';
 RESET ROLE;
--- Item writes above may rebuild tax rows. Create the fixture only after them.
-INSERT INTO public.order_tax_subtotals(id,order_id,vat_category_code,vat_rate,taxable_amount,tax_amount)
-VALUES ('efb10000-0000-4000-8000-000000000071','efb10000-0000-4000-8000-000000000031','S',7.5,100,0);
+-- Item writes rebuild tax rows; retain their computed VAT amounts so a later
+-- operational item update does not attempt a spurious financial tax rewrite.
+UPDATE public.order_tax_subtotals SET id='efb10000-0000-4000-8000-000000000071'
+ WHERE order_id='efb10000-0000-4000-8000-000000000031' AND vat_category_code='S' AND vat_rate=7.5;
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
 -- Eligibility is already bound to the original order and customer.
 UPDATE public.oxygen_workflows SET stage='eligibility_required' WHERE id='efb10000-0000-4000-8000-000000000041';

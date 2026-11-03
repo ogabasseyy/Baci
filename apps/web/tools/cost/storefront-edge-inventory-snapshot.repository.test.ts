@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      '931070450efc53842cd893fa58d94e7d74e4c114b45a14ea532b4acf657b3a14',
+      'ad4fc5bf6016620c7ba4018ec3ae526ea1cd8b0a59a5afc956c3862042d2fe75',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 608,
+    rowCount: 612,
   });
 });
 
@@ -60,6 +60,23 @@ it('keeps every Oxygen API route on the dynamic origin', async () => {
     row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
   );
   expect(rows).toHaveLength(21);
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps wallet PIN routes on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/customer/wallet-pin/'
+    )
+  );
+  expect(rows).toHaveLength(4);
   for (const row of rows) expect(row.decision).toBe('origin_dynamic');
 });
 

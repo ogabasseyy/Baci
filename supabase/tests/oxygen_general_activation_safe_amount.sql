@@ -58,13 +58,13 @@ BEGIN
  PERFORM public.oxygen_general_activation('finish',w.id,jsonb_build_object('attemptId',evidence_id,'reference',ref,'status','activated',
   'ciphertext','v1.'||repeat('a',16)||'.'||repeat('b',22)||'.'||repeat('c',50)));
  UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{booking,product_amount}','"bad"'::jsonb) WHERE workflow_id=w.id;
- rejected:=false;
- BEGIN PERFORM public.oxygen_general_activation('reconcile',w.id,'{}'); EXCEPTION WHEN serialization_failure THEN rejected:=true; END;
+ rejected:=public.oxygen_general_activation('reconcile',w.id,'{}')->>'reviewRequired'='true';
  IF NOT rejected OR NOT EXISTS(SELECT 1 FROM oxygen_private.general_activations WHERE id=evidence_id AND status='activated' AND ciphertext IS NOT NULL)
  OR (SELECT stage FROM public.oxygen_workflows WHERE id=w.id)='activated' THEN
   RAISE EXCEPTION 'Malformed amount lost activation evidence or projected';
  END IF;
  UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{booking,product_amount}',to_jsonb((SELECT total FROM public.orders WHERE id=w.order_id))) WHERE workflow_id=w.id;
+ UPDATE oxygen_private.general_activation_reconcile_conflicts SET resolved_at=clock_timestamp() WHERE workflow_id=w.id;
  IF public.oxygen_general_activation('reconcile',w.id,'{}')->>'orderConfirmed' IS DISTINCT FROM 'true' THEN
   RAISE EXCEPTION 'Valid evidence did not reconcile';
  END IF;

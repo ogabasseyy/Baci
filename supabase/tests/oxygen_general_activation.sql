@@ -59,9 +59,9 @@ BEGIN
  IF result->>'status' IS DISTINCT FROM 'activated' OR result->>'environment' IS DISTINCT FROM w.environment THEN RAISE EXCEPTION 'Existing activation environment missing'; END IF;
  IF (SELECT stage FROM public.oxygen_workflows WHERE id=w.id)='activated' THEN RAISE EXCEPTION 'Evidence write prematurely projected'; END IF;
  UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{applicationReference}',to_jsonb(gen_random_uuid())) WHERE workflow_id=w.id;
- expected_error:=false;
- BEGIN PERFORM public.oxygen_general_activation('reconcile',w.id,'{}'); EXCEPTION WHEN serialization_failure THEN expected_error:=true; END;
- IF NOT expected_error THEN RAISE EXCEPTION 'Changed application accepted'; END IF;
+ result:=public.oxygen_general_activation('reconcile',w.id,'{}');
+ IF result->>'reviewRequired' IS DISTINCT FROM 'true' OR result->>'orderConfirmed' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'Changed application accepted'; END IF;
+ UPDATE oxygen_private.general_activation_reconcile_conflicts SET resolved_at=clock_timestamp() WHERE workflow_id=w.id;
  UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{applicationReference}',to_jsonb(app)) WHERE workflow_id=w.id;
  result:=public.oxygen_general_activation('reconcile',w.id,'{}');
  IF result->>'orderConfirmed' IS DISTINCT FROM 'true' OR (SELECT payment_status FROM public.orders WHERE id=w.order_id) IS DISTINCT FROM before_status THEN RAISE EXCEPTION 'Projection or order status wrong'; END IF;

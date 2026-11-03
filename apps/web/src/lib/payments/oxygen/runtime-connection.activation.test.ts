@@ -71,7 +71,14 @@ it('keeps a paid callback pending when automatic activation is disabled', async 
   await expect(
     runtime.reconcilePaymentCallback(worker, workflow, workflow, workflow)
   ).rejects.toThrow('Activation pending');
-  expect(m.general).not.toHaveBeenCalled();
+  expect(m.general).toHaveBeenCalledWith(
+    worker,
+    workflow,
+    expect.any(String),
+    false,
+    expect.any(Function),
+    expect.any(String)
+  );
   expect(m.trial).not.toHaveBeenCalled();
 });
 it.each([
@@ -88,7 +95,14 @@ it.each([
   await expect(
     runtime.reconcilePaymentCallback(worker, workflow, workflow, workflow)
   ).rejects.toThrow('Activation pending');
-  expect(m.general).not.toHaveBeenCalled();
+  expect(m.general).toHaveBeenCalledWith(
+    worker,
+    workflow,
+    expect.any(String),
+    false,
+    expect.any(Function),
+    expect.any(String)
+  );
   expect(m.trial).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -146,7 +160,14 @@ it('retains only explicitly bound staging trial recovery', async () => {
     )
   ).resolves.toBe(false);
   expect(m.trial).toHaveBeenCalledOnce();
-  expect(m.general).not.toHaveBeenCalled();
+  expect(m.general).toHaveBeenCalledWith(
+    worker,
+    '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+    'production',
+    false,
+    expect.any(Function),
+    expect.any(String)
+  );
   vi.stubEnv('OXYGEN_PRODUCTION_AUTOMATIC_ACTIVATION_ENABLED', 'true');
   await production.completePaidActivation(
     worker,

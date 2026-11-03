@@ -12,9 +12,9 @@ export async function runGeneralOxygenActivation(
   request: (reference: string) => Promise<Response>,
   key: string
 ): Promise<void> {
-  if (!enabled) return;
   z.uuid().parse(workflowId);
-  if (!/^[a-f0-9]{64}$/i.test(key)) throw new Error('Activation unavailable');
+  if (enabled && !/^[a-f0-9]{64}$/i.test(key))
+    throw new Error('Activation unavailable');
   const call = async (operation: string, payload: Record<string, unknown>) => {
     const result = await worker.rpc('oxygen_general_activation', {
       p_operation: operation,
@@ -24,7 +24,7 @@ export async function runGeneralOxygenActivation(
     if (result.error) throw new Error('Activation unavailable');
     return result.data;
   };
-  const value = await call('claim', {});
+  const value = await call(enabled ? 'claim' : 'recover', {});
   if (value === null) return;
   const existing = z
     .object({
@@ -35,9 +35,15 @@ export async function runGeneralOxygenActivation(
   if (existing.success) {
     if (existing.data.status !== 'activated')
       throw new Error('Activation unconfirmed');
-    await call('reconcile', {});
+    const result = await call('reconcile', {});
+    if (
+      !z.object({ orderConfirmed: z.literal(true) }).safeParse(result).success
+    )
+      throw new Error('Activation unconfirmed');
     return;
   }
+  // Recovery is read-only even if the RPC returns an unexpected claim shape.
+  if (!enabled) throw new Error('Activation unavailable');
   const claim = z
     .object({
       reference: z.uuid(),
@@ -109,8 +115,13 @@ export async function runGeneralOxygenActivation(
       status,
       ciphertext,
     });
-    if (status === 'activated') await call('reconcile', {});
-    else throw new Error('Activation unconfirmed');
+    if (status === 'activated') {
+      const result = await call('reconcile', {});
+      if (
+        !z.object({ orderConfirmed: z.literal(true) }).safeParse(result).success
+      )
+        throw new Error('Activation unconfirmed');
+    } else throw new Error('Activation unconfirmed');
   } catch {
     // The provider may have received the request. Keep the durable claim in flight.
     throw new Error('Activation unconfirmed');

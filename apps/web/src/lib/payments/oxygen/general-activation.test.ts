@@ -23,7 +23,9 @@ it('does not request activation without the server gate or a durable claim', asy
     request,
     'a'.repeat(64)
   );
-  expect(rpc).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.map(([, args]) => args.p_operation)).toEqual([
+    'recover',
+  ]);
   await runGeneralOxygenActivation(
     { rpc },
     workflow,
@@ -37,7 +39,12 @@ it('does not request activation without the server gate or a durable claim', asy
 it('stores encrypted response evidence before projection and binds the response reference', async () => {
   const rpc = vi.fn().mockImplementation(async (_name, args) => ({
     error: null,
-    data: args.p_operation === 'claim' ? claim : { recorded: true },
+    data:
+      args.p_operation === 'claim'
+        ? claim
+        : args.p_operation === 'reconcile'
+          ? { orderConfirmed: true }
+          : { recorded: true },
   }));
   const request = vi.fn().mockResolvedValue(
     Response.json({
@@ -212,4 +219,67 @@ it('does not reconcile an existing activation from a different environment', asy
   ).rejects.toThrow();
   expect(request).not.toHaveBeenCalled();
   expect(rpc).toHaveBeenCalledTimes(1);
+});
+
+it('recovers an existing activation with new activation disabled without sending', async () => {
+  const rpc = vi.fn().mockImplementation(async (_name, args) => ({
+    error: null,
+    data:
+      args.p_operation === 'recover'
+        ? { status: 'activated', environment: 'staging' }
+        : { orderConfirmed: true },
+  }));
+  const request = vi.fn();
+  await runGeneralOxygenActivation(
+    { rpc },
+    workflow,
+    'staging',
+    false,
+    request,
+    'a'.repeat(64)
+  );
+  expect(request).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.map(([, args]) => args.p_operation)).toEqual([
+    'recover',
+    'reconcile',
+  ]);
+});
+
+it('does not report success when activated evidence needs manual review', async () => {
+  const rpc = vi.fn().mockImplementation(async (_name, args) => ({
+    error: null,
+    data:
+      args.p_operation === 'recover'
+        ? { status: 'activated', environment: 'staging' }
+        : { orderConfirmed: false, reviewRequired: true },
+  }));
+  await expect(
+    runGeneralOxygenActivation(
+      { rpc },
+      workflow,
+      'staging',
+      false,
+      vi.fn(),
+      'a'.repeat(64)
+    )
+  ).rejects.toThrow('Activation unconfirmed');
+});
+
+it('never dispatches with the gate disabled even if recovery returns claim-shaped data', async () => {
+  const rpc = vi.fn().mockResolvedValue({ error: null, data: claim });
+  const request = vi.fn();
+  await expect(
+    runGeneralOxygenActivation(
+      { rpc },
+      workflow,
+      'staging',
+      false,
+      request,
+      'a'.repeat(64)
+    )
+  ).rejects.toThrow('Activation unavailable');
+  expect(request).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.map(([, args]) => args.p_operation)).toEqual([
+    'recover',
+  ]);
 });

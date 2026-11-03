@@ -171,8 +171,6 @@ export function connectOxygenRuntime() {
     }
     const prefix =
       environment === 'production' ? 'OXYGEN_PRODUCTION' : 'OXYGEN_STAGING';
-    if (process.env[`${prefix}_AUTOMATIC_ACTIVATION_ENABLED`] !== 'true')
-      return false;
     await runGeneralOxygenActivation(
       worker,
       workflow,

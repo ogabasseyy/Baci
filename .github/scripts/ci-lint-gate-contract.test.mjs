@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { matchesGlob } from 'node:path';
 import test from 'node:test';
 
 import YAML from 'yaml';
@@ -8,6 +9,8 @@ import YAML from 'yaml';
 const workflow = YAML.parse(
   await readFile('.github/workflows/ci.yml', 'utf8')
 );
+
+const filters = YAML.parse(await readFile('.github/filters/ci.yml', 'utf8'));
 
 const NO_CHANGES = {
   web: 'false',
@@ -121,4 +124,31 @@ test('accepts a skipped lint when nothing lintable changed or in config-smoke mo
     }).status,
     0
   );
+});
+
+test('flags every lintable mobile path, not only the enumerated app folders', () => {
+  const cases = {
+    mobile_admin: [
+      'apps/mobile-admin/index.ts',
+      'apps/mobile-admin/types/order.ts',
+      'apps/mobile-admin/__tests__/admin/transactions.test.tsx',
+    ],
+    mobile_storefront: [
+      'apps/mobile-storefront/index.js',
+      'apps/mobile-storefront/metro.config.js',
+      'apps/mobile-storefront/types/product.ts',
+      'apps/mobile-storefront/modules/example/index.ts',
+      'apps/mobile-storefront/__tests__/example.test.tsx',
+      'apps/mobile-storefront/test-support/render.tsx',
+    ],
+  };
+
+  for (const [flag, files] of Object.entries(cases)) {
+    for (const file of files) {
+      assert.ok(
+        filters[flag].some((pattern) => matchesGlob(file, pattern)),
+        `${file} must set ${flag}`
+      );
+    }
+  }
 });

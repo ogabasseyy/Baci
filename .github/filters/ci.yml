@@ -26,6 +26,7 @@ mobile_admin:
   - '.npmrc'
   - 'pnpm-workspace.yaml'
 mobile_storefront:
+  - 'apps/mobile-storefront/**'
   - 'apps/mobile-admin/app.config.ts'
   - 'apps/mobile-admin/ios/Podfile.properties.json'
   - 'apps/mobile-storefront/assets/quiz/**'

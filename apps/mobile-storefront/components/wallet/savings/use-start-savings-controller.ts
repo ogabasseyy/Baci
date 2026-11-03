@@ -53,12 +53,7 @@ export function useStartSavingsController() {
     useState(false);
   const [initialContributionAmount, setInitialContributionAmount] =
     useState('');
-  const {
-    initialContributionIdempotencyKey,
-    initialContributionRail,
-    setInitialContributionIdempotencyKey,
-    setInitialContributionRail,
-  } = useInitialContributionOperation();
+  const operation = useInitialContributionOperation();
   const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
     useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -134,7 +129,8 @@ export function useStartSavingsController() {
   useStartSavingsAccountReset(userId, {
     setCreatedGoalId,
     setGoalIdempotencyKey,
-    setInitialContributionIdempotencyKey,
+    setInitialContributionIdempotencyKey:
+      operation.setInitialContributionIdempotencyKey,
     setFormError,
     setShowFundingModal,
     setShowPreviewModal,
@@ -172,8 +168,7 @@ export function useStartSavingsController() {
     frequency,
     fundingAccount,
     setCreatedGoalId,
-    initialContributionIdempotencyKey,
-    initialContributionRail,
+    ...operation,
     maturityDate,
     goalIdempotencyKey,
     setGoalIdempotencyKey,
@@ -183,8 +178,6 @@ export function useStartSavingsController() {
     selectedPaymentMethodId,
     selectedProduct,
     setFormError,
-    setInitialContributionIdempotencyKey,
-    setInitialContributionRail,
     setShowFundingModal,
     setShowPreviewModal,
     setShowSuccessModal,

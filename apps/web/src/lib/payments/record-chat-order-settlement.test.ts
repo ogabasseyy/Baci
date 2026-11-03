@@ -28,7 +28,7 @@ describe('recordChatOrderSettlement', () => {
     await recordChatOrderSettlement({
       ...base,
       gatewayResponse: { subaccount: {} },
-      supabase: { from: review.from, rpc },
+      supabase: { from: review.from, rpc } as never,
     });
 
     // Assert
@@ -67,7 +67,7 @@ describe('recordChatOrderSettlement', () => {
           },
           subaccount: { subaccount_code: 'ACCT_other' },
         },
-        supabase: { from: review.from, rpc },
+        supabase: { from: review.from, rpc } as never,
       })
     ).rejects.toThrow(
       'chat_order_settlement_failed: record_paystack_direct_split_settlement: paystack_direct_settlement_subaccount_mismatch'
@@ -82,7 +82,7 @@ describe('recordChatOrderSettlement', () => {
       recordChatOrderSettlement({
         ...base,
         gatewayResponse: { status: 'success' },
-        supabase: { from: review.from, rpc },
+        supabase: { from: review.from, rpc } as never,
       })
     ).rejects.toThrow('paystack_settlement_collection_unknown');
     expect(rpc).not.toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('recordChatOrderSettlement', () => {
       recordChatOrderSettlement({
         ...base,
         gatewayResponse: { status: 'success' },
-        supabase: { from: review.from, rpc },
+        supabase: { from: review.from, rpc } as never,
       })
     ).rejects.toThrow('paystack_settlement_collection_unknown');
 
@@ -124,7 +124,7 @@ describe('recordChatOrderSettlement', () => {
     await recordChatOrderSettlement({
       ...base,
       gatewayResponse: { subaccount: {} },
-      supabase: { from: review.from, rpc },
+      supabase: { from: review.from, rpc } as never,
     });
 
     expect(review.insert).not.toHaveBeenCalled();

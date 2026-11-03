@@ -163,6 +163,12 @@ shapes are therefore accepted and not hardened further:
 - A `github-script` dispatch whose parameters sit in an unrelated object
   (`createWorkflowDispatch(params)`) is matched with any literal `workflow_id`
   in the file rather than its own.
+- An external reusable workflow or upload action (`uses: org/repo/...@ref`) is
+  not followed.
+- Re-running an existing gated run (`gh run rerun`, `/actions/runs/{id}/rerun`)
+  is not treated as a dispatch.
+- The server-off rule covers `apps/mobile-storefront` only, not PiggyVest code
+  in `packages/shared`.
 - A parent-relative script path (`bash ../x.sh`) is not followed outside the
   repository root.
 - The server-off test check reads test text heuristically: an all-inline

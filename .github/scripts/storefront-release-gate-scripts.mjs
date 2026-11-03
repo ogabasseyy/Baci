@@ -8,6 +8,8 @@ import path from 'node:path';
 export const STOREFRONT_DIR = 'apps/mobile-storefront';
 const STOREFRONT_SCOPE = /mobile-storefront/;
 const INVOCATION = /(?:^|[\s;&|(])(pnpm|npm|yarn|bun|turbo|make)((?:[ \t]+[^\s;&|()]+)*)/gm;
+// A package-manager prefix (`pnpm`, `pnpm exec`, `pnpm dlx`, `npx`, ...) before `turbo`; the flags it carries are kept.
+const TURBO_WRAPPER = /(?:^|(?<=[\s;&|(]))(?:pnpm|npm|yarn|bun|npx)((?:\s+-\S+(?:\s+(?![-\s])(?!(?:exec|dlx|x|turbo)\b)\S+)?)*)(?:\s+(?:exec|dlx|x))?\s+turbo\b/g;
 const VALUE_FLAGS = new Set(['--filter', '-F', '-C', '--dir', '--prefix', '--cwd', '--workspace', '-w', '--directory', '-f', '--file']);
 const PATH_FLAGS = new Set(['-C', '--dir', '--prefix', '--cwd', '--directory']);
 const FILTER_FLAGS = new Set(['--filter', '-F', '--workspace', '-w']);
@@ -52,7 +54,9 @@ function scriptNames(tool, positional) {
  * The package scripts and Makefiles a text invokes: `{ bodies: [{ key, text }], missing: [label] }`.
  * `directories` are the working directories declared in the text.
  */
-export function scriptInvocations(source, directories, readFile) {
+export function scriptInvocations(rawSource, directories, readFile) {
+  // A continued command is one command; `pnpm exec turbo run x` is `turbo run x`.
+  const source = rawSource.replace(/\\\r?\n\s*/g, ' ').replace(TURBO_WRAPPER, ' turbo$1 ');
   const bodies = [];
   const missing = [];
   const addBody = (key, text, directory) => !bodies.some((body) => body.key === key) && bodies.push({ key, text, directory });

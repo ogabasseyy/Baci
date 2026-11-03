@@ -73,3 +73,29 @@ test('package-manager commands that are not scripts are ignored', () => {
     assert.deepEqual(bodies(source), { texts: [], directories: [], missing: [] }, source);
   }
 });
+
+test('a command split by a shell line continuation is read as one command', () => {
+  for (const source of [
+    'run: |\n  pnpm \\\n    --filter @baci/mobile-storefront run ship',
+    'run: |\n  pnpm --filter @baci/mobile-storefront \\\n    ship',
+    'run: |\n  cd apps/mobile-storefront && npm \\\n  run ship',
+  ]) {
+    assert.deepEqual(bodies(source).texts[0], 'bash scripts/up.sh', source);
+  }
+});
+
+test('turbo run through pnpm, yarn, npm exec or npx expands the task', () => {
+  const files = { ...FILES, 'apps/mobile-storefront/package.json': manifest({ ship: 'fastlane ios release' }) };
+  for (const source of [
+    'run: pnpm turbo run ship',
+    'run: pnpm exec turbo run ship',
+    'run: pnpm dlx turbo run ship',
+    'run: yarn turbo run ship',
+    'run: npx turbo run ship',
+    'run: npx --yes turbo run ship',
+    'run: pnpm -w exec turbo run ship --filter=@baci/mobile-storefront',
+  ]) {
+    assert.deepEqual(bodies(source, [], files).texts, ['fastlane ios release'], source);
+  }
+  assert.deepEqual(bodies('run: pnpm exec jest', [], files).texts, []);
+});

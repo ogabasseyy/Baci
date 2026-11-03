@@ -10,6 +10,7 @@ const MODEL_FAMILY_ALIAS_TOKENS = new Set([
   'airpods',
   'alienware',
   'aorus',
+  'blade',
   'buds',
   'legion',
   'laserjet',

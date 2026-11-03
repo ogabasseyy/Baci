@@ -69,17 +69,27 @@ function isDedicatedGamingLaptopContent(
   titleHaystack: string,
   haystack: string
 ): boolean {
-  const hasExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((subject) =>
-    hasPhrase(titleHaystack, subject)
-  );
+  const hasGamingLaptopPhrase =
+    hasPhrase(titleHaystack, 'gaming laptop') ||
+    hasPhrase(titleHaystack, 'gaming laptops');
+
+  const hasExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((subject) => {
+    if (
+      hasGamingLaptopPhrase &&
+      (subject === 'gpu' ||
+        subject === 'gpus' ||
+        subject === 'graphics card' ||
+        subject === 'graphics cards')
+    ) {
+      return false;
+    }
+    return hasPhrase(titleHaystack, subject);
+  });
   if (hasExcludedSubject) {
     return false;
   }
 
-  if (
-    hasPhrase(titleHaystack, 'gaming laptop') ||
-    hasPhrase(titleHaystack, 'gaming laptops')
-  ) {
+  if (hasGamingLaptopPhrase) {
     return true;
   }
 

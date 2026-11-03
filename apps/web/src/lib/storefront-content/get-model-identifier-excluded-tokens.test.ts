@@ -68,5 +68,18 @@ describe('getExcludedModelIdentifierTokens', () => {
       tokenize
     );
     expect(aorusExcluded.has('aorus')).toBe(false);
+
+    const bladeExcluded = getExcludedModelIdentifierTokens(
+      {
+        categorySlug: 'gaming-laptops',
+        brands: ['Razer'],
+        productSlugs: ['razer-blade-16'],
+      },
+      'razer-blade-16',
+      new Set(),
+      new Set(),
+      tokenize
+    );
+    expect(bladeExcluded.has('blade')).toBe(false);
   });
 });

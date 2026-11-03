@@ -1,5 +1,4 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
@@ -30,10 +29,6 @@ function hasConfiguredPostBrandMismatch(
   productBrand: string | null | undefined,
   productName: string
 ): boolean {
-  if (GAME_CATEGORY_PATTERN.test(categorySlug)) {
-    return false;
-  }
-
   const brandAliases = CONTENT_CLUSTER_SUPPORT[categorySlug].brandTokens;
   const productBrands = productBrand ? [productBrand] : [];
   const normalizedBrands = getContextBrandKeys(

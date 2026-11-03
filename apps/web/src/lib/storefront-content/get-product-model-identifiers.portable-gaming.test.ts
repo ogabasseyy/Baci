@@ -33,5 +33,12 @@ describe('getProductModelIdentifiers portable gaming', () => {
       productSlugs: ['gigabyte-aorus-16x'],
     });
     expect(aorus).toEqual(['aorus 16x']);
+
+    const blade = getProductModelIdentifiers({
+      categorySlug: 'gaming-laptops',
+      brands: ['Razer'],
+      productSlugs: ['razer-blade-16'],
+    });
+    expect(blade).toEqual(['blade 16']);
   });
 });

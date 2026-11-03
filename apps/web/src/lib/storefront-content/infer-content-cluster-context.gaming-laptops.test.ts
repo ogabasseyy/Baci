@@ -204,4 +204,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(katanaGuide.categorySlug).toBe('gaming-laptops');
   });
+
+  it('promotes legitimate gaming-laptop roundups mentioning GPUs in the title to gaming-laptops', () => {
+    const gpuRoundup = inferContentClusterContext({
+      title: 'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
+      excerpt: 'Comparing affordable high-refresh-rate gaming laptops.',
+      category: 'Gaming',
+      tags: ['gaming', 'laptops'],
+      keywords: ['buyer guide'],
+    });
+    expect(gpuRoundup.categorySlug).toBe('gaming-laptops');
+  });
 });

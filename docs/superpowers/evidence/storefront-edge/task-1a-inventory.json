@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "19afcce403521d73c6cfdbdc728e3317e11f177a",
+  "originMainSha": "5bb83744c31923dce72319abdcd4be09565e4f5c",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "60460b43717d9ca41ecbb7bd84def176e813b898545c69e0fadafe4ab560e13b",
-  "routingProxyInputSha256": "c5435651c3b07ae8a865dbfc11e3a9650d868bd77a3bf8054a2b7560daf45cea",
+  "routingProxyInputSha256": "8f56cdda64e76ea4c085d7a45ad3a1e216b1ace444e96d22339dade008fdc479",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1447,6 +1447,55 @@
       "routePattern": "/api/storefront/customer/wallet/top-up/usdt/{reference}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/top-up/usdt/[reference]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/change/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/change",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/change/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/reset/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/reset",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/reset/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/set/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/set",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/set/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/status/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8660,5 +8709,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "2e53f7f56902eb39424c9d9dd6312185c83ad73da71031ae82d78a97812f10b0"
+  "inventorySha256": "c4b8c2ef38c56e922064fc93de6789ce12268a6b26500c50f2fc02d7edbd7983"
 }

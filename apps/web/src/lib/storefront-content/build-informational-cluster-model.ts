@@ -137,6 +137,7 @@ export async function buildInformationalClusterModel(
     storeUrl: input.storeUrl,
     categorySlug,
     categoryName,
+    merchantCurrency: input.merchantCurrency,
     products,
     inferredBrands: inferred.brands,
     preferredPriceBandSlugs: inferred.matchedPriceBands,

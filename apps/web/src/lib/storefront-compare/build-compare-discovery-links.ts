@@ -11,10 +11,11 @@ import {
   curateProductComparePairs,
 } from './curate-product-compare-pairs';
 
-interface CompareDiscoveryInput {
+export interface CompareDiscoveryInput {
   storeUrl: string;
   categorySlug: string;
   categoryName: string;
+  merchantCurrency?: string | null;
   includeBrandCompareLinks?: boolean;
   products: CuratedCompareProduct[];
   requiredProductSlugs?: string[];

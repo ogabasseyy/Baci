@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as priceBandTaxonomy from '@/lib/storefront-compare/price-band-taxonomy';
 import { resolvePriceRangeTitle } from './resolve-price-range-title';
 
 describe('resolvePriceRangeTitle', () => {
@@ -54,5 +55,26 @@ describe('resolvePriceRangeTitle', () => {
       formatCurrency: (amount) => `$${amount}`,
     });
     expect(title).toBe('Gaming Laptops $700000 - $1100000');
+  });
+
+  it('treats band floor as exclusive (rawPrice equal to floor does not match)', () => {
+    vi.spyOn(priceBandTaxonomy, 'getCuratedPriceBands').mockReturnValueOnce([
+      {
+        slug: '500k-to-1m',
+        label: 'Best Smartphones ₦500,000 - ₦1,000,000',
+        ceiling: 1_000_000,
+        floor: 500_000,
+      },
+    ]);
+    const title = resolvePriceRangeTitle({
+      categorySlug: 'smartphones',
+      currencyCode: 'NGN',
+      rawPrice: 500_000,
+      minPrice: 400_000,
+      maxPrice: 600_000,
+      productCategory: 'Smartphones',
+      formatCurrency,
+    });
+    expect(title).toBe('Smartphones ₦400,000 - ₦600,000');
   });
 });

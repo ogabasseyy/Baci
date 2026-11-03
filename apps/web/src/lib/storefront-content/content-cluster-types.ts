@@ -134,6 +134,7 @@ export interface BuildInformationalClusterModelInput {
   /** Test seam only: override pools skip destination verification. Hub links still exact-filter the pool to the override category (the destination counts only exact category membership, never child categories); compare and price-band links trust the caller's destination-verified pool as supplied. Production callers omit this. Without destinationVerified, compare and price-band links are fail-closed (dropped) while hub links still verify live. */
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
+  merchantCurrency?: string | null;
 }
 
 export interface BlogClusterCollection {

@@ -171,7 +171,8 @@ function inferCategorySlug(
   ) as ClusterSupportEntry[]) {
     if (
       categorySlug === 'gaming-laptops' &&
-      hasExcludedGamingLaptopSubject(getSubjectTarget(title, excerpt), true)
+      (!hasLaptopPhrase(haystack) ||
+        hasExcludedGamingLaptopSubject(getSubjectTarget(title, excerpt), true))
     ) {
       continue;
     }

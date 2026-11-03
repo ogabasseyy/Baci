@@ -127,15 +127,20 @@ describe('inferContentClusterContext - gaming laptops', () => {
     }
   });
 
-  it('promotes legitimate gaming laptop roundups containing idiomatic phrases like "stand out" to gaming-laptops', () => {
-    const standOutRoundup = inferContentClusterContext({
-      title: 'Best Gaming Laptops in Nigeria That Stand Out in 2026',
-      excerpt: 'Top-tier portable gaming rigs reviewed and compared.',
-      category: 'Gaming',
-      tags: ['gaming', 'laptops'],
-      keywords: ['buyer guide'],
-    });
-    expect(standOutRoundup.categorySlug).toBe('gaming-laptops');
+  it('promotes legitimate gaming laptop roundups with idiomatic phrases or GPUs to gaming-laptops', () => {
+    for (const title of [
+      'Best Gaming Laptops in Nigeria That Stand Out in 2026',
+      'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
+    ]) {
+      const post = inferContentClusterContext({
+        title,
+        excerpt: 'Top-tier portable gaming rigs reviewed and compared.',
+        category: 'Gaming',
+        tags: ['gaming', 'laptops'],
+        keywords: ['buyer guide'],
+      });
+      expect(post.categorySlug).toBe('gaming-laptops');
+    }
   });
 
   it('promotes dedicated gaming laptop articles for newly supported families (predator, aorus) to gaming-laptops', () => {
@@ -155,17 +160,6 @@ describe('inferContentClusterContext - gaming laptops', () => {
       });
       expect(guide.categorySlug).toBe('gaming-laptops');
     }
-  });
-
-  it('promotes legitimate gaming-laptop roundups mentioning GPUs in the title to gaming-laptops', () => {
-    const gpuRoundup = inferContentClusterContext({
-      title: 'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
-      excerpt: 'Comparing affordable high-refresh-rate gaming laptops.',
-      category: 'Gaming',
-      tags: ['gaming', 'laptops'],
-      keywords: ['buyer guide'],
-    });
-    expect(gpuRoundup.categorySlug).toBe('gaming-laptops');
   });
 
   it('does not promote desktop articles without laptop evidence under Gaming or Laptops', () => {
@@ -243,6 +237,13 @@ describe('inferContentClusterContext - gaming laptops', () => {
         'RGB mechanical.',
         ['katana', 'keyboard'],
         'keyboard',
+        'not-gaming',
+      ],
+      [
+        'Blade Vampire Action Game Review',
+        'Action combat.',
+        ['blade', 'games'],
+        'blade',
         'not-gaming',
       ],
       [

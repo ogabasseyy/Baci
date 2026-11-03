@@ -27,7 +27,8 @@ export function isNonBrandPlaceholderKey(keyOrBrand?: string | null): boolean {
   const trimmed = keyOrBrand.trim();
   if (!trimmed) return true;
 
-  const slug = generateSlug(trimmed);
+  const normalized = trimmed.replace(/[._/\\-]+/g, ' ');
+  const slug = generateSlug(normalized);
   if (!slug) return true;
 
   if (NON_BRAND_PLACEHOLDER_KEYS.has(slug)) return true;

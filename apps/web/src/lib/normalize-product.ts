@@ -13,6 +13,7 @@
 
 import { generateSlug } from '@/lib/seo-utils';
 import {
+  // Phase 1B: Coerces raw manage_stock to strict boolean contract
   coerceStorefrontManageStock,
   getStorefrontAgentAvailability,
 } from '@/lib/storefront-agent-availability';

@@ -35,7 +35,7 @@ const NON_SPEC_METADATA_KEYS = new Set(['created_at', 'updated_at']);
 function normalizeBrand(brand?: string | null): NormalizedBrand | null {
   const label = brand?.trim();
 
-  if (!label) {
+  if (!label || isNonBrandPlaceholderKey(label)) {
     return null;
   }
 

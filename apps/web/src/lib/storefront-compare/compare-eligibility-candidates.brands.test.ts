@@ -226,4 +226,26 @@ describe('compare eligibility candidate builders', () => {
     });
     expect(candidate).toBeNull();
   });
+
+  it('counts only valid brands when a price band mixes valid and placeholder brands', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: {
+        slug: 'under-500k',
+        label: 'Under ₦500k',
+        ceiling: 500_000,
+      },
+      products: [
+        { slug: 'v1', name: 'V1', brand: 'Samsung', price: 200_000 },
+        { slug: 'v2', name: 'V2', brand: 'Apple', price: 250_000 },
+        { slug: 'p1', name: 'P1', brand: 'Generic.Brand', price: 300_000 },
+        { slug: 'p2', name: 'P2', brand: 'Unknown Products', price: 350_000 },
+        { slug: 'p3', name: 'P3', brand: 'N/A', price: 400_000 },
+        { slug: 'p4', name: 'P4', brand: 'Other', price: 450_000 },
+      ],
+    });
+    expect(candidate.activeProductCount).toBe(6);
+    expect(candidate.differentiatingSpecCount).toBe(2);
+    expect(candidate.isIndexable).toBe(false);
+  });
 });

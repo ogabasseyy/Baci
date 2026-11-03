@@ -15,7 +15,7 @@ export interface BrandCountEntry {
 
 function normalizeBrand(brand?: string | null) {
   const label = brand?.trim();
-  if (!label) {
+  if (!label || isNonBrandPlaceholderKey(label)) {
     return null;
   }
 

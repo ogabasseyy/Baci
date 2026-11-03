@@ -21,6 +21,9 @@ describe('isNonBrandPlaceholderKey', () => {
     expect(isNonBrandPlaceholderKey('N / A')).toBe(true);
     expect(isNonBrandPlaceholderKey('No-Brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('Generic Brand')).toBe(true);
+    expect(isNonBrandPlaceholderKey('Generic.Brand')).toBe(true);
+    expect(isNonBrandPlaceholderKey('No_Brand')).toBe(true);
+    expect(isNonBrandPlaceholderKey('No/Brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('Other Brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('Unbranded Product')).toBe(true);
     expect(isNonBrandPlaceholderKey('Unknown Brand')).toBe(true);

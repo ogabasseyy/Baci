@@ -13,6 +13,18 @@ describe('server keeps PiggyVest off', () => {
     expect(screen.getByText('Add from your wallet')).toBeOnTheScreen();
     expect(screen.queryByText(SERVER_OFF_ACCOUNT_NUMBER)).toBeNull();
     expect(screen.queryByText(/\d{10}/)).toBeNull();
+    expect(screen.queryByText(/PiggyVest/)).toBeNull();
+  });
+
+  it('names PiggyVest only when the merchant is primary', () => {
+    render(
+      <SavingsPlanWalletNote
+        colors={Colors.light}
+        onRefresh={jest.fn()}
+        primary
+      />
+    );
+    expect(screen.getByText(/from your PiggyVest wallet/)).toBeOnTheScreen();
   });
 
   it('reports a failed wallet refresh', async () => {

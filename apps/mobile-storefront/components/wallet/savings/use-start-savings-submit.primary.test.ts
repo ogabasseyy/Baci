@@ -149,4 +149,27 @@ describe('submitBankTransferContribution primary routing', () => {
     expect(mockAddSavingsContribution).toHaveBeenCalledTimes(1);
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
+
+  it('refuses cleanly when a wallet PIN is required, keeping the id and not retrying', async () => {
+    mockAddPrimaryContribution.mockRejectedValue(
+      Object.assign(new Error('Please confirm your PIN to continue.'), {
+        code: 'PIN_PROOF_REQUIRED',
+      })
+    );
+    const input = readyInput();
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitBankTransferContribution();
+    });
+    const copy =
+      'Saving into goals from the app needs a wallet PIN, which is coming soon. Your money is still in your wallet.';
+    expect(input.setFormError).toHaveBeenCalledWith(copy);
+    expect(Alert.alert).toHaveBeenCalledWith('Contribution not recorded', copy);
+    expect(mockAddPrimaryContribution).toHaveBeenCalledTimes(1);
+    expect(mockAddSavingsContribution).not.toHaveBeenCalled();
+    expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalledWith(
+      null
+    );
+    expect(input.setShowSuccessModal).not.toHaveBeenCalled();
+  });
 });

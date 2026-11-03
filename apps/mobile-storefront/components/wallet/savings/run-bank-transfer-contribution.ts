@@ -12,6 +12,9 @@ import {
   resolveStoredOperation,
 } from './stored-contribution-operation';
 
+const PIN_COMING_SOON_MESSAGE =
+  'Saving into goals from the app needs a wallet PIN, which is coming soon. Your money is still in your wallet.';
+
 export type OperationRailRef = MutableRefObject<{
   operationId: string;
   rail: ContributionRail;
@@ -164,10 +167,14 @@ export async function runBankTransferContribution(
       // The server cancelled the reservation; the id can never be reused.
       input.setInitialContributionIdempotencyKey(null);
     }
+    // A clean refusal: nothing moved, so the id and rail stay as they are and
+    // nothing is retried.
     const message =
-      error instanceof Error && error.message
-        ? error.message
-        : 'Unable to record the contribution.';
+      getErrorCode(error) === 'PIN_PROOF_REQUIRED'
+        ? PIN_COMING_SOON_MESSAGE
+        : error instanceof Error && error.message
+          ? error.message
+          : 'Unable to record the contribution.';
     input.setFormError(message);
     showAppAlert({
       title: 'Contribution not recorded',

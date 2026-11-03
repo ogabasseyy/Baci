@@ -7,6 +7,8 @@ import { getErrorMessage } from './start-savings-controller.utils';
 type Props = {
   colors: (typeof Colors)['light'];
   onRefresh: () => Promise<unknown>;
+  /** True only when the merchant has an explicit primary (PiggyVest) verdict. */
+  primary?: boolean;
 };
 
 /**
@@ -14,7 +16,11 @@ type Props = {
  * goal's own bank account is hidden (not absent), so nobody can send a bank
  * transfer to it and strand the money. This note replaces that account.
  */
-export function SavingsPlanWalletNote({ colors, onRefresh }: Props) {
+export function SavingsPlanWalletNote({
+  colors,
+  onRefresh,
+  primary = false,
+}: Props) {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isMountedRef = useRef(true);
@@ -54,9 +60,9 @@ export function SavingsPlanWalletNote({ colors, onRefresh }: Props) {
         Add from your wallet
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        Savings plans are funded by moving money from your PiggyVest wallet. The
-        plan's own account is kept hidden, so do not send a bank transfer to a
-        plan.
+        {primary
+          ? "Savings plans are funded by moving money from your PiggyVest wallet. The plan's own account is kept hidden, so do not send a bank transfer to a plan."
+          : "Savings plans are funded by moving money from your wallet. The plan's own account is kept hidden, so do not send a bank transfer to a plan."}
       </Text>
       <Pressable
         accessibilityRole="button"

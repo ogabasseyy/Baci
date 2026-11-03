@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { CONFIG } from '@/lib/config';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsPlanCardContribution } from './savings/SavingsPlanCardContribution';
@@ -68,6 +69,7 @@ export function WalletSavingsPlanFunding({
           ])}
           colors={colors}
           onRefresh={refreshProgress}
+          primary={isPiggyvestPrimaryMerchant(activeMerchantId)}
         />
       ) : null}
       {manual ? (

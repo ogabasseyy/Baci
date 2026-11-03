@@ -164,6 +164,8 @@ test('a server-off test needs a live test with an assertion, not only an import 
     "it('off', () => { assert.equal(a, b); });",
     "test.only('off', () => { expect(1).toBe(1); });",
     "it('skipped', () => {});\nit('live', () => { expect(1).toBe(1); });",
+    "describe.skip('old', () => { it('a', () => { expect(1).toBe(1); }); });\nit('live', () => { expect(2).toBe(2); });",
+    "xdescribe('old', () => {});\ndescribe('on', () => { test('b', () => { assert.ok(true); }); });",
   ]) {
     assert.equal(hasLiveAssertion(text), true, text);
   }
@@ -178,6 +180,8 @@ test('a server-off test needs a live test with an assertion, not only an import 
     "describe.skip('off', () => { it('a', () => { expect(1).toBe(1); }); });",
     "xdescribe('off', () => { it('a', () => { expect(1).toBe(1); }); });",
     "it('off', () => {});",
+    "it('off', () => {});\nexpect(1).toBe(1);",
+    "describe('x', () => { expect(1).toBe(1); it('live', () => { render(); }); });",
     "it('off', () => { render(<Sheet />); });",
     "// it('off', () => { expect(1).toBe(1); });",
     "/* it('off', () => { expect(1).toBe(1); }); */",
@@ -212,4 +216,10 @@ test('an assertion inside a skipped test does not count', () => {
   const nested = "it.skip('a', () => { call(() => { expect(')').toBe(1); }); });\nit('live', () => {});";
   assert.equal(hasLiveAssertion(nested), false);
   assert.equal(hasLiveAssertion(`${skippedAssert}\nit('live', () => { expect(2).toBe(2); });`), true);
+});
+
+test('goal files are PiggyVest storefront files', () => {
+  assert.equal(isPiggyvestSource(`${APP}/components/goals/GoalSheet.tsx`, ''), true);
+  assert.equal(isPiggyvestSource(`${APP}/app/goal/index.tsx`, ''), true);
+  assert.equal(isPiggyvestSource(`${APP}/components/goalkeeper/Mitt.tsx`, ''), false);
 });

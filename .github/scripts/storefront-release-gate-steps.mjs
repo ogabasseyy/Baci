@@ -23,21 +23,37 @@ function otaRefusalLines(marker) {
   ];
 }
 
-/** True when the guard script keeps its refusal constructs in order, outside comments, and cannot swallow a failure. */
-function keepsOtaRefusal(run, marker) {
-  const lines = (run ?? '')
+/** The script's lines without blanks and comments. */
+function codeLines(run) {
+  return (run ?? '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line !== '' && !line.startsWith('#'));
+}
+
+/**
+ * True when the `if` at `at` is a refusal: only echo lines, then `exit 1`, then
+ * its own `fi`, so the exit sits inside the block and nothing else can run there.
+ */
+function refusesInBlock(lines, at) {
+  let index = at + 1;
+  while (lines[index]?.startsWith('echo ')) index += 1;
+  return lines[index] === 'exit 1' && lines[index + 1] === 'fi';
+}
+
+/** True when the guard script keeps its refusal constructs in order, outside comments, and cannot swallow a failure. */
+function keepsOtaRefusal(run, marker) {
+  const lines = codeLines(run);
   let from = 0;
   for (const required of otaRefusalLines(marker)) {
     const at = lines.indexOf(required, from);
     if (at === -1) return false;
+    // Each `if` is a refusal block that exits inside itself (the first line is `set`, the lookup an assignment).
+    if (required.startsWith('if ') && !refusesInBlock(lines, at)) return false;
     from = at + 1;
   }
-  const exits = lines.filter((line) => line === 'exit 1').length;
   const reassigned = lines.filter((line) => /^held=/.test(line)).length;
-  return exits >= 3 && reassigned === 1 && !lines.some((line) => /\bset\s+\+e\b|\|\|\s*true\b/.test(line));
+  return reassigned === 1 && !lines.some((line) => /\bset\s+\+e\b|\|\|\s*true\b/.test(line));
 }
 
 /** The iOS OTA export must refuse sources that carry `marker` before it selects one. */
@@ -64,6 +80,18 @@ export function otaGuardFailures(workflow, text, marker) {
   return failures;
 }
 
+const RELEASE_REFUSAL_IF = 'if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then';
+
+/**
+ * True when the guard script is exactly `set -euo pipefail`, the ancestry test
+ * as an `if !` that echoes and exits 1 inside its own block, and nothing else:
+ * no earlier command can rewrite main, and no later one can undo the refusal.
+ */
+function keepsReleaseRefusal(run) {
+  const lines = codeLines(run);
+  return lines[0] === 'set -euo pipefail' && lines[1] === RELEASE_REFUSAL_IF && refusesInBlock(lines, 1) && lines.length === lines.indexOf('fi') + 1;
+}
+
 /**
  * A store release must refuse a commit that is not on main before it does
  * anything else, so a tag or a manual run can never ship unmerged code.
@@ -86,7 +114,7 @@ export function releaseGuardFailures(workflow, text, jobId) {
   }
   const guard = readStep(job, RELEASE_GUARD_STEP);
   const fromGithubSha = /^\s*RELEASE_SHA: \$\{\{ github\.sha \}\}\s*$/m.test(guard.text);
-  if (!fromGithubSha || !guard.run?.includes('git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main')) {
+  if (!fromGithubSha || !keepsReleaseRefusal(guard.run)) {
     failures.push(
       `${workflow} "${RELEASE_GUARD_STEP}" must refuse a RELEASE_SHA from github.sha that is not on refs/remotes/origin/main`
     );

@@ -21,7 +21,7 @@ const NOT_SHIPPED = [
 ];
 const NOT_SHIPPED_DIRECTORIES = ['test-support/', 'scripts/', 'tools/'];
 const PIGGYVEST_NAME = /piggy[-_ ]?vest/i;
-const WALLET_PATH = /wallet|savings/i;
+const WALLET_PATH = /wallet|savings|goals?\b/i;
 
 /** True for storefront source that is bundled into the app. */
 export function isShippedSource(path) {
@@ -81,43 +81,53 @@ export function importsModule(testPath, testContent, source) {
   return false;
 }
 
-const SKIPPED_SUITE = /\b(?:xdescribe|describe\s*\.\s*skip|describe\s*\.\s*todo)\b/;
-const LIVE_TEST = /(?<![\w.$])(?:it|test)\s*(?:\.\s*(?:only|concurrent|each|failing)\b[^(]*)?\(/;
+const SKIPPED_BLOCK =
+  /(?<![\w.$])(?:(?:it|test)\s*\.\s*(?:skip|todo)|describe\s*\.\s*(?:skip|todo)|xit|xtest|xdescribe)\s*\(/g;
+const LIVE_TEST = /(?<![\w.$])(?:it|test)\s*(?:\.\s*(?:only|concurrent|each|failing)\b[^(]*)?\(/g;
 const ASSERTION = /(?<![\w.$])expect\s*(?:\.\s*assertions?\s*)?\(|(?<![\w.$])assert\s*(?:\.\s*\w+)?\s*\(|\.(?:should|toMatchSnapshot)\b/;
 
-const SKIPPED_TEST = /(?<![\w.$])(?:(?:it|test)\s*\.\s*skip|xit|xtest)\s*\(/g;
+// The index after the parenthesis that closes the one just before `from`, skipping strings.
+function callEnd(code, from) {
+  let depth = 1;
+  let quote = '';
+  let at = from;
+  for (; at < code.length && depth > 0; at += 1) {
+    const char = code[at];
+    if (quote) {
+      if (char === '\\') at += 1;
+      else if (char === quote) quote = '';
+    } else if (char === '"' || char === "'" || char === '`') quote = char;
+    else if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+  }
+  return at;
+}
 
-// Removes the whole call of every skipped test, so an assertion in its body is not counted.
-function withoutSkippedTests(code) {
+// Removes the whole call of every skipped or todo test or suite, so nothing inside it counts.
+function withoutSkipped(code) {
   let result = '';
   let from = 0;
-  for (const match of code.matchAll(SKIPPED_TEST)) {
+  for (const match of code.matchAll(SKIPPED_BLOCK)) {
     if (match.index < from) continue;
-    let depth = 1;
-    let quote = '';
-    let at = match.index + match[0].length;
-    for (; at < code.length && depth > 0; at += 1) {
-      const char = code[at];
-      if (quote) {
-        if (char === '\\') at += 1;
-        else if (char === quote) quote = '';
-      } else if (char === '"' || char === "'" || char === '`') quote = char;
-      else if (char === '(') depth += 1;
-      else if (char === ')') depth -= 1;
-    }
     result += code.slice(from, match.index);
-    from = at;
+    from = callEnd(code, match.index + match[0].length);
   }
   return result + code.slice(from);
 }
 
 /**
- * True when the test file declares at least one test that is not skipped or
- * todo and makes an assertion: an import with a skipped or empty test proves nothing.
+ * True when the test file declares a test that is not skipped or todo and
+ * asserts inside its own body: an import with a skipped or empty test proves
+ * nothing, and neither does an assertion outside every live test.
  */
 export function hasLiveAssertion(testContent) {
-  const code = withoutSkippedTests((testContent ?? '').replace(COMMENT, ''));
-  return !SKIPPED_SUITE.test(code) && LIVE_TEST.test(code) && ASSERTION.test(code);
+  const code = withoutSkipped((testContent ?? '').replace(COMMENT, ''));
+  return [...code.matchAll(LIVE_TEST)].some((match) => {
+    let end = callEnd(code, match.index + match[0].length);
+    // it.each(table)(name, body) is two calls.
+    while (/^\s*\(/.test(code.slice(end))) end = callEnd(code, end + code.slice(end).indexOf('(') + 1);
+    return ASSERTION.test(code.slice(match.index, end));
+  });
 }
 
 /**

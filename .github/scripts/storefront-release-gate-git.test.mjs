@@ -89,8 +89,8 @@ test('the OTA export refuses a source that carries the gate marker, from any wor
   });
 });
 
-test('each store release refuses a commit that is not on main', () => {
-  for (const [workflow, { job }] of RELEASE_WORKFLOWS) {
+test('each store release and the manual submit refuse a commit that is not on main', () => {
+  for (const [workflow, { job }] of [...RELEASE_WORKFLOWS, ['.github/workflows/ios-storefront-submit.yml', { job: 'submit' }]]) {
     const guard = readStep(readJob(real.readFile(workflow), job), RELEASE_GUARD_STEP)?.run;
     assert.ok(guard, `${workflow} must have a release source guard script`);
     withRepository(({ dir, first, second, feature }) => {

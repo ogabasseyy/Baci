@@ -144,6 +144,8 @@ test('the OTA guard must stay in place and run before the source is selected', (
     ['          if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then', '          if false; then'],
     ['          set -euo pipefail\n          if ! [[', '          set -uo pipefail\n          if ! [['],
     ['          held="$(git', '          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- x || true)"\n          held="$(git'],
+    // The exit moved out of the held-source block, leaving a dead `if false; then exit 1; fi` to supply the count.
+    ["gate.md.' >&2\n            exit 1\n          fi", "gate.md.' >&2\n          fi\n          if false; then\n            exit 1\n          fi"],
   ]) {
     const mutated = guard.replace(from, to);
     assert.notEqual(mutated, guard, `fixture must change: ${from}`);

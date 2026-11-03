@@ -148,11 +148,21 @@ export async function stepTimeoutRetry(
     'timeout_rows_with_reference',
     rows
   );
+  // A resumed slot was booked BEFORE this run's baseline was read, so the
+  // main delta is 0 by construction: it cannot show how often it was booked.
+  const debit = mainDelta === null ? null : -mainDelta;
+  const resumed = sent.kind === 'resumed';
+  const unmeasured = resumed || debit === null || rows === null;
   b.finding(
     TIMEOUT_BOOKED_ONCE,
     Q[TIMEOUT_BOOKED_ONCE],
-    mainDelta === null || rows === null
+    unmeasured
       ? 'unknown'
-      : answerOf(rows === 1 && mainDelta === -amount)
+      : // Same band as the fund step: a fee may ride on the debit, a second
+        // booking would take 2x; the single matching record decides the rest.
+        answerOf(rows === 1 && debit >= amount && debit < amount * 2),
+    resumed
+      ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
+      : undefined
   );
 }

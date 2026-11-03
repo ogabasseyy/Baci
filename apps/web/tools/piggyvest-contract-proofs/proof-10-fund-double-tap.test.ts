@@ -70,6 +70,31 @@ describe('S8 fund goal from main', () => {
   });
 });
 
+describe('S8 fund goal with fees', () => {
+  it('accepts a wallet-to-wallet fee on the debit side', async () => {
+    const { h, b } = await setup({ mock: { transferFeeKobo: 100 } });
+    expect(answer(b, h, FUND_GOAL)).toBe('yes');
+  });
+
+  it('answers unknown when the goal got less than the amount and no fee was read', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const goal = h.state.goalWalletId as string;
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    const goalWallet = h.mock.sandbox.wallet(goal);
+    const b = new ProofBuilder('p10', 'S8');
+    // The goal ends up 100 short after the transfer settles.
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (goalWallet) goalWallet.balance -= 100;
+      return out;
+    };
+    await stepFundGoal(h.ctx, b, h.state.mainWalletId as string, goal);
+    expect(answer(b, h, FUND_GOAL)).toBe('unknown');
+  });
+});
+
 describe('S8 double tap', () => {
   it('sends nothing on the second tap and the provider holds one transfer', async () => {
     const { h, b, main, goal, fund } = await setup();

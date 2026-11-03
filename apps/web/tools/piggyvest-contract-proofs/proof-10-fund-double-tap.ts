@@ -112,10 +112,18 @@ export async function stepFundGoal(
     return result;
   }
   const debit = -main$;
+  // A goal credit short of the amount with no fee read is not a verdict: it
+  // may be a goal-side fee, so it is published as unknown, never as a failure.
+  const goalShort = goal$ > 0 && goal$ < amount;
   b.finding(
     FUND_GOAL,
     FUND_Q,
-    answerOf(goal$ === amount && debit >= amount && debit < amount * 2)
+    goalShort
+      ? 'unknown'
+      : answerOf(goal$ === amount && debit >= amount && debit < amount * 2),
+    goalShort
+      ? 'the goal credit is below the amount and no fee was read'
+      : undefined
   );
   return result;
 }

@@ -108,4 +108,23 @@ describe('S8 timeout on submit, then status check', () => {
     expect(posts(h)).toHaveLength(before);
     expect(answer(b.build(h.ctx), TIMEOUT_INDETERMINATE)).toBe('unknown');
   });
+
+  it('still counts a transfer booked once when the provider adds a fee', async () => {
+    const { result } = await run({ mock: { transferFeeKobo: 100 } });
+    expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('yes');
+  });
+
+  it('answers unknown, not no, when the slot was already booked in an earlier run', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const goal = h.state.goalWalletId as string;
+    await stepTimeoutRetry(h.ctx, new ProofBuilder('p10', 'S8'), main, goal);
+    const b = new ProofBuilder('p10', 'S8');
+    const before = posts(h).length;
+    await stepTimeoutRetry(h.ctx, b, main, goal);
+    expect(posts(h)).toHaveLength(before);
+    expect(answer(b.build(h.ctx), TIMEOUT_BOOKED_ONCE)).toBe('unknown');
+  });
 });

@@ -193,8 +193,6 @@ export function WalletContent(props: WalletContentProps) {
         }
       >
         <WalletHeroSection
-          activeSavingsGoal={activeSavingsGoal}
-          isRefetching={isRefetching}
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={
             createFundingAccountUnavailableMessage

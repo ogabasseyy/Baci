@@ -51,6 +51,11 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // A wallet's balance is above what we expect by exactly its open inflow
   // reviews: nothing is re-queued until those reviews are resolved.
   'PIGGYVEST_INFLOW_REVIEW_OPEN',
+  // A bank deposit arrived for a PiggyVest wallet that maps to no goal or
+  // wallet of ours. It is not credited and stays retryable; an operator
+  // finds out whose money it is. Goal account numbers are hidden in the app,
+  // so any such deposit is unexpected.
+  'PIGGYVEST_INFLOW_UNMAPPED',
   // Reserved for drift monitoring: the PiggyVest balance is below what our
   // records expect, so new spends are held. Not emitted yet.
   'PIGGYVEST_NEGATIVE_DRIFT',
@@ -97,6 +102,41 @@ function allowlistedDetail(
   if (typeof detail.attempts === 'number') safe.attempts = detail.attempts;
   if (detail.operationId) safe.operationId = clip(detail.operationId);
   return safe;
+}
+
+/**
+ * Writes the alert's console line (the primary log-drain page) and nothing
+ * else. Split from the PostHog send so a caller can remember "paged" as soon
+ * as the line is written, whatever PostHog does.
+ */
+export function logPiggyvestWebhookAlert(
+  code: PiggyvestWebhookAlertCode,
+  detail: PiggyvestWebhookAlertDetail = {}
+): void {
+  console.error(
+    `[PiggyVest Webhook][ALERT] ${code} ${JSON.stringify(allowlistedDetail(detail))}`
+  );
+}
+
+/**
+ * The PostHog half of the alert. Settles with whether the page was sent; it
+ * never rejects and is bounded by the send timeout.
+ */
+export async function sendPiggyvestWebhookAlertDelivered(
+  code: PiggyvestWebhookAlertCode,
+  detail: PiggyvestWebhookAlertDetail = {}
+): Promise<boolean> {
+  try {
+    // 'duplicate' means this page was already claimed and sent, so it is
+    // delivered; only 'failed' should be retried on redelivery.
+    const outcome = await sendPiggyvestMoneyAlert(
+      code,
+      allowlistedDetail(detail)
+    );
+    return outcome === 'sent' || outcome === 'duplicate';
+  } catch {
+    return false;
+  }
 }
 
 export function emitPiggyvestWebhookAlert(

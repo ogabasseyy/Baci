@@ -3,9 +3,9 @@ import {
   fetchExistingSavingsPlanFunding,
   fetchSavingsPlanFunding,
 } from '@/lib/customer-savings';
+import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import type { SavingsPlanFundingAccount } from '@/schemas/customer-savings';
 import { getErrorMessage } from './start-savings-controller.utils';
 
 export type SavingsPlanFundingPhase =
@@ -22,7 +22,27 @@ type UseSavingsPlanFundingInput = {
   goalId: string | null;
   identityKey?: string;
   loadExisting?: boolean;
+  // A never-started goal (404 SAVINGS_WALLET_NOT_FOUND) reads as 'pending'
+  // (still being set up), not as an error, for status-only callers.
+  notFoundMeansPending?: boolean;
 };
+
+function isWalletNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'SAVINGS_WALLET_NOT_FOUND'
+  );
+}
+
+// The status endpoint answers a never-started setup with a 404 code, which
+// the API client throws before the response is read as not_found.
+function planFundingErrorMessage(error: unknown): string {
+  if (isWalletNotFound(error)) {
+    return PLAN_NOT_SET_UP_MESSAGE;
+  }
+  return getErrorMessage(error, 'Unable to load the plan account.');
+}
 
 function isBvn(value: string): boolean {
   return /^\d{11}$/.test(value.trim());
@@ -34,9 +54,9 @@ export function useSavingsPlanFunding({
   goalId,
   identityKey,
   loadExisting = false,
+  notFoundMeansPending = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
-  const [accounts, setAccounts] = useState<SavingsPlanFundingAccount[]>([]);
   const [statusCode, setStatusCode] = useState<string | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
@@ -60,7 +80,6 @@ export function useSavingsPlanFunding({
     scopeKeyRef.current = scopeKey;
     requestGenerationRef.current += 1;
     setPhase('idle');
-    setAccounts([]);
     setStatusCode(null);
     setFundingError(null);
   }
@@ -73,8 +92,9 @@ export function useSavingsPlanFunding({
     response: Awaited<ReturnType<typeof fetchSavingsPlanFunding>>
   ) => {
     setStatusCode(response.code ?? null);
+    // Goal bank account numbers are deliberately never retained: only the
+    // readiness status is kept, so no UI can reveal one.
     if (response.status === 'ready') {
-      setAccounts(response.accounts ?? []);
       setPhase('ready');
     } else if (response.status === 'pending') {
       setPhase('pending');
@@ -88,7 +108,6 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
-    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({
@@ -100,9 +119,12 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      setFundingError(
-        getErrorMessage(error, 'Unable to load the plan account.')
-      );
+      if (notFoundMeansPending && isWalletNotFound(error)) {
+        setStatusCode(null);
+        setPhase('pending');
+        return;
+      }
+      setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
   };
@@ -127,7 +149,6 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
-    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchSavingsPlanFunding({
@@ -141,9 +162,7 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      setFundingError(
-        getErrorMessage(error, 'Unable to load the plan account.')
-      );
+      setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
   };
@@ -168,7 +187,6 @@ export function useSavingsPlanFunding({
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError,
-    planFundingAccounts: accounts,
     planFundingPhase: phase,
     planFundingStatusCode: statusCode,
     planFundingRequiresBvn,

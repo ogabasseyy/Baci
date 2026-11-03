@@ -65,3 +65,17 @@ it('releases the operation on authoritative not-found so the next tap re-submits
     expect.stringContaining('try again')
   );
 });
+it('keeps a primary operation when the merchant is reported not primary', async () => {
+  // The answer comes from runtime config, not the provider record, so a
+  // stale binding must never release an id the primary rail may hold.
+  const props = input();
+  mockCheck.mockRejectedValue(
+    Object.assign(new Error('np'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
+  );
+  await checkPendingPrimarySavings(props);
+  expect(props.clearOperation).not.toHaveBeenCalled();
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Status unavailable',
+    expect.any(String)
+  );
+});

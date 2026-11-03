@@ -113,12 +113,12 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
 
     render(<CategoryPage prioritizeFirstRowImages products={products} />);
 
-    expect(
-      screen.getByRole('button', { name: 'Grid view' })
-    ).toHaveAttribute('aria-pressed', 'true');
-    expect(
-      screen.getByRole('button', { name: 'List view' })
-    ).toHaveAttribute('aria-pressed', 'false');
+    const gridButton = screen.getByRole('button', { name: 'Grid view' });
+    const listButton = screen.getByRole('button', { name: 'List view' });
+    expect(gridButton).toHaveAttribute('aria-pressed', 'true');
+    expect(gridButton).toHaveClass('min-h-11', 'min-w-11');
+    expect(listButton).toHaveAttribute('aria-pressed', 'false');
+    expect(listButton).toHaveClass('min-h-11', 'min-w-11');
 
     expect(
       screen.getByRole('article', { name: 'Phone 1' })
@@ -134,7 +134,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     ).toHaveAttribute('data-image-priority', 'false');
   });
 
-  it('caps initial SSR markup at the mobile-safe 2 prioritized cards and keeps 2 on mobile viewports', () => {
+  it('prioritizes 3 cards in SSR markup for desktop preload discovery and demotes the 3rd card after mount on mobile viewports', () => {
     mockMatchMedia(false);
 
     const products = Array.from({ length: 4 }, (_, index) => ({
@@ -156,7 +156,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
       ssrDoc
         .querySelector('article[aria-label="Phone 3"]')
         ?.getAttribute('data-image-priority')
-    ).toBe('false');
+    ).toBe('true');
 
     render(<CategoryPage prioritizeFirstRowImages products={products} />);
 

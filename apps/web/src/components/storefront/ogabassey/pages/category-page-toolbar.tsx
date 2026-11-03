@@ -65,7 +65,7 @@ export function CategoryPageToolbar({
               aria-label="Grid view"
               aria-pressed={viewMode === 'grid'}
               onClick={() => onViewModeChange('grid')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-store-background-text/10 text-store-background-text shadow-sm' : 'text-store-background-text/60 hover:text-store-background-text/80'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-store-background-text/10 text-store-background-text shadow-sm' : 'text-store-background-text/60 hover:text-store-background-text/80'}`}
             >
               <LayoutGrid size={18} />
             </button>
@@ -74,7 +74,7 @@ export function CategoryPageToolbar({
               aria-label="List view"
               aria-pressed={viewMode === 'list'}
               onClick={() => onViewModeChange('list')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-store-background-text/10 text-store-background-text shadow-sm' : 'text-store-background-text/60 hover:text-store-background-text/80'}`}
+              className={`inline-flex min-h-11 min-w-11 items-center justify-center p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-store-background-text/10 text-store-background-text shadow-sm' : 'text-store-background-text/60 hover:text-store-background-text/80'}`}
             >
               <List size={18} />
             </button>

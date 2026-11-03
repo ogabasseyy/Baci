@@ -24,6 +24,17 @@ const noStore = { 'Cache-Control': 'no-store' };
 // and ack the valid event, and the quarantine stores only a digest, so
 // the provider would stop retrying and the deposit or payout could never
 // be replayed.
+// Kill-switch deferrals are tagged (side table, so the provider-facing
+// Response is unchanged) so the capture drain can settle a replayed one
+// without spending a processing attempt: a paused switch says nothing about
+// the row, and counting it toward MAX_DRAIN_ATTEMPTS would park a captured
+// deposit as needs_review.
+const killSwitchDeferrals = new WeakSet<Response>();
+
+export function isKillSwitchDeferral(response: Response): boolean {
+  return killSwitchDeferrals.has(response);
+}
+
 function retryable(code: string, error: string): Response {
   return NextResponse.json(
     { received: false, code, error },
@@ -68,11 +79,14 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
   if (
     isPiggyvestKilled(process.env) &&
     isMoneyInDelivery(input.event.eventType, input.families)
-  )
-    return retryable(
+  ) {
+    const deferred = retryable(
       'PIGGYVEST_KILL_SWITCH_ACTIVE',
       'PiggyVest intake paused; delivery will be retried'
     );
+    killSwitchDeferrals.add(deferred);
+    return deferred;
+  }
   if (input.event.eventType === 'wallet-transfer.outflow.success') {
     if (input.families.includes('custody')) {
       const custody = await dispatchPrimaryCardSignedCustodyIntake({

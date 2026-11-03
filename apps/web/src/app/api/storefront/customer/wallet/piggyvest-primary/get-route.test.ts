@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   runtime: vi.fn(),
   drain: vi.fn(),
   killed: vi.fn(),
+  flagSet: vi.fn(),
   identity: vi.fn(),
   wallet: vi.fn(),
   accounts: vi.fn(),
@@ -28,6 +29,9 @@ vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
 }));
 vi.mock('@/lib/piggyvest/piggyvest-kill-switch', () => ({
   isPiggyvestKilled: mocks.killed,
+}));
+vi.mock('@/lib/piggyvest/piggyvest-feature-on', () => ({
+  isPiggyvestFeatureFlagSet: mocks.flagSet,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
@@ -96,6 +100,7 @@ beforeEach(() => {
   mocks.statements.length = 0;
   mocks.review.mockResolvedValue(null);
   mocks.killed.mockReturnValue(false);
+  mocks.flagSet.mockReturnValue(true);
   mocks.drain.mockReturnValue(null);
   mocks.auth.mockResolvedValue({
     user: { id: 'f4f01e61-691f-494a-a895-872f17f8e55e' },
@@ -222,6 +227,19 @@ describe('primary wallet GET under the master kill switch', () => {
     expect(mocks.statements).not.toContain(
       PRIMARY_WALLET_STATEMENTS.resolveRouting
     );
+  });
+  it('does not serve the wallet view for a feature that is explicitly off, even when killed', async () => {
+    const runtime = mocks.runtime();
+    mocks.killed.mockReturnValue(true);
+    mocks.flagSet.mockReturnValue(false);
+    mocks.runtime.mockReturnValue(null);
+    mocks.drain.mockReturnValue(runtime);
+    mocks.wallet.mockResolvedValue(wallet(null));
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('PIGGYVEST_NOT_READY');
+    expect(mocks.flagSet).toHaveBeenCalledWith('wallet');
+    expect(mocks.statements).toEqual([]);
   });
   it('still answers not ready when the kill switch is off and the runtime is off', async () => {
     mocks.runtime.mockReturnValue(null);

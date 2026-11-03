@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { isPiggyvestFeatureFlagSet } from '@/lib/piggyvest/piggyvest-feature-on';
 import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
@@ -47,7 +48,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const killed = isPiggyvestKilled();
     const runtime =
       readPrimaryWalletRuntime() ??
-      (killed ? readPrimaryWalletRuntimeDrain() : null);
+      (killed && isPiggyvestFeatureFlagSet('wallet')
+        ? readPrimaryWalletRuntimeDrain()
+        : null);
     if (!runtime || runtime.onboarding.merchantId !== parsed.data.merchantId) {
       return NextResponse.json(
         {

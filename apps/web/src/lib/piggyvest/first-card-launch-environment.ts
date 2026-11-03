@@ -1,7 +1,6 @@
 import { firstCardLaunchAuthSchema } from '@/schemas/first-card-launch-auth';
 import { hostedFirstCardEnvironmentSchema } from '@/schemas/hosted-first-card-environment';
 import { prefundedCardKnownDeadlineSchema } from '@/schemas/prefunded-card-known-deadline';
-import { isPiggyvestKilled } from './piggyvest-kill-switch';
 
 export function createFirstCardLaunchEnvironment(
   configuration: unknown,
@@ -15,7 +14,6 @@ export function createFirstCardLaunchEnvironment(
   try {
     if (typeof mutationsEnabled !== 'boolean') throw new Error();
     const auth = firstCardLaunchAuthSchema.parse(publicAuth);
-    const killed = isPiggyvestKilled({ PIGGYVEST_KILL_SWITCH: killSwitch });
     const environment: Record<string, string> = {
       NODE_ENV: 'production',
       BACI_WORKER_PROFILE: 'hosted-first-card-checkout',
@@ -27,9 +25,10 @@ export function createFirstCardLaunchEnvironment(
       NEXT_PUBLIC_APP_URL: 'https://staging.ogabassey.com',
       NEXT_PUBLIC_SUPABASE_ANON_KEY: auth.key,
       PREFUNDED_CARD_CHECKOUT_PUBLIC_ENABLED: 'true',
-      PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED: String(
-        mutationsEnabled && !killed
-      ),
+      // The owner's flag is preserved even when killed: the copied kill switch
+      // refuses new checkouts in the worker, while this flag keeps refresh of
+      // an already-paid checkout available.
+      PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED: String(mutationsEnabled),
       PREFUNDED_CARD_CHECKOUT_PUBLIC_CONFIG: JSON.stringify(configuration),
       PREFUNDED_CARD_PUBLIC_ENABLED: 'false',
     };

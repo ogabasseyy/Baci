@@ -1577,16 +1577,26 @@ const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
   'playstation 5': 'ps5',
   'ps5 pro': 'ps5',
   'playstation 5 pro': 'ps5',
+  'ps5 slim': 'ps5',
+  'playstation 5 slim': 'ps5',
   ps4: 'ps4',
   'playstation 4': 'ps4',
+  'ps4 pro': 'ps4',
+  'playstation 4 pro': 'ps4',
+  'ps4 slim': 'ps4',
+  'playstation 4 slim': 'ps4',
   ps3: 'ps3',
   'playstation 3': 'ps3',
+  'ps vita': 'ps-vita',
+  'playstation vita': 'ps-vita',
   xbox: 'xbox',
+  'xbox 360': 'xbox-360',
   'xbox one': 'xbox-one',
   'xbox one x': 'xbox-one',
   'xbox one s': 'xbox-one',
-  'xbox series x': 'xbox-series-x',
-  'xbox series s': 'xbox-series-s',
+  'xbox series x': 'xbox-series',
+  'xbox series s': 'xbox-series',
+  'xbox series': 'xbox-series',
   switch: 'switch',
   'nintendo switch': 'switch',
   'switch oled': 'switch',
@@ -1595,6 +1605,12 @@ const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
   'nintendo switch lite': 'switch',
   'switch 2': 'switch-2',
   'nintendo switch 2': 'switch-2',
+  'wii u': 'wii-u',
+  'nintendo wii u': 'wii-u',
+  wii: 'wii',
+  'nintendo wii': 'wii',
+  '3ds': '3ds',
+  'nintendo 3ds': '3ds',
   pc: 'pc',
   windows: 'pc',
   steam: 'pc',
@@ -1628,16 +1644,17 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
+    /(?:(?:\s*[-–—,:;|/&]+\s*)+)?\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*)?\s*\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
     (
       match,
-      innerBeforePunct?: string,
+      innerBeforePunctOrEnd?: string,
       innerBeforeNext?: string,
       innerNext?: string,
       innerOther?: string,
       offset?: number
     ) => {
-      const inner = innerBeforePunct ?? innerBeforeNext ?? innerOther ?? '';
+      const inner =
+        innerBeforePunctOrEnd ?? innerBeforeNext ?? innerOther ?? '';
       if (!isRedundantPlatformListParenthetical(inner)) {
         return match;
       }
@@ -1654,7 +1671,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       ) {
         strippedAtEnd = true;
       }
-      if (innerBeforePunct !== undefined) {
+      if (innerBeforePunctOrEnd !== undefined) {
         return '';
       }
       if (innerBeforeNext !== undefined) {
@@ -1667,8 +1684,6 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   if (!stripped) {
     return title;
   }
-
-  compacted = compacted.replace(/(?:\s*[-–—,:;|/&]+\s*)+(?=[,:;.!?])/gu, '');
 
   if (strippedAtStart) {
     compacted = compacted.replace(/^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+)+/u, '');

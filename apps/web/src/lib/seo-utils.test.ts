@@ -1816,16 +1816,33 @@ describe('generateMetaTitle', () => {
       expect(isRedundantPlatformListParenthetical('Switch Lite, PS5')).toBe(
         true
       );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Slim, Xbox Series X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox 360, PS3')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS Vita, Nintendo Switch')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Wii U, Nintendo Switch')
+      ).toBe(true);
     });
 
     it('returns false for single-platform parentheticals', () => {
       expect(isRedundantPlatformListParenthetical('PS5')).toBe(false);
       expect(isRedundantPlatformListParenthetical('PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Slim')).toBe(false);
       expect(isRedundantPlatformListParenthetical('PlayStation 5 Pro')).toBe(
         false
       );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4 Slim')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Steam Deck')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Xbox One X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox 360')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS Vita')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wii U')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Nintendo Switch')).toBe(
         false
       );
@@ -1838,6 +1855,7 @@ describe('generateMetaTitle', () => {
         false
       );
       expect(isRedundantPlatformListParenthetical('Xbox Series X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series S')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Xbox Series X|S')).toBe(
         false
       );
@@ -1851,6 +1869,11 @@ describe('generateMetaTitle', () => {
         false
       );
       expect(isRedundantPlatformListParenthetical('PS5, PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4, PS4 Pro')).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox Series X, Xbox Series S')
+      ).toBe(false);
       expect(
         isRedundantPlatformListParenthetical('Nintendo Switch, Switch OLED')
       ).toBe(false);
@@ -2093,6 +2116,25 @@ describe('generateMetaTitle', () => {
           'Deal  of the Day (PS5, PS4) Sale  Now'
         )
       ).toBe('Deal  of the Day Sale  Now');
+    });
+
+    it('localizes orphan separator cleanup to the removed parenthetical boundary without touching distant punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All'
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
+
+      expect(
+        stripRedundantPlatformParentheticals('Game (PS5, PS4) Finals - : Sale')
+      ).toBe('Game Finals - : Sale');
+
+      expect(
+        generateMetaTitle(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All',
+          { maxLength: 45 }
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
     });
   });
 });

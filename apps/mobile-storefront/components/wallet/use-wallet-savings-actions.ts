@@ -125,7 +125,14 @@ export function createWalletSavingsActions({
       activeMerchantSlug,
       addSavingsContribution:
         rail === 'primary'
-          ? addPiggyvestPrimarySavingsContribution
+          ? (input) =>
+              addPiggyvestPrimarySavingsContribution({
+                ...input,
+                // A fallback sends the id on legacy, so retries must follow it.
+                onRail: (sentOn) => {
+                  operationRailRef.current = sentOn;
+                },
+              })
           : addSavingsContribution,
       cancelSavingsReminder: cancelSavingsReminderNotification,
       clearIdempotencyKey: releaseOperation,

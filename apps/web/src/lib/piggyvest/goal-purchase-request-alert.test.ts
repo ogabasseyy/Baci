@@ -125,3 +125,23 @@ it('refuses an unexpected database answer without alerting', async () => {
   );
   expect(alerts.log).not.toHaveBeenCalled();
 });
+
+it('waits for the best-effort PostHog page before returning', async () => {
+  execute
+    .mockResolvedValueOnce(pendingRow)
+    .mockResolvedValueOnce({ rows: [{ result: true }] });
+  let settled = false;
+  alerts.send.mockImplementation(
+    () =>
+      new Promise<boolean>((resolve) => {
+        setImmediate(() => {
+          settled = true;
+          resolve(true);
+        });
+      })
+  );
+  expect(await alertGoalPurchaseRequest({ configuration, operationId })).toBe(
+    'alerted'
+  );
+  expect(settled).toBe(true);
+});

@@ -1,8 +1,8 @@
 -- REGRESSION TEST (behaviour): eligibility, server-issued operation id, PIN
 -- binding and reservation for goal complete
--- (migration 20261103154500_piggyvest_goal_complete_purchase_request).
+-- (migration 20261103181737_piggyvest_goal_complete_purchase_request).
 -- Fixture and helpers live in the included part; registered in the replay
--- registry folder 20261103154500_piggyvest_goal_complete_purchase_request.
+-- registry folder 20261103181737_piggyvest_goal_complete_purchase_request.
 \set ON_ERROR_STOP on
 \ir piggyvest_goal_complete_behaviour.fixture.inc.sql
 

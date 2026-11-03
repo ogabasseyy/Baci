@@ -49,10 +49,14 @@ export async function alertGoalPurchaseRequest(input: {
       operationId,
     });
     await execute(sql.markPurchaseAlerted, parameters);
-    // Extra channel only; its outcome never changes the answer.
-    sendPiggyvestWebhookAlertDelivered('PIGGYVEST_GOAL_PURCHASE_REQUEST', {
-      operationId,
-    }).catch(() => undefined);
+    // Extra channel only; its outcome never changes the answer. It is awaited
+    // so a serverless runtime cannot freeze before the request is sent.
+    await sendPiggyvestWebhookAlertDelivered(
+      'PIGGYVEST_GOAL_PURCHASE_REQUEST',
+      {
+        operationId,
+      }
+    ).catch(() => undefined);
     return 'alerted';
   } catch {
     return 'pending';

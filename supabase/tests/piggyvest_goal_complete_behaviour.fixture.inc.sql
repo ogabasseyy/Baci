@@ -1,5 +1,5 @@
 -- Shared fixture for the goal complete behaviour suites (migration
--- 20261103154500_piggyvest_goal_complete_purchase_request). Included with \ir by each
+-- 20261103181737_piggyvest_goal_complete_purchase_request). Included with \ir by each
 -- piggyvest_goal_complete_*.sql suite, never run on its own: it opens the
 -- transaction the including suite rolls back.
 --

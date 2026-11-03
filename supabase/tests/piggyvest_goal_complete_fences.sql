@@ -1,9 +1,9 @@
 -- REGRESSION TEST (behaviour): a goal is fenced against funding, redemption,
 -- deletion and a competing cancel while a complete is in flight, and the
 -- mixed-goal refusal
--- (migration 20261103154500_piggyvest_goal_complete_purchase_request).
+-- (migration 20261103181737_piggyvest_goal_complete_purchase_request).
 -- Registered in the replay registry folder
--- 20261103154500_piggyvest_goal_complete_purchase_request.
+-- 20261103181737_piggyvest_goal_complete_purchase_request.
 \set ON_ERROR_STOP on
 \ir piggyvest_goal_complete_behaviour.fixture.inc.sql
 

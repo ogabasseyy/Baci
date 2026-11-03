@@ -1,9 +1,9 @@
 -- REGRESSION TEST: privileges and shape of the goal complete objects
--- (migration 20261103154500_piggyvest_goal_complete_purchase_request).
+-- (migration 20261103181737_piggyvest_goal_complete_purchase_request).
 --
 -- Catalog checks only, never call-and-catch (a denied EXECUTE cannot be
 -- trapped on the replay image). Registered in the replay registry folder
--- 20261103154500_piggyvest_goal_complete_purchase_request.
+-- 20261103181737_piggyvest_goal_complete_purchase_request.
 
 BEGIN;
 

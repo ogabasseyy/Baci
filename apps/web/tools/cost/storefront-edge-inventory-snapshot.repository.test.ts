@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'ad4fc5bf6016620c7ba4018ec3ae526ea1cd8b0a59a5afc956c3862042d2fe75',
+      'abcb36603aaba771e46f1851811460e2f647f1619f2f794470cee73924887f25',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 612,
+    rowCount: 613,
   });
 });
 
@@ -92,6 +92,23 @@ it('keeps the savings PIN verification endpoint on the dynamic origin', async ()
     expect.objectContaining({
       sourcePath:
         'apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
+});
+
+it('keeps the savings goal completion endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  expect(inventory.rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts',
       decision: 'origin_dynamic',
     })
   );

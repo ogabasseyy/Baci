@@ -38,7 +38,10 @@ export async function issueOxygenPhoneHandoff(
     current.state.bookingReference
   )
     throw new Error('Unavailable');
+  const secret = process.env.OXYGEN_HANDOFF_ISSUER_SECRET ?? '';
+  if (!/^[a-f0-9]{64}$/i.test(secret)) throw new Error('Unavailable');
   const ready = await fetchImpl('http://127.0.0.1:3456/ready', {
+    headers: { 'x-oxygen-handoff-secret': secret },
     cache: 'no-store',
     signal: AbortSignal.timeout(3000),
   });
@@ -72,7 +75,10 @@ export async function issueOxygenPhoneHandoff(
   const expires = Math.min(expiresAt(url), Date.now() / 1000 + 300);
   const response = await fetchImpl('http://127.0.0.1:3456/issue', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-oxygen-handoff-secret': secret,
+    },
     body: JSON.stringify({ url, expires }),
     signal: AbortSignal.timeout(5000),
     cache: 'no-store',

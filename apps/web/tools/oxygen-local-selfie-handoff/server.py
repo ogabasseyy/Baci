@@ -1,5 +1,5 @@
 """Temporary staging-only phone bridge. No storefront proxy or durable identity storage."""
-import base64,hashlib,io,json,os,secrets,threading,time
+import base64,hashlib,hmac,io,json,os,re,secrets,threading,time
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -8,6 +8,8 @@ from qrcode.image.pure import PyPNGImage
 
 HOST='staging.d1l1k5yxed9cvn.amplifyapp.com'
 ORIGIN_FILE=Path(os.environ['OXYGEN_HANDOFF_ORIGIN_FILE'])
+ALLOWED_ORIGIN=os.environ.get('OXYGEN_HANDOFF_ALLOWED_ORIGIN','')
+ISSUER_SECRET=os.environ.get('OXYGEN_HANDOFF_ISSUER_SECRET','')
 entries={}
 lock=threading.Lock()
 SCRIPT="""let token=location.hash.slice(1);history.replaceState(null,'','/selfie');const note=document.querySelector('#note');async function open(){try{if(!/^[A-Za-z0-9_-]{43}$/.test(token))throw Error();const r=await fetch('/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});token='';if(!r.ok)throw Error();const data=await r.json();const target=new URL(data.url);if(target.protocol!=='https:'||target.hostname!=='staging.d1l1k5yxed9cvn.amplifyapp.com')throw Error();location.replace(target.href)}catch{document.querySelector('.spinner').hidden=true;note.textContent='This QR has expired or was already opened. Please refresh it on your laptop and scan again.'}}open();"""
@@ -22,7 +24,8 @@ def issue(url,expires):
  now=time.time();expires=min(float(expires),now+300)
  if expires<now+20:raise ValueError('Expired handoff')
  origin=ORIGIN_FILE.read_text().strip()
- if not origin.startswith('https://') or not urlparse(origin).hostname.endswith('.trycloudflare.com'):raise ValueError('Unavailable origin')
+ p=urlparse(origin)
+ if not ALLOWED_ORIGIN or origin!=ALLOWED_ORIGIN or p.scheme!='https' or not p.hostname or not p.hostname.endswith('.trycloudflare.com') or p.netloc!=p.hostname or p.path or p.params or p.query or p.fragment:raise ValueError('Unavailable origin')
  token=secrets.token_urlsafe(32)
  with lock:
   for key in list(entries):
@@ -54,11 +57,16 @@ class Handler(BaseHTTPRequestHandler):
   digest=base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()
   self.send_header('Content-Security-Policy',f"default-src 'none'; script-src 'sha256-{digest}'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
   self.end_headers();self.wfile.write(body)
+ def authorized(self):
+  given=self.headers.get('x-oxygen-handoff-secret','')
+  return bool(re.fullmatch(r'[0-9a-fA-F]{64}',ISSUER_SECRET)) and hmac.compare_digest(given,ISSUER_SECRET)
  def do_GET(self):
+  if self.internal and not self.authorized():return self.reply(403,{'error':'Unavailable'})
   if not self.internal and self.path=='/selfie':return self.reply(200,HTML,True)
   if self.internal and self.path=='/ready':return self.reply(200,{'ready':ORIGIN_FILE.exists()})
   self.reply(404,{'error':'Not found'})
  def do_POST(self):
+  if self.internal and not self.authorized():return self.reply(403,{'error':'Unavailable'})
   if self.path!=('/issue' if self.internal else '/exchange'):return self.reply(404,{'error':'Not found'})
   try:
    size=int(self.headers.get('Content-Length','0'))

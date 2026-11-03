@@ -32,6 +32,7 @@ const call = vi.fn();
 const fetchMock = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('OXYGEN_HANDOFF_ISSUER_SECRET', 'a'.repeat(64));
   m.read.mockResolvedValue(saved);
   m.rpc.mockResolvedValue(saved);
   worker.mockResolvedValue(user);
@@ -106,4 +107,28 @@ it('rejects a mismatched application before requesting or exposing a link', asyn
   ).rejects.toThrow();
   expect(call).not.toHaveBeenCalled();
   expect(fetchMock).toHaveBeenCalledOnce();
+});
+
+it('sends the issuer secret to both loopback endpoints', async () => {
+  await issueOxygenPhoneHandoff(
+    user,
+    worker,
+    { call },
+    'partner',
+    id,
+    fetchMock
+  );
+  for (const [, options] of fetchMock.mock.calls) {
+    expect(new Headers(options.headers).get('x-oxygen-handoff-secret')).toBe(
+      'a'.repeat(64)
+    );
+  }
+});
+it('fails closed before contacting the bridge when the secret is missing', async () => {
+  vi.stubEnv('OXYGEN_HANDOFF_ISSUER_SECRET', '');
+  await expect(
+    issueOxygenPhoneHandoff(user, worker, { call }, 'partner', id, fetchMock)
+  ).rejects.toThrow();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(call).not.toHaveBeenCalled();
 });

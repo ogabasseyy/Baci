@@ -6,6 +6,10 @@ import { PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES } from '@/schemas/piggyv
 // Every enable flag must be read through isPiggyvestFeatureOn so the master
 // kill switch cannot be bypassed. The scan is recursive over the whole web
 // source tree and scripts, and it also rejects flag names built at runtime.
+// This sweep is an early warning, not the guarantee: the runtime gate and the
+// behaviour tests run with PIGGYVEST_KILL_SWITCH=true are the real protection.
+// Accepted limitation: further regex-shape evasions (aliases, env objects held
+// under other names) are not detected here.
 const webRoot = join(__dirname, '..', '..', '..');
 const repoRoot = join(webRoot, '..', '..');
 // Launch tooling that materializes an environment for a child process lives

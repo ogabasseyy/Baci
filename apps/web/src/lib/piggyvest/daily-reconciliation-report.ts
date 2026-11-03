@@ -70,7 +70,12 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
       'Treat today as unchecked until it is run again.',
     ];
   } else {
-    headline = report.status === 'clean' ? 'all clear' : 'NEEDS ATTENTION';
+    const aboveRecord = report.balances.some(
+      (balance) => balance.kind === 'above_expected'
+    );
+    if (report.status === 'attention') headline = 'NEEDS ATTENTION';
+    else if (aboveRecord) headline = 'REVIEW balances above record';
+    else headline = 'all clear';
     lines = [
       report.stuckTotal === 0
         ? `Nothing is stuck (transfers still reserved or sent after ${Math.floor(report.staleAfterSeconds / 60)} minutes).`

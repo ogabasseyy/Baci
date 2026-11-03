@@ -6,14 +6,20 @@ anything is wrong. It resends, settles and releases nothing.
 ## What it checks
 
 1. **Stuck transfers.** Every savings transfer still `reserved` or `dispatched`
-   longer than 30 minutes. Each dispatched one is looked up at PiggyVest with
+   longer than 30 minutes, counted from when the money was reserved (a re-drive
+   does not restart the clock). Each dispatched one is looked up at PiggyVest with
    the existing transfer status reader (the same reference, amount and wallet
    binding as the settlement path; a 404 is never read as "absent"). The report
    shows what PiggyVest says: completed, pending, failed, not listed, or
    unconfirmed.
 2. **Balances.** For every goal wallet we confirmed principal into, the balance
    at PiggyVest against the principal we recorded. Less at PiggyVest pages. More
-   is listed for review but does not page, because interest accrues there.
+   is listed for review and the email subject says REVIEW instead of all clear,
+   but it does not page, because interest accrues there.
+
+   The database snapshot is read first and the PiggyVest balances afterwards, so
+   they can differ by a few minutes. A provider-side debit in that window could
+   look like a shortfall; check a flagged wallet again before acting.
 3. **Could not run.** A missing configuration, an unreadable database answer,
    or a balance that cannot be read pages. A run is never reported clean unless
    it completed.

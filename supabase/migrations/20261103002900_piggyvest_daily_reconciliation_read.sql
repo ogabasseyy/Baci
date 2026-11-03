@@ -38,6 +38,9 @@ BEGIN
   -- The clock is read only after the lock above is held, so a wait for it
   -- cannot make a fresh transfer look stale or a stale one look fresh.
   as_of:=pg_catalog.clock_timestamp();
+  -- Age counts from created_at (when the money was reserved), never from
+  -- dispatched_at: the reclaim path refreshes that on every re-drive, which
+  -- would keep a long-stuck transfer looking young.
   -- Each list and its total come from one statement, so they share a snapshot.
   SELECT COALESCE(max(item.total),0)::integer,COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'operationId',item.id,'goalId',item.goal_id,'state',item.state,'amountKobo',item.amount_kobo,
@@ -46,12 +49,12 @@ BEGIN
     INTO stuck_total,stuck FROM (
     SELECT operation.id,operation.goal_id,operation.state,operation.amount_kobo,operation.source_wallet_id,
       operation.destination_wallet_id,operation.reference,
-      pg_catalog.floor(pg_catalog.date_part('epoch',as_of-COALESCE(operation.dispatched_at,operation.created_at)))::bigint AS age,
+      pg_catalog.floor(pg_catalog.date_part('epoch',as_of-operation.created_at))::bigint AS age,
       count(*) OVER () AS total
     FROM piggyvest_primary.savings_operations operation
     WHERE operation.integration_id=read_daily_reconciliation.integration_id
       AND operation.state IN ('reserved','dispatched')
-      AND COALESCE(operation.dispatched_at,operation.created_at)<=as_of-pg_catalog.make_interval(secs=>stale_seconds)
+      AND operation.created_at<=as_of-pg_catalog.make_interval(secs=>stale_seconds)
     ORDER BY age DESC,operation.id LIMIT 200) item;
   SELECT COALESCE(max(item.total),0)::integer,COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'walletId',item.wallet_id,'expectedKobo',item.expected_kobo) ORDER BY item.wallet_id),'[]'::jsonb)

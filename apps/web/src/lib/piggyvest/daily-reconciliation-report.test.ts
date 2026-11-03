@@ -80,6 +80,25 @@ describe('renderReconciliationEmail', () => {
     expect(email.text).toContain('goal-a');
   });
 
+  it('never says all clear when a wallet holds more than recorded', () => {
+    const email = renderReconciliationEmail({
+      ...clean,
+      balances: [
+        {
+          walletId: 'goal-a',
+          expectedKobo: 150000,
+          providerKobo: 200000,
+          differenceKobo: 50000,
+          kind: 'above_expected',
+        },
+      ],
+    });
+    expect(email.subject).toBe(
+      'PiggyVest daily reconciliation: REVIEW balances above record (2026-11-03)'
+    );
+    expect(email.text).not.toContain('all clear');
+  });
+
   it('flags attention with stuck transfers and the balance differences', () => {
     const email = renderReconciliationEmail(attention);
     expect(email.subject).toBe(

@@ -66,7 +66,9 @@ FROM (VALUES
   ('f3820000-0000-4000-8000-0000000000a3', 700, 'synthetic-goal-b', 'recon-stale-dispatched', 'dispatched', interval '2 hours', now() - interval '1 hour'),
   ('f3820000-0000-4000-8000-0000000000a4', 300, 'synthetic-goal-b', 'recon-fresh-dispatched', 'dispatched', interval '1 minute', now() - interval '1 minute'),
   ('f3820000-0000-4000-8000-0000000000a5', 200, 'synthetic-goal-b', 'recon-stale-reserved', 'reserved', interval '5 hours', NULL::timestamptz),
-  ('f3820000-0000-4000-8000-0000000000a6', 100, 'synthetic-goal-c', 'recon-cancelled', 'cancelled', interval '9 hours', NULL::timestamptz)
+  ('f3820000-0000-4000-8000-0000000000a6', 100, 'synthetic-goal-c', 'recon-cancelled', 'cancelled', interval '9 hours', NULL::timestamptz),
+  -- Re-driven: dispatch time refreshed a minute ago, but reserved 3 days ago.
+  ('f3820000-0000-4000-8000-0000000000a7', 400, 'synthetic-goal-b', 'recon-redriven-dispatched', 'dispatched', interval '3 days', now() - interval '1 minute')
 ) AS v(id, amount, destination, reference, state, age, dispatched);
 
 DO $read$
@@ -79,14 +81,15 @@ BEGIN
     FROM piggyvest_primary.savings_operations;
   snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
   IF snapshot->>'businessId' IS DISTINCT FROM 'synthetic-recon-business'
-    OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 2
+    OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 3
     OR (snapshot->>'walletsTotal')::int IS DISTINCT FROM 1
     OR (snapshot->>'staleAfterSeconds')::int IS DISTINCT FROM 900 THEN
     RAISE EXCEPTION 'Unexpected reconciliation header: %', snapshot;
   END IF;
-  -- Oldest first: the reserved row (5 hours) before the dispatched one (1 hour).
+  -- Oldest first, aged from when the money was reserved: the re-driven row
+  -- (3 days, dispatch refreshed a minute ago) leads, then 5 hours, then 2 hours.
   IF (SELECT array_agg(item->>'reference') FROM jsonb_array_elements(snapshot->'stuck') item)
-    IS DISTINCT FROM ARRAY['recon-stale-reserved','recon-stale-dispatched'] THEN
+    IS DISTINCT FROM ARRAY['recon-redriven-dispatched','recon-stale-reserved','recon-stale-dispatched'] THEN
     RAISE EXCEPTION 'Wrong stuck list: %', snapshot->'stuck';
   END IF;
   IF snapshot->'wallets' IS DISTINCT FROM
@@ -97,9 +100,10 @@ BEGIN
       FROM piggyvest_primary.savings_operations) IS DISTINCT FROM before_states THEN
     RAISE EXCEPTION 'Reconciliation read changed savings operations';
   END IF;
-  -- A one-day cutoff lists nothing stale; the fresh transfer never appears.
+  -- A one-day cutoff lists only the 3-day-old re-driven transfer; the fresh one never appears.
   snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":86400}');
-  IF snapshot->'stuck' IS DISTINCT FROM '[]'::jsonb OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 0 THEN
+  IF (SELECT array_agg(item->>'reference') FROM jsonb_array_elements(snapshot->'stuck') item)
+    IS DISTINCT FROM ARRAY['recon-redriven-dispatched'] OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'One-day cutoff listed transfers: %', snapshot;
   END IF;
 END;

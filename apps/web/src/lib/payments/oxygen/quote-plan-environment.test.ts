@@ -54,7 +54,7 @@ it('does not construct a worker when durable enqueue rejects changed booking ter
       return { data: { plans: [], selectedReference: null }, error: null };
     if (args.p_operation === 'status') return { data: snapshot, error: null };
     // Database contract: this key already belongs to different booking terms.
-    return { data: null, error: { message: 'Idempotency conflict' } };
+    return { data: null, error: { code: '22023' } };
   });
   const worker = vi.fn();
   const call = vi.fn();

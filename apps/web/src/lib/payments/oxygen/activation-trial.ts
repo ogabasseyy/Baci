@@ -118,15 +118,7 @@ export async function runOxygenActivationTrial(
       },
     });
     if (!isJson) throw new Error('Invalid response');
-    if (!response.ok) {
-      if (
-        operation === 'activate' &&
-        response.status >= 400 &&
-        response.status < 500
-      )
-        mutationSent = false;
-      throw new Error('Provider rejected request');
-    }
+    if (!response.ok) throw new Error('Provider rejected request');
     return parsed;
   }
   try {

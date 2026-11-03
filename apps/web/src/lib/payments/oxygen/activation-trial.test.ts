@@ -87,7 +87,7 @@ it.each([
         status:
           mode === 'activated'
             ? 'activated'
-            : ['timeout', 'malformed'].includes(mode)
+            : ['timeout', 'malformed', 'rejected'].includes(mode)
               ? 'indeterminate'
               : 'rejected',
       }),
@@ -235,6 +235,40 @@ it('retains bounded payment and activation evidence without storing arbitrary pr
     expect.objectContaining({
       p_operation: 'finish',
       p_payload: expect.objectContaining({ status: 'activated' }),
+    })
+  );
+});
+
+it.each([
+  400, 409, 429, 500,
+])('retains indeterminate status after a sent activation returns HTTP %i', async (status) => {
+  const rpc = vi.fn().mockImplementation(async (_name, args) => ({
+    error: null,
+    data: args.p_operation === 'claim' ? { reference: trialReference } : {},
+  }));
+  const request = vi.fn(async (operation: string) =>
+    operation === 'payment'
+      ? Response.json({
+          split_payment: { completed: true },
+          repayment_setup: { completed: true },
+        })
+      : Response.json({ message: 'unconfirmed' }, { status })
+  );
+  await runOxygenActivationTrial(
+    { rpc },
+    { rpc },
+    request,
+    'a'.repeat(64),
+    trialReference
+  );
+  expect(
+    request.mock.calls.filter(([operation]) => operation === 'activate')
+  ).toHaveLength(1);
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_activation_trial',
+    expect.objectContaining({
+      p_operation: 'finish',
+      p_payload: expect.objectContaining({ status: 'indeterminate' }),
     })
   );
 });

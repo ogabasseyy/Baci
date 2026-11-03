@@ -73,6 +73,7 @@ export async function performOxygenPaymentRecovery(
   if (claimed === null)
     return readOxygenPaymentRecovery(user, request.workflowId, hosts);
   let sent = false;
+  let result: Record<string, unknown>;
   try {
     const context = z
       .object({
@@ -103,7 +104,6 @@ export async function performOxygenPaymentRecovery(
     const raw = await provider.call(operation, {
       loan_reference: context.reference,
     });
-    let result: Record<string, unknown>;
     if (request.action === 'check_status') {
       const checked = z
         .object({
@@ -125,11 +125,6 @@ export async function performOxygenPaymentRecovery(
           ? { paymentUrl: link }
           : { setupUrl: link };
     }
-    await rpc(worker, 'finish', request.workflowId, {
-      commandId: queued.commandId,
-      outcome: 'succeeded',
-      result,
-    });
   } catch (error) {
     const outcome =
       request.action === 'check_status' ||
@@ -151,5 +146,14 @@ export async function performOxygenPaymentRecovery(
       'Payment recovery could not be confirmed. Check for an update before retrying.'
     );
   }
+  // A lost finish response may conceal a committed success. Do not record a
+  // second, conflicting outcome or replay an uncertain provider mutation.
+  z.object({ recorded: z.literal(true) }).parse(
+    await rpc(worker, 'finish', request.workflowId, {
+      commandId: queued.commandId,
+      outcome: 'succeeded',
+      result,
+    })
+  );
   return readOxygenPaymentRecovery(user, request.workflowId, hosts);
 }

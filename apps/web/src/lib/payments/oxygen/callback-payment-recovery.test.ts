@@ -165,3 +165,63 @@ it('rejects a succeeded response with missing authoritative flags without replay
   ).rejects.toThrow();
   expect(call).not.toHaveBeenCalled();
 });
+
+it.each([
+  'error-response',
+  'lost-response',
+  'missing-ack',
+] as const)('does not write a failed outcome when the successful finish has an uncertain %s', async (failure) => {
+  let stored = false;
+  const finishes: unknown[] = [];
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    if (name === 'oxygen_callback_payment')
+      return {
+        error: null,
+        data: {
+          commandId: command,
+          reference,
+          environment: 'staging',
+          status: stored ? 'succeeded' : 'queued',
+          result: stored
+            ? { paymentComplete: true, setupComplete: true }
+            : null,
+        },
+      };
+    if (args.p_operation === 'claim')
+      return {
+        error: null,
+        data: { reference, action: 'check_status', environment: 'staging' },
+      };
+    finishes.push(args.p_payload);
+    if (failure === 'lost-response') {
+      stored = true;
+      throw new Error('response lost after commit');
+    }
+    if (failure === 'missing-ack') return { error: null, data: null };
+    return { error: { code: 'connection_failure' }, data: null };
+  });
+  const call = vi.fn().mockResolvedValue({
+    split_payment: { completed: true },
+    repayment_setup: { completed: true },
+  });
+  const run = () =>
+    reconcileOxygenCallbackPayment(
+      { rpc },
+      () => ({ call, environment: 'staging' }),
+      workflow,
+      command,
+      reference
+    );
+  await expect(run()).rejects.toThrow();
+  expect(finishes).toEqual([
+    {
+      commandId: command,
+      outcome: 'succeeded',
+      result: { paymentComplete: true, setupComplete: true },
+    },
+  ]);
+  if (failure === 'lost-response') {
+    await expect(run()).resolves.toBe(true);
+    expect(call).toHaveBeenCalledTimes(1);
+  }
+});

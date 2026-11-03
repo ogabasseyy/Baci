@@ -50,6 +50,7 @@ export async function reconcileOxygenCallbackPayment(
   }
   const claimed = await rpc('claim', {});
   if (claimed === null) throw new Error('Callback payment pending');
+  let result: { paymentComplete: boolean; setupComplete: boolean };
   try {
     const context = z
       .object({
@@ -74,14 +75,10 @@ export async function reconcileOxygenCallbackPayment(
         repayment_setup: z.object({ completed: z.boolean() }),
       })
       .parse(raw);
-    await rpc('finish', {
-      outcome: 'succeeded',
-      result: {
-        paymentComplete: status.split_payment.completed,
-        setupComplete: status.repayment_setup.completed,
-      },
-    });
-    return status.split_payment.completed && status.repayment_setup.completed;
+    result = {
+      paymentComplete: status.split_payment.completed,
+      setupComplete: status.repayment_setup.completed,
+    };
   } catch (error) {
     await rpc('finish', {
       outcome: 'failed',
@@ -93,4 +90,10 @@ export async function reconcileOxygenCallbackPayment(
     });
     throw new Error('Callback payment unconfirmed');
   }
+  // A failed response from finish does not establish whether it committed.
+  // Never overwrite a potentially successful recording with a failed outcome.
+  z.object({ recorded: z.literal(true) }).parse(
+    await rpc('finish', { outcome: 'succeeded', result })
+  );
+  return result.paymentComplete && result.setupComplete;
 }

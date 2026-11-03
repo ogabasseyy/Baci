@@ -151,7 +151,7 @@ export async function stepDoubleTap(
   main: string,
   goal: string,
   fund: FundGoalResult | null
-): Promise<void> {
+): Promise<boolean> {
   const { api, qa } = ctx;
   if (
     !fund?.sendAccepted ||
@@ -160,10 +160,8 @@ export async function stepDoubleTap(
   ) {
     // The wire repeat is only meaningful against a settled original: a still
     // pending one would settle later and look like a second debit.
-    return unknownTap(
-      b,
-      'no settled, accepted goal funding to tap a second time'
-    );
+    unknownTap(b, 'no settled, accepted goal funding to tap a second time');
+    return true; // nothing was sent, so nothing is outstanding
   }
   const reference = fund.reference;
 
@@ -283,4 +281,8 @@ export async function stepDoubleTap(
         ? 'the repeat was accepted or its outcome is indeterminate and no second record or debit appeared, but its settlement or deduplication cannot be established from the original status'
         : 'the record list or the balances did not settle, so no count is published'
   );
+  // Is every balance movement of the repeat reconciled? A rejected repeat
+  // with settled balances, or an accepted one whose debit was seen to land.
+  // An accepted repeat with no debit seen may still land later.
+  return extraDebit !== null && (!accepted || extraDebit !== 0);
 }

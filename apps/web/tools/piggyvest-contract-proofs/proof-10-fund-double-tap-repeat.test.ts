@@ -98,6 +98,20 @@ describe('S8 double tap', () => {
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
   });
 
+  it('reports an unreconciled accepted repeat as not settled', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { duplicateReference: 'accept', tsqPendingPolls: 3 },
+      maxPolls: 6,
+    });
+    h.mock.sandbox.options.balanceLagReads = 8;
+    expect(await stepDoubleTap(h.ctx, b, main, goal, fund)).toBe(false);
+  });
+
+  it('reports a rejected repeat with settled balances as settled', async () => {
+    const { h, b, main, goal, fund } = await setup();
+    expect(await stepDoubleTap(h.ctx, b, main, goal, fund)).toBe(true);
+  });
+
   it('stays unknown, not no, when main is credited during the repeat window', async () => {
     const { h, b, main, goal, fund } = await setup();
     h.mock.sandbox.wallet(main)!.balance += 500;

@@ -93,10 +93,11 @@ export async function runProof10(ctx: ProofContext): Promise<ProofResult> {
 
   await stepDeposit(ctx, b, main);
   const fund = await stepFundGoal(ctx, b, main, goal);
-  await stepDoubleTap(ctx, b, main, goal, fund);
+  const tapSettled = await stepDoubleTap(ctx, b, main, goal, fund);
   // An unsettled funding can still move the wallets this step measures.
   const earlierSettled =
-    fund === null || (fund.terminalSuccess && fund.mainDeltaKobo !== null);
+    tapSettled &&
+    (fund === null || (fund.terminalSuccess && fund.mainDeltaKobo !== null));
   await stepTimeoutRetry(ctx, b, main, goal, earlierSettled);
   return b.build(ctx);
 }

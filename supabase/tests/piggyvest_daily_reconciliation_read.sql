@@ -51,6 +51,18 @@ INSERT INTO public.customer_wallet_transactions (
 ) VALUES ('f3820000-0000-4000-8000-000000000009', 'f3820000-0000-4000-8000-000000000008',
   'f3820000-0000-4000-8000-000000000003', 'f3820000-0000-4000-8000-000000000002',
   'adjustment', 10, 10, 'completed');
+-- One pending transfer per goal: a unique index allows a single reserved or
+-- dispatched transfer per intent and goal, so each pending row gets its own goal.
+INSERT INTO public.customer_savings_goals (
+  id, merchant_id, customer_id, product_id, title, target_amount, current_amount,
+  contribution_amount, contribution_frequency, start_date, maturity_date, source_mode,
+  terms_accepted_at, non_withdrawable_accepted_at
+)
+SELECT g.id::uuid, 'f3820000-0000-4000-8000-000000000002', 'f3820000-0000-4000-8000-000000000003',
+  'f3820000-0000-4000-8000-000000000004', 'Synthetic reconciliation goal ' || g.id, 10000, 0, 1000,
+  'daily', current_date, current_date + 30, 'manual', now(), now()
+FROM (VALUES ('f3820000-0000-4000-8000-0000000000b4'), ('f3820000-0000-4000-8000-0000000000b5'),
+  ('f3820000-0000-4000-8000-0000000000b7')) AS g(id);
 -- Two confirmed (one wallet), one stale dispatched, one fresh dispatched, one
 -- stale reserved, one cancelled.
 INSERT INTO piggyvest_primary.savings_operations (
@@ -58,18 +70,18 @@ INSERT INTO piggyvest_primary.savings_operations (
   destination_wallet_id, reference, state, wallet_transaction_id, created_at, dispatched_at
 )
 SELECT v.id::uuid, 'f3820000-0000-4000-8000-000000000006', 'f3820000-0000-4000-8000-000000000007',
-  'f3820000-0000-4000-8000-000000000005', v.amount, 'synthetic-main-wallet', v.destination,
+  v.goal::uuid, v.amount, 'synthetic-main-wallet', v.destination,
   v.reference, v.state, 'f3820000-0000-4000-8000-000000000009', now() - v.age, v.dispatched
 FROM (VALUES
-  ('f3820000-0000-4000-8000-0000000000a1', 1000, 'synthetic-goal-a', 'recon-confirmed-1', 'confirmed', interval '3 days', now() - interval '3 days'),
-  ('f3820000-0000-4000-8000-0000000000a2', 500, 'synthetic-goal-a', 'recon-confirmed-2', 'confirmed', interval '2 days', NULL::timestamptz),
-  ('f3820000-0000-4000-8000-0000000000a3', 700, 'synthetic-goal-b', 'recon-stale-dispatched', 'dispatched', interval '2 hours', now() - interval '1 hour'),
-  ('f3820000-0000-4000-8000-0000000000a4', 300, 'synthetic-goal-b', 'recon-fresh-dispatched', 'dispatched', interval '1 minute', now() - interval '1 minute'),
-  ('f3820000-0000-4000-8000-0000000000a5', 200, 'synthetic-goal-b', 'recon-stale-reserved', 'reserved', interval '5 hours', NULL::timestamptz),
-  ('f3820000-0000-4000-8000-0000000000a6', 100, 'synthetic-goal-c', 'recon-cancelled', 'cancelled', interval '9 hours', NULL::timestamptz),
+  ('f3820000-0000-4000-8000-0000000000a1', 'f3820000-0000-4000-8000-000000000005', 1000, 'synthetic-goal-a', 'recon-confirmed-1', 'confirmed', interval '3 days', now() - interval '3 days'),
+  ('f3820000-0000-4000-8000-0000000000a2', 'f3820000-0000-4000-8000-000000000005', 500, 'synthetic-goal-a', 'recon-confirmed-2', 'confirmed', interval '2 days', NULL::timestamptz),
+  ('f3820000-0000-4000-8000-0000000000a3', 'f3820000-0000-4000-8000-000000000005', 700, 'synthetic-goal-b', 'recon-stale-dispatched', 'dispatched', interval '2 hours', now() - interval '1 hour'),
+  ('f3820000-0000-4000-8000-0000000000a4', 'f3820000-0000-4000-8000-0000000000b4', 300, 'synthetic-goal-b', 'recon-fresh-dispatched', 'dispatched', interval '1 minute', now() - interval '1 minute'),
+  ('f3820000-0000-4000-8000-0000000000a5', 'f3820000-0000-4000-8000-0000000000b5', 200, 'synthetic-goal-b', 'recon-stale-reserved', 'reserved', interval '5 hours', NULL::timestamptz),
+  ('f3820000-0000-4000-8000-0000000000a6', 'f3820000-0000-4000-8000-000000000005', 100, 'synthetic-goal-c', 'recon-cancelled', 'cancelled', interval '9 hours', NULL::timestamptz),
   -- Re-driven: dispatch time refreshed a minute ago, but reserved 3 days ago.
-  ('f3820000-0000-4000-8000-0000000000a7', 400, 'synthetic-goal-b', 'recon-redriven-dispatched', 'dispatched', interval '3 days', now() - interval '1 minute')
-) AS v(id, amount, destination, reference, state, age, dispatched);
+  ('f3820000-0000-4000-8000-0000000000a7', 'f3820000-0000-4000-8000-0000000000b7', 400, 'synthetic-goal-b', 'recon-redriven-dispatched', 'dispatched', interval '3 days', now() - interval '1 minute')
+) AS v(id, goal, amount, destination, reference, state, age, dispatched);
 
 DO $read$
 DECLARE

@@ -20,9 +20,19 @@ anything is wrong. It resends, settles and releases nothing.
    The database snapshot is read first and the PiggyVest balances afterwards, so
    they can differ by a few minutes. A provider-side debit in that window could
    look like a shortfall; check a flagged wallet again before acting.
+
+   The same skew applies to the stuck list: it is the state at snapshot time. A
+   transfer may have settled or been released since, so the email says "at
+   snapshot time" and the local record should be checked before acting on a
+   "needs settling" or "needs releasing" line.
 3. **Could not run.** A missing configuration, an unreadable database answer,
    or a balance that cannot be read pages. A run is never reported clean unless
    it completed.
+
+4. **Too slow.** The route has 300 seconds. Provider reads stop starting after
+   200 seconds; anything not yet read is reported as unchecked (a transfer as
+   unconfirmed, a balance as unreadable) and the email says time ran out. The
+   report and page therefore always go out, even when PiggyVest hangs.
 
 The page is the existing `piggyvest_money_alert` event with code
 `PIGGYVEST_RECONCILIATION_MISMATCH` (see `piggyvest-money-alerts.md`). It also
@@ -43,5 +53,5 @@ transfer. Set values by REST upsert, not a pipe.
 ## Running it
 
 Route: `GET /api/cron/piggyvest-daily-reconciliation` with the cron secret.
-The VPS crontab entry (through `vps-workers/jobs/run-web-cron.mjs`) is an owner
-step and is deliberately not added by this change. Until then nothing calls it.
+The runner `vps-workers/jobs/run-web-cron.mjs` accepts this path. The VPS
+crontab entry itself is an owner step and is deliberately not added by this change. Until then nothing calls it.

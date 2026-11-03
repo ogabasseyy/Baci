@@ -158,4 +158,11 @@ describe('pageReasonOf', () => {
       })
     ).toBe('reconciliation_failed:snapshot_invalid');
   });
+  it('says so when the read budget ran out', () => {
+    const cutOff = { ...attention, deadlineReached: true as const };
+    expect(pageReasonOf(cutOff)).toBe(
+      'stuck=1 below_expected=1 unreadable=1 truncated=no deadline=reached'
+    );
+    expect(renderReconciliationEmail(cutOff).text).toContain('NOT checked');
+  });
 });

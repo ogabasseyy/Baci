@@ -55,6 +55,7 @@ function makeDeps(overrides: Partial<DailyReconciliationDeps> = {}) {
     sendEmail: vi.fn(async () => ({ success: true })),
     emitAlert: vi.fn(),
     now: () => '2026-11-03T00:30:00.000Z',
+    nowMs: () => 0,
     ...overrides,
   };
   return { deps, execute };
@@ -367,5 +368,36 @@ describe('runPiggyvestDailyReconciliation', () => {
     await runPiggyvestDailyReconciliation({ env, deps });
     const sent = JSON.stringify(vi.mocked(deps.sendEmail).mock.calls);
     expect(sent).not.toContain(runtime.providerToken);
+  });
+  it('still emails and pages when a slow PiggyVest uses up the read budget', async () => {
+    let ms = 0;
+    const wallets = Array.from({ length: 50 }, (_, i) => ({
+      walletId: `goal-${i}`,
+      expectedKobo: 100,
+    }));
+    const { deps, execute } = makeDeps({
+      nowMs: () => ms,
+      retrieveWallet: vi.fn(async (_c: unknown, id: string) => {
+        ms += 30_000;
+        return { id, business_id: 'synthetic-business', balance: 100 };
+      }) as never,
+    });
+    execute.mockResolvedValue({
+      rows: [{ result: snapshot({ wallets, walletsTotal: 50 }) }],
+    });
+    const result = await runPiggyvestDailyReconciliation({ env, deps });
+    // Each batch of five costs 150s of the 200s budget: two batches start.
+    expect(deps.retrieveWallet).toHaveBeenCalledTimes(10);
+    expect(result).toEqual({
+      status: 'reported',
+      report: 'attention',
+      emailed: true,
+      paged: true,
+    });
+    expect(deps.sendEmail).toHaveBeenCalledTimes(1);
+    expect(deps.emitAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_RECONCILIATION_MISMATCH',
+      { reason: expect.stringContaining('deadline=reached') }
+    );
   });
 });

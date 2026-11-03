@@ -25,6 +25,12 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * the savings flags are off (a rollback cannot hide a stuck transfer).
  */
 export const RECONCILIATION_STALE_AFTER_SECONDS = 1800;
+/**
+ * Provider reads stop starting after this long. The route allows 300 seconds;
+ * the slowest read already running (30 seconds) plus the email and page must
+ * still fit, so reads get 200.
+ */
+export const RECONCILIATION_READ_BUDGET_MS = 200_000;
 
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
@@ -48,6 +54,7 @@ export interface DailyReconciliationDeps {
     detail: { reason: string }
   ) => void;
   now: () => string;
+  nowMs: () => number;
 }
 
 function defaultDeps(): DailyReconciliationDeps {
@@ -59,6 +66,7 @@ function defaultDeps(): DailyReconciliationDeps {
     sendEmail: sendReconciliationEmail,
     emitAlert: emitPiggyvestWebhookAlert,
     now: () => new Date().toISOString(),
+    nowMs: () => Date.now(),
   };
 }
 
@@ -155,7 +163,12 @@ export async function runPiggyvestDailyReconciliation(
   } else {
     try {
       const ports = buildPorts(runtime, deps);
-      report = await runDailyReconciliation({ ...ports, now: deps.now });
+      report = await runDailyReconciliation({
+        ...ports,
+        now: deps.now,
+        nowMs: deps.nowMs,
+        deadlineMs: deps.nowMs() + RECONCILIATION_READ_BUDGET_MS,
+      });
     } catch {
       // Building the provider and database handles failed: not runnable.
       report = {

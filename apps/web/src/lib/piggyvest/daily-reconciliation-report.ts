@@ -25,9 +25,11 @@ const READING_TEXT: Record<StuckFinding['reading'], string> = {
   not_dispatched: 'reserved but never sent to PiggyVest',
 };
 
+// The transfer list is read from our records at snapshot time and PiggyVest
+// minutes later, so a transfer may have settled or been released in between.
 function stuckLine(item: StuckFinding): string {
   const minutes = Math.floor(item.ageSeconds / 60);
-  return `- ${item.reference}: ${formatKobo(item.amountKobo)}, ${item.state} for ${minutes} minutes. ${READING_TEXT[item.reading]}.`;
+  return `- ${item.reference}: ${formatKobo(item.amountKobo)}, ${item.state} at snapshot time, for ${minutes} minutes. ${READING_TEXT[item.reading]}.`;
 }
 
 function balanceLine(item: BalanceFinding): string {
@@ -82,6 +84,11 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
         '',
         'The lists above are cut short; there are more rows than were checked.'
       );
+    if (report.deadlineReached)
+      lines.push(
+        '',
+        'PiggyVest was too slow: the time allowed for reads ran out, so some transfers and balances below were NOT checked.'
+      );
     lines.push(
       '',
       'This report only reads. Nothing was resent, settled or released.'
@@ -103,5 +110,6 @@ export function pageReasonOf(report: ReconciliationReport): string | null {
   const count = (kind: BalanceFinding['kind']) =>
     report.balances.filter((balance) => balance.kind === kind).length;
   const truncated = report.truncated.stuck || report.truncated.wallets;
-  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}`;
+  const deadline = report.deadlineReached ? ' deadline=reached' : '';
+  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${deadline}`;
 }

@@ -32,7 +32,8 @@ export type AttentionReason =
   | 'stuck_transfers'
   | 'balance_below_expected'
   | 'balance_unreadable'
-  | 'list_truncated';
+  | 'list_truncated'
+  | 'read_deadline_reached';
 
 export interface StuckFinding {
   operationId: string;
@@ -66,6 +67,8 @@ export type ReconciliationReport =
       walletsTotal: number;
       balances: BalanceFinding[];
       truncated: { stuck: boolean; wallets: boolean };
+      /** Set when provider reads were cut off to leave time to report. */
+      deadlineReached?: true;
       reasons: AttentionReason[];
     };
 
@@ -80,22 +83,83 @@ export interface ReconciliationPorts {
   readWalletBalance: (walletId: string) => Promise<number>;
   /** Used only to stamp a failed report, which has no database time. */
   now: () => string;
+  /**
+   * Optional read budget. Once `nowMs()` reaches `deadlineMs`, no new provider
+   * read starts: unstarted transfer lookups read as uncertain and unstarted
+   * balances as unreadable, so the report (and page) still goes out in time.
+   */
+  nowMs?: () => number;
+  deadlineMs?: number;
 }
 
 const MAX_CONCURRENT_READS = 5;
 
+interface Budget {
+  expired: () => boolean;
+  hit: boolean;
+}
+
+function budgetOf(ports: ReconciliationPorts): Budget {
+  const { nowMs, deadlineMs } = ports;
+  const budget: Budget = {
+    hit: false,
+    expired: () => {
+      if (nowMs && deadlineMs !== undefined && nowMs() >= deadlineMs)
+        budget.hit = true;
+      return budget.hit;
+    },
+  };
+  return budget;
+}
+
+/**
+ * Runs `run` in small batches. Once the budget is spent a batch is not
+ * started; its items get `skipped` instead, so no read is left in flight past
+ * the deadline except the batch already running.
+ */
 async function mapLimited<T, R>(
   items: readonly T[],
-  run: (item: T) => Promise<R>
+  budget: Budget,
+  run: (item: T) => Promise<R>,
+  skipped: (item: T) => R
 ): Promise<R[]> {
   const results: R[] = [];
-  for (let start = 0; start < items.length; start += MAX_CONCURRENT_READS)
-    results.push(
-      ...(await Promise.all(
-        items.slice(start, start + MAX_CONCURRENT_READS).map(run)
-      ))
-    );
+  for (let start = 0; start < items.length; start += MAX_CONCURRENT_READS) {
+    const batch = items.slice(start, start + MAX_CONCURRENT_READS);
+    if (budget.expired()) {
+      results.push(...batch.map(skipped));
+      continue;
+    }
+    results.push(...(await Promise.all(batch.map(run))));
+  }
   return results;
+}
+
+function unreadableBalance(wallet: {
+  walletId: string;
+  expectedKobo: number;
+}): BalanceFinding {
+  return {
+    walletId: wallet.walletId,
+    expectedKobo: wallet.expectedKobo,
+    providerKobo: null,
+    differenceKobo: null,
+    kind: 'unreadable',
+  };
+}
+
+function stuckFinding(
+  transfer: ReturnType<typeof schemas.stuckTransfer.parse>,
+  reading: TransferReading
+): StuckFinding {
+  return {
+    operationId: transfer.operationId,
+    reference: transfer.reference,
+    state: transfer.state,
+    amountKobo: transfer.amountKobo,
+    ageSeconds: transfer.ageSeconds,
+    reading,
+  };
 }
 
 async function readBalance(
@@ -113,13 +177,7 @@ async function readBalance(
     !Number.isSafeInteger(providerKobo) ||
     providerKobo < 0
   )
-    return {
-      walletId: wallet.walletId,
-      expectedKobo: wallet.expectedKobo,
-      providerKobo: null,
-      differenceKobo: null,
-      kind: 'unreadable',
-    };
+    return unreadableBalance(wallet);
   const differenceKobo = providerKobo - wallet.expectedKobo;
   let kind: BalanceKind = 'match';
   if (differenceKobo < 0) kind = 'below_expected';
@@ -147,14 +205,7 @@ async function readStuck(
       reading = 'uncertain';
     }
   }
-  return {
-    operationId: transfer.operationId,
-    reference: transfer.reference,
-    state: transfer.state,
-    amountKobo: transfer.amountKobo,
-    ageSeconds: transfer.ageSeconds,
-    reading,
-  };
+  return stuckFinding(transfer, reading);
 }
 
 export async function runDailyReconciliation(
@@ -178,11 +229,18 @@ export async function runDailyReconciliation(
       generatedAt: ports.now(),
     };
   const snapshot = parsed.data;
-  const stuck = await mapLimited(snapshot.stuck, (transfer) =>
-    readStuck(ports, snapshot.businessId, transfer)
+  const budget = budgetOf(ports);
+  const stuck = await mapLimited(
+    snapshot.stuck,
+    budget,
+    (transfer) => readStuck(ports, snapshot.businessId, transfer),
+    (transfer) => stuckFinding(transfer, 'uncertain')
   );
-  const balances = await mapLimited(snapshot.wallets, (wallet) =>
-    readBalance(ports, wallet)
+  const balances = await mapLimited(
+    snapshot.wallets,
+    budget,
+    (wallet) => readBalance(ports, wallet),
+    unreadableBalance
   );
   const truncated = {
     stuck: snapshot.stuckTotal > snapshot.stuck.length,
@@ -196,6 +254,7 @@ export async function runDailyReconciliation(
   if (balances.some((balance) => balance.kind === 'unreadable'))
     reasons.push('balance_unreadable');
   if (truncated.stuck || truncated.wallets) reasons.push('list_truncated');
+  if (budget.hit) reasons.push('read_deadline_reached');
   return {
     status: reasons.length > 0 ? 'attention' : 'clean',
     generatedAt: snapshot.generatedAt,
@@ -205,6 +264,7 @@ export async function runDailyReconciliation(
     walletsTotal: snapshot.walletsTotal,
     balances,
     truncated,
+    ...(budget.hit ? { deadlineReached: true as const } : {}),
     reasons,
   };
 }

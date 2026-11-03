@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "886050d3aa3d17192e5935f0e1c001f7bc31502e",
+  "originMainSha": "21d8853c509c9bde42f75db7702ac08d1d6040e9",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "fad195bb51648f240ddfb2341645b380d23241d30ac86aa870d06cfb0ae41c31",
-  "routingProxyInputSha256": "c5435651c3b07ae8a865dbfc11e3a9650d868bd77a3bf8054a2b7560daf45cea",
+  "routeTreeSha256": "60460b43717d9ca41ecbb7bd84def176e813b898545c69e0fadafe4ab560e13b",
+  "routingProxyInputSha256": "9228aa290d72ff39163e2121b588eb213405257e632b7e010f0efbc2417bfb58",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1143,6 +1143,19 @@
       "routePattern": "/api/storefront/customer/savings/funding",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/funding/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-cancel/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8660,5 +8673,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "e7b5a1e122adefbeb41bb3372ccf81784c22c042e93967d57bdd8a1bde467fc0"
+  "inventorySha256": "f576fdf2bc366d88e29862295a08934b446b8db93ea8340eec3fefe3c2f6d3cf"
 }

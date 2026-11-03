@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 
 const mocks = vi.hoisted(() => ({
@@ -149,4 +150,55 @@ it('never runs a financial statement after an unsafe session check', async () =>
     ])
   ).rejects.toThrow('database unavailable');
   expect(mocks.query).toHaveBeenCalledTimes(1);
+});
+it('admits the goal cancel read, settlement and release statements only', async () => {
+  mocks.query.mockReset();
+  const verify = {
+    rows: [
+      {
+        database_name: 'postgres',
+        login_name: config.database.login,
+        role_name: config.database.login,
+        safe: true,
+        tls: true,
+      },
+    ],
+  };
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  for (const [text, selection] of [
+    [GOAL_CANCEL_STATEMENTS.readDispatched, operationId],
+    [GOAL_CANCEL_STATEMENTS.findByReference, 'pvb-cancel-reference'],
+    [GOAL_CANCEL_STATEMENTS.settle, JSON.stringify({ operationId })],
+    [GOAL_CANCEL_STATEMENTS.release, JSON.stringify({ operationId })],
+  ] as const) {
+    mocks.query
+      .mockResolvedValueOnce(verify)
+      .mockResolvedValueOnce({ rows: [{ result: null }] });
+    await expect(
+      execute(text, [config.integrationId, 'staging', selection])
+    ).resolves.toEqual({ rows: [{ result: null }] });
+  }
+  // The attempt reads take an operation id, never free text.
+  await expect(
+    execute(GOAL_CANCEL_STATEMENTS.readDispatched, [
+      config.integrationId,
+      'staging',
+      'not-a-uuid',
+    ])
+  ).rejects.toThrow();
+  // The authorizer-side statements are not evidence statements.
+  await expect(
+    execute(GOAL_CANCEL_STATEMENTS.checkIssued, [
+      config.integrationId,
+      'staging',
+      operationId,
+    ])
+  ).rejects.toThrow();
+  await expect(
+    execute(GOAL_CANCEL_STATEMENTS.issue, [
+      config.integrationId,
+      'staging',
+      operationId,
+    ])
+  ).rejects.toThrow();
 });

@@ -1,7 +1,4 @@
-import {
-  CONTENT_CLUSTER_SCORE,
-  CONTENT_CLUSTER_SUPPORT,
-} from '@/config/storefront-content-clusters';
+import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
@@ -49,20 +46,16 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
     productSlugs: [input.currentProduct.slug],
   };
 
-  const priorityMinScore =
-    CONTENT_CLUSTER_SCORE.categoryMatch + CONTENT_CLUSTER_SCORE.brandMatch;
+  const priorityLinks = buildCommercialGuideLinks({
+    storeUrl: input.storeUrl,
+    posts: priorityGuidePosts,
+    context,
+  });
+  const fallbackLinks = buildCommercialGuideLinks({
+    storeUrl: input.storeUrl,
+    posts: fallbackGuidePosts,
+    context,
+  });
 
-  return dedupeGuideLinks([
-    ...buildCommercialGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: priorityGuidePosts,
-      context,
-      minScore: priorityMinScore,
-    }),
-    ...buildCommercialGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: fallbackGuidePosts,
-      context,
-    }),
-  ]).slice(0, 3);
+  return dedupeGuideLinks([...priorityLinks, ...fallbackLinks]).slice(0, 3);
 }

@@ -151,6 +151,7 @@ describe('runChatwootIsolationProbe', () => {
   it.each([
     'http://localhost:3000',
     'http://127.0.0.2:3000',
+    'http://127.0.0.1:3000/chatwoot',
     'http://user:pass@127.0.0.1:3000',
     'http://127.0.0.1:3000/?redirect=1',
     '',
@@ -231,8 +232,23 @@ describe('runChatwootIsolationProbe', () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
+  it('reports cross-token HTTP 200 as an adverse status without qualifying the provider', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200))
+      .mockResolvedValueOnce(response(200))
+      .mockResolvedValueOnce(response(200));
+
+    await expect(runChatwootIsolationProbe(input, fetcher)).resolves.toEqual({
+      decision: 'unqualified',
+      check: 'adverse-status',
+      outcome: 'cross-token-status-200-after-positive-controls',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
-    200, 301, 302, 429, 500,
+    301, 302, 429, 500,
   ])('keeps B detail status %s unknown', async (status) => {
     const fetcher = vi
       .fn<typeof fetch>()

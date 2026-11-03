@@ -17,7 +17,7 @@ Run from `apps/web` against an isolated local Chatwoot instance containing synth
 - `CHATWOOT_PROBE_ACCOUNT_A_TOKEN` and `CHATWOOT_PROBE_ACCOUNT_B_TOKEN` — distinct account tokens.
 - `CHATWOOT_PROBE_CONVERSATION_ID` — numeric conversation ID independently verified as belonging to A.
 
-Then run `pnpm exec tsx tools/messaging/chatwoot-compatibility-probe.ts`. The B list and A detail must each return HTTP 200 before a B cross-token detail status of HTTP 401, 403, or 404 is labeled `observed-status`; invalid positive controls, redirects, other statuses, and request errors remain unknown. The bounded output contains only that result label/outcome and always reports `decision: unqualified`. Exit code `0` means only that the three-response status pattern was observed; exit code `1` means unknown, invalid configuration, or request failure. Neither exit code establishes account identity/resource ownership or qualifies Chatwoot.
+Then run `pnpm exec tsx tools/messaging/chatwoot-compatibility-probe.ts`. The B list and A detail must each return HTTP 200 before a B cross-token detail status of HTTP 401, 403, or 404 is labeled `observed-status`. A cross-token detail HTTP 200 is labeled separately as `adverse-status`; it remains unqualified and returns a nonzero exit. Invalid positive controls, redirects, other statuses, and request errors remain unknown. The bounded output contains only the result label/outcome and always reports `decision: unqualified`. Exit code `0` means only that the three-response 401/403/404 status pattern was observed; exit code `1` means an adverse cross-token 200, unknown, invalid configuration, or request failure. Neither exit code establishes account identity/resource ownership or qualifies Chatwoot.
 
 The `observed-status` label describes only the observed HTTP status pattern after the two positive controls. A B-detail 401/403/404 can still reflect authorization details other than tenant isolation. The successful B list request is a limited positive control, not independent proof of B's real-world identity or role; the successful A detail likewise does not independently attest the fixture's ownership mapping. This result does **not** establish that B cannot read the resource or that all account resources are isolated. Independently attest fixture identities and resource ownership before interpreting it.
 
@@ -31,7 +31,17 @@ In a second synthetic run with the same image and digest, the two fully configur
 
 In that second run, two POSTs carrying the same `echo_id` but different content each returned **200**, and the database contained two messages. This shows `echo_id` alone did not enforce uniqueness/deduplication for those requests. It is **not** an identical-request replay test. Separately, a message accepted by Chatwoot had its HTTP response discarded locally; reconciliation then found one message in B's conversation. No lost-response retry was performed, so this does not prove retry safety or deduplication after ambiguous acceptance.
 
-Webhook receiver/DNS setup was unsuccessful. No webhook delivery was captured; there is no conclusion about webhook signing, delivery, or retry behavior. These observations do not prove full tenant isolation or qualify Chatwoot.
+An earlier webhook attempt had receiver/DNS setup problems. A later bounded run is recorded below; neither attempt qualifies Chatwoot or proves general webhook retry semantics.
+
+### Isolated synthetic webhook observation
+
+On 2026-11-03, the same isolated Chatwoot CE **v4.19.1** image manifest (`sha256:04895c7bd0550d9e74b45b7202787b56f7ee4e891ebbde0c429c8c32901b97cf`) was exercised over an internal-only Docker network. `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` was set only for the disposable fixture; it had no external egress. The worker resolved the receiver's name and its health check returned **200** before events were sent. The fixture and its data were cleaned up afterward.
+
+The run captured **2** account `message_created` callbacks and **6** API-inbox callbacks: 2 `conversation_created`, 2 `message_created`, and 2 `conversation_updated`. All eight raw bodies passed HMAC verification and included timestamps and delivery IDs; timestamp freshness was not assessed. A receiver self-test accepted a valid signature with **200** and rejected a mutated body with **401**; this tests receiver behavior only, not Chatwoot's signing or delivery behavior.
+
+For failure-path observations, a rerun created **two distinct message records**. The `/fail500` receiver captured 2 `message_created` callbacks. The `/timeout` receiver captured 4 callbacks: 2 `message_created` and 2 `message_updated` after the failed message status. Six unique delivery IDs were seen in these failure-path captures, with no repeated delivery ID captured over approximately 30 seconds. These counts are callback observations, not duplicate messages or redeliveries. The bounded window does not prove that Chatwoot never retries, and it does not establish single-event redelivery semantics. No general conclusion about retry behavior is supported.
+
+These observations do not prove full tenant isolation or qualify Chatwoot.
 
 ## Current evidence ledger
 
@@ -44,7 +54,8 @@ Webhook receiver/DNS setup was unsuccessful. No webhook delivery was captured; t
 | Sender attribution and message history | Unknown | Verify human/bot actor attribution and reconstructed history. |
 | Text, image, audio, and PDF behavior | Unknown | Exercise multipart and both-direction contracts with synthetic fixtures. |
 | Private media and revocation | Unknown | Test access without auth, deletion/revocation, Range requests, and redirect blocking through the gateway. |
-| Signed webhook delivery and recovery | Unknown | Receiver/DNS setup failed; no delivery was captured and no signature/retry behavior was assessed. Fix the isolated receiver setup and test signing, replay, interruption, and redelivery. |
+| Synthetic webhook callbacks and bounded failure paths (v4.19.1, 2026-11-03) | Observed: 8 normal callback bodies verified; 6 unique delivery IDs captured over ~30 seconds across failure paths | No general retry or redelivery conclusion. Extend duration, cover interrupted delivery/signature invalidity, and establish event identity/redelivery semantics. |
+| Signed webhook delivery and recovery | Unknown | Sender signing, outage recovery, and retry semantics remain unproven; test interruption, replay, and redelivery in the isolated fixture. |
 | Message acceptance ambiguity and replay | Unknown | One accepted message was reconciled after its response was discarded; no retry was attempted. Same-echo-ID requests had different content and created two rows. Test identical-payload replay after lost acknowledgement before drawing retry/deduplication conclusions. |
 | Accepted-but-lost resource creation recovery | Unknown | Verify safe lookup before retry; do not infer message correlation applies to resource creation. |
 | Rate limits and operational recovery | Unknown | Exercise bounded synthetic traffic and record recovery behavior. |

@@ -17,9 +17,10 @@ export interface ChatwootProbeInput {
 
 export type IsolationProbeReport = {
   decision: 'unqualified';
-  check: 'observed-status' | 'unknown';
+  check: 'observed-status' | 'adverse-status' | 'unknown';
   outcome:
     | 'positive-control-failed'
+    | 'cross-token-status-200-after-positive-controls'
     | 'cross-token-status-401-after-positive-controls'
     | 'cross-token-status-403-after-positive-controls'
     | 'cross-token-status-404-after-positive-controls'
@@ -59,6 +60,7 @@ function validateInput(input: ChatwootProbeInput): URL | undefined {
     (url.protocol !== 'http:' && url.protocol !== 'https:') ||
     url.username ||
     url.password ||
+    url.pathname !== '/' ||
     url.search ||
     url.hash
   )
@@ -143,6 +145,13 @@ export async function runChatwootIsolationProbe(
   }
 
   const statusB = await readStatus(resourceUrl, input.accountBToken, fetcher);
+  if (statusB === 200) {
+    return {
+      decision: 'unqualified',
+      check: 'adverse-status',
+      outcome: 'cross-token-status-200-after-positive-controls',
+    };
+  }
   if (statusB === 401 || statusB === 403 || statusB === 404) {
     return {
       decision: 'unqualified',

@@ -69,8 +69,12 @@ gateway-origin guard (`20260724140000`).
   movement**, mirroring the REDVAULT recorders. They fail closed for any other
   gateway, a missing/malformed subaccount code, a code that is not the
   merchant's registered subaccount, a REDVAULT order, an unknown order, or a
-  cancelled/refunded order. The GIGL variant records the retained delivery
-  fee and `retained_shipping_collected_by_split` (whether Paystack's verified
+  cancelled/refunded order. The row records what Paystack actually paid: the
+  verified `fees_split.subaccount` share is `net_amount`, and Baci's share is
+  the rest (so a bank-transfer DVA records ₦0 for Baci, and a checkout from
+  before the GIG-fee fix does not book the delivery fee as Baci's). The GIGL
+  variant also records the intended retention and
+  `retained_shipping_collected_by_split` (whether Paystack's verified
   `transaction_charge` actually covered it).
 - `20261103084502_paystack_direct_split_exposure.sql`:
   `private.merchant_wallet_direct_settled_exposure` and
@@ -94,8 +98,9 @@ No existing row is changed.
 ### Application
 
 - `classify-paystack-settlement-collection.ts`: reads Paystack's verified
-  payload. `subaccount.subaccount_code` present **and** a positive
-  `fees_split.subaccount` (the merchant's share) → `direct_split`;
+  payload. `subaccount.subaccount_code` present **and** a parseable
+  `fees_split.subaccount` (the merchant's share, which may be 0) →
+  `direct_split`;
   `subaccount` present but empty/null → `integration` (Baci-held); anything
   else (no `subaccount` key, or a named subaccount without a provable share)
   → `unknown`.

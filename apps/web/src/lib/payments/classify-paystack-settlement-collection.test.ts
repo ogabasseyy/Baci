@@ -41,6 +41,27 @@ describe('classifyPaystackSettlementCollection', () => {
     });
   });
 
+  it("accepts a proven zero merchant share when Baci's charge took the whole payment", () => {
+    // Checkout clamps fee + delivery to the payable amount, so the merchant
+    // share can legitimately be 0; it is still verified, so it must settle.
+    expect(
+      classifyPaystackSettlementCollection({
+        fees_split: {
+          integration: 480_000,
+          params: { transaction_charge: '500000' },
+          subaccount: 0,
+        },
+        subaccount: { subaccount_code: 'ACCT_x' },
+      })
+    ).toEqual({
+      integrationShareKobo: 480_000,
+      mode: 'direct_split',
+      subaccountCode: 'ACCT_x',
+      subaccountShareKobo: 0,
+      transactionChargeKobo: 500_000,
+    });
+  });
+
   it('fails closed to unknown when a named subaccount has no provable merchant share', () => {
     const base = { subaccount: { subaccount_code: 'ACCT_x' } };
 
@@ -49,7 +70,6 @@ describe('classifyPaystackSettlementCollection', () => {
       { ...base, fees_split: null },
       { ...base, fees_split: { integration: 5000 } },
       { ...base, fees_split: { subaccount: 'abc' } },
-      { ...base, fees_split: { subaccount: 0 } },
       { ...base, fees_split: { subaccount: Number.MAX_SAFE_INTEGER + 2 } },
     ]) {
       expect(classifyPaystackSettlementCollection(payload)).toEqual({

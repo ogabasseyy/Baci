@@ -61,12 +61,13 @@ export function classifyPaystackSettlementCollection(
   if (!subaccountCode) {
     return { mode: 'integration' };
   }
-  // A named subaccount is not enough: the history row claims the merchant's
-  // bank received money, so Paystack's split must show a positive merchant
-  // share. Without it the payload proves nothing either way.
+  // A named subaccount is not enough: the history row records what the
+  // merchant's bank received, so Paystack's split must state the merchant
+  // share. Zero is a valid, verified share (Baci's charge took the whole
+  // payment); a missing or malformed one proves nothing either way.
   const feesSplit = asRecord(payload.fees_split);
   const subaccountShareKobo = parseKobo(feesSplit?.subaccount);
-  if (subaccountShareKobo === null || subaccountShareKobo <= 0) {
+  if (subaccountShareKobo === null) {
     return { mode: 'unknown' };
   }
   const params = asRecord(feesSplit?.params);

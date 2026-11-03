@@ -23,6 +23,9 @@ SET search_path = ''
 AS $$
 DECLARE
   v_wallet_id uuid;
+  v_share_text text := p_metadata ->> 'paystack_subaccount_share_kobo';
+  v_net numeric(12,2);
+  v_platform numeric(12,2);
   v_settlement_id uuid;
   v_method text;
   v_shipping_status text;
@@ -48,6 +51,21 @@ BEGIN
      OR p_gateway_fee IS NULL OR p_gateway_fee < 0
      OR p_platform_fee > p_gross_amount THEN
     RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
+  END IF;
+  -- Record what Paystack actually paid the merchant. The verified
+  -- fees_split.subaccount share is the truth (a bank-transfer DVA gives Baci
+  -- nothing; a checkout from before the GIG-fee fix gave Baci only its fee).
+  -- Baci's share is the rest, since bearer 'account' takes Paystack's fee from
+  -- it. Without a verified share, fall back to gross minus Baci's charge.
+  IF v_share_text ~ '^[0-9]{1,15}$' THEN
+    v_net := v_share_text::numeric / 100;
+    IF v_net > p_gross_amount THEN
+      RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
+    END IF;
+    v_platform := p_gross_amount - v_net;
+  ELSE
+    v_net := p_gross_amount - p_platform_fee;
+    v_platform := p_platform_fee;
   END IF;
 
   SELECT o.payment_method, o.shipping_status, o.payment_status
@@ -85,10 +103,7 @@ BEGIN
     settlement_notified
   ) VALUES (
     p_merchant_id, v_wallet_id, p_source_type, p_source_id, p_gateway,
-    p_gateway_reference, p_gross_amount, p_gateway_fee, p_platform_fee,
-    -- Account-borne gateway fee: Paystack takes it from Baci's share, so the
-    -- subaccount receives gross minus Baci's transaction_charge.
-    p_gross_amount - p_platform_fee,
+    p_gateway_reference, p_gross_amount, p_gateway_fee, v_platform, v_net,
     pg_catalog.now(), pg_catalog.now()::date,
     'Settled to your bank by Paystack',
     'settled',
@@ -96,6 +111,7 @@ BEGIN
       'paystack_direct_split', true,
       'paystack_collection', 'direct_split',
       'paystack_subaccount_code', v_subaccount,
+      'requested_platform_fee', p_platform_fee,
       'source_description', p_description
     ),
     true

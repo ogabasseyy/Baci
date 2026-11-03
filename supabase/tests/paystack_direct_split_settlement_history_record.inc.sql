@@ -9,6 +9,7 @@ DECLARE
   v_id uuid;
   v_again uuid;
   v_row public.merchant_settlements;
+  v_caught text;
 BEGIN
   v_before := pg_temp.wallet();
   PERFORM pg_temp.seed_order(4, 250000);
@@ -48,6 +49,31 @@ BEGIN
   PERFORM pg_temp.check(
     public.get_merchant_wallet_spendable_balance(pg_temp.merchant()) = 0,
     'T4 direct-split history must not count as spendable');
+
+  -- A bank-transfer DVA split: Paystack paid the merchant everything, so the
+  -- verified share, not the requested platform fee, is what history records.
+  PERFORM pg_temp.seed_order(9, 80000);
+  v_id := public.record_paystack_direct_split_settlement(
+    pg_temp.merchant(), 'order', pg_temp.fid(2, 9), 'paystack', 'PDS-REF-9',
+    80000, 0, 1200, 'Order payment via paystack',
+    '{"paystack_subaccount_share_kobo":8000000,"paystack_integration_share_kobo":0}'::jsonb,
+    'ACCT_pdsfixture');
+  SELECT * INTO v_row FROM public.merchant_settlements WHERE id = v_id;
+  PERFORM pg_temp.check(v_row.net_amount = 80000 AND v_row.platform_fee = 0
+      AND (v_row.metadata ->> 'requested_platform_fee')::numeric = 1200,
+    'T4 history must record the verified merchant share');
+  v_caught := NULL;
+  BEGIN
+    PERFORM pg_temp.seed_order(10, 1000);
+    PERFORM public.record_paystack_direct_split_settlement(
+      pg_temp.merchant(), 'order', pg_temp.fid(2, 10), 'paystack', 'PDS-REF-10',
+      1000, 0, 0, 'Order payment via paystack',
+      '{"paystack_subaccount_share_kobo":100001}'::jsonb, 'ACCT_pdsfixture');
+  EXCEPTION WHEN OTHERS THEN
+    v_caught := SQLERRM;
+  END;
+  PERFORM pg_temp.check(v_caught = 'paystack_direct_settlement_amount_invalid',
+    'T4 a share above the gross must be refused, got: ' || COALESCE(v_caught, 'success'));
 END
 $t4$;
 
@@ -133,11 +159,13 @@ BEGIN
   v_unpaid := public.record_paystack_direct_split_settlement_gigl_v1(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 8), 'paystack', 'PDS-REF-8',
     54000, 900, 2050, 'Order payment via paystack',
-    '{"paystack_transaction_charge_kobo":"205000"}'::jsonb, 'ACCT_pdsfixture');
+    '{"paystack_transaction_charge_kobo":"205000","paystack_subaccount_share_kobo":"5195000"}'::jsonb,
+    'ACCT_pdsfixture');
   PERFORM pg_temp.check(
     (SELECT metadata ->> 'retained_shipping_collected_by_split' = 'false'
+        AND platform_fee = 2050 AND net_amount = 51950
        FROM public.merchant_settlements WHERE id = v_unpaid),
-    'T6 an uncollected delivery fee must be flagged');
+    'T6 an uncollected delivery fee must be flagged and not booked as Baci''s');
   PERFORM pg_temp.check(
     public.get_merchant_wallet_spendable_balance(pg_temp.merchant()) = 0,
     'T6 GIGL direct split must not create spendable balance');

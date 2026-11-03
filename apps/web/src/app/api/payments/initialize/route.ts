@@ -48,6 +48,7 @@ import {
   initializePayment as initializeKorapayPayment,
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { checkPaystackDvaShippingEligibility } from '@/lib/payments/check-paystack-dva-shipping-eligibility';
 import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
 import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
@@ -1694,37 +1695,22 @@ export async function POST(request: NextRequest) {
               );
             }
 
-            // Paystack DVA payments to a subaccount give Baci nothing, so a
-            // customer-paid GIG delivery fee cannot be retained: card only.
+            // A subaccount DVA gives Baci nothing, so an order that still
+            // owes Baci a GIG delivery fee must pay by card.
             const dvaAmountKobo = Math.round(paymentData.amount * 100);
-            let dvaRetainedShippingKobo: number;
-            try {
-              ({ retainedShippingKobo: dvaRetainedShippingKobo } =
-                await resolvePaystackSplitTransactionCharge({
-                  client: await createServerSupabaseClient(),
-                  customerEmail: paymentData.customer_email,
-                  orderId: paymentData.order_id,
-                  merchantId,
-                  amountKobo: dvaAmountKobo,
-                  platformFeeKobo:
-                    calculatePaystackFee(dvaAmountKobo).platformFee,
-                }));
-            } catch (retentionError) {
-              console.error(
-                'Paystack DVA retained shipping check failed:',
-                retentionError
-              );
+            const dvaEligibility = await checkPaystackDvaShippingEligibility({
+              amountKobo: dvaAmountKobo,
+              client: await createServerSupabaseClient(),
+              customerEmail: paymentData.customer_email,
+              merchantId,
+              orderId: paymentData.order_id,
+              platformFeeKobo: calculatePaystackFee(dvaAmountKobo).platformFee,
+            });
+            if (!dvaEligibility.ok) {
               return createErrorResponse(
-                'Bank transfer is temporarily unavailable. Please pay by card.',
-                'PAYMENT_SPLIT_RESOLUTION_FAILED',
-                503
-              );
-            }
-            if (dvaRetainedShippingKobo > 0) {
-              return createErrorResponse(
-                'Bank transfer is not available for orders with GIG delivery yet. Please pay by card.',
-                'PAYMENT_METHOD_UNAVAILABLE_FOR_SHIPPING',
-                409
+                dvaEligibility.message,
+                dvaEligibility.code,
+                dvaEligibility.status
               );
             }
 

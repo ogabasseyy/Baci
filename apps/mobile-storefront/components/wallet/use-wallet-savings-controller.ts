@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Alert } from 'react-native';
+import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 
@@ -33,7 +34,11 @@ export function useWalletSavingsController(
     railRef: input.operationRailRef,
     setAmount: input.setSavingsContributionAmount,
   });
-  const actions = createWalletSavingsActions(input);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
+  const actions = createWalletSavingsActions({
+    ...input,
+    requestPinProof: requestProof,
+  });
   const retryRecovery = () => {
     recovery.retry();
     Alert.alert(
@@ -43,6 +48,7 @@ export function useWalletSavingsController(
   };
   return {
     ...actions,
+    pinSheetProps,
     hasPendingSavingsContribution:
       recovery.ready && actions.hasPendingSavingsContribution,
     handleAddSavingsContribution: recovery.ready

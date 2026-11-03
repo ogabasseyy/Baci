@@ -65,3 +65,16 @@ it('releases the operation on authoritative not-found so the next tap re-submits
     expect.stringContaining('try again')
   );
 });
+it('releases the operation when the merchant is not primary, with the same copy', async () => {
+  const props = input();
+  mockCheck.mockRejectedValue(
+    Object.assign(new Error('np'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
+  );
+  await checkPendingPrimarySavings(props);
+  expect(props.clearOperation).toHaveBeenCalledTimes(1);
+  expect(props.clearAmount).not.toHaveBeenCalled();
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Contribution not received',
+    expect.stringContaining('try again')
+  );
+});

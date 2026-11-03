@@ -107,3 +107,11 @@ written. No new flag, setting or migration is involved.
 Add it to `PIGGYVEST_WEBHOOK_ALERT_CODES` with a one-line comment, add a row to
 the table above, and update the expected list in `webhook-alerts.test.ts`.
 Never put request bodies, secrets or customer data in the alert detail.
+
+## Accepted noise: unmapped alert on first delivery
+
+When a deposit webhook arrives before its mapping commits, the first delivery
+raises the unmapped-account alert and the retry then succeeds. That one early
+page per deposit is accepted: it is preferred over silence for money that may
+really be stranded. Treat an unmapped page that clears on the next delivery as
+expected noise, not an incident.

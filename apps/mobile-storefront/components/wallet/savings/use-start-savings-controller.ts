@@ -18,6 +18,7 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { readParam } from './start-savings-controller.utils';
+import { useInitialContributionOperation } from './use-initial-contribution-operation';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
@@ -52,10 +53,12 @@ export function useStartSavingsController() {
     useState(false);
   const [initialContributionAmount, setInitialContributionAmount] =
     useState('');
-  const [
+  const {
     initialContributionIdempotencyKey,
+    initialContributionRail,
     setInitialContributionIdempotencyKey,
-  ] = useState<string | null>(null);
+    setInitialContributionRail,
+  } = useInitialContributionOperation();
   const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
     useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -170,6 +173,7 @@ export function useStartSavingsController() {
     fundingAccount,
     setCreatedGoalId,
     initialContributionIdempotencyKey,
+    initialContributionRail,
     maturityDate,
     goalIdempotencyKey,
     setGoalIdempotencyKey,
@@ -180,6 +184,7 @@ export function useStartSavingsController() {
     selectedProduct,
     setFormError,
     setInitialContributionIdempotencyKey,
+    setInitialContributionRail,
     setShowFundingModal,
     setShowPreviewModal,
     setShowSuccessModal,

@@ -3,10 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
-import {
-  type OperationRailRef,
-  runBankTransferContribution,
-} from './run-bank-transfer-contribution';
+import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
@@ -19,9 +16,6 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
-  // Rail of the attempt that owns the stored operation id. A retry never
-  // crosses rails: primary and legacy dedupe independently.
-  const operationRailRef: OperationRailRef = useRef(null);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const contextKey = JSON.stringify([
@@ -100,7 +94,6 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     try {
       await runBankTransferContribution(input, goalId, amount, {
         isMounted: () => mountedRef.current,
-        railRef: operationRailRef,
       });
     } finally {
       submitInFlightRef.current = false;

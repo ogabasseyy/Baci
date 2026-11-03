@@ -1,5 +1,4 @@
 import * as Crypto from 'expo-crypto';
-import type { MutableRefObject } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
@@ -15,11 +14,6 @@ import {
 const PIN_COMING_SOON_MESSAGE =
   'Saving into goals from the app needs a wallet PIN, which is coming soon. Your money is still in your wallet.';
 
-export type OperationRailRef = MutableRefObject<{
-  operationId: string;
-  rail: ContributionRail;
-} | null>;
-
 /**
  * Moves the first contribution of a created goal, bound to the rail of the
  * attempt that owns the stored operation id (see resolveStoredOperation).
@@ -29,16 +23,20 @@ export async function runBankTransferContribution(
   input: UseStartSavingsSubmitInput,
   goalId: string,
   amount: number,
-  ctx: { isMounted: () => boolean; railRef: OperationRailRef }
+  ctx: { isMounted: () => boolean }
 ): Promise<void> {
   try {
     const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
     const storedKey = input.initialContributionIdempotencyKey;
-    const recorded = ctx.railRef.current;
+    // The rail is persisted with the stored id (same state, same scope,
+    // cleared together). A truly unrecorded id is only an id from before the
+    // rail was recorded; none exist, because primary has been dark. With no
+    // record, SAVINGS_NOT_READY from the status read stays fail-closed on
+    // purpose: the server cannot prove no primary transfer exists for it.
     const stored = await resolveStoredOperation({
       merchantId: input.activeMerchantId,
       operationId: storedKey,
-      rail: recorded?.operationId === storedKey ? recorded.rail : null,
+      rail: input.initialContributionRail ?? null,
     });
     if (!ctx.isMounted()) return;
     if (stored.unknown) {
@@ -75,7 +73,9 @@ export async function runBankTransferContribution(
     if (!stored.operationId) {
       input.setInitialContributionIdempotencyKey(idempotencyKey);
     }
-    ctx.railRef.current = { operationId: idempotencyKey, rail };
+    let usedRail: ContributionRail = rail;
+    // Written before the request so a restart mid-flight resumes on this rail.
+    input.setInitialContributionRail?.(idempotencyKey, rail);
     // Primary-rail operations move money main wallet -> goal through
     // PiggyVest (stable operation id); the helper reports through onRail if
     // it falls back to legacy on SAVINGS_NOT_READY, and that rail sticks.
@@ -103,10 +103,8 @@ export async function runBankTransferContribution(
                 // legacy: only a fresh id may fall back.
                 allowLegacyFallback: !stored.operationId,
                 onRail: (used: ContributionRail) => {
-                  ctx.railRef.current = {
-                    operationId: idempotencyKey,
-                    rail: used,
-                  };
+                  usedRail = used;
+                  input.setInitialContributionRail?.(idempotencyKey, used);
                 },
               }
             : {}),
@@ -143,7 +141,7 @@ export async function runBankTransferContribution(
     // transfer that covers the target counts as completion.
     if (
       contributionResult.goalStatus === 'completed' ||
-      (ctx.railRef.current?.rail === 'primary' && amount >= input.targetValue)
+      (usedRail === 'primary' && amount >= input.targetValue)
     ) {
       try {
         await cancelSavingsReminderNotification(goalId);

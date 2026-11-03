@@ -36,11 +36,15 @@ export async function checkPendingPrimarySavings(input: {
         'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.'
       );
   } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
     if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'CONTRIBUTION_NOT_FOUND'
+      code === 'CONTRIBUTION_NOT_FOUND' ||
+      // A merchant that is not primary can hold no primary record: same
+      // authoritative absence.
+      code === 'SAVINGS_MERCHANT_NOT_PRIMARY'
     ) {
       // Authoritative absence: the server joins the status read to the
       // caller's own intent, so not_found means this identity never

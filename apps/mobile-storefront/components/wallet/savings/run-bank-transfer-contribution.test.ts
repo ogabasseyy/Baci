@@ -27,15 +27,15 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
   cancelSavingsReminderNotification: (id: string) => mockCancelReminder(id),
 }));
 
-const run = (railRef: { current: unknown }, overrides = {}) => {
+const run = (overrides = {}) => {
   const input = createInput({
     createdGoalId: 'goal-1',
     effectiveInitialContribution: 20000,
+    setInitialContributionRail: jest.fn(),
     ...overrides,
   });
-  return runBankTransferContribution(input, 'goal-1', 20000, {
+  return runBankTransferContribution(input as never, 'goal-1', 20000, {
     isMounted: () => true,
-    railRef: railRef as never,
   }).then(() => input);
 };
 
@@ -48,15 +48,14 @@ describe('runBankTransferContribution', () => {
   });
 
   it('records the rail with a freshly minted id', async () => {
-    const railRef = { current: null };
-    const input = await run(railRef);
+    const input = await run();
     expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
       'fresh-op'
     );
-    expect(railRef.current).toEqual({
-      operationId: 'fresh-op',
-      rail: 'primary',
-    });
+    expect(input.setInitialContributionRail).toHaveBeenCalledWith(
+      'fresh-op',
+      'primary'
+    );
   });
 
   it.each([
@@ -64,34 +63,44 @@ describe('runBankTransferContribution', () => {
     ['legacy', false],
   ])('records the %s rail before the network call', async (rail, primary) => {
     mockIsPrimary.mockReturnValue(primary);
-    const railRef: { current: unknown } = { current: null };
-    let seen: unknown = 'unset';
+    const order: string[] = [];
     const spy = async () => {
-      seen = railRef.current;
+      order.push('request');
       return {};
     };
     mockAddPrimary.mockImplementation(spy);
     mockAddSavings.mockImplementation(spy);
-    await run(railRef);
-    expect(seen).toEqual({ operationId: 'fresh-op', rail });
+    const setRail = jest.fn(() => {
+      order.push('rail');
+    });
+    const input = await run({ setInitialContributionRail: setRail });
+    expect(order[0]).toBe('rail');
+    expect(input.setInitialContributionRail).toHaveBeenCalledWith(
+      'fresh-op',
+      rail
+    );
   });
 
   it('forbids legacy fallback for a kept primary id but not a fresh one', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'pending' });
-    const kept = { current: { operationId: 'old', rail: 'primary' } };
-    await run(kept, { initialContributionIdempotencyKey: 'old' });
+    await run({
+      initialContributionIdempotencyKey: 'old',
+      initialContributionRail: 'primary',
+    });
     expect(mockAddPrimary).toHaveBeenLastCalledWith(
       expect.objectContaining({ allowLegacyFallback: false })
     );
-    await run({ current: null });
+    await run();
     expect(mockAddPrimary).toHaveBeenLastCalledWith(
       expect.objectContaining({ allowLegacyFallback: true })
     );
   });
 
   it('sends a legacy-rail id to legacy only, even for a primary merchant', async () => {
-    const railRef = { current: { operationId: 'old', rail: 'legacy' } };
-    await run(railRef, { initialContributionIdempotencyKey: 'old' });
+    await run({
+      initialContributionIdempotencyKey: 'old',
+      initialContributionRail: 'legacy',
+    });
     expect(mockCheckStatus).not.toHaveBeenCalled();
     expect(mockAddPrimary).not.toHaveBeenCalled();
     expect(mockAddSavings).toHaveBeenCalledWith(
@@ -99,15 +108,30 @@ describe('runBankTransferContribution', () => {
     );
   });
 
-  it('asks primary about a recorded rail that belongs to a different id', async () => {
-    mockCheckStatus.mockResolvedValue({ status: 'pending' });
-    const railRef = { current: { operationId: 'other', rail: 'legacy' } };
-    await run(railRef, { initialContributionIdempotencyKey: 'old' });
-    expect(mockCheckStatus).toHaveBeenCalled();
-    expect(mockAddSavings).not.toHaveBeenCalled();
-    expect(mockAddPrimary).toHaveBeenCalledWith(
+  it('resubmits a restored legacy rail on legacy when the status route says SAVINGS_NOT_READY', async () => {
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('nr'), { code: 'SAVINGS_NOT_READY' })
+    );
+    const input = await run({
+      initialContributionIdempotencyKey: 'old',
+      initialContributionRail: 'legacy',
+    });
+    expect(mockCheckStatus).not.toHaveBeenCalled();
+    expect(mockAddSavings).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'old' })
     );
+    expect(input.setFormError).not.toHaveBeenCalledWith(
+      expect.stringContaining('Could not confirm')
+    );
+  });
+
+  it('stays fail-closed for an unrecorded id when the status route says SAVINGS_NOT_READY', async () => {
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('nr'), { code: 'SAVINGS_NOT_READY' })
+    );
+    await run({ initialContributionIdempotencyKey: 'old' });
+    expect(mockAddSavings).not.toHaveBeenCalled();
+    expect(mockAddPrimary).not.toHaveBeenCalled();
   });
 
   it('submits an unrecorded id on legacy for a merchant that is not primary', async () => {
@@ -115,8 +139,7 @@ describe('runBankTransferContribution', () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('x'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
     );
-    const railRef = { current: null };
-    await run(railRef, { initialContributionIdempotencyKey: 'old' });
+    await run({ initialContributionIdempotencyKey: 'old' });
     expect(mockAddPrimary).not.toHaveBeenCalled();
     expect(mockAddSavings).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'old' })
@@ -128,10 +151,10 @@ describe('runBankTransferContribution', () => {
       (arg as { onRail?: (r: string) => void }).onRail?.('legacy');
       return { goalStatus: 'active' };
     });
-    await run({ current: null }, { targetValue: 20000 });
+    await run({ targetValue: 20000 });
     expect(mockCancelReminder).not.toHaveBeenCalled();
     mockAddPrimary.mockResolvedValue({ status: 'confirmed' });
-    await run({ current: null }, { targetValue: 20000 });
+    await run({ targetValue: 20000 });
     expect(mockCancelReminder).toHaveBeenCalledWith('goal-1');
   });
 
@@ -139,12 +162,14 @@ describe('runBankTransferContribution', () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('nf'), { code: 'CONTRIBUTION_NOT_FOUND' })
     );
-    const railRef = { current: null };
-    await run(railRef, { initialContributionIdempotencyKey: 'old' });
+    const input = await run({ initialContributionIdempotencyKey: 'old' });
     expect(mockAddPrimary).not.toHaveBeenCalled();
     expect(mockAddSavings).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'old' })
     );
-    expect(railRef.current).toEqual({ operationId: 'old', rail: 'legacy' });
+    expect(input.setInitialContributionRail).toHaveBeenCalledWith(
+      'old',
+      'legacy'
+    );
   });
 });

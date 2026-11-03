@@ -37,21 +37,22 @@ beforeEach(() => {
 // production legacy transfer: no primary call and no primary status read.
 describe('server keeps PiggyVest off', () => {
   it('submits on the legacy rail with a fresh id', async () => {
-    const railRef = { current: null };
-    const input = createInput({ createdGoalId: 'goal-1' });
+    const input = createInput({
+      createdGoalId: 'goal-1',
+      setInitialContributionRail: jest.fn(),
+    });
     await runBankTransferContribution(input as never, 'goal-1', 20000, {
       isMounted: () => true,
-      railRef: railRef as never,
     });
     expect(addSavingsContribution).toHaveBeenCalledWith(
       expect.objectContaining({ goalId: 'goal-1', idempotencyKey: 'fresh-op' })
     );
     expect(addPiggyvestPrimarySavingsContribution).not.toHaveBeenCalled();
     expect(checkPiggyvestPrimarySavingsStatus).not.toHaveBeenCalled();
-    expect(railRef.current).toEqual({
-      operationId: 'fresh-op',
-      rail: 'legacy',
-    });
+    expect(input.setInitialContributionRail).toHaveBeenCalledWith(
+      'fresh-op',
+      'legacy'
+    );
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 
@@ -62,10 +63,10 @@ describe('server keeps PiggyVest off', () => {
     const input = createInput({
       createdGoalId: 'goal-1',
       initialContributionIdempotencyKey: 'op-1',
+      initialContributionRail: 'primary',
     });
     await runBankTransferContribution(input as never, 'goal-1', 20000, {
       isMounted: () => true,
-      railRef: { current: { operationId: 'op-1', rail: 'primary' } } as never,
     });
     expect(addSavingsContribution).not.toHaveBeenCalled();
     expect(addPiggyvestPrimarySavingsContribution).not.toHaveBeenCalled();

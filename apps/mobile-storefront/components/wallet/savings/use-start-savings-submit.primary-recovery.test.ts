@@ -77,7 +77,13 @@ const lostFirstAttempt = async (rail: Rail) => {
   } else {
     mockAddSavingsContribution.mockRejectedValueOnce(lost);
   }
-  const first = readyInput();
+  // Stands in for the controller state that persists the rail with the key.
+  let persisted: Rail | null = null;
+  const first = readyInput({
+    setInitialContributionRail: (_id: string, used: Rail) => {
+      persisted = used;
+    },
+  });
   const hook = renderHook(
     ({ value }: { value: SubmitInput }) => useStartSavingsSubmit(value),
     {
@@ -93,7 +99,11 @@ const lostFirstAttempt = async (rail: Rail) => {
   jest.clearAllMocks();
   return {
     hook,
-    retry: readyInput({ initialContributionIdempotencyKey: 'op-uuid-1' }),
+    retry: readyInput({
+      initialContributionIdempotencyKey: 'op-uuid-1',
+      initialContributionRail: persisted,
+      setInitialContributionRail: jest.fn(),
+    }),
   };
 };
 
@@ -209,7 +219,12 @@ describe('submitBankTransferContribution stored operation recovery', () => {
       (arg as RailAttempt).onRail?.('legacy');
       throw new Error('timeout');
     });
-    const first = readyInput();
+    let persisted: Rail | null = null;
+    const first = readyInput({
+      setInitialContributionRail: (_id: string, used: Rail) => {
+        persisted = used;
+      },
+    });
     const hook = renderHook(
       ({ value }: { value: SubmitInput }) => useStartSavingsSubmit(value),
       {
@@ -221,7 +236,11 @@ describe('submitBankTransferContribution stored operation recovery', () => {
     });
     jest.clearAllMocks();
     hook.rerender({
-      value: readyInput({ initialContributionIdempotencyKey: 'op-uuid-1' }),
+      value: readyInput({
+        initialContributionIdempotencyKey: 'op-uuid-1',
+        initialContributionRail: persisted,
+        setInitialContributionRail: jest.fn(),
+      }),
     });
     await act(async () => {
       await hook.result.current.submitBankTransferContribution();

@@ -133,14 +133,13 @@ describe('WalletSavingsContributionFlow', () => {
       const props = { ...createProps(), addAmount: '500' };
       render(<WalletSavingsContributionFlow {...props} />);
 
-      expect(
-        screen.getByText(/do not send a real bank transfer/i)
-      ).toBeOnTheScreen();
+      expect(screen.getByText(/do not send real money/i)).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Open savings bank transfer details',
+        name: 'Fund wallet for savings',
       });
       expect(payment).toHaveAccessibilityState({ disabled: false });
-      expect(payment).toHaveTextContent('View bank transfer details');
+      expect(payment).toHaveTextContent('Fund wallet');
+      expect(screen.queryByText(/bank transfer/i)).toBeNull();
       fireEvent.press(payment);
       expect(props.onFundWallet).toHaveBeenCalledTimes(1);
     } finally {
@@ -190,7 +189,7 @@ describe('WalletSavingsContributionFlow', () => {
       fireEvent.press(contribute);
       expect(props.onAddSavings).toHaveBeenCalledTimes(1);
       expect(props.onFundWallet).not.toHaveBeenCalled();
-      expect(screen.queryByText('View bank transfer details')).toBeNull();
+      expect(screen.queryByText('Fund wallet')).toBeNull();
     } finally {
       if (previousMode === undefined)
         delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;

@@ -25,13 +25,22 @@ it('unsubscribes the replaced authenticated controller without hiding the new co
   const view = render(
     <SavingsScreen source={source} cancellation={previous} />
   );
-  await screen.findByText('Synthetic bank');
+  await screen.findByRole('region', { name: 'Draft policy review' });
   view.rerender(
     <SavingsScreen source={replacementSource} cancellation={replacement} />
   );
-  await screen.findByText('Synthetic bank');
+  await screen.findByRole('region', { name: 'Draft policy review' });
+  expect(
+    screen.queryByRole('region', { name: 'Customer savings' })
+  ).not.toBeNull();
   await act(async () => previous.invalidate());
-  expect(screen.queryByText('Synthetic bank')).not.toBeNull();
+  expect(
+    screen.queryByRole('region', { name: 'Draft policy review' })
+  ).not.toBeNull();
+  expect(
+    screen.queryByRole('region', { name: 'Customer savings' })
+  ).not.toBeNull();
+  expect(screen.queryByText('NOT-REAL')).toBeNull();
   view.unmount();
   await act(async () => replacement.invalidate());
 });
@@ -100,7 +109,7 @@ const quote = {
 it.each([
   'prepared',
   'uncertain',
-] as const)('suppresses cached funding from pending through %s via controller notification', async (outcome) => {
+] as const)('never shows a goal account through cancellation pending through %s via controller notification', async (outcome) => {
   let finish: ((result: unknown) => void) | undefined;
   let fail: ((error: Error) => void) | undefined;
   const binding = createPiggyvestCancellationController({
@@ -116,14 +125,13 @@ it.each([
       }),
   });
   const view = render(<SavingsScreen source={source} cancellation={binding} />);
-  await screen.findByText('Synthetic bank');
+  await screen.findByRole('region', { name: 'Draft policy review' });
   const initial = binding.read(source);
   if (initial?.status !== 'review') throw new Error('fixture');
   let pending: Promise<unknown> | undefined;
   await act(async () => {
     pending = binding.prepare(initial.command).catch(() => undefined);
   });
-  expect(screen.queryByText('Synthetic bank')).toBeNull();
   expect(screen.queryByText('NOT-REAL')).toBeNull();
   await act(async () => {
     if (outcome === 'uncertain') fail?.(new Error('lost'));
@@ -139,6 +147,5 @@ it.each([
     await pending;
   });
   view.rerender(<SavingsScreen source={source} cancellation={binding} />);
-  expect(screen.queryByText('Synthetic bank')).toBeNull();
   expect(screen.queryByText('NOT-REAL')).toBeNull();
 });

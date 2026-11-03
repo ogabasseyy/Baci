@@ -23,12 +23,14 @@ export function useWalletSavingsController(
   if (boundScope.current !== scopeKey) {
     boundScope.current = scopeKey;
     input.idempotencyKeyRef.current = null;
+    input.operationRailRef.current = null;
   }
   const recovery = usePrimarySavingsRecovery({
     merchantId: input.activeMerchantId,
     userId: input.userId,
     goalId: input.goal?.id,
     operationRef: input.idempotencyKeyRef,
+    railRef: input.operationRailRef,
     setAmount: input.setSavingsContributionAmount,
   });
   const actions = createWalletSavingsActions(input);

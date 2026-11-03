@@ -36,12 +36,14 @@ export async function checkPendingPrimarySavings(input: {
         'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.'
       );
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'CONTRIBUTION_NOT_FOUND'
-    ) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    // SAVINGS_MERCHANT_NOT_PRIMARY is derived from runtime config, not the
+    // provider record, so it never releases a primary id: it falls through to
+    // the ambiguous branch below and the operation is kept.
+    if (code === 'CONTRIBUTION_NOT_FOUND') {
       // Authoritative absence: the server joins the status read to the
       // caller's own intent, so not_found means this identity never
       // reserved this operation id (the initial POST died on CSRF,

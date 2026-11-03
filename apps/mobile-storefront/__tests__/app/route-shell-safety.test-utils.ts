@@ -114,6 +114,8 @@ export const SHELL_EXEMPT_ROUTES = new Set([
   'product/[slug].tsx',
   'profile/edit.tsx',
   'saved/index.tsx',
+  // Pure <Redirect> to /wallet (no rendered UI), so there is nothing to wrap.
+  'savings/funding.tsx',
   'search.tsx',
   'track-order/index.tsx',
 ]);

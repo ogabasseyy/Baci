@@ -20,6 +20,7 @@ jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 const input = {
   goal: null,
   idempotencyKeyRef: { current: null },
+  operationRailRef: { current: null },
   refetchWallet: async () => undefined,
   savingsContributionAmount: '',
   spendableBalance: 0,
@@ -48,17 +49,28 @@ it('uses existing operation actions once recovery is ready', () => {
 });
 it('drops the pending key when the scope changes so no foreign operation is queried', () => {
   const idempotencyKeyRef: { current: string | null } = { current: null };
+  const operationRailRef: { current: 'primary' | 'legacy' | null } = {
+    current: null,
+  };
   const { rerender } = renderHook(
     ({ userId }: { userId: string }) =>
-      useWalletSavingsController({ ...input, idempotencyKeyRef, userId }),
+      useWalletSavingsController({
+        ...input,
+        idempotencyKeyRef,
+        operationRailRef,
+        userId,
+      }),
     { initialProps: { userId: 'user-a' } }
   );
   // A key created during the session survives same-scope re-renders.
   idempotencyKeyRef.current = 'created-operation';
+  operationRailRef.current = 'legacy';
   rerender({ userId: 'user-a' });
   expect(idempotencyKeyRef.current).toBe('created-operation');
+  expect(operationRailRef.current).toBe('legacy');
   // An account switch drops it before any status query could clear it
   // as not_found under the new identity.
   rerender({ userId: 'user-b' });
   expect(idempotencyKeyRef.current).toBeNull();
+  expect(operationRailRef.current).toBeNull();
 });

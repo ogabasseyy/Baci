@@ -20,6 +20,7 @@ import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
 } from './transfer-outbox';
+import { alertUnmappedInflow } from './unmapped-alert-once';
 import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
 
 /**
@@ -277,6 +278,7 @@ export async function processPiggyvestEvent(
       });
       return 'processed';
     }
+    await alertUnmappedInflow(error, event);
     await resolvePiggyvestEvent(supabase, {
       eventId: event.eventId,
       claimToken: claimed.claimToken,

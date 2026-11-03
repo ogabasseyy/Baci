@@ -80,12 +80,26 @@ DO $$ BEGIN
   RAISE EXCEPTION 'Anonymous draft read privilege granted' USING ERRCODE='P1002';
  END IF;
 END $$;
+\set ON_ERROR_STOP off
 DO $$ BEGIN
  BEGIN
   PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041'::uuid,0::integer,'efaa0000-0000-4000-8000-000000000055'::uuid,repeat('encrypted-fixture',4)::text,repeat('address-fixture',4)::text,(now()+interval '1 day')::timestamptz);
   RAISE EXCEPTION 'Anonymous draft save executed' USING ERRCODE='P1003';
  EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN query_canceled OR assert_failure OR OTHERS THEN RAISE EXCEPTION 'anonymous draft save unexpected SQLSTATE %', SQLSTATE USING ERRCODE=SQLSTATE; END;
 END $$;
+\set oxygen_anon_draft_state :SQLSTATE
+\if :ERROR
+ ROLLBACK;
+ \set ON_ERROR_STOP on
+ SELECT pg_catalog.set_config('test.oxygen_anon_draft_state', :'oxygen_anon_draft_state', false);
+ DO $$ DECLARE s text := current_setting('test.oxygen_anon_draft_state'); BEGIN
+  IF s !~ '^[0-9A-Z]{5}$' OR s = '00000' THEN
+   RAISE EXCEPTION 'Invalid diagnostic state' USING ERRCODE='P1005';
+  END IF;
+  RAISE EXCEPTION 'OXYGEN_ANON_DRAFT_SQLSTATE=%', s USING ERRCODE=s;
+ END $$;
+\endif
+\set ON_ERROR_STOP on
 DO $$ BEGIN
  BEGIN
   PERFORM workflow_id FROM public.oxygen_form_drafts;

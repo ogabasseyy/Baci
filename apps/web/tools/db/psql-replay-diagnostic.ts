@@ -27,6 +27,13 @@ export function boundedPsqlDiagnostic(
       errorLine
     )?.[1];
   if (wrappedState) return ` (line=${line},sqlstate=${wrappedState})`;
+  // Test-only psql recovery emits this exact sentinel after capturing SQLSTATE
+  // from the preceding failed statement. Only its five-character code escapes.
+  const recoveredState = new RegExp(
+    `^${escapedCommandName}:[^\\r\\n]*:\\d+:[ \\t]+(?:ERROR|error):[^\\r\\n]*\\bOXYGEN_ANON_DRAFT_SQLSTATE=([0-9A-Z]{5})(?=[: \\t]|$)`,
+    'm'
+  ).exec(output)?.[1];
+  if (recoveredState) return ` (line=${line},sqlstate=${recoveredState})`;
   const reason = /anonymous draft save executed/i.test(errorLine)
     ? 'anonymous-draft-save-executed'
     : /permission denied/i.test(errorLine)

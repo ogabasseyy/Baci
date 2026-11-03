@@ -143,6 +143,29 @@ describe('createReplayCommand', () => {
     );
   });
 
+  it('recovers the captured state from a later fixed psql diagnostic without leaking errors', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    const stderr =
+      'psql:/private.sql:88: ERROR: private error with identity\n' +
+      'psql:/private.sql:99: ERROR: OXYGEN_ANON_DRAFT_SQLSTATE=42883\n';
+    await writeFile(
+      psql,
+      `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(stderr)});process.exit(1);\n`,
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    await expect(
+      applySupabaseReplaySql(() => runCommand(psql, []), {
+        kind: 'sql-check',
+        ordinal: 189,
+        sqlPath: '/private.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=88,sqlstate=42883\)$/
+    );
+  });
+
   it.each([
     ['ERROR:  permission denied for function secret_name', 'permission-denied'],
     [

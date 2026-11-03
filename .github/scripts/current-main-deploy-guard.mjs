@@ -206,7 +206,7 @@ async function supersedingChangesCanProceed({
     throw new Error('incomplete or non-ancestral superseding comparison');
   }
   if (comparison.total_commits > 100 || !(comparison.files?.length < 300)) {
-    return !(await descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }));
+    return !(await descendantAlreadyDeployed({ apiRoot, comparison, currentSha, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }));
   }
   let nonWebOnly = true;
   for (const file of comparison.files) {

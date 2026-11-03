@@ -1,4 +1,5 @@
 import { sendDeliveredNotification } from '@/lib/order-fulfillment-delivered-sender';
+import { sendDeliveryExceptionNotification } from '@/lib/order-fulfillment-exception-sender';
 import type {
   FeatureSettingsRecord,
   FulfillmentOrderRecord,
@@ -43,6 +44,16 @@ export function sendFulfillmentNotificationEmail({
       order,
       resetProviderDispatch,
       trackingNumber,
+    });
+  }
+  if (eventType === 'order_delivery_failed' || eventType === 'order_returned') {
+    return sendDeliveryExceptionNotification({
+      beforeProviderDispatch,
+      kind: eventType === 'order_returned' ? 'returned' : 'failed',
+      merchant,
+      merchantId,
+      order,
+      resetProviderDispatch,
     });
   }
   return sendDeliveredNotification({

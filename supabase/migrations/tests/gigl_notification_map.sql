@@ -212,13 +212,18 @@ BEGIN
         AND notification_kind = 'cancelled') IS DISTINCT FROM 'superseded_by_newer_shipment' THEN
     RAISE EXCEPTION 'cancellation must be dropped when a newer live shipment exists';
   END IF;
+  IF (SELECT count(*) FROM public.shipment_tracking_notification_outbox
+      WHERE shipment_id = v_new_shipment
+        AND notification_kind = 'waybill_changed') <> 2 THEN
+    RAISE EXCEPTION 'a replacement waybill must alert both the merchant and the customer';
+  END IF;
   -- The booked GIG replacement keeps the order out of the early-shipped path.
   UPDATE public.shipments SET status = 'cancelled' WHERE id = v_new_shipment;
 END;
 $cancel$;
 SELECT pass('customer cancellation is dropped only when a newer live shipment exists');
 
--- 5. No shipped email at booking; shipped email at pickup --------------------------------
+-- 5. No shipped email at booking; shipped/failed/returned emails from GIG events --------------------------------
 DO $shipped$
 DECLARE
   f gigl_map_fixture%ROWTYPE;
@@ -226,6 +231,7 @@ DECLARE
   v_shipment uuid;
   v_epoch uuid;
   v_event uuid;
+  v_kind text;
 BEGIN
   SELECT * INTO f FROM gigl_map_fixture;
   INSERT INTO public.orders (id, merchant_id, order_number, total, shipping_status)
@@ -264,6 +270,21 @@ BEGIN
   IF (SELECT count(*) FROM public.order_notification_outbox
       WHERE order_id = v_order AND event_type = 'order_shipped') <> 1 THEN
     RAISE EXCEPTION 'GIG pickup must queue exactly one shipped email';
+  END IF;
+
+  FOR v_kind IN SELECT unnest(ARRAY['delivery_attempt_failed', 'return_in_progress']) LOOP
+    INSERT INTO public.shipment_tracking_notification_outbox (
+      shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
+      audience, notification_kind
+    ) VALUES (
+      v_shipment, v_epoch, v_order, f.merchant_id, v_event, 'customer', v_kind
+    );
+  END LOOP;
+  IF (SELECT count(*) FROM public.order_notification_outbox
+      WHERE order_id = v_order AND event_type = 'order_delivery_failed') <> 1
+    OR (SELECT count(*) FROM public.order_notification_outbox
+        WHERE order_id = v_order AND event_type = 'order_returned') <> 1 THEN
+    RAISE EXCEPTION 'failed and returned GIG events must each queue one customer email';
   END IF;
 END;
 $shipped$;

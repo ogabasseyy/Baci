@@ -55,6 +55,12 @@ function isOrderInRequiredShippingStatus(
     );
   }
 
+  if (eventType === 'order_delivery_failed' || eventType === 'order_returned') {
+    // GIG reports these while the order is in flight; the order status is not
+    // the gate, the tracking event is.
+    return true;
+  }
+
   return shippingStatus === 'delivered' || shippingStatus === 'completed';
 }
 

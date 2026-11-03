@@ -17212,7 +17212,11 @@ export type Database = {
         }[];
       };
       merge_shipment_event_preferences: {
-        Args: { p_merchant_id: string; p_patch: Json };
+        Args: { p_fields?: Json; p_merchant_id: string; p_patch: Json };
+        Returns: Json;
+      };
+      get_notification_preferences: {
+        Args: { p_merchant_id: string };
         Returns: Json;
       };
       claim_shipment_tracking_notifications: {

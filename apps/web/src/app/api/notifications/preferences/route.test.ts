@@ -22,6 +22,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 }));
 
 describe('PATCH /api/notifications/preferences', () => {
+  const rpcMock = vi.fn();
   let authUser: { id: string } | null;
   let preferenceQuery: {
     eq: ReturnType<typeof vi.fn>;
@@ -57,7 +58,9 @@ describe('PATCH /api/notifications/preferences', () => {
         getUser: vi.fn(() => Promise.resolve({ data: { user: authUser } })),
       },
       from: vi.fn(() => preferenceQuery),
+      rpc: rpcMock,
     } as unknown as ReturnType<typeof createClient>);
+    rpcMock.mockResolvedValue({ data: null, error: null });
   });
 
   it('returns 401 before checking CSRF when unauthenticated', async () => {
@@ -114,6 +117,29 @@ describe('PATCH /api/notifications/preferences', () => {
     await expect(response.json()).resolves.toMatchObject({
       merchant_id: MERCHANT_ID,
       follow_up_notifications_enabled: true,
+    });
+  });
+
+  it('lets staff read saved preferences through the authorised RPC when the owner-only table read finds nothing', async () => {
+    preferenceQuery.single.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST116', message: 'No rows found' },
+    });
+    rpcMock.mockResolvedValueOnce({
+      data: {
+        merchant_id: MERCHANT_ID,
+        shipment_event_preferences: { delivered: false },
+      },
+      error: null,
+    });
+
+    const response = await GET();
+
+    expect(rpcMock).toHaveBeenCalledWith('get_notification_preferences', {
+      p_merchant_id: MERCHANT_ID,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      shipment_event_preferences: { delivered: false },
     });
   });
 
@@ -222,11 +248,12 @@ describe('PATCH /api/notifications/preferences shipment_event_preferences', () =
     expect(rpc).toHaveBeenCalledWith('merge_shipment_event_preferences', {
       p_merchant_id: MERCHANT_ID,
       p_patch: { out_for_delivery: true },
+      p_fields: {},
     });
     expect(upsert).not.toHaveBeenCalled();
   });
 
-  it('also saves other fields through the normal upsert when sent together', async () => {
+  it('saves ordinary fields and toggles in the same atomic RPC call', async () => {
     rpc.mockResolvedValue({ data: { merchant_id: MERCHANT_ID }, error: null });
 
     const response = await PATCH(
@@ -237,13 +264,26 @@ describe('PATCH /api/notifications/preferences shipment_event_preferences', () =
     );
 
     expect(response.status).toBe(200);
-    expect(upsert.mock.calls[0][0]).toEqual({
-      merchant_id: MERCHANT_ID,
-      in_app_enabled: false,
+    expect(rpc).toHaveBeenCalledWith('merge_shipment_event_preferences', {
+      p_merchant_id: MERCHANT_ID,
+      p_patch: { delivered: false },
+      p_fields: { in_app_enabled: false },
     });
-    expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(
-      rpc.mock.invocationCallOrder[0]
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a failing combined save persists nothing (no separate upsert)', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'db down' } });
+
+    const response = await PATCH(
+      request({
+        in_app_enabled: false,
+        shipment_event_preferences: { delivered: false },
+      })
     );
+
+    expect(response.status).toBe(500);
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it('bugfix: aborts instead of wiping saved toggles when the merge fails', async () => {

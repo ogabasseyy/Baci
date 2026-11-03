@@ -79,6 +79,7 @@ with `[Filtered]`.
 | `PIGGYVEST_ENGINE_CREDIT_NOT_BACKED` | A confirmed transfer credited a wallet that is not yet PiggyVest-backed; the backed balance waits for the wallet to switch | Wallet switch status |
 | `PIGGYVEST_INFLOW_REVIEW_OPEN` | A wallet is above its expected balance by exactly its open inflow reviews; nothing is re-queued | Open inflow reviews for the wallet |
 | `PIGGYVEST_NEGATIVE_DRIFT` | Reserved for drift monitoring: the PiggyVest balance is below what our records expect and new spends are held. Not emitted yet | Drift report for the wallet |
+| `PIGGYVEST_RECONCILIATION_MISMATCH` | The daily reconciliation found a transfer still reserved or sent past its cutoff, a goal wallet holding less at PiggyVest than we recorded, a balance it could not read, or it could not run. The emailed report lists each one. Read-only: nothing is resent or released | The emailed report, then the status of each listed transfer at PiggyVest |
 
 ## Setting up paging in PostHog (owner step, later)
 

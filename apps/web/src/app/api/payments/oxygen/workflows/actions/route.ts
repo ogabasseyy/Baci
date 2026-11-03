@@ -24,6 +24,7 @@ import {
   readOxygenSnapshot,
 } from '@/lib/payments/oxygen/runtime-service';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
+import { oxygenPlanQuoteSchema } from '@/schemas/oxygen-plan-quote';
 
 export const maxDuration = 120;
 const headers = {
@@ -50,9 +51,26 @@ export async function GET(request: NextRequest) {
     const snapshot = connection
       ? await restoreOxygenEligibilityRecovery(owned, connection.worker)
       : owned;
+    let pending = snapshot.pending;
+    if (pending?.action === 'book' && pending.status === 'queued') {
+      const terms = await auth.supabase.rpc('oxygen_queued_booking_terms', {
+        p_workflow_id: snapshot.workflowId,
+        p_version: snapshot.version,
+        p_key: pending.idempotencyKey,
+      });
+      if (terms.error) throw new Error('Workflow unavailable');
+      if (terms.data)
+        pending = {
+          ...pending,
+          bookingTerms: oxygenPlanQuoteSchema
+            .pick({ equityPercentage: true, tenure: true })
+            .parse(terms.data),
+        };
+    }
     return NextResponse.json(
       {
         ...snapshot,
+        pending,
         ninAttemptStatus: await readOxygenNinRetryStatus(
           auth.supabase,
           snapshot

@@ -1,7 +1,7 @@
 import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 
-/** Only safe pending commands may be resumed by a customer status check. */
+/** Identify pending commands safe for an explicit customer action. */
 export function pendingReadRecovery(
   snapshot: OxygenRuntimeSnapshot | null
 ):
@@ -10,6 +10,8 @@ export function pendingReadRecovery(
   | 'refresh_eligibility'
   | 'refresh_payment_setup'
   | 'validate_nin'
+  | 'selfie_link'
+  | 'book'
   | null {
   const pending = snapshot?.pending;
   if (
@@ -18,6 +20,26 @@ export function pendingReadRecovery(
   )
     return null;
   // A queued command has not been dispatched; resuming it must reuse its key.
+  if (
+    pending.action === 'book' &&
+    pending.status === 'queued' &&
+    pending.bookingTerms &&
+    !snapshot.bookingBlock &&
+    !snapshot.approvalOtpReady &&
+    snapshot.stage !== 'activated' &&
+    snapshot.stage !== 'reconciliation_required'
+  )
+    return 'book';
+  if (
+    pending.action === 'selfie_link' &&
+    pending.status === 'queued' &&
+    snapshot.state.applicationReference &&
+    snapshot.state.validated &&
+    !snapshot.state.bookingReference &&
+    snapshot.stage !== 'activated' &&
+    snapshot.stage !== 'reconciliation_required'
+  )
+    return 'selfie_link';
   if (
     pending.action === 'validate_nin' &&
     pending.status === 'queued' &&

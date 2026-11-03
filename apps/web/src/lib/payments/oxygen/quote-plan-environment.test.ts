@@ -17,6 +17,74 @@ const kyc = {
   address_status: 'DONE',
 };
 
+it('does not construct a worker when durable enqueue rejects changed booking terms', async () => {
+  const key = '80000000-0000-4000-8000-000000000001';
+  const snapshot = {
+    workflowId: id,
+    stage: 'approval_required',
+    environment: 'staging',
+    version: 3,
+    executionEnabled: true,
+    approvalOtpReady: false,
+    activationEnabled: false,
+    settlementEnabled: false,
+    state: {
+      applicationReference: id,
+      validated: true,
+      eligible: true,
+      minimumAmount: 10000,
+      eligibleAmount: 400000,
+      maxTenure: 12,
+      kyc,
+      bookingReference: reference,
+      booking: {
+        loan_reference: reference,
+        product_amount: 400000,
+        equity_percentage: 35,
+        equity_amount: 140000,
+        loan_amount: 260000,
+        loan_tenure: 3,
+        status: 'BOOKED',
+      },
+    },
+    pending: { action: 'book', status: 'queued', idempotencyKey: key },
+  };
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    if (name === 'oxygen_saved_plans')
+      return { data: { plans: [], selectedReference: null }, error: null };
+    if (args.p_operation === 'status') return { data: snapshot, error: null };
+    // Database contract: this key already belongs to different booking terms.
+    return { data: null, error: { message: 'Idempotency conflict' } };
+  });
+  const worker = vi.fn();
+  const call = vi.fn();
+  await expect(
+    quoteOxygenPlan(
+      { rpc },
+      {
+        worker,
+        provider: { call },
+        partnerReference: 'partner',
+        hosts: new Set(),
+      },
+      { workflowId: id, idempotencyKey: key, equityPercentage: 35, tenure: 6 }
+    )
+  ).rejects.toThrow();
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_runtime',
+    expect.objectContaining({
+      p_operation: 'enqueue',
+      p_id: id,
+      p_payload: expect.objectContaining({
+        idempotencyKey: key,
+        command: { action: 'book', equityPercentage: 35, tenure: 6 },
+      }),
+    })
+  );
+  expect(worker).not.toHaveBeenCalled();
+  expect(call).not.toHaveBeenCalled();
+});
+
 it.each([
   'book',
   'refresh_details',

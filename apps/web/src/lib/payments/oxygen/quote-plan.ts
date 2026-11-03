@@ -58,10 +58,17 @@ export async function quoteOxygenPlan(
     )
   )
     throw new OxygenPlanQuoteError('blocked');
-  if (match) return saved(user, input.workflowId, match.bookingReference);
+  // A cached plan must not hide a booking that still needs reconciliation.
+  if (match && snapshot.pending?.action !== 'book')
+    return saved(user, input.workflowId, match.bookingReference);
+  const queuedBooking =
+    snapshot.pending?.action === 'book' && snapshot.pending.status === 'queued'
+      ? snapshot.pending
+      : null;
   if (
     !snapshot.executionEnabled ||
-    snapshot.pending ||
+    (snapshot.pending && !queuedBooking) ||
+    (queuedBooking && input.idempotencyKey !== queuedBooking.idempotencyKey) ||
     snapshot.stage === 'reconciliation_required' ||
     snapshot.bookingBlock ||
     snapshot.approvalOtpReady
@@ -98,7 +105,7 @@ export async function quoteOxygenPlan(
     };
   };
   const controlled = restrict(connection.provider);
-  if (!same) {
+  if (!same || queuedBooking) {
     if (
       !oxygenActionAllowed(
         {
@@ -120,10 +127,21 @@ export async function quoteOxygenPlan(
       {
         workflowId: input.workflowId,
         version: snapshot.version,
-        idempotencyKey: input.idempotencyKey,
+        // The owned snapshot identifies the existing command. The enqueue RPC
+        // compares its stored terms and version atomically before any claim.
+        idempotencyKey: queuedBooking?.idempotencyKey ?? input.idempotencyKey,
         command,
       }
     );
+    if (
+      snapshot.pending ||
+      snapshot.stage === 'reconciliation_required' ||
+      snapshot.state.booking?.status !== 'BOOKED' ||
+      snapshot.state.booking.equity_percentage !== input.equityPercentage ||
+      snapshot.state.booking.loan_tenure !== input.tenure ||
+      !snapshot.state.bookingReference
+    )
+      throw new OxygenPlanQuoteError('blocked');
   }
   // Do not book again if details or the response is lost after this point.
   await performOxygenAction(

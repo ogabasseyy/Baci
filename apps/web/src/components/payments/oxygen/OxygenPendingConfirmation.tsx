@@ -1,5 +1,6 @@
 'use client';
-import type { Dispatch, SetStateAction } from 'react';
+import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
+import { fetchWithCsrf } from '@/lib/api-client';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { OxygenAddressProgress } from './OxygenAddressProgress';
 import { OxygenApprovalUnconfirmed } from './OxygenApprovalUnconfirmed';
@@ -34,6 +35,42 @@ export function OxygenPendingConfirmation({
   selfieConfirmed,
   setComparingPlans,
 }: Props) {
+  const [bookingBusy, setBookingBusy] = useState(false);
+  const [bookingFailed, setBookingFailed] = useState(false);
+  const bookingLock = useRef(false);
+  async function resumeBooking() {
+    const pending = snapshot?.pending;
+    if (
+      bookingLock.current ||
+      !snapshot ||
+      pending?.action !== 'book' ||
+      pending.status !== 'queued' ||
+      !pending.bookingTerms
+    )
+      return;
+    bookingLock.current = true;
+    setBookingBusy(true);
+    setBookingFailed(false);
+    try {
+      const response = await fetchWithCsrf('/api/payments/oxygen/plans/quote', {
+        method: 'POST',
+        cache: 'no-store',
+        body: JSON.stringify({
+          workflowId: snapshot.workflowId,
+          idempotencyKey: pending.idempotencyKey,
+          ...pending.bookingTerms,
+        }),
+      });
+      if (!response.ok) throw new Error('Unavailable');
+      await refresh();
+    } catch {
+      setBookingFailed(true);
+      await refresh();
+    } finally {
+      bookingLock.current = false;
+      setBookingBusy(false);
+    }
+  }
   const s = snapshot?.state;
   if (
     awaitingConfirmation &&
@@ -60,7 +97,7 @@ export function OxygenPendingConfirmation({
           submitted
           delayed
           statusUnavailable={Boolean(error)}
-          busy={busy}
+          busy={busy || bookingBusy}
           onCheck={
             pendingReadRecovery(snapshot) === 'refresh_kyc'
               ? snapshot.stage === 'booked' && checkAddress
@@ -76,6 +113,10 @@ export function OxygenPendingConfirmation({
       <section className="px-6 pb-6" aria-label="Oxygen finance application">
         {snapshot?.workflowId &&
           snapshot.pending?.action !== 'approve_booking' &&
+          !(
+            snapshot.pending?.action === 'book' &&
+            snapshot.pending.status === 'queued'
+          ) &&
           s?.booking &&
           (s.booking.status === 'BOOKED' ? (
             <OxygenSavedPlans
@@ -108,8 +149,18 @@ export function OxygenPendingConfirmation({
         )}
         <OxygenConfirmationNotice
           booking={snapshot?.pending?.action === 'book'}
+          queuedBooking={pendingReadRecovery(snapshot) === 'book'}
+          bookingTerms={snapshot?.pending?.bookingTerms}
+          bookingError={
+            pendingReadRecovery(snapshot) === 'book' &&
+            (Boolean(error) || bookingFailed)
+          }
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
           queuedIdentityCheck={pendingReadRecovery(snapshot) === 'validate_nin'}
+          queuedSelfieCheck={pendingReadRecovery(snapshot) === 'selfie_link'}
+          selfieError={
+            pendingReadRecovery(snapshot) === 'selfie_link' && Boolean(error)
+          }
           identityError={
             pendingReadRecovery(snapshot) === 'validate_nin' && Boolean(error)
           }
@@ -117,17 +168,21 @@ export function OxygenPendingConfirmation({
             snapshot?.pending?.action === 'refresh_eligibility' &&
             snapshot.pending.status !== 'queued'
           }
-          busy={busy}
+          busy={busy || bookingBusy}
           refresh={
-            [
-              'refresh_kyc',
-              'refresh_details',
-              'refresh_eligibility',
-              'refresh_payment_setup',
-              'validate_nin',
-            ].includes(pendingReadRecovery(snapshot) ?? '') && checkPending
-              ? checkPending
-              : refresh
+            pendingReadRecovery(snapshot) === 'book'
+              ? resumeBooking
+              : [
+                    'refresh_kyc',
+                    'refresh_details',
+                    'refresh_eligibility',
+                    'refresh_payment_setup',
+                    'validate_nin',
+                    'selfie_link',
+                  ].includes(pendingReadRecovery(snapshot) ?? '') &&
+                  checkPending
+                ? checkPending
+                : refresh
           }
         />
       </section>

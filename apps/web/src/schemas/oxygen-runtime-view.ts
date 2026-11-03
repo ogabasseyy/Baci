@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { oxygenPlanQuoteSchema } from './oxygen-plan-quote';
 import { oxygenProviderStateSchema } from './oxygen-runtime';
 import { oxygenWorkflowStageSchema } from './oxygen-workflow';
 export const oxygenRuntimeSnapshotSchema = z
@@ -23,6 +24,9 @@ export const oxygenRuntimeSnapshotSchema = z
         action: z.string(),
         status: z.enum(['queued', 'executing', 'indeterminate']),
         idempotencyKey: z.uuid(),
+        bookingTerms: oxygenPlanQuoteSchema
+          .pick({ equityPercentage: true, tenure: true })
+          .optional(),
       })
       .nullable()
       .optional(),

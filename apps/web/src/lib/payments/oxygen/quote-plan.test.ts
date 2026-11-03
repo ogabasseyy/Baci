@@ -139,6 +139,113 @@ it('does not retry a booking after response loss', async () => {
   await expect(quoteOxygenPlan(user, connection, input)).rejects.toThrow();
   expect(m.perform).toHaveBeenCalledTimes(1);
 });
+it('resumes a queued comparison booking with its durable key after reload', async () => {
+  const durableKey = '80000000-0000-4000-8000-000000000001';
+  m.read.mockResolvedValue({
+    ...snapshot,
+    state: { ...state, booking: { ...booking, loan_tenure: 3 } },
+    pending: { action: 'book', status: 'queued', idempotencyKey: durableKey },
+  });
+  rpc.mockResolvedValueOnce({
+    data: { plans: [], selectedReference: null },
+    error: null,
+  });
+  await quoteOxygenPlan(user, connection, {
+    ...input,
+    idempotencyKey: durableKey,
+  });
+  expect(m.perform.mock.calls[0][5]).toMatchObject({
+    idempotencyKey: durableKey,
+    command: { action: 'book', equityPercentage: 35, tenure: 6 },
+  });
+  expect(m.perform.mock.calls.map((call) => call[5].command.action)).toEqual([
+    'book',
+    'refresh_details',
+  ]);
+});
+it('resumes a queued booking even when its terms match a cached plan', async () => {
+  const durableKey = '80000000-0000-4000-8000-000000000001';
+  m.read.mockResolvedValue({
+    ...snapshot,
+    state: { ...state, booking: { ...booking, loan_tenure: 3 } },
+    pending: { action: 'book', status: 'queued', idempotencyKey: durableKey },
+  });
+  await quoteOxygenPlan(user, connection, {
+    ...input,
+    idempotencyKey: durableKey,
+  });
+  expect(m.perform.mock.calls.map((call) => call[5].command.action)).toEqual([
+    'book',
+    'refresh_details',
+  ]);
+  expect(m.perform.mock.calls[0][5].idempotencyKey).toBe(durableKey);
+});
+it('does not resume a queued booking using an unrelated retry key', async () => {
+  const durableKey = '80000000-0000-4000-8000-000000000001';
+  m.read.mockResolvedValue({
+    ...snapshot,
+    state: { ...state, booking: { ...booking, loan_tenure: 3 } },
+    pending: { action: 'book', status: 'queued', idempotencyKey: durableKey },
+  });
+  rpc.mockResolvedValueOnce({
+    data: { plans: [], selectedReference: null },
+    error: null,
+  });
+  await expect(quoteOxygenPlan(user, connection, input)).rejects.toThrow(
+    'blocked'
+  );
+  expect(m.perform).not.toHaveBeenCalled();
+});
+it.each([
+  'executing',
+  'indeterminate',
+])('does not return a cached plan while a %s booking is unresolved', async (status) => {
+  m.read.mockResolvedValue({
+    ...snapshot,
+    pending: { action: 'book', status, idempotencyKey: id },
+  });
+  await expect(quoteOxygenPlan(user, connection, input)).rejects.toThrow(
+    'blocked'
+  );
+  expect(m.perform).not.toHaveBeenCalled();
+});
+it.each([
+  'executing',
+  'indeterminate',
+])('never resumes a %s booking', async (status) => {
+  m.read.mockResolvedValue({
+    ...snapshot,
+    pending: { action: 'book', status, idempotencyKey: id },
+  });
+  rpc.mockResolvedValue({
+    data: { plans: [], selectedReference: null },
+    error: null,
+  });
+  await expect(quoteOxygenPlan(user, connection, input)).rejects.toThrow(
+    'blocked'
+  );
+  expect(m.perform).not.toHaveBeenCalled();
+});
+it('does not fetch details when a queued booking was claimed concurrently', async () => {
+  const pending = { action: 'book', status: 'queued', idempotencyKey: id };
+  m.read.mockResolvedValue({
+    ...snapshot,
+    state: { ...state, booking: { ...booking, loan_tenure: 3 } },
+    pending,
+  });
+  rpc.mockResolvedValueOnce({
+    data: { plans: [], selectedReference: null },
+    error: null,
+  });
+  m.perform.mockResolvedValueOnce({
+    ...snapshot,
+    pending: { ...pending, status: 'executing' },
+  });
+  await expect(quoteOxygenPlan(user, connection, input)).rejects.toThrow(
+    'blocked'
+  );
+  expect(m.perform).toHaveBeenCalledTimes(1);
+});
 it.each([
   { stage: 'reconciliation_required' },
   { pending: { action: 'book', status: 'indeterminate' } },

@@ -4,7 +4,7 @@ import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { pendingReadRecovery } from './oxygen-read-recovery';
 
-/** Read-only provider lookups; never approves, cancels, pays, activates or settles. */
+/** Status reads and explicit queued recovery; never approves, cancels, pays, activates or settles. */
 export function useOxygenBookingProgress(
   snapshot: OxygenRuntimeSnapshot | null,
   busy: boolean,
@@ -121,6 +121,7 @@ export function useOxygenBookingProgress(
           'refresh_eligibility',
           'refresh_payment_setup',
           'validate_nin',
+          'selfie_link',
         ].includes(pendingReadRecovery(snapshot) ?? '')
       )
         return;
@@ -130,7 +131,8 @@ export function useOxygenBookingProgress(
         action === 'refresh_details' ||
         action === 'refresh_eligibility' ||
         action === 'refresh_payment_setup' ||
-        action === 'validate_nin'
+        action === 'validate_nin' ||
+        action === 'selfie_link'
       )
         await submit({ action });
     },

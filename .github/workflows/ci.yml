@@ -347,6 +347,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/redvault_fresh_claim_concurrency.sh
       - name: Test Oxygen local credit admission
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_local_credit_admission.sh
+      - name: Test Oxygen recorded gateway admission
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_recorded_gateway_fence.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder

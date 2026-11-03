@@ -63,14 +63,19 @@ const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
     ? hasGaming &&
       !hasPhrase(t, 'gaming laptop gpu') &&
       !hasPhrase(t, 'gaming laptop graphics card')
-    : (['desktop', 'monitor', 'accessories', 'battery'] as const).some(
-        (k) =>
-          (k === 'battery'
-            ? s.startsWith('laptop batter')
-            : s.startsWith(k.slice(0, 7))) &&
-          (k === 'desktop' || k === 'battery' || hasGaming) &&
-          GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
-      );
+    : s.startsWith('monitor')
+      ? hasGaming &&
+        !hasPhrase(t, 'monitors for') &&
+        !hasPhrase(t, 'monitor for') &&
+        GAMING_LAPTOP_EXEMPT_PHRASES.monitor.some((p) => hasPhrase(t, p))
+      : (['desktop', 'accessories', 'battery'] as const).some(
+          (k) =>
+            (k === 'battery'
+              ? s.startsWith('laptop batter')
+              : s.startsWith(k.slice(0, 7))) &&
+            (k === 'desktop' || k === 'battery' || hasGaming) &&
+            GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
+        );
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
@@ -124,9 +129,8 @@ function isDedicatedGamingLaptopContent(
   if (['handheld', 'steam deck', 'rog ally'].some((t) => hasPhrase(title, t))) {
     return false;
   }
-  if (hasTitleLaptopSubject(title)) {
+  if (hasTitleLaptopSubject(title))
     return !hasExcludedGamingLaptopSubject(title);
-  }
   const hasDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((t) =>
     hasPhrase(title, t)
   );

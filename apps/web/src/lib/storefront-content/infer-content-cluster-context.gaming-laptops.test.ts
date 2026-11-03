@@ -47,6 +47,7 @@ describe('inferContentClusterContext - gaming laptops', () => {
   it('keeps Gaming and Laptops categories for monitor articles even when title mentions gaming laptop setup', () => {
     for (const [title, category] of [
       ['Best Monitors for a Gaming Laptop Setup', 'Gaming'],
+      ['Best Monitors for Gaming Laptops: Pairing Guide', 'Gaming'],
       ['Top 5 Monitors for Your Gaming Laptop in 2026', 'Laptops'],
     ]) {
       const post = inferContentClusterContext({

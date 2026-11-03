@@ -71,6 +71,12 @@ Both the callback handler and customer payment-status recovery reach the shared 
 
 `GET /api/cron/oxygen-callback-reconciliation` authenticates with the existing cron secret before runtime construction, defaults off unless `OXYGEN_CALLBACK_DRAIN_ENABLED=true`, and drains at most the existing two-provider-read budget. Individual failures remain queued. A 200 means the pass ran, not that the backlog is empty. The VPS deployment definition schedules an authenticated pass every five minutes; deployment, runtime configuration, backlog alerting and end-to-end delivery still require verification. Next request-lifetime scheduling remains the immediate wake-up, with this endpoint as recovery.
 
+When the oldest pending callback is at least 15 minutes old, the drain returns
+`503` with code `oxygen_callback_backlog` after its bounded pass. The VPS
+runner exits nonzero and logs that code without customer data. This is a
+monitoring signal, not proof that an operator was notified: configure and test
+an alert on the cron failure/log before enabling the production drain.
+
 Local validation: 111 focused integration tests passed; additional focused activation and UI tests passed after review fixes. Web lint and typechecks passed (11 existing unrelated warnings). Isolated rollback validation covered the new environment and activation contracts, evidence, payment recovery, callback recovery, approval timing, address callbacks, saved plans, cache failure and booking blocks. No persistent migration or provider mutation occurred.
 
 Internal review found and corrected incomplete-callback retirement, missing recovery environment binding, staging evidence-key selection, competing frontend activation and already-activated callback recovery. CodeRabbit's whole-patch attempt failed its 150-file limit (582 selected files); a smaller backend attempt then failed the exhausted included-review allowance/unassigned organization seat. External review is incomplete. Do not bypass it or describe this patch as reviewed for release.

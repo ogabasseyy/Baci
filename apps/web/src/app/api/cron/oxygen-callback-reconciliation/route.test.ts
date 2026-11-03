@@ -113,4 +113,26 @@ describe('Oxygen callback reconciliation cron', () => {
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private');
   });
+
+  it('signals an aged callback backlog to the scheduler without exposing callback data', async () => {
+    const worker = {
+      rpc: vi.fn().mockResolvedValue({
+        error: null,
+        data: { pendingCount: 3, capped: false, oldestAgeSeconds: 900 },
+      }),
+    };
+    mocks.connect.mockReturnValue({
+      worker: vi.fn().mockResolvedValue(worker),
+      provider: {},
+      hosts: new Set(),
+      partnerReference: 'partner',
+      reconcilePaymentCallback: vi.fn(),
+    });
+    const response = await GET(request('Bearer secret'));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'Callback backlog requires attention',
+      code: 'oxygen_callback_backlog',
+    });
+  });
 });

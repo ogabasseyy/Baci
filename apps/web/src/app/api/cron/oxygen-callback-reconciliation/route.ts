@@ -5,6 +5,7 @@ import { reconcileOxygenCallbacks } from '@/lib/payments/oxygen/runtime-reconcil
 
 export const maxDuration = 120;
 const headers = { 'Cache-Control': 'no-store' };
+const BACKLOG_ALERT_AGE_SECONDS = 15 * 60;
 
 // The VPS schedule invokes this endpoint; the drain remains disabled by default.
 export async function GET(request: Request) {
@@ -37,6 +38,15 @@ export async function GET(request: Request) {
       worker,
       connection.partnerReference
     );
+    if ((backlog.oldestAgeSeconds ?? 0) >= BACKLOG_ALERT_AGE_SECONDS) {
+      return Response.json(
+        {
+          error: 'Callback backlog requires attention',
+          code: 'oxygen_callback_backlog',
+        },
+        { status: 503, headers }
+      );
+    }
     return Response.json({ enabled: true, backlog }, { headers });
   } catch {
     return Response.json(

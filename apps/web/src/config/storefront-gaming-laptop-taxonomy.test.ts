@@ -10,6 +10,7 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('aorus');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('nitro');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('blade');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('katana');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('alienware');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('omen');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('legion');

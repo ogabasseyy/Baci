@@ -176,5 +176,32 @@ describe('inferContentClusterContext - gaming laptops', () => {
       keywords: ['buyer guide'],
     });
     expect(aorusGuide.categorySlug).toBe('gaming-laptops');
+
+    const bladeGuide = inferContentClusterContext({
+      title: 'Razer Blade 16 Laptop Review',
+      excerpt: 'Premium thin and light gaming laptop benchmarks.',
+      category: 'Laptops',
+      tags: ['laptops', 'razer'],
+      keywords: ['review'],
+    });
+    expect(bladeGuide.categorySlug).toBe('gaming-laptops');
+
+    const nitroGuide = inferContentClusterContext({
+      title: 'Acer Nitro 15 Laptop Review',
+      excerpt: 'Budget-friendly mobile gaming performance tested.',
+      category: 'Laptops',
+      tags: ['laptops', 'acer'],
+      keywords: ['review'],
+    });
+    expect(nitroGuide.categorySlug).toBe('gaming-laptops');
+
+    const katanaGuide = inferContentClusterContext({
+      title: 'MSI Katana 15 Laptop Review',
+      excerpt: 'Entry gaming laptop review with RTX graphics.',
+      category: 'Laptops',
+      tags: ['laptops', 'msi'],
+      keywords: ['review'],
+    });
+    expect(katanaGuide.categorySlug).toBe('gaming-laptops');
   });
 });

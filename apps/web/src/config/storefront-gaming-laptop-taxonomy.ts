@@ -3,6 +3,7 @@ export const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'aorus',
   'blade',
   'geforce',
+  'katana',
   'legion',
   'nitro',
   'omen',

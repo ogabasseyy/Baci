@@ -85,6 +85,9 @@ it('redirects once after a session refresh and denies on repeated refresh', asyn
     'shop'
   );
   expect(result.status).toBe(307);
+  expect(
+    mocks.create.mock.results.at(-1)?.value.options.cookies.setAll([])
+  ).toBeUndefined();
   expect(result.headers.get('location')).toContain('__oxygen_policy_refresh=');
   expect(result.cookies.get('sb-fixture-auth-token.0')?.value).toBe('rotated');
   expect(result.headers.get('cache-control')).toBe('private, no-store');

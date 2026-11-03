@@ -39,7 +39,9 @@ export async function applyOwnedOxygenDocumentPolicy(
     const client = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll: (values) => rotated.push(...values),
+        setAll: (values) => {
+          rotated.push(...values);
+        },
       },
     });
     const owned = await verifyOxygenDocumentOwnership(

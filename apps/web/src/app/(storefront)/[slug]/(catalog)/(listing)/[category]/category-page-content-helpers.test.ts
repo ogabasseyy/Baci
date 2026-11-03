@@ -210,6 +210,7 @@ describe('buildCategoryPageHubModel', () => {
           category_slug: 'gaming-laptops',
           brand: 'ASUS',
           condition: 'New',
+          image: 'https://example.com/laptop.jpg',
           stock: 5,
           manage_stock: true,
           product_key_specs: { ram_gb: 32 },

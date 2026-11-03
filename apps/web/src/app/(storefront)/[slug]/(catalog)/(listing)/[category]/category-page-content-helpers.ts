@@ -134,7 +134,7 @@ export function buildCategoryPageHubModel(input: {
     comparisonLinks: input.comparisonLinks,
     brandAuthorityEntries: input.brandAuthorityEntries,
     products: input.products.map((product) => ({
-      id: product.id,
+      id: product.id != null ? String(product.id) : undefined,
       slug: product.slug || '',
       name: product.name,
       brand: product.brand,

@@ -5,6 +5,7 @@ import { selectDepositRow } from './proof-3-goal-deposit';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
 import { pollSettled, recordOf, usableList } from './read-rules';
+import { creditComplete } from './settle-rule';
 import { analyseRecord, type RecordFacts } from './tsq-analysis';
 
 /**
@@ -27,6 +28,13 @@ export type DepositMeasurement =
   | ({
       kind: 'measured';
       creditedKobo: number;
+      /**
+       * The shared settle rule holds: the settled credit is the full gross
+       * minus the fee this deposit's record shows. A partial tranche, or a
+       * net credit whose fee record is not visible, is measured but not
+       * complete, and must never be marked settled in a ledger.
+       */
+      complete: boolean;
       /** This deposit's list row, or null with the reason in rowDetail. */
       row: unknown;
       rowDetail: string | null;
@@ -91,10 +99,16 @@ export async function measureDeposit(
   const rowId = pickString(row, ['id']);
   const single = rowId ? await api.transaction(rowId, walletId) : null;
   const record = single ? recordOf(single) : null;
+  const facts = analyseRecord(record, {
+    sourceWalletId: null,
+    destinationWalletId: walletId,
+    amountKobo: grossKobo,
+  });
   return {
     kind: 'measured',
     ...funding,
     creditedKobo: credited,
+    complete: creditComplete(credited, grossKobo, facts.feeKobo),
     row,
     rowDetail: row
       ? null
@@ -106,10 +120,6 @@ export async function measureDeposit(
     listHttpStatus: polled.value.httpStatus,
     single,
     record,
-    facts: analyseRecord(record, {
-      sourceWalletId: null,
-      destinationWalletId: walletId,
-      amountKobo: grossKobo,
-    }),
+    facts,
   };
 }

@@ -2,6 +2,7 @@ import type { RunMode } from './constants';
 import type { QaIdentity } from './provider-ops';
 import type { ProofApi } from './provider-ops-proofs';
 import type { Redactor } from './redactor';
+import type { TransportFaults } from './transport-faults';
 
 export interface WalletView {
   id: string;
@@ -87,4 +88,6 @@ export interface ProofContext {
   bank: { code: string; account: string } | null;
   /** Ogabassey business sandbox wallet (interest payout target, proof 7). */
   businessWalletId: string | null;
+  /** Lets a proof lose one response after the request left (S8 timeout step). */
+  faults?: TransportFaults;
 }

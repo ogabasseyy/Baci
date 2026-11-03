@@ -50,24 +50,42 @@ export async function applyOwnedOxygenDocumentPolicy(
       trustedMerchantSlug
     );
     if (rotated.length) {
-      const previousRefresh = Number(
-        request.nextUrl.searchParams.get(refreshMarker)
-      );
-      if (
-        previousRefresh > 0 &&
-        Math.abs(Date.now() - previousRefresh) < 30_000
-      ) {
+      const marker = request.nextUrl.searchParams.get(refreshMarker) ?? '';
+      const match = /^(\d{13})(?:-(\d))?$/.exec(marker);
+      const startedAt = Number(match?.[1]);
+      const recent = startedAt > 0 && Math.abs(Date.now() - startedAt) < 30_000;
+      // Accept the old timestamp-only marker as one completed redirect.
+      const attempts = recent ? Number(match?.[2] ?? '1') : 0;
+      if (attempts >= 3) {
+        // Do not render checkout against stale request cookies. A retry will
+        // carry the rotated cookies without allowing an unbounded redirect loop.
+        const retry = new NextResponse('Session refreshed. Please retry.', {
+          status: 503,
+          headers: {
+            'Cache-Control': 'private, no-store',
+            'CDN-Cache-Control': 'no-store',
+            'Vercel-CDN-Cache-Control': 'no-store',
+            'Retry-After': '1',
+          },
+        });
+        for (const cookie of response.cookies.getAll())
+          retry.cookies.set(cookie);
         for (const { name, value, options } of rotated)
-          response.cookies.set(name, value, options);
-        return response;
+          retry.cookies.set(name, value, options);
+        return retry;
       }
       // Avoid duplicating large refreshed cookies in a rewrite response.
       const target = request.nextUrl.clone();
-      target.searchParams.set(refreshMarker, String(Date.now()));
+      target.searchParams.set(
+        refreshMarker,
+        `${recent ? startedAt : Date.now()}-${attempts + 1}`
+      );
       const redirect = NextResponse.redirect(target, 307);
       redirect.headers.set('Cache-Control', 'private, no-store');
       redirect.headers.set('CDN-Cache-Control', 'no-store');
       redirect.headers.set('Vercel-CDN-Cache-Control', 'no-store');
+      for (const cookie of response.cookies.getAll())
+        redirect.cookies.set(cookie);
       for (const { name, value, options } of rotated)
         redirect.cookies.set(name, value, options);
       return redirect;

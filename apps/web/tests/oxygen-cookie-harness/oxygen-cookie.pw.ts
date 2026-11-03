@@ -178,3 +178,32 @@ for (const [label, path] of [
     );
   });
 }
+
+test('a recent refresh marker permits a new expired session to refresh on first navigation', async ({
+  page,
+  context,
+}) => {
+  const expired = `e30.${Buffer.from(JSON.stringify({ sub: 'synthetic-user', exp: 1, role: 'authenticated' })).toString('base64url')}.sig`;
+  const session = `base64-${Buffer.from(JSON.stringify({ access_token: expired, refresh_token: 'synthetic-old-refresh', expires_at: 1, expires_in: 3600, token_type: 'bearer', user: { id: 'synthetic-user', aud: 'authenticated', role: 'authenticated' } })).toString('base64url')}`;
+  await context.addCookies([
+    {
+      name: 'sb-fixture-auth-token',
+      value: session,
+      url: 'http://127.0.0.1:3297',
+    },
+  ]);
+  const response = await page.goto(
+    `http://127.0.0.1:3297/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df&case=large&__oxygen_policy_refresh=${Date.now()}`
+  );
+  expect(response?.status()).toBe(200);
+  expect(response?.headers()['content-security-policy']).toContain(
+    'https://frame.example.test'
+  );
+  const forwarded = JSON.parse(await page.locator('pre').innerText());
+  const saved = (await context.cookies()).filter((cookie) =>
+    /^sb-fixture-auth-token\.\d+$/.test(cookie.name)
+  );
+  expect(saved.length).toBeGreaterThanOrEqual(2);
+  for (const cookie of saved)
+    expect(forwarded.cookie).toContain(`${cookie.name}=${cookie.value}`);
+});

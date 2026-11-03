@@ -107,6 +107,38 @@ it('admits the reference lookup and the failed-release receipt', async () => {
     )
   ).rejects.toThrow();
 });
+it('admits the daily reconciliation read with JSON options only', async () => {
+  mocks.query.mockReset();
+  mocks.query
+    .mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    })
+    .mockResolvedValueOnce({ rows: [{ result: { stuck: [] } }] });
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  const sql =
+    'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
+  await expect(
+    execute(sql, [
+      config.integrationId,
+      'staging',
+      JSON.stringify({ staleAfterSeconds: 1800 }),
+    ])
+  ).resolves.toEqual({ rows: [{ result: { stuck: [] } }] });
+  await expect(
+    execute(sql, [config.integrationId, 'staging', 'not json'])
+  ).rejects.toThrow();
+  await expect(
+    execute(sql, [config.integrationId, 'production', '{}'])
+  ).rejects.toThrow();
+});
 it('never runs a financial statement after an unsafe session check', async () => {
   mocks.query.mockReset().mockResolvedValue({ rows: [{ safe: false }] });
   await expect(

@@ -92,7 +92,7 @@ export function CookieConsent() {
                     <Link
                       href={asRoute(`${basePath}/privacy`)}
                       prefetch={false}
-                      className="underline underline-offset-4 hover:text-white"
+                      className="underline underline-offset-4 hover:text-foreground"
                     >
                       Read our policy
                     </Link>
@@ -106,7 +106,7 @@ export function CookieConsent() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(true)}
-                className="text-muted-foreground hover:text-foreground h-9"
+                className="text-muted-foreground hover:text-foreground min-h-11"
                 type="button"
               >
                 Customize
@@ -115,7 +115,7 @@ export function CookieConsent() {
                 variant="outline"
                 size="sm"
                 onClick={acceptNecessary}
-                className="h-9"
+                className="min-h-11"
               >
                 Necessary Only
               </Button>
@@ -123,7 +123,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={acceptAll}
-                className="h-9 px-6 shadow-sm"
+                className="min-h-11 px-6 shadow-sm"
               >
                 Accept All
               </ThemedButton>
@@ -148,7 +148,7 @@ export function CookieConsent() {
               <button
                 type="button"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
                 aria-label="Close details"
               >
                 <X className="size-5" />
@@ -257,7 +257,7 @@ export function CookieConsent() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowDetails(false)}
-                className="text-muted-foreground h-9"
+                className="text-muted-foreground min-h-11"
               >
                 Cancel
               </Button>
@@ -265,7 +265,7 @@ export function CookieConsent() {
                 colorRole="primary"
                 size="sm"
                 onClick={savePreferences}
-                className="h-9 px-6"
+                className="min-h-11 px-6"
               >
                 Save Preferences
               </ThemedButton>

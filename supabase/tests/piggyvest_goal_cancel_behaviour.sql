@@ -580,12 +580,15 @@ BEGIN
   -- the snapshot and the transfer) is never settled as cancelled-at-zero: the
   -- refund is credited, the goal stays open with the residual recorded, a
   -- review marker is written and the answer is 'conflict'. Rolled back.
-  PERFORM pg_temp.gc_assert(
-    piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":4200}'::jsonb)
-    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":0}'::jsonb)
-    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":"4200"}'::jsonb)
-    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"other":"x"}'::jsonb),
-    'the optional residual key was validated wrongly');
+  -- Only a positive integer residual (and no other extra key) is a valid proof.
+  FOREACH v_text IN ARRAY ARRAY['{"residualKobo":0}', '{"residualKobo":"4200"}', '{"other":"x"}'] LOOP
+    BEGIN
+      PERFORM piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
+        pg_temp.gc_proof(v_op) || v_text::jsonb);
+      RAISE EXCEPTION 'an invalid residual proof was accepted: %', v_text USING ERRCODE = 'PVT00';
+    EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+    END;
+  END LOOP;
   BEGIN
     PERFORM pg_temp.gc_assert(
       piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',

@@ -95,6 +95,9 @@ export function CdnFormatImage({
     onError?.(event);
   };
 
+  const resolvedFetchPriority =
+    imgProps.fetchPriority ?? (input.preload ? 'high' : undefined);
+
   if (input.preload) {
     const avifHref = avifSource
       ? rewriteOgabasseyTransformUrlFormat(imgProps.src, 'avif')
@@ -102,7 +105,7 @@ export function CdnFormatImage({
     if (avifSource && avifHref) {
       preload(avifHref, {
         as: 'image',
-        fetchPriority: imgProps.fetchPriority,
+        fetchPriority: resolvedFetchPriority,
         imageSizes: avifSource.sizes,
         imageSrcSet: avifSource.srcSet,
         type: 'image/avif',
@@ -110,7 +113,7 @@ export function CdnFormatImage({
     } else {
       preload(imgProps.src, {
         as: 'image',
-        fetchPriority: imgProps.fetchPriority,
+        fetchPriority: resolvedFetchPriority,
         imageSizes: imgProps.sizes,
         imageSrcSet: imgProps.srcSet,
       });
@@ -122,6 +125,7 @@ export function CdnFormatImage({
     <img
       {...imgProps}
       alt={imgProps.alt}
+      fetchPriority={resolvedFetchPriority}
       onError={handleError}
       onLoad={onLoad}
       ref={ref}

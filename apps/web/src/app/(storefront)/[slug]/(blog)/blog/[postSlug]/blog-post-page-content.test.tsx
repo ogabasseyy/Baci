@@ -700,11 +700,10 @@ describe('BlogPostPageContent', () => {
       'src',
       'https://cdn.ogabassey.com/media/blog/best-phones-cover.webp'
     );
-    // Repo LCP convention: preload XOR the loading/fetchPriority pair — never
-    // the redundant trio the hero shipped with before. The focused shell and
-    // preload-parity suites cover the non-DOM preload/quality inputs.
+    // Repo LCP convention: preload sets fetchpriority="high" on the rendered
+    // hero <img> while omitting redundant priority/loading attributes.
     expect(image).not.toHaveAttribute('priority');
-    expect(image).not.toHaveAttribute('fetchpriority');
+    expect(image).toHaveAttribute('fetchpriority', 'high');
     expect(image).not.toHaveAttribute('loading');
   });
 

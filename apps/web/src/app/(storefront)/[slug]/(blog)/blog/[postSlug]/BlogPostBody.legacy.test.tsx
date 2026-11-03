@@ -99,22 +99,18 @@ describe('BlogPostBody legacy rendering', () => {
       'https://usebaci.com/ogabassey/blog/pixel-9-review'
     );
 
-    expect(screen.getByRole('link', { name: 'Twitter' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
-    expect(screen.getByRole('link', { name: 'Twitter' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedTitle)
-    );
-    expect(screen.getByRole('link', { name: 'LinkedIn' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
-    expect(screen.getByRole('link', { name: 'Facebook' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(encodedShareUrl)
-    );
+    expect(
+      screen.getByRole('link', { name: /share on twitter/i })
+    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
+    expect(
+      screen.getByRole('link', { name: /share on twitter/i })
+    ).toHaveAttribute('href', expect.stringContaining(encodedTitle));
+    expect(
+      screen.getByRole('link', { name: /share on linkedin/i })
+    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
+    expect(
+      screen.getByRole('link', { name: /share on facebook/i })
+    ).toHaveAttribute('href', expect.stringContaining(encodedShareUrl));
     expect(mockResolveBlogPostContent).toHaveBeenCalledWith(
       '<p>Legacy HTML body</p>',
       {

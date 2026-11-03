@@ -344,6 +344,43 @@ describe('CdnFormatImage (preload side effect, mocked format-source)', () => {
     );
     expect(options).not.toHaveProperty('type');
   });
+
+  it('defaults fetchPriority="high" on both preload() and the rendered <img> when preload is true', async () => {
+    vi.doMock('@/lib/ogabassey-image-format-sources', () => ({
+      getOgabasseyImageFormatProps: vi.fn(() => ({
+        avifSource: {
+          sizes: '100vw',
+          srcSet: `${CDN}/image/format=avif/core-assets/products/phone-640.jpg 640w`,
+        },
+        imgProps: {
+          alt: 'Hero Phone',
+          sizes: '100vw',
+          src: `${CDN}/image/format=jpeg/core-assets/products/phone-640.jpg`,
+          srcSet: `${CDN}/image/format=jpeg/core-assets/products/phone-640.jpg 640w`,
+        },
+      })),
+    }));
+    const { CdnFormatImage: Component } = await import('./cdn-format-image');
+
+    const markup = renderToStaticMarkup(
+      <Component
+        src="unused-because-mocked"
+        alt="Hero Phone"
+        width={800}
+        height={600}
+        preload
+      />
+    );
+
+    expect(preload).toHaveBeenCalledWith(
+      `${CDN}/image/format=avif/core-assets/products/phone-640.jpg`,
+      expect.objectContaining({
+        fetchPriority: 'high',
+        type: 'image/avif',
+      })
+    );
+    expect(markup).toContain('fetchPriority="high"');
+  });
 });
 
 describe('CdnFormatImage (real pipeline — no ogabassey-image-format-sources mocking)', () => {

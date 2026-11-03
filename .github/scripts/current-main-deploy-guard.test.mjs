@@ -196,6 +196,7 @@ test('fails closed when the superseding comparison is incomplete', async () => {
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'diverged', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: intermediateSha }, status: 'ahead', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 0 },
+    { files: 'not-an-array', merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2, commits: [{ sha: currentSha }] },
   ]) {
     await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response(comparison), repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/);

@@ -200,13 +200,13 @@ async function supersedingChangesCanProceed({
   if (
     comparison?.status !== 'ahead' ||
     comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
-    !(Number.isSafeInteger(comparison?.total_commits) && comparison.total_commits >= 1)
+    !(Number.isSafeInteger(comparison?.total_commits) && comparison.total_commits >= 1) ||
+    (comparison.files != null && !Array.isArray(comparison.files))
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
   }
   if (comparison.total_commits > 100 || !(comparison.files?.length < 300)) {
-    const ctx = { apiRoot, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token };
-    return !(await descendantAlreadyDeployed(ctx));
+    return !(await descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }));
   }
   let nonWebOnly = true;
   for (const file of comparison.files) {

@@ -173,3 +173,23 @@ test('bugfix: the runs query has no server-side branch filter (capped at 1000 re
   assert.ok(urls.some((u) => u.includes('/deploy.yml/runs?')));
   assert.ok(!urls.filter((u) => u.includes('/deploy.yml/runs?')).some((u) => u.includes('branch=')));
 });
+
+test('bugfix: a malformed descendant compare (bad status or merge-base SHA) fails closed', async () => {
+  for (const bad of [{ status: 'nonsense', merge_base_commit: { sha: expectedSha } }, { status: 'ahead', merge_base_commit: { sha: 'garbage' } }]) {
+    const fetchImpl = farAheadFetch({
+      runs: [{ conclusion: 'success', head_branch: 'main', head_sha: intermediateSha, id: 3, status: 'completed' }, expectedRun],
+      compares: { [intermediateSha]: bad },
+      jobs: { 3: deployedJob },
+    });
+    await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete descendant comparison/);
+  }
+});
+
+test('bugfix: fails closed instead of exhausting the API rate budget on a huge run history', async () => {
+  const hex = (n) => n.toString(16).padStart(40, '0');
+  const pages = Array.from({ length: 10 }, (_, p) => Array.from({ length: 100 }, (_, i) => ({ conclusion: 'cancelled', head_branch: 'main', head_sha: hex(p * 100 + i + 1000), id: p * 100 + i + 5000, status: 'completed' })));
+  const urls = [];
+  const fetchImpl = farAheadFetch({ pages, urls });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /request budget/);
+  assert.ok(urls.length < 900);
+});

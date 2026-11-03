@@ -4,8 +4,15 @@ export default defineConfig({
   testMatch: 'oxygen-cookie.pw.ts',
   workers: 1,
   reporter: 'list',
-  outputDir: '/tmp/baci-oxygen-cookie-results',
-  use: { browserName: 'chromium', serviceWorkers: 'block' },
+  outputDir:
+    process.env.OXYGEN_COOKIE_BROWSER_ARTIFACTS ||
+    '/tmp/baci-oxygen-cookie-results',
+  use: {
+    browserName: 'chromium',
+    serviceWorkers: 'block',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
   webServer: {
     env: {
       NEXT_PUBLIC_SUPABASE_URL: 'https://fixture.supabase.co',

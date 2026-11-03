@@ -11,7 +11,8 @@ The server already refuses a goal contribution that has no PIN proof. Until now 
 - The proof the server returns is tied to one goal, one contribution reference and one amount, and works once. The app retries only when the server clearly says a PIN was missing or refused, using the same reference and the same payment route, so a retry can never pay twice or switch routes. Any other failure is not retried.
 - The sheet appears only after the server asks for a PIN. If the server says the PIN service is unavailable, or the answer is missing or unreadable, the customer sees "Wallet PIN is unavailable right now" and is never offered the set-a-PIN screen.
 - Wrong-PIN and lockout messages come from the server, unchanged.
-- Closing the sheet sends nothing and keeps the stored reference and route for the next attempt.
+- Closing the sheet sends nothing, keeps the stored reference and route for the next attempt, and tells the customer: "Your goal was created. Add money to it from your wallet when you're ready."
+- A PIN check that is still running when the sheet is closed and re-opened is ignored when it answers, so an old proof can never be used for a newer request.
 
 ## How it is tested
 Automated tests with mocked network answers cover setting, resetting and entering a PIN, wrong-PIN and lockout copy, the unavailable cases, the retry with the proof on the same reference and route, a closed sheet, the proof never reaching the older payment route, and both contribution screens. Each new or changed file has a server-off test, and the release-gate check passes. No live sandbox was used.

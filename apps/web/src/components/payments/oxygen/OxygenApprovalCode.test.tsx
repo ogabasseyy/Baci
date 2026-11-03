@@ -5,7 +5,15 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 
 const m = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -26,6 +34,13 @@ beforeAll(() =>
 );
 afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => vi.clearAllMocks());
+// input-otp schedules selection synchronization up to 50ms after mounting.
+// Let those callbacks finish before Vitest tears down the DOM environment.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+});
 const id = '60000000-0000-4000-8000-000000000001';
 const ref = '70000000-0000-4000-8000-000000000025';
 const state: OxygenProviderState = {

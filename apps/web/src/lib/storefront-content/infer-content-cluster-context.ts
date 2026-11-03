@@ -67,39 +67,32 @@ type ClusterSupportEntry = [
 
 function isDedicatedGamingLaptopContent(
   titleHaystack: string,
-  haystack: string
+  haystack: string,
+  excerptHaystack = ''
 ): boolean {
   const hasTitleGamingLaptopPhrase =
     hasPhrase(titleHaystack, 'gaming laptop') ||
     hasPhrase(titleHaystack, 'gaming laptops');
-
   const hasTitleLaptopToken =
     hasPhrase(titleHaystack, 'laptop') || hasPhrase(titleHaystack, 'laptops');
-
   const hasTitleDedicatedModel = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
     hasPhrase(titleHaystack, token)
   );
+  const isGpu = (subject: string) =>
+    subject === 'gpu' ||
+    subject === 'gpus' ||
+    subject === 'graphics card' ||
+    subject === 'graphics cards';
 
   if (
     hasTitleGamingLaptopPhrase ||
     (hasTitleDedicatedModel && hasTitleLaptopToken)
   ) {
-    const hasTitleExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-      (subject) => {
-        if (
-          hasTitleGamingLaptopPhrase &&
-          (subject === 'gpu' ||
-            subject === 'gpus' ||
-            subject === 'graphics card' ||
-            subject === 'graphics cards')
-        ) {
-          return false;
-        }
-        return hasPhrase(titleHaystack, subject);
-      }
+    return !EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
+      (subject) =>
+        !(hasTitleGamingLaptopPhrase && isGpu(subject)) &&
+        hasPhrase(titleHaystack, subject)
     );
-
-    return !hasTitleExcludedSubject;
   }
 
   const hasMetadataLaptopToken =
@@ -109,12 +102,20 @@ function isDedicatedGamingLaptopContent(
     hasPhrase(haystack, 'gaming laptops');
 
   if (hasTitleDedicatedModel && hasMetadataLaptopToken) {
-    const hasAnyExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-      (subject) =>
-        hasPhrase(titleHaystack, subject) || hasPhrase(haystack, subject)
-    );
+    const titleAndExcerpt = [titleHaystack, excerptHaystack]
+      .filter(Boolean)
+      .join(' ');
+    const hasLaptop =
+      hasTitleLaptopToken ||
+      hasPhrase(excerptHaystack, 'laptop') ||
+      hasPhrase(excerptHaystack, 'laptops') ||
+      hasPhrase(excerptHaystack, 'gaming laptop') ||
+      hasPhrase(excerptHaystack, 'gaming laptops');
 
-    return !hasAnyExcludedSubject;
+    return !EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
+      (subject) =>
+        !(hasLaptop && isGpu(subject)) && hasPhrase(titleAndExcerpt, subject)
+    );
   }
 
   return false;
@@ -124,7 +125,8 @@ function inferCategorySlug(
   haystack: string,
   tokens: string[],
   explicitCategory: string,
-  title?: string
+  title?: string,
+  excerpt?: string
 ): SupportedClusterCategory | null {
   const explicitMatch = (
     Object.entries(CONTENT_CLUSTER_SUPPORT) as ClusterSupportEntry[]
@@ -140,8 +142,9 @@ function inferCategorySlug(
       explicitMatch.categorySlug === 'gaming' ||
       explicitMatch.categorySlug === 'laptops'
     ) {
-      const titleHaystack = title ?? '';
-      if (isDedicatedGamingLaptopContent(titleHaystack, haystack)) {
+      if (
+        isDedicatedGamingLaptopContent(title ?? '', haystack, excerpt ?? '')
+      ) {
         return 'gaming-laptops';
       }
     }
@@ -275,7 +278,8 @@ export function inferContentClusterContext(
     haystack,
     tokens,
     explicitCategory,
-    normalizeText(input.title)
+    normalizeText(input.title),
+    normalizeText(input.excerpt)
   );
 
   return {

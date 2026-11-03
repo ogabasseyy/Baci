@@ -226,4 +226,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(desktopArticle.categorySlug).toBe('gaming');
   });
+
+  it('promotes legitimate dedicated-model laptop posts with incidental excluded subjects in metadata tags or keywords', () => {
+    const laptopArticle = inferContentClusterContext({
+      title: 'Alienware m16 Review',
+      excerpt: 'Flagship gaming laptop tested with high refresh rate.',
+      category: 'Gaming',
+      tags: ['alienware', 'gaming', 'gpu', 'monitor'],
+      keywords: ['review', 'gpu', 'monitor'],
+    });
+    expect(laptopArticle.categorySlug).toBe('gaming-laptops');
+  });
 });

@@ -2,7 +2,7 @@ import {
   CONTENT_CLUSTER_SCORE,
   CONTENT_CLUSTER_SUPPORT,
 } from '@/config/storefront-content-clusters';
-import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
+import { COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideDescription } from './build-commercial-guide-description';
 import type {
@@ -32,6 +32,14 @@ const KIND_PREFERENCE: Record<CommercialGuidePageKind, ContentClusterKind[]> = {
 };
 
 const MODEL_FAMILY_CONTEXT_EXCLUSIONS = new Set(['and', 'or']);
+const CONSOLE_BRAND_NAMES = new Set([
+  'nintendo',
+  'playstation',
+  'ps4',
+  'ps5',
+  'switch',
+  'xbox',
+]);
 function toPublishedTimestamp(value: string | null) {
   if (!value) {
     return 0;
@@ -182,20 +190,14 @@ export function buildCommercialGuideLinks(
         score += CONTENT_CLUSTER_SCORE.priceBandMatch;
       }
 
+      const isGameContext = COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN.test(
+        input.context.categorySlug
+      );
       const shouldBindProductModelBrand =
         normalizedBrands.length > 0 &&
-        (!GAME_CATEGORY_PATTERN.test(input.context.categorySlug) ||
+        (!isGameContext ||
           (input.context.categorySlug === 'gaming' &&
-            normalizedBrands.some((brand) =>
-              [
-                'ps4',
-                'ps5',
-                'playstation',
-                'xbox',
-                'switch',
-                'nintendo',
-              ].includes(brand)
-            )));
+            normalizedBrands.some((b) => CONSOLE_BRAND_NAMES.has(b))));
       const productGuideMatchStrength = getProductGuideMatchStrength({
         post,
         inferredTokens: inferred.tokens,
@@ -242,9 +244,7 @@ export function buildCommercialGuideLinks(
                 knownBrands: inferred.brands,
                 brandAliases,
                 discriminatorTokens,
-                requireBrandBeforeIdentifier: !GAME_CATEGORY_PATTERN.test(
-                  input.context.categorySlug
-                ),
+                requireBrandBeforeIdentifier: !isGameContext,
                 allowBrandAliasOverlap: true,
                 ...compareGuideDiscriminatorOptions,
               }

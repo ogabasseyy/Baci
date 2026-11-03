@@ -1,8 +1,10 @@
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const PAGE_SIZE = 100;
-// Each superseding commit costs ~2 requests (runs + jobs). The guard runs up to ~3 times per
-// deploy and GITHUB_TOKEN allows ~1000 REST calls/hour/repository, so one scan gets a third of
-// that: ~150 superseding commits. Beyond it the guard refuses rather than judge a partial history.
+// Each superseding commit costs ~2 requests (runs + jobs). On the success path the guard scans
+// about 3 times per deploy (attempt, promote, postdeploy; the pre-build run has a small gap), and
+// GITHUB_TOKEN allows ~1000 REST calls/hour/repository, so one scan gets a third of that: ~150
+// superseding commits. Retry attempts only follow a failure and can exceed the hourly allowance;
+// the guard then refuses (fails closed) rather than judge a partial history.
 const MAX_COMMITS = 150;
 const LOOKUP_CONCURRENCY = 5;
 const MAX_REQUESTS = 330;

@@ -1,6 +1,7 @@
 import { AMOUNTS_KOBO } from './constants';
 import { debitedOnce, readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
+import { settledAfterMovement } from './movement';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
 import { answerOf, type ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
@@ -166,9 +167,15 @@ export async function stepTimeoutRetry(
     b.finding(TIMEOUT_BOOKED_ONCE, Q[TIMEOUT_BOOKED_ONCE], 'unknown');
     return;
   }
-  const after = await settledWallets(ctx, [main, goal]);
+  // A resumed slot was booked before this run's baseline: nothing to measure.
+  // Otherwise the main balance must SHOW the booking; an unchanged, lagging
+  // balance is not a result.
+  const after =
+    sent.kind === 'resumed'
+      ? null
+      : await settledAfterMovement(ctx, [main, goal], baseline, [main]);
   const mainDelta =
-    baseline.settled && after.settled
+    after && baseline.settled && after.settled && after.moved
       ? delta(readingOf(baseline, main).balance, readingOf(after, main).balance)
       : null;
   const listed = await pollSettled(
@@ -206,10 +213,12 @@ export async function stepTimeoutRetry(
     answer,
     resumed
       ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
-      : rows === null
-        ? 'the transaction list never showed the reference within the polling budget'
-        : answer === 'unknown'
-          ? 'the main debit exceeds the amount and the record shows no fee that explains it'
-          : undefined
+      : debit === null
+        ? 'the main balance never showed the booking within the polling budget'
+        : rows === null
+          ? 'the transaction list never showed the reference within the polling budget'
+          : answer === 'unknown'
+            ? 'the main debit exceeds the amount and the record shows no fee that explains it'
+            : undefined
   );
 }

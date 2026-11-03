@@ -1,8 +1,8 @@
 import { AMOUNTS_KOBO } from './constants';
 import { measureDeposit } from './deposit-measure';
-import { answerOf, type ProofBuilder } from './proof-builder';
+import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
-import type { Answer } from './types';
+import { creditedOnce } from './verdict-rule';
 
 /**
  * S8, step 2: a bank deposit (the sandbox test-funding stand-in) into the main
@@ -11,21 +11,10 @@ import type { Answer } from './types';
  * and never by more than the gross (a double credit would exceed it).
  */
 
+export { creditedOnce };
 export const DEPOSIT_ONCE = 's8_deposit_credited_once';
 const QUESTION =
   'Is a bank deposit into the main wallet credited exactly once?';
-
-export function creditedOnce(
-  grossKobo: number,
-  creditedKobo: number,
-  feeKobo: number | null
-): Answer {
-  if (creditedKobo > grossKobo) return 'no';
-  if (creditedKobo === grossKobo) return 'yes';
-  return feeKobo === null
-    ? 'unknown'
-    : answerOf(creditedKobo === grossKobo - feeKobo);
-}
 
 export async function stepDeposit(
   ctx: ProofContext,

@@ -246,3 +246,14 @@ describe('S8 timeout slot resumed from the journal', () => {
     expect(answer(r, TIMEOUT_INDETERMINATE)).toBe('unknown');
   });
 });
+
+describe('S8 timeout booking with a lagging balance', () => {
+  it('answers unknown, not no, when the balance never shows the booking', async () => {
+    const { result } = await run({
+      mock: { balanceLagReads: 8 },
+      maxPolls: 6,
+    });
+    expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('unknown');
+    expect(result.values.timeout_main_delta_kobo).toBeNull();
+  });
+});

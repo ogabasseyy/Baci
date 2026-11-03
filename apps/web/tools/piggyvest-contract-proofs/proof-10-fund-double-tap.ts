@@ -1,6 +1,7 @@
 import { AMOUNTS_KOBO } from './constants';
-import { debitedOnce, readTransferFeeKobo } from './debit-once';
+import { readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
+import { settledAfterMovement } from './movement';
 import {
   awaitTerminal,
   delta,
@@ -13,6 +14,7 @@ import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
 import { pollSettled, usableList } from './read-rules';
 import type { Answer } from './types';
+import { transferVerdict } from './verdict-rule';
 
 /**
  * S8, steps 4 and 5: fund the goal wallet from the main wallet, then tap the
@@ -95,8 +97,13 @@ export async function stepFundGoal(
     main,
     await api.verify(sent.reference, main)
   );
-  const after = await settledWallets(ctx, [main, goal]);
-  const measured = baseline.settled && after.settled;
+  // Both balances must SHOW the transfer: a lagging, unchanged balance is not
+  // a settled result.
+  const after = await settledAfterMovement(ctx, [main, goal], baseline, [
+    main,
+    goal,
+  ]);
+  const measured = baseline.settled && after.settled && after.moved;
   result.mainBalanceKobo = after.settled
     ? readingOf(after, main).balance
     : null;
@@ -113,34 +120,22 @@ export async function stepFundGoal(
   const { mainDeltaKobo: main$, goalDeltaKobo: goal$ } = result;
   if (watch.terminal !== 'success' || main$ === null || goal$ === null) {
     b.inconclusive('the goal funding did not reach a settled, measured result');
-    b.finding(FUND_GOAL, FUND_Q, 'unknown');
+    b.finding(
+      FUND_GOAL,
+      FUND_Q,
+      'unknown',
+      watch.terminal !== 'success'
+        ? 'the funding did not reach a terminal success'
+        : 'the balances never showed the transfer within the polling budget'
+    );
     return result;
   }
-  const debit = -main$;
-  // One transfer takes the amount plus, at most, the fee the record shows. A
-  // debit the record cannot explain is never counted as "once".
+  // One transfer takes the amount plus, at most, the fee the record shows,
+  // on either side. A difference the record cannot explain is never "once".
   const fee = await readTransferFeeKobo(ctx, sent.reference, main);
   b.value('fund_goal_fee_from_record_kobo', fee);
-  const debitAnswer = debitedOnce(amount, debit, fee);
-  // A short goal credit with no fee read may be a goal-side fee: unknown only
-  // while the debit itself is not already impossible.
-  const goalShort = goal$ > 0 && goal$ < amount;
-  const answer: Answer =
-    debitAnswer === 'no' || goal$ <= 0 || goal$ > amount
-      ? 'no'
-      : goalShort || debitAnswer === 'unknown'
-        ? 'unknown'
-        : 'yes';
-  b.finding(
-    FUND_GOAL,
-    FUND_Q,
-    answer,
-    answer !== 'unknown'
-      ? undefined
-      : goalShort
-        ? 'the goal credit is below the amount and no fee was read'
-        : 'the main debit exceeds the amount and the record shows no fee that explains it'
-  );
+  const verdict = transferVerdict(amount, -main$, goal$, fee);
+  b.finding(FUND_GOAL, FUND_Q, verdict.answer, verdict.detail);
   return result;
 }
 
@@ -226,12 +221,13 @@ export async function stepDoubleTap(
     'double_tap_status_after',
     statusOf(await api.verify(reference, main))
   );
-  let repeatPending = false;
   if (again.outcome === 'accepted') {
-    // An accepted repeat is measured only once its status is terminal.
-    const watch = await awaitTerminal(ctx, reference, main);
-    b.value('double_tap_repeat_terminal', watch.terminal);
-    repeatPending = watch.terminal === 'timeout';
+    // The original's terminal status says nothing about the repeat: keep
+    // observing for the whole polling budget, never stopping on that status.
+    for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
+      await ctx.sleep(ctx.pollIntervalMs);
+      await api.verify(reference, main);
+    }
   }
   const settled = await settledWallets(ctx, [main]);
   const extraDebit = settled.settled
@@ -250,21 +246,30 @@ export async function stepDoubleTap(
   b.note(
     'Double tap: the provider behaviour on a repeated reference is recorded only; production never resubmits a reference.'
   );
-  const answer: Answer =
-    repeatPending ||
-    rowsBefore === null ||
-    rowsAfter === null ||
-    extraDebit === null
+  // A status check by reference returns the ORIGINAL booking, so it cannot
+  // show whether an accepted repeat settled or was deduplicated; a hidden or
+  // lagging second booking looks identical to none. An accepted repeat is
+  // therefore only ever `no` (a second row or debit was seen) or `unknown`.
+  const accepted = again.outcome === 'accepted';
+  const secondSeen =
+    (rowsAfter !== null && rowsAfter > 1) ||
+    (extraDebit !== null && extraDebit !== 0);
+  const answer: Answer = secondSeen
+    ? 'no'
+    : rowsBefore === null ||
+        rowsAfter === null ||
+        extraDebit === null ||
+        accepted
       ? 'unknown'
       : answerOf(rowsAfter === 1 && extraDebit === 0);
   b.finding(
     TAP_ONCE,
     TAP_ONCE_Q,
     answer,
-    answer === 'unknown'
-      ? repeatPending
-        ? 'the accepted repeat never reached a terminal state, so no count is published'
+    answer !== 'unknown'
+      ? undefined
+      : accepted && rowsAfter !== null && extraDebit !== null
+        ? 'the provider accepted the repeat and no second record or debit appeared, but its settlement or deduplication cannot be established from the original status'
         : 'the record list or the balances did not settle, so no count is published'
-      : undefined
   );
 }

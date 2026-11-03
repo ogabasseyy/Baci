@@ -164,6 +164,19 @@ describe('S8 fund goal with unexplained extra debit', () => {
 });
 
 describe('S8 double tap', () => {
+  it('stays unknown when an accepted repeat is hidden past the polling budget', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { duplicateReference: 'accept', tsqPendingPolls: 3 },
+      maxPolls: 6,
+    });
+    expect(fund?.terminalSuccess).toBe(true);
+    h.mock.sandbox.options.listLagReads = 8;
+    h.mock.sandbox.options.balanceLagReads = 8;
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(b.build(h.ctx).values.double_tap_wire_outcome).toBe('accepted');
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+
   it('does not repeat on the wire while the original funding is still pending', async () => {
     const { h, b, main, goal, fund } = await setup({
       mock: { tsqPendingPolls: 7 },
@@ -213,7 +226,7 @@ describe('S8 double tap', () => {
     expect(answer(b, h, TAP_SENDS_ONCE)).toBe('unknown');
   });
 
-  it('answers unknown, not yes, when an accepted repeat never reaches a terminal state', async () => {
+  it('answers no, not yes, when an accepted repeat shows a second record while its status stays pending', async () => {
     const { h, b, main, goal, fund } = await setup({
       mock: { duplicateReference: 'accept' },
     });
@@ -224,6 +237,64 @@ describe('S8 double tap', () => {
     });
     await stepDoubleTap(h.ctx, b, main, goal, fund);
     expect(b.build(h.ctx).values.double_tap_wire_outcome).toBe('accepted');
+    expect(answer(b, h, TAP_ONCE)).toBe('no');
+  });
+});
+
+describe('S8 stale balances after a terminal success', () => {
+  it('answers unknown, not no, when balances lag past the polling budget', async () => {
+    const { h, b, fund } = await setup({
+      mock: { balanceLagReads: 8 },
+      maxPolls: 6,
+    });
+    expect(fund?.terminalSuccess).toBe(true);
+    expect(fund?.mainDeltaKobo).toBeNull();
+    expect(answer(b, h, FUND_GOAL)).toBe('unknown');
+    expect(b.build(h.ctx).values.fund_goal_main_delta_kobo).toBeNull();
+  });
+
+  it('does not tap again on a funding whose balances never moved', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { balanceLagReads: 8 },
+      maxPolls: 6,
+    });
+    const before = transferPosts(h);
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(transferPosts(h)).toBe(before);
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+});
+
+describe('S8 fund goal with a fee on the goal credit', () => {
+  async function shortCredit(short: number) {
+    const h = makeHarness({ mock: { tsqShape: 'rich', transferFeeKobo: 100 } });
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const goal = h.state.goalWalletId as string;
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    const goalWallet = h.mock.sandbox.wallet(goal);
+    let taken = false;
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (goalWallet && !taken) {
+        taken = true;
+        goalWallet.balance -= short;
+      }
+      return out;
+    };
+    const b = new ProofBuilder('p10', 'S8');
+    await stepFundGoal(h.ctx, b, main, goal);
+    return { h, b };
+  }
+
+  it('answers yes when the shortfall equals the fee read', async () => {
+    const { h, b } = await shortCredit(100);
+    expect(answer(b, h, FUND_GOAL)).toBe('yes');
+  });
+
+  it('answers no when the shortfall differs from the fee read', async () => {
+    const { h, b } = await shortCredit(300);
+    expect(answer(b, h, FUND_GOAL)).toBe('no');
   });
 });

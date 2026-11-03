@@ -278,7 +278,8 @@ describe('buildScriptExecutors', () => {
       await ex.merchant_settlement!({
         ...stepCtx,
         gatewayResponse: {
-          fees_split: { integration: 0, subaccount: 5_000_000 },
+          amount: 5_030_000,
+          fees_split: { integration: 0, paystack: 30_000, subaccount: 5_000_000 },
           subaccount: { subaccount_code: 'ACCT_store' },
         },
       });
@@ -290,6 +291,57 @@ describe('buildScriptExecutors', () => {
         'record_merchant_settlement',
         expect.anything()
       );
+    });
+
+    describe('bugfix: GIGL customer-checkout orders must use the GIGL settlement RPCs', () => {
+      const giglOrder = () =>
+        richOrder({
+          shipping_provider: ' gigl ',
+          shipping_funding_source: 'customer_checkout',
+        });
+      const splitCtx = {
+        ...stepCtx,
+        gatewayResponse: {
+          amount: 5_030_000,
+          fees_split: { integration: 0, paystack: 30_000, subaccount: 5_000_000 },
+          subaccount: { subaccount_code: 'ACCT_store' },
+        },
+      };
+
+      it('routes a split payload to record_paystack_direct_split_settlement_gigl_v1', async () => {
+        const args = { ...defaultArgs(), richOrder: giglOrder() };
+        const ex = buildScriptExecutors(args);
+        await ex.merchant_settlement!(splitCtx);
+        expect(args.supabase.rpc).toHaveBeenCalledWith(
+          'record_paystack_direct_split_settlement_gigl_v1',
+          expect.objectContaining({ p_paystack_subaccount_code: 'ACCT_store' })
+        );
+      });
+
+      it('routes a Baci-collected payload to record_merchant_settlement_gigl_v1', async () => {
+        const args = { ...defaultArgs(), richOrder: giglOrder() };
+        const ex = buildScriptExecutors(args);
+        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { subaccount: {} } });
+        expect(args.supabase.rpc).toHaveBeenCalledWith(
+          'record_merchant_settlement_gigl_v1',
+          expect.objectContaining({
+            p_metadata: expect.objectContaining({ paystack_collection: 'integration' }),
+          })
+        );
+      });
+
+      it('keeps the non-GIGL RPC for a GIGL provider without an economics snapshot', async () => {
+        const args = {
+          ...defaultArgs(),
+          richOrder: richOrder({ shipping_provider: 'GIGL', shipping_funding_source: null }),
+        };
+        const ex = buildScriptExecutors(args);
+        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { subaccount: {} } });
+        expect(args.supabase.rpc).toHaveBeenCalledWith(
+          'record_merchant_settlement',
+          expect.anything()
+        );
+      });
     });
 
     it('refuses to credit when the verified payload proves neither collection mode', async () => {

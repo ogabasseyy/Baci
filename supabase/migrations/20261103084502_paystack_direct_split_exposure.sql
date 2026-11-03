@@ -27,9 +27,9 @@ ALTER FUNCTION private.merchant_wallet_direct_settled_exposure(uuid) OWNER TO po
 REVOKE ALL ON FUNCTION private.merchant_wallet_direct_settled_exposure(uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE INDEX IF NOT EXISTS merchant_settlements_wallet_settled_paystack_idx
-  ON public.merchant_settlements (wallet_id)
-  WHERE status = 'settled' AND source_type = 'order';
+-- No new index: the exposure sum filters by wallet_id, which the baseline's
+-- idx_merchant_settlements_wallet_id already covers, and a plain CREATE INDEX
+-- here would hold a SHARE lock on merchant_settlements during deploy.
 
 -- Spendable balance for payout callers and dashboards (service_role only).
 CREATE OR REPLACE FUNCTION public.get_merchant_wallet_spendable_balance(

@@ -3,7 +3,7 @@ export type PaystackSettlementCollection =
       mode: 'direct_split';
       subaccountCode: string;
       subaccountShareKobo: number;
-      integrationShareKobo: number | null;
+      integrationShareKobo: number;
       transactionChargeKobo: number | null;
     }
   | { mode: 'integration' }
@@ -71,14 +71,25 @@ export function classifyPaystackSettlementCollection(
   }
   // A named subaccount is not enough: the history row records what the
   // merchant's bank received, so Paystack's split must state the merchant
-  // share. Zero is a valid, verified share (Baci's charge took the whole
-  // payment); a missing or malformed one proves nothing either way.
-  if (subaccountShareKobo === null) {
+  // share, and the split must add up: merchant + Baci + Paystack = amount
+  // (true for every production split, card and bank transfer alike). Zero is
+  // a valid share (Baci's charge took the whole payment); a missing,
+  // malformed or inconsistent split proves nothing either way.
+  const integrationShareKobo = parseKobo(feesSplit?.integration);
+  const paystackFeeKobo = parseKobo(feesSplit?.paystack);
+  const amountKobo = parseKobo(payload.amount);
+  if (
+    subaccountShareKobo === null ||
+    integrationShareKobo === null ||
+    paystackFeeKobo === null ||
+    amountKobo === null ||
+    subaccountShareKobo + integrationShareKobo + paystackFeeKobo !== amountKobo
+  ) {
     return { mode: 'unknown' };
   }
   const params = asRecord(feesSplit?.params);
   return {
-    integrationShareKobo: parseKobo(feesSplit?.integration),
+    integrationShareKobo,
     mode: 'direct_split',
     subaccountCode,
     subaccountShareKobo,

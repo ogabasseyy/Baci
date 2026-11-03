@@ -53,9 +53,7 @@ export function resolveSettlementRpcRouting(args: {
       paystack_collection: 'direct_split',
       paystack_subaccount_code: collection.subaccountCode,
       paystack_subaccount_share_kobo: collection.subaccountShareKobo,
-      ...(collection.integrationShareKobo === null
-        ? {}
-        : { paystack_integration_share_kobo: collection.integrationShareKobo }),
+      paystack_integration_share_kobo: collection.integrationShareKobo,
       ...(collection.transactionChargeKobo === null
         ? {}
         : {

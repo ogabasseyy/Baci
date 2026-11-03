@@ -1011,6 +1011,15 @@ describe('POST /api/payments/initialize', () => {
         expect(serverClientRpcNames).toContain(
           'get_order_paystack_split_retained_shipping_kobo'
         );
+        // The persisted merchant amount excludes the delivery fee Baci keeps:
+        // (500000 - 7500 - 120000) kobo.
+        expect(rpcCalls).toContainEqual({
+          name: 'create_payment_transaction',
+          args: expect.objectContaining({
+            p_merchant_amount: 3_725,
+            p_platform_fee: 75,
+          }),
+        });
         expect(mockInitializePaystack).toHaveBeenCalledWith(
           expect.objectContaining({
             subaccount: 'ACCT_TESTMOCK1234567',

@@ -218,6 +218,14 @@ functions called from the existing paid-order side-effect graph (see
 
 ## Not in this PR (follow-ups)
 
+- **Two pending card checkouts for one GIG order each carry the delivery fee
+  in `transaction_charge`.** The checkout read subtracts only recorded
+  settlements, so if a customer pays both attempts, Paystack keeps the fee
+  twice while settlement history records it once (the second paid attempt
+  already goes to review). Fix by reserving the retained amount when a
+  checkout starts, or by not retaining it while another attempt for the
+  order is pending.
+
 - **Owner-only "ship with GIG without paying from the wallet"**, for the
   owner's store, since Baci's GIG account is owner-funded. Keep it a separate,
   owner-restricted mechanism. After this PR merges, the owner's store cannot

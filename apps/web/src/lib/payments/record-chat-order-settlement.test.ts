@@ -51,7 +51,12 @@ describe('recordChatOrderSettlement', () => {
       recordChatOrderSettlement({
         ...base,
         gatewayResponse: {
-          fees_split: { subaccount: 2_462_500 },
+          amount: 2_500_000,
+          fees_split: {
+            integration: 0,
+            paystack: 37_500,
+            subaccount: 2_462_500,
+          },
           subaccount: { subaccount_code: 'ACCT_other' },
         },
         supabase: { rpc },

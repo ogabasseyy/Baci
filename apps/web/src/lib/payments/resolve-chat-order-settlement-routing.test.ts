@@ -21,7 +21,8 @@ describe('resolveChatOrderSettlementRouting', () => {
     const routing = resolveChatOrderSettlementRouting({
       gateway: 'paystack',
       gatewayResponse: {
-        fees_split: { subaccount: 990_000 },
+        amount: 1_000_000,
+        fees_split: { integration: 0, paystack: 10_000, subaccount: 990_000 },
         subaccount: { subaccount_code: 'ACCT_chat' },
       },
     });

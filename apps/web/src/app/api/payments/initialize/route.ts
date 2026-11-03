@@ -978,7 +978,9 @@ async function initializePaystack(
     checkout_url: paystackData.authorization_url,
     reference,
     platformFee: fees.platformFee / 100,
-    merchantAmount: fees.merchantAmount / 100,
+    // The subaccount receives the amount minus Baci's whole charge, which
+    // now includes the retained GIG delivery fee.
+    merchantAmount: (fees.merchantAmount - retainedShippingKobo) / 100,
   };
 }
 

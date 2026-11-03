@@ -3,7 +3,9 @@ import { classifyPaystackSettlementCollection } from '@/lib/payments/classify-pa
 
 describe('classifyPaystackSettlementCollection', () => {
   it('classifies a subaccount-split transaction as direct_split with parsed shares', () => {
+    // Paystack's split always adds up: merchant + Baci + Paystack = amount.
     const result = classifyPaystackSettlementCollection({
+      amount: 1_006_500,
       fees_split: {
         integration: '5000',
         params: { bearer: 'account', transaction_charge: '205000' },
@@ -22,18 +24,41 @@ describe('classifyPaystackSettlementCollection', () => {
     });
   });
 
-  it('returns null for the optional shares it cannot parse', () => {
+  it('accepts a bank-transfer split where Paystack takes its fee from the merchant share', () => {
+    // Production DVA shape: no transaction_charge, Baci gets 0.
     expect(
       classifyPaystackSettlementCollection({
+        amount: '83500000',
         fees_split: {
-          integration: -1,
+          integration: 0,
+          paystack: 30_000,
+          subaccount: 83_470_000,
+        },
+        subaccount: { subaccount_code: 'ACCT_x' },
+      })
+    ).toEqual({
+      integrationShareKobo: 0,
+      mode: 'direct_split',
+      subaccountCode: 'ACCT_x',
+      subaccountShareKobo: 83_470_000,
+      transactionChargeKobo: null,
+    });
+  });
+
+  it('returns null for a transaction charge it cannot parse', () => {
+    expect(
+      classifyPaystackSettlementCollection({
+        amount: 260_000,
+        fees_split: {
+          integration: 5_000,
           params: { transaction_charge: '12.5' },
+          paystack: 5_000,
           subaccount: '250000',
         },
         subaccount: { subaccount_code: 'ACCT_x' },
       })
     ).toEqual({
-      integrationShareKobo: null,
+      integrationShareKobo: 5_000,
       mode: 'direct_split',
       subaccountCode: 'ACCT_x',
       subaccountShareKobo: 250_000,
@@ -46,9 +71,11 @@ describe('classifyPaystackSettlementCollection', () => {
     // share can legitimately be 0; it is still verified, so it must settle.
     expect(
       classifyPaystackSettlementCollection({
+        amount: 500_000,
         fees_split: {
           integration: 480_000,
           params: { transaction_charge: '500000' },
+          paystack: 20_000,
           subaccount: 0,
         },
         subaccount: { subaccount_code: 'ACCT_x' },
@@ -60,6 +87,29 @@ describe('classifyPaystackSettlementCollection', () => {
       subaccountShareKobo: 0,
       transactionChargeKobo: 500_000,
     });
+  });
+
+  it('fails closed to unknown when the split shares do not add up to the amount', () => {
+    const split = { integration: 5_000, paystack: 195_000, subaccount: 1 };
+    const named = { subaccount: { subaccount_code: 'ACCT_x' } };
+
+    for (const payload of [
+      // A 1-kobo merchant share on a ₦20,000 sale.
+      { ...named, amount: 2_000_000, fees_split: split },
+      // The amount, Baci's share or Paystack's fee is missing or malformed.
+      { ...named, fees_split: split },
+      { ...named, amount: 'abc', fees_split: split },
+      {
+        ...named,
+        amount: 200_001,
+        fees_split: { ...split, paystack: undefined },
+      },
+      { ...named, amount: 200_001, fees_split: { ...split, integration: -1 } },
+    ]) {
+      expect(classifyPaystackSettlementCollection(payload)).toEqual({
+        mode: 'unknown',
+      });
+    }
   });
 
   it('fails closed to unknown when a named subaccount has no provable merchant share', () => {

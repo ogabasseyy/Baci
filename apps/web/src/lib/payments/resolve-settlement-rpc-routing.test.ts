@@ -5,10 +5,13 @@ import {
   resolveSettlementRpcRouting,
 } from '@/lib/payments/resolve-settlement-rpc-routing';
 
+// Production card shape: merchant + Baci + Paystack = amount.
 const splitPayload = {
+  amount: 27_752_088,
   fees_split: {
     integration: '5000',
     params: { transaction_charge: '205000' },
+    paystack: 200_000,
     subaccount: 27547088,
   },
   subaccount: { subaccount_code: 'ACCT_merchant' },

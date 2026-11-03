@@ -78,6 +78,8 @@ export type RichOrder = {
   customer_email?: string | null;
   customer_phone?: string | null;
   currency?: string | null;
+  shipping_provider?: string | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
   shipping_address?: {
     address?: string;
     city?: string;
@@ -250,11 +252,18 @@ export function buildScriptExecutors(
     // Storefront DVAs usually split to the merchant subaccount: record those
     // as history, keep Baci-collected money spendable, and refuse a payload
     // that proves neither (throws paystack_settlement_collection_unknown).
+    // Mirror paid-order-settlement-executor: GIGL customer-checkout/wallet
+    // orders carry an economics snapshot and need the GIGL variant so the
+    // retained delivery-fee accounting is not dropped. p_platform_fee stays
+    // the base fee; the SQL wrapper adds the retention.
+    const useGiglSettlementRpc =
+      richOrder.shipping_funding_source != null &&
+      richOrder.shipping_provider?.trim().toUpperCase() === 'GIGL';
     const routing = resolveSettlementRpcRouting({
       gatewayResponse: ctx.gatewayResponse,
       isRedvaultDirectSettlement: false,
       settlementGateway: 'paystack',
-      useGiglSettlementRpc: false,
+      useGiglSettlementRpc,
     });
     const { error: settlementError } = await supabase.rpc(
       routing.rpc,

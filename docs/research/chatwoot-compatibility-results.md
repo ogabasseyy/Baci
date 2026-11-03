@@ -23,25 +23,29 @@ The `observed-status` label describes only the observed HTTP status pattern afte
 
 ### Isolated synthetic observation
 
-On 2026-11-03, the isolated Chatwoot CE **v4.19.1** fixture used image manifest digest `sha256:04895c7bd0550d9e74b45b7202787b56f7ee4e891ebbde0c429c8c32901b97cf`. It contained two synthetic accounts, two users, two conversations, and six synthetic messages. The fixture database verified ownership and membership; token validity was independently controlled; the temporary fixture was cleaned up afterward.
+On 2026-11-03, isolated Chatwoot CE **v4.19.1** runs used image manifest digest `sha256:04895c7bd0550d9e74b45b7202787b56f7ee4e891ebbde0c429c8c32901b97cf`. The first fixture contained two synthetic accounts, two users, two conversations, and six synthetic messages. Its database verified ownership and membership; token validity was independently controlled; the fixture was cleaned up afterward.
 
 The captured HTTP outcomes were: each account's own conversation reads and message POSTs — **200**; cross-account conversation-list reads, thread/detail reads, and message POSTs — **401**. These are bounded observations from that fixture, not a provider pass. The prior two-request probe itself returned **unknown** for its A-detail-200/B-detail-401 path: it had no B-own-account positive control and only labeled 403/404. The updated three-request probe (B list, A detail, B against A detail) is covered by mocked unit tests only; it was **not** run against the now-removed instance. Thus this fixture evidence does not claim that the updated executable reproduced the captured sequence.
 
-This evidence does not prove full tenant isolation, identify all authorization causes, or establish webhook support. No webhook contract or delivery was tested.
+In a second synthetic run with the same image and digest, the two fully configured accounts' own reads returned **200**, while B reading A's conversation detail returned **401**. That fixture contained three total accounts (one only partially set up), two users, two conversations, and five messages. Database ownership and membership were checked, token validity was independently controlled, and the fixture was cleaned up. `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` was used only inside the isolated internal network; no external egress was available.
+
+In that second run, two POSTs carrying the same `echo_id` but different content each returned **200**, and the database contained two messages. This shows `echo_id` alone did not enforce uniqueness/deduplication for those requests. It is **not** an identical-request replay test. Separately, a message accepted by Chatwoot had its HTTP response discarded locally; reconciliation then found one message in B's conversation. No lost-response retry was performed, so this does not prove retry safety or deduplication after ambiguous acceptance.
+
+Webhook receiver/DNS setup was unsuccessful. No webhook delivery was captured; there is no conclusion about webhook signing, delivery, or retry behavior. These observations do not prove full tenant isolation or qualify Chatwoot.
 
 ## Current evidence ledger
 
 | Contract | Status | Remaining qualification |
 | --- | --- | --- |
 | Documented read-only conversation detail route | Contract verified from pinned Swagger candidate | Revalidate route/auth behavior against the supported pinned image at execution. |
-| Synthetic v4.19.1 cross-account read/write status observations (2026-11-03) | Observed: own reads/POSTs 200; cross-account lists/threads/POSTs 401; manifest digest recorded above | Prior probe returned unknown; updated positive-control implementation has mocked tests only and was not run on the removed fixture. Repeat under a retained isolated fixture and test more resources. |
+| Synthetic v4.19.1 cross-account status observations (2026-11-03) | Observed: own reads 200; B-to-A detail 401; manifest digest recorded above | Prior probe returned unknown; updated positive-control implementation has mocked tests only and was not run on the removed fixture. Repeat under a retained isolated fixture and test more resources. |
 | Complete two-account access isolation | Unknown | The captured endpoints/statuses are limited; test contacts, other reads/writes, guessed IDs, revoked staff, and relevant authorization paths. |
 | CE API access without enterprise features | Unknown | Verify against the isolated CE build. |
 | Sender attribution and message history | Unknown | Verify human/bot actor attribution and reconstructed history. |
 | Text, image, audio, and PDF behavior | Unknown | Exercise multipart and both-direction contracts with synthetic fixtures. |
 | Private media and revocation | Unknown | Test access without auth, deletion/revocation, Range requests, and redirect blocking through the gateway. |
-| Signed webhook delivery and recovery | Unknown | No webhook was tested. Test signatures, replay, interruption, and redelivery. |
-| Message acceptance ambiguity and replay | Unknown | Drop acknowledgement after acceptance and establish replay/reconciliation behavior. |
+| Signed webhook delivery and recovery | Unknown | Receiver/DNS setup failed; no delivery was captured and no signature/retry behavior was assessed. Fix the isolated receiver setup and test signing, replay, interruption, and redelivery. |
+| Message acceptance ambiguity and replay | Unknown | One accepted message was reconciled after its response was discarded; no retry was attempted. Same-echo-ID requests had different content and created two rows. Test identical-payload replay after lost acknowledgement before drawing retry/deduplication conclusions. |
 | Accepted-but-lost resource creation recovery | Unknown | Verify safe lookup before retry; do not infer message correlation applies to resource creation. |
 | Rate limits and operational recovery | Unknown | Exercise bounded synthetic traffic and record recovery behavior. |
 | Value versus native Supabase messaging | Unknown | Compare operational burden, failure dependencies, effort, cost, and retained provider value. |

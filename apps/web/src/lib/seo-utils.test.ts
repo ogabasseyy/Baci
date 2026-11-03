@@ -2041,6 +2041,27 @@ describe('generateMetaTitle', () => {
           'Buy Game - (Disc Edition) (PS5, PS4)'
         )
       ).toBe('Buy Game - (Disc Edition)');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) -')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) and')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) |')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) /')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) &')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) –')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) —')
+      ).toBe('Buy Game');
     });
 
     it('drops orphan separators before retained terminal punctuation', () => {

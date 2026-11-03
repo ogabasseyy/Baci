@@ -1669,11 +1669,14 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       ) {
         strippedAtStart = true;
       }
-      if (
-        typeof offset === 'number' &&
-        title.slice(offset + match.length).trim().length === 0
-      ) {
-        strippedAtEnd = true;
+      if (typeof offset === 'number') {
+        const remaining = title.slice(offset + match.length);
+        if (
+          remaining.trim().length === 0 ||
+          /^(?:[\s\-–—|/&]|\band\b)+$/u.test(remaining)
+        ) {
+          strippedAtEnd = true;
+        }
       }
       if (innerBeforePunctOrEnd !== undefined) {
         return '';

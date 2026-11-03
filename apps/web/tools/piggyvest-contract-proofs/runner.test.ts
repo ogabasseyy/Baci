@@ -34,6 +34,8 @@ describe('dry-run (default)', () => {
       p5: 'observed',
       p6: 'observed',
       p7: 'observed',
+      p8: 'observed',
+      p9: 'observed',
     });
     const output = printed.join('\n');
     expect(output).toMatch(/MOCK DATA/);
@@ -96,23 +98,39 @@ describe('live-sandbox-mutations', () => {
       '/api/v1/customers',
       '/api/v1/wallet/sub-account',
       '/api/v1/transfer/test/funding',
+      // proof 1: the re-POST, then the same-BVN create under another identifier
       '/api/v1/customers',
+      '/api/v1/customers',
+      // proof 2: the transfer, then the deliberate duplicate-reference re-send
       '/api/v1/transfer/wallet',
+      '/api/v1/transfer/wallet',
+      // proof 3: the goal deposit, then the house-wallet inflow
+      '/api/v1/transfer/test/funding',
       '/api/v1/transfer/test/funding',
       '/api/v1/transfer/wallet',
       '/api/v1/transfer/bank',
       // proof 7: a NEW payout-routing customer, then four goal sub-wallets
       '/api/v1/customers',
       ...Array(4).fill('/api/v1/wallet/sub-account'),
+      // proof 8: collection to main, main to goal, goal to main
+      '/api/v1/transfer/wallet',
+      '/api/v1/transfer/wallet',
+      '/api/v1/transfer/wallet',
+      // proof 9: the main-wallet deposit
+      '/api/v1/transfer/test/funding',
     ]);
     const journalLines = readFileSync(cfg.journalPath ?? '', 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
     expect(journalLines.map((entry) => entry.phase)).toEqual(
-      Array(13).fill(['intent', 'outcome']).flat()
+      Array(20).fill(['intent', 'outcome']).flat()
     );
-    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(13);
+    // Every slot mints its own reference except the deliberate repeat.
+    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(19);
+    const referenceOf = (slot: string) =>
+      journalLines.find((entry) => entry.slot === slot)?.reference;
+    expect(referenceOf('p2/duplicate_reference')).toBe(referenceOf('p2/w2w'));
     expect(JSON.stringify(journalLines)).not.toMatch(/01M2T[0-9A-F]{21}/);
 
     const before = mock.calls.length;
@@ -120,15 +138,15 @@ describe('live-sandbox-mutations', () => {
       ...deps,
       now: () => new Date('2026-10-31T10:00:00Z'),
     });
-    expect(posts(mock).length).toBe(13);
+    expect(posts(mock).length).toBe(20);
     expect(mock.calls.length).toBeGreaterThan(before);
     expect(second.proofs.some((p) => p.status === 'inconclusive')).toBe(true);
 
     await runHarness({ ...cfg, newAttempt: true }, deps);
-    expect(posts(mock).length).toBeGreaterThan(13);
+    expect(posts(mock).length).toBeGreaterThan(20);
   });
 
-  it('uses unique references for every transfer', async () => {
+  it('uses unique references for every booked transfer', async () => {
     const mock = createMockProvider();
     await runHarness(liveConfig('--live-sandbox-mutations'), {
       sleep: noSleep,
@@ -139,8 +157,10 @@ describe('live-sandbox-mutations', () => {
       txns: { reference: string | null }[];
     };
     const transferRefs = refs.txns.map((t) => t.reference).filter(Boolean);
-    expect(transferRefs).toHaveLength(3);
-    expect(new Set(transferRefs).size).toBe(3);
+    // Proofs 2, 4 (wallet + bank) and 8 (three legs); the mock refuses the
+    // duplicate-reference re-send, so it books nothing.
+    expect(transferRefs).toHaveLength(6);
+    expect(new Set(transferRefs).size).toBe(6);
   });
 
   it('keeps going when one proof throws unexpectedly, and reports the failure', async () => {

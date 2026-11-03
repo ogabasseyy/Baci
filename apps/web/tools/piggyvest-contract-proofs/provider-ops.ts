@@ -64,7 +64,7 @@ export function classifyOutcome(call: CallResult): JournalOutcome {
 }
 
 export class ProviderApi extends ProviderReads {
-  private async mutate(
+  protected async mutate(
     intent: MutationIntent,
     send: (reference: string) => Promise<unknown>
   ): Promise<MutationOutcome> {

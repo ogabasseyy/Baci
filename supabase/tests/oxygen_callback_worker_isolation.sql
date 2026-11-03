@@ -39,9 +39,9 @@ INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES
 ('efae0000-0000-4000-8000-000000000042','{"phone":"2348010000000","applicationReference":"application-b","bookingReference":"efae0000-0000-4000-8000-000000000072"}');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
-SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000","deduplicationKey":"same-event"}');
+SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000","applicationReference":"application-a","deduplicationKey":"same-event"}');
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000004',true);
-SELECT public.oxygen_callback('accept','other-partner','{"kind":"address","phoneNumber":"08010000000","deduplicationKey":"same-event"}');
+SELECT public.oxygen_callback('accept','other-partner','{"kind":"address","phoneNumber":"08010000000","applicationReference":"application-b","deduplicationKey":"same-event"}');
 RESET ROLE;
 INSERT INTO oxygen_private.callback_inbox(partner_reference,environment,deduplication_key,payload_hash,event,status)
 VALUES('response-evidence-fixture','production','foreign-env',decode(repeat('00',32),'hex'),'{"kind":"address","phoneNumber":"08010000000"}','queued');

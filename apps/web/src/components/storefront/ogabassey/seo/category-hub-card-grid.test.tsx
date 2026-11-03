@@ -109,7 +109,7 @@ describe('CategoryHubCardGrid', () => {
             description: 'Larger battery and display.',
             href: '/smartphones/samsung-galaxy-s10-plus',
             secondaryHref: '/smartphones/compare/samsung-galaxy-s10-plus-vs-s10',
-            secondaryLabel: 'Compare S10+',
+            secondaryLabel: 'Compare S10 +.',
           },
         ]}
       />
@@ -120,7 +120,7 @@ describe('CategoryHubCardGrid', () => {
       name: 'Samsung Galaxy S10+ (Samsung Galaxy S10 Plus)',
     });
     const compareLink = screen.getByRole('link', {
-      name: 'Compare S10+ (Compare S10 Plus)',
+      name: 'Compare S10 +. (Compare S10 Plus.)',
     });
 
     expect(s10Link).not.toHaveAttribute('aria-label');
@@ -131,7 +131,7 @@ describe('CategoryHubCardGrid', () => {
     expect(s10PlusLink).toHaveTextContent('Samsung Galaxy S10+');
     expect(compareLink).toHaveAttribute(
       'aria-label',
-      'Compare S10+ (Compare S10 Plus)'
+      'Compare S10 +. (Compare S10 Plus.)'
     );
   });
 });

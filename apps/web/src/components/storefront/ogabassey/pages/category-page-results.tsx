@@ -107,10 +107,11 @@ export function CategoryPageResults({
       : FILTERED_LIST_CARD_CONTENT_VISIBILITY
     : '';
   const [prioritizedGridCardCount, setPrioritizedGridCardCount] =
-    React.useState(3);
+    React.useState(2);
 
   React.useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
+      setPrioritizedGridCardCount(3);
       return;
     }
 

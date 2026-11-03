@@ -10,7 +10,7 @@ function buildHeadingId(title: string) {
 }
 
 function getDisambiguatedAriaLabel(label: string): string | undefined {
-  const expanded = label.replace(/(\w)\+(?=\s|$)/g, '$1 Plus');
+  const expanded = label.replace(/(\w)\s*\+(?=[\s,.;:!?)]|$)/g, '$1 Plus');
   return expanded !== label ? `${label} (${expanded})` : undefined;
 }
 

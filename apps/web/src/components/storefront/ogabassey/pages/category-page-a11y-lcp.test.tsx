@@ -134,7 +134,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     ).toHaveAttribute('data-image-priority', 'false');
   });
 
-  it('keeps initial SSR markup consistent and syncs to 2 prioritized cards on mobile viewports after mount', () => {
+  it('caps initial SSR markup at the mobile-safe 2 prioritized cards and keeps 2 on mobile viewports', () => {
     mockMatchMedia(false);
 
     const products = Array.from({ length: 4 }, (_, index) => ({
@@ -156,7 +156,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
       ssrDoc
         .querySelector('article[aria-label="Phone 3"]')
         ?.getAttribute('data-image-priority')
-    ).toBe('true');
+    ).toBe('false');
 
     render(<CategoryPage prioritizeFirstRowImages products={products} />);
 

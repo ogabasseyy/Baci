@@ -35,19 +35,44 @@ it('gives the same operation a different funding binding for another goal', () =
     }).idempotencyKeySha256;
   expect(fund(goalId)).not.toBe(fund(other));
 });
-it.each([
-  'cancel',
-  'complete',
-] as const)('binds %s to the goal and action with the whole-balance marker', (action) => {
-  expect(buildGoalPinBinding({ action, goalId })).toEqual({
-    purpose: `goal_${action}`,
+it('binds cancel to the goal and the server-issued operation id with the whole-balance marker', () => {
+  expect(
+    buildGoalPinBinding({ action: 'cancel', goalId, operationId })
+  ).toEqual({
+    purpose: 'goal_cancel',
     amountKobo: GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO,
-    idempotencyKeySha256: sha(`${goalId}:${action}`),
+    idempotencyKeySha256: sha(`${goalId}:cancel:${operationId.toLowerCase()}`),
   });
+});
+it('gives each cancel attempt and each goal its own cancel binding', () => {
+  const cancel = (goal: string, operation: string) =>
+    buildGoalPinBinding({
+      action: 'cancel',
+      goalId: goal,
+      operationId: operation,
+    }).idempotencyKeySha256;
+  const otherOperation = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const otherGoal = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  expect(cancel(goalId, operationId)).not.toBe(cancel(goalId, otherOperation));
+  expect(cancel(goalId, operationId)).not.toBe(cancel(otherGoal, operationId));
+});
+it('binds complete to the goal and action with the whole-balance marker', () => {
+  expect(buildGoalPinBinding({ action: 'complete', goalId })).toEqual({
+    purpose: 'goal_complete',
+    amountKobo: GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO,
+    idempotencyKeySha256: sha(`${goalId}:complete`),
+  });
+});
+it('never gives cancel the unbound goal:cancel digest the database no longer accepts', () => {
+  expect(
+    buildGoalPinBinding({ action: 'cancel', goalId, operationId })
+      .idempotencyKeySha256
+  ).not.toBe(sha(`${goalId}:cancel`));
 });
 it('gives cancel and complete different bindings for the same goal', () => {
   expect(
-    buildGoalPinBinding({ action: 'cancel', goalId }).idempotencyKeySha256
+    buildGoalPinBinding({ action: 'cancel', goalId, operationId })
+      .idempotencyKeySha256
   ).not.toBe(
     buildGoalPinBinding({ action: 'complete', goalId }).idempotencyKeySha256
   );
@@ -57,15 +82,15 @@ it('matches the marker used by the database spend function', () => {
 });
 
 // These literals are asserted verbatim by the SQL behaviour suite
-// (piggyvest_goal_pin_proofs_behaviour.sql), so the two sides cannot drift.
+// (piggyvest_goal_pin_proofs_behaviour.sql and piggyvest_goal_cancel_behaviour.sql), so the two sides cannot drift.
 it('matches the digests the database computes for the same key text', () => {
   const digest = (input: Parameters<typeof buildGoalPinBinding>[0]) =>
     buildGoalPinBinding(input).idempotencyKeySha256;
   expect(
     digest({ action: 'fund', goalId, operationId, amountKobo: 5000 })
   ).toBe('05cb93fe83c97235778776801f1f9f4d602f7bc66cded386cb49d66312789811');
-  expect(digest({ action: 'cancel', goalId })).toBe(
-    '5fd298ab6c53da67ab0e70e3c51343e4667c2f24667eb4b1e3c335dd29e9e5e7'
+  expect(digest({ action: 'cancel', goalId, operationId })).toBe(
+    '2caa79006f7f847e307e48c9d4a52d49b96fc8d0b7d761b8adb79888e42c5143'
   );
   expect(digest({ action: 'complete', goalId })).toBe(
     '06c1da1b8fcf092edd91e05a10a3ea7c3f68a89fece21b85578b63e00abbd605'

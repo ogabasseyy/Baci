@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
 
 const mocks = vi.hoisted(() => ({
@@ -119,4 +120,40 @@ it('permits the fixed scope-bound pending adoption statement', async () => {
       'extra',
     ])
   ).rejects.toThrow('Savings statement unavailable');
+});
+it('permits the five goal cancel statements with their exact parameter counts', async () => {
+  const execute = createPrimaryWalletSavingsExecutor(config);
+  const id = '55555555-5555-4555-8555-555555555555';
+  const cases = [
+    [GOAL_CANCEL_STATEMENTS.issue, [JSON.stringify(scope), id]],
+    [GOAL_CANCEL_STATEMENTS.reserve, [JSON.stringify(scope), '{}', pinProof]],
+    [
+      GOAL_CANCEL_STATEMENTS.manage,
+      [JSON.stringify(scope), id, 'dispatch', '5'],
+    ],
+    [GOAL_CANCEL_STATEMENTS.status, [JSON.stringify(scope), id]],
+    [GOAL_CANCEL_STATEMENTS.checkIssued, [JSON.stringify(scope), id, id]],
+  ] as const;
+  for (const [text, parameters] of cases) {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    });
+    mocks.query.mockResolvedValueOnce({ rows: [{ result: true }] });
+    await execute(text, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
+    await expect(execute(text, [...parameters, 'extra'])).rejects.toThrow(
+      'Savings statement unavailable'
+    );
+    await expect(execute(text, parameters.slice(0, -1))).rejects.toThrow(
+      'Savings statement unavailable'
+    );
+  }
 });

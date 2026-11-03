@@ -2,10 +2,13 @@ import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { runGoalCancelOutflowReconciliation } from './goal-cancel-reconciliation';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
+
+const GOAL_CANCEL_REFERENCE_PREFIX = 'pvb-cancel-';
 
 // Webhook-driven savings reconciliation: outflow webhooks attribute by
 // provider reference, so resolve each candidate to its dispatched operation
@@ -53,5 +56,31 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
     );
     return outcome.status;
   }
-  return 'unmatched';
+  // Not a savings transfer: it may be a goal cancel refund (same evidence
+  // login, same proof), which would otherwise stay dispatched until the
+  // customer polls.
+  // Goal cancel is auxiliary to the savings path: a failure here (for
+  // example the lookup not yet deployed) must not 503 legacy outflow
+  // webhooks, and the cancel still reconciles from the client status path.
+  try {
+    return await runGoalCancelOutflowReconciliation({
+      configuration: input.configuration,
+      providerToken: input.providerToken,
+      references: input.references,
+      fetchImplementation: input.fetchImplementation,
+    });
+  } catch (error) {
+    console.warn(
+      '[PiggyVest Webhook] Goal cancel reconciliation skipped:',
+      error instanceof Error ? error.message : error
+    );
+    // A failed lookup of OUR cancel reference must stay retryable: calling it
+    // unmatched would mark the webhook processed and strand a refunded cancel
+    // until the customer polls. Unrelated legacy references stay unmatched.
+    return input.references.some((reference) =>
+      reference.startsWith(GOAL_CANCEL_REFERENCE_PREFIX)
+    )
+      ? 'pending'
+      : 'unmatched';
+  }
 }

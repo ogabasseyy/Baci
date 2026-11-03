@@ -108,7 +108,7 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: ['laptops'],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
       },
       {
         slug: 'legion-5',
@@ -122,7 +122,7 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: ['gaming-laptops'],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
       },
     ]);
   });
@@ -279,7 +279,7 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         category_slugs: [],
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
       },
     ]);
   });

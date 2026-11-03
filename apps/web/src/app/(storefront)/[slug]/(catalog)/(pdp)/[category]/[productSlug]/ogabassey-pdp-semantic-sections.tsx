@@ -16,6 +16,7 @@ import {
   loadPdpBrandHubEligibilityInventorySafely,
   PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
 } from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 
 interface OgabasseyPdpSemanticMerchant {
@@ -91,7 +92,7 @@ export async function OgabasseyPdpSemanticSections({
     brand: product.brand,
     condition: product.condition,
     price: product.price,
-    stock: product.stock,
+    stock: resolveSemanticCandidateStock(product),
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
   };

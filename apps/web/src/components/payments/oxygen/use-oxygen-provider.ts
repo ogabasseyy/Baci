@@ -1,75 +1,32 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
-import {
-  oxygenActiveLoanCode,
-  oxygenActiveLoanMessage,
-  oxygenStatementRequiredCode,
-  oxygenStatementRequiredMessage,
-} from '@/lib/payments/oxygen/booking-rejection';
 import { trackOxygenJourney } from '@/lib/payments/oxygen/journey-events';
-import {
-  oxygenInvalidOtpCode,
-  oxygenInvalidOtpMessage,
-} from '@/lib/payments/oxygen/otp-rejection';
+import { oxygenInvalidOtpMessage } from '@/lib/payments/oxygen/otp-rejection';
 import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
 import {
   type OxygenRuntimeSnapshot,
   oxygenRuntimeSnapshotSchema,
 } from '@/schemas/oxygen-runtime-view';
-
+import {
+  decodeOxygenResponse as decode,
+  OxygenInvalidOtpError,
+  OxygenRateLimitError,
+  oxygenRateLimitMessage,
+  SignInRequired,
+} from './oxygen-provider-response';
 import { pendingReadRecovery } from './oxygen-read-recovery';
+
+export { oxygenRateLimitMessage } from './oxygen-provider-response';
+
+import {
+  fetchOxygenSnapshot,
+  initializeOxygenWorkflow,
+} from './oxygen-workflow-initialization';
 import { rememberPhoneOtpSend } from './phone-otp-window';
 
 const base = '/api/payments/oxygen/workflows';
-class SignInRequired extends Error {}
-class OxygenRateLimitError extends Error {}
-class OxygenInvalidOtpError extends Error {}
-export const oxygenRateLimitMessage =
-  'Please wait a moment before trying again.';
-async function decode(response: Response): Promise<unknown> {
-  if (response.status === 401) throw new SignInRequired();
-  if (response.status === 429)
-    throw new OxygenRateLimitError(oxygenRateLimitMessage);
-  if (response.status === 409) {
-    const body: unknown = await response.json().catch(() => null);
-    if (
-      typeof body === 'object' &&
-      body !== null &&
-      'code' in body &&
-      body.code === oxygenActiveLoanCode
-    )
-      throw new Error(oxygenActiveLoanMessage);
-    if (
-      typeof body === 'object' &&
-      body !== null &&
-      'code' in body &&
-      body.code === oxygenInvalidOtpCode
-    )
-      throw new OxygenInvalidOtpError(oxygenInvalidOtpMessage);
-    if (
-      typeof body === 'object' &&
-      body !== null &&
-      'code' in body &&
-      body.code === oxygenStatementRequiredCode
-    )
-      throw new Error(oxygenStatementRequiredMessage);
-  }
-  if (!response.ok)
-    throw new Error(
-      'We couldn’t complete this step right now. Your progress is saved.'
-    );
-  return response.json() as Promise<unknown>;
-}
-async function fetchSnapshot(id: string) {
-  return oxygenRuntimeSnapshotSchema.parse(
-    await decode(
-      await fetchWithCsrf(`${base}/actions?workflowId=${id}`, {
-        cache: 'no-store',
-      })
-    )
-  );
-}
+type LastKey = { action: string; version: number; key: string };
 export function useOxygenProvider(orderId: string) {
   const [snapshot, setSnapshot] = useState<OxygenRuntimeSnapshot | null>(null);
   const [busy, setBusy] = useState(true);
@@ -80,41 +37,43 @@ export function useOxygenProvider(orderId: string) {
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const alive = useRef(true);
   const generation = useRef(0);
-  const locked = useRef(false);
+  const locked = useRef<symbol | null>(null);
+  const scope = useRef(0);
   const workflow = useRef('');
-  const lastKey = useRef<{
-    action: string;
-    version: number;
-    key: string;
-  } | null>(null);
+  const lastKey = useRef<LastKey | null>(null);
   async function read() {
     const token = ++generation.current;
-    const result = await fetchSnapshot(workflow.current);
-    if (alive.current && token === generation.current) setSnapshot(result);
+    let id = workflow.current;
+    if (!id) {
+      id = await initializeOxygenWorkflow(orderId, decode);
+      if (!alive.current || token !== generation.current) return null;
+      workflow.current = id;
+    }
+    const result = await fetchOxygenSnapshot(id, decode);
+    if (!alive.current || token !== generation.current) return null;
+    setSnapshot(result);
     return result;
   }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: read is bound to this order and must not restart on each render
   useEffect(() => {
     alive.current = true;
-    const token = ++generation.current;
+    workflow.current = '';
+    locked.current = null;
+    ++scope.current;
+    setSnapshot(null);
+    setError('');
+    setNeedsSignIn(false);
+    setBusy(true);
+    const token = generation.current + 1;
     async function resume() {
       try {
-        const result = (await decode(
-          await fetchWithCsrf(base, {
-            method: 'POST',
-            body: JSON.stringify({ orderId, channel: 'web' }),
-            cache: 'no-store',
-          })
-        )) as { workflow?: { id?: string } };
-        if (!result.workflow?.id) throw new Error('Workflow unavailable');
-        workflow.current = result.workflow.id;
-        const saved = await fetchSnapshot(workflow.current);
-        if (alive.current && token === generation.current) setSnapshot(saved);
+        await read();
       } catch (failure) {
         if (alive.current && token === generation.current) {
           trackOxygenJourney('load_failed', orderId, 'loading');
           setNeedsSignIn(failure instanceof SignInRequired);
           setError(
-            'Unable to load your finance application. Sign in and refresh to continue.'
+            'Unable to load your finance application. Try again to continue.'
           );
         }
       } finally {
@@ -124,6 +83,7 @@ export function useOxygenProvider(orderId: string) {
     void resume();
     return () => {
       alive.current = false;
+      ++generation.current;
     };
   }, [orderId]);
   async function submit(
@@ -141,7 +101,9 @@ export function useOxygenProvider(orderId: string) {
     }
     const requestedAt = Date.now();
     ++generation.current;
-    locked.current = true;
+    const lock = Symbol();
+    const requestScope = scope.current;
+    locked.current = lock;
     setBusy(true);
     setError('');
     setErrorAction(null);
@@ -195,6 +157,7 @@ export function useOxygenProvider(orderId: string) {
           })
         )
       );
+      if (!alive.current || requestScope !== scope.current) return false;
       const confirmed =
         result.workflowId === snapshot.workflowId &&
         result.version > snapshot.version &&
@@ -214,7 +177,8 @@ export function useOxygenProvider(orderId: string) {
       )
         rememberPhoneOtpSend(snapshot.workflowId, requestedAt);
       if (confirmed && onConfirmed) await onConfirmed();
-      if (alive.current) setSnapshot(result);
+      if (!alive.current || requestScope !== scope.current) return false;
+      setSnapshot(result);
       trackOxygenJourney(
         'action_response_received',
         orderId,
@@ -223,6 +187,7 @@ export function useOxygenProvider(orderId: string) {
       );
       return confirmed;
     } catch (failure) {
+      if (!alive.current || requestScope !== scope.current) return false;
       trackOxygenJourney(
         'action_unconfirmed',
         orderId,
@@ -235,7 +200,7 @@ export function useOxygenProvider(orderId: string) {
       } catch {
         /* Preserve last known snapshot. */
       }
-      if (alive.current) {
+      if (alive.current && requestScope === scope.current) {
         setErrorAction(command.action);
         setError(
           failure instanceof OxygenRateLimitError
@@ -255,35 +220,41 @@ export function useOxygenProvider(orderId: string) {
       }
       return false;
     } finally {
-      locked.current = false;
-      if (alive.current) setBusy(false);
+      if (locked.current === lock) locked.current = null;
+      if (alive.current && requestScope === scope.current) setBusy(false);
     }
   }
   async function readSaved() {
     if (locked.current || !workflow.current) return;
-    locked.current = true;
+    const lock = Symbol();
+    locked.current = lock;
     try {
       await read();
     } finally {
-      locked.current = false;
+      if (locked.current === lock) locked.current = null;
     }
   }
   async function refresh() {
     if (locked.current) return;
-    locked.current = true;
+    const lock = Symbol();
+    locked.current = lock;
     setBusy(true);
+    const token = generation.current + 1;
     try {
-      await read();
-      if (alive.current) {
+      const result = await read();
+      if (alive.current && result) {
+        setNeedsSignIn(false);
         setError('');
         setErrorAction(null);
       }
-    } catch {
-      if (alive.current)
+    } catch (failure) {
+      if (alive.current && token === generation.current) {
+        setNeedsSignIn(failure instanceof SignInRequired);
         setError('We couldn’t check for an update. Your progress is saved.');
+      }
     } finally {
-      locked.current = false;
-      if (alive.current) setBusy(false);
+      if (locked.current === lock) locked.current = null;
+      if (alive.current && token === generation.current) setBusy(false);
     }
   }
   return {

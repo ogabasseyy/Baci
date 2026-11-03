@@ -119,14 +119,24 @@ DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Confirmed address retained identity draft'; END IF;
 END $$;
 SET LOCAL ROLE anon;
+SELECT set_config('request.jwt.claim.sub','',true);
+SELECT set_config('request.jwt.claims','{}',true);
+-- Distinct SQLSTATEs identify the failing privilege check without leaking data.
+\set VERBOSITY verbose
 DO $$ BEGIN
+ IF has_function_privilege('anon','public.oxygen_save_form_draft(uuid,integer,uuid,text,text,timestamp with time zone)','EXECUTE') THEN
+  RAISE EXCEPTION 'Anonymous draft save privilege granted' USING ERRCODE='P1001';
+ END IF;
+ IF has_table_privilege('anon','public.oxygen_form_drafts','SELECT') THEN
+  RAISE EXCEPTION 'Anonymous draft read privilege granted' USING ERRCODE='P1002';
+ END IF;
  BEGIN
   PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',0,'efaa0000-0000-4000-8000-000000000055',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
-  RAISE EXCEPTION 'Anonymous draft save granted';
- EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  RAISE EXCEPTION 'Anonymous draft save executed' USING ERRCODE='P1003';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN OTHERS THEN RAISE EXCEPTION 'Anonymous draft save unexpected error' USING ERRCODE='P1003'; END;
  BEGIN
   PERFORM workflow_id FROM public.oxygen_form_drafts;
-  RAISE EXCEPTION 'Anonymous read granted';
- EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  RAISE EXCEPTION 'Anonymous draft read executed' USING ERRCODE='P1004';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN OTHERS THEN RAISE EXCEPTION 'Anonymous draft read unexpected error' USING ERRCODE='P1004'; END;
 END $$;
 ROLLBACK;

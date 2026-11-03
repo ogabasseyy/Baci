@@ -39,20 +39,6 @@ type NotificationProcessingState = { rejectionCompleted: boolean };
 
 const SHIPMENT_UPDATE_CAPABILITY = 1;
 
-/**
- * An explicit empty list means nobody qualifies (skip). A missing projection
- * means the claim RPC predates the recipient column: fail so the row retries
- * once the migration is live, never broadcast and never silently drop.
- */
-function merchantRecipientUserIds(
-  notification: ClaimedGiglTrackingNotification
-): string[] {
-  if (!notification.recipient_user_ids) {
-    throw new Error('Merchant recipient projection missing from claim');
-  }
-  return notification.recipient_user_ids;
-}
-
 async function complete(
   supabase: WorkerSupabase,
   id: string,
@@ -126,6 +112,16 @@ async function processNotification(
     );
   };
   if (notification.audience === 'merchant') {
+    if (!notification.recipient_user_ids) {
+      // The claim RPC predates the recipient column (rollout window). Leave the
+      // lease untouched, without begin/complete, so the row is re-claimed after
+      // it expires and no delivery attempt is consumed. Never broadcast.
+      logger.warn({
+        message: 'GIGL merchant notification claimed without recipient list',
+        notificationId: notification.id,
+      });
+      return 'failed' as const;
+    }
     const payload = buildGiglTrackingMerchantPushPayload(notification);
     const result = await notifyMerchant(
       notification.merchant_id,
@@ -137,7 +133,7 @@ async function processNotification(
         onDeliveryStart,
         onDeliveryRejected,
         requiredShipmentUpdateCapability: SHIPMENT_UPDATE_CAPABILITY,
-        recipientUserIds: merchantRecipientUserIds(notification),
+        recipientUserIds: notification.recipient_user_ids,
       }
     );
     return completeNotificationResult(

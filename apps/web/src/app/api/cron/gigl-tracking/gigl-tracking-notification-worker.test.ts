@@ -303,7 +303,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       );
     });
 
-    it('bugfix: retries instead of broadcasting or dropping when the claim omits recipient_user_ids', async () => {
+    it('bugfix: defers without consuming an attempt or broadcasting when the claim omits recipient_user_ids', async () => {
       const supabase = createGiglTrackingNotificationSupabase({
         description: 'Picked up',
         raw_status: 'MPIK',
@@ -315,10 +315,8 @@ describe('processClaimedGiglTrackingNotifications', () => {
       );
       expect(summary).toMatchObject({ failed: 1, sent: 0 });
       expect(notifyMerchant).not.toHaveBeenCalled();
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        'complete_shipment_tracking_notification',
-        expect.objectContaining({ p_outcome: 'failed' })
-      );
+      // The lease is left to expire: no attempt is consumed.
+      expect(supabase.rpc).not.toHaveBeenCalled();
     });
 
     it('sends nobody when no owner or fulfil staff qualifies', async () => {

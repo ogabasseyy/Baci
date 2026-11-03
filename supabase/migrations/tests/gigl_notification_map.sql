@@ -302,12 +302,6 @@ BEGIN
     RAISE EXCEPTION 'failed and returned GIG events must each queue one customer email';
   END IF;
 
-  -- In-place waybill correction on the same shipment alerts both sides.
-  UPDATE public.shipments SET tracking_number = 'GIGL-MAP-003B' WHERE id = v_shipment;
-  IF (SELECT count(*) FROM public.shipment_tracking_notification_outbox
-      WHERE shipment_id = v_shipment AND notification_kind = 'waybill_changed') <> 2 THEN
-    RAISE EXCEPTION 'an in-place waybill change must alert both the merchant and the customer';
-  END IF;
 END;
 $shipped$;
 SELECT pass('shipped email waits for GIG pickup and is queued exactly once');

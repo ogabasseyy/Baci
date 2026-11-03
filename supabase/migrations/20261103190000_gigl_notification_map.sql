@@ -292,26 +292,20 @@ DECLARE
   v_epoch uuid;
   v_event uuid;
 BEGIN
+  -- Only a replacement shipment row counts. In-place waybill edits are the
+  -- audited "swap" path (supabase/tests/gigl_provider_cancellation_wallet_refund
+  -- T5) and must not write tracking events.
   IF NEW.provider IS DISTINCT FROM 'GIGL' OR NEW.order_id IS NULL
     OR NEW.status = 'cancelled'
+    OR nullif(btrim(NEW.tracking_number), '') IS NULL
+    OR NOT EXISTS (
+      SELECT 1 FROM public.shipments AS previous
+      WHERE previous.order_id = NEW.order_id
+        AND previous.id <> NEW.id
+        AND previous.provider = 'GIGL'
+        AND upper(btrim(previous.tracking_number)) <> upper(btrim(NEW.tracking_number))
+    )
   THEN
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'UPDATE' THEN
-    -- In-place relink/correction of the waybill on the same shipment row.
-    -- First assignment of a waybill (NULL/empty -> value) is not a change.
-    IF nullif(btrim(OLD.tracking_number), '') IS NULL
-      OR upper(btrim(OLD.tracking_number)) IS NOT DISTINCT FROM upper(btrim(NEW.tracking_number))
-    THEN
-      RETURN NEW;
-    END IF;
-  ELSIF NOT EXISTS (
-    SELECT 1 FROM public.shipments AS previous
-    WHERE previous.order_id = NEW.order_id
-      AND previous.id <> NEW.id
-      AND previous.provider = 'GIGL'
-      AND upper(btrim(previous.tracking_number)) <> upper(btrim(NEW.tracking_number))
-  ) THEN
     RETURN NEW;
   END IF;
   SELECT monitor.tracking_epoch_id INTO v_epoch
@@ -325,7 +319,7 @@ BEGIN
     provider_event_key, raw_status, normalized_status, description, occurred_at
   ) VALUES (
     NEW.id, v_epoch, NEW.tracking_number, 'GIGL',
-    'waybill-changed:' || NEW.id::text || ':' || upper(btrim(NEW.tracking_number)), 'WAYBILL_CHANGED', 'booked',
+    'waybill-changed:' || NEW.id::text, 'WAYBILL_CHANGED', 'booked',
     'Tracking number changed', now()
   )
   ON CONFLICT (shipment_id, tracking_epoch_id, provider_event_key) DO NOTHING
@@ -348,7 +342,7 @@ REVOKE ALL ON FUNCTION private.notify_gigl_waybill_changed()
 
 DROP TRIGGER IF EXISTS zz_notify_gigl_waybill_changed ON public.shipments;
 CREATE TRIGGER zz_notify_gigl_waybill_changed
-  AFTER INSERT OR UPDATE OF tracking_number ON public.shipments
+  AFTER INSERT ON public.shipments
   FOR EACH ROW EXECUTE FUNCTION private.notify_gigl_waybill_changed();
 
 

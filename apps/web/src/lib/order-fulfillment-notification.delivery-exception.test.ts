@@ -81,7 +81,7 @@ describe('delivery exception emails (GIG failed / returned)', () => {
     'delivered',
     'completed',
     'cancelled',
-  ])('bugfix: does not send a late failed email once the order is %s', async (status) => {
+  ])('bugfix: does not send a failed email unless the order is in flight (%s)', async (status) => {
     const result = await sendOrderFulfillmentNotification({
       eventType: 'order_delivery_failed',
       merchantId: 'merchant-1',

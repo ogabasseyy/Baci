@@ -56,11 +56,13 @@ function isOrderInRequiredShippingStatus(
   }
 
   if (eventType === 'order_delivery_failed' || eventType === 'order_returned') {
-    // GIG reports these while the order is in flight. A late retry after the
-    // order was delivered or cancelled would contradict its final state.
-    return !['cancelled', 'canceled', 'completed', 'delivered'].includes(
-      shippingStatus
-    );
+    // The GIG sync moves the order to 'failed' / 'returned' with the parcel, so
+    // those are the event's own states. A failed-delivery email is stale once
+    // the parcel is returned; anything never shipped, delivered or cancelled
+    // would contradict the order's real state.
+    const allowed = ['shipped', 'out_for_delivery', 'failed'];
+    if (eventType === 'order_returned') allowed.push('returned');
+    return allowed.includes(shippingStatus);
   }
 
   return shippingStatus === 'delivered' || shippingStatus === 'completed';

@@ -111,3 +111,32 @@ describe('MockLedger accepted repeats follow the pending/404 progression', () =>
     expect(balance(s)).toBe(300_000);
   });
 });
+
+describe('MockLedger TSQ with an accepted repeat (first-booking semantics)', () => {
+  const check = (s: ReturnType<typeof funded>) =>
+    dataOf<{ id: string; status: string }>(
+      s.sandbox.ledger.verify(q({ reference: 'pvbproof-dup-0001' }))
+    );
+
+  it('always describes the first booking, while the repeat settles on its own record', () => {
+    const s = funded({
+      duplicateReference: 'accept',
+      tsqShape: 'rich',
+      tsqNotFoundPolls: 0,
+      tsqPendingPolls: 1,
+    });
+    transfer(s);
+    transfer(s);
+    const [repeat, original] = debitRows(s); // newest first
+    expect(original?.id).not.toBe(repeat?.id);
+    const pending = check(s);
+    expect(pending).toMatchObject({ id: original?.id, status: 'pending' });
+    const settled = check(s);
+    expect(settled).toMatchObject({ id: original?.id, status: 'success' });
+    // The repeat's own record settled even though TSQ never named it.
+    expect(debitRows(s).map((row) => row.status)).toEqual([
+      'successful',
+      'successful',
+    ]);
+  });
+});

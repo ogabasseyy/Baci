@@ -6,13 +6,15 @@ import {
   type RunMode,
 } from './constants';
 import {
-  acceptedReference,
   type Journal,
   type JournalOutcome,
-  newReference,
   slotState,
-  walletsDigest,
 } from './mutation-journal';
+import {
+  acceptedReference,
+  newReference,
+  walletsDigest,
+} from './mutation-journal-references';
 import {
   assertNoRecordingAccount,
   assertSyntheticEmail,

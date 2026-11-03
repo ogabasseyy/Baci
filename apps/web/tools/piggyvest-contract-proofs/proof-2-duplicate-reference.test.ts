@@ -26,6 +26,16 @@ const transferPosts = (h: ReturnType<typeof harness>) =>
       call.method === 'POST' && call.pathname === '/api/v1/transfer/wallet'
   ).length;
 
+/** Re-hides proof 2's transfer row for the next N list reads (late indexing). */
+function hideOriginalRow(h: ReturnType<typeof harness>, reads: number): void {
+  const ledger = h.mock.sandbox.ledger as unknown as {
+    txns: { reference: string | null; hiddenReads: number }[];
+  };
+  for (const txn of ledger.txns)
+    if (txn.reference === h.state.walletTransfer?.reference)
+      txn.hiddenReads = reads;
+}
+
 async function duplicate(h: ReturnType<typeof harness>) {
   const b = new ProofBuilder('p2', 'TSQ');
   await runDuplicateReference(h.ctx, b);
@@ -130,6 +140,27 @@ describe('proof 2: duplicate-reference re-send', () => {
         .entries()
         .some((entry) => entry.slot === 'p2/duplicate_reference')
     ).toBe(false);
+  });
+
+  it('waits for the original row to be indexed before counting records', async () => {
+    const h = await afterProof2();
+    hideOriginalRow(h, 3);
+    const result = await duplicate(h);
+    expect(result.values.rows_with_reference_before).toBe(1);
+    expect(result.values.rows_with_reference_after).toBe(1);
+    expect(answer(result, 'duplicate_reference_rejected')).toBe('yes');
+    expect(answer(result, 'duplicate_reference_second_record')).toBe('no');
+  });
+
+  it('answers the record question unknown when the original row never shows before the repeat', async () => {
+    const h = await afterProof2();
+    hideOriginalRow(h, 50);
+    const result = await duplicate(h);
+    // The late original must not be mistaken for a second record.
+    expect(result.values.rows_with_reference_before).toBeNull();
+    expect(answer(result, 'duplicate_reference_second_record')).toBe('unknown');
+    expect(answer(result, 'duplicate_reference_rejected')).toBe('yes');
+    expect(answer(result, 'duplicate_reference_moves_money_again')).toBe('no');
   });
 
   it('sends nothing without a settled proof 2 transfer, or in read-only mode', async () => {

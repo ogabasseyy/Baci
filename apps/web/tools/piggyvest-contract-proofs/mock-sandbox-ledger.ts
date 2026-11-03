@@ -179,8 +179,11 @@ export class MockLedger {
     );
     const notFound = fail('Transaction not found', 404);
     if (!txn) return notFound;
-    // A repeat booked under an accepted duplicate reference follows the same
-    // lifecycle as the original, on its own poll count.
+    // FIRST-BOOKING SEMANTICS: the reply always describes the first booking
+    // (its id, status and amount). A repeat booked under an accepted duplicate
+    // reference follows the same lifecycle on its own poll count, advanced by
+    // status checks, but its own record is never reported here (the real
+    // provider's choice is unknown; proofs read the repeat from the record list).
     for (const repeat of repeats) this.advance(repeat);
     const state = this.advance(txn);
     if (state === 'not_found') return notFound;

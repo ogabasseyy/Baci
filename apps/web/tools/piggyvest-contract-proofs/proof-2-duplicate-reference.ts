@@ -69,7 +69,15 @@ export async function runDuplicateReference(
   };
   const listMain = () => api.transactions({ wallet_id: main, limit: '50' });
   const baseline = await settledWallets(ctx, [main, goal]);
-  const rowsBefore = countRows(await listMain());
+  // The original row can be indexed late: wait for it, so a row that only
+  // appears after the repeat is never mistaken for a second record. Without a
+  // baseline the record question stays unknown.
+  const original = await pollSettled(
+    ctx,
+    listMain,
+    (list) => (countRows(list) ?? 0) >= 1
+  );
+  const rowsBefore = original.settled ? countRows(original.value) : null;
 
   const again = await api.transferWalletAgain(
     qa,
@@ -152,7 +160,10 @@ export async function runDuplicateReference(
     QUESTIONS[2][1],
     rowsBefore === null || rowsAfter === null
       ? 'unknown'
-      : answerOf(rowsAfter > rowsBefore)
+      : answerOf(rowsAfter > rowsBefore),
+    rowsBefore === null
+      ? "the original transfer's row was not listed before the repeat, so there is no baseline"
+      : undefined
   );
   b.note(
     'Duplicate reference: production never resubmits a reference until PiggyVest confirms this behaviour in writing; a failed or uncertain transfer is released and any retry uses a new reference.'

@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -17,8 +16,9 @@ import { HarnessRefusal } from './safety-guards';
  * Local, append-only journal of mutation intents and outcomes.
  *
  * The intent is durably written BEFORE a request can be sent. Entries hold
- * no provider ids, balances or secrets: only the harness's own slot name,
- * the generated reference, the opaque QA key and the amount.
+ * no raw provider ids, balances or secrets: only the harness's own slot name,
+ * the generated reference, the opaque QA key, the amount and a short wallet
+ * digest (a consistency check, not a secret; see mutation-journal-references.ts).
  */
 
 export const JOURNAL_OUTCOMES = [
@@ -246,68 +246,4 @@ export function slotState(
     };
   }
   return { kind: 'fresh' };
-}
-
-/**
- * Did this QA key send this reference for this operation, with an accepted
- * outcome? Only such a reference may be re-sent on purpose (proof 2).
- */
-/** Opaque, order-independent fingerprint of the wallets an intent touches. */
-export function walletsDigest(walletIds: readonly string[]): string {
-  return createHash('sha256')
-    .update(JSON.stringify([...walletIds].sort()))
-    .digest('hex')
-    .slice(0, 16);
-}
-
-/**
- * True only when this QA key already sent the reference for the same
- * operation, it was accepted, and the original intent moved the same amount
- * between the same wallets. A missing digest (older journal) never matches.
- */
-export function acceptedReference(
-  journal: Journal,
-  reference: string,
-  qaKey: string,
-  op: string,
-  expected: { amountKobo: number | null; walletIds: readonly string[] }
-): boolean {
-  const all = journal.entries();
-  const digest = walletsDigest(expected.walletIds);
-  return all.some(
-    (intent) =>
-      intent.phase === 'intent' &&
-      intent.reference === reference &&
-      intent.qaKey === qaKey &&
-      intent.op === op &&
-      intent.amountKobo === expected.amountKobo &&
-      intent.walletsDigest === digest &&
-      all.some(
-        (entry) =>
-          entry.phase === 'outcome' &&
-          entry.reference === reference &&
-          entry.slot === intent.slot &&
-          entry.outcome === 'accepted'
-      )
-  );
-}
-
-export function referenceInUse(journal: Journal, reference: string): boolean {
-  return journal.entries().some((entry) => entry.reference === reference);
-}
-
-export function newReference(
-  journal: Journal,
-  op: string,
-  runId: string,
-  random: () => string = () => randomBytes(4).toString('hex')
-): string {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const reference = `pvbproof-${runId}-${op}-${random()}`;
-    if (!referenceInUse(journal, reference)) return reference;
-  }
-  throw new HarnessRefusal(
-    'REFERENCE_REUSE',
-    'could not mint a unique reference'
-  );
 }

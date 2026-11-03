@@ -5,7 +5,8 @@ import {
   makeGate,
   transfer,
 } from './mutation-gate.test-support';
-import { acceptedReference, slotState } from './mutation-journal';
+import { slotState } from './mutation-journal';
+import { acceptedReference } from './mutation-journal-references';
 
 /**
  * Proof 2's duplicate-reference check re-sends a reference on purpose. The

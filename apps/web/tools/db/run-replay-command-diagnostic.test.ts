@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applySupabaseReplaySql } from './apply-supabase-replay-sql';
 import { replayCommandRuntime } from './run-replay-command';
+import { runSupabaseReplayStage } from './run-supabase-replay-stage';
 
 const temporaryRoots: string[] = [];
 afterEach(async () => {
@@ -20,6 +21,27 @@ async function temporaryRoot() {
 }
 
 describe('replay diagnostics', () => {
+  it('reports a startup milestone from a failed subprocess without leaking adjacent secrets', async () => {
+    const root = await temporaryRoot();
+    const supabase = path.join(root, 'supabase');
+    const secret = 'password=synthetic-private-value';
+    const stderr = `Starting database...\nInitialising schema...\n${secret}\n`;
+    await writeFile(
+      supabase,
+      `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(stderr)});process.exit(1);\n`,
+      { mode: 0o700 }
+    );
+    const run = replayCommandRuntime.create(root);
+    const error = await runSupabaseReplayStage('db start', () =>
+      run(supabase, ['db', 'start'])
+    ).catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      'Supabase replay stage db start failed (supabase failed: non-zero-exit (diagnostic=startup-schema))'
+    );
+    expect((error as Error).message).not.toContain(secret);
+  });
+
   it('skips an explicitly confirmed expected denial and reports the later failure', async () => {
     const root = await temporaryRoot();
     const psql = path.join(root, 'psql');

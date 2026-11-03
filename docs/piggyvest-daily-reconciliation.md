@@ -13,9 +13,14 @@ anything is wrong. It resends, settles and releases nothing.
    shows what PiggyVest says: completed, pending, failed, not listed, or
    unconfirmed.
 2. **Balances.** For every goal wallet we confirmed principal into, the balance
-   at PiggyVest against the principal we recorded. Less at PiggyVest pages. More
-   is listed for review and the email subject says REVIEW instead of all clear,
-   but it does not page, because interest accrues there.
+   at PiggyVest against the principal we recorded. Less at PiggyVest pages (after
+   a confirming re-read). More is listed for review and the email subject says
+   REVIEW instead of all clear, because interest accrues there. A surplus at or
+   above `PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO` (default N1,000) pages,
+   since it may be an unmapped goal deposit. The recorded figure is principal
+   only, so once a wallet's cumulative interest passes the threshold it pages
+   daily until the owner raises the threshold; a baseline/delta rule is a
+   tracked follow-up.
 
    The database snapshot is read first and the PiggyVest balances afterwards, so
    they can differ by a few minutes. A provider-side debit in that window could

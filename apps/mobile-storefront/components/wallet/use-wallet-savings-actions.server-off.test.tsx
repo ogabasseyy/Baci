@@ -40,6 +40,7 @@ function actions(keyInRef: string | null) {
     activeMerchantId: SERVER_OFF_MERCHANT_ID,
     goal: goal as never,
     idempotencyKeyRef: { current: keyInRef },
+    operationRailRef: { current: null },
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
     spendableBalance: 5000,

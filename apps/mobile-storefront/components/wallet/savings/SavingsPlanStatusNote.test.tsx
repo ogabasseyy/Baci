@@ -45,7 +45,11 @@ describe('SavingsPlanStatusNote', () => {
   it('only reads status for the goal, never provisions', () => {
     renderNote();
     expect(mockHook).toHaveBeenCalledWith(
-      expect.objectContaining({ goalId: 'goal-1', loadExisting: true })
+      expect.objectContaining({
+        goalId: 'goal-1',
+        loadExisting: true,
+        notFoundMeansPending: true,
+      })
     );
     const result = mockHook.mock.results[0]?.value as Record<string, unknown>;
     expect(result.fetchPlanFunding).toBeUndefined();
@@ -116,5 +120,16 @@ describe('SavingsPlanStatusNote', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     expect(fetchExistingPlanFunding).toHaveBeenCalledTimes(1);
     expect(fetchPlanFunding).not.toHaveBeenCalled();
+  });
+
+  it('shows the setup copy and no retry for a never-started goal', () => {
+    mockHook.mockReturnValue({
+      planFundingPhase: 'pending',
+      planFundingRequiresBvn: false,
+      fundingError: null,
+    });
+    renderNote();
+    expect(screen.getByText(/still being set up/)).toBeTruthy();
+    expect(screen.queryByText('Try again')).toBeNull();
   });
 });

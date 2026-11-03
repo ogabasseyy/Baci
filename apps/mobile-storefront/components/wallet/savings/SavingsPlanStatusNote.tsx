@@ -27,6 +27,7 @@ export function SavingsPlanStatusNote({
     goalId,
     identityKey,
     loadExisting: primary,
+    notFoundMeansPending: true,
   });
   if (!primary || funding.planFundingRequiresBvn) return null;
   const phase = funding.planFundingPhase;

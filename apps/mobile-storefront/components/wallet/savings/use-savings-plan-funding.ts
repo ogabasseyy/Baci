@@ -22,16 +22,23 @@ type UseSavingsPlanFundingInput = {
   goalId: string | null;
   identityKey?: string;
   loadExisting?: boolean;
+  // A never-started goal (404 SAVINGS_WALLET_NOT_FOUND) reads as 'pending'
+  // (still being set up), not as an error, for status-only callers.
+  notFoundMeansPending?: boolean;
 };
+
+function isWalletNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'SAVINGS_WALLET_NOT_FOUND'
+  );
+}
 
 // The status endpoint answers a never-started setup with a 404 code, which
 // the API client throws before the response is read as not_found.
 function planFundingErrorMessage(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === 'SAVINGS_WALLET_NOT_FOUND'
-  ) {
+  if (isWalletNotFound(error)) {
     return PLAN_NOT_SET_UP_MESSAGE;
   }
   return getErrorMessage(error, 'Unable to load the plan account.');
@@ -47,6 +54,7 @@ export function useSavingsPlanFunding({
   goalId,
   identityKey,
   loadExisting = false,
+  notFoundMeansPending = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
   const [statusCode, setStatusCode] = useState<string | null>(null);
@@ -111,6 +119,11 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
+      if (notFoundMeansPending && isWalletNotFound(error)) {
+        setStatusCode(null);
+        setPhase('pending');
+        return;
+      }
       setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }

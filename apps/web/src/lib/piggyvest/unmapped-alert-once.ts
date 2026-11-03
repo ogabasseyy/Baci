@@ -13,7 +13,8 @@ const posthogPending = new Set<string>();
 const inFlight = new Set<string>();
 
 /**
- * An unmapped deposit stays retryable, so PiggyVest redelivers it. The
+ * The log page fires once per deposit per server instance; PostHog is
+ * deduplicated across instances. An unmapped deposit stays retryable, so PiggyVest redelivers it. The
  * primary page is the console line: it is written once per key (per server
  * instance) and remembered as soon as it is written, whatever PostHog does,
  * so a PostHog outage cannot repeat the log line on every redelivery.

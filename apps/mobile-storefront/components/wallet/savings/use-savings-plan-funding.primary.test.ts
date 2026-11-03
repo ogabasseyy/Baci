@@ -132,3 +132,30 @@ it('maps the endpoint SAVINGS_WALLET_NOT_FOUND error to the not-set-up state', a
   expect(result.current.planFundingPhase).toBe('error');
   expect(result.current.fundingError).toBe(PLAN_NOT_SET_UP_MESSAGE);
 });
+
+it('reads a never-started goal as still being set up when the caller asks for it', async () => {
+  mockFetchExistingSavingsPlanFunding.mockRejectedValueOnce(
+    Object.assign(new Error('not found'), { code: 'SAVINGS_WALLET_NOT_FOUND' })
+  );
+  const { result } = renderHook(() =>
+    useSavingsPlanFunding({ ...input, notFoundMeansPending: true })
+  );
+  await act(async () => {
+    await result.current.fetchExistingPlanFunding();
+  });
+  expect(result.current.planFundingPhase).toBe('pending');
+  expect(result.current.fundingError).toBeNull();
+});
+
+it('still reports other status failures as errors for a status-only caller', async () => {
+  mockFetchExistingSavingsPlanFunding.mockRejectedValueOnce(
+    new Error('network down')
+  );
+  const { result } = renderHook(() =>
+    useSavingsPlanFunding({ ...input, notFoundMeansPending: true })
+  );
+  await act(async () => {
+    await result.current.fetchExistingPlanFunding();
+  });
+  expect(result.current.planFundingPhase).toBe('error');
+});

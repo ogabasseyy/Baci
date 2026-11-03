@@ -6,7 +6,9 @@ import { decryptOxygenDraft, encryptOxygenDraft } from './draft-crypto';
 import { resolveOxygenEnvironment } from './environment';
 
 const rowSchema = z.object({
-  ciphertext: z.string(),
+  ciphertext: z.string().nullable(),
+  residential_ciphertext: z.string().nullable().optional(),
+  residential_version: z.number().int().positive().nullable().optional(),
   version: z.number().int().positive(),
   mutation_id: z.uuid(),
   expires_at: z.iso.datetime({ offset: true }),
@@ -56,7 +58,9 @@ function getKey() {
 async function readRow(client: SupabaseClient, workflowId: string) {
   const result = await client
     .from('oxygen_form_drafts')
-    .select('ciphertext, version, mutation_id, expires_at')
+    .select(
+      'ciphertext, residential_ciphertext, residential_version, version, mutation_id, expires_at'
+    )
     .eq('workflow_id', workflowId)
     .maybeSingle();
   if (result.error) throw new OxygenDraftError('unavailable');
@@ -78,6 +82,7 @@ export async function readOxygenDraft(
   if (!row) return { draft: null, version: 0 };
   if (Date.parse(row.expires_at) <= Date.now())
     return { draft: null, version: row.version };
+  if (!row.ciphertext) return { draft: null, version: row.version };
   const draft = decryptOxygenDraft(row.ciphertext, key, {
     userId,
     workflowId,
@@ -98,6 +103,7 @@ export async function saveOxygenDraft(
     row?.mutation_id === input.idempotencyKey &&
     row.version === input.version + 1
   ) {
+    if (!row.ciphertext) throw new OxygenDraftError('stage_locked');
     const previous = decryptOxygenDraft(row.ciphertext, key, {
       userId,
       workflowId: input.workflowId,
@@ -115,8 +121,20 @@ export async function saveOxygenDraft(
     workflowId: input.workflowId,
     version,
   });
+  const homeFields = Object.fromEntries(
+    Object.entries(input.draft.fields).filter(([name]) =>
+      name.startsWith('home_')
+    )
+  );
+  const residentialCiphertext = encryptOxygenDraft(
+    { step: 0, fields: homeFields },
+    key,
+    { userId, workflowId: input.workflowId, version, purpose: 'residential' }
+  );
   const values = {
     ciphertext,
+    residential_ciphertext: residentialCiphertext,
+    residential_version: version,
     version,
     mutation_id: input.idempotencyKey,
     expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
@@ -174,10 +192,13 @@ export async function readOxygenDraftForLocalAttempt(
     throw new OxygenDraftError('not_found');
   const row = await readRow(client, sourceWorkflowId);
   if (!row || Date.parse(row.expires_at) <= Date.now()) return current;
-  const saved = decryptOxygenDraft(row.ciphertext, getKey(), {
+  const payload = row.ciphertext ?? row.residential_ciphertext;
+  if (!payload) return current;
+  const saved = decryptOxygenDraft(payload, getKey(), {
     userId,
     workflowId: sourceWorkflowId,
-    version: row.version,
+    version: row.ciphertext ? row.version : (row.residential_version ?? 0),
+    ...(!row.ciphertext ? { purpose: 'residential' as const } : {}),
   });
   return { version: 0, draft: { ...saved, step: 0 as const } };
 }
@@ -202,10 +223,15 @@ export async function readOxygenResidentialDraft(
     throw new OxygenDraftError('not_found');
   const row = await readRow(client, workflowId);
   if (!row || Date.parse(row.expires_at) <= Date.now()) return {};
-  const draft = decryptOxygenDraft(row.ciphertext, getKey(), {
+  const payload = row.residential_ciphertext ?? row.ciphertext;
+  if (!payload) return {};
+  const draft = decryptOxygenDraft(payload, getKey(), {
     userId,
     workflowId,
-    version: row.version,
+    version: row.residential_ciphertext
+      ? (row.residential_version ?? 0)
+      : row.version,
+    ...(row.residential_ciphertext ? { purpose: 'residential' as const } : {}),
   });
   const keys = [
     'state',

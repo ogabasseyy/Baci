@@ -52,6 +52,8 @@ The append-only migration has been tested inside an isolated staging rollback, n
 
 Required per environment: `OXYGEN_<ENV>_DURABLE_HANDOFF_ENABLED`, `OXYGEN_<ENV>_HANDOFF_ORIGIN` and `OXYGEN_<ENV>_SELFIE_HOSTS`, plus that environment's existing runtime encryption key and restricted worker. The handoff origin must be the platform HTTPS origin serving `/auth/oxygen-selfie`; merchant custom-domain auth redirects are not an interchangeable origin. Leave configuration absent until runtime environment contracts and actual provider hosts are verified.
 
+Draft minimization applies to drafts saved with a separate residential ciphertext. Existing drafts without that copy retain their identity ciphertext for address recovery until address completion or expiry cleanup. Before production rollout, reconcile or wait for those legacy drafts to expire and verify the expiry cleanup job is operating; do not claim immediate removal of identity data from legacy rows.
+
 The current browser policy treats `OXYGEN_<ENV>_HOSTED_HOSTS` as the complete set of permitted hosted-frame origins, including both payment and selfie hosts. `OXYGEN_<ENV>_SELFIE_HOSTS` is a narrower camera-enabled subset: each selfie hostname must also appear in `HOSTED_HOSTS`, even when it differs from the payment hostname. A hostname present only in `SELFIE_HOSTS` is ignored, so the selfie cannot open. Confirm both exact provider hosts before configuring either list; this intersection does not restrict the payment frame to payment-only hosts. Separating those permissions requires a coordinated CSP and runtime policy change.
 
 ## Live provider contract checked on 1 November 2026

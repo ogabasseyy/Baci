@@ -5,7 +5,12 @@ import {
   oxygenFormDraftSchema,
 } from '@/schemas/oxygen-form-draft';
 
-type Context = { userId: string; workflowId: string; version: number };
+type Context = {
+  userId: string;
+  workflowId: string;
+  version: number;
+  purpose?: 'residential';
+};
 function keyBytes(key: string): Buffer {
   if (!/^[a-f0-9]{64}$/i.test(key))
     throw new Error('Draft storage unavailable');
@@ -14,7 +19,9 @@ function keyBytes(key: string): Buffer {
 const aad = (context: Context) =>
   Buffer.from(
     JSON.stringify([
-      'oxygen-form-draft:v1',
+      context.purpose === 'residential'
+        ? 'oxygen-residential-draft:v1'
+        : 'oxygen-form-draft:v1',
       context.userId,
       context.workflowId,
       context.version,

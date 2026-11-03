@@ -34,3 +34,23 @@ it('fails closed without a dedicated key and rejects tampered ciphertext', () =>
     decryptOxygenDraft(`${encrypted}tampered`, key, context)
   ).toThrow();
 });
+
+it('separates residential ciphertext from full-draft encryption context', () => {
+  const home = { step: 0 as const, fields: { home_street: 'Example Road' } };
+  const residential = encryptOxygenDraft(home, key, {
+    ...context,
+    purpose: 'residential',
+  });
+  expect(
+    decryptOxygenDraft(residential, key, { ...context, purpose: 'residential' })
+  ).toEqual(home);
+  expect(() => decryptOxygenDraft(residential, key, context)).toThrow();
+  const full = encryptOxygenDraft(
+    { step: 0, fields: { bvn: '12345678901' } },
+    key,
+    context
+  );
+  expect(() =>
+    decryptOxygenDraft(full, key, { ...context, purpose: 'residential' })
+  ).toThrow();
+});

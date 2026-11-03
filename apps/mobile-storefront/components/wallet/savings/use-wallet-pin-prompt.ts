@@ -3,9 +3,12 @@ import type {
   PinProofRequest,
   PinProofRequester,
 } from '@/lib/wallet-pin-proof';
+import { useAuthStore } from '@/stores/auth-store';
 
 export type WalletPinSheetBinding = {
   request: PinProofRequest | null;
+  /** The account that opened the sheet; every PIN call is pinned to it. */
+  expectedUserId?: string;
   onProof: (proof: string) => void;
   onCancel: () => void;
 };
@@ -17,6 +20,8 @@ export type WalletPinSheetBinding = {
  */
 export function useWalletPinPrompt() {
   const [request, setRequest] = useState<PinProofRequest | null>(null);
+  const userId = useAuthStore((state) => state.user?.id);
+  const initiator = useRef<string | undefined>(undefined);
   const resolver = useRef<((proof: string | null) => void) | null>(null);
   useEffect(
     () => () => {
@@ -25,6 +30,15 @@ export function useWalletPinPrompt() {
     },
     []
   );
+  // A different signed-in account must never inherit this sheet or its waiter.
+  useEffect(() => {
+    if (resolver.current && initiator.current !== userId) {
+      const resolve = resolver.current;
+      resolver.current = null;
+      setRequest(null);
+      resolve(null);
+    }
+  }, [userId]);
   const settle = (proof: string | null) => {
     const resolve = resolver.current;
     resolver.current = null;
@@ -35,10 +49,12 @@ export function useWalletPinPrompt() {
     new Promise<string | null>((resolve) => {
       resolver.current?.(null);
       resolver.current = resolve;
+      initiator.current = userId;
       setRequest(next);
     });
   const sheetProps: WalletPinSheetBinding = {
     request,
+    expectedUserId: request ? initiator.current : undefined,
     onProof: settle,
     onCancel: () => settle(null),
   };

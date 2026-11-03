@@ -8,15 +8,18 @@ const SERVER_REPLY_UNREADABLE = 'Wallet PIN is unavailable right now.';
 // Every call is pinned to the signed-in user so an account switch mid-flight
 // fails locally instead of sending the PIN under another identity. The PIN is
 // only ever placed in a request body here; it is never logged or stored.
-function begin() {
+function begin(pinnedUserId?: string) {
   return {
     client: createStorefrontCustomerApiClient(),
-    expectedUserId: useAuthStore.getState().user?.id ?? undefined,
+    // The account that opened the PIN sheet wins over whoever is signed in
+    // now, so a switch while the sheet is open fails locally.
+    expectedUserId:
+      pinnedUserId ?? useAuthStore.getState().user?.id ?? undefined,
   };
 }
 
-export async function fetchWalletPinStatus() {
-  const { client, expectedUserId } = begin();
+export async function fetchWalletPinStatus(pinnedUserId?: string) {
+  const { client, expectedUserId } = begin(pinnedUserId);
   const result = schemas.status.safeParse(
     await client.fetchJson({
       path: '/api/storefront/customer/wallet-pin/status',
@@ -28,8 +31,12 @@ export async function fetchWalletPinStatus() {
 }
 
 /** First PIN ('set') or a replacement after a required reset ('reset'). */
-export async function submitWalletPin(kind: 'set' | 'reset', pin: string) {
-  const { client, expectedUserId } = begin();
+export async function submitWalletPin(
+  kind: 'set' | 'reset',
+  pin: string,
+  pinnedUserId?: string
+) {
+  const { client, expectedUserId } = begin(pinnedUserId);
   const body = schemas.setRequest.parse({ pin });
   const result = schemas.setResponse.safeParse(
     await client.fetchJson({
@@ -44,14 +51,17 @@ export async function submitWalletPin(kind: 'set' | 'reset', pin: string) {
 }
 
 /** Returns the single-use proof bound to this goal, operation and amount. */
-export async function verifyFundPin(input: {
-  merchantId: string;
-  pin: string;
-  goalId: string;
-  operationId: string;
-  amountKobo: number;
-}) {
-  const { client, expectedUserId } = begin();
+export async function verifyFundPin(
+  input: {
+    merchantId: string;
+    pin: string;
+    goalId: string;
+    operationId: string;
+    amountKobo: number;
+  },
+  pinnedUserId?: string
+) {
+  const { client, expectedUserId } = begin(pinnedUserId);
   const body = schemas.fundVerifyRequest.parse({ ...input, action: 'fund' });
   const result = schemas.fundVerifyResponse.safeParse(
     await client.fetchJson({

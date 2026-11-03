@@ -1,11 +1,12 @@
 import {
   ActivityIndicator,
-  Modal,
+  Keyboard,
   Pressable,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
 import {
@@ -85,22 +86,27 @@ function PinField(props: {
 export function WalletPinSheet({
   colors,
   request,
+  expectedUserId,
   onProof,
   onCancel,
 }: WalletPinSheetBinding & { colors: WalletColors }) {
-  const sheet = useWalletPinSheet({ request, onProof });
+  const sheet = useWalletPinSheet({ request, expectedUserId, onProof });
   const copy = COPY[sheet.step];
   const entering =
     sheet.step === 'set' || sheet.step === 'reset' || sheet.step === 'enter';
   const choosing = sheet.step === 'set' || sheet.step === 'reset';
   return (
-    <Modal
+    <ModalSheet
       visible={request !== null}
-      transparent
       animationType="slide"
+      backdropStyle={styles.backdrop}
+      keyboardAutomaticOffset
+      keyboardSurfaceColor={colors.background}
       onRequestClose={onCancel}
     >
-      <View style={styles.backdrop}>
+      {/* The number pad has no return key: a tap on the sheet's own blank
+          space hides it so Confirm and Cancel stay reachable. */}
+      <Pressable accessible={false} onPress={Keyboard.dismiss}>
         <View style={[styles.sheet, { backgroundColor: colors.background }]}>
           <Text
             accessibilityRole="header"
@@ -179,7 +185,7 @@ export function WalletPinSheet({
             </Text>
           </Pressable>
         </View>
-      </View>
-    </Modal>
+      </Pressable>
+    </ModalSheet>
   );
 }

@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
+import { Keyboard } from 'react-native';
 import Colors from '@/constants/Colors';
 import {
   fetchWalletPinStatus,
@@ -64,7 +65,10 @@ describe('entering the PIN', () => {
     fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
     fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
-    expect(verifyFundPin).toHaveBeenCalledWith({ ...request, pin: '4821' });
+    expect(verifyFundPin).toHaveBeenCalledWith(
+      { ...request, pin: '4821' },
+      undefined
+    );
     expect(screen.getByLabelText('PIN').props.value).toBe('');
   });
 
@@ -133,7 +137,7 @@ describe('setting a PIN', () => {
     expect(submitWalletPin).not.toHaveBeenCalled();
     chooseAndSave('Save PIN', '4821', '4821');
     await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('set', '4821');
+    expect(submitWalletPin).toHaveBeenCalledWith('set', '4821', undefined);
     expect(verifyFundPin).not.toHaveBeenCalled();
     expect(screen.getByLabelText('PIN').props.value).toBe('');
   });
@@ -178,7 +182,7 @@ describe('resetting a PIN', () => {
     await screen.findByText('Reset your wallet PIN');
     chooseAndSave('Reset PIN', '4821', '4821');
     await screen.findByText('Enter your wallet PIN');
-    expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821');
+    expect(submitWalletPin).toHaveBeenCalledWith('reset', '4821', undefined);
   });
 });
 
@@ -204,5 +208,16 @@ describe('when the PIN service cannot be used', () => {
       await screen.findByText('Wallet PIN is unavailable right now')
     ).toBeOnTheScreen();
     expect(screen.queryByText('Set a wallet PIN')).toBeNull();
+  });
+});
+
+describe('keyboard handling', () => {
+  it('hides the number pad when the sheet is tapped, and leaves the sheet open', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    const dismiss = jest.spyOn(Keyboard, 'dismiss');
+    const { onCancel } = renderSheet();
+    fireEvent.press(await screen.findByText('Enter your wallet PIN'));
+    expect(dismiss).toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

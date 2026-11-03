@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { useAuthStore } from '@/stores/auth-store';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 
 const request = {
@@ -54,5 +55,19 @@ describe('useWalletPinPrompt', () => {
     });
     await expect(first).resolves.toBeNull();
     expect(result.current.sheetProps.request?.operationId).toBe('o2');
+  });
+
+  it('binds the sheet to the account that opened it and closes it on a user switch', async () => {
+    act(() => useAuthStore.setState({ user: { id: 'user-a' } as never }));
+    const { result } = renderHook(() => useWalletPinPrompt());
+    let pending!: Promise<string | null>;
+    act(() => {
+      pending = result.current.requestProof(request);
+    });
+    expect(result.current.sheetProps.expectedUserId).toBe('user-a');
+    act(() => useAuthStore.setState({ user: { id: 'user-b' } as never }));
+    await expect(pending).resolves.toBeNull();
+    expect(result.current.sheetProps.request).toBeNull();
+    act(() => useAuthStore.setState({ user: null as never }));
   });
 });

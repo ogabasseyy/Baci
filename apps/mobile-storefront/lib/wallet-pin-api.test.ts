@@ -101,3 +101,33 @@ describe('verifyFundPin', () => {
     expect(mockFetchJson).not.toHaveBeenCalled();
   });
 });
+
+describe('pinned to the account that opened the sheet', () => {
+  it('sends the given user id, not whoever is signed in now', async () => {
+    mockFetchJson.mockResolvedValue({ ok: true });
+    await submitWalletPin('set', '4821', 'user-opened');
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUserId: 'user-opened' })
+    );
+    mockFetchJson.mockResolvedValue({
+      primary: true,
+      hasPin: true,
+      resetRequired: false,
+      available: true,
+    });
+    await fetchWalletPinStatus('user-opened');
+    expect(mockFetchJson).toHaveBeenLastCalledWith(
+      expect.objectContaining({ expectedUserId: 'user-opened' })
+    );
+  });
+
+  it('a verify for another account is refused by the client before any request', async () => {
+    mockFetchJson.mockRejectedValue(new Error('account changed'));
+    await expect(
+      verifyFundPin({ ...ids, pin: '4821', amountKobo: 1 }, 'user-opened')
+    ).rejects.toThrow('account changed');
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUserId: 'user-opened' })
+    );
+  });
+});

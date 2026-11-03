@@ -117,3 +117,56 @@ describe('a PIN check that is still in flight', () => {
     expect(result.current.notice).toBeNull();
   });
 });
+
+describe('request identity', () => {
+  it('drops an in-flight answer when the replacement shares the operation id but not the amount', async () => {
+    let answerOld: (value: string) => void = () => undefined;
+    jest.mocked(verifyFundPin).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          answerOld = resolve;
+        })
+    );
+    const onProof = jest.fn();
+    const { result, rerender } = renderHook(
+      (props: { amountKobo: number }) =>
+        useWalletPinSheet({
+          request: { ...request, amountKobo: props.amountKobo },
+          onProof,
+        }),
+      { initialProps: { amountKobo: 250000 } }
+    );
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    act(() => result.current.setPin('4821'));
+    act(() => {
+      void result.current.submit();
+    });
+    rerender({ amountKobo: 300000 });
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    await act(async () => {
+      answerOld(proof);
+    });
+    expect(onProof).not.toHaveBeenCalled();
+  });
+
+  it('sends the initiating account on every call', async () => {
+    jest.mocked(verifyFundPin).mockResolvedValue(proof);
+    const { result } = renderHook(() =>
+      useWalletPinSheet({
+        request,
+        expectedUserId: 'user-opened',
+        onProof: jest.fn(),
+      })
+    );
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    expect(fetchWalletPinStatus).toHaveBeenCalledWith('user-opened');
+    act(() => result.current.setPin('4821'));
+    await act(async () => {
+      await result.current.submit();
+    });
+    expect(verifyFundPin).toHaveBeenCalledWith(
+      expect.objectContaining({ pin: '4821' }),
+      'user-opened'
+    );
+  });
+});

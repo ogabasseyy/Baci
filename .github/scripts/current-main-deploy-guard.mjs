@@ -200,7 +200,7 @@ async function supersedingChangesCanProceed({
   if (
     comparison?.status !== 'ahead' ||
     comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
-    !(comparison?.total_commits >= 1)
+    !(Number.isSafeInteger(comparison?.total_commits) && comparison.total_commits >= 1)
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
   }

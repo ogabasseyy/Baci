@@ -8,8 +8,10 @@ function response(body, { ok = true, status = 200 } = {}) {
   return { ok, status, async json() { return body; } };
 }
 
-function farAheadFetch({ runs, compares = {}, jobs = {}, pages }) {
+function farAheadFetch({ runs, compares = {}, jobs = {}, pages, urls = [] }) {
   return async (url) => {
+    urls.push(url);
+    if (url.includes('/git/commits/')) return response({ committer: { date: '2026-11-01T12:00:00Z' } });
     if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
     const cmp = url.match(/\/compare\/([0-9a-f]{40})\.\.\.([0-9a-f]{40})/);
     if (cmp) {
@@ -20,7 +22,7 @@ function farAheadFetch({ runs, compares = {}, jobs = {}, pages }) {
     if (jobMatch) { const j = jobs[jobMatch[1]] ?? []; return response({ jobs: j, total_count: j.length }); }
     const page = Number(url.match(/[?&]page=(\d+)/)?.[1] ?? 1);
     const list = pages ? (pages[page - 1] ?? []) : runs;
-    return response({ total_count: list.length, workflow_runs: list });
+    return response({ total_count: pages ? pages.flat().length : list.length, workflow_runs: list });
   };
 }
 const ahead = { merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 3 };
@@ -109,4 +111,30 @@ test('routes a 101-commit compare with a truncated commit list through the run-b
     ? response({ commits: Array.from({ length: 100 }, () => ({ sha: currentSha })), files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 101 })
     : base(url);
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
+});
+
+test('bounds the run walk to runs created since the expected commit date', async () => {
+  const urls = [];
+  const fetchImpl = farAheadFetch({ runs: [expectedRun], urls });
+  await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' });
+  assert.ok(urls.some((u) => u.includes('/runs?') && u.includes('created=%3E%3D2026-10-31')));
+});
+
+test('bugfix: an irregular historical run that is not a descendant cannot abort the guard', async () => {
+  const fetchImpl = farAheadFetch({
+    runs: [{ conclusion: 'success', head_branch: 'main', head_sha: olderDeployedSha, id: 7, status: 'completed' }, expectedRun],
+    jobs: { 7: [] },
+  });
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), { currentSha, expectedSha });
+});
+
+test('bugfix: fails closed when a runs page is shorter than total_count says', async () => {
+  const base = farAheadFetch({ runs: [expectedRun] });
+  const fetchImpl = async (url) => (/\/runs\?/.test(url) ? response({ total_count: 400, workflow_runs: [expectedRun] }) : base(url));
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete or invalid workflow runs response/);
+});
+
+test('bugfix: rejects a compare whose total_commits is not an integer', async () => {
+  const fetchImpl = async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response({ status: 'ahead', merge_base_commit: { sha: expectedSha }, total_commits: '500', files: null });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete or non-ancestral superseding comparison/);
 });

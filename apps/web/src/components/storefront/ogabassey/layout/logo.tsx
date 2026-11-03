@@ -4,7 +4,7 @@ interface LogoProps {
   className?: string;
   height?: number;
   isLoading?: boolean;
-  color?: 'white' | 'black';
+  color?: 'white' | 'black' | 'current';
 }
 
 export const Logo: React.FC<LogoProps> = ({
@@ -13,7 +13,8 @@ export const Logo: React.FC<LogoProps> = ({
   isLoading = false,
   color = 'white',
 }) => {
-  const fillColor = color === 'white' ? '#fff' : '#000';
+  const fillColor =
+    color === 'current' ? 'currentColor' : color === 'black' ? '#000' : '#fff';
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

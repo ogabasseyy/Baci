@@ -6,7 +6,8 @@ import type { MockOptions } from './mock-sandbox';
 import { MutationGate } from './mutation-gate';
 import { createMemoryJournal, type Journal } from './mutation-journal';
 import { emptyScenarioState, type ProofContext } from './proof-context';
-import { ProviderApi, qaIdentityFor } from './provider-ops';
+import { qaIdentityFor } from './provider-ops';
+import { ProofApi } from './provider-ops-proofs';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
 
@@ -50,7 +51,7 @@ export function makeHarness(options: HarnessOptions = {}) {
     capture,
   });
   vi.stubGlobal('fetch', guarded);
-  const api = new ProviderApi(
+  const api = new ProofApi(
     { baseUrl: options.baseUrl ?? SANDBOX_ORIGIN, token: MOCK_API_KEY },
     capture,
     gate

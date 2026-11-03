@@ -18,6 +18,7 @@ const VERIFY_SESSION = `SELECT current_database() AS database_name,
 
 // Every statement this executor may run, with its exact bound-argument count.
 const STATEMENT_ARITY = new Map<string, number>([
+  [PRIMARY_WALLET_STATEMENTS.presence, 1],
   [PRIMARY_WALLET_STATEMENTS.read, 1],
   [PRIMARY_WALLET_STATEMENTS.claim, 2],
   [PRIMARY_WALLET_VERIFICATION_STATEMENT, 2],
@@ -31,6 +32,7 @@ const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.review, 6],
   [PRIMARY_WALLET_STATEMENTS.ownershipHold, 3],
   [PRIMARY_WALLET_STATEMENTS.readReview, 1],
+  [PRIMARY_WALLET_STATEMENTS.readRolloutCohort, 1],
 ]);
 
 export function createPrimaryWalletExecutor(

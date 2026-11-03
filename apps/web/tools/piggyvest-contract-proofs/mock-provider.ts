@@ -1,3 +1,4 @@
+import { bankListReply, nameEnquiryReply } from './mock-banks';
 import { type MockOptions, type MockReply, MockSandbox } from './mock-sandbox';
 
 /**
@@ -58,6 +59,8 @@ function route(
     if (p === '/api/v1/wallet/api/wallet-type') return sandbox.listWallets(q);
     if (p === '/api/v1/transaction') return sandbox.ledger.listTransactions(q);
     if (p === '/api/v1/transaction/verify') return sandbox.ledger.verify(q);
+    if (p === '/api/v1/transfer/bank-list') return bankListReply();
+    if (p === '/api/v1/transfer/name-enquiry') return nameEnquiryReply(q);
     const accrued = pathParam(
       /^\/api\/v1\/wallet\/interests\/accrued\/([^/]+)$/,
       p

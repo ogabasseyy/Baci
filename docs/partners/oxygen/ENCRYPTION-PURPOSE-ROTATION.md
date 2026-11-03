@@ -10,6 +10,26 @@ Even deriving purpose-specific keys from the same root would not protect other
 purposes when that root is compromised; independent rotation needs separately
 provisioned secrets and an explicit key-retention policy.
 
+## Phone-handoff independent-key candidate
+
+Phone-handoff readers also support `v3`, using a separately provisioned 32-byte
+hex secret named `OXYGEN_STAGING_PHONE_HANDOFF_ENCRYPTION_KEY` or
+`OXYGEN_PRODUCTION_PHONE_HANDOFF_ENCRYPTION_KEY`. New writes use v3 only when
+the corresponding `OXYGEN_STAGING_PHONE_KEY_V3_WRITE` or
+`OXYGEN_PRODUCTION_PHONE_KEY_V3_WRITE` is exactly `true`; defaults remain
+unchanged. A missing, malformed, or legacy-root-equal v3 key fails closed.
+Version, workflow, application, environment and capability hash remain bound as
+authenticated data; v1 and v2 reads continue to use the original root.
+
+Do not enable v3 writes until every serving instance can read v3 and the
+independent key is provisioned consistently. Operators must provision distinct
+staging and production secrets and keep them distinct from every other purpose;
+the application only checks against the current legacy root. Turning the flag off does not
+convert v3 records; retain the v3 key and a v3-capable reader until all such
+handoffs expire. The old root remains necessary for older envelopes. This
+candidate does not independently rotate drafts or either activation ledger,
+and does not constitute staging or production rollout approval.
+
 ## Draft and phone-handoff v2 implementation
 
 Drafts (including residential-only drafts) and phone handoffs now support

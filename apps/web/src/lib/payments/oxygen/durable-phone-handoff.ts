@@ -7,7 +7,11 @@ import {
 } from '@/schemas/oxygen-phone-handoff';
 import { oxygenRuntimeSnapshotSchema } from '@/schemas/oxygen-runtime-view';
 import type { OxygenPhoneConfiguration } from './phone-handoff-configuration';
-import { decryptPhoneTarget, encryptPhoneTarget } from './phone-handoff-crypto';
+import {
+  assertPhoneEncryptionReady,
+  decryptPhoneTarget,
+  encryptPhoneTarget,
+} from './phone-handoff-crypto';
 import type { OxygenProvider } from './provider';
 import { hosted } from './runtime-policy';
 import {
@@ -45,6 +49,7 @@ export async function issueDurableOxygenHandoff(
   workflowId: string,
   config: OxygenPhoneConfiguration
 ) {
+  assertPhoneEncryptionReady(config.key, config.environment);
   const current = await readOxygenSnapshot(user, workflowId);
   if (
     !current.executionEnabled ||

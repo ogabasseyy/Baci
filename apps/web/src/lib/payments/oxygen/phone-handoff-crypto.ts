@@ -9,7 +9,7 @@ type Context = {
   applicationReference: string;
   environment: 'staging' | 'production';
 };
-const aad = (c: Context, version: 'v1' | 'v2') =>
+const aad = (c: Context, version: 'v1' | 'v2' | 'v3') =>
   Buffer.from(
     JSON.stringify([
       `oxygen-phone:${version}`,
@@ -24,17 +24,55 @@ function keyBytes(key: string) {
     throw new Error('Phone verification unavailable');
   return Buffer.from(key, 'hex');
 }
+function independentPhoneKey(
+  context: Pick<Context, 'environment'>,
+  legacyRoot: Buffer
+): Buffer {
+  const prefix =
+    context.environment === 'production'
+      ? 'OXYGEN_PRODUCTION'
+      : 'OXYGEN_STAGING';
+  const secret = process.env[`${prefix}_PHONE_HANDOFF_ENCRYPTION_KEY`];
+  if (!secret || !/^[a-f0-9]{64}$/i.test(secret))
+    throw new Error('Phone verification unavailable');
+  const key = Buffer.from(secret, 'hex');
+  if (key.equals(legacyRoot)) throw new Error('Phone verification unavailable');
+  return key;
+}
+function writeVersion(
+  context: Pick<Context, 'environment'>
+): 'v1' | 'v2' | 'v3' {
+  const prefix =
+    context.environment === 'production'
+      ? 'OXYGEN_PRODUCTION'
+      : 'OXYGEN_STAGING';
+  return process.env[`${prefix}_PHONE_KEY_V3_WRITE`] === 'true'
+    ? 'v3'
+    : oxygenWriteVersion();
+}
+export function assertPhoneEncryptionReady(
+  key: string,
+  environment: Context['environment']
+): void {
+  const root = keyBytes(key);
+  if (writeVersion({ environment }) === 'v3')
+    independentPhoneKey({ environment }, root);
+}
 export function encryptPhoneTarget(
   url: string,
   key: string,
   context: Context
 ): string {
-  const version = oxygenWriteVersion();
+  const version = writeVersion(context);
   const iv = randomBytes(12);
   const root = keyBytes(key);
   const cipher = createCipheriv(
     'aes-256-gcm',
-    version === 'v2' ? oxygenPurposeKey(root, 'phone-handoff') : root,
+    version === 'v3'
+      ? independentPhoneKey(context, root)
+      : version === 'v2'
+        ? oxygenPurposeKey(root, 'phone-handoff')
+        : root,
     iv
   );
   cipher.setAAD(aad(context, version));
@@ -58,7 +96,13 @@ export function decryptPhoneTarget(
   context: Context
 ): string {
   const [version, iv, tag, value, extra] = payload.split('.');
-  if ((version !== 'v1' && version !== 'v2') || !iv || !tag || !value || extra)
+  if (
+    (version !== 'v1' && version !== 'v2' && version !== 'v3') ||
+    !iv ||
+    !tag ||
+    !value ||
+    extra
+  )
     throw new Error('Phone verification unavailable');
   const nonce = Buffer.from(iv, 'base64url');
   const authTag = Buffer.from(tag, 'base64url');
@@ -67,7 +111,11 @@ export function decryptPhoneTarget(
   const root = keyBytes(key);
   const cipher = createDecipheriv(
     'aes-256-gcm',
-    version === 'v2' ? oxygenPurposeKey(root, 'phone-handoff') : root,
+    version === 'v3'
+      ? independentPhoneKey(context, root)
+      : version === 'v2'
+        ? oxygenPurposeKey(root, 'phone-handoff')
+        : root,
     nonce,
     {
       authTagLength: 16,

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 const m = vi.hoisted(() => ({ read: vi.fn(), runtime: vi.fn(), qr: vi.fn() }));
@@ -240,4 +240,52 @@ it('rejects invalid capability syntax before database access', async () => {
     redeemDurableOxygenHandoff(client, 'bad', config)
   ).rejects.toThrow();
   expect(rpc).not.toHaveBeenCalled();
+});
+
+afterEach(() => vi.unstubAllEnvs());
+it('rejects a misconfigured v3 key before any provider or storage request', async () => {
+  vi.stubEnv('OXYGEN_STAGING_PHONE_KEY_V3_WRITE', 'true');
+  vi.stubEnv('OXYGEN_STAGING_PHONE_HANDOFF_ENCRYPTION_KEY', '');
+  await expect(
+    issueDurableOxygenHandoff(client, worker, { call }, 'partner', id, config)
+  ).rejects.toThrow();
+  expect(call).not.toHaveBeenCalled();
+  expect(worker).not.toHaveBeenCalled();
+  expect(m.read).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalled();
+});
+
+it('issues and redeems v3 after writes are disabled, preserving its exact stored context', async () => {
+  vi.stubEnv('OXYGEN_STAGING_PHONE_KEY_V3_WRITE', 'true');
+  vi.stubEnv('OXYGEN_STAGING_PHONE_HANDOFF_ENCRYPTION_KEY', 'c'.repeat(64));
+  await issueDurableOxygenHandoff(
+    client,
+    worker,
+    { call },
+    'partner',
+    id,
+    config
+  );
+  const token = new URL(m.qr.mock.calls[0][0]).hash.slice(1);
+  const issued = rpc.mock.calls[0][1].p_payload;
+  expect(issued.ciphertext).toMatch(/^v3\./);
+  vi.stubEnv('OXYGEN_STAGING_PHONE_KEY_V3_WRITE', '');
+  const stored = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging',
+    expiresAt: issued.expiresAt,
+    ciphertext: issued.ciphertext,
+  };
+  rpc.mockResolvedValueOnce({ data: stored, error: null });
+  rpc.mockResolvedValueOnce({ data: { consumed: true }, error: null });
+  await expect(
+    redeemDurableOxygenHandoff(client, token, config)
+  ).resolves.toEqual({
+    url: 'https://selfie.example.test/?token=private',
+  });
+  expect(rpc.mock.calls.at(-1)?.[1]).toMatchObject({
+    p_operation: 'consume',
+    p_payload: stored,
+  });
 });

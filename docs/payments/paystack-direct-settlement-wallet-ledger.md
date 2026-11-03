@@ -100,12 +100,23 @@ No existing row is changed.
 ### Application
 
 - `classify-paystack-settlement-collection.ts`: reads Paystack's verified
-  payload. `subaccount.subaccount_code` present **and** a parseable
-  `fees_split.subaccount` (the merchant's share, which may be 0) →
-  `direct_split`;
-  `subaccount` present but empty/null → `integration` (Baci-held); anything
-  else (no `subaccount` key, or a named subaccount without a provable share)
-  → `unknown`.
+  payload.
+  - `direct_split`: `subaccount.subaccount_code` is a non-empty string,
+    `fees_split.subaccount` (the merchant's share, may be 0),
+    `fees_split.integration` (Baci's share) and `fees_split.paystack`
+    (Paystack's fee) all parse as non-negative integer kobo, and
+    merchant + Baci + Paystack = `amount` exactly. That identity held for all
+    62 production splits (card, bank transfer and DVA).
+  - `integration` (Baci-held): `subaccount` is null, `{}` or has a blank or
+    null code, **and** `fees_split.subaccount` is absent or 0.
+  - `unknown` (fail closed): anything else. That covers no `subaccount` key,
+    a non-string code, a split that doesn't add up, or an empty subaccount
+    alongside a positive merchant share.
+- The weekly payout cron (`api/cron/wallet-payouts`) pays
+  `get_merchant_wallet_spendable_balance`, not `available_balance`, for the
+  minimum check, the debit and the transfer. If that read fails, the wallet
+  is skipped as failed, with no fallback to the raw balance.
+
 - `paid-order-settlement-executor.ts` (+ `resolve-settlement-rpc-routing.ts`):
   for Paystack, `direct_split` → the new history recorders; `integration` →
   the existing wallet-crediting RPCs with `paystack_collection: 'integration'`;
@@ -255,10 +266,6 @@ functions called from the existing paid-order side-effect graph (see
   re-run the settlement step.
 - Storefront/agentic DVA payments give Baci ₦0 platform fee (subaccount DVA
   split). Card is unaffected. Decide whether DVA should use a split code.
-- The payout cron still asks for the whole `available_balance` and is now
-  refused while exposure exists. It could request
-  `get_merchant_wallet_spendable_balance` instead, if ops payouts are ever
-  wanted.
 - Dashboard and mobile wallet screens: show direct-split rows as "Settled to
   your bank by Paystack" history and the spendable amount, not
   `available_balance`.

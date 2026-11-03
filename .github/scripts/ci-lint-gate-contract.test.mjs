@@ -152,3 +152,22 @@ test('flags every lintable mobile path, not only the enumerated app folders', ()
     }
   }
 });
+
+test('stays wired into the CI contract run', async () => {
+  const configTest = await readFile(
+    '.github/scripts/resolve-ci-test-plan-config.test.mjs',
+    'utf8'
+  );
+
+  assert.match(configTest, /import '\.\/ci-lint-gate-contract\.test\.mjs';/);
+  assert.ok(
+    filters.web.includes('.github/scripts/ci-lint-gate-contract.test.mjs')
+  );
+  assert.ok(
+    workflow.jobs['quality-test'].steps.some(
+      (step) =>
+        step.run?.includes('node --test') &&
+        step.run.includes('.github/scripts/resolve-ci-test-plan-config.test.mjs')
+    )
+  );
+});

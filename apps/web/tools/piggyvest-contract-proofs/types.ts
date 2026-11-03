@@ -1,6 +1,6 @@
-import type { RunMode } from './constants';
+import type { PROOF_IDS, RunMode } from './constants';
 
-export type ProofId = 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7';
+export type ProofId = (typeof PROOF_IDS)[number];
 export type Answer = 'yes' | 'no' | 'unknown' | 'not_applicable';
 export type Scalar = string | number | boolean | null;
 

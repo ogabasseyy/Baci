@@ -205,19 +205,15 @@ export class MockSandbox {
     ) {
       return fail('Invalid interest payout wallet');
     }
-    const payoutWalletId =
-      explicit ??
-      (this.options.subWalletInheritsPayout ? customer.payoutWalletId : null);
-    return ok(
-      {
-        id: this.addWallet(customer.id, name, {
-          payoutWalletId,
-          interestEnabled: body.enable_interest_accrual === true,
-        }).id,
-      },
-      'Wallet creation is being processed',
-      202
-    );
+    const wallet = this.addWallet(customer.id, name, {
+      payoutWalletId:
+        explicit ??
+        (this.options.subWalletInheritsPayout ? customer.payoutWalletId : null),
+      interestEnabled: body.enable_interest_accrual === true,
+    });
+    if (!explicit && this.options.subWalletPaysItselfWhenUnset)
+      wallet.payoutWalletId = wallet.id;
+    return ok({ id: wallet.id }, 'Wallet creation is being processed', 202);
   }
 
   listWallets(query: URLSearchParams): MockReply {

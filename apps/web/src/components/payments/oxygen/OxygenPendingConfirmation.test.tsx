@@ -73,3 +73,24 @@ it('keeps an address under review on status recovery without replacement upload'
   fireEvent.click(screen.getByRole('button', { name: 'Check for an update' }));
   expect(refresh).toHaveBeenCalledOnce();
 });
+it('shows an interrupted eligibility check as unconfirmed and only refreshes saved state', () => {
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const checkPending = vi.fn().mockResolvedValue(undefined);
+  const snapshot = pending('refresh_eligibility');
+  render(
+    <OxygenPendingConfirmation
+      {...common}
+      snapshot={snapshot}
+      refresh={refresh}
+      checkPending={checkPending}
+    />
+  );
+  expect(
+    screen.getByRole('heading', {
+      name: 'Your payment options need confirmation',
+    })
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Check for an update' }));
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(checkPending).not.toHaveBeenCalled();
+});

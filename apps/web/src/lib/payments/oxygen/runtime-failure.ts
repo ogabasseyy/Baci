@@ -10,7 +10,8 @@ import {
 export function trackOxygenExecution(provider: OxygenProvider) {
   let uncertain = false;
   let operation: OxygenProviderOperation | null = null;
-  const reads = new Set(['kyc', 'eligibility', 'details', 'payment']);
+  // Eligibility may initiate underwriting; Oxygen has not confirmed repeat safety.
+  const reads = new Set(['kyc', 'details', 'payment']);
   return {
     uncertain: () => uncertain,
     operation: () => operation,
@@ -28,7 +29,8 @@ export function trackOxygenExecution(provider: OxygenProvider) {
           if (
             mutation &&
             error instanceof OxygenProviderFailure &&
-            error.outcome !== 'indeterminate'
+            (error.outcome === 'not_sent' ||
+              (operation !== 'eligibility' && error.outcome === 'rejected'))
           )
             uncertain = before;
           throw error;

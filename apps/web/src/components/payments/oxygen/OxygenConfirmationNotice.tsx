@@ -6,11 +6,13 @@ import { OxygenLoadingButton } from './OxygenLoadingButton';
 export function OxygenConfirmationNotice({
   booking,
   identityCheck = false,
+  eligibilityCheck = false,
   busy,
   refresh,
 }: {
   booking: boolean;
   identityCheck?: boolean;
+  eligibilityCheck?: boolean;
   busy: boolean;
   refresh: () => Promise<void>;
 }) {
@@ -23,19 +25,25 @@ export function OxygenConfirmationNotice({
         <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">
           {identityCheck
             ? 'Identity verification paused'
-            : 'Taking a little longer'}
+            : eligibilityCheck
+              ? 'Payment options check paused'
+              : 'Taking a little longer'}
         </p>
         <h3 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">
           {booking
             ? 'Your payment plan is being confirmed'
             : identityCheck
               ? 'Your NIN verification needs confirmation'
-              : 'Your application is being checked'}
+              : eligibilityCheck
+                ? 'Your payment options need confirmation'
+                : 'Your application is being checked'}
         </h3>
         <p className="text-sm leading-relaxed text-gray-600">
           {identityCheck
             ? 'Your code was accepted, but we couldn’t confirm the result of Oxygen’s NIN check. Your details are saved. Please don’t submit them again.'
-            : 'We’re waiting for confirmation from Oxygen. You don’t need to submit this step again.'}
+            : eligibilityCheck
+              ? 'We couldn’t confirm the result with Oxygen. Your application is saved. Please don’t submit this check again. Contact support if you need help.'
+              : 'We’re waiting for confirmation from Oxygen. You don’t need to submit this step again.'}
         </p>
       </div>
       <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">

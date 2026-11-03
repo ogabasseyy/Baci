@@ -109,6 +109,10 @@ export function OxygenPendingConfirmation({
         <OxygenConfirmationNotice
           booking={snapshot?.pending?.action === 'book'}
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
+          eligibilityCheck={
+            snapshot?.pending?.action === 'refresh_eligibility' &&
+            snapshot.pending.status !== 'queued'
+          }
           busy={busy}
           refresh={
             [

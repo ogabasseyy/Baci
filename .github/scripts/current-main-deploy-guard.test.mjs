@@ -105,16 +105,16 @@ test('accepts an in-flight ancestor when superseding commit is queued or in_prog
   assert.deepEqual(result, { currentSha, expectedSha });
 });
 
-test('rejects an ancestor when a superseding run is in_progress but deploy-production completed', async () => {
-  await assert.rejects(
-    verifySupersededFile(
-      'apps/web/src/app/page.tsx',
-      [{ conclusion: null, head_sha: currentSha, id: 126, status: 'in_progress' }],
-      [{ sha: currentSha }],
-      [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }]
-    ),
-    /superseded deployment SHA/
-  );
+test('rejects an ancestor when superseding job or deploy step succeeded while in_progress', async () => {
+  for (const jobs of [
+    [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }],
+    [{ conclusion: null, name: 'deploy-production', status: 'in_progress', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }],
+  ]) {
+    await assert.rejects(
+      verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: null, head_sha: currentSha, id: 126, status: 'in_progress' }], [{ sha: currentSha }], jobs),
+      /superseded deployment SHA/
+    );
+  }
 });
 
 test('handles cancelled runs correctly based on whether deploy step succeeded', async () => {
@@ -228,11 +228,11 @@ test('root public guide assets trigger web CI and production deployment', () => 
 });
 
 test('detects earlier successful deploy attempt when rerun is queued or failed', async () => {
-  for (const status of ['queued', 'completed']) {
+  for (const { status, run_attempt } of [{ status: 'queued', run_attempt: 2 }, { status: 'queued', run_attempt: null }, { status: 'completed', run_attempt: 2 }]) {
     await assert.rejects(
       verifySupersededFile(
         'apps/web/src/app/page.tsx',
-        [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt: 2, status }],
+        [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt, status }],
         [{ sha: currentSha }],
         [
           { conclusion: 'success', name: 'deploy-production', status: 'completed' },

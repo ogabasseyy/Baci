@@ -103,7 +103,7 @@ function collectSupersedingShas(comparison, currentSha) {
 }
 
 async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token) {
-  if (run?.status === 'queued' && (typeof run.run_attempt !== 'number' || run.run_attempt <= 1)) {
+  if (run?.status === 'queued' && Number.isSafeInteger(run.run_attempt) && run.run_attempt <= 1) {
     return false;
   }
   if (!Number.isSafeInteger(run?.id) || run.id <= 0) {
@@ -123,20 +123,23 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   for (const job of jobsBody.jobs) {
     if (job?.name !== 'deploy-production') continue;
     if (job.conclusion === 'success') return true;
-    if (job.status === 'completed' && job.conclusion !== 'skipped') {
-      if (!Array.isArray(job.steps) || job.steps.length === 0) {
+    if (job.conclusion !== 'skipped') {
+      if (Array.isArray(job.steps) && job.steps.length > 0) {
+        const deployStep = job.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
+        if (deployStep?.conclusion === 'success') return true;
+        if (job.status === 'completed' && !deployStep) {
+          throw new Error('missing Deploy to Vercel step in deploy-production job');
+        }
+      } else if (job.status === 'completed') {
         throw new Error('incomplete or invalid workflow job steps response');
       }
-      const deployStep = job.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
-      if (!deployStep) {
-        throw new Error('missing Deploy to Vercel step in deploy-production job');
-      }
-      if (deployStep.conclusion === 'success') return true;
     }
   }
   return false;
 }
 
+// Residual risk note: tracks canonical deploy.yml workflow runs on main. Manual emergency
+// runs executed outside GitHub Actions do not leave runs records.
 async function hasSupersedingDeployment({
   apiRoot,
   fetchImpl,

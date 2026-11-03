@@ -15,13 +15,25 @@
 -- The proof binding is derived here, never taken from the caller (theme D):
 -- customer and merchant come from the scope the reservation itself validates,
 -- the amount from the request, and the Idempotency-Key digest is
--- SHA-256('<operationId>') for funding or SHA-256('<goalId>:<action>') for
--- cancel and complete. Cancel and complete move the whole balance read from
+-- SHA-256('<goalId>:<operationId>') for funding (so a proof is for one goal)
+-- or SHA-256('<goalId>:<action>') for cancel and complete. Cancel and complete move the whole balance read from
 -- PiggyVest at that moment, so their proofs bind the fixed amount 1 kobo
 -- (a marker, not a money amount); the goal and action are bound by the key.
 --
 -- Failed-attempt lockout is the existing verify_wallet_pin lockout (5 wrong
 -- PINs lock 30 minutes, doubling, capped at 24 hours).
+--
+-- Scope of this change: only funding is wired. The cancel and complete
+-- purposes and consume_goal_pin_proof are groundwork; the goal cancel and
+-- complete flows do not exist in the database yet (manage_savings only moves
+-- a funding transfer reservation, it does not cancel or complete a goal), so
+-- wiring them is a follow-up that calls consume_goal_pin_proof in the same
+-- transaction as the state change.
+--
+-- The original reserve_savings(jsonb,jsonb) is no longer executable by the
+-- savings executor login; only reserve_savings_with_pin (a definer function
+-- owned by the migration owner) can reach it, so no reservation can be
+-- created without spending a proof.
 
 BEGIN;
 
@@ -42,6 +54,7 @@ AS $$
 DECLARE
   v_customer_id uuid;
   v_merchant_id uuid;
+  v_goal_id uuid;
   v_operation text;
   v_amount bigint;
   v_result jsonb;
@@ -51,13 +64,18 @@ BEGIN
     OR pg_catalog.jsonb_typeof(scope) <> 'object'
     OR pg_catalog.jsonb_typeof(request) <> 'object'
     OR NOT (scope ? 'customerId' AND scope ? 'merchantId')
-    OR NOT (request ? 'operationId' AND request ? 'amountKobo') THEN
+    OR NOT (request ? 'goalId' AND request ? 'operationId' AND request ? 'amountKobo') THEN
     RAISE EXCEPTION 'invalid savings request' USING ERRCODE = '22023';
   END IF;
   v_customer_id := (scope ->> 'customerId')::uuid;
   v_merchant_id := (scope ->> 'merchantId')::uuid;
+  v_goal_id := (request ->> 'goalId')::uuid;
   v_operation := ((request ->> 'operationId')::uuid)::text;
   v_amount := (request ->> 'amountKobo')::bigint;
+  IF v_customer_id IS NULL OR v_merchant_id IS NULL OR v_goal_id IS NULL
+    OR v_amount IS NULL OR v_amount NOT BETWEEN 1 AND 9999999999 THEN
+    RAISE EXCEPTION 'invalid savings request' USING ERRCODE = '22023';
+  END IF;
 
   BEGIN
     v_result := piggyvest_primary.reserve_savings(scope, request);
@@ -68,7 +86,7 @@ BEGIN
     -- consume function reads the clock itself after locking the proof row.
     v_outcome := wallet_pin_private.consume_wallet_pin_proof(
       v_customer_id, v_merchant_id, 'goal_fund', v_amount,
-      pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_operation, 'UTF8')), 'hex'),
+      pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_goal_id::text || ':' || v_operation, 'UTF8')), 'hex'),
       pin_proof);
     IF v_outcome IS DISTINCT FROM 'consumed' THEN
       RAISE EXCEPTION 'pin_refused:%', COALESCE(v_outcome, 'invalid') USING ERRCODE = 'PVP01';
@@ -119,6 +137,9 @@ REVOKE ALL ON FUNCTION piggyvest_primary.reserve_savings_with_pin(jsonb, jsonb, 
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.consume_goal_pin_proof(jsonb, uuid, text, text)
   FROM PUBLIC, anon, authenticated, service_role;
+-- The executor login reaches reserve_savings only through the wrapper above.
+REVOKE EXECUTE ON FUNCTION piggyvest_primary.reserve_savings(jsonb, jsonb)
+  FROM piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.reserve_savings_with_pin(jsonb, jsonb, text)
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.consume_goal_pin_proof(jsonb, uuid, text, text)

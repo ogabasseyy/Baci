@@ -27,8 +27,8 @@ export type GoalPinBinding = {
 export const GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO = 1;
 
 /**
- * The key text the database hashes itself: the operation id for funding
- * (reserve_savings_with_pin), '<goalId>:<action>' for cancel and complete
+ * The key text the database hashes itself: '<goalId>:<operationId>' for
+ * funding (reserve_savings_with_pin), '<goalId>:<action>' for cancel and complete
  * (consume_goal_pin_proof). Both sides use lower-case UUIDs.
  */
 export function buildGoalPinBinding(
@@ -39,7 +39,7 @@ export function buildGoalPinBinding(
       purpose: 'goal_fund',
       amountKobo: input.amountKobo,
       idempotencyKeySha256: deriveWalletPinIdempotencyDigest(
-        input.operationId.toLowerCase()
+        `${input.goalId.toLowerCase()}:${input.operationId.toLowerCase()}`
       ),
     };
   }

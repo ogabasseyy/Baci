@@ -51,6 +51,25 @@ BEGIN
       RAISE EXCEPTION '% must not be executable by PUBLIC', v_signature;
     END IF;
   END LOOP;
+
+  -- The executor login reaches the original reservation only through the
+  -- wrapper: it must not execute reserve_savings(jsonb,jsonb) itself.
+  v_oid := 'piggyvest_primary.reserve_savings(jsonb,jsonb)'::regprocedure;
+  IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_oid, 'EXECUTE') THEN
+    RAISE EXCEPTION 'piggyvest_primary_authorizer must not execute reserve_savings directly';
+  END IF;
+  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+    IF pg_catalog.has_function_privilege(v_role, v_oid, 'EXECUTE') THEN
+      RAISE EXCEPTION 'reserve_savings must not be executable by %', v_role;
+    END IF;
+  END LOOP;
+  -- The wrapper's owner can still run it (the definer path).
+  IF NOT pg_catalog.has_function_privilege(
+    (SELECT proc.proowner FROM pg_catalog.pg_proc AS proc
+      WHERE proc.oid = 'piggyvest_primary.reserve_savings_with_pin(jsonb,jsonb,text)'::regprocedure),
+    v_oid, 'EXECUTE') THEN
+    RAISE EXCEPTION 'the wrapper owner must keep EXECUTE on reserve_savings';
+  END IF;
 END
 $catalog$;
 

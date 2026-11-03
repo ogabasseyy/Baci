@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROOF_IDS } from './constants';
+import { FULL_RUN_ONLY_PROOFS, PROOF_IDS } from './constants';
 import { PROOF_ORDER } from './proof-order';
 
 describe('PROOF_ORDER', () => {
@@ -17,5 +17,13 @@ describe('PROOF_ORDER', () => {
     for (const id of PROOF_IDS) expect(ids).toContain(id);
     expect(ids.indexOf('p3')).toBeLessThan(ids.indexOf('p8'));
     expect(ids.indexOf('p3')).toBeLessThan(ids.indexOf('p9'));
+  });
+
+  it('names every proof it runs in PROOF_IDS, and refuses p8 and p9 alone', () => {
+    const ids: string[] = PROOF_ORDER.map(([id]) => id);
+    expect([...PROOF_IDS].sort()).toEqual([...ids].sort());
+    expect(PROOF_IDS).toContain('p8');
+    expect(PROOF_IDS).toContain('p9');
+    expect(FULL_RUN_ONLY_PROOFS).toEqual(expect.arrayContaining(['p8', 'p9']));
   });
 });

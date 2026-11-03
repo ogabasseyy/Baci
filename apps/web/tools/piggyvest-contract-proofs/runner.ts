@@ -18,7 +18,7 @@ import { PROOF_ORDER } from './proof-order';
 import { qaIdentityFor } from './provider-ops';
 import { ProofApi } from './provider-ops-proofs';
 import { loadAllowlist } from './qa-allowlist';
-import { isProof7KeyOf } from './qa-keys';
+import { isDerivedKeyOf, isProof7KeyOf } from './qa-keys';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
 import { assertProofScope, type RunConfig } from './run-mode';
@@ -28,6 +28,7 @@ import {
   HarnessRefusal,
 } from './safety-guards';
 import { setupScenario } from './scenario';
+import { TransportFaults } from './transport-faults';
 import type { ProofId, ProofResult } from './types';
 
 export type { ProofRunner } from './proof-extension';
@@ -73,7 +74,7 @@ export function currentAttempt(
     .filter((entry) => entry.qaKey === qaKey)
     .map((entry) => entry.attempt);
   const derived = entries
-    .filter((entry) => isProof7KeyOf(qaKey, entry.qaKey))
+    .filter((entry) => isDerivedKeyOf(qaKey, entry.qaKey))
     .map((entry) => entry.attempt);
   const latest = Math.max(0, ...own, ...derived);
   if (latest === 0) return 1;
@@ -177,10 +178,11 @@ export async function runHarness(
       isWalletAuthorized: (walletId) => state.authorized.has(walletId),
       now: deps.now,
     });
+    const faults = new TransportFaults();
     const guarded = createGuardedFetch({
       mode: config.mode,
       origin: SANDBOX_ORIGIN,
-      baseFetch: mock ? mock.fetch : transport,
+      baseFetch: faults.wrap(mock ? mock.fetch : transport),
       gate,
       capture,
       minGapMs: live ? 200 : 0,
@@ -201,6 +203,7 @@ export async function runHarness(
       pollIntervalMs: live ? 2_000 : 0,
       maxPolls: live ? 15 : 6,
       attempt,
+      faults,
       bank: !live
         ? { code: '058', account: '0123456789' }
         : config.bankCode && config.bankAccount

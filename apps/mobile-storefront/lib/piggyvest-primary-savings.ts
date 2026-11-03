@@ -11,6 +11,8 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   idempotencyKey: string;
   merchantId?: string;
   merchantSlug?: string;
+  /** Reports the rail the operation id was sent on (legacy after fallback). */
+  onRail?: (rail: 'primary' | 'legacy') => void;
 }) {
   const amountKobo = Math.round(input.amount * 100);
   if (
@@ -28,6 +30,7 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   // closure, so a module-level singleton would keep serving the previous
   // user's Bearer [REDACTED] after an account switch.
   const client = createStorefrontCustomerApiClient();
+  input.onRail?.('primary');
   // Pin the submission to the initiating user: without this, an
   // account switch mid-flight sends the new user's Bearer [REDACTED] with
   // the old goal and operation ids, turning a legitimate contribution
@@ -69,6 +72,7 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
       throw new Error(
         'Your contribution is still processing. Check its status before trying again.'
       );
+    input.onRail?.('legacy');
     return addSavingsContribution({
       amount: input.amount,
       goalId: input.goalId,

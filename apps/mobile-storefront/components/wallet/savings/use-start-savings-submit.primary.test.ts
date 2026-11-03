@@ -79,23 +79,6 @@ describe('submitBankTransferContribution primary routing', () => {
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 
-  it('reuses the stored operation id on retry', async () => {
-    mockAddPrimaryContribution.mockResolvedValue({
-      status: 'confirmed',
-      operationId: 'stored-op',
-    });
-    const input = readyInput({
-      initialContributionIdempotencyKey: 'stored-op',
-    });
-    const { result } = renderHook(() => useStartSavingsSubmit(input));
-    await act(async () => {
-      await result.current.submitBankTransferContribution();
-    });
-    expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'stored-op' })
-    );
-  });
-
   it('shows pending, keeps the operation and never reports success', async () => {
     mockAddPrimaryContribution.mockResolvedValue({
       status: 'pending',

@@ -117,10 +117,13 @@ export async function sendPiggyvestWebhookAlertDelivered(
   detail: PiggyvestWebhookAlertDetail = {}
 ): Promise<boolean> {
   try {
-    return (
-      (await sendPiggyvestMoneyAlert(code, allowlistedDetail(detail))) ===
-      'sent'
+    // 'duplicate' means this page was already claimed and sent, so it is
+    // delivered; only 'failed' should be retried on redelivery.
+    const outcome = await sendPiggyvestMoneyAlert(
+      code,
+      allowlistedDetail(detail)
     );
+    return outcome === 'sent' || outcome === 'duplicate';
   } catch {
     return false;
   }

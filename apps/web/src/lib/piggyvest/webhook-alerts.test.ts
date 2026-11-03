@@ -111,6 +111,22 @@ describe('logPiggyvestWebhookAlert and sendPiggyvestWebhookAlertDelivered', () =
     expect(error).not.toHaveBeenCalled();
   });
 
+  it('resolves true for a duplicate: PostHog already holds that page', async () => {
+    const detail = { operationId: 'txn-delivered-dup' };
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered(
+        'PIGGYVEST_INFLOW_UNMAPPED',
+        detail
+      )
+    ).resolves.toBe(true);
+    await expect(
+      alerts.sendPiggyvestWebhookAlertDelivered(
+        'PIGGYVEST_INFLOW_UNMAPPED',
+        detail
+      )
+    ).resolves.toBe(true);
+  });
+
   it('resolves false, never rejects, when the PostHog send fails or rejects', async () => {
     posthog.captureServerEvent.mockResolvedValueOnce(false);
     await expect(

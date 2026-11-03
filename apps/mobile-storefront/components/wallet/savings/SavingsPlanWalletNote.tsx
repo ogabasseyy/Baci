@@ -11,7 +11,7 @@ type Props = {
 
 /**
  * Savings goals are funded from the customer's PiggyVest wallet only. The
- * goal's own bank account number is never shown, so nobody can send a bank
+ * goal's own bank account is hidden (not absent), so nobody can send a bank
  * transfer to it and strand the money. This note replaces that account.
  */
 export function SavingsPlanWalletNote({ colors, onRefresh }: Props) {
@@ -54,9 +54,9 @@ export function SavingsPlanWalletNote({ colors, onRefresh }: Props) {
         Add from your wallet
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
-        Savings plans are funded by moving money from your PiggyVest wallet.
-        Plans do not have their own bank account number, so do not send a bank
-        transfer to a plan.
+        Savings plans are funded by moving money from your PiggyVest wallet. The
+        plan's own account is kept hidden, so do not send a bank transfer to a
+        plan.
       </Text>
       <Pressable
         accessibilityRole="button"

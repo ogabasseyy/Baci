@@ -1,22 +1,17 @@
-import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
-import { addSavingsContribution } from '@/lib/customer-savings';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
-import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
-import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import {
+  type OperationRailRef,
+  runBankTransferContribution,
+} from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
-import {
-  getErrorCode,
-  resolveStoredOperation,
-} from './stored-contribution-operation';
 import { validateSavingsInput } from './validate-savings-input';
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
@@ -24,6 +19,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  // Rail of the attempt that owns the stored operation id. A retry never
+  // crosses rails: primary and legacy dedupe independently.
+  const operationRailRef: OperationRailRef = useRef(null);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const contextKey = JSON.stringify([
@@ -100,116 +98,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
-      const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
-      const stored = await resolveStoredOperation({
-        merchantId: input.activeMerchantId,
-        operationId: input.initialContributionIdempotencyKey,
-        isPrimary,
-      });
-      if (!mountedRef.current) return;
-      if (stored.unknown) {
-        // A settled transfer may hide behind a transient error; resubmitting
-        // could debit twice through the legacy fallback. Keep the id.
-        const message =
-          'Could not confirm your earlier transfer. Check again in a moment before trying another payment.';
-        input.setFormError(message);
-        showAppAlert({
-          title: 'Status unavailable',
-          message,
-          variant: 'error',
-        });
-        return;
-      }
-      const idempotencyKey = stored.operationId ?? Crypto.randomUUID();
-      if (!stored.operationId) {
-        input.setInitialContributionIdempotencyKey(idempotencyKey);
-      }
-      // Primary customers move money main wallet -> goal through PiggyVest
-      // (stable operation id); the helper itself falls back to the legacy
-      // rail on SAVINGS_NOT_READY. Legacy customers keep the legacy call.
-      const contribute = isPrimary
-        ? addPiggyvestPrimarySavingsContribution
-        : addSavingsContribution;
-      // A confirmed stored operation is complete: submitting it again could
-      // fall back to the legacy rail and debit twice.
-      const contributionResult: {
-        status?: unknown;
-        goalStatus?: unknown;
-        operationId?: string;
-      } = stored.confirmed
-        ? { status: 'confirmed', operationId: idempotencyKey }
-        : await contribute({
-            amount,
-            goalId,
-            idempotencyKey,
-            merchantId: input.activeMerchantId,
-            merchantSlug: input.activeMerchantSlug,
-          });
-      if (!mountedRef.current) return;
-      const outcome = contributionResult.status;
-      if (outcome === 'pending' || outcome === 'cancelled') {
-        // Never "funded" until PiggyVest confirms. Pending keeps the stored
-        // operation id so a retry cannot double-spend; cancelled releases it.
-        if (outcome === 'cancelled') {
-          input.setInitialContributionIdempotencyKey(null);
-        }
-        input.setFormError(null);
-        showAppAlert({
-          title:
-            outcome === 'pending' ? 'Transfer pending' : 'Transfer cancelled',
-          message:
-            outcome === 'pending'
-              ? 'Your plan will update after PiggyVest confirms the transfer. No new payment has been started.'
-              : 'The transfer was cancelled and your reserved wallet funds were released. You can try again.',
-          variant: outcome === 'pending' ? 'info' : 'error',
-        });
-        try {
-          await input.refetch();
-        } catch {
-          // Refresh is best effort; the pending state is already shown.
-        }
-        return;
-      }
-      // Completion reconciliation for the deferred path: the reminder was
-      // retained at creation because the transfer was unconfirmed — now that
-      // a confirmed contribution completes the goal, cancel it.
-      // The primary response carries no goalStatus, so a confirmed primary
-      // transfer that covers the target counts as completion.
-      if (
-        contributionResult.goalStatus === 'completed' ||
-        (isPrimary && amount >= input.targetValue)
-      ) {
-        try {
-          await cancelSavingsReminderNotification(goalId);
-        } catch {
-          // Reminder cleanup is best effort after a confirmed contribution.
-        }
-      }
-      input.setInitialContributionIdempotencyKey(null);
-      input.setCreatedGoalId?.(null);
-      input.setShowTransferModal(false);
-      input.setFormError(null);
-      input.setShowSuccessModal(true);
-      try {
-        await input.refetch();
-      } catch {
-        input.setFormError('Plan funded but unable to refresh wallet data.');
-      }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      if (getErrorCode(error) === 'WALLET_UNAVAILABLE') {
-        // The server cancelled the reservation; the id can never be reused.
-        input.setInitialContributionIdempotencyKey(null);
-      }
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to record the contribution.';
-      input.setFormError(message);
-      showAppAlert({
-        title: 'Contribution not recorded',
-        message,
-        variant: 'error',
+      await runBankTransferContribution(input, goalId, amount, {
+        isMounted: () => mountedRef.current,
+        railRef: operationRailRef,
       });
     } finally {
       submitInFlightRef.current = false;

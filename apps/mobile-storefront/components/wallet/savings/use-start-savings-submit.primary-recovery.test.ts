@@ -15,7 +15,10 @@ const mockIsPrimary = jest.fn<(merchantId?: string | null) => boolean>();
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
 }));
-jest.mock('expo-crypto', () => ({ randomUUID: () => 'op-uuid-1' }));
+let mockUuidCount = 0;
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => `op-uuid-${++mockUuidCount}`,
+}));
 jest.mock('@/lib/customer-savings', () => ({
   addSavingsContribution: (...args: unknown[]) =>
     mockAddSavingsContribution(...args),
@@ -49,10 +52,8 @@ const readyInput = (overrides = {}) =>
   });
 
 const submitWith = async (overrides = {}) => {
-  const input = readyInput({
-    initialContributionIdempotencyKey: 'stored-op',
-    ...overrides,
-  });
+  mockIsPrimary.mockReturnValue(true);
+  const input = readyInput(overrides);
   const { result } = renderHook(() => useStartSavingsSubmit(input));
   await act(async () => {
     await result.current.submitBankTransferContribution();
@@ -60,59 +61,114 @@ const submitWith = async (overrides = {}) => {
   return input;
 };
 
+type SubmitInput = Parameters<typeof useStartSavingsSubmit>[0];
+type Rail = 'primary' | 'legacy';
+type RailAttempt = { onRail?: (rail: Rail) => void };
+
+/** First attempt mints op-uuid-1 and loses its response; the rail it used sticks. */
+const lostFirstAttempt = async (rail: Rail) => {
+  mockIsPrimary.mockReturnValue(rail === 'primary');
+  const lost = new Error('timeout');
+  if (rail === 'primary') {
+    mockAddPrimaryContribution.mockImplementationOnce(async (arg) => {
+      (arg as RailAttempt).onRail?.('primary');
+      throw lost;
+    });
+  } else {
+    mockAddSavingsContribution.mockRejectedValueOnce(lost);
+  }
+  const first = readyInput();
+  const hook = renderHook(
+    ({ value }: { value: SubmitInput }) => useStartSavingsSubmit(value),
+    {
+      initialProps: { value: first },
+    }
+  );
+  await act(async () => {
+    await hook.result.current.submitBankTransferContribution();
+  });
+  expect(first.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
+    'op-uuid-1'
+  );
+  jest.clearAllMocks();
+  return {
+    hook,
+    retry: readyInput({ initialContributionIdempotencyKey: 'op-uuid-1' }),
+  };
+};
+
+const retryWith = async (rail: Rail, mode: Rail, overrides = {}) => {
+  const { hook, retry } = await lostFirstAttempt(rail);
+  mockIsPrimary.mockReturnValue(mode === 'primary');
+  const input = { ...retry, ...overrides };
+  hook.rerender({ value: input });
+  await act(async () => {
+    await hook.result.current.submitBankTransferContribution();
+  });
+  return input;
+};
+
 describe('submitBankTransferContribution stored operation recovery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUuidCount = 0;
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    mockIsPrimary.mockReturnValue(true);
     mockCheckStatus.mockResolvedValue({
       status: 'pending',
-      operationId: 'stored-op',
+      operationId: 'op-uuid-1',
     });
     mockAddPrimaryContribution.mockResolvedValue({
       status: 'confirmed',
       operationId: 'op-uuid-1',
     });
+    mockAddSavingsContribution.mockResolvedValue({
+      goalStatus: 'active',
+      success: true,
+    });
   });
 
-  it('checks the stored operation before resubmitting it', async () => {
-    await submitWith();
+  it('checks a primary-rail operation, then resubmits it on primary', async () => {
+    await retryWith('primary', 'primary');
     expect(mockCheckStatus).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
-      operationId: 'stored-op',
+      operationId: 'op-uuid-1',
     });
-    expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'stored-op' })
-    );
-  });
-
-  it('starts a fresh operation when the stored one was cancelled', async () => {
-    mockCheckStatus.mockResolvedValue({
-      status: 'cancelled',
-      operationId: 'stored-op',
-    });
-    const input = await submitWith();
-    expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
-      'op-uuid-1'
-    );
     expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'op-uuid-1' })
     );
+    expect(mockAddSavingsContribution).not.toHaveBeenCalled();
   });
 
-  it('keeps the stored id when primary has no record, since the legacy rail may hold it', async () => {
+  it('starts a fresh operation when the primary one was cancelled', async () => {
+    mockCheckStatus.mockResolvedValue({
+      status: 'cancelled',
+      operationId: 'op-uuid-1',
+    });
+    const input = await retryWith('primary', 'primary');
+    expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
+      'op-uuid-2'
+    );
+    expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'op-uuid-2' })
+    );
+  });
+
+  it('releases the id and mints a fresh one on primary CONTRIBUTION_NOT_FOUND', async () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('nf'), { code: 'CONTRIBUTION_NOT_FOUND' })
     );
-    await submitWith();
+    const input = await retryWith('primary', 'primary');
+    expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
+      'op-uuid-2'
+    );
     expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'stored-op' })
+      expect.objectContaining({ idempotencyKey: 'op-uuid-2' })
     );
   });
 
-  it('blocks resubmission when the status check is ambiguous', async () => {
+  it('blocks resubmission when the primary status check is ambiguous', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
-    const input = await submitWith();
+    const input = await retryWith('primary', 'primary');
     expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
     expect(mockAddSavingsContribution).not.toHaveBeenCalled();
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
@@ -122,12 +178,12 @@ describe('submitBankTransferContribution stored operation recovery', () => {
     );
   });
 
-  it('completes a confirmed stored operation without submitting it again', async () => {
+  it('completes a confirmed primary operation without submitting it again', async () => {
     mockCheckStatus.mockResolvedValue({
       status: 'confirmed',
-      operationId: 'stored-op',
+      operationId: 'op-uuid-1',
     });
-    const input = await submitWith();
+    const input = await retryWith('primary', 'primary');
     expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
     expect(mockAddSavingsContribution).not.toHaveBeenCalled();
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
@@ -136,13 +192,59 @@ describe('submitBankTransferContribution stored operation recovery', () => {
     );
   });
 
-  it('does not check status for legacy customers', async () => {
-    mockIsPrimary.mockReturnValue(false);
-    mockAddSavingsContribution.mockResolvedValue({
-      goalStatus: 'active',
-      success: true,
+  it('keeps a legacy-rail operation on legacy even after primary is enabled', async () => {
+    const input = await retryWith('legacy', 'primary');
+    expect(mockCheckStatus).not.toHaveBeenCalled();
+    expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
+    expect(mockAddSavingsContribution).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'op-uuid-1' })
+    );
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the legacy rail when the primary helper fell back to legacy', async () => {
+    mockIsPrimary.mockReturnValue(true);
+    mockAddPrimaryContribution.mockImplementationOnce(async (arg) => {
+      (arg as RailAttempt).onRail?.('primary');
+      (arg as RailAttempt).onRail?.('legacy');
+      throw new Error('timeout');
     });
-    await submitWith();
+    const first = readyInput();
+    const hook = renderHook(
+      ({ value }: { value: SubmitInput }) => useStartSavingsSubmit(value),
+      {
+        initialProps: { value: first },
+      }
+    );
+    await act(async () => {
+      await hook.result.current.submitBankTransferContribution();
+    });
+    jest.clearAllMocks();
+    hook.rerender({
+      value: readyInput({ initialContributionIdempotencyKey: 'op-uuid-1' }),
+    });
+    await act(async () => {
+      await hook.result.current.submitBankTransferContribution();
+    });
+    expect(mockCheckStatus).not.toHaveBeenCalled();
+    expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
+    expect(mockAddSavingsContribution).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'op-uuid-1' })
+    );
+  });
+
+  it('never moves a pending primary operation to legacy when primary is off', async () => {
+    const input = await retryWith('primary', 'legacy');
+    expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
+    expect(mockAddSavingsContribution).not.toHaveBeenCalled();
+    expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      expect.stringContaining('checking your earlier contribution')
+    );
+  });
+
+  it('does not check status for legacy customers', async () => {
+    await retryWith('legacy', 'legacy');
     expect(mockCheckStatus).not.toHaveBeenCalled();
   });
 

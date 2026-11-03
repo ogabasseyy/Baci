@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  type ContributionRail,
   getErrorCode,
   resolveStoredOperation,
 } from './stored-contribution-operation';
@@ -10,8 +11,8 @@ jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
     mockCheckStatus(...args),
 }));
 
-const run = (operationId: string | null, isPrimary = true) =>
-  resolveStoredOperation({ merchantId: 'm1', operationId, isPrimary });
+const run = (operationId: string | null, rail: ContributionRail | null) =>
+  resolveStoredOperation({ merchantId: 'm1', operationId, rail });
 
 describe('resolveStoredOperation', () => {
   beforeEach(() => {
@@ -19,44 +20,75 @@ describe('resolveStoredOperation', () => {
   });
 
   it('mints fresh without a stored id', async () => {
-    expect(await run(null)).toEqual({ operationId: null, confirmed: false });
-    expect(mockCheckStatus).not.toHaveBeenCalled();
-  });
-
-  it('skips the status call for legacy customers', async () => {
-    expect(await run('op', false)).toEqual({
-      operationId: 'op',
+    expect(await run(null, null)).toEqual({
+      operationId: null,
+      rail: null,
       confirmed: false,
     });
     expect(mockCheckStatus).not.toHaveBeenCalled();
   });
 
-  it('keeps a pending id', async () => {
+  it('keeps a legacy-rail id without any primary call', async () => {
+    expect(await run('op', 'legacy')).toEqual({
+      operationId: 'op',
+      rail: 'legacy',
+      confirmed: false,
+    });
+    expect(mockCheckStatus).not.toHaveBeenCalled();
+  });
+
+  it('treats a stored id with no recorded rail as legacy, never primary', async () => {
+    expect(await run('op', null)).toEqual({
+      operationId: 'op',
+      rail: 'legacy',
+      confirmed: false,
+    });
+    expect(mockCheckStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending primary id', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'pending' });
-    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
+    expect(await run('op', 'primary')).toEqual({
+      operationId: 'op',
+      rail: 'primary',
+      confirmed: false,
+    });
   });
 
-  it('flags a confirmed id so it is not submitted again', async () => {
+  it('flags a confirmed primary id so it is not submitted again', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'confirmed' });
-    expect(await run('op')).toEqual({ operationId: 'op', confirmed: true });
+    expect(await run('op', 'primary')).toEqual({
+      operationId: 'op',
+      rail: 'primary',
+      confirmed: true,
+    });
   });
 
-  it('drops a cancelled id', async () => {
+  it('releases a cancelled primary id', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'cancelled' });
-    expect(await run('op')).toEqual({ operationId: null, confirmed: false });
+    expect(await run('op', 'primary')).toEqual({
+      operationId: null,
+      rail: null,
+      confirmed: false,
+    });
   });
 
-  it('keeps the id when primary has no record (legacy may hold it)', async () => {
+  it('releases a primary id that primary has no record of', async () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('x'), { code: 'CONTRIBUTION_NOT_FOUND' })
     );
-    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
+    expect(await run('op', 'primary')).toEqual({
+      operationId: null,
+      rail: null,
+      confirmed: false,
+    });
   });
 
-  it('flags an ambiguous lookup failure as unknown and keeps the id', async () => {
+  it('blocks on an ambiguous primary status error and keeps the id', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
-    expect(await run('op')).toEqual({
+    expect(await run('op', 'primary')).toEqual({
       operationId: 'op',
+      rail: 'primary',
       confirmed: false,
       unknown: true,
     });

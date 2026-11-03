@@ -1,5 +1,8 @@
 import type { z } from 'zod';
-import { fetchGiglWithAccessToken } from './gigl.auth-request';
+import {
+  fetchGiglWithAccessToken,
+  type GiglTokenRejectionCheck,
+} from './gigl.auth-request';
 import {
   GIGL_EMAIL,
   GIGL_LOGIN_RESPONSE_MAX_BYTES,
@@ -142,7 +145,8 @@ export class GiglApiClient {
     url: string,
     tokenData: GiglToken,
     buildRequest: (tokenData: GiglToken) => GiglFetchOptions,
-    responseOptions?: GiglResponseJsonOptions
+    responseOptions?: GiglResponseJsonOptions,
+    isTokenRejected?: GiglTokenRejectionCheck
   ): Promise<{
     envelope: GiglApiEnvelope | null;
     response: Response;
@@ -154,7 +158,8 @@ export class GiglApiClient {
       (token) => this.invalidateCachedToken(token),
       url,
       tokenData,
-      buildRequest
+      buildRequest,
+      isTokenRejected
     );
 
     if (!result.response.ok) {
@@ -203,7 +208,8 @@ export class GiglApiClient {
       (token) => this.invalidateCachedToken(token),
       url,
       refreshedToken,
-      buildRequest
+      buildRequest,
+      isTokenRejected
     );
 
     if (!result.response.ok) {
@@ -274,6 +280,7 @@ export class GiglApiClient {
 
     this.cachedToken = {
       token: loginData['access-token'],
+      userId: loginData.Id,
       userChannelCode: loginData.UserChannelCode,
       customerType: normalizeCustomerType(
         loginData?.CustomerType,

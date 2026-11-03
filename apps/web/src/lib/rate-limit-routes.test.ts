@@ -91,6 +91,14 @@ describe('rate-limit route matching', () => {
     });
   });
 
+  it('gives GIG status webhooks their own per-IP bucket', () => {
+    expect(getRateLimitConfig('/api/webhooks/gigl')).toMatchObject({
+      pattern: '/api/webhooks/gigl',
+      config: { maxRequests: 60, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/webhooks/mycover').pattern).toBe('default');
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

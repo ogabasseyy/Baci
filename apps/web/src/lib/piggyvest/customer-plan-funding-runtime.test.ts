@@ -68,4 +68,13 @@ describe('master kill switch', () => {
       readPiggyvestPlanFundingRuntime({ ...base, PIGGYVEST_KILL_SWITCH: 'x' })
     ).toBeNull();
   });
+
+  it('still accepts a whitespace-padded display flag as before the switch', () => {
+    expect(
+      readPiggyvestPlanFundingRuntime({
+        ...base,
+        PIGGYVEST_SAVINGS_FUNDING_DISPLAY_ENABLED: ' true ',
+      })
+    ).not.toBeNull();
+  });
 });

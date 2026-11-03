@@ -4,6 +4,7 @@ import {
   type PiggyvestFeature,
 } from './piggyvest-feature-flags';
 import {
+  isPiggyvestFeatureFlagSet,
   isPiggyvestFeatureOn,
   piggyvestFeatureState,
 } from './piggyvest-feature-on';
@@ -62,5 +63,36 @@ describe('feature state', () => {
         PIGGYVEST_KILL_SWITCH: 'true',
       })
     ).toBe('killed');
+  });
+});
+
+describe('recovery flag read and whitespace semantics', () => {
+  it('flag-set ignores the kill switch but still needs exactly true', () => {
+    const killed = { ...allOn, PIGGYVEST_KILL_SWITCH: 'true' };
+    for (const feature of features) {
+      expect(isPiggyvestFeatureOn(feature, killed)).toBe(false);
+      expect(isPiggyvestFeatureFlagSet(feature, killed)).toBe(true);
+      expect(isPiggyvestFeatureFlagSet(feature, {})).toBe(false);
+      expect(
+        isPiggyvestFeatureFlagSet(feature, {
+          [PIGGYVEST_FEATURE_FLAGS[feature]]: '1',
+        })
+      ).toBe(false);
+    }
+  });
+
+  it('keeps the plan-funding flag whitespace tolerant and no other', () => {
+    const padded = (feature: PiggyvestFeature) => ({
+      [PIGGYVEST_FEATURE_FLAGS[feature]]: ' true ',
+    });
+    expect(isPiggyvestFeatureOn('plan_funding', padded('plan_funding'))).toBe(
+      true
+    );
+    expect(piggyvestFeatureState('plan_funding', padded('plan_funding'))).toBe(
+      'on'
+    );
+    for (const feature of features.filter((f) => f !== 'plan_funding')) {
+      expect(isPiggyvestFeatureOn(feature, padded(feature))).toBe(false);
+    }
   });
 });

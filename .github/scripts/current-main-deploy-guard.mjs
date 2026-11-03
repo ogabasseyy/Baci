@@ -109,7 +109,7 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   }
   const deployJobs = jobsBody.jobs.filter((j) => j?.name === 'deploy-production');
   if (deployJobs.length === 0) {
-    if (run.status === 'completed') {
+    if (run.status === 'completed' && run.conclusion !== 'cancelled') {
       throw new Error('missing deploy-production job in workflow run');
     }
     return false;
@@ -126,7 +126,7 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
           deployStep.status === 'in_progress' ||
           (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
         if (attempted) return true;
-      } else if (deployJob.status === 'completed') {
+      } else if (deployJob.status === 'completed' && deployJob.conclusion !== 'cancelled') {
         throw new Error('incomplete or invalid workflow job steps response');
       }
     }

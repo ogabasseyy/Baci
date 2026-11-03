@@ -118,4 +118,18 @@ DO $$ DECLARE wallet uuid; BEGIN
       VALUES(gen_random_uuid(),wallet,'00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','redemption',1,9.5,'piggyvest_primary_inflow');
     RAISE EXCEPTION 'deposit-source row of another type accepted';
   EXCEPTION WHEN check_violation THEN NULL; END;
+  -- Relabelling an existing neutral history row as a deposit is rejected too,
+  -- while ordinary edits to that row that leave source_type alone still work.
+  DECLARE neutral uuid := gen_random_uuid(); deposit_source text; BEGIN
+    INSERT INTO public.customer_wallet_transactions(id,wallet_id,customer_id,merchant_id,type,amount,balance_after,source_type)
+      VALUES(neutral,wallet,'00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','credit',1,9.5,NULL);
+    FOREACH deposit_source IN ARRAY ARRAY['piggyvest_primary_inflow','piggyvest_primary_card_custody'] LOOP
+      BEGIN
+        UPDATE public.customer_wallet_transactions SET source_type=deposit_source WHERE id=neutral;
+        RAISE EXCEPTION 'relabel to % accepted', deposit_source;
+      EXCEPTION WHEN check_violation THEN NULL; END;
+    END LOOP;
+    UPDATE public.customer_wallet_transactions SET amount=2 WHERE id=neutral;
+    IF (SELECT source_type FROM public.customer_wallet_transactions WHERE id=neutral) IS NOT NULL THEN RAISE EXCEPTION 'neutral row was relabelled'; END IF;
+  END;
 END $$;

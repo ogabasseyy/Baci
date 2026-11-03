@@ -35,7 +35,9 @@ test('production excludes the test graph while the normal typecheck still includ
   assert.equal(build.fileNames.filter(isTest).length, 0);
   assert.ok(build.fileNames.length < full.fileNames.length);
   const nextConfig = readFileSync(`${web}next.config.ts`, 'utf8');
-  assert.match(nextConfig, /typescript:\s*\{\s*tsconfigPath: 'tsconfig\.build\.json',\s*ignoreBuildErrors: false,/);
+  const buildConfig = readFileSync(`${web}src/config/build-typecheck.ts`, 'utf8');
+  assert.match(nextConfig, /typescript: BUILD_TYPESCRIPT_CONFIG/);
+  assert.match(buildConfig, /tsconfigPath: 'tsconfig\.build\.json',\s*ignoreBuildErrors: false,/);
   const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
   assert.match(manifest.scripts.typecheck, /tsc --noEmit/);
   assert.doesNotMatch(manifest.scripts.typecheck, /tsconfig\.build/);

@@ -1026,11 +1026,6 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.clone().json();
-    console.log(
-      '[PaymentInit] Raw Request Body:',
-      sanitizeForLog(redactPaymentLogValue(body))
-    );
-
     const parseResult = PaymentInitRequestSchema.safeParse(body);
 
     if (!parseResult.success) {

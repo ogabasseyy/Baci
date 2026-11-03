@@ -985,7 +985,7 @@ describe('POST /api/payments/initialize', () => {
       expect(json.authorization_url).toBe('https://paystack.com/pay/abc');
     });
 
-    it('redacts payment payload logs without mutating the Paystack request payload', async () => {
+    it('never logs raw request fields without mutating the Paystack request payload', async () => {
       const logSpy = vi
         .spyOn(console, 'log')
         .mockImplementation(() => undefined);
@@ -995,7 +995,11 @@ describe('POST /api/payments/initialize', () => {
 
       try {
         const res = await POST(
-          makeRequest({ ...validBody, gateway: 'paystack' })
+          makeRequest({
+            ...validBody,
+            gateway: 'paystack',
+            unknown_private_field: 'private-sentinel',
+          })
         );
         const json = await res.json();
         const loggedOutput = logSpy.mock.calls
@@ -1004,11 +1008,9 @@ describe('POST /api/payments/initialize', () => {
 
         expect(res.status).toBe(200);
         expect(json.success).toBe(true);
-        expect(loggedOutput).toContain('[PaymentInit] Raw Request Body:');
+        expect(loggedOutput).not.toContain('private-sentinel');
+        expect(loggedOutput).not.toContain('[PaymentInit] Raw Request Body:');
         expect(loggedOutput).toContain('[PaymentInit] Paystack Phone Debug:');
-        expect(loggedOutput).toContain('"customer_email":"[REDACTED]"');
-        expect(loggedOutput).toContain('"customer_phone":"[REDACTED]"');
-        expect(loggedOutput).toContain('"billing_address":"[REDACTED]"');
         expect(loggedOutput).toContain('"original_phone":"[REDACTED]"');
         expect(loggedOutput).toContain('"formatted_phone":"[REDACTED]"');
         expect(loggedOutput).not.toContain('customer@example.com');

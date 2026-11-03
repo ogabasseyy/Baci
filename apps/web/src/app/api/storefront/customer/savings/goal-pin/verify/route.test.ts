@@ -215,8 +215,27 @@ it('answers unavailable when the goal lookup fails', async () => {
   expect((await call(fund)).status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
 });
-it('does not apply the funding gates to cancel, which must stay available', async () => {
+it('keeps cancel available with the feature off but only for an own active goal', async () => {
   mocks.features.mockResolvedValue({ savingsEnabled: false });
   expect((await call(cancel)).status).toBe(200);
-  expect(mocks.goal).not.toHaveBeenCalled();
+  expect(mocks.features).not.toHaveBeenCalled();
+  expect(mocks.goal).toHaveBeenCalledWith(
+    expect.objectContaining({ goalId, merchantId, customerId: 'c' })
+  );
+});
+it.each([
+  cancel,
+  { ...cancel, action: 'complete' },
+])('issues no $action proof for a goal that is not an active goal of this customer', async (body) => {
+  mocks.goal.mockResolvedValue(false);
+  const response = await call(body);
+  expect(response.status).toBe(404);
+  expect((await response.json()).code).toBe('GOAL_NOT_FOUND');
+  expect(mocks.verify).not.toHaveBeenCalled();
+});
+it('gates complete proofs on the customer savings feature', async () => {
+  mocks.features.mockResolvedValue({ savingsEnabled: false });
+  const response = await call({ ...cancel, action: 'complete' });
+  expect(response.status).toBe(403);
+  expect(mocks.verify).not.toHaveBeenCalled();
 });

@@ -11,6 +11,8 @@ const read =
   'SELECT piggyvest_primary.read_savings_status($1::jsonb,$2::uuid) AS result';
 const recover =
   'SELECT piggyvest_primary.read_pending_savings($1::jsonb,$2::uuid) AS result';
+const adopt =
+  'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result';
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
     AND pg_has_role(SESSION_USER,'piggyvest_primary_authorizer','MEMBER')
@@ -29,7 +31,8 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
       (statement !== reserve &&
         statement !== manage &&
         statement !== read &&
-        statement !== recover) ||
+        statement !== recover &&
+        statement !== adopt) ||
       parameters.length !==
         (statement === manage || statement === reserve ? 3 : 2) ||
       parameters.some(

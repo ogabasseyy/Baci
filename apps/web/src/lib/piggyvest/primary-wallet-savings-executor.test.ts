@@ -104,3 +104,19 @@ it('does not reserve after unsafe session verification', async () => {
   ).rejects.toThrow('database unavailable');
   expect(mocks.query).toHaveBeenCalledTimes(1);
 });
+it('permits the fixed scope-bound pending adoption statement', async () => {
+  const adoption =
+    'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result';
+  const parameters = [
+    JSON.stringify(scope),
+    '55555555-5555-4555-8555-555555555555',
+  ];
+  await createPrimaryWalletSavingsExecutor(config)(adoption, parameters);
+  expect(mocks.query).toHaveBeenLastCalledWith(adoption, parameters);
+  await expect(
+    createPrimaryWalletSavingsExecutor(config)(adoption, [
+      ...parameters,
+      'extra',
+    ])
+  ).rejects.toThrow('Savings statement unavailable');
+});

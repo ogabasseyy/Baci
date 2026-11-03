@@ -64,9 +64,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         409
       );
     const supabase = auth.supabase;
-    // A funding proof is only issued for funding that could proceed: the
-    // customer savings feature is on and the goal is theirs and active.
-    if (input.action === 'fund') {
+    // A proof is only issued for an action that could proceed: the goal must
+    // be an active goal of this customer, and funding or completing also
+    // needs the customer savings feature on. Cancel stays available without
+    // the feature so nobody is trapped.
+    if (input.action !== 'cancel') {
       const features = await getPrimaryCustomerSavingsFeatureSettings({
         supabase,
         merchantId: identity.merchantId,
@@ -78,19 +80,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           'CUSTOMER_SAVINGS_DISABLED',
           403
         );
-      const owned = await isActiveOwnGoal({
-        supabase,
-        merchantId: identity.merchantId,
-        customerId: identity.customerId,
-        goalId: input.goalId,
-      });
-      if (!owned)
-        return refuse(
-          'That savings goal was not found.',
-          'GOAL_NOT_FOUND',
-          404
-        );
     }
+    const owned = await isActiveOwnGoal({
+      supabase,
+      merchantId: identity.merchantId,
+      customerId: identity.customerId,
+      goalId: input.goalId,
+    });
+    if (!owned)
+      return refuse('That savings goal was not found.', 'GOAL_NOT_FOUND', 404);
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

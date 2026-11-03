@@ -50,10 +50,10 @@ BEGIN
   VALUES (v_order, v_merchant_id, 'GIGL-MAP-001', 1000);
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number,
-    sender_address, receiver_address, items
+    sender_address, receiver_address, items, funding_source
   ) VALUES (
     v_order, v_merchant_id, 'GIGL', 'GIGL-MAP-001',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
   ) RETURNING id INTO v_shipment;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment;
@@ -193,10 +193,11 @@ BEGIN
   UPDATE public.shipments SET status = 'cancelled' WHERE id = f.shipment_id;
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number,
-    sender_address, receiver_address, items, created_at
+    sender_address, receiver_address, items, created_at, funding_source
   ) VALUES (
     f.order_id, f.merchant_id, 'GIGL', 'GIGL-MAP-002',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, now() + interval '1 minute'
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, now() + interval '1 minute',
+    'external_manual'
   ) RETURNING id INTO v_new_shipment;
   INSERT INTO public.shipment_tracking_notification_outbox (
     shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
@@ -252,10 +253,10 @@ BEGIN
   VALUES (v_order, f.merchant_id, 'GIGL-MAP-003', 1000, 'processing');
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number, status,
-    sender_address, receiver_address, items
+    sender_address, receiver_address, items, funding_source
   ) VALUES (
     v_order, f.merchant_id, 'GIGL', 'GIGL-MAP-003', 'booked',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
   ) RETURNING id INTO v_shipment;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment;

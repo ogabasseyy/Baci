@@ -91,4 +91,30 @@ describe('delivery exception emails (GIG failed / returned)', () => {
     });
     expect(sendEmail).not.toHaveBeenCalled();
   });
+
+  it('bugfix: skips a return queued for a previous shipment after a replacement', async () => {
+    const result = await sendOrderFulfillmentNotification({
+      eventType: 'order_returned',
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      supabase: supabaseFor('shipped'),
+      trackingNumber: 'OLD-WAYBILL',
+    });
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'order_not_in_required_status',
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('still sends when the snapshot matches the order tracking number', async () => {
+    const result = await sendOrderFulfillmentNotification({
+      eventType: 'order_returned',
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      supabase: supabaseFor('shipped'),
+      trackingNumber: 'w1',
+    });
+    expect(result).toMatchObject({ status: 'sent' });
+  });
 });

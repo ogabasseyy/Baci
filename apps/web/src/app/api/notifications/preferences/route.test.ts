@@ -206,25 +206,45 @@ describe('PATCH /api/notifications/preferences shipment_event_preferences', () =
     } as unknown as ReturnType<typeof createClient>);
   });
 
-  it('merges a partial toggle atomically in SQL and never reads-then-writes', async () => {
-    rpc.mockResolvedValue({ error: null });
+  it('merges a partial toggle atomically in SQL and returns the row without the owner-only upsert', async () => {
+    const row = {
+      merchant_id: MERCHANT_ID,
+      shipment_event_preferences: { out_for_delivery: true },
+    };
+    rpc.mockResolvedValue({ data: row, error: null });
 
     const response = await PATCH(
       request({ shipment_event_preferences: { out_for_delivery: true } })
     );
 
     expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(row);
     expect(rpc).toHaveBeenCalledWith('merge_shipment_event_preferences', {
       p_merchant_id: MERCHANT_ID,
       p_patch: { out_for_delivery: true },
     });
-    expect(upsert.mock.calls[0][0]).not.toHaveProperty(
-      'shipment_event_preferences'
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('also saves other fields through the normal upsert when sent together', async () => {
+    rpc.mockResolvedValue({ data: { merchant_id: MERCHANT_ID }, error: null });
+
+    const response = await PATCH(
+      request({
+        in_app_enabled: false,
+        shipment_event_preferences: { delivered: false },
+      })
     );
+
+    expect(response.status).toBe(200);
+    expect(upsert.mock.calls[0][0]).toEqual({
+      merchant_id: MERCHANT_ID,
+      in_app_enabled: false,
+    });
   });
 
   it('bugfix: aborts instead of wiping saved toggles when the merge fails', async () => {
-    rpc.mockResolvedValue({ error: { message: 'db down' } });
+    rpc.mockResolvedValue({ data: null, error: { message: 'db down' } });
 
     const response = await PATCH(
       request({ shipment_event_preferences: { delivered: false } })

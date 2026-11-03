@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
     if (body.shipment_event_preferences !== undefined) {
       // Atomic jsonb merge in SQL so concurrent partial toggles never clobber
       // each other (RLS applies: the function is SECURITY INVOKER).
-      const { error: mergeError } = await supabase.rpc(
+      const { data: mergedRow, error: mergeError } = await supabase.rpc(
         'merge_shipment_event_preferences',
         {
           p_merchant_id: merchantId,
@@ -169,6 +169,11 @@ export async function PATCH(request: NextRequest) {
           { error: 'Failed to update preferences' },
           { status: 500 }
         );
+      }
+      // Shipment-only update: the authorised RPC already returned the row, so
+      // staff are not sent through the owner-only table policies.
+      if (Object.keys(updates).length === 1 && mergedRow) {
+        return NextResponse.json(mergedRow);
       }
     }
     if (body.quiet_hours_start !== undefined)

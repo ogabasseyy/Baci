@@ -17213,7 +17213,7 @@ export type Database = {
       };
       merge_shipment_event_preferences: {
         Args: { p_merchant_id: string; p_patch: Json };
-        Returns: undefined;
+        Returns: Json;
       };
       claim_shipment_tracking_notifications: {
         Args: { p_limit: number; p_worker_id: string };

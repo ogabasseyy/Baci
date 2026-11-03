@@ -22,9 +22,11 @@ COMMENT ON COLUMN public.notification_preferences.shipment_event_preferences IS
 CREATE OR REPLACE FUNCTION public.merge_shipment_event_preferences(
   p_merchant_id uuid, p_patch jsonb
 )
-RETURNS void
+RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
+DECLARE
+  v_row jsonb;
 BEGIN
   IF coalesce(auth.role(), '') <> 'service_role'
     AND NOT public.check_staff_permission(
@@ -39,7 +41,19 @@ BEGIN
   ) VALUES (p_merchant_id, coalesce(p_patch, '{}'::jsonb))
   ON CONFLICT (merchant_id) DO UPDATE
   SET shipment_event_preferences =
-    preferences.shipment_event_preferences || coalesce(p_patch, '{}'::jsonb);
+    preferences.shipment_event_preferences || coalesce(p_patch, '{}'::jsonb)
+  RETURNING jsonb_build_object(
+    'merchant_id', preferences.merchant_id,
+    'in_app_enabled', preferences.in_app_enabled,
+    'banner_enabled', preferences.banner_enabled,
+    'follow_up_notifications_enabled', preferences.follow_up_notifications_enabled,
+    'shipment_event_preferences', preferences.shipment_event_preferences,
+    'quiet_hours_start', preferences.quiet_hours_start,
+    'quiet_hours_end', preferences.quiet_hours_end,
+    'quiet_hours_time_zone', preferences.quiet_hours_time_zone,
+    'updated_at', preferences.updated_at
+  ) INTO v_row;
+  RETURN v_row;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.merge_shipment_event_preferences(uuid, jsonb)

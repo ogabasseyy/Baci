@@ -149,6 +149,12 @@ describe('seo-meta-title-platform-compaction', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5 or PS4) or Best Deals')
       ).toBe('Best Deals');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) AND Best Deals')
+      ).toBe('Best Deals');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) Or Best Deals')
+      ).toBe('Best Deals');
     });
 
     it('strips platform lists at end and cleans trailing separators', () => {
@@ -168,7 +174,13 @@ describe('seo-meta-title-platform-compaction', () => {
         stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) and')
       ).toBe('Buy Game');
       expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) And')
+      ).toBe('Buy Game');
+      expect(
         stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) or')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) OR')
       ).toBe('Buy Game');
       expect(
         stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) |')
@@ -194,10 +206,19 @@ describe('seo-meta-title-platform-compaction', () => {
         stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
       expect(
+        stripRedundantPlatformParentheticals('Buy Game And (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+      expect(
         stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
       expect(
         stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game Or (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game OR (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
     });
 

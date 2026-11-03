@@ -94,7 +94,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\b(?:and|or)\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/gu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\b(?:and|or)\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/giu,
     (
       match,
       innerBeforePunctOrEnd?: string,
@@ -133,7 +133,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
         const remaining = title.slice(offset + match.length);
         if (
           remaining.trim().length === 0 ||
-          /^(?:[\s\-–—|/&]|\b(?:and|or)\b)+$/u.test(remaining)
+          /^(?:[\s\-–—|/&]|\b(?:and|or)\b)+$/iu.test(remaining)
         ) {
           strippedAtEnd = true;
         }
@@ -154,14 +154,14 @@ export function stripRedundantPlatformParentheticals(title: string): string {
 
   if (strippedAtStart) {
     compacted = compacted.replace(
-      /^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+|\b(?:and|or)\s+)+/u,
+      /^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+|\b(?:and|or)\s+)+/iu,
       ''
     );
   }
 
   if (strippedAtEnd) {
     compacted = compacted.replace(
-      /(?:\s*[-–—,:;|/&]+|\s+\b(?:and|or)\b)\s*$/u,
+      /(?:\s*[-–—,:;|/&]+|\s+\b(?:and|or)\b)\s*$/iu,
       ''
     );
   }

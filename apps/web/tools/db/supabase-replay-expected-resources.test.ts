@@ -219,12 +219,14 @@ describe('inspectSupabaseReplayResources', () => {
     'com.supabase.cli.project=foreign',
   ])('detects an exact cache volume even with foreign or missing labels: %s', async (labels) => {
     const cacheName = `supabase_edge_runtime_${projectId}`;
-    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
-      stderr: '',
-      stdout: args.includes(`name=^${cacheName}$`)
-        ? `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`
-        : '',
-    }));
+    const runCommand = vi.fn(
+      async (_command: string, args: readonly string[]) => ({
+        stderr: '',
+        stdout: args.includes(`name=^${cacheName}$`)
+          ? `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`
+          : '',
+      })
+    );
     const resources = await inspectSupabaseReplayResources(
       projectId,
       runCommand
@@ -247,12 +249,14 @@ describe('inspectSupabaseReplayResources', () => {
     'com.supabase.cli.project=foreign',
   ])('detects an exact database volume with foreign or missing labels: %s', async (labels) => {
     const name = `supabase_db_${projectId}`;
-    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
-      stderr: '',
-      stdout: args.includes(`name=^${name}$`)
-        ? `${JSON.stringify({ Name: name, Labels: labels })}\n`
-        : '',
-    }));
+    const runCommand = vi.fn(
+      async (_command: string, args: readonly string[]) => ({
+        stderr: '',
+        stdout: args.includes(`name=^${name}$`)
+          ? `${JSON.stringify({ Name: name, Labels: labels })}\n`
+          : '',
+      })
+    );
     const resources = await inspectSupabaseReplayResources(
       projectId,
       runCommand
@@ -276,22 +280,24 @@ describe('inspectSupabaseReplayResources', () => {
   ])('deduplicates matching %s volume and rejects inconsistent labels', async (kind) => {
     const cacheName = `supabase_${kind}_${projectId}`;
     let changed = false;
-    const runCommand = vi.fn(async (_command: string, args: string[]) => {
-      if (
-        args[0] !== 'volume' ||
-        (args.some((arg) => arg.startsWith('name=^')) &&
-          !args.includes(`name=^${cacheName}$`))
-      )
-        return { stderr: '', stdout: '' };
-      const labels =
-        changed && args.includes(`name=^${cacheName}$`)
-          ? 'com.supabase.cli.project=foreign'
-          : `${SUPABASE_PROJECT_LABEL}=${projectId}`;
-      return {
-        stderr: '',
-        stdout: `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`,
-      };
-    });
+    const runCommand = vi.fn(
+      async (_command: string, args: readonly string[]) => {
+        if (
+          args[0] !== 'volume' ||
+          (args.some((arg) => arg.startsWith('name=^')) &&
+            !args.includes(`name=^${cacheName}$`))
+        )
+          return { stderr: '', stdout: '' };
+        const labels =
+          changed && args.includes(`name=^${cacheName}$`)
+            ? 'com.supabase.cli.project=foreign'
+            : `${SUPABASE_PROJECT_LABEL}=${projectId}`;
+        return {
+          stderr: '',
+          stdout: `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`,
+        };
+      }
+    );
     const resources = await inspectSupabaseReplayResources(
       projectId,
       runCommand

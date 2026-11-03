@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import {
   generateMetaTitle,
-  getTrailingSeparatedSegment,
   normalizePlainText,
   stringsMatchCaseInsensitive,
   stripRedundantPlatformParentheticals,
@@ -86,17 +85,25 @@ export function buildStorefrontMetadataTitle(input: {
       if (stringsMatchCaseInsensitive(fullTitle, normalizedSuffix)) {
         effectiveTitle = fullTitle;
       } else {
-        const trailingSegment = getTrailingSeparatedSegment(fullTitle);
-        if (
-          trailingSegment &&
-          stringsMatchCaseInsensitive(trailingSegment.suffix, normalizedSuffix)
-        ) {
-          const baseTitle = trailingSegment.base;
-          const suffixWithSeparator = fullTitle.slice(baseTitle.length);
+        const suffixFragment = ` | ${normalizedSuffix}`;
+        const endsWithSuffix =
+          fullTitle.length >= suffixFragment.length &&
+          stringsMatchCaseInsensitive(
+            fullTitle.slice(fullTitle.length - suffixFragment.length),
+            suffixFragment
+          );
+        if (endsWithSuffix) {
+          const baseTitle = fullTitle.slice(
+            0,
+            fullTitle.length - suffixFragment.length
+          );
+          const matchedSuffix = fullTitle.slice(
+            fullTitle.length - suffixFragment.length
+          );
           const compactBaseTitle =
             stripRedundantPlatformParentheticals(baseTitle);
           effectiveTitle = compactBaseTitle
-            ? `${compactBaseTitle}${suffixWithSeparator}`
+            ? `${compactBaseTitle}${matchedSuffix}`
             : normalizedSuffix;
         } else {
           effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);

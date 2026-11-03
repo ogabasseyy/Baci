@@ -88,11 +88,13 @@ export function stripRedundantPlatformParentheticals(title: string): string {
     return title;
   }
 
+  let currentDepth = 0;
+  let lastIndex = 0;
   let stripped = false;
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|\s*\(([^()]*)\)\s*/gu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\band\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/gu,
     (
       match,
       innerBeforePunctOrEnd?: string,
@@ -101,6 +103,20 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       innerOther?: string,
       offset?: number
     ) => {
+      const parenOpenIndex = (offset ?? 0) + match.indexOf('(');
+      for (let i = lastIndex; i < parenOpenIndex; i++) {
+        if (title[i] === '(') {
+          currentDepth++;
+        } else if (title[i] === ')') {
+          currentDepth = Math.max(0, currentDepth - 1);
+        }
+      }
+      lastIndex = parenOpenIndex;
+
+      if (currentDepth > 0) {
+        return match;
+      }
+
       const inner =
         innerBeforePunctOrEnd ?? innerBeforeNext ?? innerOther ?? '';
       if (!isRedundantPlatformListParenthetical(inner)) {

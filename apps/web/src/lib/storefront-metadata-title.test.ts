@@ -136,6 +136,16 @@ describe('buildStorefrontMetadataTitle', () => {
     expect(result.title).toContain('| Gaming (PS5, PC)');
   });
 
+  it('preserves a platform parenthetical inside a suffix containing internal separators', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 60,
+      suffix: 'Gaming: (PS5, PC)',
+      title: 'EA Sports FC 27 Championship Tournament Deluxe Edition',
+    });
+
+    expect(result.title).toContain('| Gaming: (PS5, PC)');
+  });
+
   it('preserves a platform parenthetical inside a suffix when title already ends with that suffix behind a hyphen', () => {
     const result = buildStorefrontMetadataTitle({
       maxLength: 55,

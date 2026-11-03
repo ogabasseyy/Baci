@@ -171,6 +171,28 @@ describe('seo-meta-title-platform-compaction', () => {
       ).toBe('EA Sports FC 27 (PS5 / PlayStation 5)');
     });
 
+    it('cleans preceding conjunctions for mid-title lists', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+    });
+
+    it('preserves nested platform lists inside non-platform qualifiers', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (Special Edition (PS5, PS4)) Now'
+        )
+      ).toBe('Game (Special Edition (PS5, PS4)) Now');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (Special Edition (PS5, PS4)) Now (Xbox, PC)'
+        )
+      ).toBe('Game (Special Edition (PS5, PS4)) Now');
+    });
+
     it('preserves distant double spaces and punctuation', () => {
       expect(
         stripRedundantPlatformParentheticals(
@@ -181,10 +203,11 @@ describe('seo-meta-title-platform-compaction', () => {
 
     it('executes without exponential backtracking on long separator runs', () => {
       const runOfSeparators = '-'.repeat(50);
-      const result = stripRedundantPlatformParentheticals(
-        `Game ${runOfSeparators} (PS5, PS4) Sale`
-      );
-      expect(result).toBe(`Game ${runOfSeparators} Sale`);
+      expect(
+        stripRedundantPlatformParentheticals(
+          `Game ${runOfSeparators} (PS5, PS4) Sale`
+        )
+      ).toBe(`Game ${runOfSeparators} Sale`);
     });
 
     it('executes without quadratic rescans on unbalanced parentheses', () => {

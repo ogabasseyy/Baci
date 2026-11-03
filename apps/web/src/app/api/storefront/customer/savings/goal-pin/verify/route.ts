@@ -6,10 +6,7 @@ import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
 import { isActiveOwnGoal } from '@/lib/piggyvest/goal-pin-fund-eligibility';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
-import {
-  readPrimaryWalletSavingsRecoveryRuntime,
-  readPrimaryWalletSavingsRuntime,
-} from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import { readPrimaryWalletSavingsRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { piggyvestGoalPinSchemas } from '@/schemas/piggyvest-goal-pin';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -37,14 +34,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   const input = parsed.data;
+  // Cancel and complete proofs are not issued until they bind to a
+  // server-issued per-attempt operation id (S6/S7). Refuse before any PIN
+  // verification so no attempt is counted and no proof is minted.
+  if (input.action !== 'fund')
+    return refuse(
+      'This PIN check is not available yet.',
+      'PIN_ACTION_NOT_AVAILABLE',
+      400
+    );
   try {
-    // Cancel back to the main wallet stays available when the feature flags
-    // are off, so nobody is trapped; funding and completing never are.
-    const runtime =
-      input.action === 'cancel'
-        ? (readPrimaryWalletSavingsRuntime() ??
-          readPrimaryWalletSavingsRecoveryRuntime())
-        : readPrimaryWalletSavingsRuntime();
+    const runtime = readPrimaryWalletSavingsRuntime();
     if (!runtime || runtime.merchantId !== input.merchantId)
       return refuse(
         'PIN checks are temporarily unavailable.',
@@ -64,23 +64,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         409
       );
     const supabase = auth.supabase;
-    // A proof is only issued for an action that could proceed: the goal must
-    // be an active goal of this customer, and funding or completing also
-    // needs the customer savings feature on. Cancel stays available without
-    // the feature so nobody is trapped.
-    if (input.action !== 'cancel') {
-      const features = await getPrimaryCustomerSavingsFeatureSettings({
-        supabase,
-        merchantId: identity.merchantId,
-        customerId: identity.customerId,
-      });
-      if (!features.savingsEnabled)
-        return refuse(
-          'Savings is not enabled.',
-          'CUSTOMER_SAVINGS_DISABLED',
-          403
-        );
-    }
+    // A funding proof is only issued when the goal is an active goal of this
+    // customer and the customer savings feature is on.
+    const features = await getPrimaryCustomerSavingsFeatureSettings({
+      supabase,
+      merchantId: identity.merchantId,
+      customerId: identity.customerId,
+    });
+    if (!features.savingsEnabled)
+      return refuse(
+        'Savings is not enabled.',
+        'CUSTOMER_SAVINGS_DISABLED',
+        403
+      );
     const owned = await isActiveOwnGoal({
       supabase,
       merchantId: identity.merchantId,

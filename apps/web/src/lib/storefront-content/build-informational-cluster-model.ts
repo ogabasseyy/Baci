@@ -164,6 +164,7 @@ export async function buildInformationalClusterModel(
       ? commerceLinks
       : verifyPriceBandLinkAgainstDestination({
           categorySlug,
+          merchantCurrency: input.merchantCurrency,
           links: commerceLinks,
           compareProducts: compareInventory?.products ?? null,
           // Bands verify against the destination's own category-page pool;

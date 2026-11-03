@@ -8,7 +8,10 @@ import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { retrievePiggyvestWallet } from './wallets';
-import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+import {
+  emitPiggyvestWebhookAlert,
+  type PiggyvestWebhookAlertCode,
+} from './webhook-alerts';
 
 /** The goal wallet the post-transfer balance read must be about. */
 export interface GoalBalanceTarget {
@@ -29,6 +32,11 @@ export class GoalBalanceMismatchError extends Error {
   }
 }
 
+/** The four evidence statements a goal cancel or goal complete settles with. */
+export type GoalEvidenceStatements = Readonly<
+  Record<'readDispatched' | 'findByReference' | 'settle' | 'release', string>
+>;
+
 type Execute = (
   statement: string,
   parameters: readonly string[]
@@ -43,6 +51,9 @@ export function createGoalCancelEvidenceStore(input: {
   integrationId: string;
   environment: 'staging' | 'production';
   execute: Execute;
+  // Cancel by default; goal complete passes its own statements and alert code.
+  statements?: GoalEvidenceStatements;
+  alertCode?: PiggyvestWebhookAlertCode;
   // Re-reads the goal wallet balance at PiggyVest (kobo) once a transfer is
   // verified successful. Anything above 0 means money is still there (a
   // credit landed between the snapshot and the transfer).
@@ -51,6 +62,8 @@ export function createGoalCancelEvidenceStore(input: {
   // The provider customer of each loaded attempt, so the balance read can be
   // bound to the customer as well as to the wallet and business.
   const providerCustomers = new Map<string, string>();
+  const statements: GoalEvidenceStatements = input.statements ?? sql;
+  const alertCode = input.alertCode ?? 'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW';
   async function run(statement: string, selection: string) {
     const result = await input.execute(statement, [
       input.integrationId,
@@ -71,7 +84,7 @@ export function createGoalCancelEvidenceStore(input: {
   function flagConflict(reason: string, proof: object) {
     conflicted = true;
     const { operationId } = proof as { operationId?: unknown };
-    emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+    emitPiggyvestWebhookAlert(alertCode, {
       reason,
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
@@ -134,7 +147,7 @@ export function createGoalCancelEvidenceStore(input: {
     hasConflict: () => conflicted,
     async loadDispatched(operationId: string) {
       const result = await run(
-        sql.readDispatched,
+        statements.readDispatched,
         schemas.operationId.parse(operationId)
       );
       if (result === null) return null;
@@ -148,19 +161,19 @@ export function createGoalCancelEvidenceStore(input: {
     // Webhook path: the attempt (dispatched, or released after dispatch)
     // whose provider reference an outflow event names, or null.
     async findByReference(reference: string) {
-      const result = await run(sql.findByReference, reference);
+      const result = await run(statements.findByReference, reference);
       return result === null ? null : schemas.referenceMatch.parse(result);
     },
     settle: (proof: object) =>
       conclude<'confirmed' | 'duplicate' | 'conflict'>(
-        sql.settle,
+        statements.settle,
         proof,
         ['confirmed', 'duplicate', 'conflict'],
         'settle'
       ),
     release: (proof: object) =>
       conclude<'released' | 'duplicate' | 'conflict'>(
-        sql.release,
+        statements.release,
         proof,
         ['released', 'duplicate', 'conflict'],
         'release'
@@ -168,7 +181,7 @@ export function createGoalCancelEvidenceStore(input: {
   };
 }
 
-function goalBalanceReader(environment: unknown, token: string) {
+export function goalBalanceReader(environment: unknown, token: string) {
   return async (target: GoalBalanceTarget) => {
     const wallet = await retrievePiggyvestWallet(
       { token, baseUrl: getPrimaryWalletProviderOrigin(environment) },

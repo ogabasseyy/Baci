@@ -111,4 +111,21 @@ describe('rate-limit route matching', () => {
     });
     expect(getRateLimitConfig('/api/places-other').config.maxRequests).toBe(50);
   });
+
+  it('puts the wallet PIN routes in their own fail-closed bucket', () => {
+    for (const leaf of ['set', 'change', 'reset', 'status'])
+      expect(
+        getRateLimitConfig(`/api/storefront/customer/wallet-pin/${leaf}`)
+      ).toMatchObject({
+        pattern: '/api/storefront/customer/wallet-pin',
+        config: {
+          maxRequests: 10,
+          windowMs: 60_000,
+          failClosedWithoutRedis: true,
+        },
+      });
+    expect(
+      getRateLimitConfig('/api/storefront/customer/wallet').pattern
+    ).not.toBe('/api/storefront/customer/wallet-pin');
+  });
 });

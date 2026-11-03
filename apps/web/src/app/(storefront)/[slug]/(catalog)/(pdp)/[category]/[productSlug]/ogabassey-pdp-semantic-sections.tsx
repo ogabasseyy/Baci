@@ -86,12 +86,6 @@ export async function OgabasseyPdpSemanticSections({
   }
 
   const { inventory, guidePosts, priorityGuidePostSlugs } = seoLinkData;
-  const normalizedInventory = inventory.map((candidate) => ({
-    ...candidate,
-    category_slug: categorySlug,
-    canonical_category_slug:
-      candidate.canonical_category_slug ?? candidate.category_slug,
-  }));
   const currentProduct = {
     slug: product.slug || String(product.id),
     name: product.name,
@@ -99,7 +93,7 @@ export async function OgabasseyPdpSemanticSections({
     condition: product.condition,
     price: product.price,
     stock: resolveSemanticCandidateStock(product),
-    category_slug: categorySlug,
+    category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
   };
   const compareInventory = inventory.some(
@@ -123,7 +117,7 @@ export async function OgabasseyPdpSemanticSections({
     categoryName,
     countryCode: merchant.country,
     currentProduct,
-    inventory: normalizedInventory,
+    inventory,
     hubEligibilityInventory,
     guidePosts,
     priorityGuidePostSlugs,

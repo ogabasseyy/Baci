@@ -89,8 +89,12 @@ END $$;
 RESET ROLE;
 -- Keep address context during review; remove the whole encrypted identity
 -- draft as soon as the provider confirms the address.
+-- The form draft must be saved before the application advances: the write
+-- fence deliberately rejects new drafts for a progressed workflow.
+UPDATE public.oxygen_workflows SET stage='application_required' WHERE id='efaa0000-0000-4000-8000-000000000041';
 INSERT INTO public.oxygen_form_drafts(workflow_id,user_id,ciphertext,mutation_id)
 VALUES ('efaa0000-0000-4000-8000-000000000041','efaa0000-0000-4000-8000-000000000001',repeat('encrypted-fixture',4),'efaa0000-0000-4000-8000-000000000054');
+UPDATE public.oxygen_workflows SET stage='booked' WHERE id='efaa0000-0000-4000-8000-000000000041';
 INSERT INTO oxygen_private.provider_states(workflow_id,state)
 VALUES ('efaa0000-0000-4000-8000-000000000041','{"kyc":{"address_status":"PROCESSING"}}');
 DO $$ BEGIN

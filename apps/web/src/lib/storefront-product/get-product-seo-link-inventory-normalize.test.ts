@@ -13,6 +13,11 @@ describe('getProductSeoSelect', () => {
   it('includes stable recency data for globally merging category scopes', () => {
     expect(getProductSeoSelect(false)).toContain('created_at');
   });
+
+  it('includes manage_stock in category-scoped and unscoped select strings', () => {
+    expect(getProductSeoSelect(false)).toContain('manage_stock');
+    expect(getProductSeoSelect(true)).toContain('manage_stock');
+  });
 });
 
 describe('toProductSemanticCandidate', () => {
@@ -87,6 +92,111 @@ describe('toProductSemanticCandidate', () => {
         'fallback'
       )
     ).toBeNull();
+  });
+
+  describe('manage_stock candidate stock resolution', () => {
+    it.each([
+      {
+        label: 'unmanaged with false and 0 stock',
+        product: {
+          slug: 'unmanaged-false',
+          name: 'Unmanaged False',
+          price: 100,
+          manage_stock: false,
+          stock: 0,
+          stock_quantity: 0,
+        },
+        expectedStock: null,
+        expectedManageStock: false,
+      },
+      {
+        label: 'unmanaged with null and 0 stock',
+        product: {
+          slug: 'unmanaged-null',
+          name: 'Unmanaged Null',
+          price: 100,
+          manage_stock: null,
+          stock: 0,
+          stock_quantity: 0,
+        },
+        expectedStock: null,
+        expectedManageStock: null,
+      },
+      {
+        label: 'tracked zero stock with true',
+        product: {
+          slug: 'tracked-zero',
+          name: 'Tracked Zero',
+          price: 100,
+          manage_stock: true,
+          stock: 0,
+          stock_quantity: 0,
+        },
+        expectedStock: 0,
+        expectedManageStock: true,
+      },
+      {
+        label: 'tracked positive stock with true',
+        product: {
+          slug: 'tracked-positive',
+          name: 'Tracked Positive',
+          price: 100,
+          manage_stock: true,
+          stock: 0,
+          stock_quantity: 6,
+        },
+        expectedStock: 6,
+        expectedManageStock: true,
+      },
+      {
+        label:
+          'omitted manage_stock with zero stock (strict projection fallback)',
+        product: {
+          slug: 'omitted-zero',
+          name: 'Omitted Zero',
+          price: 100,
+          stock: 0,
+          stock_quantity: 0,
+        },
+        expectedStock: 0,
+        expectedManageStock: null,
+      },
+      {
+        label: 'omitted manage_stock with positive stock',
+        product: {
+          slug: 'omitted-positive',
+          name: 'Omitted Positive',
+          price: 100,
+          stock: 0,
+          stock_quantity: 9,
+        },
+        expectedStock: 9,
+        expectedManageStock: null,
+      },
+      {
+        label:
+          'legacy positive stock with zero stock_quantity and manage_stock true',
+        product: {
+          slug: 'legacy-positive',
+          name: 'Legacy Positive',
+          price: 100,
+          manage_stock: true,
+          stock: 8,
+          stock_quantity: 0,
+        },
+        expectedStock: 8,
+        expectedManageStock: true,
+      },
+    ])('resolves candidate stock for $label', ({
+      product,
+      expectedStock,
+      expectedManageStock,
+    }) => {
+      const candidate = toProductSemanticCandidate(product, 'fallback');
+      expect(candidate).not.toBeNull();
+      expect(candidate?.stock).toBe(expectedStock);
+      expect(candidate?.manage_stock).toBe(expectedManageStock);
+    });
   });
 
   it('deduplicates semantic candidates by slug in source order', () => {

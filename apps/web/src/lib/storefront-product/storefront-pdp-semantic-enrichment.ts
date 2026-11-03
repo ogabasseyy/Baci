@@ -164,6 +164,19 @@ function toProductSemanticCandidateFromJson(
     return null;
   }
 
+  let manageStock: boolean | null | undefined;
+  if ('manage_stock' in value) {
+    const rawManageStock = value.manage_stock;
+    if (
+      rawManageStock !== null &&
+      rawManageStock !== undefined &&
+      typeof rawManageStock !== 'boolean'
+    ) {
+      return null;
+    }
+    manageStock = rawManageStock;
+  }
+
   return toProductSemanticCandidate(
     {
       brand: typeof value.brand === 'string' ? value.brand : null,
@@ -176,6 +189,7 @@ function toProductSemanticCandidateFromJson(
       slug: typeof value.slug === 'string' ? value.slug : null,
       stock,
       stock_quantity: stockQuantity,
+      manage_stock: manageStock,
     },
     categorySlug
   );

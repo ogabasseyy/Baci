@@ -67,4 +67,60 @@ describe('matchesProductStockFilter', () => {
       )
     ).toBe(false);
   });
+
+  describe('filter agreement across all manage_stock states', () => {
+    it.each([
+      {
+        label: 'manage_stock: false (unmanaged)',
+        item: { manage_stock: false, stock: 0, stock_quantity: 0 },
+        inStock: true,
+        outOfStock: false,
+        infinite: true,
+      },
+      {
+        label: 'manage_stock: null (unmanaged)',
+        item: { manage_stock: null, stock: 0, stock_quantity: 0 },
+        inStock: true,
+        outOfStock: false,
+        infinite: true,
+      },
+      {
+        label: 'manage_stock: undefined (unmanaged)',
+        item: { stock: 0, stock_quantity: 0 },
+        inStock: true,
+        outOfStock: false,
+        infinite: true,
+      },
+      {
+        label: 'manage_stock: true with zero stock (tracked sold-out)',
+        item: { manage_stock: true, stock: 0, stock_quantity: 0 },
+        inStock: false,
+        outOfStock: true,
+        infinite: false,
+      },
+      {
+        label: 'manage_stock: true with positive stock (tracked in-stock)',
+        item: { manage_stock: true, stock: 0, stock_quantity: 10 },
+        inStock: true,
+        outOfStock: false,
+        infinite: false,
+      },
+      {
+        label: 'manage_stock: true with legacy stock (tracked in-stock)',
+        item: { manage_stock: true, stock: 5, stock_quantity: 0 },
+        inStock: true,
+        outOfStock: false,
+        infinite: false,
+      },
+    ])('$label: in_stock=$inStock, out_of_stock=$outOfStock, infinite=$infinite', ({
+      item,
+      inStock,
+      outOfStock,
+      infinite,
+    }) => {
+      expect(matchesProductStockFilter(item, 'in_stock')).toBe(inStock);
+      expect(matchesProductStockFilter(item, 'out_of_stock')).toBe(outOfStock);
+      expect(matchesProductStockFilter(item, 'infinite')).toBe(infinite);
+    });
+  });
 });

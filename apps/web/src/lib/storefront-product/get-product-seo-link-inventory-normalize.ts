@@ -1,6 +1,7 @@
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
 import type { ProductSemanticCandidate } from '@/lib/storefront-product/product-semantic-types';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 
 export interface ProductCategoryJoin {
   category_id?: string | null;
@@ -20,6 +21,7 @@ export interface ProductSeoRow {
   price?: number | string | null;
   stock?: number | null;
   stock_quantity?: number | null;
+  manage_stock?: boolean | null;
   category?: string | null;
   category_id?: string | null;
   categories?:
@@ -35,7 +37,7 @@ export function getProductSeoSelect(isCategoryScoped: boolean) {
     ? 'product_categories!inner(category_id, categories(slug))'
     : 'product_categories(category_id, categories(slug))';
   return `
-    id, slug, name, brand, condition, price, stock, stock_quantity, category, category_id, created_at,
+    id, slug, name, brand, condition, price, stock, stock_quantity, manage_stock, category, category_id, created_at,
     categories:category_id(slug),
     ${PRODUCT_KEY_SPECS_RELATION_SELECT},
     ${productCategoriesSelect}
@@ -74,11 +76,12 @@ export function toProductSemanticCandidate(
     brand: product.brand,
     condition: product.condition,
     price,
-    stock: product.stock_quantity ?? product.stock,
+    stock: resolveSemanticCandidateStock(product),
     category_slug:
       getJoinedCategorySlug(product, fallbackCategorySlug) ??
       fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(product.product_key_specs),
+    manage_stock: product.manage_stock ?? null,
   };
 }
 

@@ -16,6 +16,7 @@ import {
   loadPdpBrandHubEligibilityInventorySafely,
   PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
 } from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
+import { resolveSemanticCandidateStock } from '@/lib/storefront-product/resolve-semantic-candidate-stock';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 
 interface OgabasseyPdpSemanticMerchant {
@@ -85,21 +86,25 @@ export async function OgabasseyPdpSemanticSections({
   }
 
   const { inventory, guidePosts, priorityGuidePostSlugs } = seoLinkData;
+  const normalizedInventory = inventory.map((candidate) => ({
+    ...candidate,
+    category_slug: categorySlug,
+  }));
   const currentProduct = {
     slug: product.slug || String(product.id),
     name: product.name,
     brand: product.brand,
     condition: product.condition,
     price: product.price,
-    stock: product.stock,
-    category_slug: product.category_slug ?? categorySlug,
+    stock: resolveSemanticCandidateStock(product),
+    category_slug: categorySlug,
     product_key_specs: product.product_key_specs,
   };
-  const compareInventory = inventory.some(
+  const compareInventory = normalizedInventory.some(
     (candidate) => candidate.slug === currentProduct.slug
   )
-    ? inventory
-    : [currentProduct, ...inventory];
+    ? normalizedInventory
+    : [currentProduct, ...normalizedInventory];
   const productCompareLinks = buildCompareLinkGraph({
     storeUrl,
     categorySlug,
@@ -116,7 +121,7 @@ export async function OgabasseyPdpSemanticSections({
     categoryName,
     countryCode: merchant.country,
     currentProduct,
-    inventory,
+    inventory: normalizedInventory,
     hubEligibilityInventory,
     guidePosts,
     priorityGuidePostSlugs,

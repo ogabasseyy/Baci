@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCachedProductSemanticInventory } from './get-cached-product-semantic-inventory';
+import {
+  getCachedProductSemanticInventory,
+  PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT,
+} from './get-cached-product-semantic-inventory';
 
 const mockGetPublicSupabaseClient = vi.fn();
 
@@ -67,6 +70,9 @@ describe('getCachedProductSemanticInventory', () => {
       expect.stringContaining(
         'product_categories!inner(categories!inner(slug))'
       )
+    );
+    expect(productsQuery.select).toHaveBeenCalledWith(
+      expect.stringContaining('manage_stock')
     );
     expect(productsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(productsQuery.eq).toHaveBeenCalledWith('status', 'active');
@@ -174,5 +180,132 @@ describe('getCachedProductSemanticInventory', () => {
     await expect(
       getCachedProductSemanticInventory('merchant-1', 'laptops')
     ).resolves.toEqual([]);
+  });
+
+  it('includes manage_stock in PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT', () => {
+    expect(PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT).toContain('manage_stock');
+  });
+
+  describe('manage_stock candidate stock resolution', () => {
+    it.each([
+      {
+        label: 'unmanaged with false',
+        row: {
+          slug: 'unmanaged-false',
+          name: 'Unmanaged False',
+          price: 100,
+          manage_stock: false,
+          stock: 0,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: null,
+        expectedManageStock: false,
+      },
+      {
+        label: 'unmanaged with null',
+        row: {
+          slug: 'unmanaged-null',
+          name: 'Unmanaged Null',
+          price: 100,
+          manage_stock: null,
+          stock: 0,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: null,
+        expectedManageStock: null,
+      },
+      {
+        label: 'tracked zero stock with true',
+        row: {
+          slug: 'tracked-zero',
+          name: 'Tracked Zero',
+          price: 100,
+          manage_stock: true,
+          stock: 0,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: 0,
+        expectedManageStock: true,
+      },
+      {
+        label: 'tracked positive stock with true',
+        row: {
+          slug: 'tracked-positive',
+          name: 'Tracked Positive',
+          price: 100,
+          manage_stock: true,
+          stock: 0,
+          stock_quantity: 5,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: 5,
+        expectedManageStock: true,
+      },
+      {
+        label:
+          'omitted manage_stock with zero stock (strict projection fallback)',
+        row: {
+          slug: 'omitted-zero',
+          name: 'Omitted Zero',
+          price: 100,
+          stock: 0,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: 0,
+        expectedManageStock: null,
+      },
+      {
+        label: 'omitted manage_stock with positive stock',
+        row: {
+          slug: 'omitted-positive',
+          name: 'Omitted Positive',
+          price: 100,
+          stock: 0,
+          stock_quantity: 8,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: 8,
+        expectedManageStock: null,
+      },
+      {
+        label:
+          'legacy positive stock with zero stock_quantity and manage_stock true',
+        row: {
+          slug: 'legacy-positive',
+          name: 'Legacy Positive',
+          price: 100,
+          manage_stock: true,
+          stock: 9,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'phones' } }],
+        },
+        expectedStock: 9,
+        expectedManageStock: true,
+      },
+    ])('resolves candidate stock for $label', async ({
+      row,
+      expectedStock,
+      expectedManageStock,
+    }) => {
+      const productsQuery = createProductsQuery({
+        data: [row],
+        error: null,
+      });
+      mockGetPublicSupabaseClient.mockReturnValue({
+        from: vi.fn(() => productsQuery),
+      });
+
+      const result = await getCachedProductSemanticInventory(
+        'merchant-1',
+        'phones'
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.stock).toBe(expectedStock);
+      expect(result[0]?.manage_stock).toBe(expectedManageStock);
+    });
   });
 });

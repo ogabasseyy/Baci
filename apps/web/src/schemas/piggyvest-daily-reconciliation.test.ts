@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as zod from 'zod';
 import { piggyvestDailyReconciliationSchemas as schemas } from './piggyvest-daily-reconciliation';
 
 const stuck = {
@@ -68,6 +69,22 @@ describe('piggyvest daily reconciliation schemas', () => {
     expect(schemas.reportEmail.safeParse('owner@example.test').success).toBe(
       true
     );
+    expect(schemas.reportEmail.safeParse('not-an-email').success).toBe(false);
+  });
+
+  it('relies only on top-level Zod 4 helpers that exist in the pinned version', () => {
+    for (const helper of ['uuid', 'int', 'email', 'iso'] as const) {
+      expect(zod.z[helper]).toBeDefined();
+    }
+    expect(typeof zod.z.iso.datetime).toBe('function');
+    expect(schemas.stuckTransfer.safeParse(stuck).success).toBe(true);
+    expect(
+      schemas.stuckTransfer.safeParse({ ...stuck, operationId: 'not-a-uuid' })
+        .success
+    ).toBe(false);
+    expect(
+      schemas.stuckTransfer.safeParse({ ...stuck, ageSeconds: 1.5 }).success
+    ).toBe(false);
     expect(schemas.reportEmail.safeParse('not-an-email').success).toBe(false);
   });
 });

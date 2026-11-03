@@ -1,3 +1,5 @@
+// Zod 4 (pinned 4.6.6) provides z.uuid(), z.int(), z.email() and
+// z.iso.datetime() as top-level helpers; the schema test pins their presence.
 import { z } from 'zod';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 

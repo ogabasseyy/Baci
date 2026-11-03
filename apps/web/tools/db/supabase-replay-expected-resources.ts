@@ -117,26 +117,29 @@ function assertResourceList(
   observed: ObservedResource[],
   expectedNames: readonly string[],
   projectId: string,
-  allowPartial: boolean
+  allowPartial: boolean,
+  kind: 'container' | 'volume' | 'network'
 ): void {
   const names = observed.map(({ labels, name }) => {
     if (
       labels[SUPABASE_PROJECT_LABEL] !== projectId ||
       !expectedNames.includes(name)
     ) {
-      throw new Error();
+      throw new ResourceMismatch(`${kind}-unexpected`);
     }
     return name;
   });
+  if (new Set(names).size !== names.length)
+    throw new ResourceMismatch(`${kind}-duplicate`);
   if (
-    new Set(names).size !== names.length ||
-    (!allowPartial &&
-      (names.length !== expectedNames.length ||
-        expectedNames.some((name) => !names.includes(name))))
-  ) {
-    throw new Error();
-  }
+    !allowPartial &&
+    (names.length !== expectedNames.length ||
+      expectedNames.some((name) => !names.includes(name)))
+  )
+    throw new ResourceMismatch(`${kind}-missing`);
 }
+
+class ResourceMismatch extends Error {}
 
 export function assertSupabaseReplayResources(
   observed: ObservedSupabaseReplayResources,
@@ -151,7 +154,8 @@ export function assertSupabaseReplayResources(
       observed.containers,
       [...expectedContainers.keys()],
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'container'
     );
     for (const container of observed.containers) {
       const expectedContainer = expectedContainers.get(container.name);
@@ -159,22 +163,26 @@ export function assertSupabaseReplayResources(
         !expectedContainer ||
         (expectedContainer.image && container.image !== expectedContainer.image)
       ) {
-        throw new Error();
+        throw new ResourceMismatch('container-image');
       }
     }
     assertResourceList(
       observed.volumes,
       expected.volumes,
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'volume'
     );
     assertResourceList(
       observed.networks,
       expected.networks,
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'network'
     );
-  } catch {
-    throw new Error('Supabase replay resource verification failed');
+  } catch (error) {
+    throw new Error(
+      `Supabase replay resource verification failed${error instanceof ResourceMismatch ? ` (${error.message})` : ''}`
+    );
   }
 }

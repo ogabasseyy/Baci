@@ -62,6 +62,71 @@ describe('expectedSupabaseReplayResources', () => {
 });
 
 describe('assertSupabaseReplayResources', () => {
+  it('classifies mismatches without exposing resource names or labels', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const missing = observed();
+    missing.networks = [];
+    expect(() =>
+      assertSupabaseReplayResources(missing, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(network-missing\)$/
+    );
+
+    const foreign = observed();
+    foreign.volumes[0] = {
+      name: 'secret-name',
+      labels: { [SUPABASE_PROJECT_LABEL]: 'secret-label' },
+    };
+    expect(() =>
+      assertSupabaseReplayResources(foreign, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(volume-unexpected\)$/
+    );
+
+    const wrongImage = observed();
+    wrongImage.containers[0].image = 'private-registry/secret-image';
+    expect(() =>
+      assertSupabaseReplayResources(wrongImage, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-image\)$/
+    );
+  });
+
+  it('classifies duplicate resources and redacts unexpected exceptions', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const duplicate = observed();
+    duplicate.volumes.push(duplicate.volumes[0]);
+    expect(() =>
+      assertSupabaseReplayResources(duplicate, expected, {
+        allowPartial: true,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(volume-duplicate\)$/
+    );
+
+    const broken = observed();
+    Object.defineProperty(broken, 'containers', {
+      get() {
+        throw new Error('private resource details');
+      },
+    });
+    expect(() =>
+      assertSupabaseReplayResources(broken, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/^Supabase replay resource verification failed$/);
+  });
   it('accepts the exact complete owned resource set', () => {
     expect(() =>
       assertSupabaseReplayResources(
@@ -95,7 +160,9 @@ describe('assertSupabaseReplayResources', () => {
         allowPartial: false,
         projectId,
       })
-    ).toThrow(/^Supabase replay resource verification failed$/);
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-missing\)$/
+    );
 
     const malformed = observed();
     malformed.containers[0] = {
@@ -108,7 +175,9 @@ describe('assertSupabaseReplayResources', () => {
         allowPartial: true,
         projectId,
       })
-    ).toThrow(/^Supabase replay resource verification failed$/);
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-unexpected\)$/
+    );
   });
 });
 

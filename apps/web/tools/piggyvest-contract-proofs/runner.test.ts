@@ -101,19 +101,18 @@ describe('live-sandbox-mutations', () => {
       '/api/v1/transfer/test/funding',
       '/api/v1/transfer/wallet',
       '/api/v1/transfer/bank',
-      // proof 7: a NEW payout-routing customer, then two goal sub-wallets
+      // proof 7: a NEW payout-routing customer, then four goal sub-wallets
       '/api/v1/customers',
-      '/api/v1/wallet/sub-account',
-      '/api/v1/wallet/sub-account',
+      ...Array(4).fill('/api/v1/wallet/sub-account'),
     ]);
     const journalLines = readFileSync(cfg.journalPath ?? '', 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
     expect(journalLines.map((entry) => entry.phase)).toEqual(
-      Array(11).fill(['intent', 'outcome']).flat()
+      Array(13).fill(['intent', 'outcome']).flat()
     );
-    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(11);
+    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(13);
     expect(JSON.stringify(journalLines)).not.toMatch(/01M2T[0-9A-F]{21}/);
 
     const before = mock.calls.length;
@@ -121,12 +120,12 @@ describe('live-sandbox-mutations', () => {
       ...deps,
       now: () => new Date('2026-10-31T10:00:00Z'),
     });
-    expect(posts(mock).length).toBe(11);
+    expect(posts(mock).length).toBe(13);
     expect(mock.calls.length).toBeGreaterThan(before);
     expect(second.proofs.some((p) => p.status === 'inconclusive')).toBe(true);
 
     await runHarness({ ...cfg, newAttempt: true }, deps);
-    expect(posts(mock).length).toBeGreaterThan(11);
+    expect(posts(mock).length).toBeGreaterThan(13);
   });
 
   it('uses unique references for every transfer', async () => {

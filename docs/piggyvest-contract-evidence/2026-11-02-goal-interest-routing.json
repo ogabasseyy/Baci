@@ -1,0 +1,333 @@
+{
+  "schema": "piggyvest-contract-evidence/v1",
+  "date": "2026-11-02",
+  "mode": "live-sandbox-mutations",
+  "sandboxHost": "staging.piggyvest.business",
+  "mockData": false,
+  "guards": [
+    "base URL host must be exactly staging.piggyvest.business; API key must be a test key",
+    "dry-run is the default and uses mocks only; live-readonly sends GET only",
+    "mutations need --live-sandbox-mutations, an allowlist of QA customer ids, a journaled intent and a unique reference",
+    "the protected recording account is refused in arguments, requests and responses",
+    "evidence is scanned for ids, emails, phones, BVNs, account numbers, keys and balances before it is written"
+  ],
+  "proofs": [
+    {
+      "proof": "p7",
+      "title": "Main-wallet interest routing at creation",
+      "status": "observed",
+      "findings": [
+        {
+          "id": "customer_create_with_payout_accepted",
+          "question": "Does POST /customers accept enable_interest_accrual=true with interest_payout_wallet set to the business wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "customer_created_fresh",
+          "question": "Was a new customer created (so the settings were actually applied)?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_readback_exposes_interest_fields",
+          "question": "Does GET /wallet/:id expose interest or payout settings?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_readback_names_payout_destination",
+          "question": "Does a readback field equal the payout wallet that was set?",
+          "answer": "yes"
+        },
+        {
+          "id": "main_wallet_accrual_flag_readable",
+          "question": "Is the accrual on/off setting readable?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_payout_update_after_creation_documented",
+          "question": "Does a documented endpoint set a goal's interest payout (to itself) after creation?",
+          "answer": "no",
+          "detail": "PiggyVest public API docs read 2026-11-02: no endpoint changes a wallet's interest payout or accrual after creation; nothing undocumented was tried"
+        },
+        {
+          "id": "goal_without_payout_created",
+          "question": "Is a goal sub-wallet with its own payout left unset created?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_without_payout_inherits_business_payout",
+          "question": "Does a goal wallet with no payout of its own inherit the customer's business payout wallet?",
+          "answer": "unknown",
+          "detail": "the readback names no payout wallet (null): that proves nothing unless PiggyVest confirms in writing where it pays; sandbox rates are 0%, so no payout can be observed"
+        },
+        {
+          "id": "goal_explicit_payout_accepted",
+          "question": "Does POST /wallet/sub-account accept interest_payout_wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_explicit_readback_names_payout_destination",
+          "question": "Does the explicit goal wallet readback name that payout wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_opted_out_created",
+          "question": "Is an opted-out goal sub-wallet (accrual off, payout unset) created?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_opted_out_reads_accrual_off",
+          "question": "Does the opted-out goal read back interest_enabled=false?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_payout_main_accepted",
+          "question": "Does POST /wallet/sub-account accept interest_payout_wallet set to the customer's own main wallet?",
+          "answer": "yes"
+        },
+        {
+          "id": "goal_a_interest_stays_in_goal",
+          "question": "Goal (a): does its readback name the goal itself as the payout wallet (interest stays in the goal)?",
+          "answer": "unknown",
+          "detail": "the readback names no payout wallet (null): that proves nothing unless PiggyVest confirms in writing where it pays; sandbox rates are 0%, so no payout can be observed"
+        },
+        {
+          "id": "goal_b_interest_stays_in_goal",
+          "question": "Goal (b): does its readback name the goal itself as the payout wallet (interest stays in the goal)?",
+          "answer": "unknown",
+          "detail": "the readback names no payout wallet (null): that proves nothing unless PiggyVest confirms in writing where it pays; sandbox rates are 0%, so no payout can be observed"
+        },
+        {
+          "id": "goal_c_interest_stays_in_goal",
+          "question": "Goal (c): does its readback name the goal itself as the payout wallet (interest stays in the goal)?",
+          "answer": "no"
+        },
+        {
+          "id": "goal_d_interest_stays_in_goal",
+          "question": "Goal (d): does its readback name the goal itself as the payout wallet (interest stays in the goal)?",
+          "answer": "no"
+        }
+      ],
+      "shapes": [
+        {
+          "name": "GET /wallet/:id (P7 main wallet)",
+          "httpStatus": 200,
+          "fields": [
+            {
+              "path": "id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "business_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "branch_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "faas_wallet_identifier",
+              "type": "string(uuid)"
+            },
+            {
+              "path": "currency",
+              "type": "string(enum:NGN)"
+            },
+            {
+              "path": "name",
+              "type": "string(text)"
+            },
+            {
+              "path": "status",
+              "type": "string(enum:active)"
+            },
+            {
+              "path": "auto_payout",
+              "type": "boolean"
+            },
+            {
+              "path": "type",
+              "type": "string(enum:api)"
+            },
+            {
+              "path": "tag",
+              "type": "null"
+            },
+            {
+              "path": "is_subaccount",
+              "type": "boolean"
+            },
+            {
+              "path": "parent_wallet_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "balance",
+              "type": "integer"
+            },
+            {
+              "path": "ledger_balance",
+              "type": "integer"
+            },
+            {
+              "path": "gradient_color_id",
+              "type": "null"
+            },
+            {
+              "path": "provider_payload",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_type",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_id",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_name",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_code",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_bank_name",
+              "type": "null"
+            },
+            {
+              "path": "auto_withdrawal_destination_bank_logo",
+              "type": "null"
+            },
+            {
+              "path": "is_frozen",
+              "type": "boolean"
+            },
+            {
+              "path": "api_customer_id",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "bypass_withdrawal_limit_rule",
+              "type": "null"
+            },
+            {
+              "path": "interest_payout_wallet",
+              "type": "string(ulid)"
+            },
+            {
+              "path": "interest_enabled",
+              "type": "boolean"
+            },
+            {
+              "path": "approval_workflow_id",
+              "type": "null"
+            },
+            {
+              "path": "creation_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "current_interest_rate",
+              "type": "integer"
+            },
+            {
+              "path": "created_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "updated_at",
+              "type": "string(iso-datetime)"
+            },
+            {
+              "path": "deleted_at",
+              "type": "null"
+            },
+            {
+              "path": "split_save[]",
+              "type": "array(len=0)"
+            },
+            {
+              "path": "has_an_active_lien",
+              "type": "boolean"
+            },
+            {
+              "path": "withdrawal_count",
+              "type": "integer"
+            },
+            {
+              "path": "interest_forfeiture_minimum_transactions",
+              "type": "integer"
+            }
+          ]
+        }
+      ],
+      "values": {
+        "create_http_status": 200,
+        "create_outcome": "accepted",
+        "main_wallet_interest_field_names": "auto_payout,interest_payout_wallet,interest_enabled,interest_forfeiture_minimum_transactions",
+        "main_wallet_rate_field_names": "creation_interest_rate,current_interest_rate",
+        "main_wallet_payout_field_paths": "interest_payout_wallet",
+        "main_wallet_accrual_enabled": true,
+        "wallet_list_interest_field_names": "auto_payout,interest_payout_wallet,interest_enabled",
+        "goal_a_http_status": 202,
+        "goal_a_outcome": "accepted",
+        "goal_a_interest_enabled_at_0m": true,
+        "goal_a_payout_at_0m": "null",
+        "goal_a_interest_enabled_at_5m": true,
+        "goal_a_payout_at_5m": "null",
+        "goal_a_verdict": "not_proven",
+        "goal_b_http_status": 202,
+        "goal_b_outcome": "accepted",
+        "goal_b_interest_enabled_at_0m": false,
+        "goal_b_payout_at_0m": "null",
+        "goal_b_interest_enabled_at_5m": false,
+        "goal_b_payout_at_5m": "null",
+        "goal_b_verdict": "not_proven",
+        "goal_c_http_status": 202,
+        "goal_c_outcome": "accepted",
+        "goal_c_interest_enabled_at_0m": true,
+        "goal_c_payout_at_0m": "main",
+        "goal_c_interest_enabled_at_5m": true,
+        "goal_c_payout_at_5m": "main",
+        "goal_c_verdict": "not_proven",
+        "goal_d_http_status": 202,
+        "goal_d_outcome": "accepted",
+        "goal_d_interest_enabled_at_0m": true,
+        "goal_d_payout_at_0m": "business",
+        "goal_d_interest_enabled_at_5m": true,
+        "goal_d_payout_at_5m": "business",
+        "goal_d_verdict": "not_proven",
+        "interest_routing_verdict": "create_time_routing_verified"
+      },
+      "notes": [
+        "Goal (a) opted in, payout unset: accepted; payout at 0 min null, at 5 min null; interest_enabled true then true; verdict not proven.",
+        "Goal (b) opted out (accrual off), payout unset: accepted; payout at 0 min null, at 5 min null; interest_enabled false then false; verdict not proven.",
+        "Goal (c) opted in, payout = the customer's main wallet: accepted; payout at 0 min main, at 5 min main; interest_enabled true then true; verdict not proven.",
+        "Goal (d) opted in, payout = the business wallet: accepted; payout at 0 min business, at 5 min business; interest_enabled true then true; verdict not proven.",
+        "Goal payout pseudonyms: self = the goal itself; main = the customer's main wallet; business = the business (interest) wallet; null = the payout field is empty; other = any other wallet; absent = the readback omitted the field; unread = no readback. Only self proves interest stays in the goal; null proves nothing unless PiggyVest confirms it in writing.",
+        "Sandbox interest rates are 0%, so no interest payout can be observed here: where goal interest is really paid stays a release check (the first monthly payout).",
+        "Written question for the owner to send PiggyVest: when a goal sub-wallet is created with enable_interest_accrual=true and no interest_payout_wallet, where is its interest paid, and can it be paid into the goal itself? Until PiggyVest answers in writing, goal interest staying in the goal counts as not proven.",
+        "verdict: verified = accepted and readable, so route at creation; rejected or unverifiable = sweep the interest after it lands with a main to Ogabassey wallet-to-wallet transfer (proofs 2 and 4 cover that transfer); unconfirmed = the readback never showed a payout destination field within the polling budget, so re-run before deciding.",
+        "Correction recorded 2026-11-02 after a harness fix (no request was re-sent): goal_without_payout_inherits_business_payout now follows goal (a)'s final reading, the same one its verdict uses, so a null payout reads unknown (it proves nothing unless PiggyVest confirms in writing), not no."
+      ]
+    }
+  ],
+  "assumptionsToConfirm": [
+    "GET /api/v1/customers with third_party_identifier returns a list under paginatedPayload.edges, edges, or a bare array (the container found is recorded).",
+    "Customer list rows carry the customer id as customer_id or id.",
+    "GET /api/v1/wallet/:id returns api_customer_id (undocumented); wallet ownership is proven from it and nothing weaker.",
+    "Wallet list rows (orderBy ASC/DESC) carry id, name and created_at; otherwise default-wallet-by-order cannot be judged.",
+    "TSQ for a wallet-to-wallet transfer accepts wallet_id as a filter; its field names for source, destination, fee and currency are unknown until observed.",
+    "TSQ status vocabulary is success|pending|failed while list/single use successful; a 404 may mean unknown OR not yet indexed.",
+    "POST /api/v1/transfer/test/funding is the sandbox stand-in for a bank deposit to a virtual account number; it may lag or not settle (seen on 17 Sep).",
+    "The sandbox accepts a bank outflow to an operator-supplied NUBAN and bank code (PVB_PROOF_BANK_CODE, PVB_PROOF_BANK_ACCOUNT) and settles it.",
+    "withdrawal_count appears on GET /wallet/:id for every wallet and updates within the polling window after a settled outflow.",
+    "Accrual and transaction reads accept limit up to 100 and a cursor; sandbox rates are 0% so no accrual edge may exist to inspect.",
+    "Synthetic QA identities (000-prefixed 11-digit BVN, example.test email) are accepted by the sandbox; the 17 Sep probe accepted an all-zeros BVN.",
+    "POST /customers accepts interest_payout_wallet set to an Ogabassey business sandbox wallet (PVB_PROOF_BUSINESS_WALLET_ID) together with enable_interest_accrual=true; whether GET /wallet/:id can read the payout destination back is unknown.",
+    "POST /wallet/sub-account accepts interest_payout_wallet, and a goal sub-wallet created with no payout of its own may or may not inherit the customer payout wallet.",
+    "Webhook delivery cannot be observed by this harness; the credited-wallet field must be confirmed from the durable inbox."
+  ]
+}

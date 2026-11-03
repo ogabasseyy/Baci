@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 3 November 2026 against source revision
-`a4c6d461f159f31f9f8277c54ca660f6a27c3be6`. Oxygen remains local-staging QA only.
+`e176e135ca5af65bf537b98e95443a9dc6be743a`. Oxygen remains local-staging QA only.
 The Paystack DVA helper now avoids a second-bank retry after an uncertain result;
 the merchant protocol claims remain accurate. This is a navigation map,
 not authorization or proof of current deployment. Check the current implementation,

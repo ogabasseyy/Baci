@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-03T06:24:00+00:00",
-  "source_revision": "a4c6d461f159f31f9f8277c54ca660f6a27c3be6",
-  "evidence_digest": "10cff5e4e0634eb51504e6387bfe7d4e4a45f5ea14a1ab4955a37bdf46a4c093",
-  "claims_digest": "defe8866c8829eec02fa327f2ccec60c58c85c8136d8350bcde551ef236ab4a6",
-  "review_scope": "Source review: the Paystack DVA helper no longer retries account creation at a second bank after an uncertain result; the merchant protocol claims remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-03T12:38:46+00:00",
+  "source_revision": "e176e135ca5af65bf537b98e95443a9dc6be743a",
+  "evidence_digest": "5116e516becbc59a17a36c792ca69da979e94104310cf2cd138f933353d2a762",
+  "claims_digest": "c35c9ccded8bfaad14ced90e8506c3f74261f89254fcc9415c9eeee8f3dfc856",
+  "review_scope": "Source review: uncertain agentic DVA creation and persistence outcomes retain their claim for reconciliation; stale claims without a confirmed provider outcome require manual review. Merchant protocol claims remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

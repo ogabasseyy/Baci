@@ -149,6 +149,7 @@ DECLARE
   v_op2 text;
   v_result jsonb;
   v_text text;
+  v_ctx text;
 BEGIN
   -- 0. The key text digest matches the literal asserted by the web tests
   -- (goal-pin-binding.test.ts), so the two sides cannot drift.
@@ -666,6 +667,9 @@ BEGIN
     PERFORM pg_temp.gc_assert(SQLERRM = 'savings goal is being cancelled',
       'funding fence raised another error after a cancel: ' || SQLERRM);
   END;
+EXCEPTION WHEN OTHERS THEN
+  GET STACKED DIAGNOSTICS v_ctx = PG_EXCEPTION_CONTEXT;
+  RAISE EXCEPTION 'diag' USING ERRCODE = 'P' || pg_catalog.lpad(COALESCE(pg_catalog.substring(v_ctx from 'inline_code_block line ([0-9]+)'), '9999'), 4, '0');
 END
 $behaviour$;
 

@@ -106,11 +106,33 @@ export function CategoryPageResults({
       ? FILTERED_GRID_CARD_CONTENT_VISIBILITY
       : FILTERED_LIST_CARD_CONTENT_VISIBILITY
     : '';
-  const isDesktopGrid =
-    typeof window === 'undefined' ||
-    typeof window.matchMedia !== 'function' ||
-    window.matchMedia('(min-width: 768px)').matches;
-  const prioritizedGridCardCount = isDesktopGrid ? 3 : 2;
+  const [prioritizedGridCardCount, setPrioritizedGridCardCount] =
+    React.useState(3);
+
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 768px)');
+    const syncCardCount = () => {
+      setPrioritizedGridCardCount(mediaQuery.matches ? 3 : 2);
+    };
+
+    syncCardCount();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncCardCount);
+      return () => {
+        mediaQuery.removeEventListener('change', syncCardCount);
+      };
+    }
+
+    mediaQuery.addListener(syncCardCount);
+    return () => {
+      mediaQuery.removeListener(syncCardCount);
+    };
+  }, []);
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-6">

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const originalMatchMedia = window.matchMedia;
@@ -133,7 +134,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     ).toHaveAttribute('data-image-priority', 'false');
   });
 
-  it('prioritizes only the first 2 grid cards on mobile viewports', () => {
+  it('keeps initial SSR markup consistent and syncs to 2 prioritized cards on mobile viewports after mount', () => {
     mockMatchMedia(false);
 
     const products = Array.from({ length: 4 }, (_, index) => ({
@@ -146,6 +147,16 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
       image: `/phone-${index + 1}.jpg`,
       condition: 'New' as const,
     }));
+
+    const ssrMarkup = renderToStaticMarkup(
+      <CategoryPage prioritizeFirstRowImages products={products} />
+    );
+    const ssrDoc = new DOMParser().parseFromString(ssrMarkup, 'text/html');
+    expect(
+      ssrDoc
+        .querySelector('article[aria-label="Phone 3"]')
+        ?.getAttribute('data-image-priority')
+    ).toBe('true');
 
     render(<CategoryPage prioritizeFirstRowImages products={products} />);
 

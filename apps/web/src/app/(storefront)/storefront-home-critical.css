@@ -13,6 +13,8 @@
 
 @layer components {
   .ogabassey-home-products {
+    background: var(--ogabassey-surface, var(--store-background, #ffffff));
+    color: var(--ogabassey-surface-text, var(--store-background-text, #111827));
     margin-left: auto;
     margin-right: auto;
     max-width: 1400px;

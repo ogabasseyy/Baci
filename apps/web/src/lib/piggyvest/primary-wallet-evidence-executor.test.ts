@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
+import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 
 const mocks = vi.hoisted(() => ({
@@ -201,4 +202,54 @@ it('admits the goal cancel read, settlement and release statements only', async 
       operationId,
     ])
   ).rejects.toThrow();
+});
+
+it('admits the goal complete evidence and purchase alert statements only', async () => {
+  mocks.query.mockReset();
+  const verify = {
+    rows: [
+      {
+        database_name: 'postgres',
+        login_name: config.database.login,
+        role_name: config.database.login,
+        safe: true,
+        tls: true,
+      },
+    ],
+  };
+  const execute = createPrimaryWalletEvidenceExecutor(config);
+  for (const [text, selection] of [
+    [GOAL_COMPLETE_STATEMENTS.readDispatched, operationId],
+    [GOAL_COMPLETE_STATEMENTS.findByReference, 'pvb-complete-reference'],
+    [GOAL_COMPLETE_STATEMENTS.settle, JSON.stringify({ operationId })],
+    [GOAL_COMPLETE_STATEMENTS.release, JSON.stringify({ operationId })],
+    [GOAL_COMPLETE_STATEMENTS.readPurchaseAlert, operationId],
+    [GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted, operationId],
+  ] as const) {
+    mocks.query
+      .mockResolvedValueOnce(verify)
+      .mockResolvedValueOnce({ rows: [{ result: null }] });
+    await expect(
+      execute(text, [config.integrationId, 'staging', selection])
+    ).resolves.toEqual({ rows: [{ result: null }] });
+  }
+  // The attempt and alert reads take an operation id, never free text.
+  for (const text of [
+    GOAL_COMPLETE_STATEMENTS.readDispatched,
+    GOAL_COMPLETE_STATEMENTS.readPurchaseAlert,
+    GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted,
+  ])
+    await expect(
+      execute(text, [config.integrationId, 'staging', 'not-a-uuid'])
+    ).rejects.toThrow();
+  // The authorizer-side statements are not evidence statements.
+  for (const text of [
+    GOAL_COMPLETE_STATEMENTS.checkIssued,
+    GOAL_COMPLETE_STATEMENTS.issue,
+    GOAL_COMPLETE_STATEMENTS.reserve,
+    GOAL_COMPLETE_STATEMENTS.manage,
+  ])
+    await expect(
+      execute(text, [config.integrationId, 'staging', operationId])
+    ).rejects.toThrow();
 });

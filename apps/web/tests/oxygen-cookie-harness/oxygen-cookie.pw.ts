@@ -45,6 +45,49 @@ test('custom-domain checkout grants Oxygen policy only to the matching signed-in
     'https://frame.example.test'
   );
   expect(owner?.headers()['cache-control']).toContain('no-store');
+  // Exercise the browser policy on the verified owner document, including an
+  // origin that was never configured for either framing or selfie capture.
+  const otherOrigin = 'https://other.example.test';
+  await page.route(`${otherOrigin}/**`, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<p>Unexpected frame</p>' })
+  );
+  const camera = await page.evaluate(
+    ({ allowed, other }) => {
+      const policy = (
+        document as Document & {
+          featurePolicy: {
+            allowsFeature(feature: string, origin: string): boolean;
+          };
+        }
+      ).featurePolicy;
+      return {
+        allowed: policy.allowsFeature('camera', allowed),
+        other: policy.allowsFeature('camera', other),
+      };
+    },
+    { allowed: 'https://frame.example.test', other: otherOrigin }
+  );
+  expect(camera).toEqual({ allowed: true, other: false });
+  const blockedOrigin = await page.evaluate(
+    (origin) =>
+      new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Missing frame CSP violation')),
+          3000
+        );
+        document.addEventListener('securitypolicyviolation', (event) => {
+          if (event.violatedDirective !== 'frame-src') return;
+          clearTimeout(timeout);
+          resolve(event.blockedURI);
+        });
+        const frame = document.createElement('iframe');
+        frame.src = `${origin}/fixture`;
+        frame.allow = 'camera';
+        document.body.appendChild(frame);
+      }),
+    otherOrigin
+  );
+  expect(blockedOrigin).toBe(otherOrigin);
   const foreign = await page.goto(`${url}&case=foreign`);
   expect(foreign?.status()).toBe(200);
   await expect(

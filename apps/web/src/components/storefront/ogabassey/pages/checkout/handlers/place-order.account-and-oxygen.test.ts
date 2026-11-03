@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePlaceOrder } from './place-order';
 
+const navigation = vi.hoisted(() => ({ oxygen: vi.fn() }));
+vi.mock('./navigate-to-oxygen-order', () => ({
+  navigateToOxygenOrder: navigation.oxygen,
+}));
+
 // Mock dependencies
 vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn(),
@@ -95,9 +100,10 @@ describe('handlePlaceOrder', () => {
       payWithWallet: false,
     });
     await handlePlaceOrder(opts);
-    expect(opts.routerPush).toHaveBeenCalledWith(
-      '/payments/oxygen/60000000-0000-4000-8000-000000000001'
+    expect(navigation.oxygen).toHaveBeenCalledExactlyOnceWith(
+      '60000000-0000-4000-8000-000000000001'
     );
+    expect(opts.routerPush).not.toHaveBeenCalled();
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).payment_method).toBe(
       'oxygen'

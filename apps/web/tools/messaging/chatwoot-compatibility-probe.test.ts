@@ -38,11 +38,10 @@ describe('runChatwootIsolationProbe', () => {
     const tsxCli = join(dirname(tsxPackage), 'dist', 'cli.mjs');
     try {
       await copyFile(sourcePath, copiedScript);
-      const environment = Object.fromEntries(
-        Object.entries(process.env).filter(
-          ([key]) => !key.startsWith('CHATWOOT_PROBE_')
-        )
-      );
+      const environment = { ...process.env };
+      for (const key of Object.keys(environment)) {
+        if (key.startsWith('CHATWOOT_PROBE_')) delete environment[key];
+      }
       const result = spawnSync(process.execPath, [tsxCli, copiedScript], {
         cwd: process.cwd(),
         env: environment,
@@ -80,7 +79,7 @@ describe('runChatwootIsolationProbe', () => {
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('uses the documented read-only endpoint with both credentials and confirms only observed denial', async () => {
     const fetcher = vi

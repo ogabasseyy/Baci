@@ -137,6 +137,38 @@ describe('assertSupabaseReplayResources', () => {
     ).not.toThrow();
   });
 
+  it('accepts only the exact project-labeled optional pg-delta cache volume', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const resources = observed();
+    resources.volumes.push({
+      name: `supabase_edge_runtime_${projectId}`,
+      labels: { [SUPABASE_PROJECT_LABEL]: projectId },
+    });
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).not.toThrow();
+    resources.volumes[1].labels[SUPABASE_PROJECT_LABEL] = 'other';
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/volume-unexpected/);
+    resources.volumes[1] = {
+      name: `supabase_edge_runtime_${projectId}_extra`,
+      labels: { [SUPABASE_PROJECT_LABEL]: projectId },
+    };
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/volume-unexpected/);
+  });
+
   it('accepts a correctly labeled partial subset only during cleanup', () => {
     const resources = observed();
     resources.containers = resources.containers.slice(0, 2);
@@ -182,6 +214,95 @@ describe('assertSupabaseReplayResources', () => {
 });
 
 describe('inspectSupabaseReplayResources', () => {
+  it.each([
+    '',
+    'com.supabase.cli.project=foreign',
+  ])('detects an exact cache volume even with foreign or missing labels: %s', async (labels) => {
+    const cacheName = `supabase_edge_runtime_${projectId}`;
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      stderr: '',
+      stdout: args.includes(`name=^${cacheName}$`)
+        ? `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`
+        : '',
+    }));
+    const resources = await inspectSupabaseReplayResources(
+      projectId,
+      runCommand
+    );
+    expect(resources.volumes).toHaveLength(1);
+    expect(() =>
+      assertSupabaseReplayResources(
+        resources,
+        expectedSupabaseReplayResources({}, projectId),
+        {
+          projectId,
+          allowPartial: true,
+        }
+      )
+    ).toThrow(/volume-unexpected/);
+  });
+
+  it.each([
+    '',
+    'com.supabase.cli.project=foreign',
+  ])('detects an exact database volume with foreign or missing labels: %s', async (labels) => {
+    const name = `supabase_db_${projectId}`;
+    const runCommand = vi.fn(async (_command: string, args: string[]) => ({
+      stderr: '',
+      stdout: args.includes(`name=^${name}$`)
+        ? `${JSON.stringify({ Name: name, Labels: labels })}\n`
+        : '',
+    }));
+    const resources = await inspectSupabaseReplayResources(
+      projectId,
+      runCommand
+    );
+    expect(resources.volumes).toHaveLength(1);
+    expect(() =>
+      assertSupabaseReplayResources(
+        resources,
+        expectedSupabaseReplayResources({}, projectId),
+        {
+          projectId,
+          allowPartial: true,
+        }
+      )
+    ).toThrow(/volume-unexpected/);
+  });
+
+  it.each([
+    'db',
+    'edge_runtime',
+  ])('deduplicates matching %s volume and rejects inconsistent labels', async (kind) => {
+    const cacheName = `supabase_${kind}_${projectId}`;
+    let changed = false;
+    const runCommand = vi.fn(async (_command: string, args: string[]) => {
+      if (
+        args[0] !== 'volume' ||
+        (args.some((arg) => arg.startsWith('name=^')) &&
+          !args.includes(`name=^${cacheName}$`))
+      )
+        return { stderr: '', stdout: '' };
+      const labels =
+        changed && args.includes(`name=^${cacheName}$`)
+          ? 'com.supabase.cli.project=foreign'
+          : `${SUPABASE_PROJECT_LABEL}=${projectId}`;
+      return {
+        stderr: '',
+        stdout: `${JSON.stringify({ Name: cacheName, Labels: labels })}\n`,
+      };
+    });
+    const resources = await inspectSupabaseReplayResources(
+      projectId,
+      runCommand
+    );
+    expect(resources.volumes).toHaveLength(1);
+    changed = true;
+    await expect(
+      inspectSupabaseReplayResources(projectId, runCommand)
+    ).rejects.toThrow(/^Docker replay resource output is invalid$/);
+  });
+
   it('lists every exact-label Docker resource without a shell command', async () => {
     const runCommand = vi
       .fn()
@@ -200,6 +321,8 @@ describe('inspectSupabaseReplayResources', () => {
           Name: `supabase_db_${projectId}`,
         })}\n`,
       })
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
       .mockResolvedValueOnce({ stderr: '', stdout: '' });
 
     const resources = await inspectSupabaseReplayResources(
@@ -229,6 +352,22 @@ describe('inspectSupabaseReplayResources', () => {
         'ls',
         '--filter',
         `label=${SUPABASE_PROJECT_LABEL}=${projectId}`,
+        '--format',
+        '{{json .}}',
+      ],
+      [
+        'volume',
+        'ls',
+        '--filter',
+        `name=^supabase_db_${projectId}$`,
+        '--format',
+        '{{json .}}',
+      ],
+      [
+        'volume',
+        'ls',
+        '--filter',
+        `name=^supabase_edge_runtime_${projectId}$`,
         '--format',
         '{{json .}}',
       ],

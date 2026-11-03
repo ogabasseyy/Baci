@@ -44,22 +44,9 @@
 @source "../../components/storefront/sticky-add-to-cart.tsx";
 @source "../../components/ui/quantity-button.tsx";
 
-/* On upward scroll navigation takes the bottom edge; on downward scroll
-   it hides and the purchase controls occupy the same space. */
+/* Clear both the sticky purchase bar and its scroll-to-top control on mobile. */
 @media (width < 48rem) {
-  body:has(.ogabassey-mobile-footer:not(.ogabassey-mobile-footer--hidden))
-    [data-sticky-cart-visible="true"] {
-    visibility: hidden;
-    pointer-events: none;
-  }
-}
-
-/* The assistant otherwise drops to the screen edge when navigation hides.
-   Clear both the purchase bar and its scroll-to-top control. */
-@media (width < 48rem) {
-  body:has([data-sticky-cart-visible="true"]):has(
-      .ogabassey-mobile-footer--hidden
-    )
+  body:has([data-sticky-cart-visible="true"])
     .ogabassey-chat-anchor:not(:has(.ogabassey-chat-button--open)) {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 9rem);
   }

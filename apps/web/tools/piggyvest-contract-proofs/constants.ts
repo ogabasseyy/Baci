@@ -12,6 +12,24 @@ export const RUN_MODES = [
 ] as const;
 export type RunMode = (typeof RUN_MODES)[number];
 
+export const PROOF_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] as const;
+
+/**
+ * Proofs that create their own QA customer and need nothing from the shared
+ * scenario: run alone (--proof), they skip its customer, goal, funding and
+ * transfers entirely.
+ */
+export const STANDALONE_PROOFS: readonly (typeof PROOF_IDS)[number][] = ['p7'];
+
+/**
+ * Proofs that only measure what other proofs in the same run did (proof 6
+ * reads the transfer and the deposit that proofs 2 and 3 make), so --proof
+ * refuses them: alone they would spend scenario mutations and measure nothing.
+ */
+export const FULL_RUN_ONLY_PROOFS: readonly (typeof PROOF_IDS)[number][] = [
+  'p6',
+];
+
 /** The only modes that may send a state-changing request. Everything else fails closed. */
 export const MUTATION_CAPABLE_MODES: readonly RunMode[] = [
   'dry-run',
@@ -37,7 +55,7 @@ export const ENV_API_KEY_FALLBACK = 'PIGGYVEST_SAVINGS_FUNDING_API_SECRET';
 export const ENV_BASE_URL = 'PVB_PROOF_BASE_URL';
 export const ENV_BANK_CODE = 'PVB_PROOF_BANK_CODE';
 export const ENV_BANK_ACCOUNT = 'PVB_PROOF_BANK_ACCOUNT';
-/** Ogabassey business SANDBOX wallet used as the interest payout target (proof 7). */
+/** Ogabassey business SANDBOX wallet: proof 7's interest payout target and proofs 3 and 8's house wallet. */
 export const ENV_BUSINESS_WALLET = 'PVB_PROOF_BUSINESS_WALLET_ID';
 
 /** Hard money caps (kobo). The sandbox is not real money; caps limit blast radius. */
@@ -50,11 +68,19 @@ export const AMOUNTS_KOBO = {
   fundGoal: 200_000,
   walletTransfer: 100_000,
   bankOutflow: 100_000,
+  /** Proof 3: the house-wallet inflow, which also funds proof 8's collection leg. */
+  fundHouse: 200_000,
+  /** Proof 9: a main-wallet deposit no other main-wallet credit shares. */
+  depositMain: 250_000,
 } as const;
 
-/** Everything the later proofs take out of the main wallet: two wallet transfers and one bank outflow. */
+/**
+ * Everything the later proofs may take out of the main wallet: wallet
+ * transfers in proofs 2 (plus a possible duplicate-reference second debit),
+ * 4 and 8, and proof 4's bank outflow.
+ */
 export const PLANNED_OUTFLOWS_KOBO =
-  AMOUNTS_KOBO.walletTransfer * 2 + AMOUNTS_KOBO.bankOutflow;
+  AMOUNTS_KOBO.walletTransfer * 4 + AMOUNTS_KOBO.bankOutflow;
 /** Room for the bank-outflow fee (sandbox tariffs are tens of naira) and any transfer fee. */
 export const FEE_RESERVE_KOBO = 50_000;
 /** A main wallet below this is topped up before the proofs run. */

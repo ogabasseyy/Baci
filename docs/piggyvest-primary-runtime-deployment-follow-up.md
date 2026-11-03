@@ -87,6 +87,58 @@ Goal provisioning additionally requires
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
 
+### Client build floors and onboarding rollout cohort (gate not wired yet)
+
+`apps/web/src/lib/piggyvest/primary-client-capability.ts` and
+`primary-onboarding-capability.ts` hold the build-aware capability gate; no route calls it yet. When wired, it reads:
+
+- `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
+  `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
+  build (iOS `CFBundleVersion`, Android `versionCode`) allowed to use the
+  primary wallet, as a positive whole number with no spaces. While either is
+  unset or malformed every build is refused, whatever the cohort. The owner
+  sets them only after the release that sends the build headers passes App
+  Review. Clients send `X-Baci-Client-Platform` (`ios` or `android`) and
+  `X-Baci-Client-Build`; a missing or malformed pair counts as an old build.
+  A refusal uses `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, which
+  released builds already treat as "use the legacy flow" (never the base
+  `PIGGYVEST_NOT_READY`, which they cache merchant-wide); a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+- A floor proves only the native build. What reads wallet responses is the
+  JavaScript bundle, and an over-the-air update can replace it: the Android
+  runtime version is shared by every `versionCode`, so one Android update
+  reaches every build, and an iOS export targets one build's runtime. Never
+  publish or export an update whose source predates the wallet response
+  contract that the builds at or above a floor rely on. If an update
+  rollback must cross such a contract change, first unset both floors (or
+  raise them past every affected build), and set them again only after the
+  forward fix ships. This rule belongs on the storefront release checklist
+  (P9-mobile-build-header-pilot-removal); a later change may instead have
+  the client send a contract number compiled into the bundle, so the gate
+  keys on the JavaScript rather than the native build.
+- `piggyvest_primary.rollout_cohort` (migration 20261103012500), keyed by
+  merchant and customer. It ships empty and only a privileged operator adds
+  rows. A customer with no primary onboarding may start one only while
+  listed and while every readiness reader in
+  `primary-readiness-registry.ts` reports ready; none is registered yet, so
+  onboarding stays closed. A customer whose wallet is verified, or whose
+  onboarding is in flight (an intent or mapping not yet released), needs
+  only the build floor: removing them from the cohort, or a reader dropping
+  to not ready, never strands a provider-side wallet. Route wiring admits an
+  in-flight customer to resume that onboarding only, never a fresh claim.
+  Include
+  `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
+  verified grants; it returns only a boolean for the scoped customer.
+- Claim-time binding (route wiring PR, P4-capability-gate-routes). A `fresh`
+  verdict is a point-in-time read, not a token. The wiring must re-run
+  `resolvePrimaryOnboardingCapability` immediately before dispatching the
+  claim, and a follow-up migration must make `claim_onboarding(jsonb,text)`
+  re-check `rollout_cohort` membership inside its own transaction, so a
+  customer removed from the cohort between the gate and the claim cannot
+  create a backed wallet. Until both land no route calls the gate.
+- Refusal codes. Gate refusals are per customer or per build, so they use
+  only `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, never the base
+  `PIGGYVEST_NOT_READY` that released storefront builds cache merchant-wide.
+
 ## Restricted database preparation
 
 1. Review the pending primary migration chain and its public-table dependencies.
@@ -217,3 +269,9 @@ PostgreSQL password validity does not terminate existing sessions. The legacy
 installer or its route/role receipts cannot satisfy missing primary evidence.
 
 Apply the review-classification migration before deploying the new six-argument review and four-argument routing-resolution statements. Verify both overloads in the restricted provisioner readiness check. The old signatures remain conservative wrappers: they do not infer routing-only review from an unclassified contradiction. Identity-matched interest-setting contradictions retain a routing reason atomically; identity mismatches remain ownership-held after the recorded DVA closes.
+
+## Onboarding presence
+
+Apply `20261102121549_piggyvest_onboarding_presence.sql` before deploying the GET presence check, and include `has_onboarding(jsonb)` in the restricted provisioner's verified grants. The migration grants EXECUTE on `has_onboarding(jsonb)` only to the `piggyvest_primary_provisioner` group; execution stays denied to `PUBLIC`, client roles and `service_role`. It changes no login roles, environment variables or runtime settings. Because the group's executable-function set grows by one, readiness evidence must be re-captured against an artifact that includes this change; evidence from an earlier artifact fails the onboarding role check by design.
+
+When the scoped customer has no onboarding intent at all, GET answers before any provider, mapping or review read. A failed or malformed presence read fails closed with 503. Only a client that sends `x-baci-piggyvest-snapshot-version: 2` receives `{ "status": "not_started", "account": null }`; every other client, including every installed mobile build, receives the `{ "status": "pending", "account": null }` reply its strict snapshot schema already accepts, which is also what a never-started customer received before this change. The reply varies on that header and is never cached. A mobile build may send the header only once its snapshot schema accepts `not_started`.

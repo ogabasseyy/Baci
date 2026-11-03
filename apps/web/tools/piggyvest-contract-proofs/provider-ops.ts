@@ -64,7 +64,7 @@ export function classifyOutcome(call: CallResult): JournalOutcome {
 }
 
 export class ProviderApi extends ProviderReads {
-  private async mutate(
+  protected async mutate(
     intent: MutationIntent,
     send: (reference: string) => Promise<unknown>
   ): Promise<MutationOutcome> {
@@ -153,17 +153,26 @@ export class ProviderApi extends ProviderReads {
     );
   }
 
-  createGoalWallet(
+  /**
+   * `subaccountName` is the full name to send (default: this QA key's goal
+   * name); accrual defaults to on. Both are pinned in the journaled intent.
+   * A name over the provider limit rejects before anything is journaled.
+   */
+  async createGoalWallet(
     qa: QaIdentity,
     customerId: string,
     slot: string,
-    options: { nameSuffix?: string; payoutWalletId?: string } = {}
+    options: {
+      subaccountName?: string;
+      payoutWalletId?: string;
+      enableInterestAccrual?: boolean;
+    } = {}
   ) {
     const subaccountName = goalWalletName(
-      qa.goalWalletName,
-      options.nameSuffix
+      options.subaccountName ?? qa.goalWalletName
     );
-    return this.mutate(
+    const enableInterestAccrual = options.enableInterestAccrual ?? true;
+    return await this.mutate(
       {
         slot,
         op: 'create_wallet',
@@ -172,6 +181,7 @@ export class ProviderApi extends ProviderReads {
         bodyMatch: {
           subaccount_name: subaccountName,
           customer_id: customerId,
+          enable_interest_accrual: enableInterestAccrual,
           ...(options.payoutWalletId
             ? { interest_payout_wallet: options.payoutWalletId }
             : {}),
@@ -184,7 +194,7 @@ export class ProviderApi extends ProviderReads {
           subaccountName,
           customerId,
           reserveVirtualAccount: true,
-          enableInterestAccrual: true,
+          enableInterestAccrual,
           interestPayoutWallet: options.payoutWalletId,
         })
     );

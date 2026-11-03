@@ -108,13 +108,13 @@ No existing row is changed.
     merchant + Baci + Paystack = `amount` exactly. That identity held for all
     62 production splits (card, bank transfer and DVA).
   - `integration` (Baci-held): `subaccount` is null, `{}` or has a blank or
-    null code, **and** the payload carries a `fees_split` field that is null
-    or shows no positive merchant share. All 46 production Baci-collected
+    null code, **and** `fees_split` is exactly `null` or shows a merchant
+    share of exactly 0. All 46 production Baci-collected
     payments have exactly `subaccount: {}` with `fees_split: null`.
   - `unknown` (fail closed): anything else. That covers no `subaccount` key,
     a non-string code, a split that doesn't add up, an empty subaccount with
-    no `fees_split` field, or an empty subaccount alongside a positive
-    merchant share.
+    a missing or malformed `fees_split`, or an empty subaccount alongside a
+    positive merchant share.
 - The weekly payout cron (`api/cron/wallet-payouts`) pays
   `get_merchant_wallet_spendable_balance`, not `available_balance`, for the
   minimum check, the debit and the transfer. If that read fails, the wallet

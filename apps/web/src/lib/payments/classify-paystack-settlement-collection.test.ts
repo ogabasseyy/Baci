@@ -146,6 +146,22 @@ describe('classifyPaystackSettlementCollection', () => {
     }
   });
 
+  it('fails closed to unknown when an empty subaccount comes with a malformed fees_split', () => {
+    // Only fees_split: null (the production shape) or a split showing a zero
+    // merchant share proves Baci collected the money.
+    for (const fees_split of [
+      {},
+      'x',
+      [],
+      { subaccount: 'abc' },
+      { subaccount: -1 },
+    ]) {
+      expect(
+        classifyPaystackSettlementCollection({ fees_split, subaccount: {} })
+      ).toEqual({ mode: 'unknown' });
+    }
+  });
+
   it('fails closed to unknown when an empty subaccount comes without any fees_split', () => {
     // No split data at all proves nothing, so it must not credit the wallet.
     for (const subaccount of [{}, null, { subaccount_code: '' }]) {

@@ -6,6 +6,7 @@ VALUES
  ('efb10000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence-other@example.test','test',now(),now(),now(),'{}','{}'),
  ('efb10000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence-staff@example.test','test',now(),now(),now(),'{}','{}'),
  ('efb10000-0000-4000-8000-000000000004','00000000-0000-0000-0000-000000000000','authenticated','authenticated','fence-worker@example.test','test',now(),now(),now(),'{}','{}');
+SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000001','fence-owner@example.test','Fence merchant','oxygen-financial-fence-test');
 INSERT INTO public.staff_members(merchant_id,user_id,email,name,role,permissions,status)

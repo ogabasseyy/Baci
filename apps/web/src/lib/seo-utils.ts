@@ -1640,11 +1640,15 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
 }
 
 export function stripRedundantPlatformParentheticals(title: string): string {
+  if (!title.includes('(')) {
+    return title;
+  }
+
   let stripped = false;
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:(?:\s*[-–—,:;|/&]+\s*)+)?\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*)?\s*\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^)]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
     (
       match,
       innerBeforePunctOrEnd?: string,
@@ -1686,11 +1690,14 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   }
 
   if (strippedAtStart) {
-    compacted = compacted.replace(/^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+)+/u, '');
+    compacted = compacted.replace(
+      /^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+|\band\s+)+/u,
+      ''
+    );
   }
 
   if (strippedAtEnd) {
-    compacted = compacted.replace(/\s*[-–—,:;|/&]+\s*$/u, '');
+    compacted = compacted.replace(/(?:\s*[-–—,:;|/&]+|\s+\band\b)\s*$/u, '');
   }
 
   return compacted.trim();

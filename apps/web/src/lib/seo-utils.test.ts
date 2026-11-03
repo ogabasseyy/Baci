@@ -2136,6 +2136,30 @@ describe('generateMetaTitle', () => {
         )
       ).toBe('Buy Game - Bonus: ...And Justice for All');
     });
+
+    it('handles adjoining word conjunctions when platform list is stripped', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) and Best Game')
+      ).toBe('Best Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4).')
+      ).toBe('Buy Game.');
+    });
+
+    it('processes long separator runs without catastrophic backtracking', () => {
+      const longSeparatorsNoParen = `Buy Game ${'-'.repeat(50)} Edition Today`;
+      expect(stripRedundantPlatformParentheticals(longSeparatorsNoParen)).toBe(
+        longSeparatorsNoParen
+      );
+
+      const longSeparatorsWithParen = `Buy Game ${'-'.repeat(50)} (PS5, PS4) Edition Today`;
+      expect(
+        stripRedundantPlatformParentheticals(longSeparatorsWithParen)
+      ).toBe(`Buy Game ${'-'.repeat(50)} Edition Today`);
+    });
   });
 });
 

@@ -48,6 +48,15 @@ export function classifyPaystackSettlementCollection(
     return { mode: 'unknown' };
   }
   const rawCode = subaccount.subaccount_code;
+  // Only an absent, null or blank code means "no split". Any other
+  // non-string could still name a real subaccount, so fail closed.
+  if (
+    rawCode !== undefined &&
+    rawCode !== null &&
+    typeof rawCode !== 'string'
+  ) {
+    return { mode: 'unknown' };
+  }
   const subaccountCode = typeof rawCode === 'string' ? rawCode.trim() : '';
   if (!subaccountCode) {
     return { mode: 'integration' };

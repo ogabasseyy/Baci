@@ -72,9 +72,22 @@ describe('classifyPaystackSettlementCollection', () => {
     ).toEqual({ mode: 'integration' });
     expect(
       classifyPaystackSettlementCollection({
-        subaccount: { subaccount_code: 42 },
+        subaccount: { subaccount_code: null },
       })
     ).toEqual({ mode: 'integration' });
+  });
+
+  it('fails closed to unknown when subaccount_code is present but not a string', () => {
+    // A non-string code could still be a real split; crediting the Baci
+    // wallet on that guess would fail open.
+    for (const code of [42, true, { id: 'ACCT_x' }, ['ACCT_x']]) {
+      expect(
+        classifyPaystackSettlementCollection({
+          fees_split: { subaccount: 990_000 },
+          subaccount: { subaccount_code: code },
+        })
+      ).toEqual({ mode: 'unknown' });
+    }
   });
 
   it('classifies anything without a subaccount key as unknown', () => {

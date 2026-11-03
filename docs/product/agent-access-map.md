@@ -1,8 +1,9 @@
 # Baci capabilities and agent access
 
-Reviewed 2 November 2026 against source revision
-`0f0c1f82ca8aea4d9bace613faa70cddf32c05ed`. Oxygen remains local-staging QA only. GIGL webhook hints and mobile shipment
-confirmation and error presentation were re-reviewed. This is a navigation map,
+Reviewed 3 November 2026 against source revision
+`a4c6d461f159f31f9f8277c54ca660f6a27c3be6`. Oxygen remains local-staging QA only.
+The Paystack DVA helper now avoids a second-bank retry after an uncertain result;
+the merchant protocol claims remain accurate. This is a navigation map,
 not authorization or proof of current deployment. Check the current implementation,
 live tool discovery and merchant entitlement before calling or claiming a tool.
 

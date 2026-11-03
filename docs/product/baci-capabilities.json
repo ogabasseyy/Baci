@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T21:44:46+00:00",
-  "source_revision": "0f0c1f82ca8aea4d9bace613faa70cddf32c05ed",
-  "evidence_digest": "c91d8b45ed9edabdcb71be44a123547a7cad83d43c6cc22377d65ec55f75d386",
-  "claims_digest": "cca437241128bcb31304a68fb011cf9532b09c98dd9479ee5f50262566ae0dc4",
-  "review_scope": "Source review: GIGL webhook deliveries remain account-matched tracking hints for the existing authoritative poller. Cited capability and access-map sources were checked and remain unchanged across the current main integration. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-03T06:24:00+00:00",
+  "source_revision": "a4c6d461f159f31f9f8277c54ca660f6a27c3be6",
+  "evidence_digest": "10cff5e4e0634eb51504e6387bfe7d4e4a45f5ea14a1ab4955a37bdf46a4c093",
+  "claims_digest": "defe8866c8829eec02fa327f2ccec60c58c85c8136d8350bcde551ef236ab4a6",
+  "review_scope": "Source review: the Paystack DVA helper no longer retries account creation at a second bank after an uncertain result; the merchant protocol claims remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

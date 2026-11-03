@@ -59,9 +59,24 @@ test('finds a deployed descendant on a later runs page', async () => {
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
 });
 
-test('fails closed when the expected SHA run is not found in the runs listing', async () => {
+test('bugfix: checks runs older than the expected SHA run (main reset then restored)', async () => {
+  const fetchImpl = farAheadFetch({
+    runs: [expectedRun, { conclusion: 'success', head_branch: 'main', head_sha: intermediateSha, id: 3, status: 'completed' }],
+    compares: { [intermediateSha]: ahead },
+    jobs: { 3: deployedJob },
+  });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
+});
+
+test('accepts when the runs history has no deployed descendant, even without the expected run listed', async () => {
   const fetchImpl = farAheadFetch({ runs: [{ conclusion: null, head_branch: 'main', head_sha: currentSha, id: 2, status: 'queued' }] });
-  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /could not locate deployment run/);
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), { currentSha, expectedSha });
+});
+
+test('fails closed when the runs history is longer than the page cap', async () => {
+  const full = Array.from({ length: 100 }, (_, i) => ({ conclusion: 'cancelled', head_branch: 'main', head_sha: 'e'.repeat(40), id: 2000 + i, status: 'completed' }));
+  const fetchImpl = farAheadFetch({ pages: Array.from({ length: 12 }, () => full) });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /could not exhaust deployment run history/);
 });
 
 test('fails closed when a far-behind SHA is not an ancestor of main', async () => {

@@ -25,6 +25,7 @@ BEGIN
   ) AS enrichment;
 
   IF v_enrichment.resolution_status IS DISTINCT FROM 'found'
+    OR v_enrichment.inventory_data IS NULL
     OR NOT v_enrichment.inventory_data @> '[{"slug":"serialized-snapshot-phone","manage_stock":true}]'::jsonb
     OR NOT v_enrichment.inventory_data @> '[{"slug":"child-category-snapshot-phone","manage_stock":false,"categories":{"slug":"snapshot-android-phones"}}]'::jsonb
     OR NOT v_enrichment.inventory_data @> '[{"slug":"null-manage-stock-snapshot-phone","manage_stock":null}]'::jsonb
@@ -53,6 +54,7 @@ BEGIN
   ) AS enrichment;
 
   IF v_unmanaged_enrichment.resolution_status IS DISTINCT FROM 'found'
+    OR v_unmanaged_enrichment.inventory_data IS NULL
     OR NOT v_unmanaged_enrichment.inventory_data @> '[{"slug":"child-category-snapshot-phone","manage_stock":false}]'::jsonb
   THEN
     RAISE EXCEPTION 'unmanaged current product did not preserve manage_stock false';
@@ -75,6 +77,7 @@ BEGIN
   ) AS enrichment;
 
   IF v_null_enrichment.resolution_status IS DISTINCT FROM 'found'
+    OR v_null_enrichment.inventory_data IS NULL
     OR NOT v_null_enrichment.inventory_data @> '[{"slug":"null-manage-stock-snapshot-phone","manage_stock":null}]'::jsonb
   THEN
     RAISE EXCEPTION 'null manage_stock current product did not preserve manage_stock null';

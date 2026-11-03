@@ -891,6 +891,7 @@ async function initializePaystack(
   const { transactionChargeKobo, retainedShippingKobo } =
     await resolvePaystackSplitTransactionCharge({
       client: splitClient,
+      customerEmail: data.customer_email,
       orderId: data.order_id,
       merchantId,
       amountKobo: amountInKobo,
@@ -1700,7 +1701,8 @@ export async function POST(request: NextRequest) {
             try {
               ({ retainedShippingKobo: dvaRetainedShippingKobo } =
                 await resolvePaystackSplitTransactionCharge({
-                  client: paymentDataClient,
+                  client: await createServerSupabaseClient(),
+                  customerEmail: paymentData.customer_email,
                   orderId: paymentData.order_id,
                   merchantId,
                   amountKobo: dvaAmountKobo,
@@ -1792,7 +1794,7 @@ export async function POST(request: NextRequest) {
               redirectUrl,
               reference,
               merchantId,
-              paymentDataClient
+              await createServerSupabaseClient()
             );
           }
           break;

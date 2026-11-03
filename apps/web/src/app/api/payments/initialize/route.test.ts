@@ -260,11 +260,21 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
+// RPC names issued through the request-scoped (non-admin) client.
+const serverClientRpcNames: string[] = [];
+
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({
-    ...createMockSupabase(),
-    ...createMockAdminClient(),
-  }),
+  createClient: () => {
+    const client = { ...createMockSupabase(), ...createMockAdminClient() };
+    const rpc = client.rpc;
+    return {
+      ...client,
+      rpc: (name: string, args?: unknown) => {
+        serverClientRpcNames.push(name);
+        return rpc(name, args);
+      },
+    };
+  },
 }));
 
 // ---- Import handler AFTER mocks ----
@@ -342,6 +352,7 @@ function setupDefaults() {
     reason: 'provider_evidence_unavailable',
   });
   rpcCalls.length = 0;
+  serverClientRpcNames.length = 0;
 }
 
 function enableKorapayForTest() {
@@ -990,8 +1001,16 @@ describe('POST /api/payments/initialize', () => {
         expect(res.status).toBe(200);
         expect(rpcCalls).toContainEqual({
           name: 'get_order_paystack_split_retained_shipping_kobo',
-          args: { p_order_id: ORDER_ID, p_merchant_id: MERCHANT_ID },
+          args: {
+            p_email: validBody.customer_email,
+            p_merchant_id: MERCHANT_ID,
+            p_order_id: ORDER_ID,
+          },
         });
+        // Proof-bound read on the request-scoped client, never the admin one.
+        expect(serverClientRpcNames).toContain(
+          'get_order_paystack_split_retained_shipping_kobo'
+        );
         expect(mockInitializePaystack).toHaveBeenCalledWith(
           expect.objectContaining({
             subaccount: 'ACCT_TESTMOCK1234567',

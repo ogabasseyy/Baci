@@ -1,4 +1,4 @@
--- Paystack direct-split settlement history, part 2 of 3: spend guards.
+-- Paystack direct-split settlement history, part 4 of 5: spend guards.
 -- See 20261103084500_paystack_direct_split_settlement_history.sql.
 --
 -- The wallet's two spend primitives may only spend available_balance minus

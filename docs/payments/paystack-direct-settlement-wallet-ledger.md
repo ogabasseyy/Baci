@@ -56,30 +56,36 @@ gateway-origin guard (`20260724140000`).
 
 ### Database (append-only)
 
-- `20261103084500_paystack_direct_split_settlement_history.sql`
-  - `record_paystack_direct_split_settlement(_gigl_v1)`: settled history rows
-    (`status 'settled'`, `settlement_notified`, description "Settled to your
-    bank by Paystack", `paystack_direct_split: true`) with **no wallet
-    movement**, mirroring the REDVAULT recorders. They fail closed for any other
-    gateway, a missing/malformed subaccount code, a REDVAULT order, an unknown
-    order, or a cancelled/refunded order. The GIGL variant records the
-    retained delivery fee and `retained_shipping_collected_by_split` (whether
-    Paystack's verified `transaction_charge` actually covered it).
-  - `get_order_paystack_split_retained_shipping_kobo`: service-role read of
-    the customer-paid GIGL delivery fee still to retain, for checkout.
-  - `private.merchant_wallet_direct_settled_exposure` and
-    `get_merchant_wallet_spendable_balance`: settled Paystack order credits
-    that lack proof Baci's own Paystack balance received them
-    (`paystack_collection = 'integration'`) and that the owner has not
-    reconciled (`legacy_wallet_credit_reconciled = true`). Spendable =
-    `available_balance − exposure`, floored at 0.
-- `20261103084501_paystack_direct_split_spend_guards.sql`: `debit_merchant_wallet`
+- `20261103084500_paystack_direct_split_settlement_history.sql`: the
+  direct-split marker, the remaining customer-paid GIGL retention rule, and
+  `get_order_paystack_split_retained_shipping_kobo`, the checkout read of the
+  delivery fee Baci must keep. It is proof-bound (order id, merchant and the
+  order's customer email, like checkout itself) and called with the
+  request-scoped client, not the admin client.
+- `20261103084501_paystack_direct_split_recorders.sql`:
+  `record_paystack_direct_split_settlement(_gigl_v1)`, settled history rows
+  (`status 'settled'`, `settlement_notified`, description "Settled to your
+  bank by Paystack", `paystack_direct_split: true`) with **no wallet
+  movement**, mirroring the REDVAULT recorders. They fail closed for any other
+  gateway, a missing/malformed subaccount code, a code that is not the
+  merchant's registered subaccount, a REDVAULT order, an unknown order, or a
+  cancelled/refunded order. The GIGL variant records the retained delivery
+  fee and `retained_shipping_collected_by_split` (whether Paystack's verified
+  `transaction_charge` actually covered it).
+- `20261103084502_paystack_direct_split_exposure.sql`:
+  `private.merchant_wallet_direct_settled_exposure` and
+  `get_merchant_wallet_spendable_balance`: settled Paystack order credits
+  that lack proof Baci's own Paystack balance received them
+  (`paystack_collection = 'integration'`) and that the owner has not
+  reconciled (`legacy_wallet_credit_reconciled = true`). Spendable =
+  `available_balance − exposure`, floored at 0.
+- `20261103084503_paystack_direct_split_spend_guards.sql`: `debit_merchant_wallet`
   (payouts) and `reserve_merchant_shipping_charge` (GIG bookings) only spend
   the spendable part. Payouts fail with "Paystack-settled sales are not
   withdrawable"; GIG bookings fail with the existing
   `MERCHANT_WALLET_INSUFFICIENT`. `debit_merchant_wallet` also rejects
   non-positive amounts.
-- `20261103084502_paystack_direct_split_refund_finalizer.sql`: the cancellation
+- `20261103084504_paystack_direct_split_refund_finalizer.sql`: the cancellation
   refund finalizer treats the new marker like REDVAULT's, so it never debits a
   wallet the sale never credited.
 
@@ -88,20 +94,31 @@ No existing row is changed.
 ### Application
 
 - `classify-paystack-settlement-collection.ts`: reads Paystack's verified
-  payload. `subaccount.subaccount_code` present → `direct_split`; `subaccount`
-  present but empty/null → `integration` (Baci-held); no `subaccount` key →
-  `unknown`.
+  payload. `subaccount.subaccount_code` present **and** a positive
+  `fees_split.subaccount` (the merchant's share) → `direct_split`;
+  `subaccount` present but empty/null → `integration` (Baci-held); anything
+  else (no `subaccount` key, or a named subaccount without a provable share)
+  → `unknown`.
 - `paid-order-settlement-executor.ts` (+ `resolve-settlement-rpc-routing.ts`):
   for Paystack, `direct_split` → the new history recorders; `integration` →
   the existing wallet-crediting RPCs with `paystack_collection: 'integration'`;
   `unknown` → throws `paystack_settlement_collection_unknown` before any RPC
-  (never credit the wallet without proof). REDVAULT, Korapay and Juicyway are
-  unchanged.
+  (never credit the wallet without proof; a permanent side-effect error, so
+  the row waits for manual review). REDVAULT, Korapay and Juicyway are
+  unchanged. A split to a subaccount that is not the merchant's registered
+  one fails with the permanent `paystack_direct_settlement_subaccount_mismatch`.
+- The chat-order webhook path (`resolve-chat-order-settlement-routing.ts`) and
+  the manual DVA reconcile script use the same classification, so Baci-owned
+  chat DVAs stay spendable (`paystack_collection: 'integration'`). A chat
+  payload that proves nothing keeps the old unmarked credit, which the guard
+  treats as not spendable; the reconcile script refuses it instead.
 - Standard Paystack card init (`api/payments/initialize`, via
   `resolve-paystack-split-transaction-charge.ts`): `transaction_charge =
   platform fee + remaining customer-paid GIGL delivery fee`, mirroring
   REDVAULT, with validation (safe integers, non-negative, clamped to the
   payable amount, `fee + retained ≤ amount`, fail closed on an RPC error).
+  The fee is read on the request-scoped client with the order's customer
+  email as proof, not with the admin client.
 - Storefront bank transfer (DVA) is refused for orders that still owe Baci a
   GIG delivery fee: a subaccount DVA gives Baci ₦0 (production `fees_split`
   shows `integration: 0`), so the fee could not be collected.
@@ -189,8 +206,10 @@ savings goals), and there is no cash-out to bank. The merchant wallet stays a
 narrow internal ledger for GIG booking funds and genuinely Baci-held merchant
 earnings (VTU commission, wallet top-ups, Korapay). Direct-settled sales are
 history only. Nothing here touches PiggyVest tables, and no service-role
-exception is added (all new RPCs are service-role SQL functions called from
-existing service-role call graphs; see `docs/agent-guidance/service-role-exceptions.md`).
+exception is added: the checkout read is proof-bound and called with the
+request-scoped client, and the settlement recorders are service-role SQL
+functions called from the existing paid-order side-effect graph (see
+`docs/agent-guidance/service-role-exceptions.md`).
 
 ## Not in this PR (follow-ups)
 
@@ -200,10 +219,11 @@ existing service-role call graphs; see `docs/agent-guidance/service-role-excepti
   book wallet-funded GIG shipments (spendable ₦0) until that mechanism or the
   reconciliation lands.
 - The reconciliation data migration above.
-- Chat-order settlements (webhook path) and the manual DVA reconcile script
-  still call `record_merchant_settlement` without the `paystack_collection`
-  marker, so their credits count as exposure (safe, conservative). Route them
-  through the classifier when next touched.
+- An operator repair path for side effects that failed with
+  `paystack_settlement_collection_unknown` or
+  `paystack_direct_settlement_subaccount_mismatch` (both permanent, so they
+  are not retried automatically): re-verify the transaction with Paystack and
+  re-run the settlement step.
 - Storefront/agentic DVA payments give Baci ₦0 platform fee (subaccount DVA
   split). Card is unaffected. Decide whether DVA should use a split code.
 - The payout cron still asks for the whole `available_balance` and is now

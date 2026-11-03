@@ -113,8 +113,17 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => createAdminClientMock(),
 }));
 
+// The proof-bound GIG fee read runs on the request-scoped client.
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn().mockResolvedValue({}),
+  createClient: vi.fn().mockResolvedValue({
+    rpc: vi.fn((name: string) =>
+      Promise.resolve(
+        name === 'get_order_paystack_split_retained_shipping_kobo'
+          ? { data: 0, error: null }
+          : { data: null, error: null }
+      )
+    ),
+  }),
 }));
 
 import { POST } from './route';

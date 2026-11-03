@@ -104,7 +104,10 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
     const { rpc, supabase } = setup();
 
     await buildSettlementExecutor({ ...baseArgs, supabase })(
-      contextWith({ subaccount: { subaccount_code: 'ACCT_x' } })
+      contextWith({
+        fees_split: { subaccount: 1_900_000 },
+        subaccount: { subaccount_code: 'ACCT_x' },
+      })
     );
 
     expect(rpc).toHaveBeenCalledWith(
@@ -114,10 +117,22 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
           paystack_collection: 'direct_split',
           paystack_reference: 'PSK_REF',
           paystack_subaccount_code: 'ACCT_x',
+          paystack_subaccount_share_kobo: 1_900_000,
           verified_gateway_fee: 250,
         },
       })
     );
+  });
+
+  it('does not record direct-settled history when Paystack names a subaccount but proves no merchant share', async () => {
+    const { rpc, supabase } = setup();
+
+    await expect(
+      buildSettlementExecutor({ ...baseArgs, supabase })(
+        contextWith({ subaccount: { subaccount_code: 'ACCT_x' } })
+      )
+    ).rejects.toThrow('paystack_settlement_collection_unknown');
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('routes a split GIGL customer-checkout order to the direct GIGL variant with the base platform fee', async () => {

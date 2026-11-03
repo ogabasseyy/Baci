@@ -58,6 +58,8 @@ SELECT * FROM (VALUES
    'public storefront/feed read; anon-safe projection'),
   ('public.get_order_inventory_proof(uuid,text,text)',
    'guest or bearer flow; token/secret verified in the body'),
+  ('public.get_order_paystack_split_retained_shipping_kobo(uuid,uuid,text)',
+   'guest checkout; order id + merchant + customer email verified in the body, returns only the customer-facing delivery fee'),
   ('public.get_order_receipt_bank_details(uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.get_order_tracking(text,uuid,text,text,text)',

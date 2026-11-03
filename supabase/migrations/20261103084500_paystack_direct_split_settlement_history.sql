@@ -8,26 +8,27 @@
 -- out a second time by the weekly auto-payout. Baci has no licence to hold
 -- merchant money, so direct-split sales must never look like Baci balance.
 --
--- This change ships as three migrations (this file and 20261103084501 /
--- 20261103084502). This one:
+-- This change ships as five migrations, 20261103084500 to 20261103084504:
 --   1. adds private.is_direct_split_settlement, recognising both the REDVAULT
 --      marker and the new paystack_direct_split marker;
 --   2. adds private.gigl_order_remaining_retained_shipping (the customer-paid
 --      GIGL delivery fee still to be retained for an order, the same rule the
---      settlement wrappers use) and the service-role read
---      get_order_paystack_split_retained_shipping_kobo that the checkout uses
---      to put that fee in Baci's Paystack split;
---   3. adds record_paystack_direct_split_settlement(_gigl_v1): settled history
---      rows with no wallet movement, mirroring the REDVAULT direct recorders;
---   4. adds private.merchant_wallet_direct_settled_exposure: wallet credits
---      that came from Paystack order settlements recorded before this change
---      (or without proof that Baci's own Paystack balance received them).
---      Until the owner reconciles them, they are not spendable;
---   5. (20261103084501) guards the two wallet spend primitives
+--      settlement wrappers use) and the proof-bound checkout read
+--      get_order_paystack_split_retained_shipping_kobo that puts that fee in
+--      Baci's Paystack split (this file);
+--   3. (20261103084501) adds record_paystack_direct_split_settlement(_gigl_v1):
+--      settled history rows with no wallet movement, mirroring the REDVAULT
+--      direct recorders;
+--   4. (20261103084502) adds private.merchant_wallet_direct_settled_exposure:
+--      wallet credits that came from Paystack order settlements recorded
+--      before this change (or without proof that Baci's own Paystack balance
+--      received them). Until the owner reconciles them, they are not
+--      spendable;
+--   5. (20261103084503) guards the two wallet spend primitives
 --      (debit_merchant_wallet for payouts, reserve_merchant_shipping_charge
 --      for GIG bookings) so they can only spend available_balance minus that
 --      exposure;
---   6. (20261103084502) teaches finalize_refunded_cancellation_order_v1 the
+--   6. (20261103084504) teaches finalize_refunded_cancellation_order_v1 the
 --      new marker, so a refund never debits a wallet that a direct-split sale
 --      never credited.
 --
@@ -139,11 +140,15 @@ REVOKE ALL ON FUNCTION private.gigl_order_remaining_retained_shipping(uuid, uuid
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- Checkout read: the delivery fee Baci must keep in the Paystack split, in
--- kobo. The value is the customer-facing delivery price (not tariff or
--- margin), and only service_role may read it. Unknown orders fail closed.
+-- kobo. The storefront calls it with the request-scoped client, so the
+-- caller proves the order the same way checkout does: order id, merchant and
+-- the order's customer email. The value is the customer-facing delivery
+-- price the shopper already sees (never tariff or margin). A failed proof
+-- and an unknown order raise the same error, so it is not an oracle.
 CREATE OR REPLACE FUNCTION public.get_order_paystack_split_retained_shipping_kobo(
   p_order_id uuid,
-  p_merchant_id uuid
+  p_merchant_id uuid,
+  p_email text
 ) RETURNS bigint
 LANGUAGE plpgsql
 STABLE
@@ -151,14 +156,14 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
-    RAISE EXCEPTION 'forbidden: get_order_paystack_split_retained_shipping_kobo requires service_role'
-      USING ERRCODE = '42501';
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM public.orders AS o
-     WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
-  ) THEN
+  IF NULLIF(pg_catalog.btrim(COALESCE(p_email, '')), '') IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM public.orders AS o
+        WHERE o.id = p_order_id
+          AND o.merchant_id = p_merchant_id
+          AND pg_catalog.lower(pg_catalog.btrim(COALESCE(o.customer_email, '')))
+            = pg_catalog.lower(pg_catalog.btrim(p_email))
+     ) THEN
     RAISE EXCEPTION 'paystack_split_order_not_found' USING ERRCODE = 'P0002';
   END IF;
   RETURN pg_catalog.round(
@@ -166,247 +171,8 @@ BEGIN
   )::bigint;
 END;
 $$;
-ALTER FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid)
-  FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid)
-  TO service_role;
-
--- 3. Direct-split settlement recorders --------------------------------------
--- The executor calls these only when Paystack's verified transaction names
--- the merchant subaccount that received the split. The row is settlement
--- history ('settled', settlement_notified) and moves no wallet balance.
-CREATE OR REPLACE FUNCTION public.record_paystack_direct_split_settlement(
-  p_merchant_id uuid,
-  p_source_type text,
-  p_source_id uuid,
-  p_gateway text,
-  p_gateway_reference text,
-  p_gross_amount numeric,
-  p_gateway_fee numeric,
-  p_platform_fee numeric,
-  p_description text,
-  p_metadata jsonb,
-  p_paystack_subaccount_code text
-) RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  v_wallet_id uuid;
-  v_settlement_id uuid;
-  v_method text;
-  v_shipping_status text;
-  v_payment_status text;
-  v_subaccount text := pg_catalog.btrim(COALESCE(p_paystack_subaccount_code, ''));
-BEGIN
-  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
-    RAISE EXCEPTION 'forbidden: record_paystack_direct_split_settlement requires service_role';
-  END IF;
-  IF p_gateway IS DISTINCT FROM 'paystack' THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_gateway_mismatch';
-  END IF;
-  IF v_subaccount !~ '^ACCT_[A-Za-z0-9]+$' THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_subaccount_missing';
-  END IF;
-  IF p_source_type IS DISTINCT FROM 'order' OR p_source_id IS NULL
-     OR NULLIF(pg_catalog.btrim(COALESCE(p_gateway_reference, '')), '') IS NULL THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_source_invalid';
-  END IF;
-  IF p_gross_amount IS NULL OR p_gross_amount <= 0
-     OR p_platform_fee IS NULL OR p_platform_fee < 0
-     OR p_gateway_fee IS NULL OR p_gateway_fee < 0
-     OR p_platform_fee > p_gross_amount THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
-  END IF;
-
-  SELECT o.payment_method, o.shipping_status, o.payment_status
-    INTO v_method, v_shipping_status, v_payment_status
-    FROM public.orders AS o
-   WHERE o.id = p_source_id AND o.merchant_id = p_merchant_id
-   FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_order_mismatch';
-  END IF;
-  -- REDVAULT sales have their own recorder and refund reversal.
-  IF v_method = 'uba_redvault' THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_order_mismatch';
-  END IF;
-  IF v_shipping_status IN ('cancelled', 'canceled')
-     OR v_payment_status = 'refunded' THEN
-    RAISE EXCEPTION 'settlement_order_cancelled';
-  END IF;
-
-  v_wallet_id := public.get_or_create_merchant_wallet(p_merchant_id);
-  INSERT INTO public.merchant_settlements (
-    merchant_id, wallet_id, source_type, source_id, gateway,
-    gateway_reference, gross_amount, gateway_fee, platform_fee, net_amount,
-    payment_date, expected_settlement_date, description, status, metadata,
-    settlement_notified
-  ) VALUES (
-    p_merchant_id, v_wallet_id, p_source_type, p_source_id, p_gateway,
-    p_gateway_reference, p_gross_amount, p_gateway_fee, p_platform_fee,
-    -- Account-borne gateway fee: Paystack takes it from Baci's share, so the
-    -- subaccount receives gross minus Baci's transaction_charge.
-    p_gross_amount - p_platform_fee,
-    pg_catalog.now(), pg_catalog.now()::date,
-    'Settled to your bank by Paystack',
-    'settled',
-    COALESCE(p_metadata, '{}'::jsonb) || jsonb_build_object(
-      'paystack_direct_split', true,
-      'paystack_collection', 'direct_split',
-      'paystack_subaccount_code', v_subaccount,
-      'source_description', p_description
-    ),
-    true
-  )
-  ON CONFLICT (source_type, source_id, gateway_reference)
-    WHERE gateway_reference IS NOT NULL AND status != 'cancelled'
-    DO NOTHING
-  RETURNING id INTO v_settlement_id;
-
-  RETURN v_settlement_id;
-END;
-$$;
-ALTER FUNCTION public.record_paystack_direct_split_settlement(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.record_paystack_direct_split_settlement(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.record_paystack_direct_split_settlement(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) TO service_role;
-
--- GIGL variant: records the customer-paid delivery fee Baci retained, capped
--- like the REDVAULT direct wrapper (gross minus platform fee; the gateway fee
--- is account-borne). retained_shipping_collected_by_split says whether the
--- verified Paystack transaction_charge actually covered fee plus retention:
--- checkouts started before the split fix (and bank-transfer payments) never
--- sent the delivery fee to Baci.
-CREATE OR REPLACE FUNCTION public.record_paystack_direct_split_settlement_gigl_v1(
-  p_merchant_id uuid,
-  p_source_type text,
-  p_source_id uuid,
-  p_gateway text,
-  p_gateway_reference text,
-  p_gross_amount numeric,
-  p_gateway_fee numeric,
-  p_platform_fee numeric,
-  p_description text,
-  p_metadata jsonb,
-  p_paystack_subaccount_code text
-) RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  v_retained numeric(12,2) := 0;
-  v_charge_text text := p_metadata ->> 'paystack_transaction_charge_kobo';
-  v_collected boolean := false;
-BEGIN
-  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
-    RAISE EXCEPTION 'forbidden: record_paystack_direct_split_settlement_gigl_v1 requires service_role';
-  END IF;
-  IF p_source_type IS DISTINCT FROM 'order' OR p_source_id IS NULL THEN
-    RAISE EXCEPTION 'paystack_direct_settlement_source_invalid';
-  END IF;
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('merchant-shipping-order:' || p_source_id::text, 0)
-  );
-  v_retained := LEAST(
-    private.gigl_order_remaining_retained_shipping(p_source_id, p_merchant_id),
-    GREATEST(COALESCE(p_gross_amount, 0) - COALESCE(p_platform_fee, 0), 0)
-  );
-  IF v_charge_text ~ '^[0-9]{1,15}$' THEN
-    v_collected := v_charge_text::bigint
-      >= pg_catalog.round((COALESCE(p_platform_fee, 0) + v_retained) * 100);
-  END IF;
-  RETURN public.record_paystack_direct_split_settlement(
-    p_merchant_id, p_source_type, p_source_id, p_gateway,
-    p_gateway_reference, p_gross_amount, p_gateway_fee,
-    COALESCE(p_platform_fee, 0) + v_retained, p_description,
-    COALESCE(p_metadata, '{}'::jsonb) || jsonb_build_object(
-      'retained_shipping_amount', v_retained,
-      'retained_shipping_collected_by_split', v_retained = 0 OR v_collected
-    ),
-    p_paystack_subaccount_code
-  );
-END;
-$$;
-ALTER FUNCTION public.record_paystack_direct_split_settlement_gigl_v1(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.record_paystack_direct_split_settlement_gigl_v1(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.record_paystack_direct_split_settlement_gigl_v1(
-  uuid, text, uuid, text, text, numeric, numeric, numeric, text, jsonb, text
-) TO service_role;
-
--- 4. Direct-settled exposure ------------------------------------------------
--- Settled Paystack order settlements that credited the wallet without proof
--- that Baci's own Paystack balance received the money. New Baci-collected
--- Paystack credits carry paystack_collection = 'integration' (set by the
--- executor from the verified payload); the owner's reconciliation marks
--- reviewed legacy rows legacy_wallet_credit_reconciled = true.
-CREATE OR REPLACE FUNCTION private.merchant_wallet_direct_settled_exposure(
-  p_wallet_id uuid
-) RETURNS numeric
-LANGUAGE sql
-STABLE
-SET search_path = ''
-AS $$
-  SELECT COALESCE(SUM(GREATEST(COALESCE(settlement.net_amount, 0), 0)), 0)
-    FROM public.merchant_settlements AS settlement
-   WHERE settlement.wallet_id = p_wallet_id
-     AND settlement.status = 'settled'
-     AND settlement.source_type = 'order'
-     AND pg_catalog.lower(pg_catalog.btrim(COALESCE(settlement.gateway, ''))) = 'paystack'
-     AND NOT private.is_direct_split_settlement(settlement.metadata)
-     AND COALESCE(settlement.metadata ->> 'paystack_collection', '') <> 'integration'
-     AND COALESCE(settlement.metadata ->> 'legacy_wallet_credit_reconciled', 'false') <> 'true'
-$$;
-ALTER FUNCTION private.merchant_wallet_direct_settled_exposure(uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION private.merchant_wallet_direct_settled_exposure(uuid)
-  FROM PUBLIC, anon, authenticated, service_role;
-
-CREATE INDEX IF NOT EXISTS merchant_settlements_wallet_settled_paystack_idx
-  ON public.merchant_settlements (wallet_id)
-  WHERE status = 'settled' AND source_type = 'order';
-
--- Spendable balance for payout callers and dashboards (service_role only).
-CREATE OR REPLACE FUNCTION public.get_merchant_wallet_spendable_balance(
-  p_merchant_id uuid
-) RETURNS numeric
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  v_wallet public.merchant_wallets%ROWTYPE;
-BEGIN
-  IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
-    RAISE EXCEPTION 'forbidden: get_merchant_wallet_spendable_balance requires service_role'
-      USING ERRCODE = '42501';
-  END IF;
-  SELECT * INTO v_wallet FROM public.merchant_wallets WHERE merchant_id = p_merchant_id;
-  IF NOT FOUND THEN
-    RETURN 0;
-  END IF;
-  RETURN GREATEST(
-    COALESCE(v_wallet.available_balance, 0)
-      - private.merchant_wallet_direct_settled_exposure(v_wallet.id),
-    0
-  );
-END;
-$$;
-ALTER FUNCTION public.get_merchant_wallet_spendable_balance(uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.get_merchant_wallet_spendable_balance(uuid)
-  FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_merchant_wallet_spendable_balance(uuid)
-  TO service_role;
-
+ALTER FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid, text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid, text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_order_paystack_split_retained_shipping_kobo(uuid, uuid, text)
+  TO anon, authenticated, service_role;

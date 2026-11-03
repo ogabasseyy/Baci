@@ -22,33 +22,40 @@ describe('classifyPaystackSettlementCollection', () => {
     });
   });
 
-  it('returns null shares when fees_split is absent or malformed', () => {
-    const base = { subaccount: { subaccount_code: 'ACCT_x' } };
-    const nulls = {
-      integrationShareKobo: null,
-      mode: 'direct_split',
-      subaccountCode: 'ACCT_x',
-      subaccountShareKobo: null,
-      transactionChargeKobo: null,
-    };
-
-    expect(classifyPaystackSettlementCollection(base)).toEqual(nulls);
+  it('returns null for the optional shares it cannot parse', () => {
     expect(
       classifyPaystackSettlementCollection({
-        ...base,
         fees_split: {
           integration: -1,
           params: { transaction_charge: '12.5' },
-          subaccount: 'abc',
+          subaccount: '250000',
         },
+        subaccount: { subaccount_code: 'ACCT_x' },
       })
-    ).toEqual(nulls);
-    expect(
-      classifyPaystackSettlementCollection({
-        ...base,
-        fees_split: { integration: Number.MAX_SAFE_INTEGER + 2 },
-      })
-    ).toEqual(nulls);
+    ).toEqual({
+      integrationShareKobo: null,
+      mode: 'direct_split',
+      subaccountCode: 'ACCT_x',
+      subaccountShareKobo: 250_000,
+      transactionChargeKobo: null,
+    });
+  });
+
+  it('fails closed to unknown when a named subaccount has no provable merchant share', () => {
+    const base = { subaccount: { subaccount_code: 'ACCT_x' } };
+
+    for (const payload of [
+      base,
+      { ...base, fees_split: null },
+      { ...base, fees_split: { integration: 5000 } },
+      { ...base, fees_split: { subaccount: 'abc' } },
+      { ...base, fees_split: { subaccount: 0 } },
+      { ...base, fees_split: { subaccount: Number.MAX_SAFE_INTEGER + 2 } },
+    ]) {
+      expect(classifyPaystackSettlementCollection(payload)).toEqual({
+        mode: 'unknown',
+      });
+    }
   });
 
   it('classifies an empty or null subaccount as integration', () => {

@@ -86,6 +86,14 @@ describe('resolveSettlementRpcRouting', () => {
     );
   });
 
+  it("treats a split to a subaccount that is not the merchant's as permanent", () => {
+    // The direct-split recorder raises this when the payload's subaccount is
+    // not the merchant's registered one; retries cannot change either side.
+    expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).toContain(
+      'paystack_direct_settlement_subaccount_mismatch'
+    );
+  });
+
   it('keeps REDVAULT on its own recorder even when a subaccount is present', () => {
     const routing = resolveSettlementRpcRouting({
       gatewayResponse: splitPayload,

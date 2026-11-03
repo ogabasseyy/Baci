@@ -2,7 +2,7 @@ export type PaystackSettlementCollection =
   | {
       mode: 'direct_split';
       subaccountCode: string;
-      subaccountShareKobo: number | null;
+      subaccountShareKobo: number;
       integrationShareKobo: number | null;
       transactionChargeKobo: number | null;
     }
@@ -52,13 +52,20 @@ export function classifyPaystackSettlementCollection(
   if (!subaccountCode) {
     return { mode: 'integration' };
   }
+  // A named subaccount is not enough: the history row claims the merchant's
+  // bank received money, so Paystack's split must show a positive merchant
+  // share. Without it the payload proves nothing either way.
   const feesSplit = asRecord(payload.fees_split);
+  const subaccountShareKobo = parseKobo(feesSplit?.subaccount);
+  if (subaccountShareKobo === null || subaccountShareKobo <= 0) {
+    return { mode: 'unknown' };
+  }
   const params = asRecord(feesSplit?.params);
   return {
     integrationShareKobo: parseKobo(feesSplit?.integration),
     mode: 'direct_split',
     subaccountCode,
-    subaccountShareKobo: parseKobo(feesSplit?.subaccount),
+    subaccountShareKobo,
     transactionChargeKobo: parseKobo(params?.transaction_charge),
   };
 }

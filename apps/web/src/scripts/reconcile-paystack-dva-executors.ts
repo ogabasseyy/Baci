@@ -23,6 +23,7 @@ import type {
   SideEffectStep,
   StepExecutor,
 } from '@/lib/payments/apply-paid-order-side-effects';
+import { resolveSettlementRpcRouting } from '@/lib/payments/resolve-settlement-rpc-routing';
 import { extractVerifiedGatewayFeeNgn } from '@/lib/payments/verified-gateway-fee';
 import type { createServiceClient } from '@/lib/supabase/service';
 import {
@@ -246,9 +247,19 @@ export function buildScriptExecutors(
       ? parsedPlatformFee
       : calculatePlatformFee(grossAmount * 100).platformFee / 100;
 
+    // Storefront DVAs usually split to the merchant subaccount: record those
+    // as history, keep Baci-collected money spendable, and refuse a payload
+    // that proves neither (throws paystack_settlement_collection_unknown).
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: ctx.gatewayResponse,
+      isRedvaultDirectSettlement: false,
+      settlementGateway: 'paystack',
+      useGiglSettlementRpc: false,
+    });
     const { error: settlementError } = await supabase.rpc(
-      'record_merchant_settlement',
+      routing.rpc,
       {
+        ...routing.extraParams,
         p_merchant_id: order.merchant_id,
         p_source_type: 'order',
         p_source_id: order.id,
@@ -264,6 +275,7 @@ export function buildScriptExecutors(
           paystack_reference: paystackReference,
           verified_gateway_fee: gatewayFee,
           reconciled_by: actor,
+          ...routing.extraMetadata,
         },
       }
     );

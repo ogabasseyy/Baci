@@ -5,8 +5,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const RETAINED_SHIPPING_RPC = 'get_order_paystack_split_retained_shipping_kobo';
 
 interface ResolvePaystackSplitTransactionChargeInput {
-  // Must be a service-role client: the RPC is not granted to anon/authenticated.
+  // The request-scoped client: the RPC is proof-bound (order, merchant and
+  // the order's customer email), so no service-role client is needed.
   client: Pick<SupabaseClient, 'rpc'>;
+  customerEmail: string;
   orderId: string;
   merchantId: string;
   amountKobo: number;
@@ -32,6 +34,7 @@ function assertKobo(value: number, label: string): void {
  */
 export async function resolvePaystackSplitTransactionCharge({
   client,
+  customerEmail,
   orderId,
   merchantId,
   amountKobo,
@@ -44,8 +47,9 @@ export async function resolvePaystackSplitTransactionCharge({
   }
 
   const { data, error } = await client.rpc(RETAINED_SHIPPING_RPC, {
-    p_order_id: orderId,
+    p_email: customerEmail,
     p_merchant_id: merchantId,
+    p_order_id: orderId,
   });
   if (error) {
     throw new Error('Paystack split retained shipping lookup failed');

@@ -47,10 +47,10 @@ LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO public.orders (
     id, merchant_id, order_number, total, amount_paid, payment_status,
-    shipping_status, payment_method
+    shipping_status, payment_method, customer_email
   ) VALUES (
     pg_temp.fid(2, p_n), pg_temp.merchant(), 'PDS-' || p_n, p_total, p_total,
-    'paid', 'processing', p_payment_method
+    'paid', 'processing', p_payment_method, 'pds-buyer@example.test'
   );
   RETURN pg_temp.fid(2, p_n);
 END $$;
@@ -125,11 +125,12 @@ INSERT INTO auth.users (
   '{}'::jsonb, '{}'::jsonb
 );
 
-INSERT INTO public.merchants (id, user_id, email, business_name, slug)
-VALUES (
+INSERT INTO public.merchants (
+  id, user_id, email, business_name, slug, paystack_subaccount_code
+) VALUES (
   pg_temp.merchant(), 'd5e70000-0000-4000-8000-000000000001',
   'paystack-direct-split-owner@example.test', 'Paystack Direct Split Fixture',
-  'paystack-direct-split-fixture'
+  'paystack-direct-split-fixture', 'ACCT_pdsfixture'
 );
 
 -- GIGL orders need the carrier enabled for the merchant

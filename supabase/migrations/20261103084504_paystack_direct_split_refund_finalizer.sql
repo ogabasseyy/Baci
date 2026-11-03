@@ -1,4 +1,4 @@
--- Paystack direct-split settlement history, part 3 of 3: refund finalizer.
+-- Paystack direct-split settlement history, part 5 of 5: refund finalizer.
 -- See 20261103084500_paystack_direct_split_settlement_history.sql.
 --
 -- record_paystack_direct_split_settlement rows never credit the wallet, so a

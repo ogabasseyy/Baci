@@ -187,10 +187,14 @@ describe('buildScriptExecutors', () => {
   });
 
   describe('merchant_settlement', () => {
+    // A Baci-owned DVA: Paystack shows no subaccount, so the credit stays a
+    // wallet credit marked as Baci-collected.
+    const baciCollectedCtx = { ...stepCtx, gatewayResponse: { subaccount: {} } };
+
     it('passes the gateway_reference as BAC-* (Δ-22 invariant) and metadata.paystack_reference', async () => {
       const args = defaultArgs();
       const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
+      await ex.merchant_settlement!(baciCollectedCtx);
       expect(args.supabase.rpc).toHaveBeenCalledWith(
         'record_merchant_settlement',
         expect.objectContaining({
@@ -212,7 +216,7 @@ describe('buildScriptExecutors', () => {
         },
       };
       const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
+      await ex.merchant_settlement!(baciCollectedCtx);
       expect(args.supabase.rpc).toHaveBeenCalledWith(
         'record_merchant_settlement',
         expect.objectContaining({ p_gateway_reference: '100000000' })
@@ -222,7 +226,7 @@ describe('buildScriptExecutors', () => {
     it('preserves legitimate zero rawPlatformFee instead of falling back (Δ-94 mirror)', async () => {
       const args = { ...defaultArgs(), rawPlatformFee: 0 };
       const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
+      await ex.merchant_settlement!(baciCollectedCtx);
       expect(args.supabase.rpc).toHaveBeenCalledWith(
         'record_merchant_settlement',
         expect.objectContaining({ p_platform_fee: 0 })
@@ -237,7 +241,7 @@ describe('buildScriptExecutors', () => {
       });
       const args = { ...defaultArgs(), rawPlatformFee: null };
       const ex = buildScriptExecutors(args);
-      await ex.merchant_settlement!(stepCtx);
+      await ex.merchant_settlement!(baciCollectedCtx);
       expect(calculatePlatformFeeMock).toHaveBeenCalled();
       expect(args.supabase.rpc).toHaveBeenCalledWith(
         'record_merchant_settlement',
@@ -251,7 +255,50 @@ describe('buildScriptExecutors', () => {
         error: { message: 'permission denied' },
       });
       const ex = buildScriptExecutors(args);
-      await expect(ex.merchant_settlement!(stepCtx)).rejects.toThrow(/permission denied/);
+      await expect(ex.merchant_settlement!(baciCollectedCtx)).rejects.toThrow(/permission denied/);
+    });
+
+    it('marks a Baci-collected DVA reconcile credit so it stays spendable', async () => {
+      const args = defaultArgs();
+      const ex = buildScriptExecutors(args);
+      await ex.merchant_settlement!(baciCollectedCtx);
+      expect(args.supabase.rpc).toHaveBeenCalledWith(
+        'record_merchant_settlement',
+        expect.objectContaining({
+          p_metadata: expect.objectContaining({
+            paystack_collection: 'integration',
+          }),
+        })
+      );
+    });
+
+    it('records a subaccount-split DVA reconcile as direct-settled history, not a wallet credit', async () => {
+      const args = defaultArgs();
+      const ex = buildScriptExecutors(args);
+      await ex.merchant_settlement!({
+        ...stepCtx,
+        gatewayResponse: {
+          fees_split: { integration: 0, subaccount: 5_000_000 },
+          subaccount: { subaccount_code: 'ACCT_store' },
+        },
+      });
+      expect(args.supabase.rpc).toHaveBeenCalledWith(
+        'record_paystack_direct_split_settlement',
+        expect.objectContaining({ p_paystack_subaccount_code: 'ACCT_store' })
+      );
+      expect(args.supabase.rpc).not.toHaveBeenCalledWith(
+        'record_merchant_settlement',
+        expect.anything()
+      );
+    });
+
+    it('refuses to credit when the verified payload proves neither collection mode', async () => {
+      const args = defaultArgs();
+      const ex = buildScriptExecutors(args);
+      await expect(ex.merchant_settlement!(stepCtx)).rejects.toThrow(
+        'paystack_settlement_collection_unknown'
+      );
+      expect(args.supabase.rpc).not.toHaveBeenCalled();
     });
   });
 

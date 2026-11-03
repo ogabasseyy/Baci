@@ -48,6 +48,7 @@ import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
+import { resolveChatOrderSettlementRouting } from '@/lib/payments/resolve-chat-order-settlement-routing';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
 import {
   calculatePlatformFee,
@@ -1236,7 +1237,14 @@ export async function POST(request: NextRequest) {
           const platformFee =
             calculatePlatformFee(grossAmount * 100).platformFee / 100;
 
-          await supabase.rpc('record_merchant_settlement', {
+          // Baci-owned chat DVAs stay spendable; a subaccount split is
+          // history only (see resolveChatOrderSettlementRouting).
+          const chatSettlement = resolveChatOrderSettlementRouting({
+            gateway,
+            gatewayResponse,
+          });
+          await supabase.rpc(chatSettlement.rpc, {
+            ...chatSettlement.extraParams,
             p_merchant_id: chatOrder.merchant_id,
             p_source_type: 'order',
             p_source_id: newOrderId,
@@ -1249,7 +1257,10 @@ export async function POST(request: NextRequest) {
             // Δ-29 / Δ-59: traceability — gateway-side ref lives in metadata
             // only (chat-order path has no separate BAC-* yet). Review
             // feedback: key is gateway-prefixed, not hardcoded paystack.
-            p_metadata: { [`${gateway}_reference`]: reference },
+            p_metadata: {
+              [`${gateway}_reference`]: reference,
+              ...chatSettlement.extraMetadata,
+            },
           });
         } catch (settlementErr) {
           logger.warn({

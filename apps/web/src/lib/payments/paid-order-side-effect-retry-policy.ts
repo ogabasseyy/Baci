@@ -30,4 +30,7 @@ export const PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS = [
   // The stored Paystack payload cannot prove whether the merchant's
   // subaccount or Baci received the money; it needs manual reconciliation.
   'paystack_settlement_collection_unknown',
+  // Paystack split the sale to a subaccount that is not the merchant's
+  // registered one; the direct-split recorder refuses it for manual review.
+  'paystack_direct_settlement_subaccount_mismatch',
 ] as const;

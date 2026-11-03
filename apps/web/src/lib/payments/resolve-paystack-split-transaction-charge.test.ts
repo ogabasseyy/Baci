@@ -14,6 +14,7 @@ function resolve(
 ) {
   return resolvePaystackSplitTransactionCharge({
     client,
+    customerEmail: 'buyer@example.com',
     orderId: ORDER_ID,
     merchantId: MERCHANT_ID,
     amountKobo: overrides.amountKobo ?? 500_000,
@@ -22,14 +23,18 @@ function resolve(
 }
 
 describe('resolvePaystackSplitTransactionCharge', () => {
-  it('calls the retained-shipping RPC with the order and merchant ids', async () => {
+  it('calls the proof-bound retained-shipping RPC with the order, merchant and customer email', async () => {
     const client = clientReturning({ data: 0, error: null });
 
     await resolve(client);
 
     expect(client.rpc).toHaveBeenCalledWith(
       'get_order_paystack_split_retained_shipping_kobo',
-      { p_order_id: ORDER_ID, p_merchant_id: MERCHANT_ID }
+      {
+        p_email: 'buyer@example.com',
+        p_merchant_id: MERCHANT_ID,
+        p_order_id: ORDER_ID,
+      }
     );
   });
 

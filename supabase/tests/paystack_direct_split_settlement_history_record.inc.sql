@@ -15,7 +15,7 @@ BEGIN
   v_id := public.record_paystack_direct_split_settlement(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 4), 'paystack', 'PDS-REF-4',
     250000, 3500, 2050, 'Order payment via paystack',
-    '{"paystack_transaction_charge_kobo":"205000"}'::jsonb, 'ACCT_pdsfixture4');
+    '{"paystack_transaction_charge_kobo":"205000"}'::jsonb, 'ACCT_pdsfixture');
   PERFORM pg_temp.check(v_id IS NOT NULL, 'T4 direct-split row missing');
   SELECT * INTO v_row FROM public.merchant_settlements WHERE id = v_id;
   PERFORM pg_temp.check(v_row.status = 'settled' AND v_row.settlement_notified,
@@ -25,13 +25,13 @@ BEGIN
   PERFORM pg_temp.check(v_row.description = 'Settled to your bank by Paystack',
     'T4 description');
   PERFORM pg_temp.check(v_row.metadata ->> 'paystack_direct_split' = 'true'
-      AND v_row.metadata ->> 'paystack_subaccount_code' = 'ACCT_pdsfixture4'
+      AND v_row.metadata ->> 'paystack_subaccount_code' = 'ACCT_pdsfixture'
       AND v_row.metadata ->> 'paystack_transaction_charge_kobo' = '205000',
     'T4 metadata');
 
   v_again := public.record_paystack_direct_split_settlement(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 4), 'paystack', 'PDS-REF-4',
-    250000, 3500, 2050, 'retry', '{}'::jsonb, 'ACCT_pdsfixture4');
+    250000, 3500, 2050, 'retry', '{}'::jsonb, 'ACCT_pdsfixture');
   PERFORM pg_temp.check(v_again IS NULL, 'T4 retry must be idempotent');
   PERFORM public.process_due_settlements();
 
@@ -63,11 +63,12 @@ BEGIN
    WHERE id = pg_temp.fid(2, 6);
   FOR v_case IN
     SELECT * FROM (VALUES
-      ('korapay', pg_temp.fid(2, 5), 'ACCT_pds5', 'paystack_direct_settlement_gateway_mismatch'),
+      ('korapay', pg_temp.fid(2, 5), 'ACCT_pdsfixture', 'paystack_direct_settlement_gateway_mismatch'),
       ('paystack', pg_temp.fid(2, 5), '', 'paystack_direct_settlement_subaccount_missing'),
       ('paystack', pg_temp.fid(2, 5), 'not-a-code', 'paystack_direct_settlement_subaccount_missing'),
-      ('paystack', pg_temp.fid(2, 99), 'ACCT_pds5', 'paystack_direct_settlement_order_mismatch'),
-      ('paystack', pg_temp.fid(2, 6), 'ACCT_pds5', 'settlement_order_cancelled')
+      ('paystack', pg_temp.fid(2, 5), 'ACCT_someoneelse', 'paystack_direct_settlement_subaccount_mismatch'),
+      ('paystack', pg_temp.fid(2, 99), 'ACCT_pdsfixture', 'paystack_direct_settlement_order_mismatch'),
+      ('paystack', pg_temp.fid(2, 6), 'ACCT_pdsfixture', 'settlement_order_cancelled')
     ) AS c(gateway, order_id, subaccount, expected)
   LOOP
     v_caught := NULL;
@@ -90,21 +91,32 @@ DO $t6$
 DECLARE
   v_paid uuid;
   v_unpaid uuid;
+  v_caught text;
 BEGIN
   PERFORM pg_temp.seed_order(7, 54000);
   PERFORM pg_temp.attach_gigl_quote(7, 4000, 'customer_checkout');
   PERFORM pg_temp.check(
-    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 7), pg_temp.merchant()) = 400000,
+    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 7), pg_temp.merchant(), 'pds-buyer@example.test') = 400000,
     'T6 checkout read must return the delivery fee in kobo');
   PERFORM pg_temp.check(
-    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 4), pg_temp.merchant()) = 0,
+    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 4), pg_temp.merchant(), ' PDS-Buyer@Example.test ') = 0,
     'T6 a non-GIGL order retains nothing');
+  v_caught := NULL;
+  BEGIN
+    PERFORM public.get_order_paystack_split_retained_shipping_kobo(
+      pg_temp.fid(2, 7), pg_temp.merchant(), 'someone-else@example.test');
+  EXCEPTION WHEN OTHERS THEN
+    v_caught := SQLERRM;
+  END;
+  PERFORM pg_temp.check(v_caught = 'paystack_split_order_not_found',
+    'T6 the checkout read must require the order''s customer email, got: '
+      || COALESCE(v_caught, 'success'));
 
   -- Split charge 2,050 + 4,000 delivery = 605000 kobo: collected.
   v_paid := public.record_paystack_direct_split_settlement_gigl_v1(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 7), 'paystack', 'PDS-REF-7',
     54000, 900, 2050, 'Order payment via paystack',
-    '{"paystack_transaction_charge_kobo":"605000"}'::jsonb, 'ACCT_pdsfixture7');
+    '{"paystack_transaction_charge_kobo":"605000"}'::jsonb, 'ACCT_pdsfixture');
   PERFORM pg_temp.check(
     (SELECT platform_fee = 6050 AND net_amount = 47950
         AND metadata ->> 'retained_shipping_amount' = '4000.00'
@@ -112,7 +124,7 @@ BEGIN
        FROM public.merchant_settlements WHERE id = v_paid),
     'T6 GIGL direct split must record the retained delivery fee');
   PERFORM pg_temp.check(
-    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 7), pg_temp.merchant()) = 0,
+    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 7), pg_temp.merchant(), 'pds-buyer@example.test') = 0,
     'T6 a retained fee must not be retained twice');
 
   -- A checkout from before the fix: Baci's split carried only the fee.
@@ -121,7 +133,7 @@ BEGIN
   v_unpaid := public.record_paystack_direct_split_settlement_gigl_v1(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 8), 'paystack', 'PDS-REF-8',
     54000, 900, 2050, 'Order payment via paystack',
-    '{"paystack_transaction_charge_kobo":"205000"}'::jsonb, 'ACCT_pdsfixture8');
+    '{"paystack_transaction_charge_kobo":"205000"}'::jsonb, 'ACCT_pdsfixture');
   PERFORM pg_temp.check(
     (SELECT metadata ->> 'retained_shipping_collected_by_split' = 'false'
        FROM public.merchant_settlements WHERE id = v_unpaid),
@@ -165,7 +177,6 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.record_paystack_direct_split_settlement(uuid,text,uuid,text,text,numeric,numeric,numeric,text,jsonb,text)',
     'public.record_paystack_direct_split_settlement_gigl_v1(uuid,text,uuid,text,text,numeric,numeric,numeric,text,jsonb,text)',
-    'public.get_order_paystack_split_retained_shipping_kobo(uuid,uuid)',
     'public.get_merchant_wallet_spendable_balance(uuid)',
     'public.debit_merchant_wallet(uuid,numeric,text,text)'
   ] LOOP
@@ -190,5 +201,11 @@ BEGIN
     pg_catalog.has_function_privilege('authenticated',
       'public.reserve_merchant_shipping_charge(uuid,uuid,text)', 'EXECUTE'),
     'T8 owners must still reserve GIG bookings');
+  -- The checkout read is proof-bound (T6) and serves guest checkouts.
+  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+    PERFORM pg_temp.check(pg_catalog.has_function_privilege(v_role,
+        'public.get_order_paystack_split_retained_shipping_kobo(uuid,uuid,text)', 'EXECUTE'),
+      'T8 ' || v_role || ' must execute the proof-bound checkout read');
+  END LOOP;
 END
 $t8$;

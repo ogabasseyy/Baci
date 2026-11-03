@@ -56,7 +56,7 @@ gateway-origin guard (`20260724140000`).
 
 ### Database (append-only)
 
-- `20261103064155_paystack_direct_split_settlement_history.sql`
+- `20261103084500_paystack_direct_split_settlement_history.sql`
   - `record_paystack_direct_split_settlement(_gigl_v1)`: settled history rows
     (`status 'settled'`, `settlement_notified`, description "Settled to your
     bank by Paystack", `paystack_direct_split: true`) with **no wallet
@@ -73,13 +73,13 @@ gateway-origin guard (`20260724140000`).
     (`paystack_collection = 'integration'`) and that the owner has not
     reconciled (`legacy_wallet_credit_reconciled = true`). Spendable =
     `available_balance − exposure`, floored at 0.
-- `20261103064156_paystack_direct_split_spend_guards.sql`: `debit_merchant_wallet`
+- `20261103084501_paystack_direct_split_spend_guards.sql`: `debit_merchant_wallet`
   (payouts) and `reserve_merchant_shipping_charge` (GIG bookings) only spend
   the spendable part. Payouts fail with "Paystack-settled sales are not
   withdrawable"; GIG bookings fail with the existing
   `MERCHANT_WALLET_INSUFFICIENT`. `debit_merchant_wallet` also rejects
   non-positive amounts.
-- `20261103064157_paystack_direct_split_refund_finalizer.sql`: the cancellation
+- `20261103084502_paystack_direct_split_refund_finalizer.sql`: the cancellation
   refund finalizer treats the new marker like REDVAULT's, so it never debits a
   wallet the sale never credited.
 

@@ -1,5 +1,5 @@
 -- Paystack direct-split settlement history, part 2 of 3: spend guards.
--- See 20261103064155_paystack_direct_split_settlement_history.sql.
+-- See 20261103084500_paystack_direct_split_settlement_history.sql.
 --
 -- The wallet's two spend primitives may only spend available_balance minus
 -- private.merchant_wallet_direct_settled_exposure, so Paystack sales the
@@ -232,7 +232,7 @@ BEGIN
   FROM public.merchant_wallets
   WHERE merchant_id = v_order.merchant_id
   FOR UPDATE;
-  -- Paystack direct-split sales recorded on the wallet before 20261103064155
+  -- Paystack direct-split sales recorded on the wallet before 20261103084500
   -- are not Baci-held money: only the balance above that exposure can pay for
   -- a booking. The message keeps the MERCHANT_WALLET_INSUFFICIENT prefix the
   -- application maps to its insufficient-balance response.

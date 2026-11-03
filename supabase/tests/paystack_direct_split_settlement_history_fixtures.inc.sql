@@ -90,7 +90,7 @@ BEGIN
 END $$;
 
 -- A legacy Paystack wallet credit, made the way production made them before
--- 20261103064155: record_merchant_settlement, then maturity.
+-- 20261103084500: record_merchant_settlement, then maturity.
 CREATE FUNCTION pg_temp.legacy_paystack_credit(
   p_n integer, p_gross numeric, p_metadata jsonb DEFAULT '{}'::jsonb
 ) RETURNS uuid

@@ -8,8 +8,8 @@
 -- out a second time by the weekly auto-payout. Baci has no licence to hold
 -- merchant money, so direct-split sales must never look like Baci balance.
 --
--- This change ships as three migrations (this file and 20261103064156 /
--- 20261103064157). This one:
+-- This change ships as three migrations (this file and 20261103084501 /
+-- 20261103084502). This one:
 --   1. adds private.is_direct_split_settlement, recognising both the REDVAULT
 --      marker and the new paystack_direct_split marker;
 --   2. adds private.gigl_order_remaining_retained_shipping (the customer-paid
@@ -23,11 +23,11 @@
 --      that came from Paystack order settlements recorded before this change
 --      (or without proof that Baci's own Paystack balance received them).
 --      Until the owner reconciles them, they are not spendable;
---   5. (20261103064156) guards the two wallet spend primitives
+--   5. (20261103084501) guards the two wallet spend primitives
 --      (debit_merchant_wallet for payouts, reserve_merchant_shipping_charge
 --      for GIG bookings) so they can only spend available_balance minus that
 --      exposure;
---   6. (20261103064157) teaches finalize_refunded_cancellation_order_v1 the
+--   6. (20261103084502) teaches finalize_refunded_cancellation_order_v1 the
 --      new marker, so a refund never debits a wallet that a direct-split sale
 --      never credited.
 --

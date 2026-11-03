@@ -1,5 +1,5 @@
 -- Paystack direct-split settlement history, part 3 of 3: refund finalizer.
--- See 20261103064155_paystack_direct_split_settlement_history.sql.
+-- See 20261103084500_paystack_direct_split_settlement_history.sql.
 --
 -- record_paystack_direct_split_settlement rows never credit the wallet, so a
 -- cancellation refund must cancel them without debiting it (the REDVAULT

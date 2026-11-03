@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { router } from 'expo-router';
+import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { addSavingsContribution } from '@/lib/customer-savings';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
@@ -40,6 +42,7 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
   return {
     goal,
     idempotencyKeyRef: { current: null as string | null },
+    operationRailRef: { current: null as 'primary' | 'legacy' | null },
     refetchWallet: jest.fn(async () => undefined),
     savingsContributionAmount: '2500',
     spendableBalance: 0,
@@ -121,17 +124,14 @@ describe('createWalletSavingsActions', () => {
     expect(input.idempotencyKeyRef.current).toBe('pending-operation');
   });
 
-  it('opens selected plan bank funding only in pinned hosted staging', () => {
+  it('never opens a plan bank account screen, even in hosted staging', () => {
     const input = createInput();
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
 
     createWalletSavingsActions(input).handleFundSavingsWallet();
 
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: '/savings/funding',
-      params: { amount: '2500', goalId: 'goal-1' },
-    });
-    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(input.startWalletTopUp).toHaveBeenCalledTimes(1);
   });
 
   it('does not open plan transfer when the wallet already covers the amount', () => {
@@ -184,5 +184,62 @@ describe('createWalletSavingsActions', () => {
     request.clearIdempotencyKey?.();
     expect(input.idempotencyKeyRef.current).toBeNull();
     expect(request.createIdempotencyKey()).toBe('synthetic-key');
+  });
+
+  describe('stored operation rail', () => {
+    const PRIMARY_MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+    const withRail = (
+      key: string | null,
+      rail: 'primary' | 'legacy' | null,
+      merchant?: string
+    ) => ({
+      ...createInput(),
+      activeMerchantId: merchant,
+      idempotencyKeyRef: { current: key },
+      operationRailRef: { current: rail },
+    });
+
+    it('records the rail before the request for a fresh id', () => {
+      const input = withRail(null, null, PRIMARY_MERCHANT);
+      createWalletSavingsActions(input).handleAddSavingsContribution();
+      const [request] = jest.mocked(addSavingsContributionToGoal).mock.calls[0];
+      expect(request.createIdempotencyKey()).toBe('synthetic-key');
+      expect(input.operationRailRef.current).toBe('primary');
+      request.clearIdempotencyKey?.();
+      expect(input.operationRailRef.current).toBeNull();
+    });
+
+    it('retries a stored legacy id on legacy only after the merchant becomes primary', () => {
+      const input = withRail('legacy-op', 'legacy', PRIMARY_MERCHANT);
+      createWalletSavingsActions(input).handleAddSavingsContribution();
+      expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
+      const [request] = jest.mocked(addSavingsContributionToGoal).mock.calls[0];
+      expect(request.addSavingsContribution).toBe(addSavingsContribution);
+      expect(request.createIdempotencyKey()).toBe('legacy-op');
+      expect(input.operationRailRef.current).toBe('legacy');
+    });
+
+    it('keeps a stored primary id and submits nothing once the merchant is no longer primary', () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+      const input = withRail('primary-op', 'primary', undefined);
+      createWalletSavingsActions(input).handleAddSavingsContribution();
+      expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
+      expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
+      expect(alert).toHaveBeenCalledWith(
+        'Still checking',
+        expect.stringContaining('We are checking your earlier contribution')
+      );
+      expect(input.idempotencyKeyRef.current).toBe('primary-op');
+      expect(input.operationRailRef.current).toBe('primary');
+    });
+
+    it('releases id and rail together when the primary check releases the operation', () => {
+      const input = withRail('primary-op', 'primary', PRIMARY_MERCHANT);
+      createWalletSavingsActions(input).handleAddSavingsContribution();
+      const [check] = jest.mocked(checkPendingPrimarySavings).mock.calls[0];
+      check.clearOperation();
+      expect(input.idempotencyKeyRef.current).toBeNull();
+      expect(input.operationRailRef.current).toBeNull();
+    });
   });
 });

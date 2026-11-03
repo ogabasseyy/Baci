@@ -16,7 +16,6 @@ const mockPlanFunding = jest.fn((_input: unknown) => ({
   fetchExistingPlanFunding: jest.fn(),
   fetchPlanFunding: jest.fn(),
   fundingError: null,
-  planFundingAccounts: [],
   planFundingPhase: 'idle',
   planFundingStatusCode: null,
   planFundingRequiresBvn: true,

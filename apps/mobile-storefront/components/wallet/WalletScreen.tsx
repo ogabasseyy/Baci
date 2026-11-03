@@ -18,6 +18,7 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
+import type { ContributionRail } from './savings/stored-contribution-operation';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
@@ -106,6 +107,7 @@ export function WalletScreen({
   const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
     useState(false);
   const savingsContributionIdempotencyKeyRef = useRef<string | null>(null);
+  const savingsContributionRailRef = useRef<ContributionRail | null>(null);
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
   const hasMerchantContext = Boolean(activeMerchantId || activeMerchantSlug);
@@ -166,6 +168,7 @@ export function WalletScreen({
     activeMerchantSlug,
     goal: display?.activeSavingsGoal ?? null,
     idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
+    operationRailRef: savingsContributionRailRef,
     refetchWallet: refetch,
     savingsContributionAmount,
     spendableBalance: display?.spendableBalance ?? 0,

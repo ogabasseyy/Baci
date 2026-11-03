@@ -10,12 +10,14 @@ export function usePrimarySavingsRecovery({
   userId,
   goalId,
   operationRef,
+  railRef,
   setAmount,
 }: {
   merchantId?: string;
   userId?: string;
   goalId?: string;
   operationRef: { current: string | null };
+  railRef?: { current: 'primary' | 'legacy' | null };
   setAmount: (value: string) => void;
 }) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
@@ -44,6 +46,7 @@ export function usePrimarySavingsRecovery({
     let active = true;
     if (boundKey.current !== key) {
       operationRef.current = null;
+      if (railRef) railRef.current = null;
       boundKey.current = key;
     }
     setState({ key, revision, ready: false, error: false });
@@ -52,6 +55,8 @@ export function usePrimarySavingsRecovery({
         if (!active) return;
         if (operation) {
           operationRef.current = operation.operationId;
+          // A server-side operation is by definition a primary one.
+          if (railRef) railRef.current = 'primary';
           setAmount(String(operation.amountKobo / 100));
         }
         setState({ key, revision, ready: true, error: false });
@@ -71,7 +76,16 @@ export function usePrimarySavingsRecovery({
     return () => {
       active = false;
     };
-  }, [enabled, goalId, key, merchantId, operationRef, revision, setAmount]);
+  }, [
+    enabled,
+    goalId,
+    key,
+    merchantId,
+    operationRef,
+    railRef,
+    revision,
+    setAmount,
+  ]);
   return {
     ready:
       !enabled ||

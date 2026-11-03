@@ -78,13 +78,26 @@ describe('money limits', () => {
   });
 
   it('sets the funding floor above every planned outflow plus a fee reserve', () => {
+    // Proofs 2 (transfer + duplicate-reference re-send), 4 (transfer + bank
+    // outflow) and 8 (main to goal) all draw on the main wallet.
     expect(PLANNED_OUTFLOWS_KOBO).toBe(
-      AMOUNTS_KOBO.walletTransfer * 2 + AMOUNTS_KOBO.bankOutflow
+      AMOUNTS_KOBO.walletTransfer * 4 + AMOUNTS_KOBO.bankOutflow
     );
     expect(FEE_RESERVE_KOBO).toBeGreaterThan(0);
     expect(FUNDING_FLOOR_KOBO).toBe(PLANNED_OUTFLOWS_KOBO + FEE_RESERVE_KOBO);
     // The old floor (3 transfers) left nothing for the bank fee.
     expect(FUNDING_FLOOR_KOBO).toBeGreaterThan(AMOUNTS_KOBO.walletTransfer * 3);
     expect(AMOUNTS_KOBO.fundMain).toBeGreaterThan(FUNDING_FLOOR_KOBO);
+  });
+
+  it('funds the house wallet with enough for the collection-to-main transfer', () => {
+    expect(AMOUNTS_KOBO.fundHouse).toBeGreaterThan(AMOUNTS_KOBO.walletTransfer);
+    // A main deposit that no other main-wallet credit shares, so its row is unambiguous.
+    const otherMainCredits: number[] = [
+      AMOUNTS_KOBO.fundMain,
+      AMOUNTS_KOBO.walletTransfer,
+      AMOUNTS_KOBO.fundGoal,
+    ];
+    expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.depositMain);
   });
 });

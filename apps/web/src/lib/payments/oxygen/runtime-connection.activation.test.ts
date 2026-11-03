@@ -53,6 +53,7 @@ function configure(environment: 'production' | 'staging') {
 }
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.resetAllMocks();
 });
 it('defers an incomplete payment callback without activation', async () => {
@@ -72,6 +73,24 @@ it('keeps a paid callback pending when automatic activation is disabled', async 
   ).rejects.toThrow('Activation pending');
   expect(m.general).not.toHaveBeenCalled();
   expect(m.trial).not.toHaveBeenCalled();
+});
+it.each([
+  'staging',
+  'production',
+] as const)('does not activate a paid callback with %s automatic and trial settings unset', async (environment) => {
+  vi.stubEnv('OXYGEN_STAGING_AUTOMATIC_ACTIVATION_ENABLED', undefined);
+  vi.stubEnv('OXYGEN_PRODUCTION_AUTOMATIC_ACTIVATION_ENABLED', undefined);
+  vi.stubEnv('OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS', undefined);
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const runtime = configure(environment);
+  m.recover.mockResolvedValue(true);
+  await expect(
+    runtime.reconcilePaymentCallback(worker, workflow, workflow, workflow)
+  ).rejects.toThrow('Activation pending');
+  expect(m.general).not.toHaveBeenCalled();
+  expect(m.trial).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
 });
 it('completes an already activated callback without payment or activation replay', async () => {
   const runtime = configure('production');
@@ -101,6 +120,8 @@ it('passes explicit activation opt-in without making a provider request itself',
   );
 });
 it('retains only explicitly bound staging trial recovery', async () => {
+  vi.stubEnv('OXYGEN_STAGING_AUTOMATIC_ACTIVATION_ENABLED', undefined);
+  vi.stubEnv('OXYGEN_PRODUCTION_AUTOMATIC_ACTIVATION_ENABLED', undefined);
   vi.stubEnv(
     'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
     JSON.stringify([

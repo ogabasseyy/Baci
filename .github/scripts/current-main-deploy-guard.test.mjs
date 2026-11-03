@@ -249,7 +249,7 @@ test('fails closed on malformed identity, API responses, or response truncation'
     [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 }); return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow jobs response/],
   ]) await assert.rejects(verifyCurrentMainDeployment(args), re);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha', id: 1, status: 'completed' }]), /invalid workflow run SHA/);
-  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: null, status: 'completed' }]), /invalid workflow run id/);
+  for (const st of ['completed', 'queued']) await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ head_sha: currentSha, id: null, status: st }]), /invalid workflow run id/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
   for (const [st, cc] of [['completed', 'failure'], ['in_progress', null]]) await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: cc, head_sha: currentSha, id: 1, status: st }], [{ sha: currentSha }], [{ conclusion: cc, name: 'deploy-production', status: st, steps: [] }]), /incomplete or invalid workflow job steps response/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ name: 'renamed-job', status: 'completed' }]), /missing deploy-production job/);
@@ -269,7 +269,7 @@ test('fails closed on malformed identity, API responses, or response truncation'
 });
 
 test('rejects unsupported picomatch glob metacharacters and complex patterns', () => {
-  for (const bad of ['apps/web/[a-z].ts', 'apps/web/{a,b}.ts', 'apps/web/?.ts', 'apps/web/(a|b).ts', 'apps/web/+a.ts', 'apps/web/@a.ts', '!apps/web/**']) {
+  for (const bad of ['apps/web/** # comment', 'apps/web/ space.ts', 'apps/web/[a-z].ts', 'apps/web/{a,b}.ts', 'apps/web/?.ts', 'apps/web/(a|b).ts', 'apps/web/+a.ts', 'apps/web/@a.ts', '!apps/web/**']) {
     assert.throws(() => validateDeployPattern(bad), /unsupported glob/);
   }
 });

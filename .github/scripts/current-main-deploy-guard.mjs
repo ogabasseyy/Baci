@@ -6,7 +6,7 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export function validateDeployPattern(pat) {
-  if (/[!?{}[\]()+@]/.test(pat) || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
+  if (/\s|#|[!?{}[\]()+@]/.test(pat) || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
     throw new Error(`unsupported glob: ${pat}`);
   }
 }
@@ -98,11 +98,11 @@ function collectSupersedingShas(comparison, currentSha) {
 }
 
 async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token) {
-  if (run?.status === 'queued' && Number.isSafeInteger(run.run_attempt) && run.run_attempt <= 1) {
-    return false;
-  }
   if (!Number.isSafeInteger(run?.id) || run.id <= 0) {
     throw new Error('invalid workflow run id');
+  }
+  if (run?.status === 'queued' && Number.isSafeInteger(run.run_attempt) && run.run_attempt <= 1) {
+    return false;
   }
   const jobsBody = await githubJson(
     fetchImpl,

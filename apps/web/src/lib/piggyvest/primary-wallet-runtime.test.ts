@@ -120,3 +120,12 @@ describe('master kill switch', () => {
     ).not.toBeNull();
   });
 });
+describe('primary wallet runtime under the master kill switch', () => {
+  const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+  it('refuses the new-work reader but keeps the drain reader serving', () => {
+    expect(readPrimaryWalletRuntime(killed)).toBeNull();
+    expect(readPrimaryWalletRuntimeDrain(killed)?.onboarding.environment).toBe(
+      'production'
+    );
+  });
+});

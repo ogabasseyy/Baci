@@ -9,6 +9,8 @@ import { GET } from './get-route';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   runtime: vi.fn(),
+  drain: vi.fn(),
+  killed: vi.fn(),
   identity: vi.fn(),
   wallet: vi.fn(),
   accounts: vi.fn(),
@@ -21,7 +23,11 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: mocks.runtime,
+  readPrimaryWalletRuntimeDrain: mocks.drain,
   readPrimaryWalletOnboardingRuntime: () => null,
+}));
+vi.mock('@/lib/piggyvest/piggyvest-switches', () => ({
+  isPiggyvestKilled: mocks.killed,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
@@ -89,6 +95,8 @@ beforeEach(() => {
   mocks.state.value = 'routing_pending';
   mocks.statements.length = 0;
   mocks.review.mockResolvedValue(null);
+  mocks.killed.mockReturnValue(false);
+  mocks.drain.mockReturnValue(null);
   mocks.auth.mockResolvedValue({
     user: { id: 'f4f01e61-691f-494a-a895-872f17f8e55e' },
     supabase: {},
@@ -182,5 +190,26 @@ describe('primary wallet GET with a routing-pending wallet (real recovery and sn
     );
     expect(mocks.review).toHaveBeenCalledTimes(2);
     expect(mocks.provider).not.toHaveBeenCalled();
+  });
+});
+
+describe('primary wallet GET under the master kill switch', () => {
+  it('keeps serving reads through the drain reader and skips routing promotion', async () => {
+    const runtime = mocks.runtime();
+    mocks.killed.mockReturnValue(true);
+    mocks.runtime.mockReturnValue(null);
+    mocks.drain.mockReturnValue(runtime);
+    mocks.wallet.mockResolvedValue(wallet(null));
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(200);
+    expect(mocks.statements).not.toContain(
+      PRIMARY_WALLET_STATEMENTS.resolveRouting
+    );
+  });
+  it('still answers not ready when the kill switch is off and the runtime is off', async () => {
+    mocks.runtime.mockReturnValue(null);
+    mocks.drain.mockReturnValue({ onboarding: { merchantId } });
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(503);
   });
 });

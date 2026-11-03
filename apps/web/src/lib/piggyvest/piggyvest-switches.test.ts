@@ -38,12 +38,15 @@ describe('per-feature switches', () => {
   it('registers the new-money features', () => {
     expect(features.sort()).toEqual(
       [
+        'bank_inbox',
         'card_checkout',
+        'card_signed_inbox',
         'card_custody',
         'deposit_to_goal',
         'goal_provisioning',
         'inflows',
         'paid_interest',
+        'paid_interest_inbox',
         'plan_funding',
         'wallet',
       ].sort()

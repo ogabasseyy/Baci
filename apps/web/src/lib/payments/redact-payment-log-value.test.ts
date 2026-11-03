@@ -79,6 +79,80 @@ describe('redactPaymentLogValue', () => {
     });
   });
 
+  it('redacts nested credential and financial identity aliases without hiding operational fields', () => {
+    expect(
+      redactPaymentLogValue({
+        order_id: 'order-1',
+        amount: 5000,
+        status: 'pending',
+        nested: [
+          {
+            apiKey: 'secret',
+            accessToken: 'token',
+            authorization: 'Bearer secret',
+            bvn: '123',
+            NINNumber: '456',
+            bankAccountNumber: '789',
+            cardNumber: '12',
+            cvv: '123',
+            pin: '1234',
+            otp: '123456',
+            dateOfBirth: '2000-01-01',
+            client_secret: 'secret',
+            password: 'password',
+            cookie: 'session',
+          },
+        ],
+      })
+    ).toEqual({
+      order_id: 'order-1',
+      amount: 5000,
+      status: 'pending',
+      nested: [
+        {
+          apiKey: '[REDACTED]',
+          accessToken: '[REDACTED]',
+          authorization: '[REDACTED]',
+          bvn: '[REDACTED]',
+          NINNumber: '[REDACTED]',
+          bankAccountNumber: '[REDACTED]',
+          cardNumber: '[REDACTED]',
+          cvv: '[REDACTED]',
+          pin: '[REDACTED]',
+          otp: '[REDACTED]',
+          dateOfBirth: '[REDACTED]',
+          client_secret: '[REDACTED]',
+          password: '[REDACTED]',
+          cookie: '[REDACTED]',
+        },
+      ],
+    });
+  });
+
+  it('redacts common suffixed identity aliases but preserves ordinary status fields', () => {
+    expect(
+      redactPaymentLogValue({
+        bvnValue: '123',
+        ninNumber: '123',
+        otp_code: '123',
+        bankAccountNo: '123',
+        bank_verification_number: '123',
+        authorization_header: 'bearer',
+        processingStatus: 'pending',
+        order_reference: 'ref',
+      })
+    ).toEqual({
+      bvnValue: '[REDACTED]',
+      ninNumber: '[REDACTED]',
+      otp_code: '[REDACTED]',
+      bankAccountNo: '[REDACTED]',
+      bank_verification_number: '[REDACTED]',
+      authorization_header: '[REDACTED]',
+      processingStatus: 'pending',
+      order_reference: 'ref',
+    });
+  });
+
   it('handles circular arrays without infinite recursion', () => {
     const circular: unknown[] = [];
     circular.push(circular);

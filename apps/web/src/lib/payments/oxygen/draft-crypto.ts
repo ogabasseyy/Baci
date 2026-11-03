@@ -4,6 +4,7 @@ import {
   type OxygenFormDraft,
   oxygenFormDraftSchema,
 } from '@/schemas/oxygen-form-draft';
+import { oxygenPurposeKey, oxygenWriteVersion } from './purpose-key-crypto';
 
 type Context = {
   userId: string;
@@ -16,12 +17,12 @@ function keyBytes(key: string): Buffer {
     throw new Error('Draft storage unavailable');
   return Buffer.from(key, 'hex');
 }
-const aad = (context: Context) =>
+const aad = (context: Context, version: 'v1' | 'v2') =>
   Buffer.from(
     JSON.stringify([
       context.purpose === 'residential'
-        ? 'oxygen-residential-draft:v1'
-        : 'oxygen-form-draft:v1',
+        ? `oxygen-residential-draft:${version}`
+        : `oxygen-form-draft:${version}`,
       context.userId,
       context.workflowId,
       context.version,
@@ -33,15 +34,23 @@ export function encryptOxygenDraft(
   key: string,
   context: Context
 ): string {
+  const version = oxygenWriteVersion();
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', keyBytes(key), iv);
-  cipher.setAAD(aad(context));
+  const root = keyBytes(key);
+  const purpose =
+    context.purpose === 'residential' ? 'residential-draft' : 'form-draft';
+  const cipher = createCipheriv(
+    'aes-256-gcm',
+    version === 'v2' ? oxygenPurposeKey(root, purpose) : root,
+    iv
+  );
+  cipher.setAAD(aad(context, version));
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(oxygenFormDraftSchema.parse(draft)), 'utf8'),
     cipher.final(),
   ]);
   return [
-    'v1',
+    version,
     iv.toString('base64url'),
     cipher.getAuthTag().toString('base64url'),
     ciphertext.toString('base64url'),
@@ -54,16 +63,30 @@ export function decryptOxygenDraft(
   context: Context
 ): OxygenFormDraft {
   const [version, iv, tag, encrypted, extra] = payload.split('.');
-  if (version !== 'v1' || !iv || !tag || !encrypted || extra)
+  if (
+    (version !== 'v1' && version !== 'v2') ||
+    !iv ||
+    !tag ||
+    !encrypted ||
+    extra
+  )
     throw new Error('Draft storage unavailable');
   const ivBytes = Buffer.from(iv, 'base64url');
   const tagBytes = Buffer.from(tag, 'base64url');
   if (ivBytes.length !== 12 || tagBytes.length !== 16)
     throw new Error('Draft storage unavailable');
-  const decipher = createDecipheriv('aes-256-gcm', keyBytes(key), ivBytes, {
-    authTagLength: 16,
-  });
-  decipher.setAAD(aad(context));
+  const root = keyBytes(key);
+  const purpose =
+    context.purpose === 'residential' ? 'residential-draft' : 'form-draft';
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    version === 'v2' ? oxygenPurposeKey(root, purpose) : root,
+    ivBytes,
+    {
+      authTagLength: 16,
+    }
+  );
+  decipher.setAAD(aad(context, version));
   decipher.setAuthTag(tagBytes);
   const raw = Buffer.concat([
     decipher.update(Buffer.from(encrypted, 'base64url')),

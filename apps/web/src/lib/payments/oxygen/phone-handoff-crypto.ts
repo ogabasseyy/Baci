@@ -1,6 +1,7 @@
 import 'server-only';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { oxygenPhoneTargetSchema } from '@/schemas/oxygen-phone-handoff';
+import { oxygenPurposeKey, oxygenWriteVersion } from './purpose-key-crypto';
 
 type Context = {
   hash: string;
@@ -8,10 +9,10 @@ type Context = {
   applicationReference: string;
   environment: 'staging' | 'production';
 };
-const aad = (c: Context) =>
+const aad = (c: Context, version: 'v1' | 'v2') =>
   Buffer.from(
     JSON.stringify([
-      'oxygen-phone:v1',
+      `oxygen-phone:${version}`,
       c.hash,
       c.workflowId,
       c.applicationReference,
@@ -28,9 +29,15 @@ export function encryptPhoneTarget(
   key: string,
   context: Context
 ): string {
+  const version = oxygenWriteVersion();
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', keyBytes(key), iv);
-  cipher.setAAD(aad(context));
+  const root = keyBytes(key);
+  const cipher = createCipheriv(
+    'aes-256-gcm',
+    version === 'v2' ? oxygenPurposeKey(root, 'phone-handoff') : root,
+    iv
+  );
+  cipher.setAAD(aad(context, version));
   const bytes = Buffer.concat([
     cipher.update(
       JSON.stringify(oxygenPhoneTargetSchema.parse({ url })),
@@ -39,7 +46,7 @@ export function encryptPhoneTarget(
     cipher.final(),
   ]);
   return [
-    'v1',
+    version,
     iv.toString('base64url'),
     cipher.getAuthTag().toString('base64url'),
     bytes.toString('base64url'),
@@ -51,16 +58,22 @@ export function decryptPhoneTarget(
   context: Context
 ): string {
   const [version, iv, tag, value, extra] = payload.split('.');
-  if (version !== 'v1' || !iv || !tag || !value || extra)
+  if ((version !== 'v1' && version !== 'v2') || !iv || !tag || !value || extra)
     throw new Error('Phone verification unavailable');
   const nonce = Buffer.from(iv, 'base64url');
   const authTag = Buffer.from(tag, 'base64url');
   if (nonce.length !== 12 || authTag.length !== 16)
     throw new Error('Phone verification unavailable');
-  const cipher = createDecipheriv('aes-256-gcm', keyBytes(key), nonce, {
-    authTagLength: 16,
-  });
-  cipher.setAAD(aad(context));
+  const root = keyBytes(key);
+  const cipher = createDecipheriv(
+    'aes-256-gcm',
+    version === 'v2' ? oxygenPurposeKey(root, 'phone-handoff') : root,
+    nonce,
+    {
+      authTagLength: 16,
+    }
+  );
+  cipher.setAAD(aad(context, version));
   cipher.setAuthTag(authTag);
   const bytes = Buffer.concat([
     cipher.update(Buffer.from(value, 'base64url')),

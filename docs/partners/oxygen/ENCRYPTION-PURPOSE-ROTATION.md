@@ -1,14 +1,41 @@
 # Oxygen encryption separation and rollout
 
 Status: **unresolved before production enablement.** The current environment's
-configured draft secret is used as raw AES key material by draft encryption,
-phone handoff, general activation and the staging activation trial. Ordinary
+configured draft secret is still used as raw AES key material by the default v1
+draft and phone-handoff writers, general activation and the staging activation trial. Ordinary
 response and payment-recovery evidence already derive a response-specific key
 with HKDF. Separate AAD binds records to context, but it does not separate raw
 keys, provide independent rotation or contain compromise of the shared secret.
 Even deriving purpose-specific keys from the same root would not protect other
 purposes when that root is compromised; independent rotation needs separately
 provisioned secrets and an explicit key-retention policy.
+
+## Draft and phone-handoff v2 implementation
+
+Drafts (including residential-only drafts) and phone handoffs now support
+reading both the existing `v1` envelope and a `v2` envelope. The default
+writer remains `v1`; only the exact server-side setting
+`OXYGEN_PURPOSE_KEY_V2_WRITE=true` selects `v2` for new records. Do not set the
+flag until every serving instance and recovery reader runs the dual-reader
+code. The flag does not affect the separately encrypted response, payment,
+trial, or general activation evidence, whose `v1` database contracts remain
+unchanged.
+
+The v2 key uses HKDF-SHA256 with an empty salt, the existing 32-byte configured
+root as input key material, and one of the fixed info strings
+`oxygen:form-draft:v2`, `oxygen:residential-draft:v2`, or
+`oxygen:phone-handoff:v2`. The version and existing owner/workflow/application
+context are also authenticated. This separates derived purpose keys but does
+not give independent rotation or protection against root-key compromise.
+
+Rollout requires dual readers on every instance first, then confirmation that
+no older code or operational reader needs newly written records before
+explicitly enabling v2 writes. An old deployment cannot read v2 records;
+turning off the flag only makes future writes v1 and does not convert existing
+v2 ciphertext. Roll back only to a release with dual readers until all v2
+records have expired or been migrated under an approved retention procedure.
+Keep the existing environment-specific root secrets available for both
+versions. No actual flag, key, database or deployment is changed here.
 
 New trial evidence retains bounded payment completion flags, the matching loan
 reference, activation status and finite numeric terms instead of arbitrary raw

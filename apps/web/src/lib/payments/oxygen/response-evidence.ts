@@ -1,6 +1,7 @@
 import 'server-only';
 import { projectEligibilityEvidence } from './eligibility-response-evidence';
 import type { OxygenProviderOperation } from './provider';
+import { redactOxygenDiagnosticText } from './redact-diagnostic';
 import {
   decryptOxygenResponse,
   encryptOxygenResponse,
@@ -132,7 +133,7 @@ export function projectOxygenResponse(
       verification[field] = value;
   }
   // Full bodies, arbitrary strings/keys, tokens, identity fields and request inputs never enter this projection.
-  // Failure text is redacted against request values and credentials before observation.
+  // Redact known request values before observation and patterns again at storage.
   const payload = {
     version: 1,
     operation: response.operation,
@@ -157,12 +158,31 @@ export function projectOxygenResponse(
     ...(response.failure
       ? {
           failure: {
-            providerMessage:
-              response.failure.providerMessage?.slice(0, 1000) ?? null,
-            providerCode: response.failure.providerCode?.slice(0, 32) ?? null,
+            providerMessage: response.failure.providerMessage
+              ? redactOxygenDiagnosticText(
+                  response.failure.providerMessage.slice(0, 1000),
+                  null
+                )
+              : null,
+            providerCode:
+              response.failure.providerCode &&
+              /^[a-z0-9_-]{1,32}$/i.test(response.failure.providerCode) &&
+              !/\d{6}/.test(response.failure.providerCode)
+                ? redactOxygenDiagnosticText(
+                    response.failure.providerCode,
+                    null,
+                    [],
+                    false
+                  )
+                : null,
             details: response.failure.details
               .slice(0, 6)
-              .map((text) => text.slice(0, 384)),
+              .map((text) =>
+                redactOxygenDiagnosticText(text.slice(0, 1000), null).slice(
+                  0,
+                  384
+                )
+              ),
           },
         }
       : {}),

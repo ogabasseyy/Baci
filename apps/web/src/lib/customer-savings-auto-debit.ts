@@ -29,6 +29,8 @@ interface ChargeDueInput {
 }
 
 export interface ChargeDueCustomerSavingsGoalsResult {
+  /** Goals that threw unexpectedly (not ordinary declines): the cron fails. */
+  errored: number;
   failed: number;
   processed: number;
   results: GoalChargeResult[];
@@ -79,6 +81,7 @@ async function processSavingsGoalsWithConcurrency(
   goals: DueSavingsGoalRow[]
 ) {
   const results = new Array<GoalChargeResult>(goals.length);
+  let errored = 0;
   let nextIndex = 0;
   const workerCount = Math.min(AUTO_DEBIT_CONCURRENCY_LIMIT, goals.length);
   const workers = Array.from({ length: workerCount }, async () => {
@@ -105,12 +108,13 @@ async function processSavingsGoalsWithConcurrency(
             ? settled.reason.message
             : String(settled.reason),
       });
+      errored += 1;
       results[index] = failedGoalResult(goal, settled.reason);
     }
   });
 
   await Promise.all(workers);
-  return results;
+  return { errored, results };
 }
 
 export async function chargeDueCustomerSavingsGoals({
@@ -180,21 +184,20 @@ export async function chargeDueCustomerSavingsGoals({
     pageStart += fetchLimit;
   }
 
-  const results = [
-    ...(await processSavingsGoalsWithConcurrency(
-      {
-        chargeAuthorizationFn,
-        creditWalletTopUpFn,
-        loadSavedPaymentMethodFn,
-        now,
-        supabase,
-      },
-      dueGoals
-    )),
-    ...skippedResults,
-  ];
+  const charged = await processSavingsGoalsWithConcurrency(
+    {
+      chargeAuthorizationFn,
+      creditWalletTopUpFn,
+      loadSavedPaymentMethodFn,
+      now,
+      supabase,
+    },
+    dueGoals
+  );
+  const results = [...charged.results, ...skippedResults];
 
   return {
+    errored: charged.errored,
     failed: results.filter((result) => result.status === 'failed').length,
     processed: results.filter((result) => result.status === 'charged').length,
     results,

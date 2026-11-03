@@ -131,7 +131,7 @@ describe('chargeDueCustomerSavingsGoals', () => {
       supabase: supabase as unknown as SavingsAutoDebitDatabaseClient,
     });
     // One goal's failure is isolated and reported, never thrown.
-    expect(result).toMatchObject({ failed: 1, processed: 0 });
+    expect(result).toMatchObject({ failed: 1, processed: 0, errored: 1 });
     expect(result.results[0]).toMatchObject({
       status: 'failed',
       reason: expect.stringContaining('Invalid savings amount'),

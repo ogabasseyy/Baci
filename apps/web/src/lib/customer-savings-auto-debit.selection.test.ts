@@ -32,6 +32,7 @@ describe('chargeDueCustomerSavingsGoals selection', () => {
     });
 
     expect(result).toEqual({
+      errored: 0,
       failed: 0,
       processed: 0,
       results: [],

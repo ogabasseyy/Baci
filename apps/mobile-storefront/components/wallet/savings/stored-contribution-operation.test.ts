@@ -37,13 +37,37 @@ describe('resolveStoredOperation', () => {
     expect(mockCheckStatus).not.toHaveBeenCalled();
   });
 
-  it('treats a stored id with no recorded rail as legacy, never primary', async () => {
+  it.each([
+    ['pending', false],
+    ['confirmed', true],
+  ])('never sends an unrecorded id to legacy while primary reports %s', async (status, confirmed) => {
+    mockCheckStatus.mockResolvedValue({ status });
+    expect(await run('op', null)).toEqual({
+      operationId: 'op',
+      rail: 'primary',
+      confirmed,
+    });
+  });
+
+  it('resubmits an unrecorded id on legacy, same id, when primary has no record', async () => {
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('x'), { code: 'CONTRIBUTION_NOT_FOUND' })
+    );
     expect(await run('op', null)).toEqual({
       operationId: 'op',
       rail: 'legacy',
       confirmed: false,
     });
-    expect(mockCheckStatus).not.toHaveBeenCalled();
+  });
+
+  it('blocks an unrecorded id on an ambiguous status error', async () => {
+    mockCheckStatus.mockRejectedValue(new Error('network'));
+    expect(await run('op', null)).toEqual({
+      operationId: 'op',
+      rail: 'primary',
+      confirmed: false,
+      unknown: true,
+    });
   });
 
   it('keeps a pending primary id', async () => {

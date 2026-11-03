@@ -23,13 +23,17 @@ export type StoredOperationState = {
 
 /**
  * Resolves what to do with a stored operation id. The id is bound to the rail
- * of the original attempt and a retry never crosses rails (the rails dedupe
- * independently, so crossing would debit twice).
- * - legacy rail (or an id with no recorded rail, which only legacy goal
- *   creation mints): keep it; it is resubmitted on legacy only.
+ * of the original attempt (written before the network call) and a retry never
+ * crosses rails (the rails dedupe independently, so crossing would debit
+ * twice).
+ * - legacy rail: keep it; it is resubmitted on legacy only.
  * - primary rail: the status endpoint is authoritative. Confirmed completes,
  *   cancelled or CONTRIBUTION_NOT_FOUND releases the id, pending keeps it, and
  *   any ambiguous error blocks (unknown) while keeping the id.
+ * - unrecorded rail (older stored id): unknown, never assumed legacy. Ask
+ *   primary first: confirmed or pending means it is a primary id; not found
+ *   means it can only be legacy (resubmit there, same id); cancelled releases
+ *   it; an ambiguous error blocks and keeps the id.
  */
 export async function resolveStoredOperation(input: {
   merchantId?: string;
@@ -39,7 +43,7 @@ export async function resolveStoredOperation(input: {
   if (!input.operationId) {
     return { operationId: null, rail: null, confirmed: false };
   }
-  if (input.rail !== 'primary') {
+  if (input.rail === 'legacy') {
     return { operationId: input.operationId, rail: 'legacy', confirmed: false };
   }
   const keep = {
@@ -56,7 +60,13 @@ export async function resolveStoredOperation(input: {
     if (result.status === 'cancelled') return released;
     return { ...keep, confirmed: result.status === 'confirmed' };
   } catch (error) {
-    if (getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND') return released;
+    if (getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND') {
+      // Recorded primary: primary has no record, release. Unrecorded: only
+      // the legacy rail can hold it, so keep the id and resubmit there.
+      return input.rail === 'primary'
+        ? released
+        : { operationId: input.operationId, rail: 'legacy', confirmed: false };
+    }
     return { ...keep, unknown: true };
   }
 }

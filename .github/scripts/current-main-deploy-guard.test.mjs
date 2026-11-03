@@ -208,67 +208,32 @@ test('root public guide assets trigger web CI and production deployment', () => 
   assert.ok(ci.web.includes('public/guides/**'));
 });
 
+test('detects earlier successful deploy attempt when latest rerun failed', async () => {
+  await assert.rejects(
+    verifySupersededFile(
+      'apps/web/src/app/page.tsx',
+      [{ conclusion: 'failure', head_sha: currentSha, run_attempt: 2, status: 'completed' }],
+      [{ sha: currentSha }],
+      [
+        { conclusion: 'success', name: 'deploy-production', status: 'completed' },
+        { conclusion: 'failure', name: 'deploy-production', status: 'completed' },
+      ]
+    ),
+    /superseded deployment SHA/
+  );
+});
+
 test('fails closed on malformed identity, API responses, or response truncation', async () => {
-  await assert.rejects(
-    verifyCurrentMainDeployment({ expectedSha: 'not-a-sha', fetchImpl: async () => response({ object: { sha: expectedSha } }), repository: 'ogabasseyy/Baci', token: 'test-token' }),
-    /invalid deployment SHA/
-  );
-  await assert.rejects(
-    verifyCurrentMainDeployment({ expectedSha, fetchImpl: async () => response({}, { ok: false, status: 503 }), repository: 'ogabasseyy/Baci', token: 'test-token' }),
-    /GitHub lookup failed with status 503/
-  );
-  await assert.rejects(
-    verifyCurrentMainDeployment({ expectedSha, fetchImpl: async () => response({ object: { sha: 'malformed' } }), repository: 'ogabasseyy/Baci', token: 'test-token' }),
-    /invalid current main SHA/
-  );
-  await assert.rejects(
-    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha' }]),
-    /invalid workflow run SHA/
-  );
-  await assert.rejects(
-    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha }], [{ sha: 'bad-sha' }]),
-    /invalid superseding commit SHA/
-  );
-  await assert.rejects(
-    verifyCurrentMainDeployment({
-      expectedSha,
-      fetchImpl: async (url) => {
-        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
-        return response({ workflow_runs: 'not-an-array' });
-      },
-      repository: 'ogabasseyy/Baci',
-      token: 'test-token',
-    }),
-    /invalid workflow runs response/
-  );
-  await assert.rejects(
-    verifyCurrentMainDeployment({
-      expectedSha,
-      fetchImpl: async (url) => {
-        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
-        return response({ total_count: 105, workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
-      },
-      repository: 'ogabasseyy/Baci',
-      token: 'test-token',
-    }),
-    /incomplete or invalid workflow runs response/
-  );
-  await assert.rejects(
-    verifyCurrentMainDeployment({
-      expectedSha,
-      fetchImpl: async (url) => {
-        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
-        if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 });
-        return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
-      },
-      repository: 'ogabasseyy/Baci',
-      token: 'test-token',
-    }),
-    /incomplete or invalid workflow jobs response/
-  );
+  for (const [args, re] of [
+    [{ expectedSha: 'not-a-sha', fetchImpl: async () => response({ object: { sha: expectedSha } }), repository: 'ogabasseyy/Baci', token: 'test-token' }, /invalid deployment SHA/],
+    [{ expectedSha, fetchImpl: async () => response({}, { ok: false, status: 503 }), repository: 'ogabasseyy/Baci', token: 'test-token' }, /GitHub lookup failed with status 503/],
+    [{ expectedSha, fetchImpl: async () => response({ object: { sha: 'malformed' } }), repository: 'ogabasseyy/Baci', token: 'test-token' }, /invalid current main SHA/],
+    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); return response({ workflow_runs: 'not-an-array' }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /invalid workflow runs response/],
+    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); return response({ total_count: 105, workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow runs response/],
+    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 }); return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow jobs response/],
+  ]) await assert.rejects(verifyCurrentMainDeployment(args), re);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha' }]), /invalid workflow run SHA/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {

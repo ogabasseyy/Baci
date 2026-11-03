@@ -103,13 +103,14 @@ function collectSupersedingShas(comparison, currentSha) {
 }
 
 async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token) {
-  if (run.status !== 'completed' || run.conclusion === 'cancelled' || run.conclusion === 'skipped') {
+  const isMultiAttempt = typeof run.run_attempt === 'number' && run.run_attempt > 1;
+  if (!isMultiAttempt && (run.status !== 'completed' || run.conclusion === 'cancelled' || run.conclusion === 'skipped')) {
     return false;
   }
   const runId = run.id ?? 1;
   const jobsBody = await githubJson(
     fetchImpl,
-    `${apiRoot}/repos/${repository}/actions/runs/${runId}/jobs?per_page=100`,
+    `${apiRoot}/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100`,
     token
   );
   if (
@@ -118,12 +119,13 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   ) {
     throw new Error('incomplete or invalid workflow jobs response');
   }
-  const deployJob = jobsBody.jobs.find((j) => j?.name === 'deploy-production');
-  if (!deployJob) return false;
-  if (deployJob.conclusion === 'success') return true;
-  if (deployJob.status === 'completed' && deployJob.conclusion !== 'cancelled' && deployJob.conclusion !== 'skipped') {
-    const deployStep = deployJob.steps?.find?.((s) => s?.name === 'Deploy to Vercel (with retry)');
-    return deployStep?.conclusion === 'success';
+  for (const job of jobsBody.jobs) {
+    if (job?.name !== 'deploy-production') continue;
+    if (job.conclusion === 'success') return true;
+    if (job.status === 'completed' && job.conclusion !== 'cancelled' && job.conclusion !== 'skipped') {
+      const deployStep = job.steps?.find?.((s) => s?.name === 'Deploy to Vercel (with retry)');
+      if (deployStep?.conclusion === 'success') return true;
+    }
   }
   return false;
 }

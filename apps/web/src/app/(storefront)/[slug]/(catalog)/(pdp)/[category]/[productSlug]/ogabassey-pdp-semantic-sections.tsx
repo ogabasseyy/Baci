@@ -109,12 +109,14 @@ export async function OgabasseyPdpSemanticSections({
     anchorProductSlug: currentProduct.slug,
     maxLinks: MAX_PRODUCT_COMPARE_LINKS,
   });
+  const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const semanticModel = buildProductSemanticModel({
     storeUrl,
     merchantBusinessName: merchant.business_name || 'Baci Store',
     categorySlug,
     categoryName,
     countryCode: merchant.country,
+    merchantCurrency,
     currentProduct,
     inventory,
     hubEligibilityInventory,
@@ -125,7 +127,7 @@ export async function OgabasseyPdpSemanticSections({
     product,
     merchantDisplayName: merchant.business_name || 'Baci Store',
     categoryName,
-    currency: resolveMerchantCurrencyConfig(merchant).code,
+    currency: merchantCurrency,
     country: merchant.country,
   });
 

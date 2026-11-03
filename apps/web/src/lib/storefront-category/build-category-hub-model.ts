@@ -69,6 +69,7 @@ export function buildCategoryHubModel(
         categorySlug: input.categorySlug,
         categoryName: input.categoryName,
         products: input.products,
+        merchantCurrency: input.merchantCurrency,
       }),
     guideLinks,
     faqItems,

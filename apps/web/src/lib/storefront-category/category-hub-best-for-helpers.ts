@@ -1,4 +1,5 @@
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
+import { isAvailableProduct } from '@/lib/storefront-content/is-available-product';
 
 export function getSpecNumber(
   product: CategoryHubProduct,
@@ -10,11 +11,8 @@ export function getSpecNumber(
 
 export function isProductAvailable(product: CategoryHubProduct): boolean {
   if (!Number.isFinite(product.price) || product.price <= 0) return false;
-  if (product.manage_stock === false || product.manage_stock == null)
-    return true;
-  if (product.stock == null) return true;
-  if (product.stock > 0) return true;
-  return Boolean(product.has_condition_offers);
+  if (product.has_condition_offers) return true;
+  return isAvailableProduct(product);
 }
 
 export function pickRepresentativeProduct(

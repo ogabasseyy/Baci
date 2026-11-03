@@ -59,6 +59,13 @@ function checkModelFamilyAuthorityEntry(
   );
 }
 
+/**
+ * Validates whether a price band slug exists in static taxonomy.
+ * Trade-off: preflight resolves only merchant publication status without
+ * fetching payout currency. Currency gating for NGN-gated categories is enforced
+ * downstream in loadPriceBandPage via getCuratedPriceBands(..., { merchantCurrency }),
+ * which returns notFound() for non-NGN merchants.
+ */
 function checkCuratedPriceBand(
   categorySlug: string,
   priceBandSlug: string

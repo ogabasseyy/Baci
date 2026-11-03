@@ -253,6 +253,7 @@ export async function ProductPageBelowFold({
     categorySlug,
     categoryName,
     countryCode: merchant.country,
+    merchantCurrency: currency,
     currentProduct,
     inventory: inventoryCandidates,
     hubEligibilityInventory,

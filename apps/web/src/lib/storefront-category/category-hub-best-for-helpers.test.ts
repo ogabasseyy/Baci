@@ -77,18 +77,25 @@ describe('isProductAvailable', () => {
     expect(
       isProductAvailable(makeProduct('managed-in-stock', 100, {}, 3, true))
     ).toBe(true);
-    expect(
-      isProductAvailable(makeProduct('managed-null-stock', 100, {}, null, true))
-    ).toBe(true);
   });
 
-  it('rejects managed stock products with 0 stock unless condition offers exist', () => {
+  it('rejects managed stock products with 0 or null stock unless condition offers exist', () => {
     expect(
       isProductAvailable(makeProduct('managed-oos', 100, {}, 0, true, false))
     ).toBe(false);
     expect(
       isProductAvailable(
+        makeProduct('managed-null-stock', 100, {}, null, true, false)
+      )
+    ).toBe(false);
+    expect(
+      isProductAvailable(
         makeProduct('managed-oos-condition', 100, {}, 0, true, true)
+      )
+    ).toBe(true);
+    expect(
+      isProductAvailable(
+        makeProduct('managed-null-condition', 100, {}, null, true, true)
       )
     ).toBe(true);
   });

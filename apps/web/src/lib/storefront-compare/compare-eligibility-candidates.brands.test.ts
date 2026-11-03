@@ -181,4 +181,26 @@ describe('compare eligibility candidate builders', () => {
     });
     expect(candidate).toBeNull();
   });
+
+  it('rejects placeholder brands from contributing to price-band indexability', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: {
+        slug: 'under-500k',
+        label: 'Under ₦500k',
+        ceiling: 500_000,
+      },
+      products: [
+        { slug: 'p1', name: 'P1', brand: 'Gaming', price: 200_000 },
+        { slug: 'p2', name: 'P2', brand: 'Generic', price: 250_000 },
+        { slug: 'p3', name: 'P3', brand: 'Other', price: 300_000 },
+        { slug: 'p4', name: 'P4', brand: 'Unknown', price: 350_000 },
+        { slug: 'p5', name: 'P5', brand: 'N/A', price: 400_000 },
+        { slug: 'p6', name: 'P6', brand: 'NA', price: 450_000 },
+      ],
+    });
+    expect(candidate.activeProductCount).toBe(6);
+    expect(candidate.differentiatingSpecCount).toBe(0);
+    expect(candidate.isIndexable).toBe(false);
+  });
 });

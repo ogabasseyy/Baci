@@ -128,23 +128,27 @@ describe('classifyPaystackSettlementCollection', () => {
     }
   });
 
-  it('classifies an empty or null subaccount as integration', () => {
-    expect(classifyPaystackSettlementCollection({ subaccount: {} })).toEqual({
-      mode: 'integration',
-    });
-    expect(classifyPaystackSettlementCollection({ subaccount: null })).toEqual({
-      mode: 'integration',
-    });
-    expect(
-      classifyPaystackSettlementCollection({
-        subaccount: { subaccount_code: '   ' },
-      })
-    ).toEqual({ mode: 'integration' });
-    expect(
-      classifyPaystackSettlementCollection({
-        subaccount: { subaccount_code: null },
-      })
-    ).toEqual({ mode: 'integration' });
+  it('classifies the production Baci-collected shape as integration', () => {
+    // Every production Baci-collected payment: empty subaccount, fees_split null.
+    for (const subaccount of [
+      {},
+      null,
+      { subaccount_code: '   ' },
+      { subaccount_code: null },
+    ]) {
+      expect(
+        classifyPaystackSettlementCollection({ fees_split: null, subaccount })
+      ).toEqual({ mode: 'integration' });
+    }
+  });
+
+  it('fails closed to unknown when an empty subaccount comes without any fees_split', () => {
+    // No split data at all proves nothing, so it must not credit the wallet.
+    for (const subaccount of [{}, null, { subaccount_code: '' }]) {
+      expect(classifyPaystackSettlementCollection({ subaccount })).toEqual({
+        mode: 'unknown',
+      });
+    }
   });
 
   it('fails closed to unknown when an empty subaccount contradicts a positive merchant share', () => {

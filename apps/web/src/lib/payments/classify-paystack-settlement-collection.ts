@@ -39,12 +39,15 @@ export function classifyPaystackSettlementCollection(
   if (!payload || !('subaccount' in payload)) {
     return { mode: 'unknown' };
   }
-  // "No subaccount" only proves Baci collected the money when Paystack's own
-  // split does not show a positive merchant share; a contradiction is unknown.
+  // "No subaccount" only proves Baci collected the money when the payload
+  // carries Paystack's split field (production Baci-collected payments all
+  // have fees_split: null) and it shows no positive merchant share. A missing
+  // fees_split proves nothing; a positive share is a contradiction.
   const feesSplit = asRecord(payload.fees_split);
   const subaccountShareKobo = parseKobo(feesSplit?.subaccount);
   const integration: PaystackSettlementCollection =
-    subaccountShareKobo !== null && subaccountShareKobo > 0
+    !('fees_split' in payload) ||
+    (subaccountShareKobo !== null && subaccountShareKobo > 0)
       ? { mode: 'unknown' }
       : { mode: 'integration' };
   const subaccountValue = payload.subaccount;

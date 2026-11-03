@@ -4,7 +4,10 @@ import { resolveChatOrderSettlementRouting } from '@/lib/payments/resolve-chat-o
 describe('resolveChatOrderSettlementRouting', () => {
   it('marks a Baci-owned chat-order DVA payment as Baci-collected so it stays spendable', () => {
     // Arrange: Paystack shows no subaccount for a Baci-owned DVA.
-    const args = { gateway: 'paystack', gatewayResponse: { subaccount: {} } };
+    const args = {
+      gateway: 'paystack',
+      gatewayResponse: { fees_split: null, subaccount: {} },
+    };
 
     // Act
     const routing = resolveChatOrderSettlementRouting(args);

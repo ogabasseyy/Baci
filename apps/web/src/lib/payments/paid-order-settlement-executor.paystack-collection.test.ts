@@ -169,7 +169,7 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
     const { rpc, supabase } = setup();
 
     await buildSettlementExecutor({ ...baseArgs, supabase })(
-      contextWith({ subaccount: {} })
+      contextWith({ fees_split: null, subaccount: {} })
     );
 
     expect(rpc).toHaveBeenCalledWith(
@@ -198,7 +198,7 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
       orderShippingProvider: 'GIGL',
       orderShippingRetainedAmount: 200,
       supabase,
-    })(contextWith({ subaccount: null }));
+    })(contextWith({ fees_split: null, subaccount: null }));
 
     expect(rpc).toHaveBeenCalledWith(
       'record_merchant_settlement_gigl_v1',

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { resolveChatOrderSettlementRouting } from '@/lib/payments/resolve-chat-order-settlement-routing';
 
 type ChatSettlementSupabase = Pick<SupabaseClient, 'from' | 'rpc'>;
@@ -10,7 +11,7 @@ const POSTGRES_UNIQUE_VIOLATION = '23505';
  * (an unprovable Paystack payload, or a recorder refusal that supabase-js
  * returns instead of throwing) files a durable merchant_settlement_failed
  * review, because the webhook is acknowledged and Paystack will not
- * redeliver, and then rethrows so the caller logs it.
+ * redeliver, and then rethrows the original error so the caller logs it.
  */
 export async function recordChatOrderSettlement(
   args: ChatSettlementArgs
@@ -52,14 +53,20 @@ async function fileSettlementReview(
       reason:
         'Chat-order settlement was not recorded; reconcile it against the Paystack transaction.',
     });
-  // An open review for this order already exists on a redelivery.
+  // An open review for this order already exists on a redelivery. Any other
+  // failure is logged with the original settlement error and never thrown,
+  // so the caller still sees (and logs) the settlement error itself.
   if (
     reviewError &&
     (reviewError as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION
   ) {
-    throw new Error(
-      `chat_order_settlement_review_failed: ${reviewError.message}`
-    );
+    logger.error({
+      message: 'Failed to file chat-order settlement review',
+      orderId: args.orderId,
+      reference: args.reference,
+      reviewError: reviewError.message,
+      settlementError: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

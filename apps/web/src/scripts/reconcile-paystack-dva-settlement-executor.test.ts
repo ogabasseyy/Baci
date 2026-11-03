@@ -50,7 +50,7 @@ describe('buildReconcileSettlementExecutor', () => {
   it('keeps a Baci-collected non-GIGL payment on the wallet recorder, marked spendable', async () => {
     const { executor, rpc } = build();
 
-    await executor(ctx({ subaccount: {} }));
+    await executor(ctx({ fees_split: null, subaccount: {} }));
 
     expect(rpc).toHaveBeenCalledWith(
       'record_merchant_settlement',
@@ -67,6 +67,6 @@ describe('buildReconcileSettlementExecutor', () => {
     const { executor, rpc } = build();
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'denied' } });
 
-    await expect(executor(ctx({ subaccount: {} }))).rejects.toThrow('denied');
+    await expect(executor(ctx({ fees_split: null, subaccount: {} }))).rejects.toThrow('denied');
   });
 });

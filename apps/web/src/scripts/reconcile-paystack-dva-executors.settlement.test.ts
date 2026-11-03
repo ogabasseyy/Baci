@@ -52,7 +52,7 @@ describe('buildScriptExecutors merchant_settlement', () => {
   describe('merchant_settlement', () => {
     // A Baci-owned DVA: Paystack shows no subaccount, so the credit stays a
     // wallet credit marked as Baci-collected.
-    const baciCollectedCtx = { ...stepCtx, gatewayResponse: { subaccount: {} } };
+    const baciCollectedCtx = { ...stepCtx, gatewayResponse: { fees_split: null, subaccount: {} } };
 
     it('passes the gateway_reference as BAC-* (Δ-22 invariant) and metadata.paystack_reference', async () => {
       const args = defaultArgs();
@@ -184,7 +184,7 @@ describe('buildScriptExecutors merchant_settlement', () => {
       it('routes a Baci-collected payload to record_merchant_settlement_gigl_v1', async () => {
         const args = { ...defaultArgs(), richOrder: giglOrder() };
         const ex = buildScriptExecutors(args);
-        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { subaccount: {} } });
+        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { fees_split: null, subaccount: {} } });
         expect(args.supabase.rpc).toHaveBeenCalledWith(
           'record_merchant_settlement_gigl_v1',
           expect.objectContaining({
@@ -199,7 +199,7 @@ describe('buildScriptExecutors merchant_settlement', () => {
           richOrder: richOrder({ shipping_provider: 'GIGL', shipping_funding_source: null }),
         };
         const ex = buildScriptExecutors(args);
-        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { subaccount: {} } });
+        await ex.merchant_settlement!({ ...stepCtx, gatewayResponse: { fees_split: null, subaccount: {} } });
         expect(args.supabase.rpc).toHaveBeenCalledWith(
           'record_merchant_settlement',
           expect.anything()

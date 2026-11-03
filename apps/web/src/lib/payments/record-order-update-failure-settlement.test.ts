@@ -155,7 +155,7 @@ describe('recordOrderUpdateFailureSettlement', () => {
         gateway: 'paystack',
         gatewayReference: null,
         // Baci-collected payload, so routing reaches the failing RPC.
-        gatewayResponse: { subaccount: {} },
+        gatewayResponse: { fees_split: null, subaccount: {} },
         grossAmount: 5000,
         merchantId: 'merchant-1',
         orderId: 'order-2',
@@ -243,7 +243,7 @@ describe('bugfix: the order-update-failure fallback credited Paystack split sale
   it('marks a Baci-collected Paystack payment so its credit stays spendable', async () => {
     const { rpc, supabase } = supabaseWith();
 
-    await run(supabase, { subaccount: {} });
+    await run(supabase, { fees_split: null, subaccount: {} });
 
     expect(rpc).toHaveBeenCalledWith(
       'record_merchant_settlement_gigl_v1',

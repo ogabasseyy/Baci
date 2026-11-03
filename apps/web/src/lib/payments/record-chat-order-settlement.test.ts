@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const loggerError = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/logger', () => ({ logger: { error: loggerError } }));
+
 function reviewTable() {
   const insert = vi.fn().mockResolvedValue({ error: null });
   return { from: vi.fn(() => ({ insert })), insert };
@@ -27,7 +30,7 @@ describe('recordChatOrderSettlement', () => {
     // Act
     await recordChatOrderSettlement({
       ...base,
-      gatewayResponse: { subaccount: {} },
+      gatewayResponse: { fees_split: null, subaccount: {} },
       supabase: { from: review.from, rpc } as never,
     });
 
@@ -123,10 +126,34 @@ describe('recordChatOrderSettlement', () => {
 
     await recordChatOrderSettlement({
       ...base,
-      gatewayResponse: { subaccount: {} },
+      gatewayResponse: { fees_split: null, subaccount: {} },
       supabase: { from: review.from, rpc } as never,
     });
 
     expect(review.insert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the original settlement error and logs both when the review insert fails', async () => {
+    const insert = vi
+      .fn()
+      .mockResolvedValue({ error: { code: '42501', message: 'denied' } });
+    const rpc = vi.fn();
+
+    await expect(
+      recordChatOrderSettlement({
+        ...base,
+        gatewayResponse: { status: 'success' },
+        supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+      })
+    ).rejects.toThrow('paystack_settlement_collection_unknown');
+
+    expect(loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Failed to file chat-order settlement review',
+        orderId: 'order-1',
+        reference: 'CHAT-REF123',
+        settlementError: 'paystack_settlement_collection_unknown',
+      })
+    );
   });
 });

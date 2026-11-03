@@ -57,7 +57,7 @@ describe('resolveSettlementRpcRouting', () => {
 
   it('keeps crediting the wallet, marked as Baci-collected, when Paystack shows no subaccount', () => {
     const routing = resolveSettlementRpcRouting({
-      gatewayResponse: { subaccount: {} },
+      gatewayResponse: { fees_split: null, subaccount: {} },
       isRedvaultDirectSettlement: false,
       settlementGateway: 'paystack',
       useGiglSettlementRpc: false,

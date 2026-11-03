@@ -39,17 +39,13 @@ const WEB_WORKFLOW_FILES = new Set([
 ]);
 
 function required(value, label) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`missing ${label}`);
-  }
+  if (typeof value !== 'string' || value.length === 0) throw new Error(`missing ${label}`);
   return value;
 }
 
 function safeApiUrl(value) {
   const url = new URL(value ?? 'https://api.github.com');
-  if (url.protocol !== 'https:' || url.username || url.password) {
-    throw new Error('invalid GitHub API URL');
-  }
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('invalid GitHub API URL');
   return url.href.replace(/\/$/, '');
 }
 
@@ -113,7 +109,7 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   }
   const deployJobs = jobsBody.jobs.filter((j) => j?.name === 'deploy-production');
   if (deployJobs.length === 0) {
-    if (run.status === 'completed' || jobsBody.jobs.length > 0) {
+    if (run.status === 'completed') {
       throw new Error('missing deploy-production job in workflow run');
     }
     return false;
@@ -151,7 +147,7 @@ async function hasSupersedingDeployment({
   for (const sha of supersedingShas) {
     const runsBody = await githubJson(
       fetchImpl,
-      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}&per_page=100`,
+      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}&branch=main&per_page=100`,
       token
     );
     if (
@@ -165,7 +161,10 @@ async function hasSupersedingDeployment({
       if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
         throw new Error('invalid workflow run SHA');
       }
-      if (run.head_sha.toLowerCase() === sha.toLowerCase()) {
+      if (
+        run.head_sha.toLowerCase() === sha.toLowerCase() &&
+        (run.head_branch == null || run.head_branch === 'main')
+      ) {
         const deployed = await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token);
         if (deployed) return true;
       }

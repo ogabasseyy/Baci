@@ -80,6 +80,7 @@ with `[Filtered]`.
 | `PIGGYVEST_INFLOW_REVIEW_OPEN` | A wallet is above its expected balance by exactly its open inflow reviews; nothing is re-queued | Open inflow reviews for the wallet |
 | `PIGGYVEST_INFLOW_UNMAPPED` | A bank deposit arrived for a PiggyVest wallet that maps to none of our goals or wallets. It is not credited and stays retryable. Goal account numbers are hidden in the app, so this is unexpected. Raised once per provider transaction id (the event id for other event types) per server instance on the primary log channel (the console line, remembered as soon as it is written); the PostHog page is best effort, and a failed or timed-out send is retried on the next redelivery without repeating the log line. A restart, or another instance, can page once more | The event's wallet and customer at PiggyVest; whose money it is |
 | `PIGGYVEST_NEGATIVE_DRIFT` | Reserved for drift monitoring: the PiggyVest balance is below what our records expect and new spends are held. Not emitted yet | Drift report for the wallet |
+| `PIGGYVEST_RECONCILIATION_MISMATCH` | The daily reconciliation found a transfer still reserved or sent past its cutoff, a goal wallet holding less at PiggyVest than we recorded, a balance it could not read, or it could not run. The emailed report lists each one. Read-only: nothing is resent or released | The emailed report, then the status of each listed transfer at PiggyVest |
 
 ## Setting up paging in PostHog (owner step, later)
 

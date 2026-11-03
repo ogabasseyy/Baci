@@ -59,6 +59,10 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // Reserved for drift monitoring: the PiggyVest balance is below what our
   // records expect, so new spends are held. Not emitted yet.
   'PIGGYVEST_NEGATIVE_DRIFT',
+  // The daily reconciliation found a transfer stuck past its cutoff, a goal
+  // wallet holding less at PiggyVest than we recorded, an unreadable balance,
+  // or it could not run. Read-only: a person resolves it.
+  'PIGGYVEST_RECONCILIATION_MISMATCH',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

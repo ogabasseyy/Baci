@@ -69,4 +69,32 @@ SQL
 }
 run_race claim_storefront_redvault_payment_attempt_initialization_v4 claim_storefront_redvault_payment_attempt_initialization_v3 initialization_fresh initialization_claimed
 run_race claim_storefront_redvault_payment_attempt_initialization_v3 claim_storefront_redvault_payment_attempt_initialization_v4 initialization_claimed initialization_fresh
+psql -Xq -v ON_ERROR_STOP=1 <<SQL
+SELECT set_config('request.jwt.claims','$claims',false);
+UPDATE private.uba_redvault_payment_attempts SET state='initializing',initialization_claimed_at=NULL;
+DO \$\$ DECLARE result record; BEGIN
+ SELECT * INTO result FROM public.claim_storefront_redvault_payment_attempt_initialization_v4('00000000-0000-4000-8000-000000000001');
+ IF result.initialization_claimed IS DISTINCT FROM false OR result.initialization_fresh IS DISTINCT FROM false OR NOT EXISTS (
+  SELECT 1 FROM private.uba_redvault_payment_attempts WHERE id='00000000-0000-4000-8000-000000000001'
+   AND state='initializing' AND initialization_claimed_at IS NULL
+ ) THEN RAISE EXCEPTION 'NULL lease reclaimed or changed'; END IF;
+END \$\$;
+SQL
+psql -Xq -v ON_ERROR_STOP=1 <<'SQL'
+UPDATE private.uba_redvault_applications
+ SET user_id='00000000-0000-4000-8000-000000000005',customer_email='redvault-p12@example.com';
+UPDATE private.uba_redvault_payment_attempts SET state='created',initialization_claimed_at=NULL;
+INSERT INTO private.uba_redvault_payment_attempts
+ (id,application_id,order_id,reference,amount_kobo,currency,quote_payload_hash,state,accepted_filter_policy,accepted_filter_policy_hash,authorization_url,paystack_subaccount_code,platform_fee_kobo,split_retained_shipping_kobo,initialization_claimed_at,initialized_at)
+SELECT candidate.id,a.application_id,a.order_id,candidate.reference,a.amount_kobo,a.currency,a.quote_payload_hash,'initializing',a.accepted_filter_policy,a.accepted_filter_policy_hash,a.authorization_url,a.paystack_subaccount_code,a.platform_fee_kobo,a.split_retained_shipping_kobo,candidate.claimed_at,NULL
+FROM private.uba_redvault_payment_attempts a CROSS JOIN (VALUES
+ ('00000000-0000-4000-8000-000000000006'::uuid,'fixture-stale',now()-interval '10 minutes'),
+ ('00000000-0000-4000-8000-000000000007'::uuid,'fixture-null',NULL::timestamptz)
+) candidate(id,reference,claimed_at) WHERE a.id='00000000-0000-4000-8000-000000000001';
+\i supabase/tests/uba_redvault_round12_initialization_lease.inc.sql
+SELECT pg_temp.assert_redvault_initialization_leases(
+ '00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000003',
+ '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000006',
+ '00000000-0000-4000-8000-000000000007');
+SQL
 printf '%s\n' 'REDVAULT v3/v4 concurrent claims: one winner in each ordering'

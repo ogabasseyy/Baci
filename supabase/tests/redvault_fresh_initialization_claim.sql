@@ -20,14 +20,28 @@ END $$;
 SET LOCAL session_replication_role='replica';
 UPDATE private.uba_redvault_payment_attempts SET initialization_claimed_at=clock_timestamp()-interval '3 minutes' WHERE id='d4000000-0000-4000-8000-000000000005';
 SET LOCAL session_replication_role='origin';
-DO $$ DECLARE result record; BEGIN
+DO $$ DECLARE result record; before_claim timestamptz; BEGIN
+ SELECT initialization_claimed_at INTO before_claim FROM private.uba_redvault_payment_attempts WHERE id='d4000000-0000-4000-8000-000000000005';
  SELECT * INTO result FROM public.claim_storefront_redvault_payment_attempt_initialization_v2('d4000000-0000-4000-8000-000000000005');
- IF result.initialization_claimed IS DISTINCT FROM false OR result.state<>'initializing' THEN RAISE EXCEPTION 'stale claim was reclaimed'; END IF;
+ IF result.initialization_claimed IS DISTINCT FROM false OR result.state IS DISTINCT FROM 'initializing' OR NOT EXISTS (
+  SELECT 1 FROM private.uba_redvault_payment_attempts WHERE id='d4000000-0000-4000-8000-000000000005'
+   AND state='initializing' AND initialization_claimed_at IS NOT DISTINCT FROM before_claim
+ ) THEN RAISE EXCEPTION 'stale claim was reclaimed or changed'; END IF;
  SELECT * INTO result FROM public.claim_storefront_redvault_payment_attempt_initialization_v4('d4000000-0000-4000-8000-000000000005');
  IF result.initialization_claimed IS DISTINCT FROM false OR result.initialization_fresh IS DISTINCT FROM false THEN RAISE EXCEPTION 'stale v4 claim was reclaimed'; END IF;
  IF NOT has_function_privilege('authenticated','public.claim_storefront_redvault_payment_attempt_initialization_v4(uuid)','EXECUTE')
  OR has_function_privilege('anon','public.claim_storefront_redvault_payment_attempt_initialization_v4(uuid)','EXECUTE')
  OR has_function_privilege('service_role','public.claim_storefront_redvault_payment_attempt_initialization_v4(uuid)','EXECUTE') THEN RAISE EXCEPTION 'fresh claim grant invalid'; END IF;
+END $$;
+SET LOCAL session_replication_role='replica';
+UPDATE private.uba_redvault_payment_attempts SET initialization_claimed_at=NULL WHERE id='d4000000-0000-4000-8000-000000000005';
+SET LOCAL session_replication_role='origin';
+DO $$ DECLARE result record; BEGIN
+ SELECT * INTO result FROM public.claim_storefront_redvault_payment_attempt_initialization_v4('d4000000-0000-4000-8000-000000000005');
+ IF result.initialization_claimed IS DISTINCT FROM false OR result.initialization_fresh IS DISTINCT FROM false OR NOT EXISTS (
+  SELECT 1 FROM private.uba_redvault_payment_attempts WHERE id='d4000000-0000-4000-8000-000000000005'
+   AND state='initializing' AND initialization_claimed_at IS NULL
+ ) THEN RAISE EXCEPTION 'NULL initialization lease was reclaimed or changed'; END IF;
 END $$;
 SELECT set_config('request.jwt.claims','{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"00000000-0000-4000-8000-000000000009","storefront_redvault_customer_email":"fresh@example.test"}',true);
 DO $$ BEGIN

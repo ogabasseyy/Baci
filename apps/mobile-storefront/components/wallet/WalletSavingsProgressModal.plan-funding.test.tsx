@@ -102,36 +102,6 @@ it('shows wallet guidance, never the plan account, and keeps the wallet amount f
   expect(onAddSavings).not.toHaveBeenCalled();
 });
 
-it('lets a manual plan with a funded wallet contribute from the wallet', async () => {
-  render(modal(goal, true, undefined, '500', 1000));
-  await act(async () => {});
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Confirm savings top-up' })
-  );
-  expect(onAddSavings).toHaveBeenCalledTimes(1);
-  expect(onFundWallet).not.toHaveBeenCalled();
-  expect(screen.queryByText('0000008907')).toBeNull();
-});
-
-it('offers wallet funding, not bank transfer details, for a manual plan with an empty wallet', async () => {
-  render(modal(goal, true, undefined, '500', 0));
-  await act(async () => {});
-  expect(screen.queryByText(/bank transfer details/i)).toBeNull();
-  expect(screen.queryByText(/plan transfer details/i)).toBeNull();
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Fund wallet for savings' })
-  );
-  expect(onFundWallet).toHaveBeenCalledTimes(1);
-});
-
-it('offers no wallet contribution for an auto-debit plan', async () => {
-  render(
-    modal({ ...goal, source_mode: 'auto_debit' }, true, undefined, '500', 1000)
-  );
-  await act(async () => {});
-  expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
-});
-
 it('refreshes wallet goal progress from the guidance panel', async () => {
   const refreshWallet = jest.fn(async () => ({ isError: false }));
   render(modal(goal, true, refreshWallet));

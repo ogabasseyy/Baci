@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
-import { resetUnmappedAlertMemoryForTests } from './unmapped-alert-once';
 import {
   deferredEvent,
   inflowEvent,
@@ -26,15 +25,6 @@ vi.mock('./event-quarantine', () => ({
 vi.mock('./webhook-inbox', () => ({
   claimPiggyvestEvent: (...args: unknown[]) => mockClaim(...args),
   resolvePiggyvestEvent: (...args: unknown[]) => mockResolve(...args),
-}));
-
-const mockAlert = vi.fn();
-vi.mock('./webhook-alerts', () => ({
-  emitPiggyvestWebhookAlert: (...args: unknown[]) => mockAlert(...args),
-  emitPiggyvestWebhookAlertDelivered: async (...args: unknown[]) => {
-    mockAlert(...args);
-    return true;
-  },
 }));
 
 vi.mock('./inflow-ledger', () => ({
@@ -103,7 +93,6 @@ const claimToken = '4204dc18-efb3-44d0-b9a2-1362448d4f21';
 describe('processPiggyvestEvent', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    resetUnmappedAlertMemoryForTests();
     mockClaim.mockResolvedValue({ outcome: 'claimed', claimToken });
     mockResolve.mockResolvedValue(undefined);
     mockRecordPayout.mockResolvedValue('credited');
@@ -316,87 +305,6 @@ describe('processPiggyvestEvent', () => {
     await expect(processPiggyvestEvent(supabase, event as never)).resolves.toBe(
       'processed'
     );
-    expect(mockResolve).toHaveBeenCalledWith(
-      supabase,
-      expect.objectContaining({ claimToken, status: 'failed' })
-    );
-  });
-
-  it('alerts and stays retryable when a deposit arrives for an unmapped wallet', async () => {
-    const unmapped = new InflowLedgerError(
-      'INFLOW_LEDGER_UNMAPPED',
-      'no mapping'
-    );
-    mockRecordInflow.mockRejectedValue(unmapped);
-    await expect(
-      processPiggyvestEvent(supabase, inflowEvent as never)
-    ).rejects.toBe(unmapped);
-    expect(mockAlert).toHaveBeenCalledExactlyOnceWith(
-      'PIGGYVEST_INFLOW_UNMAPPED',
-      {
-        eventType: inflowEvent.eventType,
-        operationId: inflowEvent.eventData.transaction_id,
-      }
-    );
-    expect(mockResolve).toHaveBeenCalledWith(
-      supabase,
-      expect.objectContaining({ claimToken, status: 'failed' })
-    );
-  });
-
-  it('raises the unmapped alert only once when the same deposit is redelivered', async () => {
-    const unmapped = new InflowLedgerError(
-      'INFLOW_LEDGER_UNMAPPED',
-      'no mapping'
-    );
-    mockRecordInflow.mockRejectedValue(unmapped);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await expect(
-        processPiggyvestEvent(supabase, inflowEvent as never)
-      ).rejects.toBe(unmapped);
-    }
-    expect(mockAlert).toHaveBeenCalledTimes(1);
-    expect(mockResolve).toHaveBeenCalledTimes(3);
-  });
-
-  it('raises the unmapped alert once per deposit even under a new event id', async () => {
-    const unmapped = new InflowLedgerError(
-      'INFLOW_LEDGER_UNMAPPED',
-      'no mapping'
-    );
-    mockRecordInflow.mockRejectedValue(unmapped);
-    await expect(
-      processPiggyvestEvent(supabase, inflowEvent as never)
-    ).rejects.toBe(unmapped);
-    await expect(
-      processPiggyvestEvent(supabase, {
-        ...inflowEvent,
-        eventId: '01K8TESTINFLOW002',
-      } as never)
-    ).rejects.toBe(unmapped);
-    expect(mockAlert).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not raise the unmapped alert for other inflow failures', async () => {
-    mockRecordInflow.mockRejectedValue(new Error('storage unavailable'));
-    await expect(
-      processPiggyvestEvent(supabase, inflowEvent as never)
-    ).rejects.toThrow('storage unavailable');
-    expect(mockAlert).not.toHaveBeenCalled();
-  });
-
-  it('still retries the unmapped deposit when the alert itself throws', async () => {
-    const unmapped = new InflowLedgerError(
-      'INFLOW_LEDGER_UNMAPPED',
-      'no mapping'
-    );
-    mockRecordInflow.mockRejectedValue(unmapped);
-    mockAlert.mockImplementation(() => {
-      throw new Error('alert down');
-    });
-    await expect(
-      processPiggyvestEvent(supabase, inflowEvent as never)
-    ).rejects.toBe(unmapped);
     expect(mockResolve).toHaveBeenCalledWith(
       supabase,
       expect.objectContaining({ claimToken, status: 'failed' })

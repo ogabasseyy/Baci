@@ -7,72 +7,82 @@ import {
   resetUnmappedAlertMemoryForTests,
 } from './unmapped-alert-once';
 
-const mockAlert = vi.hoisted(() => vi.fn());
+const mockLog = vi.hoisted(() => vi.fn());
+const mockSend = vi.hoisted(() => vi.fn());
 vi.mock('./webhook-alerts', () => ({
-  emitPiggyvestWebhookAlertDelivered: mockAlert,
+  logPiggyvestWebhookAlert: mockLog,
+  sendPiggyvestWebhookAlertDelivered: mockSend,
 }));
 
+function alertWith(send: () => Promise<boolean>) {
+  return { log: vi.fn(), send: vi.fn(send) };
+}
+
 describe('alertOncePerEvent', () => {
-  it('raises the alert once for repeated deliveries of the same event', async () => {
+  it('writes the log line once and sends once for repeated deliveries', async () => {
     resetUnmappedAlertMemoryForTests();
-    const emit = vi.fn().mockResolvedValue(true);
-    await alertOncePerEvent('evt-1', emit);
-    await alertOncePerEvent('evt-1', emit);
-    await alertOncePerEvent('evt-1', emit);
-    expect(emit).toHaveBeenCalledTimes(1);
+    const alert = alertWith(async () => true);
+    await alertOncePerEvent('evt-1', alert);
+    await alertOncePerEvent('evt-1', alert);
+    await alertOncePerEvent('evt-1', alert);
+    expect(alert.log).toHaveBeenCalledTimes(1);
+    expect(alert.send).toHaveBeenCalledTimes(1);
   });
 
-  it('raises a separate alert for a different event', async () => {
+  it('pages a different key separately', async () => {
     resetUnmappedAlertMemoryForTests();
-    const emit = vi.fn().mockResolvedValue(true);
-    await alertOncePerEvent('evt-1', emit);
-    await alertOncePerEvent('evt-2', emit);
-    expect(emit).toHaveBeenCalledTimes(2);
+    const alert = alertWith(async () => true);
+    await alertOncePerEvent('evt-1', alert);
+    await alertOncePerEvent('evt-2', alert);
+    expect(alert.log).toHaveBeenCalledTimes(2);
   });
 
   it.each([
     ['resolves false', () => Promise.resolve(false)],
-    ['rejects', () => Promise.reject(new Error('alert down'))],
-    [
-      'throws synchronously',
-      () => {
-        throw new Error('alert down');
-      },
-    ],
-  ])('pages again on the next delivery when the send %s', async (_n, fail) => {
+    ['rejects', () => Promise.reject(new Error('posthog down'))],
+  ])('retries only the PostHog send, never the log line, when the send %s', async (_n, fail) => {
     resetUnmappedAlertMemoryForTests();
-    const emit = vi
+    const log = vi.fn();
+    const send = vi
       .fn<() => Promise<boolean>>()
       .mockImplementationOnce(fail)
       .mockResolvedValue(true);
-    await alertOncePerEvent('evt-1', emit).catch(() => undefined);
-    await alertOncePerEvent('evt-1', emit);
-    await alertOncePerEvent('evt-1', emit);
-    expect(emit).toHaveBeenCalledTimes(2);
+    await alertOncePerEvent('evt-1', { log, send });
+    await alertOncePerEvent('evt-1', { log, send });
+    await alertOncePerEvent('evt-1', { log, send });
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps retrying PostHog on each redelivery while it stays down, with one log line', async () => {
+    resetUnmappedAlertMemoryForTests();
+    const alert = alertWith(async () => false);
+    for (let i = 0; i < 4; i += 1) await alertOncePerEvent('evt-1', alert);
+    expect(alert.log).toHaveBeenCalledTimes(1);
+    expect(alert.send).toHaveBeenCalledTimes(4);
   });
 
   it('does not double-page concurrent redeliveries', async () => {
     resetUnmappedAlertMemoryForTests();
     let release: (v: boolean) => void = () => undefined;
-    const emit = vi.fn(
-      () => new Promise<boolean>((resolve) => (release = resolve))
-    );
-    const first = alertOncePerEvent('evt-1', emit);
-    const second = alertOncePerEvent('evt-1', emit);
+    const alert = alertWith(() => new Promise<boolean>((r) => (release = r)));
+    const first = alertOncePerEvent('evt-1', alert);
+    const second = alertOncePerEvent('evt-1', alert);
     release(true);
     await Promise.all([first, second]);
-    expect(emit).toHaveBeenCalledTimes(1);
+    expect(alert.log).toHaveBeenCalledTimes(1);
+    expect(alert.send).toHaveBeenCalledTimes(1);
   });
 
-  it('forgets the oldest events once the memory is full', async () => {
+  it('forgets the oldest keys once the memory is full', async () => {
     resetUnmappedAlertMemoryForTests();
-    const emit = vi.fn().mockResolvedValue(true);
-    for (let i = 0; i < 600; i += 1) await alertOncePerEvent(`evt-${i}`, emit);
-    emit.mockClear();
-    await alertOncePerEvent('evt-599', emit);
-    expect(emit).not.toHaveBeenCalled();
-    await alertOncePerEvent('evt-0', emit);
-    expect(emit).toHaveBeenCalledTimes(1);
+    const alert = alertWith(async () => true);
+    for (let i = 0; i < 600; i += 1) await alertOncePerEvent(`evt-${i}`, alert);
+    alert.log.mockClear();
+    await alertOncePerEvent('evt-599', alert);
+    expect(alert.log).not.toHaveBeenCalled();
+    await alertOncePerEvent('evt-0', alert);
+    expect(alert.log).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -84,61 +94,79 @@ describe('alertUnmappedInflow', () => {
   } as unknown as PiggyvestWebhookEvent;
   const unmapped = new InflowLedgerError('INFLOW_LEDGER_UNMAPPED', 'x');
 
-  it('pages once per provider transaction for an unmapped deposit', async () => {
+  function reset(sendResult: boolean | Error = true) {
     resetUnmappedAlertMemoryForTests();
-    mockAlert.mockReset().mockResolvedValue(true);
+    mockLog.mockReset();
+    mockSend.mockReset();
+    if (sendResult instanceof Error) mockSend.mockRejectedValue(sendResult);
+    else mockSend.mockResolvedValue(sendResult);
+  }
+
+  it('writes exactly one log line on the first-ever delivery', async () => {
+    reset();
+    await alertUnmappedInflow(unmapped, event);
+    expect(mockLog).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_INFLOW_UNMAPPED',
+      { eventType: 'bank-transfer.inflow.success', operationId: 'txn-9' }
+    );
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('pages once per provider transaction even under a new event id', async () => {
+    reset();
     await alertUnmappedInflow(unmapped, event);
     await alertUnmappedInflow(unmapped, {
       ...event,
       eventId: 'evt-10',
     } as never);
-    expect(mockAlert).toHaveBeenCalledTimes(1);
+    expect(mockLog).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the provider transaction as the PostHog operation id', async () => {
-    resetUnmappedAlertMemoryForTests();
-    mockAlert.mockReset().mockResolvedValue(true);
+  it('adds no second log line when PostHog rejects and the deposit is redelivered', async () => {
+    reset(new Error('down'));
     await alertUnmappedInflow(unmapped, event);
-    expect(mockAlert).toHaveBeenCalledWith('PIGGYVEST_INFLOW_UNMAPPED', {
-      eventType: 'bank-transfer.inflow.success',
-      operationId: 'txn-9',
-    });
+    await alertUnmappedInflow(unmapped, event);
+    expect(mockLog).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to the event id when the transaction id is not a safe identifier', async () => {
-    resetUnmappedAlertMemoryForTests();
-    mockAlert.mockReset().mockResolvedValue(true);
-    await alertUnmappedInflow(unmapped, {
+  it('derives a stable safe PostHog id from an unsafe transaction id, not the event id', async () => {
+    reset();
+    const unsafe = {
       ...event,
       eventData: { transaction_id: 'bad id with spaces' },
+    } as never;
+    await alertUnmappedInflow(unmapped, unsafe);
+    await alertUnmappedInflow(unmapped, {
+      ...(unsafe as object),
+      eventId: 'evt-77',
     } as never);
-    expect(mockAlert.mock.calls[0]?.[1]).toMatchObject({
-      operationId: 'evt-9',
-    });
+    const id = (mockLog.mock.calls[0]?.[1] as { operationId: string })
+      .operationId;
+    expect(id).toMatch(/^txn_[0-9a-f]{32}$/);
+    expect(id).not.toContain('evt-');
+    expect(mockLog).toHaveBeenCalledTimes(1);
   });
 
-  it('pages again on redelivery when the PostHog send failed', async () => {
-    resetUnmappedAlertMemoryForTests();
-    mockAlert
-      .mockReset()
-      .mockResolvedValueOnce(false)
-      .mockRejectedValueOnce(new Error('down'))
-      .mockResolvedValue(true);
-    await alertUnmappedInflow(unmapped, event);
-    await alertUnmappedInflow(unmapped, event);
-    await alertUnmappedInflow(unmapped, event);
-    await alertUnmappedInflow(unmapped, event);
-    expect(mockAlert).toHaveBeenCalledTimes(3);
+  it('uses the event id for deposits without a transaction', async () => {
+    reset();
+    await alertUnmappedInflow(unmapped, {
+      eventId: 'evt-5',
+      eventType: 'other.event',
+      eventData: {},
+    } as never);
+    expect(mockLog.mock.calls[0]?.[1]).toMatchObject({ operationId: 'evt-5' });
   });
 
   it('stays silent for other errors', async () => {
-    resetUnmappedAlertMemoryForTests();
-    mockAlert.mockReset();
+    reset();
     await alertUnmappedInflow(
       new InflowLedgerError('INFLOW_LEDGER_CONFLICT', 'x'),
       event
     );
     await alertUnmappedInflow(new Error('boom'), event);
-    expect(mockAlert).not.toHaveBeenCalled();
+    expect(mockLog).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });

@@ -95,18 +95,32 @@ function allowlistedDetail(
 }
 
 /**
- * Same alert as `emitPiggyvestWebhookAlert`, but the returned promise settles
- * with whether the PostHog page was delivered. It never rejects. The console
- * line is always written first.
+ * Writes the alert's console line (the primary log-drain page) and nothing
+ * else. Split from the PostHog send so a caller can remember "paged" as soon
+ * as the line is written, whatever PostHog does.
  */
-export async function emitPiggyvestWebhookAlertDelivered(
+export function logPiggyvestWebhookAlert(
+  code: PiggyvestWebhookAlertCode,
+  detail: PiggyvestWebhookAlertDetail = {}
+): void {
+  console.error(
+    `[PiggyVest Webhook][ALERT] ${code} ${JSON.stringify(allowlistedDetail(detail))}`
+  );
+}
+
+/**
+ * The PostHog half of the alert. Settles with whether the page was sent; it
+ * never rejects and is bounded by the send timeout.
+ */
+export async function sendPiggyvestWebhookAlertDelivered(
   code: PiggyvestWebhookAlertCode,
   detail: PiggyvestWebhookAlertDetail = {}
 ): Promise<boolean> {
-  const safe = allowlistedDetail(detail);
-  console.error(`[PiggyVest Webhook][ALERT] ${code} ${JSON.stringify(safe)}`);
   try {
-    return (await sendPiggyvestMoneyAlert(code, safe)) === 'sent';
+    return (
+      (await sendPiggyvestMoneyAlert(code, allowlistedDetail(detail))) ===
+      'sent'
+    );
   } catch {
     return false;
   }

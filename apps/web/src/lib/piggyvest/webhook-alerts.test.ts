@@ -92,26 +92,35 @@ describe('emitPiggyvestWebhookAlert console line', () => {
   });
 });
 
-describe('emitPiggyvestWebhookAlertDelivered', () => {
-  it('resolves true only when the PostHog page was sent', async () => {
+describe('logPiggyvestWebhookAlert and sendPiggyvestWebhookAlertDelivered', () => {
+  it('logs the console line without sending to PostHog', () => {
+    posthog.captureServerEvent.mockClear();
+    alerts.logPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
+      operationId: 'txn-log-1',
+    });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(posthog.captureServerEvent).not.toHaveBeenCalled();
+  });
+
+  it('resolves true only when the PostHog page was sent, without a console line', async () => {
     await expect(
-      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
         operationId: 'txn-delivered-1',
       })
     ).resolves.toBe(true);
-    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
   });
 
   it('resolves false, never rejects, when the PostHog send fails or rejects', async () => {
     posthog.captureServerEvent.mockResolvedValueOnce(false);
     await expect(
-      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
         operationId: 'txn-delivered-2',
       })
     ).resolves.toBe(false);
     posthog.captureServerEvent.mockRejectedValueOnce(new Error('down'));
     await expect(
-      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+      alerts.sendPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
         operationId: 'txn-delivered-3',
       })
     ).resolves.toBe(false);

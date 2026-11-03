@@ -20,6 +20,47 @@ async function temporaryRoot() {
 }
 
 describe('replay diagnostics', () => {
+  it('skips an explicitly confirmed expected denial and reports the later failure', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    const stderr =
+      'psql:/private.sql:87: ERROR:  42501: expected private denial\npsql:/private.sql:105: ERROR:  P1004: later private failure\n';
+    await writeFile(
+      psql,
+      `#!${process.execPath}\nprocess.stdout.write('OXYGEN_ANON_DRAFT_DENIAL_OK\\n');process.stderr.write(${JSON.stringify(stderr)});process.exit(1);\n`,
+      { mode: 0o700 }
+    );
+    const run = replayCommandRuntime.create(root);
+    await expect(
+      applySupabaseReplaySql(() => run(psql, []), {
+        kind: 'sql-check',
+        ordinal: 189,
+        sqlPath: '/private.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=105,sqlstate=P1004\)$/
+    );
+  });
+
+  it('does not report a confirmed expected denial if the connection later fails', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      `#!${process.execPath}\nprocess.stdout.write('OXYGEN_ANON_DRAFT_DENIAL_OK\\n');process.stderr.write('psql:/private.sql:87: ERROR:  42501: expected private denial\\n');process.exit(2);\n`,
+      { mode: 0o700 }
+    );
+    const run = replayCommandRuntime.create(root);
+    await expect(
+      applySupabaseReplaySql(() => run(psql, []), {
+        kind: 'sql-check',
+        ordinal: 189,
+        sqlPath: '/private.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 189: non-zero-exit$/
+    );
+  });
   it.each([
     1, 2, 3, 7,
   ])('reports only a bounded psql exit category for exit %i', async (exit) => {

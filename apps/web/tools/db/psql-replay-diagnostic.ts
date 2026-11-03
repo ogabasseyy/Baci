@@ -13,11 +13,21 @@ export function boundedPsqlDiagnostic(
     return '';
   }
   const output = Buffer.concat(stderr).toString('utf8');
+  const stdoutText = Buffer.concat(stdout).toString('utf8');
   const escapedCommandName = commandName.replaceAll('.', '\\.');
-  const match = new RegExp(
-    `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+(?:ERROR|error):(?:[ \\t]+([0-9A-Z]{5})(?=[: \\t]|$))?`,
-    'm'
-  ).exec(output);
+  const matches = [
+    ...output.matchAll(
+      new RegExp(
+        `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+(?:ERROR|error):(?:[ \\t]+([0-9A-Z]{5})(?=[: \\t]|$))?`,
+        'gm'
+      )
+    ),
+  ];
+  const denialOk = /^OXYGEN_ANON_DRAFT_DENIAL_OK\r?$/m.test(stdoutText);
+  // The draft SQL test intentionally receives a denied 42501 before it
+  // continues. Do not report that expected error as a later failure.
+  if (denialOk && matches[0]?.[2] === '42501') matches.shift();
+  const match = matches[0];
   const line = Number(match?.[1]);
   if (!Number.isSafeInteger(line) || line < 1) return '';
   if (match?.[2]) return ` (line=${line},sqlstate=${match[2]})`;
@@ -29,7 +39,6 @@ export function boundedPsqlDiagnostic(
       errorLine
     )?.[1];
   if (wrappedState) return ` (line=${line},sqlstate=${wrappedState})`;
-  const stdoutText = Buffer.concat(stdout).toString('utf8');
   const capturedState = /^OXYGEN_ANON_DRAFT_SQLSTATE ([0-9A-Z]{5})\r?$/m.exec(
     stdoutText
   )?.[1];

@@ -90,6 +90,7 @@ SELECT public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041'::uui
 ROLLBACK TO SAVEPOINT oxygen_anon_draft_call;
 SELECT :'oxygen_anon_draft_state' = '42501' AS oxygen_anon_draft_denied \gset
 \if :oxygen_anon_draft_denied
+ \echo OXYGEN_ANON_DRAFT_DENIAL_OK
 \else
  DO $$ BEGIN RAISE EXCEPTION 'Anonymous draft save did not return insufficient privilege' USING ERRCODE='P1003'; END $$;
 \endif

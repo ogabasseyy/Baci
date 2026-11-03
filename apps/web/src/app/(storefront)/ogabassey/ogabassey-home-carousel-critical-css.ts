@@ -18,7 +18,7 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 .ogabassey-ad-slot>div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .ogabassey-home-products{max-width:1400px;margin:0 auto;padding:1.5rem .75rem;position:relative}
 .ogabassey-home-products__header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
-.ogabassey-home-products__eyebrow{font-size:.75rem;font-weight:700;line-height:1rem;text-transform:uppercase;color:var(--store-primary,#d62027)}
+.ogabassey-home-products__eyebrow{font-size:.75rem;font-weight:700;line-height:1rem;text-transform:uppercase;color:color-mix(in srgb,var(--store-primary,#d62027) 65%,var(--ogabassey-surface-text,var(--store-background-text,#111827)))}
 .ogabassey-home-products__title{color:var(--ogabassey-surface-text,var(--store-background-text,#111827));font-size:1.25rem;font-weight:700;line-height:1.75rem;margin-top:.25rem}
 .ogabassey-home-products__view-all{display:none}
 .ogabassey-home-products__grid{display:grid;gap:.75rem;grid-template-columns:repeat(2,minmax(0,1fr))}

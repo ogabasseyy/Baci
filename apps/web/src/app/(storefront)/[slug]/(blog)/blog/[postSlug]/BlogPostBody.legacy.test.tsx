@@ -140,4 +140,43 @@ describe('BlogPostBody legacy rendering', () => {
       }
     );
   });
+
+  it('uses canonical postUrl for subdomain share links without doubled slug', async () => {
+    mockResolveBlogPostContent.mockResolvedValue({
+      isJson: false,
+      legacyHtml: '<p>Content</p>',
+      renderedContent: null,
+    });
+
+    render(
+      await BlogPostBody({
+        basePath: '/ogabassey',
+        baseUrl: 'https://ogabassey.usebaci.com',
+        content: '<p>Content</p>',
+        merchantSlug: 'ogabassey',
+        postUrl: 'https://ogabassey.usebaci.com/blog/my-post',
+        post: {
+          id: 'post-1',
+          slug: 'my-post',
+          tags: null,
+          title: 'My Post',
+        },
+        relatedProducts: [],
+        relatedPosts: [],
+      })
+    );
+
+    const expectedShareUrl = encodeURIComponent(
+      'https://ogabassey.usebaci.com/blog/my-post'
+    );
+
+    const twitterLink = screen.getByRole('link', {
+      name: 'Share on Twitter (opens in new tab)',
+    });
+    expect(twitterLink).toHaveAttribute(
+      'href',
+      expect.stringContaining(expectedShareUrl)
+    );
+    expect(twitterLink).toHaveClass('min-h-11');
+  });
 });

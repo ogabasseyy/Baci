@@ -136,6 +136,9 @@ describe('CdnFormatImage (preload side effect, mocked format-source)', () => {
         type: 'image/avif',
       })
     );
-    expect(markup).toContain('fetchPriority="high"');
+    const doc = new DOMParser().parseFromString(markup, 'text/html');
+    expect(doc.querySelector('img')?.getAttribute('fetchpriority')).toBe(
+      'high'
+    );
   });
 });

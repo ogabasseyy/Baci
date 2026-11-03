@@ -74,18 +74,20 @@ DELETE FROM oxygen_private.commands WHERE workflow_id='efb10000-0000-4000-8000-0
 UPDATE public.oxygen_workflows SET stage='payment_required' WHERE id='efb10000-0000-4000-8000-000000000041';
 INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES ('efb10000-0000-4000-8000-000000000041','{"bookingReference":"efb10000-0000-4000-8000-000000000051","booking":{"status":"APPROVED"}}');
 SET LOCAL ROLE authenticated;
+-- Stable sentinel SQLSTATEs P1001-P1009 identify this block's assertions in
+-- sanitized replay logs. Any missing expected rejection still fails the suite.
 DO $$ BEGIN
- BEGIN UPDATE public.orders SET shipping_fee=2 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Shipping fee changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN UPDATE public.orders SET discount_amount=1 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Discount changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Total changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN UPDATE public.order_items SET quantity=2 WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Item changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.orders SET shipping_fee=2 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Shipping fee changed' USING ERRCODE='P1001'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.orders SET discount_amount=1 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Discount changed' USING ERRCODE='P1002'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Total changed' USING ERRCODE='P1003'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.order_items SET quantity=2 WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Item changed' USING ERRCODE='P1004'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  -- Authenticated has no item DELETE policy: RLS hides the row before the trigger.
  DELETE FROM public.order_items WHERE id='efb10000-0000-4000-8000-000000000061';
- IF FOUND THEN RAISE EXCEPTION 'Item deleted through RLS'; END IF;
- BEGIN INSERT INTO public.order_items(order_id,name,price,quantity) VALUES('efb10000-0000-4000-8000-000000000031','Extra',1,1); RAISE EXCEPTION 'Item inserted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN UPDATE public.order_tax_subtotals SET tax_amount=1 WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax updated'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN DELETE FROM public.order_tax_subtotals WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax deleted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount) VALUES('efb10000-0000-4000-8000-000000000031','S',7.5,100,7.5); RAISE EXCEPTION 'Tax changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ IF FOUND THEN RAISE EXCEPTION 'Item deleted through RLS' USING ERRCODE='P1005'; END IF;
+ BEGIN INSERT INTO public.order_items(order_id,name,price,quantity) VALUES('efb10000-0000-4000-8000-000000000031','Extra',1,1); RAISE EXCEPTION 'Item inserted' USING ERRCODE='P1006'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.order_tax_subtotals SET tax_amount=1 WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax updated' USING ERRCODE='P1007'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN DELETE FROM public.order_tax_subtotals WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax deleted' USING ERRCODE='P1008'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount) VALUES('efb10000-0000-4000-8000-000000000031','S',7.5,100,7.5); RAISE EXCEPTION 'Tax changed' USING ERRCODE='P1009'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
 END $$;
 -- Exercise the DELETE trigger separately under the backend role, retaining the
 -- bound merchant owner so the guard must return its exact financing error.

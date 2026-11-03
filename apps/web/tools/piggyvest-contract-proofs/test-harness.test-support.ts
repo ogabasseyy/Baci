@@ -10,6 +10,7 @@ import { qaIdentityFor } from './provider-ops';
 import { ProofApi } from './provider-ops-proofs';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
+import { TransportFaults } from './transport-faults';
 
 export interface HarnessOptions {
   mode?: RunMode;
@@ -34,6 +35,7 @@ export function makeHarness(options: HarnessOptions = {}) {
   const mode = options.mode ?? 'live-sandbox-mutations';
   const mock = createMockProvider(options.mock);
   const capture = new ResponseCapture();
+  const faults = new TransportFaults();
   const journal = options.journal ?? createMemoryJournal();
   const state = emptyScenarioState();
   const gate = new MutationGate({
@@ -46,7 +48,7 @@ export function makeHarness(options: HarnessOptions = {}) {
   const guarded = createGuardedFetch({
     mode,
     origin: SANDBOX_ORIGIN,
-    baseFetch: mock.fetch,
+    baseFetch: faults.wrap(mock.fetch),
     gate,
     capture,
   });
@@ -71,6 +73,7 @@ export function makeHarness(options: HarnessOptions = {}) {
       options.bank === undefined
         ? { code: '058', account: '0123456789' }
         : options.bank,
+    faults,
     businessWalletId:
       options.businessWalletId === undefined
         ? mock.sandbox.businessWalletId

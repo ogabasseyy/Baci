@@ -36,6 +36,7 @@ describe('dry-run (default)', () => {
       p7: 'observed',
       p8: 'observed',
       p9: 'observed',
+      p10: 'observed',
     });
     const output = printed.join('\n');
     expect(output).toMatch(/MOCK DATA/);
@@ -118,19 +119,28 @@ describe('live-sandbox-mutations', () => {
       '/api/v1/transfer/wallet',
       // proof 9: the main-wallet deposit
       '/api/v1/transfer/test/funding',
+      // proof 10 (S8): a deposit, the goal funding, the same reference sent
+      // again on the wire, then the transfer whose submit times out
+      '/api/v1/transfer/test/funding',
+      '/api/v1/transfer/wallet',
+      '/api/v1/transfer/wallet',
+      '/api/v1/transfer/wallet',
     ]);
     const journalLines = readFileSync(cfg.journalPath ?? '', 'utf8')
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line));
     expect(journalLines.map((entry) => entry.phase)).toEqual(
-      Array(20).fill(['intent', 'outcome']).flat()
+      Array(24).fill(['intent', 'outcome']).flat()
     );
-    // Every slot mints its own reference except the deliberate repeat.
-    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(19);
+    // Every slot mints its own reference except the two deliberate repeats.
+    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(22);
     const referenceOf = (slot: string) =>
       journalLines.find((entry) => entry.slot === slot)?.reference;
     expect(referenceOf('p2/duplicate_reference')).toBe(referenceOf('p2/w2w'));
+    expect(referenceOf('p10/double_tap_wire')).toBe(
+      referenceOf('p10/fund_goal')
+    );
     expect(JSON.stringify(journalLines)).not.toMatch(/01M2T[0-9A-F]{21}/);
 
     const before = mock.calls.length;
@@ -138,12 +148,12 @@ describe('live-sandbox-mutations', () => {
       ...deps,
       now: () => new Date('2026-10-31T10:00:00Z'),
     });
-    expect(posts(mock).length).toBe(20);
+    expect(posts(mock).length).toBe(24);
     expect(mock.calls.length).toBeGreaterThan(before);
     expect(second.proofs.some((p) => p.status === 'inconclusive')).toBe(true);
 
     await runHarness({ ...cfg, newAttempt: true }, deps);
-    expect(posts(mock).length).toBeGreaterThan(20);
+    expect(posts(mock).length).toBeGreaterThan(24);
   });
 
   it('uses unique references for every booked transfer', async () => {
@@ -157,10 +167,11 @@ describe('live-sandbox-mutations', () => {
       txns: { reference: string | null }[];
     };
     const transferRefs = refs.txns.map((t) => t.reference).filter(Boolean);
-    // Proofs 2, 4 (wallet + bank) and 8 (three legs); the mock refuses the
-    // duplicate-reference re-send, so it books nothing.
-    expect(transferRefs).toHaveLength(6);
-    expect(new Set(transferRefs).size).toBe(6);
+    // Proofs 2, 4 (wallet + bank), 8 (three legs) and 10 (goal funding and
+    // the timed-out transfer); the mock refuses both duplicate-reference
+    // re-sends, so they book nothing.
+    expect(transferRefs).toHaveLength(8);
+    expect(new Set(transferRefs).size).toBe(8);
   });
 
   it('keeps going when one proof throws unexpectedly, and reports the failure', async () => {

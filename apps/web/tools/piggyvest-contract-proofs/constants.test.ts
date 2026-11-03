@@ -11,6 +11,7 @@ import {
   RECORDING_ACCOUNT_EMAIL,
   RECORDING_ACCOUNT_NORMALISED_MARKERS,
   RUN_MODES,
+  S8_OUTFLOWS_KOBO,
   SANDBOX_HOST,
   SANDBOX_ORIGIN,
 } from './constants';
@@ -81,7 +82,9 @@ describe('money limits', () => {
     // Proofs 2 (transfer + duplicate-reference re-send), 4 (transfer + bank
     // outflow) and 8 (main to goal) all draw on the main wallet.
     expect(PLANNED_OUTFLOWS_KOBO).toBe(
-      AMOUNTS_KOBO.walletTransfer * 4 + AMOUNTS_KOBO.bankOutflow
+      AMOUNTS_KOBO.walletTransfer * 4 +
+        AMOUNTS_KOBO.bankOutflow +
+        S8_OUTFLOWS_KOBO
     );
     expect(FEE_RESERVE_KOBO).toBeGreaterThan(0);
     expect(FUNDING_FLOOR_KOBO).toBe(PLANNED_OUTFLOWS_KOBO + FEE_RESERVE_KOBO);
@@ -99,5 +102,22 @@ describe('money limits', () => {
       AMOUNTS_KOBO.fundGoal,
     ];
     expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.depositMain);
+  });
+
+  it('budgets the S8 first pass: fund-goal, a wire-level second tap and the timed-out submit', () => {
+    expect(S8_OUTFLOWS_KOBO).toBe(
+      AMOUNTS_KOBO.s8FundGoal * 2 + AMOUNTS_KOBO.s8TimeoutTransfer
+    );
+    // The S8 deposit row must be told apart from every other main-wallet credit.
+    const otherMainCredits: number[] = [
+      AMOUNTS_KOBO.fundMain,
+      AMOUNTS_KOBO.walletTransfer,
+      AMOUNTS_KOBO.fundGoal,
+      AMOUNTS_KOBO.depositMain,
+      AMOUNTS_KOBO.s8FundGoal,
+      AMOUNTS_KOBO.s8TimeoutTransfer,
+    ];
+    expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.s8DepositMain);
+    expect(AMOUNTS_KOBO.fundMain).toBeGreaterThan(FUNDING_FLOOR_KOBO);
   });
 });

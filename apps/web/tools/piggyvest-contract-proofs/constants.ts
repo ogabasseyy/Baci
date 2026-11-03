@@ -12,7 +12,16 @@ export const RUN_MODES = [
 ] as const;
 export type RunMode = (typeof RUN_MODES)[number];
 
-export const PROOF_IDS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'] as const;
+export const PROOF_IDS = [
+  'p1',
+  'p2',
+  'p3',
+  'p4',
+  'p5',
+  'p6',
+  'p7',
+  'p10',
+] as const;
 
 /**
  * Proofs that create their own QA customer and need nothing from the shared
@@ -72,7 +81,20 @@ export const AMOUNTS_KOBO = {
   fundHouse: 200_000,
   /** Proof 9: a main-wallet deposit no other main-wallet credit shares. */
   depositMain: 250_000,
+  /** S8 first pass: a main-wallet bank deposit (credited once). */
+  s8DepositMain: 175_000,
+  /** S8: main to goal funding, which is then tapped a second time. */
+  s8FundGoal: 100_000,
+  /** S8: the transfer whose submit times out. */
+  s8TimeoutTransfer: 100_000,
 } as const;
+
+/**
+ * The S8 first pass may take out: the goal funding, a wire-level second tap
+ * (only if the provider books it) and the transfer whose submit times out.
+ */
+export const S8_OUTFLOWS_KOBO =
+  AMOUNTS_KOBO.s8FundGoal * 2 + AMOUNTS_KOBO.s8TimeoutTransfer;
 
 /**
  * Everything the later proofs may take out of the main wallet: wallet
@@ -80,7 +102,7 @@ export const AMOUNTS_KOBO = {
  * 4 and 8, and proof 4's bank outflow.
  */
 export const PLANNED_OUTFLOWS_KOBO =
-  AMOUNTS_KOBO.walletTransfer * 4 + AMOUNTS_KOBO.bankOutflow;
+  AMOUNTS_KOBO.walletTransfer * 4 + AMOUNTS_KOBO.bankOutflow + S8_OUTFLOWS_KOBO;
 /** Room for the bank-outflow fee (sandbox tariffs are tens of naira) and any transfer fee. */
 export const FEE_RESERVE_KOBO = 50_000;
 /** A main wallet below this is topped up before the proofs run. */

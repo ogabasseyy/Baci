@@ -94,6 +94,8 @@ export async function OgabasseyPdpSemanticSections({
     stock: product.stock,
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
+    manage_stock: product.manage_stock,
+    has_condition_offers: product.has_condition_offers,
   };
   const compareInventory = inventory.some(
     (candidate) => candidate.slug === currentProduct.slug

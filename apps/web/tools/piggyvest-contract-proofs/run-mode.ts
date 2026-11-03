@@ -32,7 +32,7 @@ export interface RunConfig {
   newAttempt: boolean;
   bankCode: string | null;
   bankAccount: string | null;
-  /** Ogabassey business sandbox wallet (proof 7); mutation mode only. */
+  /** Ogabassey business sandbox wallet (proof 7); live modes only. */
   businessWalletId: string | null;
   /** Run this proof only (--proof); null runs every proof. */
   proof: ProofId | null;
@@ -185,8 +185,9 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     newAttempt: flags.has('--new-attempt'),
     proof,
     help: flags.has('--help'),
-    businessWalletId:
-      mode === 'live-sandbox-mutations' ? resolveBusinessWallet(env) : null,
+    // Read-only runs may read the binding (a GET); admission withholds
+    // authorization there, so nothing is ever sent to this wallet.
+    businessWalletId: live ? resolveBusinessWallet(env) : null,
     ...bank,
   };
 }

@@ -65,8 +65,9 @@ describe('references', () => {
 });
 
 describe('walletsDigest', () => {
-  it('is order independent, 16 hex characters, and differs per wallet set', () => {
-    expect(walletsDigest(['w1', 'w2'])).toBe(walletsDigest(['w2', 'w1']));
+  it('is order sensitive, 16 hex characters, and differs per wallet set', () => {
+    expect(walletsDigest(['w1', 'w2'])).not.toBe(walletsDigest(['w2', 'w1']));
+    expect(walletsDigest(['w1', 'w2'])).toBe(walletsDigest(['w1', 'w2']));
     expect(walletsDigest(['w1', 'w2'])).toMatch(/^[0-9a-f]{16}$/);
     expect(walletsDigest(['w1', 'w2'])).not.toBe(walletsDigest(['w1', 'w3']));
   });
@@ -79,7 +80,11 @@ describe('acceptedReference', () => {
     outcome: 'accepted',
     httpStatus: 200,
   };
-  const expected = { amountKobo: 100_000, walletIds: ['w2', 'w1'] };
+  const expected = {
+    amountKobo: 100_000,
+    walletIds: ['w1', 'w2'],
+    slot: 'p2/w2w',
+  };
 
   it('matches only an accepted original with the same amount and wallets', () => {
     const journal = createMemoryJournal([base, outcome]);
@@ -105,6 +110,26 @@ describe('acceptedReference', () => {
         walletIds: expected.walletIds,
       })
     ).toBe(false);
+  });
+
+  it('refuses the reverse direction and any other original slot', () => {
+    const journal = createMemoryJournal([base, outcome]);
+    const { reference, qaKey, op } = base;
+    expect(
+      acceptedReference(journal, reference, qaKey, op, {
+        ...expected,
+        walletIds: ['w2', 'w1'],
+      })
+    ).toBe(false);
+    expect(
+      acceptedReference(journal, reference, qaKey, op, {
+        ...expected,
+        slot: 'p4/w2w',
+      })
+    ).toBe(false);
+    expect(acceptedReference(journal, reference, qaKey, op, expected)).toBe(
+      true
+    );
   });
 
   it('does not match an unfinished or rejected original', () => {

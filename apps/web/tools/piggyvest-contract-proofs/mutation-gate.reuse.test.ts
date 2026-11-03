@@ -17,7 +17,8 @@ import { acceptedReference } from './mutation-journal-references';
 const DUPLICATE_SLOT = 'p2/duplicate_reference';
 const EXPECTED = {
   amountKobo: 100_000,
-  walletIds: ['qa-wallet-goal', 'qa-wallet-main'],
+  walletIds: ['qa-wallet-main', 'qa-wallet-goal'],
+  slot: 'p2/w2w',
 };
 
 describe('MutationGate: deliberate reference reuse', () => {
@@ -25,7 +26,11 @@ describe('MutationGate: deliberate reference reuse', () => {
     const { gate, journal } = makeGate();
     const first = execute(gate, transfer());
     const again = gate.begin(
-      transfer({ slot: DUPLICATE_SLOT, reuseReference: first.reference })
+      transfer({
+        slot: DUPLICATE_SLOT,
+        reuseReference: first.reference,
+        reuseOfSlot: 'p2/w2w',
+      })
     );
     expect(again.kind).toBe('send');
     expect(again.reference).toBe(first.reference);
@@ -52,11 +57,19 @@ describe('MutationGate: deliberate reference reuse', () => {
     const first = execute(gate, transfer());
     execute(
       gate,
-      transfer({ slot: DUPLICATE_SLOT, reuseReference: first.reference })
+      transfer({
+        slot: DUPLICATE_SLOT,
+        reuseReference: first.reference,
+        reuseOfSlot: 'p2/w2w',
+      })
     );
     expect(
       gate.begin(
-        transfer({ slot: DUPLICATE_SLOT, reuseReference: first.reference })
+        transfer({
+          slot: DUPLICATE_SLOT,
+          reuseReference: first.reference,
+          reuseOfSlot: 'p2/w2w',
+        })
       )
     ).toMatchObject({ kind: 'resume' });
   });
@@ -69,6 +82,7 @@ describe('MutationGate: deliberate reference reuse', () => {
           transfer({
             slot: DUPLICATE_SLOT,
             reuseReference: 'pvbproof-someone-else-0001',
+            reuseOfSlot: 'p2/w2w',
           })
         )
       )
@@ -84,6 +98,7 @@ describe('MutationGate: deliberate reference reuse', () => {
           transfer({
             slot: DUPLICATE_SLOT,
             reuseReference: indeterminate.reference,
+            reuseOfSlot: 'p2/w2w',
           })
         )
       )
@@ -96,6 +111,7 @@ describe('MutationGate: deliberate reference reuse', () => {
             slot: DUPLICATE_SLOT,
             qaKey: 'qa-customer-2',
             reuseReference: accepted.reference,
+            reuseOfSlot: 'p4/w2w',
           })
         )
       )
@@ -107,6 +123,7 @@ describe('MutationGate: deliberate reference reuse', () => {
             slot: DUPLICATE_SLOT,
             op: 'bank_transfer',
             reuseReference: accepted.reference,
+            reuseOfSlot: 'p4/w2w',
           })
         )
       )
@@ -123,6 +140,7 @@ describe('MutationGate: deliberate reference reuse', () => {
             slot: DUPLICATE_SLOT,
             referenceField: undefined,
             reuseReference: first.reference,
+            reuseOfSlot: 'p2/w2w',
           })
         )
       )
@@ -139,11 +157,33 @@ describe('MutationGate: reuse is bound to the original transfer', () => {
         transfer({
           slot: DUPLICATE_SLOT,
           reuseReference: first.reference,
+          reuseOfSlot: 'p2/w2w',
           ...over,
         })
       )
     );
   };
+
+  it('refuses the reverse direction', () => {
+    expect(
+      reuseWith({
+        bodyMatch: {
+          source: 'qa-wallet-goal',
+          destination: 'qa-wallet-main',
+          amount: 100_000,
+        },
+        walletIds: ['qa-wallet-goal', 'qa-wallet-main'],
+      })
+    ).toBe('REFERENCE_REUSE');
+  });
+
+  it('refuses reuse claiming another original slot', () => {
+    expect(reuseWith({ reuseOfSlot: 'p4/w2w' })).toBe('REFERENCE_REUSE');
+  });
+
+  it('refuses reuse that names no original slot', () => {
+    expect(reuseWith({ reuseOfSlot: undefined })).toBe('REFERENCE_REUSE');
+  });
 
   it('refuses reuse with a different amount', () => {
     expect(reuseWith({ amountKobo: 200_000 })).toBe('REFERENCE_REUSE');

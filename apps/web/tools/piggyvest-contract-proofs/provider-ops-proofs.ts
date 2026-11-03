@@ -96,7 +96,8 @@ export class ProofApi extends ProviderApi {
     destination: string,
     amountKobo: number,
     reference: string,
-    slot: string
+    slot: string,
+    originalSlot: string
   ) {
     return this.mutate(
       {
@@ -109,6 +110,7 @@ export class ProofApi extends ProviderApi {
         amountKobo,
         referenceField: 'reference',
         reuseReference: reference,
+        reuseOfSlot: originalSlot,
       },
       (sentReference) =>
         transferToWallet(this.config, {

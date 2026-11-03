@@ -46,6 +46,8 @@ export interface MutationIntent {
    * sent, and had accepted, for the same operation (see acceptedReference).
    */
   reuseReference?: string;
+  /** The slot the reused reference was originally sent from. */
+  reuseOfSlot?: string;
 }
 
 export interface Permit {
@@ -155,9 +157,11 @@ export class MutationGate {
     if (
       reuse !== undefined &&
       (!intent.referenceField ||
+        intent.reuseOfSlot === undefined ||
         !acceptedReference(journal, reuse, intent.qaKey, intent.op, {
           amountKobo: amount,
           walletIds: intent.walletIds,
+          slot: intent.reuseOfSlot,
         }))
     ) {
       throw new HarnessRefusal(

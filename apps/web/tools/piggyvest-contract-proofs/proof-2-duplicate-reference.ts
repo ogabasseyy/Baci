@@ -85,7 +85,8 @@ export async function runDuplicateReference(
     goal,
     first.amountKobo,
     reference,
-    'p2/duplicate_reference'
+    'p2/duplicate_reference',
+    'p2/w2w'
   );
   if (again.kind === 'resumed') {
     b.note(

@@ -91,7 +91,8 @@ describe('ProofApi.transferWalletAgain', () => {
       goal,
       100_000,
       first.reference,
-      'p2/duplicate_reference'
+      'p2/duplicate_reference',
+      'p2/w2w'
     );
     expect(again.reference).toBe(first.reference);
     // The mock refuses a repeated reference.
@@ -112,7 +113,8 @@ describe('ProofApi.transferWalletAgain', () => {
           h.state.goalWalletId ?? '',
           100_000,
           'pvbproof-not-ours-0001',
-          'p2/duplicate_reference'
+          'p2/duplicate_reference',
+          'p2/w2w'
         )
       )
     ).toBe('REFERENCE_REUSE');

@@ -40,7 +40,7 @@ const entrySchema = z.strictObject({
   reference: z.string().regex(/^[A-Za-z0-9_-]{8,200}$/),
   qaKey: z.string().min(1).max(64),
   amountKobo: z.int().nonnegative().nullable(),
-  /** Digest of the sorted wallet ids the intent moves money between. */
+  /** Digest of the wallet ids, in the order sent, the intent moves money between. */
   walletsDigest: z
     .string()
     .regex(/^[0-9a-f]{16}$/)

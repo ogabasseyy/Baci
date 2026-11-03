@@ -5,9 +5,11 @@ import { HarnessRefusal } from './safety-guards';
 /** Reference bookkeeping over the mutation journal (minting, reuse checks). */
 
 /**
- * Order-independent fingerprint of the wallets an intent touches. It is an
- * unsalted, truncated SHA-256 and is ONLY a consistency check that a re-sent
- * reference moves money between the same wallets as the original. It is not a
+ * Order-sensitive fingerprint of the wallets an intent touches, hashed exactly
+ * as sent ([source, destination], no sort), so a reversed transfer never
+ * matches. It is an unsalted, truncated SHA-256 and is ONLY a consistency
+ * check that a re-sent reference moves money between the same wallets, in the
+ * same direction, as the original. It is not a
  * secret and does not hide the ids from anyone holding a candidate list, so the
  * local 0600 journal is the only protection. A keyed digest is deliberately not
  * used: the journal outlives a run, and a run-local key would make every
@@ -15,22 +17,27 @@ import { HarnessRefusal } from './safety-guards';
  */
 export function walletsDigest(walletIds: readonly string[]): string {
   return createHash('sha256')
-    .update(JSON.stringify([...walletIds].sort()))
+    .update(JSON.stringify([...walletIds]))
     .digest('hex')
     .slice(0, 16);
 }
 
 /**
  * True only when this QA key already sent the reference for the same
- * operation, it was accepted, and the original intent moved the same amount
- * between the same wallets. A missing digest (older journal) never matches.
+ * operation, it was accepted, and the original intent, sent from the named
+ * slot, moved the same amount between the same wallets in the same direction. A missing digest (older journal) never matches.
  */
 export function acceptedReference(
   journal: Journal,
   reference: string,
   qaKey: string,
   op: string,
-  expected: { amountKobo: number | null; walletIds: readonly string[] }
+  expected: {
+    amountKobo: number | null;
+    walletIds: readonly string[];
+    /** The slot the original send used. */
+    slot: string;
+  }
 ): boolean {
   const all = journal.entries();
   const digest = walletsDigest(expected.walletIds);
@@ -40,6 +47,7 @@ export function acceptedReference(
       intent.reference === reference &&
       intent.qaKey === qaKey &&
       intent.op === op &&
+      intent.slot === expected.slot &&
       intent.amountKobo === expected.amountKobo &&
       intent.walletsDigest === digest &&
       all.some(

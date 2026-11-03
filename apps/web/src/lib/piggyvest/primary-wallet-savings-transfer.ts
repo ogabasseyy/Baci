@@ -13,6 +13,7 @@ interface Ports {
   ) => Promise<
     | { status: 'claimed'; reservation: unknown }
     | { status: 'pending' | 'confirmed' | 'insufficient' | 'conflict' }
+    | { status: 'pin_refused'; reason: string }
   >;
   adoptPending: (
     operationId: string
@@ -91,6 +92,8 @@ export async function submitPrimaryWalletSavingsTransfer(
 ) {
   const request = schemas.request.parse(input);
   const claim = await ports.reserve(request);
+  if (claim.status === 'pin_refused')
+    return { status: 'pin_refused' as const, reason: claim.reason };
   if (claim.status !== 'claimed') {
     // A pending operation may belong to a holder that died mid-flight:
     // adopt it and drive it instead of stranding the hold and the goal

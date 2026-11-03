@@ -21,6 +21,8 @@ on:
         type: boolean
 
 permissions:
+  # current-main-deploy-guard inspects workflow runs and jobs for superseding commits
+  actions: read
   contents: read
 
 concurrency:
@@ -423,6 +425,8 @@ jobs:
       name: production
       url: https://ogabassey.com
     permissions:
+      # current-main-deploy-guard inspects workflow runs and jobs for superseding commits
+      actions: read
       contents: read
     # Run 40987693051 used 151 minutes before static generation finished.
     # Leave the 55-minute publish budget plus completion and verification time.

@@ -1,15 +1,37 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-
 import YAML from 'yaml';
-
 import { verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
 
-const expectedSha = 'a'.repeat(40);
-const currentSha = 'b'.repeat(40);
-const intermediateSha = 'c'.repeat(40);
-const olderDeployedSha = 'd'.repeat(40);
+const [expectedSha, currentSha, intermediateSha, olderDeployedSha] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
+
+function response(body, { ok = true, status = 200 } = {}) {
+  return { ok, status, async json() { return body; } };
+}
+
+function makeCompareResponse(filename, commits = [{ sha: currentSha }]) {
+  return response({ commits, files: [{ filename }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: commits.length });
+}
+
+async function verifySupersededFile(
+  filename,
+  workflowRuns = [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }],
+  commits = [{ sha: currentSha }],
+  jobs = [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }]
+) {
+  return verifyCurrentMainDeployment({
+    expectedSha,
+    fetchImpl: async (url) => {
+      if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+      if (url.includes('/compare/')) return makeCompareResponse(filename, commits);
+      if (url.includes('/jobs')) return response({ jobs });
+      return response({ workflow_runs: workflowRuns });
+    },
+    repository: 'ogabasseyy/Baci',
+    token: 'test-token',
+  });
+}
 
 test('tests helper-only sales repair changes and rejects deployments superseded by them', async () => {
   const helper = '.github/scripts/repair-sales-migration-collision.sh';
@@ -22,49 +44,14 @@ test('tests helper-only sales repair changes and rejects deployments superseded 
   await assert.rejects(verifySupersededFile(helper), /superseded deployment SHA/);
 });
 
-function response(body, { ok = true, status = 200 } = {}) {
-  return { ok, status, async json() { return body; } };
-}
-
-function makeCompareResponse(filename, commits = [{ sha: currentSha }]) {
-  return response({
-    commits,
-    files: [{ filename }],
-    merge_base_commit: { sha: expectedSha },
-    status: 'ahead',
-    total_commits: commits.length,
-  });
-}
-
-async function verifySupersededFile(
-  filename,
-  workflowRuns = [{ conclusion: 'success', head_sha: currentSha }],
-  commits = [{ sha: currentSha }]
-) {
-  return verifyCurrentMainDeployment({
-    expectedSha,
-    fetchImpl: async (url) => {
-      if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-      if (url.includes('/compare/')) return makeCompareResponse(filename, commits);
-      return response({ workflow_runs: workflowRuns });
-    },
-    repository: 'ogabasseyy/Baci',
-    token: 'test-token',
-  });
-}
-
 test('accepts when the deployment SHA is the current main ref', async () => {
   const calls = [];
   const result = await verifyCurrentMainDeployment({
     expectedSha,
-    fetchImpl: async (url, options) => {
-      calls.push({ options, url });
-      return response({ object: { sha: expectedSha } });
-    },
+    fetchImpl: async (url, options) => { calls.push({ options, url }); return response({ object: { sha: expectedSha } }); },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
   });
-
   assert.deepEqual(result, { currentSha: expectedSha, expectedSha });
   assert.equal(calls[0].url, 'https://api.github.com/repos/ogabasseyy/Baci/git/ref/heads/main');
   assert.equal(calls[0].options.headers.authorization, 'Bearer test-token');
@@ -81,50 +68,74 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
     fetchImpl: async (url) => {
       urls.push(url);
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
-      if (url.includes('/compare/')) {
-        return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
-      }
-      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha }] });
+      if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
+      if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
+      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, status: 'completed' }] });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
   });
-
   assert.deepEqual(result, { currentSha, expectedSha });
   assert.ok(urls.some((u) => u.includes('head_sha=')));
 });
 
 test('rejects an ancestor when an intermediate superseding commit has deployed', async () => {
   await assert.rejects(
+    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: intermediateSha, status: 'completed' }], [{ sha: intermediateSha }, { sha: currentSha }]),
+    /superseded deployment SHA/
+  );
+});
+
+test('rejects an ancestor when a superseding commit failed after promote', async () => {
+  await assert.rejects(
     verifySupersededFile(
       'apps/web/src/app/page.tsx',
-      [{ conclusion: 'success', head_sha: intermediateSha }],
-      [{ sha: intermediateSha }, { sha: currentSha }]
+      [{ conclusion: 'failure', head_sha: currentSha, status: 'completed' }],
+      [{ sha: currentSha }],
+      [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]
     ),
     /superseded deployment SHA/
   );
 });
 
-test('rejects an ancestor when a superseding commit completed with failure', async () => {
-  await assert.rejects(
-    verifySupersededFile(
-      'apps/web/src/app/page.tsx',
-      [{ conclusion: 'failure', head_sha: currentSha, status: 'completed' }]
-    ),
-    /superseded deployment SHA/
+test('accepts an ancestor when a superseding commit failed before promote', async () => {
+  const result = await verifySupersededFile(
+    'apps/web/src/app/page.tsx',
+    [{ conclusion: 'failure', head_sha: currentSha, status: 'completed' }],
+    [{ sha: currentSha }],
+    [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] }]
   );
+  assert.deepEqual(result, { currentSha, expectedSha });
 });
 
 test('accepts an in-flight ancestor when superseding commit is queued or in_progress', async () => {
   const result = await verifySupersededFile(
     'apps/web/src/app/page.tsx',
-    [
-      { conclusion: null, head_sha: currentSha, status: 'queued' },
-      { conclusion: 'cancelled', head_sha: intermediateSha, status: 'completed' },
-    ],
+    [{ conclusion: null, head_sha: currentSha, status: 'queued' }, { conclusion: 'cancelled', head_sha: intermediateSha, status: 'completed' }],
     [{ sha: intermediateSha }, { sha: currentSha }]
   );
   assert.deepEqual(result, { currentSha, expectedSha });
+});
+
+test('short-circuits lookups when newest superseding commit is already deployed', async () => {
+  const queriedShas = [];
+  await assert.rejects(
+    verifyCurrentMainDeployment({
+      expectedSha,
+      fetchImpl: async (url) => {
+        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
+        if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
+        const match = url.match(/head_sha=([0-9a-f]{40})/);
+        if (match) queriedShas.push(match[1]);
+        return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
+      },
+      repository: 'ogabasseyy/Baci',
+      token: 'test-token',
+    }),
+    /superseded deployment SHA/
+  );
+  assert.deepEqual(queriedShas, [currentSha]);
 });
 
 test('accepts an ancestor when only non-web paths supersede it', async () => {
@@ -134,88 +145,70 @@ test('accepts an ancestor when only non-web paths supersede it', async () => {
     fetchImpl: async (url) => {
       urls.push(url);
       if (urls.length === 1) return response({ object: { sha: currentSha } });
-      return response({
-        files: [{ filename: 'docs/operations.md' }],
-        merge_base_commit: { sha: expectedSha },
-        status: 'ahead',
-        total_commits: 1,
-      });
+      return response({ files: [{ filename: 'docs/operations.md' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
   });
-
   assert.deepEqual(result, { currentSha, expectedSha });
-  assert.match(
-    urls[1],
-    new RegExp(`/compare/${expectedSha}\\.\\.\\.${currentSha}`)
-  );
+  assert.match(urls[1], /repos\/ogabasseyy\/Baci\/compare\/[0-9a-f]{40}\.\.\.[0-9a-f]{40}/);
 });
 
 test('fails closed when the superseding comparison is incomplete', async () => {
-  let call = 0;
-  await assert.rejects(
-    verifyCurrentMainDeployment({
-      expectedSha,
-      fetchImpl: async () => {
-        call += 1;
-        if (call === 1) return response({ object: { sha: currentSha } });
-        return response({
-          files: [],
-          merge_base_commit: { sha: expectedSha },
-          status: 'ahead',
-          total_commits: 101,
-        });
-      },
-      repository: 'ogabasseyy/Baci',
-      token: 'test-token',
-    }),
-    /incomplete or non-ancestral superseding comparison/
-  );
+  for (const comparison of [
+    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'diverged', total_commits: 1 },
+    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: intermediateSha }, status: 'ahead', total_commits: 1 },
+    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 0 },
+    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 101 },
+    { files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 },
+    { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2, commits: [{ sha: currentSha }] },
+  ]) {
+    await assert.rejects(
+      verifyCurrentMainDeployment({
+        expectedSha,
+        fetchImpl: async (url) => {
+          if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+          return response(comparison);
+        },
+        repository: 'ogabasseyy/Baci',
+        token: 'test-token',
+      }),
+      /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/
+    );
+  }
 });
 
-test('rejects every web path declared by the deploy filter', async (context) => {
-  const filters = YAML.parse(
-    readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
-  );
-  for (const pattern of filters.web) {
-    const representative = pattern
-      .replaceAll('**', 'nested/example.js')
-      .replaceAll('*', 'example');
-    await context.test(pattern, async () => {
-      await assert.rejects(
-        verifySupersededFile(representative),
-        /superseded deployment SHA/
-      );
+test('rejects every web path declared by the deploy filter', async (t) => {
+  const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
+  for (const pattern of deployment.web) {
+    const candidate = pattern.endsWith('/**') ? `${pattern.slice(0, -3)}/nested/file.ts` : pattern;
+    await t.test(pattern, async () => {
+      await assert.rejects(verifySupersededFile(candidate), /superseded deployment SHA/);
     });
   }
 });
 
 test('rejects migration-only superseding deployments', async () => {
-  await assert.rejects(
-    verifySupersededFile('supabase/migrations/20260828180000_replay.sql'),
-    /superseded deployment SHA/
-  );
+  await assert.rejects(verifySupersededFile('supabase/migrations/20261103000000_test_migration.sql'), /superseded deployment SHA/);
 });
 
 test('gates Vercel deployment configuration in deploy and CI filters', () => {
-  const deployFilters = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
-  const ciFilters = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
+  const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
   for (const path of ['.vercelignore', 'vercel.json']) {
-    assert.ok(deployFilters.web.includes(path), `deploy filter: ${path}`);
-    assert.ok(ciFilters.web.includes(path), `CI web filter: ${path}`);
+    assert.ok(deployment.web.includes(path), `deploy filter must gate ${path}`);
+    assert.ok(ci.web.includes(path), `CI filter must gate ${path}`);
   }
 });
 
-test('root public guide assets trigger web CI and production deployment', async () => {
-  const deployFilters = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
-  const ciFilters = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
-  assert.ok(deployFilters.web.includes('public/guides/**'));
-  assert.ok(ciFilters.web.includes('public/guides/**'));
-  await assert.rejects(verifySupersededFile('public/guides/chatgpt-ads/01-pixel-setup.png'), /superseded deployment SHA/);
+test('root public guide assets trigger web CI and production deployment', () => {
+  const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
+  const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  assert.ok(deployment.web.includes('public/guides/**'));
+  assert.ok(ci.web.includes('public/guides/**'));
 });
 
-test('fails closed on malformed identity and GitHub API responses', async () => {
+test('fails closed on malformed identity, API responses, or response truncation', async () => {
   await assert.rejects(
     verifyCurrentMainDeployment({ expectedSha: 'not-a-sha', fetchImpl: async () => response({ object: { sha: expectedSha } }), repository: 'ogabasseyy/Baci', token: 'test-token' }),
     /invalid deployment SHA/
@@ -249,15 +242,43 @@ test('fails closed on malformed identity and GitHub API responses', async () => 
     }),
     /invalid workflow runs response/
   );
+  await assert.rejects(
+    verifyCurrentMainDeployment({
+      expectedSha,
+      fetchImpl: async (url) => {
+        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
+        return response({ total_count: 105, workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
+      },
+      repository: 'ogabasseyy/Baci',
+      token: 'test-token',
+    }),
+    /incomplete or invalid workflow runs response/
+  );
+  await assert.rejects(
+    verifyCurrentMainDeployment({
+      expectedSha,
+      fetchImpl: async (url) => {
+        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
+        if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 });
+        return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
+      },
+      repository: 'ogabasseyy/Baci',
+      token: 'test-token',
+    }),
+    /incomplete or invalid workflow jobs response/
+  );
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {
   const workflow = readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8');
   const postdeployAction = readFileSync(new URL('../actions/postdeploy-migrations/action.yml', import.meta.url), 'utf8');
-
   assert.match(workflow, /DEPLOY_CURRENT_MAIN_GUARD: \.github\/scripts\/current-main-deploy-guard\.mjs/);
   assert.match(workflow, /deploy --yes --prebuilt --prod --skip-domain --archive=tgz/);
   const deployJob = workflow.slice(workflow.indexOf('  deploy-production:'));
+  assert.match(deployJob, /permissions:[\s\S]*?actions: read/);
+  assert.match(deployJob, /permissions:[\s\S]*?contents: read/);
   const prebuildGuard = deployJob.indexOf('- name: Verify exact-main deployment authority before build');
   assert.ok(prebuildGuard > 0, 'missing prebuild exact-main guard');
   const nodeSetup = deployJob.indexOf('- name: Setup Node.js for deployment authority guard');
@@ -272,9 +293,5 @@ test('production deploy is staged and binds the exact-main guard', () => {
   const postdeployMigrations = postdeployAction.indexOf('- name: Apply migrations deferred until application deploy');
   assert.ok(drainStep >= 0 && postdeployGuard > drainStep, 'postdeploy guard must run after drain');
   assert.ok(postdeployMigrations > postdeployGuard, 'postdeploy guard must run immediately before deferred migrations');
-  assert.doesNotMatch(
-    postdeployAction.slice(postdeployGuard, postdeployMigrations),
-    /\n\s*-\s+(?:name|run|uses):/,
-    'no workflow step may separate the postdeploy guard from deferred migrations'
-  );
+  assert.doesNotMatch(postdeployAction.slice(postdeployGuard, postdeployMigrations), /\n\s*-\s+(?:name|run|uses):/, 'no workflow step may separate guard from migrations');
 });

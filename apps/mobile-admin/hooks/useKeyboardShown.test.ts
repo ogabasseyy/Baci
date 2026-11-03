@@ -64,7 +64,11 @@ describe('useKeyboardShown', () => {
 
     act(() => keyboard.listeners.get('keyboardDidShow')?.());
     expect(result.current).toBe(true);
+
+    act(() => keyboard.listeners.get('keyboardDidHide')?.());
+    expect(result.current).toBe(false);
     expect(keyboard.listeners.has('keyboardWillShow')).toBe(false);
+    expect(keyboard.listeners.has('keyboardWillHide')).toBe(false);
   });
 
   it('removes both listeners on unmount', () => {

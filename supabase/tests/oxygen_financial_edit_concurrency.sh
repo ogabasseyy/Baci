@@ -10,7 +10,10 @@ export PGHOST="$fixture_dir" PGPORT=55478 PGDATABASE=postgres
 createdb oxygen_financial_fence_test
 export PGDATABASE=oxygen_financial_fence_test
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_financial_edit_concurrency_fixture.sql
+psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261103010000_oxygen_safe_payment_method_exit.sql
+psql -Xq -v ON_ERROR_STOP=1 -c 'CREATE TRIGGER oxygen_order_payment_method_fence BEFORE UPDATE OF payment_method ON public.orders FOR EACH ROW EXECUTE FUNCTION oxygen_private.guard_order_payment_method()'
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261103024423_oxygen_order_financial_edit_fence.sql
+psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261103030902_oxygen_safe_financial_fence_payment_exit.sql
 export OXYGEN_FINANCIAL_FENCE_TEST_DB="$PGDATABASE"
 export OXYGEN_FINANCIAL_FENCE_TEST_SOCKET="$fixture_dir"
 export OXYGEN_FINANCIAL_FENCE_TEST_PORT="$PGPORT"

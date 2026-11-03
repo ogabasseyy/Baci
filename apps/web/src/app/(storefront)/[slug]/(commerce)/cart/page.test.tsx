@@ -39,23 +39,25 @@ describe('cart route streaming', () => {
     mocks.domain.mockResolvedValue({ id: 'merchant-1' });
   });
 
-  it('renders from the public merchant VAT snapshot without waiting for another query', async () => {
+  it('uses live VAT even when a stale cached merchant snapshot has different settings', async () => {
     mocks.merchant.mockResolvedValue({
       id: 'merchant-1',
       slug: 'ogabassey',
       vat_registration_status: 'registered',
       vat_rate: 7.5,
     });
-    mocks.single.mockImplementation(() => new Promise(() => {}));
-    const page = await CartPage({
-      params: Promise.resolve({ slug: 'ogabassey' }),
+    mocks.single.mockResolvedValue({
+      data: { vat_registration_status: 'registered', vat_rate: 5 },
+      error: null,
     });
+    const page = CartPage({ params: Promise.resolve({ slug: 'ogabassey' }) });
     const stream = await renderToReadableStream(<main>{page}</main>);
     await stream.allReady;
     const html = await new Response(stream).text();
     expect(html).toContain('Cart VAT');
-    expect(html).toContain('7.5');
-    expect(mocks.single).not.toHaveBeenCalled();
+    expect(html).toContain('5');
+    expect(html).not.toContain('7.5');
+    expect(mocks.single).toHaveBeenCalledOnce();
   });
 
   it('streams before dynamic route params resolve', async () => {
@@ -72,6 +74,10 @@ describe('cart route streaming', () => {
       vat_registration_status: 'registered',
       vat_rate: 0,
     });
+    mocks.single.mockResolvedValue({
+      data: { vat_registration_status: 'registered', vat_rate: 0 },
+      error: null,
+    });
     params.resolve({ slug: 'ogabassey' });
     let rest = '';
     for (;;) {
@@ -80,7 +86,7 @@ describe('cart route streaming', () => {
       rest += new TextDecoder().decode(chunk.value);
     }
     expect(rest).toContain('Cart VAT');
-    expect(mocks.single).not.toHaveBeenCalled();
+    expect(mocks.single).toHaveBeenCalledOnce();
   });
 
   it('streams a loading boundary while the live VAT query is pending', async () => {

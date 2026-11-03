@@ -44,24 +44,6 @@ export async function ResolvedCartPage({
     notFound();
   }
 
-  // Public snapshot already carries these merchant-scoped settings. Avoid a
-  // second session-bound round trip on every cart navigation. Older snapshots
-  // keep the streamed live-read fallback below; checkout prices on the server.
-  if (
-    typeof merchant.vat_registration_status === 'string' &&
-    typeof merchant.vat_rate === 'number' &&
-    Number.isFinite(merchant.vat_rate)
-  ) {
-    return (
-      <CartPageWrapper
-        merchantId={merchant.id}
-        merchantSlug={merchant.slug}
-        vatEnabled={merchant.vat_registration_status === 'registered'}
-        vatRate={merchant.vat_rate}
-      />
-    );
-  }
-
   return (
     <Suspense fallback={<CommerceRouteLoading />}>
       <CartContent merchantId={merchant.id} merchantSlug={merchant.slug} />

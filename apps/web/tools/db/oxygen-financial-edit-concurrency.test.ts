@@ -229,6 +229,110 @@ describe.skipIf(!enabled)('Oxygen financial edit admission', () => {
       [existingWorkflow]
     );
   });
+  it('permits a payment-method-only exit before booking while fencing combined edits', async () => {
+    await setup.query(
+      "UPDATE public.oxygen_workflows SET stage='application_required' WHERE id=$1",
+      [existingWorkflow]
+    );
+    await setup.query(
+      "UPDATE public.orders SET payment_method='oxygen' WHERE id=$1",
+      [existingOrder]
+    );
+    await setup.query(
+      "UPDATE public.oxygen_workflows SET stage='eligibility_required' WHERE id=$1",
+      [existingWorkflow]
+    );
+    await setup.query(
+      'INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES ($1,$2)',
+      [existingWorkflow, { applicationReference: 'fixture' }]
+    );
+    await expect(
+      second.query(
+        "UPDATE public.orders SET payment_method='paystack',total=101 WHERE id=$1",
+        [existingOrder]
+      )
+    ).rejects.toMatchObject({
+      code: '23514',
+      message: 'oxygen_financial_edit_locked',
+    });
+    await second.query(
+      "UPDATE public.orders SET payment_method='paystack' WHERE id=$1",
+      [existingOrder]
+    );
+    await setup.query(
+      'DELETE FROM oxygen_private.provider_states WHERE workflow_id=$1',
+      [existingWorkflow]
+    );
+    await setup.query(
+      "UPDATE public.oxygen_workflows SET stage='application_required' WHERE id=$1",
+      [existingWorkflow]
+    );
+    await setup.query(
+      "UPDATE public.orders SET payment_method='oxygen' WHERE id=$1",
+      [existingOrder]
+    );
+    await setup.query(
+      "UPDATE public.oxygen_workflows SET stage='eligibility_required' WHERE id=$1",
+      [existingWorkflow]
+    );
+    await setup.query(
+      "INSERT INTO oxygen_private.commands(workflow_id,command,status) VALUES ($1,$2,'indeterminate')",
+      [existingWorkflow, { action: 'book' }]
+    );
+    await expect(
+      second.query(
+        "UPDATE public.orders SET payment_method='paystack' WHERE id=$1",
+        [existingOrder]
+      )
+    ).rejects.toMatchObject({
+      code: 'P0001',
+      message: 'oxygen_payment_in_progress',
+    });
+    await setup.query(
+      'DELETE FROM oxygen_private.commands WHERE workflow_id=$1',
+      [existingWorkflow]
+    );
+    await setup.query(
+      'INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES ($1,$2)',
+      [existingWorkflow, { bookingReference: 'fixture' }]
+    );
+    await expect(
+      second.query(
+        "UPDATE public.orders SET payment_method='paystack' WHERE id=$1",
+        [existingOrder]
+      )
+    ).rejects.toMatchObject({
+      code: 'P0001',
+      message: 'oxygen_payment_in_progress',
+    });
+    await setup.query(
+      'DELETE FROM oxygen_private.provider_states WHERE workflow_id=$1',
+      [existingWorkflow]
+    );
+    await first.query('BEGIN');
+    await first.query(
+      'SELECT id FROM public.oxygen_workflows WHERE id=$1 FOR UPDATE',
+      [existingWorkflow]
+    );
+    await expect(
+      second.query(
+        "UPDATE public.orders SET payment_method='paystack' WHERE id=$1",
+        [existingOrder]
+      )
+    ).rejects.toMatchObject({
+      code: '40001',
+      message: 'oxygen_order_edit_retry',
+    });
+    await first.query('ROLLBACK');
+    await second.query(
+      "UPDATE public.orders SET payment_method='paystack' WHERE id=$1",
+      [existingOrder]
+    );
+    await setup.query(
+      "UPDATE public.oxygen_workflows SET stage='plan_required' WHERE id=$1",
+      [existingWorkflow]
+    );
+  });
   it('does not wait with an order lock when the workflow is already locked', async () => {
     await first.query('BEGIN');
     await first.query(

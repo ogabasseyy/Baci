@@ -49,10 +49,13 @@ DO $$ BEGIN
  BEGIN UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Eligibility total changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN UPDATE public.orders SET customer_id='efb10000-0000-4000-8000-000000000022' WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Eligibility customer changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN UPDATE public.order_items SET quantity=2 WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Eligibility item changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.orders SET payment_method='paystack',total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Combined exit and total change succeeded'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
 END $$;
+UPDATE public.orders SET payment_method='paystack' WHERE id='efb10000-0000-4000-8000-000000000031';
 RESET ROLE;
 DELETE FROM oxygen_private.provider_states WHERE workflow_id='efb10000-0000-4000-8000-000000000041';
 UPDATE public.oxygen_workflows SET stage='application_required' WHERE id='efb10000-0000-4000-8000-000000000041';
+UPDATE public.orders SET payment_method='oxygen' WHERE id='efb10000-0000-4000-8000-000000000031';
 INSERT INTO oxygen_private.commands(workflow_id,idempotency_key,expected_version,channel,command,status)
 VALUES ('efb10000-0000-4000-8000-000000000041','efb10000-0000-4000-8000-000000000081',0,'web','{"action":"book"}','queued');
 SET LOCAL ROLE authenticated;

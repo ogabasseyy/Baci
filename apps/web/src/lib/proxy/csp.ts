@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
 import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
@@ -7,6 +8,7 @@ export function generateCSP(
   nonce?: string
 ): string {
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
+  const executionOrigin = getExperienceExecutionOrigin();
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`
     : "'self' 'unsafe-inline'";
@@ -58,7 +60,13 @@ export function generateCSP(
           };
 
   return Object.entries(directives)
-    .map(([key, value]) => (value ? `${key} ${value}` : key).trim())
+    .map(([key, value]) => {
+      const source =
+        key === 'frame-src' && executionOrigin
+          ? `${value} ${executionOrigin}`
+          : value;
+      return (source ? `${key} ${source}` : key).trim();
+    })
     .join('; ');
 }
 

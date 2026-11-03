@@ -1,0 +1,20 @@
+.loading {
+  display: none;
+}
+
+/* Keep the server-rendered catalog available without JavaScript. Hide it
+   before hydration only when the browser can launch the custom experience. */
+@media (scripting: enabled) {
+  [data-experience-pending] > .fallback {
+    display: none;
+  }
+
+  [data-experience-pending] > .loading {
+    display: grid;
+    min-height: 100svh;
+    place-items: center;
+    background: var(--store-background, #fff);
+    color: var(--store-background-text, #111827);
+    font: inherit;
+  }
+}

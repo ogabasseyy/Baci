@@ -26,6 +26,58 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
     'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
   'apps/web/src/lib/imei-providers/petrock/check-catalog-data/types.ts':
     'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/schemas/experience-route-path.ts':
+    'apps/web/src/lib/experience/candidate-performance-qualification.test.ts',
+  'apps/web/src/schemas/experience-performance.ts':
+    'apps/web/src/lib/experience/candidate-performance-qualification.test.ts',
+  'apps/web/src/schemas/experience-performance-worker.ts':
+    'apps/web/tools/experience-runner/performance-harness.test.ts',
+  'apps/web/src/lib/experience/compiled-candidate.ts':
+    'apps/web/src/lib/experience/build-service.test.ts',
+  'apps/web/src/lib/experience/build-performance-retention.ts':
+    'apps/web/src/lib/experience/local-build-supervisor.test.ts',
+  'apps/web/src/app/builder/experience/workspace-content.tsx':
+    'apps/web/src/app/builder/experience/page.test.tsx',
+  'apps/web/src/app/builder/experience/preview/preview-content.tsx':
+    'apps/web/src/app/builder/experience/preview/page.test.tsx',
+  'apps/web/src/app/builder/experience/approve/approval-content.tsx':
+    'apps/web/src/app/builder/experience/approve/page.test.tsx',
+  'apps/web/src/lib/experience/profile-validation.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.test.tsx',
+  'apps/web/src/schemas/experience-source-candidate.ts':
+    'apps/web/src/lib/experience/source-candidate.test.ts',
+  'apps/web/src/instrumentation-experience-boot.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/local-profile.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-dispatcher.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-gateway.ts':
+    'apps/web/src/lib/experience/compose-runtime.test.ts',
+  'apps/web/src/lib/experience/tool-policy.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/lib/experience/private-capture-service.ts':
+    'apps/web/tests/experience-lifecycle/mcp-http.test.ts',
+  'apps/web/src/lib/experience/owner-request.ts':
+    'apps/web/src/app/api/builder-experience/request/route.test.ts',
+  'apps/web/src/lib/experience/mode-exit-service.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/lib/experience/rollback-service.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/schemas/experience-mode-exit.ts':
+    'apps/web/src/lib/experience/publication-service.test.ts',
+  'apps/web/src/schemas/experience-publication.ts':
+    'apps/web/src/lib/experience/draft-apply.test.ts',
+  'apps/web/src/schemas/experience-tool-results.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/schemas/experience-tools.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/tools/experience-runner/generate-tool-contracts.ts':
+    'apps/web/builder-mcp-server/experience-registry.test.ts',
+  'apps/web/src/app/api/builder/ai-edit/builder-ai-edit-input.ts':
+    'apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.test.ts',
 
   'apps/web/src/app/dashboard/integrations/chatgpt/actions.ts':
     'apps/web/src/app/dashboard/integrations/chatgpt/page.test.tsx',

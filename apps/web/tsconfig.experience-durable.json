@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.experience-commerce.json",
+  "include": [
+    "tests/experience-durable/**/*.ts",
+    "tests/experience-durable/**/*.mts",
+    "src/**/*.d.ts",
+    "src/lib/consent-mode.ts"
+  ]
+}

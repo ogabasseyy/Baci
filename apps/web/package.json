@@ -55,7 +55,16 @@
     "mcp:builder": "tsx builder-mcp-server/serve.ts",
     "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json",
     "verify:builder-release": "vitest run tests/builder-chatgpt builder-mcp-server --maxWorkers=1",
-    "verify:builder-provider": "pnpm --dir tools/builder-auth test"
+    "verify:builder-provider": "pnpm --dir tools/builder-auth test",
+    "test:experience:runner": "vitest run --config vitest.experience-runner.config.ts",
+    "qualify:experience:sandbox": "pnpm test:experience:browser",
+    "test:experience:browser": "node experience-runtime/build.mjs && playwright test --config tests/experience-browser/playwright.config.ts",
+    "probe:experience:sandbox": "tsx tools/experience-runner/qualify-sandbox.ts",
+    "test:experience:sql": "node tools/experience-sql/run.mjs",
+    "qualify:experience:private": "node tools/experience-sql/qualify-private.mjs",
+    "typecheck:experience": "tsc --noEmit -p tsconfig.experience-runner.json && tsc --noEmit -p tsconfig.experience-authoring.json && tsc --noEmit -p tsconfig.experience-commerce.json",
+    "qualify:experience:release": "node tools/experience-runner/qualify-release.mjs",
+    "test:experience:lifecycle": "vitest run --config vitest.experience-lifecycle.config.ts"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",
@@ -173,6 +182,7 @@
     "sanitize-html": "^2.17.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "tldts": "7.4.13",
     "ts-pattern": "^5.9.0",
     "tsx": "4.22.4",
     "tus-js-client": "^4.3.1",
@@ -187,7 +197,8 @@
     "postgres": "^3.4.9",
     "@modelcontextprotocol/server": "^2.3.1",
     "@modelcontextprotocol/node": "^2.1.1",
-    "undici": "7.30.1"
+    "undici": "7.30.1",
+    "@baci/experience-sdk": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

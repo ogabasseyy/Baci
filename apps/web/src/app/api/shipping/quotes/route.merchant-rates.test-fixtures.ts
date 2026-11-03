@@ -1,3 +1,7 @@
+vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
+  createShippingQuoteRouteProof: () => ({ signature: 'synthetic-test-proof' }),
+}));
+
 import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 
@@ -147,12 +151,17 @@ export function buildSupabaseMock(
       }
       throw new Error(`Unexpected table: ${table}`);
     }),
-    rpc: options.rpcError
-      ? vi.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'rate rpc failed' },
-        })
-      : vi.fn().mockResolvedValue({ data: ratesPayload, error: null }),
+    rpc: vi.fn((name: string, args: { p_quote?: unknown }) =>
+      name === 'storefront_shipping_quote_storage_ready'
+        ? Promise.resolve({ data: true, error: null })
+        : name === 'persist_storefront_shipping_quote'
+          ? shippingQuotesTable.upsert(args.p_quote)
+          : Promise.resolve(
+              options.rpcError
+                ? { data: null, error: { message: 'rate rpc failed' } }
+                : { data: ratesPayload, error: null }
+            )
+    ),
     shippingQuotesTable,
   };
 }

@@ -1,47 +1,61 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { getCachedMerchant } from '@/lib/cached-data';
-import CheckoutPage from './page';
 
-const pending = new Promise<never>(() => {});
-const state = vi.hoisted(() => ({ suspend: false }));
+const f = vi.hoisted(() => ({
+  head: vi.fn(),
+  merchant: {
+    id: 'merchant',
+    slug: 'qa1',
+    template_id: 'ogabassey',
+  },
+}));
+
 vi.mock('@/lib/cached-data', () => ({
-  getCachedMerchant: vi.fn(),
-  getCachedMerchantByDomain: vi.fn(),
+  getCachedMerchant: vi.fn(async () => f.merchant),
+  getCachedMerchantByDomain: vi.fn(async () => f.merchant),
+}));
+vi.mock('@/lib/experience/published-manifest', () => ({
+  loadPublishedExperience: f.head,
 }));
 vi.mock('@/components/checkout-theme-provider', () => ({
   CheckoutThemeProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock('@/components/storefront/new-template', () => ({
-  NewTemplateCheckoutPage: () => <p>New checkout</p>,
+  NewTemplateCheckoutPage: () => <p>Legacy demo checkout</p>,
 }));
 vi.mock('@/components/storefront/ogabassey/pages/checkout-page', () => ({
-  CheckoutPage: () => {
-    if (state.suspend) throw pending;
-    return <p>Guest checkout</p>;
-  },
+  CheckoutPage: () => <p>Baci commerce checkout</p>,
 }));
-vi.mock(
-  '@/components/storefront/ogabassey/pages/checkout/components/CheckoutCartCapacityGate',
-  () => ({
-    CheckoutCartCapacityGate: ({ children }: { children: ReactNode }) =>
-      children,
-  })
-);
+
+import CheckoutPage, * as pageModule from './page';
+import { ResolvedCheckoutPage } from './resolved-checkout-page';
+
+const params = (slug: string) => ({ params: Promise.resolve({ slug }) });
+
 beforeEach(() => {
-  state.suspend = false;
-  vi.mocked(getCachedMerchant).mockResolvedValue({
-    id: 'merchant',
-    template_id: 'ogabassey',
-  } as Awaited<ReturnType<typeof getCachedMerchant>>);
+  f.merchant = { id: 'merchant', slug: 'qa1', template_id: 'ogabassey' };
+  f.head.mockReset();
+  f.head.mockResolvedValue(null);
 });
-it('renders the guest checkout for the resolved merchant', async () => {
-  render(await CheckoutPage({ params: Promise.resolve({ slug: 'shop' }) }));
-  expect(screen.getByText('Guest checkout')).toBeVisible();
+
+it('uses the existing checkout for merchants with a published experience', async () => {
+  f.merchant.template_id = 'new-template';
+  f.head.mockResolvedValue({ buildDigest: 'verified' });
+
+  render(await ResolvedCheckoutPage(params('qa1')));
+
+  expect(screen.getByText('Baci commerce checkout')).toBeVisible();
+  expect(screen.queryByText('Legacy demo checkout')).toBeNull();
 });
-it('keeps query-driven checkout suspension inside an explicit loading boundary', async () => {
-  state.suspend = true;
-  render(await CheckoutPage({ params: Promise.resolve({ slug: 'shop' }) }));
-  expect(screen.getByRole('status')).toHaveTextContent('Loading checkout');
+
+it('streams checkout selection inside the secure loading boundary', () => {
+  const element = CheckoutPage(params('qa1'));
+
+  expect(element.props.fallback.props.role).toBe('status');
+  expect(element.props.children.type).toBe(ResolvedCheckoutPage);
+});
+
+it('exports only framework-recognized App Router page fields', () => {
+  expect(Object.keys(pageModule).sort()).toEqual(['default', 'metadata']);
 });

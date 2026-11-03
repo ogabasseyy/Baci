@@ -1,3 +1,7 @@
+vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
+  createShippingQuoteRouteProof: () => ({ signature: 'synthetic-test-proof' }),
+}));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDomesticRequest,
@@ -95,9 +99,9 @@ describe('legacy mobile shipping quotes without a client header', () => {
       rpc: publicRpc,
     });
     const upsert = vi.fn().mockResolvedValue({ error: null });
-    const privilegedFrom = vi.fn((table: string) => {
+    const quoteWriteFrom = vi.fn((table: string) => {
       if (table !== 'shipping_quotes') {
-        throw new Error(`Unexpected privileged table lookup: ${table}`);
+        throw new Error(`Unexpected quote table lookup: ${table}`);
       }
       return { upsert };
     });
@@ -106,8 +110,18 @@ describe('legacy mobile shipping quotes without a client header', () => {
       error: null,
     });
     mockCreateAdminClient.mockReturnValue({
-      from: privilegedFrom,
+      from: quoteWriteFrom,
       rpc: rateRpc,
+    });
+    mockCreateServerClient.mockResolvedValue({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      from: quoteWriteFrom,
+      rpc: async (name: string, args: unknown) =>
+        name === 'get_storefront_shipping_sender'
+          ? publicRpc(name, args)
+          : name === 'persist_storefront_shipping_quote'
+            ? upsert((args as { p_quote: unknown }).p_quote)
+            : rateRpc(name, args),
     });
     const quote = { ...giglQuote, expiresAt: new Date(EXPIRY) };
     mockGetQuotes.mockResolvedValue({
@@ -141,11 +155,12 @@ describe('legacy mobile shipping quotes without a client header', () => {
       p_merchant_id: MERCHANT_ID,
     });
     expect(anonymousFrom).not.toHaveBeenCalled();
-    expect(privilegedFrom).not.toHaveBeenCalledWith('merchants');
+    expect(quoteWriteFrom).not.toHaveBeenCalledWith('merchants');
     expect(rateRpc).not.toHaveBeenCalledWith(
       'get_storefront_shipping_sender',
       expect.anything()
     );
     expect(upsert).toHaveBeenCalledOnce();
+    expect(mockCreateAdminClient).not.toHaveBeenCalled();
   });
 });

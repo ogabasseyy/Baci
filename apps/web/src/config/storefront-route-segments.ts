@@ -105,6 +105,7 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // retired alias and redirects non-OgaBassey stores to their home. A suffixed
 // `/unlock-orders/<path>` remains eligible for the proxy's retired-alias redirect.
 const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
+  'collections',
   ...STOREFRONT_ROUTE_FIRST_SEGMENTS,
   'unlock-orders',
 ]);

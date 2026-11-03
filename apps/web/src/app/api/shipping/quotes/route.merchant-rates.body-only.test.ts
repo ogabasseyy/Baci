@@ -1,3 +1,7 @@
+vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
+  createShippingQuoteRouteProof: () => ({ signature: 'synthetic-test-proof' }),
+}));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDomesticRequest,
@@ -50,7 +54,11 @@ function buildBodyOnlySupabaseMock(ratesPayload: unknown) {
       // merchants table. Currency is discovered through the definer RPC.
       throw new Error(`Unexpected table: ${table}`);
     }),
-    rpc: vi.fn((name: string) => {
+    rpc: vi.fn((name: string, args: { p_quote?: unknown }) => {
+      if (name === 'storefront_shipping_quote_storage_ready')
+        return Promise.resolve({ data: true, error: null });
+      if (name === 'persist_storefront_shipping_quote')
+        return shippingQuotesTable.upsert(args.p_quote);
       if (name === 'get_storefront_shipping_sender') {
         const nonNgMerchant =
           typeof ratesPayload === 'object' &&

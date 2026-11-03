@@ -1,0 +1,88 @@
+$ turbo typecheck
+• turbo 2.9.18
+
+   • Packages in scope: @baci/builder-preview-widget, @baci/cloudflare-evidence-qualification-worker, @baci/experience-sdk, @baci/mobile-storefront, @baci/shared, @baci/tiktok-business, @baci/web, baci-mobile-admin, ogabassey-widgets
+   • Running typecheck in 9 packages
+   • Remote caching disabled, using shared worktree cache
+
+@baci/experience-sdk:typecheck: cache miss, executing 1cbbd9f59be95b43
+@baci/mobile-storefront:typecheck: cache miss, executing b73d548caac05125
+@baci/web:typecheck: cache miss, executing bf6fc7fa0522b1c3
+@baci/builder-preview-widget:typecheck: cache hit, replaying logs 648c72d14aedd227
+@baci/cloudflare-evidence-qualification-worker:typecheck: cache hit, replaying logs 4684c4906a83afbd
+@baci/cloudflare-evidence-qualification-worker:typecheck: $ mkdir -p .qualification-dist/types && wrangler types .qualification-dist/types/version-a.d.ts --config wrangler.version-a.jsonc && wrangler types .qualification-dist/types/version-b.d.ts --config wrangler.version-b.jsonc && tsc -p tsconfig.json && tsc -p tsconfig.version-b.json && tsc -p tsconfig.artifact-receipt.json
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck:  ⛅️ wrangler 4.115.0 (update available 4.152.0)
+@baci/builder-preview-widget:typecheck: $ tsc --noEmit -p tsconfig.json
+@baci/cloudflare-evidence-qualification-worker:typecheck: ───────────────────────────────────────────────
+@baci/cloudflare-evidence-qualification-worker:typecheck: Generating project types...
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: interface __BaseEnv_Env {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	CF_VERSION_METADATA: WorkerVersionMetadata;
+@baci/cloudflare-evidence-qualification-worker:typecheck: }
+@baci/cloudflare-evidence-qualification-worker:typecheck: declare namespace Cloudflare {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	interface GlobalProps {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 		mainModule: typeof import("../../src/version-a");
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	}
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	interface Env extends __BaseEnv_Env {}
+@baci/cloudflare-evidence-qualification-worker:typecheck: }
+@baci/cloudflare-evidence-qualification-worker:typecheck: interface Env extends __BaseEnv_Env {}
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: Generating runtime types...
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: Runtime types generated.
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: ✨ Types written to .qualification-dist/types/version-a.d.ts
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: 📖 Read about runtime types
+@baci/cloudflare-evidence-qualification-worker:typecheck: https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+@baci/cloudflare-evidence-qualification-worker:typecheck: 📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck:  ⛅️ wrangler 4.115.0 (update available 4.152.0)
+@baci/cloudflare-evidence-qualification-worker:typecheck: ───────────────────────────────────────────────
+@baci/cloudflare-evidence-qualification-worker:typecheck: Generating project types...
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: interface __BaseEnv_Env {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	CF_VERSION_METADATA: WorkerVersionMetadata;
+@baci/cloudflare-evidence-qualification-worker:typecheck: }
+@baci/cloudflare-evidence-qualification-worker:typecheck: declare namespace Cloudflare {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	interface GlobalProps {
+@baci/cloudflare-evidence-qualification-worker:typecheck: 		mainModule: typeof import("../../src/version-b");
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	}
+@baci/cloudflare-evidence-qualification-worker:typecheck: 	interface Env extends __BaseEnv_Env {}
+@baci/cloudflare-evidence-qualification-worker:typecheck: }
+@baci/cloudflare-evidence-qualification-worker:typecheck: interface Env extends __BaseEnv_Env {}
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: Generating runtime types...
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: Runtime types generated.
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: ✨ Types written to .qualification-dist/types/version-b.d.ts
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+@baci/cloudflare-evidence-qualification-worker:typecheck: 📖 Read about runtime types
+@baci/tiktok-business:typecheck: cache hit, replaying logs 79fb3c5a617b01bb
+@baci/cloudflare-evidence-qualification-worker:typecheck: https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+@baci/cloudflare-evidence-qualification-worker:typecheck: 📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+@baci/cloudflare-evidence-qualification-worker:typecheck:
+baci-mobile-admin:typecheck: cache hit, replaying logs 2d3966e36c8fcfa6
+@baci/tiktok-business:typecheck: $ tsc --noEmit
+@baci/shared:typecheck: cache hit, replaying logs acbc9a23e3da0a9e
+baci-mobile-admin:typecheck: $ tsc --noEmit
+@baci/shared:typecheck: $ tsc --noEmit
+@baci/mobile-storefront:typecheck: $ tsc --noEmit
+@baci/web:typecheck: $ next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication && pnpm typecheck:experience
+@baci/experience-sdk:typecheck: $ tsc --noEmit
+@baci/web:typecheck: Generating route types...
+@baci/web:typecheck: ✓ Types generated successfully
+@baci/web:typecheck: $ tsc --noEmit -p tsconfig.tools-workers.json
+@baci/web:typecheck: $ tsc --noEmit -p tsconfig.mcp.json
+@baci/web:typecheck: $ tsc --noEmit -p tsconfig.builder-mcp.json
+@baci/web:typecheck: $ tsc --noEmit -p tsconfig.builder-publication.json
+@baci/web:typecheck: $ tsc --noEmit -p tsconfig.experience-runner.json && tsc --noEmit -p tsconfig.experience-authoring.json && tsc --noEmit -p tsconfig.experience-commerce.json
+
+ Tasks:    8 successful, 8 total
+Cached:    5 cached, 8 total
+  Time:    3m46.674s

@@ -9,6 +9,20 @@ vi.mock('pg', () => ({
     end = mocks.end;
   },
 }));
+// The goal-cancel settle path re-reads the goal wallet at the provider; the
+// answer is mocked so no test depends on the network.
+const wallets = vi.hoisted(() => ({ retrieve: vi.fn() }));
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: wallets.retrieve }));
+beforeEach(() => {
+  wallets.retrieve.mockResolvedValue({
+    id: 'source',
+    api_customer_id: 'source-customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 0,
+  });
+});
 const operationId = '11111111-1111-4111-8111-111111111111';
 const configuration = {
   integrationId: '22222222-2222-4222-8222-222222222222',
@@ -162,4 +176,97 @@ it('stays pending when the provider re-query cannot confirm', async () => {
       fetchImplementation,
     })
   ).toBe('pending');
+});
+
+const cancelOperationId = '44444444-4444-4444-8444-444444444444';
+const cancelReference = `pvb-cancel-${reservation.goalId}`;
+const cancelReservation = {
+  ...reservation,
+  operationId: cancelOperationId,
+  reference: cancelReference,
+};
+function mockGoalCancelLookup(fail = false) {
+  mocks.query.mockImplementation(async (statement: string) => {
+    const session = {
+      database_name: 'postgres',
+      login_name: configuration.database.login,
+      role_name: configuration.database.login,
+      safe: true,
+      tls: true,
+    };
+    if (statement.includes('find_dispatched_goal_cancel_by_reference')) {
+      if (fail) throw new Error('function does not exist');
+      return {
+        rows: [{ result: { operationId: cancelOperationId }, ...session }],
+      };
+    }
+    const result = statement.includes('read_dispatched_goal_cancel')
+      ? cancelReservation
+      : statement.includes('settle_goal_cancel')
+        ? 'confirmed'
+        : null;
+    return { rows: [{ result, ...session }] };
+  });
+}
+it('settles a dispatched goal cancel named by the reference when no savings transfer matches', async () => {
+  mockGoalCancelLookup();
+  const fetchImplementation = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        status: true,
+        data: {
+          status: 'successful',
+          id: 'transaction',
+          internal_reference: 'transaction',
+          reference: 'provider-reference',
+          third_party_reference: cancelReference,
+          amount: 2000,
+          fee: 0,
+          customer_id: 'source-customer',
+          source_wallet: 'source',
+          destination_wallet: 'destination',
+        },
+      })
+    )
+  );
+  expect(
+    await runPrimaryWalletSavingsOutflowReconciliation({
+      configuration,
+      providerToken: 'test-token',
+      references: [cancelReference],
+      fetchImplementation,
+    })
+  ).toBe('confirmed');
+  expect(
+    mocks.query.mock.calls.some(([statement]) =>
+      String(statement).includes('settle_goal_cancel')
+    )
+  ).toBe(true);
+});
+it('keeps a goal cancel reference retryable when its lookup fails', async () => {
+  mockGoalCancelLookup(true);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(
+    await runPrimaryWalletSavingsOutflowReconciliation({
+      configuration,
+      providerToken: 'test-token',
+      references: [cancelReference],
+      fetchImplementation: vi.fn(),
+    })
+  ).toBe('pending');
+  expect(warn).toHaveBeenCalled();
+  warn.mockRestore();
+});
+it('does not fail a legacy outflow when the lookup fails for an unrelated reference', async () => {
+  mockGoalCancelLookup(true);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(
+    await runPrimaryWalletSavingsOutflowReconciliation({
+      configuration,
+      providerToken: 'test-token',
+      references: ['legacy-reference-1'],
+      fetchImplementation: vi.fn(),
+    })
+  ).toBe('unmatched');
+  warn.mockRestore();
 });

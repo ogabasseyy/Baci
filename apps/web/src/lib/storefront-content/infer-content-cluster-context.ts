@@ -8,49 +8,31 @@ import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
   EXCLUDED_CATEGORY_MAP,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
+  EXCLUDED_HANDHELD_TOKENS,
   GAMING_LAPTOP_EXEMPT_PHRASES,
+  NON_EXEMPT_GPU_PHRASES,
+  NON_EXEMPT_KEYBOARD_PHRASES,
+  NON_EXEMPT_MONITOR_PHRASES,
 } from '@/config/storefront-gaming-laptop-taxonomy';
 import {
   MERCHANT_INTENT_CLUSTER_KIND_MAP,
   VALID_MERCHANT_INTENT_SOURCES,
 } from '@/config/storefront-merchant-intent';
-import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type {
   ContentClusterKind,
   InferContentClusterContextInput,
   InferredContentClusterContext,
   SupportedClusterCategory,
 } from './content-cluster-types';
-import { normalizeContentCurrencyTokens } from './normalize-content-currency-tokens';
+import {
+  hasPhrase,
+  normalizeClusterText as normalizeText,
+} from './has-content-cluster-phrase';
 import { tokenizeContentText } from './tokenize-content-text';
-
-const normalizeText = (v: string | null | undefined) =>
-  normalizeContentCurrencyTokens(
-    applyJoinedTitleCorrections(v?.toLowerCase().trim() ?? '')
-  );
 
 const tokenize = (values: Array<string | null | undefined>) => [
   ...new Set(values.flatMap(tokenizeContentText)),
 ];
-
-const isPhraseBoundary = (v?: string): boolean => !v || /[^a-z0-9]/.test(v);
-
-function hasPhrase(haystack: string, needle: string) {
-  const norm = normalizeText(needle);
-  if (norm.length === 0) return false;
-  let from = 0;
-  for (;;) {
-    const idx = haystack.indexOf(norm, from);
-    if (idx === -1) return false;
-    if (
-      isPhraseBoundary(haystack[idx - 1]) &&
-      isPhraseBoundary(haystack[idx + norm.length])
-    ) {
-      return true;
-    }
-    from = idx + 1;
-  }
-}
 
 const hasGamingLaptopPhrase = (t: string) =>
   hasPhrase(t, 'gaming laptop') || hasPhrase(t, 'gaming laptops');
@@ -60,22 +42,21 @@ const hasLaptopPhrase = (t: string) =>
 
 const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
   s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
-    ? hasGaming &&
-      !hasPhrase(t, 'gaming laptop gpu') &&
-      !hasPhrase(t, 'gaming laptop graphics card')
+    ? hasGaming && !NON_EXEMPT_GPU_PHRASES.some((p) => hasPhrase(t, p))
     : s.startsWith('monitor')
       ? hasGaming &&
-        !hasPhrase(t, 'monitors for') &&
-        !hasPhrase(t, 'monitor for') &&
+        !NON_EXEMPT_MONITOR_PHRASES.some((p) => hasPhrase(t, p)) &&
         GAMING_LAPTOP_EXEMPT_PHRASES.monitor.some((p) => hasPhrase(t, p))
-      : (['desktop', 'accessories', 'battery'] as const).some(
-          (k) =>
-            (k === 'battery'
-              ? s.startsWith('laptop batter')
-              : s.startsWith(k.slice(0, 7))) &&
-            (k === 'desktop' || k === 'battery' || hasGaming) &&
-            GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
-        );
+      : s.startsWith('keyboard')
+        ? hasGaming && !NON_EXEMPT_KEYBOARD_PHRASES.some((p) => hasPhrase(t, p))
+        : (['desktop', 'accessories', 'battery'] as const).some(
+            (k) =>
+              (k === 'battery'
+                ? s.startsWith('laptop batter')
+                : s.startsWith(k.slice(0, 7))) &&
+              (k === 'desktop' || k === 'battery' || hasGaming) &&
+              GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
+          );
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
@@ -126,16 +107,24 @@ function isDedicatedGamingLaptopContent(
   content: string,
   excerpt = ''
 ): boolean {
-  if (['handheld', 'steam deck', 'rog ally'].some((t) => hasPhrase(title, t))) {
+  if (EXCLUDED_HANDHELD_TOKENS.some((t) => hasPhrase(title, t))) {
     return false;
   }
-  if (hasTitleLaptopSubject(title))
+  const c = [title, excerpt].filter(Boolean).join(' ');
+  if (hasPhrase(title, 'game') && !hasGamingLaptopPhrase(c)) return false;
+  if (
+    hasPhrase(title, 'blade') &&
+    !hasPhrase([c, content].join(' '), 'razer')
+  ) {
+    return false;
+  }
+  if (hasTitleLaptopSubject(title)) {
     return !hasExcludedGamingLaptopSubject(title);
+  }
   const hasDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((t) =>
     hasPhrase(title, t)
   );
   if (!hasDedicated) return false;
-  const c = [title, excerpt].filter(Boolean).join(' ');
   const target = hasLaptopPhrase(c)
     ? c
     : hasPhrase(title, 'rtx') ||
@@ -174,12 +163,10 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
-      const target = getSubjectTarget(title, excerpt);
-      if (!hasExcludedGamingLaptopSubject(target, true))
-        return 'gaming-laptops';
-      return getExcludedSubjectCategory(
-        title && hasExcludedGamingLaptopSubject(title, true) ? title : target
-      );
+      if (title && hasExcludedGamingLaptopSubject(title, true)) {
+        return getExcludedSubjectCategory(title);
+      }
+      return 'gaming-laptops';
     }
     return slug;
   }
@@ -242,31 +229,30 @@ function inferBrands(
   categorySlug: SupportedClusterCategory | null,
   haystack: string
 ) {
-  const dict = categorySlug
-    ? Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].brandTokens)
-    : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap((s) =>
-        Object.entries(s.brandTokens)
-      );
+  const support = categorySlug
+    ? [CONTENT_CLUSTER_SUPPORT[categorySlug]]
+    : Object.values(CONTENT_CLUSTER_SUPPORT);
   return [
     ...new Set(
-      dict
-        .filter(([, a]) =>
-          (a as readonly string[]).some((alias) => hasPhrase(haystack, alias))
+      support
+        .flatMap(
+          (s) => Object.entries(s.brandTokens) as [string, readonly string[]][]
         )
+        .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
         .map(([brand]) => brand)
     ),
   ];
 }
 
-function inferPriceBands(
-  categorySlug: SupportedClusterCategory | null,
+const inferPriceBands = (
+  slug: SupportedClusterCategory | null,
   haystack: string
-) {
-  if (!categorySlug) return [];
-  return Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases)
-    .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
-    .map(([slug]) => slug);
-}
+) =>
+  slug
+    ? Object.entries(CONTENT_CLUSTER_SUPPORT[slug].priceBandAliases)
+        .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
+        .map(([band]) => band)
+    : [];
 
 export function inferContentClusterContext(
   input: InferContentClusterContextInput

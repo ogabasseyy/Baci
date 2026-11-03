@@ -13,6 +13,29 @@ export const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'tuf',
 ] as const;
 
+export const EXCLUDED_HANDHELD_TOKENS = [
+  'handheld',
+  'steam deck',
+  'rog ally',
+] as const;
+
+export const NON_EXEMPT_KEYBOARD_PHRASES = [
+  'gaming keyboard',
+  'gaming keyboards',
+  'laptop keyboard',
+  'laptop keyboards',
+] as const;
+
+export const NON_EXEMPT_GPU_PHRASES = [
+  'gaming laptop gpu',
+  'gaming laptop graphics card',
+] as const;
+
+export const NON_EXEMPT_MONITOR_PHRASES = [
+  'monitor for',
+  'monitors for',
+] as const;
+
 export const GAMING_LAPTOP_EXEMPT_PHRASES = {
   desktop: ['desktop replacement', 'desktop-class'],
   monitor: ['pairing', 'pairings', 'paired'],
@@ -36,6 +59,8 @@ export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'docking stations',
   'gaming dock',
   'gaming docks',
+  'gaming keyboard',
+  'gaming keyboards',
   'gaming stand',
   'gaming stands',
   'gpu',

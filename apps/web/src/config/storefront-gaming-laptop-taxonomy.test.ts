@@ -3,7 +3,11 @@ import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
   EXCLUDED_CATEGORY_MAP,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
+  EXCLUDED_HANDHELD_TOKENS,
   GAMING_LAPTOP_EXEMPT_PHRASES,
+  NON_EXEMPT_GPU_PHRASES,
+  NON_EXEMPT_KEYBOARD_PHRASES,
+  NON_EXEMPT_MONITOR_PHRASES,
 } from './storefront-gaming-laptop-taxonomy';
 
 describe('storefront-gaming-laptop-taxonomy', () => {
@@ -37,6 +41,7 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop battery');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop keyboards');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('keyboard');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('gaming keyboards');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('rog ally');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('steam deck');
   });
@@ -48,6 +53,13 @@ describe('storefront-gaming-laptop-taxonomy', () => {
       'with accessories'
     );
     expect(GAMING_LAPTOP_EXEMPT_PHRASES.battery).toContain('battery life');
+  });
+
+  it('declares expected non-exempt phrases and handheld tokens', () => {
+    expect(EXCLUDED_HANDHELD_TOKENS).toContain('rog ally');
+    expect(NON_EXEMPT_KEYBOARD_PHRASES).toContain('gaming keyboard');
+    expect(NON_EXEMPT_GPU_PHRASES).toContain('gaming laptop gpu');
+    expect(NON_EXEMPT_MONITOR_PHRASES).toContain('monitor for');
   });
 
   it('maps excluded subjects to monitors, desktops, and gaming categories', () => {

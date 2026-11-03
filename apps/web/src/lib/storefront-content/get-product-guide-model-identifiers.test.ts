@@ -35,4 +35,17 @@ describe('getProductGuideModelIdentifiers', () => {
 
     expect(identifiers).toContain('xps 13 9340');
   });
+
+  it('adds TUF full phrase and model alias for ASUS TUF gaming laptop', () => {
+    const identifiers = getProductGuideModelIdentifiers({
+      pageKind: 'product',
+      categorySlug: 'gaming-laptops',
+      brands: ['ASUS'],
+      productSlugs: ['asus-tuf-gaming-f15'],
+    });
+
+    expect(identifiers).toContain('tuf f15');
+    expect(identifiers).toContain('tuf gaming f15');
+    expect(identifiers).toContain('f15');
+  });
 });

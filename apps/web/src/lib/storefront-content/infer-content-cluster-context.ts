@@ -25,34 +25,31 @@ interface InferContentClusterContextInput
   merchant_intent_source?: unknown;
 }
 
-function normalizeText(value: string | null | undefined) {
-  return normalizeContentCurrencyTokens(
-    applyJoinedTitleCorrections(value?.toLowerCase().trim() ?? '')
+const normalizeText = (v: string | null | undefined) =>
+  normalizeContentCurrencyTokens(
+    applyJoinedTitleCorrections(v?.toLowerCase().trim() ?? '')
   );
-}
 
-function tokenize(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.flatMap(tokenizeContentText)));
-}
+const tokenize = (values: Array<string | null | undefined>) =>
+  Array.from(new Set(values.flatMap(tokenizeContentText)));
 
-function isPhraseBoundary(value: string | undefined): boolean {
-  return value === undefined || /[^a-z0-9]/.test(value);
-}
+const isPhraseBoundary = (v: string | undefined): boolean =>
+  v === undefined || /[^a-z0-9]/.test(v);
 
 function hasPhrase(haystack: string, needle: string) {
-  const normalizedNeedle = normalizeText(needle);
-  if (normalizedNeedle.length === 0) return false;
-  let searchFrom = 0;
+  const norm = normalizeText(needle);
+  if (norm.length === 0) return false;
+  let from = 0;
   for (;;) {
-    const matchIndex = haystack.indexOf(normalizedNeedle, searchFrom);
-    if (matchIndex === -1) return false;
+    const idx = haystack.indexOf(norm, from);
+    if (idx === -1) return false;
     if (
-      isPhraseBoundary(haystack[matchIndex - 1]) &&
-      isPhraseBoundary(haystack[matchIndex + normalizedNeedle.length])
+      isPhraseBoundary(haystack[idx - 1]) &&
+      isPhraseBoundary(haystack[idx + norm.length])
     ) {
       return true;
     }
-    searchFrom = matchIndex + 1;
+    from = idx + 1;
   }
 }
 
@@ -69,7 +66,9 @@ const hasLaptopPhrase = (t: string) =>
 
 const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
   s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
-    ? hasGaming
+    ? hasGaming &&
+      !hasPhrase(t, 'gaming laptop gpu') &&
+      !hasPhrase(t, 'gaming laptop graphics card')
     : s === 'desktop' || s === 'desktops'
       ? hasPhrase(t, 'desktop replacement') || hasPhrase(t, 'desktop-class')
       : s === 'monitor' || s === 'monitors'
@@ -151,7 +150,8 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
-      return hasExcludedGamingLaptopSubject(title ?? '', true)
+      const combined = [title, excerpt].filter(Boolean).join(' ');
+      return hasExcludedGamingLaptopSubject(combined, true)
         ? 'laptops'
         : 'gaming-laptops';
     }
@@ -164,6 +164,12 @@ function inferCategorySlug(
   for (const [categorySlug, support] of Object.entries(
     CONTENT_CLUSTER_SUPPORT
   ) as ClusterSupportEntry[]) {
+    if (
+      categorySlug === 'gaming-laptops' &&
+      hasExcludedGamingLaptopSubject(haystack)
+    ) {
+      continue;
+    }
     const score = support.articleTokens.filter(
       (token) => tokens.includes(token) || hasPhrase(haystack, token)
     ).length;
@@ -180,21 +186,16 @@ function inferCategorySlug(
 function inferKind(haystack: string): ContentClusterKind | null {
   let bestKind: ContentClusterKind | null = null;
   let bestScore = 0;
-
   for (const [kind, phrases] of Object.entries(CONTENT_KIND_TOKENS) as [
     ContentClusterKind,
     readonly string[],
   ][]) {
-    const score = phrases.filter((phrase) =>
-      hasPhrase(haystack, phrase)
-    ).length;
-
+    const score = phrases.filter((p) => hasPhrase(haystack, p)).length;
     if (score > bestScore) {
       bestScore = score;
       bestKind = kind;
     }
   }
-
   return bestScore > 0 ? bestKind : null;
 }
 
@@ -213,22 +214,22 @@ function resolveKind(
   ) {
     return inferredKind;
   }
-  switch (input.merchant_intent) {
-    case 'buying-guide':
-      return inferredKind === 'best-in-nigeria' &&
-        hasPhrase(haystack, 'nigeria') &&
-        (hasPhrase(haystack, 'best') || hasPhrase(haystack, 'top'))
-        ? inferredKind
-        : 'buyer-guide';
-    case 'comparison':
-      return 'decision-support';
-    case 'repair-guide':
-      return 'troubleshooting';
-    case 'news':
-      return null;
-    default:
-      return inferredKind;
+  if (input.merchant_intent === 'buying-guide') {
+    return inferredKind === 'best-in-nigeria' &&
+      hasPhrase(haystack, 'nigeria') &&
+      (hasPhrase(haystack, 'best') || hasPhrase(haystack, 'top'))
+      ? inferredKind
+      : 'buyer-guide';
   }
+  const intentMap: Record<string, ContentClusterKind | null> = {
+    comparison: 'decision-support',
+    'repair-guide': 'troubleshooting',
+    news: null,
+  };
+  return typeof input.merchant_intent === 'string' &&
+    input.merchant_intent in intentMap
+    ? intentMap[input.merchant_intent]
+    : inferredKind;
 }
 
 function inferBrands(
@@ -236,12 +237,13 @@ function inferBrands(
   haystack: string
 ) {
   const support = categorySlug ? CONTENT_CLUSTER_SUPPORT[categorySlug] : null;
-  const brandTokens: [string, readonly string[]][] = support
-    ? (Object.entries(support.brandTokens) as [string, readonly string[]][])
-    : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap(
-        (entry) =>
-          Object.entries(entry.brandTokens) as [string, readonly string[]][]
-      );
+  const brandTokens = (
+    support
+      ? Object.entries(support.brandTokens)
+      : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap((e) =>
+          Object.entries(e.brandTokens)
+        )
+  ) as [string, readonly string[]][];
 
   return Array.from(
     new Set(
@@ -261,9 +263,7 @@ function inferPriceBands(
   if (!categorySlug) return [];
 
   return Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases)
-    .filter(([, aliases]) =>
-      aliases.some((alias) => hasPhrase(haystack, alias))
-    )
+    .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
     .map(([slug]) => slug);
 }
 

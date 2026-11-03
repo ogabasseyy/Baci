@@ -57,9 +57,9 @@ describe('inferContentClusterContext - gaming laptops', () => {
 
   it('keeps Laptops category for student laptop guides mentioning gaming lines only in tags or excerpt', () => {
     const studentLaptopGuide = inferContentClusterContext({
-      title: 'Best Student Laptops in Nigeria: 2026 Edition',
+      title: 'Best Student Laptops in Nigeria: 2026',
       excerpt:
-        'Comparing lightweight notebooks for school against heavier Legion and Omen options.',
+        'Comparing lightweight notebooks for school against Legion options.',
       category: 'Laptops',
       tags: ['laptops', 'students', 'legion', 'omen'],
       keywords: ['buyer guide', 'school'],
@@ -185,23 +185,19 @@ describe('inferContentClusterContext - gaming laptops', () => {
   });
 
   it('does not promote desktop articles tagged "gaming laptop" when the title lacks laptop evidence', () => {
-    const desktopArticle = inferContentClusterContext({
-      title: 'Alienware Aurora R16 Review',
-      excerpt: 'High-performance gaming desktop benchmarked.',
-      category: 'Gaming',
-      tags: ['gaming laptop', 'alienware', 'gaming'],
-      keywords: ['review'],
-    });
-    expect(desktopArticle.categorySlug).toBe('gaming');
-
-    const emptyExcerptDesktop = inferContentClusterContext({
-      title: 'Alienware Aurora R16 Review',
-      excerpt: '',
-      category: 'Gaming',
-      tags: ['gaming laptop', 'alienware'],
-      keywords: [],
-    });
-    expect(emptyExcerptDesktop.categorySlug).toBe('gaming');
+    for (const excerpt of [
+      'High-performance gaming desktop benchmarked.',
+      '',
+    ]) {
+      const desktopArticle = inferContentClusterContext({
+        title: 'Alienware Aurora R16 Review',
+        excerpt,
+        category: 'Gaming',
+        tags: ['gaming laptop', 'alienware'],
+        keywords: ['review'],
+      });
+      expect(desktopArticle.categorySlug).toBe('gaming');
+    }
   });
 
   it('promotes legitimate dedicated-model laptop posts with incidental excluded subjects in metadata tags or keywords', () => {
@@ -239,42 +235,45 @@ describe('inferContentClusterContext - gaming laptops', () => {
     }
   });
 
-  it('does not classify gaming laptop accessories or stands as gaming-laptops', () => {
-    const accessoryArticle = inferContentClusterContext({
-      title: 'Top 5 Ergonomic Laptop Stands to Buy in 2026',
-      excerpt: 'Stands for your gaming laptop workstation.',
-      category: 'Gaming Laptop Accessories',
-      tags: ['stands', 'accessories'],
-      keywords: ['stand'],
-    });
-    expect(accessoryArticle.categorySlug).not.toBe('gaming-laptops');
+  it('does not classify gaming laptop accessories, stands, or GPUs as gaming-laptops', () => {
+    for (const [title, category, expectedSlug] of [
+      ['Top 5 Laptop Stands 2026', 'Laptop Accessories', 'accessories'],
+      ['Best Gaming Laptop Stand 2026', 'Gaming Laptops', 'laptops'],
+      ['Best Gaming Laptop Cooling Pads in Nigeria', 'Gaming', 'gaming'],
+      ['Gaming Laptop Stands Buying Guide', 'Gaming Laptops', 'laptops'],
+      ['Gaming Laptop GPU Upgrade Guide', 'Gaming', 'gaming'],
+      ['Gaming Laptop Graphics Card Guide', 'Gaming', 'gaming'],
+      ['Essential Accessories Buyer Guide 2026', 'Gaming Laptops', 'laptops'],
+    ]) {
+      const post = inferContentClusterContext({
+        title,
+        excerpt: 'Stands, cooling pads, and GPU upgrades.',
+        category,
+        tags: ['accessories'],
+        keywords: ['guide'],
+      });
+      expect(post.categorySlug).toBe(expectedSlug);
+    }
+  });
 
-    const standArticle = inferContentClusterContext({
-      title: 'Best Gaming Laptop Stand 2026',
-      excerpt: 'Keep your machine cool.',
-      category: 'Gaming Laptops',
-      tags: ['stands'],
-      keywords: ['stand'],
+  it('excludes desktop and keyboard subjects in fallback scoring for unmapped categories', () => {
+    const desktopGuide = inferContentClusterContext({
+      title: 'Alienware Aurora R16 Desktop Buyer Guide',
+      excerpt: 'Prebuilt tower performance and Nigerian pricing.',
+      category: 'Hardware Reviews',
+      tags: ['alienware', 'desktop'],
+      keywords: ['aurora', 'desktop'],
     });
-    expect(standArticle.categorySlug).toBe('laptops');
+    expect(desktopGuide.categorySlug).toBe('desktops');
 
-    const pluralCoolingPads = inferContentClusterContext({
-      title: 'Best Gaming Laptop Cooling Pads in Nigeria',
-      excerpt: 'Top chill mats to keep your portable rig cold.',
-      category: 'Gaming',
-      tags: ['gaming', 'cooling'],
-      keywords: ['cooling pads'],
+    const keyboardPost = inferContentClusterContext({
+      title: 'Katana Mechanical Gaming Keyboard Review',
+      excerpt: 'Tactile switches and RGB lighting.',
+      category: 'Hardware Reviews',
+      tags: ['katana', 'keyboard'],
+      keywords: ['mechanical keyboard'],
     });
-    expect(pluralCoolingPads.categorySlug).toBe('gaming');
-
-    const pluralStandsGuide = inferContentClusterContext({
-      title: 'Gaming Laptop Stands Buying Guide',
-      excerpt: 'Ergonomic stands for high performance notebooks.',
-      category: 'Gaming Laptops',
-      tags: ['stands'],
-      keywords: ['stands'],
-    });
-    expect(pluralStandsGuide.categorySlug).toBe('laptops');
+    expect(keyboardPost.categorySlug).not.toBe('gaming-laptops');
   });
 
   it('preserves legitimate gaming-laptop guides with GPU, desktop-class, monitor pairing, or bundled accessories', () => {

@@ -32,5 +32,8 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('docking stations');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('gaming stands');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop chargers');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop battery');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop keyboards');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('keyboard');
   });
 });

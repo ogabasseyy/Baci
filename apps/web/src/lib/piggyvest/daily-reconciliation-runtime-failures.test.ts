@@ -137,7 +137,11 @@ describe('runPiggyvestDailyReconciliation failures and budget', () => {
       sendEmail: vi.fn(async () => ({ success: false })),
       createExecutor: vi.fn(() =>
         vi.fn(async () => ({
-          rows: [{ result: snapshot({ stuckTotal: 1, stuck: [] }) }],
+          rows: [
+            {
+              result: snapshot({ stuckTotal: 1, stuckDeferred: 1, stuck: [] }),
+            },
+          ],
         }))
       ) as never,
     });

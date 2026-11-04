@@ -18,8 +18,10 @@ const snapshot = {
   businessId: 'synthetic-business',
   stuck: [stuck],
   stuckTotal: 1,
+  stuckDeferred: 0,
   wallets: [{ walletId: 'synthetic-goal-wallet', expectedKobo: 150000 }],
   walletsTotal: 1,
+  walletsDeferred: 0,
 };
 
 describe('piggyvest daily reconciliation schemas', () => {
@@ -31,6 +33,24 @@ describe('piggyvest daily reconciliation schemas', () => {
   it.each([
     ['an extra top-level key', { ...snapshot, extra: 1 }],
     ['a missing total', { ...snapshot, stuckTotal: undefined }],
+    [
+      'a missing stuck deferred count',
+      { ...snapshot, stuckDeferred: undefined },
+    ],
+    [
+      'a missing wallet deferred count',
+      { ...snapshot, walletsDeferred: undefined },
+    ],
+    ['a null deferred count', { ...snapshot, walletsDeferred: null }],
+    ['a negative deferred count', { ...snapshot, stuckDeferred: -1 }],
+    [
+      'a wallet deferred count that does not match total minus listed',
+      { ...snapshot, walletsTotal: 3, walletsDeferred: 1 },
+    ],
+    [
+      'a stuck deferred count that hides listed rows',
+      { ...snapshot, stuckTotal: 1, stuckDeferred: 1 },
+    ],
     ['a non-ISO time', { ...snapshot, generatedAt: 'yesterday' }],
     ['a cutoff below one minute', { ...snapshot, staleAfterSeconds: 59 }],
     ['a null business id', { ...snapshot, businessId: null }],
@@ -50,6 +70,11 @@ describe('piggyvest daily reconciliation schemas', () => {
     ],
   ])('rejects %s', (_label, value) => {
     expect(schemas.snapshot.safeParse(value).success).toBe(false);
+  });
+
+  it('accepts a rotated window whose deferred count is the rest of the total', () => {
+    const rotated = { ...snapshot, walletsTotal: 3, walletsDeferred: 2 };
+    expect(schemas.snapshot.safeParse(rotated).success).toBe(true);
   });
 
   it('rejects zero or several executor rows', () => {

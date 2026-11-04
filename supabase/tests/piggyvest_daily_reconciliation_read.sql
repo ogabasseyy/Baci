@@ -91,10 +91,12 @@ DECLARE
 BEGIN
   SELECT string_agg(id::text||state||COALESCE(dispatched_at::text,''),',' ORDER BY id) INTO before_states
     FROM piggyvest_primary.savings_operations;
-  snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
+  snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900,"rotationSlot":0}');
   IF snapshot->>'businessId' IS DISTINCT FROM 'synthetic-recon-business'
     OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 3
     OR (snapshot->>'walletsTotal')::int IS DISTINCT FROM 1
+    OR (snapshot->>'stuckDeferred')::int IS DISTINCT FROM 0
+    OR (snapshot->>'walletsDeferred')::int IS DISTINCT FROM 0
     OR (snapshot->>'staleAfterSeconds')::int IS DISTINCT FROM 900 THEN
     RAISE EXCEPTION 'Unexpected reconciliation header: %', snapshot;
   END IF;
@@ -113,7 +115,7 @@ BEGIN
     RAISE EXCEPTION 'Reconciliation read changed savings operations';
   END IF;
   -- A one-day cutoff lists only the 3-day-old re-driven transfer; the fresh one never appears.
-  snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":86400}');
+  snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":86400,"rotationSlot":0}');
   IF (SELECT array_agg(item->>'reference') FROM jsonb_array_elements(snapshot->'stuck') item)
     IS DISTINCT FROM ARRAY['recon-redriven-dispatched'] OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'One-day cutoff listed transfers: %', snapshot;
@@ -126,9 +128,14 @@ DECLARE
   integration uuid:='f3820000-0000-4000-8000-000000000006';
   bad jsonb;
 BEGIN
-  FOREACH bad IN ARRAY ARRAY['{}','{"staleAfterSeconds":"900"}','{"staleAfterSeconds":900,"extra":1}',
-    '{"staleAfterSeconds":9.5}','{"staleAfterSeconds":59}','{"staleAfterSeconds":604801}',
-    '{"staleAfterSeconds":null}','{"staleAfterSeconds":-900}','[]','null']::jsonb[] LOOP
+  FOREACH bad IN ARRAY ARRAY['{}','{"staleAfterSeconds":900,"rotationSlot":0}','{"rotationSlot":0}',
+    '{"staleAfterSeconds":"900","rotationSlot":0}','{"staleAfterSeconds":900,"rotationSlot":0,"extra":1}',
+    '{"staleAfterSeconds":900,"extra":1}','{"staleAfterSeconds":900,"rotationSlot":"0"}',
+    '{"staleAfterSeconds":900,"rotationSlot":-1}','{"staleAfterSeconds":900,"rotationSlot":1.5}',
+    '{"staleAfterSeconds":900,"rotationSlot":null}','{"staleAfterSeconds":900,"rotationSlot":1000000000}',
+    '{"staleAfterSeconds":9.5,"rotationSlot":0}','{"staleAfterSeconds":59,"rotationSlot":0}',
+    '{"staleAfterSeconds":604801,"rotationSlot":0}','{"staleAfterSeconds":null,"rotationSlot":0}',
+    '{"staleAfterSeconds":-900,"rotationSlot":0}','[]','null']::jsonb[] LOOP
     BEGIN
       PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging',bad);
       RAISE EXCEPTION 'Malformed options % were accepted', bad;
@@ -140,29 +147,29 @@ BEGIN
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
   -- Wrong environment, unknown integration, and a mismatched or disabled binding.
   BEGIN
-    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'production','{"staleAfterSeconds":900}');
+    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'production','{"staleAfterSeconds":900,"rotationSlot":0}');
     RAISE EXCEPTION 'Wrong environment was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   BEGIN
-    PERFORM piggyvest_primary.read_daily_reconciliation('00000000-0000-4000-8000-000000000000','staging','{"staleAfterSeconds":900}');
+    PERFORM piggyvest_primary.read_daily_reconciliation('00000000-0000-4000-8000-000000000000','staging','{"staleAfterSeconds":900,"rotationSlot":0}');
     RAISE EXCEPTION 'Unknown integration was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   UPDATE piggyvest_primary.inflow_authorities SET executor_login = SESSION_USER || '_other'
     WHERE integration_id = integration;
   BEGIN
-    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
+    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900,"rotationSlot":0}');
     RAISE EXCEPTION 'Another login was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   UPDATE piggyvest_primary.inflow_authorities SET executor_login = SESSION_USER, enabled = false
     WHERE integration_id = integration;
   BEGIN
-    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
+    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900,"rotationSlot":0}');
     RAISE EXCEPTION 'Disabled authority was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   UPDATE piggyvest_primary.inflow_authorities SET enabled = true WHERE integration_id = integration;
   UPDATE piggyvest_primary.integrations SET enabled = false WHERE id = integration;
   BEGIN
-    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
+    PERFORM piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900,"rotationSlot":0}');
     RAISE EXCEPTION 'Disabled integration was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END;

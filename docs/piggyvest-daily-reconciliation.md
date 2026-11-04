@@ -36,6 +36,18 @@ anything is wrong. It resends, settles and releases nothing.
    unconfirmed, a balance as unreadable) and the email says time ran out. The
    report and page therefore always go out, even when PiggyVest hangs.
 
+5. **Large books.** One read returns at most 500 wallets and 200 stuck
+   transfers, but not always the same ones. The window moves by one page each
+   UTC day and wraps, so every wallet is checked within ceil(wallets / 500)
+   days. The stuck list is best effort: the set of stuck transfers changes
+   between runs, so a page can shift against it and some detail may stay
+   unlisted for a while. Every stuck transfer is still counted in the total and
+   still pages.
+   The email says how many were left out of today's window. Wallets left out do
+   not page, because later runs cover them; stuck transfers left out still page
+   (any stuck transfer pages). Indexes on the savings, cancel and complete operation tables keep
+   both reads inside the 2.5 second statement timeout.
+
 The page is the existing `piggyvest_money_alert` event with code
 `PIGGYVEST_RECONCILIATION_MISMATCH` (see `piggyvest-money-alerts.md`). It also
 pages if the report email cannot be sent.

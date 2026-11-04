@@ -18,39 +18,84 @@ interface Rule {
   sign: 1 | -1;
 }
 
+/** Drops `--` comments (whole-line and trailing), leaving string literals intact. */
+const stripLineComment = (line: string): string => {
+  let inString = false;
+  for (let i = 0; i < line.length; i += 1) {
+    if (line[i] === "'") inString = !inString;
+    else if (!inString && line[i] === '-' && line[i + 1] === '-') {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+};
+
 export const stripComments = (sql: string): string =>
-  sql
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('--'))
-    .join('\n');
+  sql.split('\n').map(stripLineComment).join('\n');
 
 export const readLegacySql = (name: string): string =>
   readFileSync(resolve(legacyDir, name), 'utf8');
 
-/** Newest migration that (re)defines the function the app rebuilds balances with. */
-export const readAppBackfillSql = (): { file: string; sql: string } => {
-  const defines =
-    /create\s+or\s+replace\s+function\s+public\.backfill_wallet_balances\s*\(/i;
-  const file = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .filter((f) =>
-      defines.test(readFileSync(resolve(migrationsDir, f), 'utf8'))
-    )
-    .sort()
-    .at(-1);
-  if (!file) throw new Error('backfill_wallet_balances migration not found');
-  return { file, sql: readFileSync(resolve(migrationsDir, file), 'utf8') };
+const NAME = '"?backfill_wallet_balances"?';
+const DEFINES = new RegExp(
+  `create\\s+(?:or\\s+replace\\s+)?function\\s+(?:public\\.)?${NAME}\\s*\\(`,
+  'i'
+);
+const DROPS = new RegExp(`drop\\s+function[^;]*${NAME}`, 'i');
+const MENTIONS = /backfill_wallet_balances/i;
+const BENIGN = new RegExp(
+  `(?:revoke|grant|comment\\s+on\\s+function)\\b[^;]*${NAME}[^;]*;`,
+  'gi'
+);
+
+/**
+ * Newest migration that (re)defines the function the app rebuilds balances with.
+ * Fails loud if a later migration drops it or touches it in a way this guard
+ * cannot classify, so it never silently falls back to an older definition.
+ */
+export const selectBackfillDefinition = (
+  files: { name: string; sql: string }[]
+): { file: string; sql: string } => {
+  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name));
+  const bodies = new Map(sorted.map((f) => [f.name, stripComments(f.sql)]));
+  const newest = sorted.filter((f) => DEFINES.test(bodies.get(f.name) ?? ''));
+  const latest = newest.at(-1);
+  if (!latest) throw new Error('backfill_wallet_balances migration not found');
+  for (const f of sorted) {
+    if (f.name <= latest.name) continue;
+    const body = bodies.get(f.name) ?? '';
+    if (DROPS.test(body)) {
+      throw new Error(`${f.name} drops backfill_wallet_balances`);
+    }
+    if (MENTIONS.test(body.replace(BENIGN, ''))) {
+      throw new Error(
+        `${f.name} touches backfill_wallet_balances in an unrecognised way`
+      );
+    }
+  }
+  return { file: latest.name, sql: latest.sql };
 };
+
+export const readAppBackfillSql = (): { file: string; sql: string } =>
+  selectBackfillDefinition(
+    readdirSync(migrationsDir)
+      .filter((f) => f.endsWith('.sql'))
+      .map((name) => ({
+        name,
+        sql: readFileSync(resolve(migrationsDir, name), 'utf8'),
+      }))
+  );
 
 /** First CASE ... END after the anchor text, comments removed. */
 export const caseAfter = (sql: string, anchor: string): string => {
   const body = stripComments(sql);
   const from = body.indexOf(anchor);
   if (from < 0) throw new Error(`anchor not found: ${anchor}`);
-  const start = body.indexOf('CASE', from);
-  const end = body.indexOf('END', start);
+  const start = body.slice(from).search(/\bCASE\b/);
+  const rest = start < 0 ? '' : body.slice(from + start);
+  const end = rest.search(/\bEND\b/);
   if (start < 0 || end < 0) throw new Error(`no CASE after: ${anchor}`);
-  return body.slice(start, end + 3);
+  return rest.slice(0, end + 3);
 };
 
 const BRANCH =

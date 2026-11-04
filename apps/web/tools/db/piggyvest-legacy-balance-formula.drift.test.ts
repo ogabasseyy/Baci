@@ -1,3 +1,9 @@
+/**
+ * Scope: backfill_wallet_balances is the canonical ledger-rebuild formula.
+ * Stored available_balance is also maintained by incremental RPC updates;
+ * those paths are out of scope here. If one changes how a ledger type or
+ * status counts, the rebuild and this guard must change with it.
+ */
 import { describe, expect, it } from 'vitest';
 import {
   caseAfter,

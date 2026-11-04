@@ -3,27 +3,35 @@ import { createStorefrontReadDeadline } from '@/lib/create-storefront-read-deadl
 import { prepareStorefrontSingleAttemptQuery } from '@/lib/prepare-storefront-single-attempt-query';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 import { getCachedCompareCategoryShell } from '@/lib/storefront-compare/get-cached-compare-category-shell';
+import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 
 export interface PriceBandDestinationProduct {
+  id?: string | null;
   slug: string;
   name: string;
   brand: string | null;
   price: number;
+  stock?: number | null;
+  stock_quantity?: number | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
-const PRODUCT_LIMIT = 600;
-const SELECT = 'id, slug, name, brand, price';
+const PRODUCT_LIMIT = COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT;
+const SELECT =
+  'id, slug, name, brand, price, stock, stock_quantity, manage_stock, has_condition_offers';
 
 function toProduct(value: unknown): PriceBandDestinationProduct | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
-  const slug = row.slug || row.id;
-  // Match the destination's JS numeric comparisons; do not reinterpret
-  // grouped strings (which its normalizeProduct path leaves non-numeric).
+  const slug = (row.slug as string) || (row.id as string);
+  const rawPrice = row.price;
   const price =
-    typeof row.price === 'number' || typeof row.price === 'string'
-      ? Number(row.price)
-      : Number.NaN;
+    typeof rawPrice === 'number'
+      ? rawPrice
+      : typeof rawPrice === 'string' && rawPrice.trim()
+        ? Number(rawPrice.replace(/,/g, '').trim())
+        : Number.NaN;
   if (
     typeof slug !== 'string' ||
     typeof row.name !== 'string' ||
@@ -31,10 +39,29 @@ function toProduct(value: unknown): PriceBandDestinationProduct | null {
   )
     return null;
   return {
+    id: typeof row.id === 'string' ? row.id : undefined,
     slug,
     name: row.name,
     brand: typeof row.brand === 'string' ? row.brand : null,
     price,
+    stock:
+      typeof row.stock === 'number'
+        ? row.stock
+        : typeof row.stock === 'string'
+          ? Number(row.stock)
+          : null,
+    stock_quantity:
+      typeof row.stock_quantity === 'number'
+        ? row.stock_quantity
+        : typeof row.stock_quantity === 'string'
+          ? Number(row.stock_quantity)
+          : null,
+    manage_stock:
+      typeof row.manage_stock === 'boolean' ? row.manage_stock : null,
+    has_condition_offers:
+      typeof row.has_condition_offers === 'boolean'
+        ? row.has_condition_offers
+        : null,
   };
 }
 

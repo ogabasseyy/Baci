@@ -3,7 +3,10 @@ import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-t
 import { isNonBrandPlaceholderKey } from '../storefront-category/category-hub-brand-placeholder';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
-import { isPriceBandCandidateAvailable } from './is-price-band-candidate-available';
+import {
+  isPriceBandCandidateAvailable,
+  parseCandidatePrice,
+} from './is-price-band-candidate-available';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 const MIN_BRAND_COMPARE_PRODUCTS = 3;
@@ -22,7 +25,7 @@ export interface BrandCompareProductInput {
   slug: string;
   name: string;
   brand?: string | null;
-  price: number;
+  price: number | string;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
   manage_stock?: boolean | null;
@@ -142,14 +145,12 @@ export function buildBrandCompareCandidate(input: {
   categorySlug: string;
   products: BrandCompareProductInput[];
 }) {
-  const brandsByKey = new Map<
-    string,
-    {
-      label: string;
-      count: number;
-      specValues: Map<string, Set<string>>;
-    }
-  >();
+  type BrandEntry = {
+    label: string;
+    count: number;
+    specValues: Map<string, Set<string>>;
+  };
+  const brandsByKey = new Map<string, BrandEntry>();
 
   for (const product of input.products) {
     const normalizedBrand = normalizeBrand(product.brand);
@@ -213,16 +214,17 @@ export function buildBrandCompareCandidate(input: {
   }
 
   // Real spec differentiation: keys both brands carry whose value sets differ.
-  const differentiatingSpecCount = [...leftBrandEntry[1].specValues.keys()]
-    .filter((key) => rightBrandEntry[1].specValues.has(key))
-    .filter((key) => {
-      const leftValues = leftBrandEntry[1].specValues.get(key) ?? new Set();
-      const rightValues = rightBrandEntry[1].specValues.get(key) ?? new Set();
-      return (
-        leftValues.size !== rightValues.size ||
-        [...leftValues].some((value) => !rightValues.has(value))
-      );
-    }).length;
+  const differentiatingSpecCount = [
+    ...leftBrandEntry[1].specValues.keys(),
+  ].filter((key) => {
+    const left = leftBrandEntry[1].specValues.get(key);
+    const right = rightBrandEntry[1].specValues.get(key);
+    return (
+      left &&
+      right &&
+      (left.size !== right.size || [...left].some((v) => !right.has(v)))
+    );
+  }).length;
 
   return {
     leftBrand: leftBrandEntry[1].label,
@@ -243,26 +245,23 @@ export function buildBrandCompareCandidate(input: {
   };
 }
 
-export function buildPriceBandCandidate(input: {
-  categorySlug: string;
-  band: PriceBandDefinition;
-  products: BrandCompareProductInput[];
-}) {
+export function buildPriceBandCandidate<
+  T extends BrandCompareProductInput,
+>(input: { categorySlug: string; band: PriceBandDefinition; products: T[] }) {
   const seenIdentities = new Set<string>();
-  const bandProducts: BrandCompareProductInput[] = [];
+  const bandProducts: T[] = [];
 
   for (const product of input.products) {
-    if (!Number.isFinite(product.price) || product.price <= 0) continue;
+    const numericPrice = parseCandidatePrice(product.price);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) continue;
     const inRange =
-      product.price <= input.band.ceiling &&
-      (input.band.floor ? product.price > input.band.floor : true);
+      numericPrice <= input.band.ceiling &&
+      (input.band.floor ? numericPrice > input.band.floor : true);
     if (!inRange || !isPriceBandCandidateAvailable(product)) continue;
 
     const key = product.id?.trim() || product.slug?.trim();
-    if (key) {
-      if (seenIdentities.has(key)) continue;
-      seenIdentities.add(key);
-    }
+    if (key && seenIdentities.has(key)) continue;
+    if (key) seenIdentities.add(key);
     bandProducts.push(product);
   }
 

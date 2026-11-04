@@ -17,6 +17,10 @@ const row = {
   slug: 'phone',
   brand: 'Apple',
   price: 500000,
+  stock: null,
+  stock_quantity: null,
+  manage_stock: null,
+  has_condition_offers: null,
 };
 const execute = vi.fn();
 const query = {
@@ -54,10 +58,20 @@ describe('bounded price-band destination projection', () => {
     expect(
       await getCachedPriceBandDestinationProjection('m1', 'smartphones')
     ).toEqual([
-      { slug: 'phone', name: 'Phone', brand: 'Apple', price: 500000 },
+      {
+        id: 'p1',
+        slug: 'phone',
+        name: 'Phone',
+        brand: 'Apple',
+        price: 500000,
+        stock: null,
+        stock_quantity: null,
+        manage_stock: null,
+        has_condition_offers: null,
+      },
     ]);
     expect(query.select).toHaveBeenCalledWith(
-      'id, slug, name, brand, price, product_categories!inner(category_id)',
+      'id, slug, name, brand, price, stock, stock_quantity, manage_stock, has_condition_offers, product_categories!inner(category_id)',
       { count: 'exact' }
     );
     expect(query.eq).toHaveBeenCalledWith('merchant_id', 'm1');
@@ -66,13 +80,13 @@ describe('bounded price-band destination projection', () => {
       'cat',
       'child',
     ]);
-    expect(query.limit).toHaveBeenCalledWith(601);
+    expect(query.limit).toHaveBeenCalledWith(151);
     expect(query.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
     expect(execute).toHaveBeenCalledWith(false);
   });
 
   it.each([
-    601,
+    151,
     null,
     2,
   ])('fails closed when count %s cannot prove the returned pool complete', async (count) => {
@@ -84,13 +98,25 @@ describe('bounded price-band destination projection', () => {
 
   it('retains unavailable rows and slug fallback without fetching stock or product detail', async () => {
     execute.mockResolvedValue({
-      data: [{ ...row, slug: null, price: '500000', stock: 0 }],
+      data: [{ ...row, slug: null, price: '500,000', stock: 0 }],
       count: 1,
       error: null,
     });
     expect(
       await getCachedPriceBandDestinationProjection('m1', 'smartphones')
-    ).toEqual([{ slug: 'p1', name: 'Phone', brand: 'Apple', price: 500000 }]);
+    ).toEqual([
+      {
+        id: 'p1',
+        slug: 'p1',
+        name: 'Phone',
+        brand: 'Apple',
+        price: 500000,
+        stock: 0,
+        stock_quantity: null,
+        manage_stock: null,
+        has_condition_offers: null,
+      },
+    ]);
   });
 
   it('uses the same legacy membership predicate without extra catalogue reads', async () => {
@@ -120,8 +146,8 @@ describe('bounded price-band destination projection', () => {
   });
   it('rejects an otherwise complete over-cap catalogue', async () => {
     execute.mockResolvedValue({
-      data: Array.from({ length: 601 }, (_, i) => ({ ...row, id: `p${i}` })),
-      count: 601,
+      data: Array.from({ length: 151 }, (_, i) => ({ ...row, id: `p${i}` })),
+      count: 151,
       error: null,
     });
     expect(

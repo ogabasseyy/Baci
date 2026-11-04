@@ -23,6 +23,7 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { buildPriceBandCandidate } from './compare-eligibility';
+import { parseCandidatePrice } from './is-price-band-candidate-available';
 import {
   COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
   getCuratedPriceBands,
@@ -183,7 +184,7 @@ export async function loadPriceBandPage(
       slug: product.slug,
       name: product.name,
       brand: product.brand,
-      price: product.price,
+      price: parseCandidatePrice(product.price),
       stock: product.stock,
       manage_stock: product.manage_stock,
       has_condition_offers: product.has_condition_offers,
@@ -193,10 +194,11 @@ export async function loadPriceBandPage(
   const seenProductIdentities = new Set<string>();
   const products: PriceBandPageProduct[] = [];
   for (const product of normalizedProducts) {
+    const numericPrice = parseCandidatePrice(product.price);
     if (
-      !Number.isFinite(product.price) ||
-      product.price <= 0 ||
-      !isWithinBand(product.price, band.floor, band.ceiling)
+      !Number.isFinite(numericPrice) ||
+      numericPrice <= 0 ||
+      !isWithinBand(numericPrice, band.floor, band.ceiling)
     ) {
       continue;
     }
@@ -220,7 +222,7 @@ export async function loadPriceBandPage(
       category: product.category,
       category_slug: product.category_slug,
       brand: product.brand,
-      price: product.price,
+      price: numericPrice,
       condition: product.condition,
       stock: product.stock,
       manage_stock: product.manage_stock,

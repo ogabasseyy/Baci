@@ -56,6 +56,38 @@ describe('price band parity and placeholder brand tests', () => {
     expect(candidate.isIndexable).toBe(true);
   });
 
+  it('normalizes numeric-string prices with commas and whitespace so legitimate price-band candidates qualify', () => {
+    const band = CURATED_PRICE_BANDS.smartphones[1];
+    const products = [
+      { slug: 'apple-1', name: 'iPhone 1', brand: 'Apple', price: '600,000' },
+      { slug: 'apple-2', name: 'iPhone 2', brand: 'Apple', price: ' 700000 ' },
+      {
+        slug: 'samsung-1',
+        name: 'Galaxy 1',
+        brand: 'Samsung',
+        price: '650,000',
+      },
+      {
+        slug: 'samsung-2',
+        name: 'Galaxy 2',
+        brand: 'Samsung',
+        price: '750000',
+      },
+      { slug: 'tecno-1', name: 'Camon 1', brand: 'Tecno', price: '620,000' },
+      { slug: 'tecno-2', name: 'Camon 2', brand: 'Tecno', price: ' 680,000 ' },
+    ];
+
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band,
+      products,
+    });
+
+    expect(candidate.activeProductCount).toBe(6);
+    expect(candidate.differentiatingSpecCount).toBe(3);
+    expect(candidate.isIndexable).toBe(true);
+  });
+
   it('emits all indexable price-band URLs per category rather than stopping at .find()', () => {
     // 12 products spanning 2 bands:
     // Band 1 (under-500k): 6 products from 3 brands (Apple, Samsung, Tecno) priced between 200k and 450k

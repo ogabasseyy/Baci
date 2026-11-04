@@ -12,6 +12,19 @@ function parseStockValue(value?: number | string | null): number | null {
   return null;
 }
 
+export function parseCandidatePrice(
+  value: number | string | undefined | null
+): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : Number.NaN;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.replace(/,/g, '').trim());
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+  return Number.NaN;
+}
+
 /**
  * Checks Phase 1 availability for price-band candidates.
  *

@@ -18,20 +18,25 @@ interface Rule {
   sign: 1 | -1;
 }
 
-/** Drops `--` comments (whole-line and trailing), leaving string literals intact. */
-const stripLineComment = (line: string): string => {
+/**
+ * Drops `--` comments (whole-line and trailing), leaving string literals
+ * intact, including literals that span several lines.
+ */
+export const stripComments = (sql: string): string => {
+  let out = '';
   let inString = false;
-  for (let i = 0; i < line.length; i += 1) {
-    if (line[i] === "'") inString = !inString;
-    else if (!inString && line[i] === '-' && line[i + 1] === '-') {
-      return line.slice(0, i);
+  for (let i = 0; i < sql.length; i += 1) {
+    const ch = sql[i];
+    if (ch === "'") inString = !inString;
+    if (!inString && ch === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i += 1;
+      if (i < sql.length) out += '\n';
+      continue;
     }
+    out += ch;
   }
-  return line;
+  return out;
 };
-
-export const stripComments = (sql: string): string =>
-  sql.split('\n').map(stripLineComment).join('\n');
 
 export const readLegacySql = (name: string): string =>
   readFileSync(resolve(legacyDir, name), 'utf8');
@@ -91,15 +96,19 @@ export const caseAfter = (sql: string, anchor: string): string => {
   const body = stripComments(sql);
   const from = body.indexOf(anchor);
   if (from < 0) throw new Error(`anchor not found: ${anchor}`);
-  const start = body.slice(from).search(/\bCASE\b/);
+  const start = body.slice(from).search(/\bCASE\b/i);
   const rest = start < 0 ? '' : body.slice(from + start);
-  const end = rest.search(/\bEND\b/);
+  const end = rest.search(/\bEND\b/i);
   if (start < 0 || end < 0) throw new Error(`no CASE after: ${anchor}`);
   return rest.slice(0, end + 3);
 };
 
+/**
+ * A branch result must be exactly `[-]alias.amount` and the CASE must end with
+ * `ELSE 0 END`; any trailing expression makes the branch unparsed on purpose.
+ */
 const BRANCH =
-  /WHEN\s+\w+\.status\s*=\s*'(\w+)'\s+AND\s+\w+\.type\s+(?:IN\s*\(([^)]*)\)|=\s*'(\w+)')\s+THEN\s+(-?)\w+\.amount/gi;
+  /WHEN\s+\w+\.status\s*=\s*'(\w+)'\s+AND\s+\w+\.type\s+(?:IN\s*\(([^)]*)\)|=\s*'(\w+)')\s+THEN\s+(-?)\w+\.amount(?=\s+(?:WHEN|ELSE)\b)/gi;
 
 export const parseRules = (caseSql: string): Rule[] => {
   const rules = [...caseSql.matchAll(BRANCH)].map((m) => ({
@@ -114,7 +123,9 @@ export const parseRules = (caseSql: string): Rule[] => {
   if (rules.length === 0 || rules.length !== whens) {
     throw new Error(`unparsed WHEN branch: parsed ${rules.length} of ${whens}`);
   }
-  if (!/ELSE\s+0\b/i.test(caseSql)) throw new Error('CASE has no ELSE 0');
+  if (!/\bELSE\s+0\s+END$/i.test(caseSql.trim())) {
+    throw new Error('CASE must end with exactly ELSE 0 END');
+  }
   return rules;
 };
 
@@ -126,3 +137,24 @@ export const ledgerTotalCents = (rules: Rule[], rows: LedgerRow[]): number =>
     );
     return sum + (rule ? rule.sign * Math.round(row.amount * 100) : 0);
   }, 0);
+
+/** Whitespace-collapsed, comment-free SQL with no padding inside parentheses. */
+export const normalizeSql = (sql: string): string =>
+  stripComments(sql)
+    .replace(/\s+/g, ' ')
+    .replace(/\( /g, '(')
+    .replace(/ \)/g, ')')
+    .trim();
+
+/**
+ * The statement text with the first CASE after the anchor collapsed to
+ * `<CASE>`, so joins, filters and the aggregate around it can be pinned.
+ */
+export const shapeAround = (sql: string, anchor: string): string => {
+  const body = stripComments(sql);
+  const kase = caseAfter(body, anchor);
+  const at = body.indexOf(kase, body.indexOf(anchor));
+  return normalizeSql(
+    `${body.slice(0, at)}<CASE>${body.slice(at + kase.length)}`
+  );
+};

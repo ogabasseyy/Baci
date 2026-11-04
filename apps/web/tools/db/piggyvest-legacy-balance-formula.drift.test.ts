@@ -6,12 +6,18 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  AGGREGATE_SHAPES,
+  GATE_SHAPES,
+} from './piggyvest-legacy-balance-formula.shapes';
+import {
   caseAfter,
   type LedgerRow,
   ledgerTotalCents,
+  normalizeSql,
   parseRules,
   readAppBackfillSql,
   readLegacySql,
+  shapeAround,
   stripComments,
 } from './piggyvest-legacy-balance-formula.test-support';
 
@@ -28,6 +34,15 @@ const formulas = {
     caseAfter(zeroSql, 'WHERE l.expected_balance IS DISTINCT FROM (')
   ),
 };
+
+const ANCHORS = {
+  app: 'WITH customer_rollup AS',
+  list: 'WITH positive AS',
+  zero: 'WHERE l.expected_balance IS DISTINCT FROM (',
+} as const;
+const sources = { app: app.sql, list: listSql, zero: zeroSql } as const;
+const missing = (text: string, fragments: readonly string[]) =>
+  fragments.filter((f) => !text.includes(f));
 
 const row = (status: string, type: string, amount: number): LedgerRow => ({
   status,
@@ -152,6 +167,57 @@ describe('legacy balance formula drift guard', () => {
     }
   });
 
+  it.each(
+    Object.keys(AGGREGATE_SHAPES) as (keyof typeof AGGREGATE_SHAPES)[]
+  )('pins the join, filter and SUM around the CASE in %s', (key) => {
+    const shape = shapeAround(sources[key], ANCHORS[key]);
+    expect(missing(shape, AGGREGATE_SHAPES[key])).toEqual([]);
+  });
+
+  it('detects a row filter, FILTER clause or aggregate change around the CASE', () => {
+    const mutate = (
+      key: keyof typeof AGGREGATE_SHAPES,
+      from: string,
+      to: string
+    ) => {
+      const shape = shapeAround(sources[key], ANCHORS[key]);
+      expect(shape).toContain(from);
+      return shape.replace(from, to);
+    };
+    const mutants: [keyof typeof AGGREGATE_SHAPES, string, string][] = [
+      [
+        'app',
+        'ON cwt.wallet_id = cw.id',
+        "ON cwt.wallet_id = cw.id AND cwt.source_type <> 'x'",
+      ],
+      [
+        'app',
+        'COALESCE(SUM(<CASE>), 0) AS available_balance',
+        'COALESCE(SUM(<CASE>) FILTER (WHERE cwt.created_at > now()), 0) AS available_balance',
+      ],
+      [
+        'list',
+        'JOIN positive p ON p.id = cwt.wallet_id',
+        "JOIN positive p ON p.id = cwt.wallet_id AND cwt.source_type <> 'x'",
+      ],
+      [
+        'list',
+        'COALESCE(SUM(<CASE>), 0) AS ledger_balance',
+        'COALESCE(MAX(<CASE>), 0) AS ledger_balance',
+      ],
+      [
+        'zero',
+        'WHERE t.wallet_id = l.wallet_id',
+        "WHERE t.wallet_id = l.wallet_id AND t.status <> 'x'",
+      ],
+    ];
+    for (const [key, from, to] of mutants) {
+      expect(missing(mutate(key, from, to), AGGREGATE_SHAPES[key])).not.toEqual(
+        []
+      );
+    }
+  });
+
   it('refuses a branch it cannot read instead of passing silently', () => {
     expect(() =>
       parseRules("CASE WHEN x.status = 'completed' THEN x.amount ELSE 0 END")
@@ -160,37 +226,48 @@ describe('legacy balance formula drift guard', () => {
   });
 });
 
-describe('zero_out_mode and the per-row customer check', () => {
-  const zero = stripComments(zeroSql);
-  const list = stripComments(listSql);
+describe('safety gates are pinned at their enforcement statements', () => {
+  const zero = normalizeSql(zeroSql);
+  const list = normalizeSql(listSql);
 
-  it('accepts only dry_run or commit and fails closed on NULL', () => {
-    expect(zero).toMatch(
-      /v_mode IS NULL OR v_mode NOT IN \('dry_run', 'commit'\)/
-    );
-    expect(zeroSql).toMatch(/\\set zero_out_mode dry_run/);
-    expect(zero).toMatch(/\(:'zero_out_mode' = 'commit'\) AS do_commit/);
+  it.each([
+    ['01-balance-list.sql', list, GATE_SHAPES.list],
+    ['02-zero-out.sql', zero, GATE_SHAPES.zero],
+  ] as const)('%s keeps every gate statement intact', (_n, text, fragments) => {
+    expect(missing(text, fragments)).toEqual([]);
   });
 
-  it('checks the customer for the same merchant, one listed row at a time', () => {
-    expect(zero).toMatch(
-      /WHERE NOT EXISTS \(\s*SELECT 1 FROM public\.customers c\s+WHERE c\.id = l\.customer_id AND c\.merchant_id = l\.merchant_id/
-    );
+  it('keeps the dry_run default and rejects the per-row NOT IN shortcut', () => {
+    expect(stripComments(zeroSql)).toMatch(/\\set zero_out_mode dry_run/);
     expect(zero).not.toMatch(/customer_id NOT IN/i);
   });
 
-  it('keeps the list query honest about the same customer rule', () => {
-    expect(list).toMatch(
-      /LEFT JOIN public\.customers c\s+ON c\.id = cw\.customer_id AND c\.merchant_id = cw\.merchant_id/
+  it('detects a gate whose raise or check was removed or loosened', () => {
+    const gate = (frag: string) =>
+      GATE_SHAPES.zero.find((f) => f.includes(frag)) as string;
+    const customerGate = gate('customer_id AND c.merchant_id');
+    const modeGate = gate('NOT IN');
+    expect(
+      zero.replace(
+        customerGate,
+        customerGate.replace('IF v_bad <> 0', 'IF false')
+      )
+    ).not.toContain(customerGate);
+    expect(
+      zero.replace("v_mode NOT IN ('dry_run', 'commit')", 'false')
+    ).not.toContain(modeGate);
+    expect(list.replace('AND c.id IS NOT NULL', '')).not.toContain(
+      GATE_SHAPES.list[0]
     );
-    expect(list).toMatch(/AND c\.id IS NOT NULL/);
-    expect(list).toMatch(/\(c\.id IS NOT NULL\) AS customer_found/);
+    expect(
+      zero.replace('\\if :do_commit COMMIT;', '\\if :do_commit ROLLBACK;')
+    ).not.toContain(gate('do_commit'));
   });
 
-  it('compares the stored balance with the ledger total null-safely in both', () => {
-    expect(list).toMatch(
-      /cw\.available_balance IS NOT DISTINCT FROM COALESCE\(l\.ledger_balance, 0\)/
+  it('compares the stored balance with the ledger total null-safely', () => {
+    expect(list).toContain(
+      'cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)'
     );
-    expect(zero).toMatch(/l\.expected_balance IS DISTINCT FROM \(/);
+    expect(zero).toContain('l.expected_balance IS DISTINCT FROM (');
   });
 });

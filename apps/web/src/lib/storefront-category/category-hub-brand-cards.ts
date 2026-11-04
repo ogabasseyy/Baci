@@ -43,10 +43,14 @@ export function buildCategoryHubBrandCards(input: {
     }
   >;
 }) {
-  const priorityDefaults =
-    CATEGORY_HUB_DEFAULTS[
-      input.categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS
-    ];
+  const priorityDefaults = Object.hasOwn(
+    CATEGORY_HUB_DEFAULTS,
+    input.categorySlug
+  )
+    ? CATEGORY_HUB_DEFAULTS[
+        input.categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS
+      ]
+    : null;
   if (!priorityDefaults) {
     return [];
   }

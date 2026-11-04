@@ -84,26 +84,7 @@ describe('getCachedPdpSemanticInventory', () => {
     expect(source).not.toContain("'use cache: remote';");
   });
 
-  it('merges direct and junction category assignments with one bounded attempt each', async () => {
-    const directQuery = createProductsQuery({
-      data: [
-        {
-          brand: 'Lenovo',
-          category: 'Laptops',
-          category_id: 'category-1',
-          condition: 'new',
-          created_at: '2026-08-31T12:00:00.000Z',
-          id: 'product-1',
-          name: 'Lenovo Legion 5',
-          price: '3,500,000',
-          product_key_specs: [{ ram_gb: 32, storage_gb: 1024 }],
-          slug: 'lenovo-legion-5',
-          stock: 2,
-          stock_quantity: null,
-        },
-      ],
-      error: null,
-    });
+  it('queries junction category assignments with bounded attempt matching category page membership', async () => {
     const joinedQuery = createProductsQuery({
       data: [
         {
@@ -127,37 +108,25 @@ describe('getCachedPdpSemanticInventory', () => {
       error: null,
     });
     mocks.getPublicSupabaseClient.mockReturnValue({
-      from: vi
-        .fn()
-        .mockReturnValueOnce(joinedQuery)
-        .mockReturnValueOnce(directQuery),
+      from: vi.fn().mockReturnValue(joinedQuery),
     });
 
     await expect(
       getCachedPdpSemanticInventory('merchant-1', 'laptops')
-    ).resolves.toEqual([
-      expect.objectContaining({ slug: 'lenovo-legion-5' }),
-      expect.objectContaining({ slug: 'asus-rog' }),
-    ]);
+    ).resolves.toEqual([expect.objectContaining({ slug: 'asus-rog' })]);
 
     expect(mocks.getCachedCompareCategoryShell).toHaveBeenCalledWith(
       'merchant-1',
       'laptops'
     );
-    expect(directQuery.in).toHaveBeenCalledWith('category_id', [
-      'category-1',
-      'category-2',
-    ]);
     expect(joinedQuery.in).toHaveBeenCalledWith(
       'product_categories.category_id',
       ['category-1', 'category-2']
     );
-    for (const query of [directQuery, joinedQuery]) {
-      expect(query.limit).toHaveBeenCalledWith(48);
-      expect(query.abortSignal).toHaveBeenCalledOnce();
-      expect(query.retry).toHaveBeenCalledWith(false);
-      expect(query.then).toHaveBeenCalledOnce();
-    }
+    expect(joinedQuery.limit).toHaveBeenCalledWith(48);
+    expect(joinedQuery.abortSignal).toHaveBeenCalledOnce();
+    expect(joinedQuery.retry).toHaveBeenCalledWith(false);
+    expect(joinedQuery.then).toHaveBeenCalledOnce();
     expect(mocks.cacheLife).toHaveBeenCalledWith('products');
     expect(mocks.cacheTag).toHaveBeenCalledWith(
       'products',
@@ -195,16 +164,12 @@ describe('getCachedPdpSemanticInventory', () => {
   });
 
   it('throws a transient query error instead of caching an empty pool', async () => {
-    const joinedQuery = createProductsQuery({ data: [], error: null });
-    const directQuery = createProductsQuery({
+    const query = createProductsQuery({
       data: null,
       error: { message: 'statement timeout' },
     });
     mocks.getPublicSupabaseClient.mockReturnValue({
-      from: vi
-        .fn()
-        .mockReturnValueOnce(joinedQuery)
-        .mockReturnValueOnce(directQuery),
+      from: vi.fn().mockReturnValue(query),
     });
 
     await expect(
@@ -212,18 +177,13 @@ describe('getCachedPdpSemanticInventory', () => {
     ).rejects.toMatchObject({ message: 'statement timeout' });
   });
 
-  it('rejects with TimeoutError at the three-second boundary when both transports ignore abort', async () => {
+  it('rejects with TimeoutError at the three-second boundary when transport ignores abort', async () => {
     vi.useFakeTimers();
     try {
-      const joinedQuery = createProductsQuery({ data: [], error: null });
-      const directQuery = createProductsQuery({ data: [], error: null });
-      joinedQuery.then.mockImplementation(() => new Promise(() => undefined));
-      directQuery.then.mockImplementation(() => new Promise(() => undefined));
+      const query = createProductsQuery({ data: [], error: null });
+      query.then.mockImplementation(() => new Promise(() => undefined));
       mocks.getPublicSupabaseClient.mockReturnValue({
-        from: vi
-          .fn()
-          .mockReturnValueOnce(joinedQuery)
-          .mockReturnValueOnce(directQuery),
+        from: vi.fn().mockReturnValue(query),
       });
 
       const pending = getCachedPdpSemanticInventory('merchant-1', 'laptops');
@@ -233,8 +193,7 @@ describe('getCachedPdpSemanticInventory', () => {
       await vi.advanceTimersByTimeAsync(3_001);
 
       await assertion;
-      expect(joinedQuery.then).toHaveBeenCalledOnce();
-      expect(directQuery.then).toHaveBeenCalledOnce();
+      expect(query.then).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }

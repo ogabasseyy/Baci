@@ -6,13 +6,14 @@ import type {
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 
 export interface ProductSemanticCandidate {
-  id?: string;
+  id?: string | null;
   slug: string;
   name: string;
   price: number;
   brand?: string | null;
   condition?: string | null;
   stock?: number | null;
+  stock_quantity?: number | null;
   category_id?: string | null;
   category_slug?: string | null;
   category_slugs?: string[] | null;
@@ -21,6 +22,7 @@ export interface ProductSemanticCandidate {
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
   has_condition_offers?: boolean | null;
+  has_explicit_slug?: boolean;
 }
 
 export interface ProductSemanticCard {
@@ -53,6 +55,7 @@ export interface BuildProductSemanticModelInput {
   categoryName: string;
   currentProduct: ProductSemanticCandidate;
   inventory: ProductSemanticCandidate[];
+  priceBandInventory?: ProductSemanticCandidate[];
   hubEligibilityInventory?: EligibleHubProductInput[];
   guidePosts?: PublishedClusterPost[];
   priorityGuidePostSlugs?: string[];

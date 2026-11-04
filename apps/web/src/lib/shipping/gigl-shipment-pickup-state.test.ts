@@ -35,6 +35,16 @@ describe('hasUnpickedGiglShipment', () => {
     );
   });
 
+  it('bugfix: an abandoned older booking does not hold the notification once a newer shipment is picked up', async () => {
+    const c = client([
+      { status: 'booked', created_at: '2026-11-01T10:00:00Z' },
+      { status: 'picked_up', created_at: '2026-11-02T10:00:00Z' },
+    ] as never);
+    await expect(hasUnpickedGiglShipment(c as never, 'o1')).resolves.toBe(
+      false
+    );
+  });
+
   it('is false for non-GIG and self-fulfilled orders with no GIG shipment', async () => {
     await expect(
       hasUnpickedGiglShipment(client([]) as never, 'o1')

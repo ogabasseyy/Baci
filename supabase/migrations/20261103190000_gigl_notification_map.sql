@@ -287,6 +287,7 @@ AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
   v_event_type text;
+  v_shipment_tracking text;
 BEGIN
   IF NEW.audience <> 'customer' OR NEW.status <> 'pending' OR NEW.order_id IS NULL
   THEN
@@ -313,6 +314,10 @@ BEGIN
   IF NOT FOUND THEN
     RETURN NEW;
   END IF;
+  -- Snapshot the tracking number of the shipment that produced this event so
+  -- a later replacement shipment can be told apart from it.
+  SELECT shipment.tracking_number INTO v_shipment_tracking
+  FROM public.shipments AS shipment WHERE shipment.id = NEW.shipment_id;
   -- Never email "shipped" twice for the same fulfilment cycle.
   IF v_event_type = 'order_shipped' AND EXISTS (
     SELECT 1 FROM public.order_notification_outbox AS existing
@@ -332,7 +337,7 @@ BEGIN
       'shipping_status', v_order.shipping_status,
       'source', 'gigl_' || NEW.notification_kind,
       'fulfillment_courier_name', v_order.shipping_provider,
-      'fulfillment_tracking_number', v_order.tracking_number,
+      'fulfillment_tracking_number', coalesce(v_shipment_tracking, v_order.tracking_number),
       'fulfillment_tracking_token', v_order.tracking_token
     )
   )
@@ -382,7 +387,7 @@ BEGIN
   -- audited "swap" path (supabase/tests/gigl_provider_cancellation_wallet_refund
   -- T5) and must not write tracking events.
   IF NEW.provider IS DISTINCT FROM 'GIGL' OR NEW.order_id IS NULL
-    OR NEW.status = 'cancelled'
+    OR NEW.status IN ('cancelled', 'delivered', 'failed', 'returned')
     OR nullif(btrim(NEW.tracking_number), '') IS NULL
     OR NOT EXISTS (
       SELECT 1 FROM public.shipments AS previous
@@ -588,6 +593,16 @@ BEGIN
     WHERE shipment.order_id = NEW.id
       AND shipment.provider = 'GIGL'
       AND shipment.status IN ('pending', 'booked', 'pickup_scheduled')
+      -- Only the order's latest live shipment holds the email; an abandoned
+      -- older booking must not suppress it forever.
+      AND NOT EXISTS (
+        SELECT 1 FROM public.shipments AS newer
+        WHERE newer.order_id = shipment.order_id
+          AND newer.provider = 'GIGL'
+          AND newer.id <> shipment.id
+          AND newer.status <> 'cancelled'
+          AND newer.created_at > shipment.created_at
+      )
   ) THEN
     RETURN NEW;
   END IF;

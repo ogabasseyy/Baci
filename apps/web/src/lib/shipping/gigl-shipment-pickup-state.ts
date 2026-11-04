@@ -14,12 +14,17 @@ export async function hasUnpickedGiglShipment(
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from('shipments')
-    .select('status')
+    .select('status, created_at')
     .eq('order_id', orderId)
     .eq('provider', 'GIGL')
     .neq('status', 'cancelled');
-  if (error || !data) return false;
-  return data.some((row) => UNPICKED_STATUSES.has(row.status ?? ''));
+  if (error || !data || data.length === 0) return false;
+  // Only the latest live shipment holds the notification; an abandoned older
+  // booking must not suppress it forever.
+  const latest = data.reduce((best, row) =>
+    String(row.created_at ?? '') > String(best.created_at ?? '') ? row : best
+  );
+  return UNPICKED_STATUSES.has(latest.status ?? '');
 }
 
 /**

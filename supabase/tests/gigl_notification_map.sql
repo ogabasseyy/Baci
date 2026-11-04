@@ -1,8 +1,11 @@
 -- Replay test: GIG notification map (policy rows, merchant role filter,
 -- per-merchant toggles, superseded customer cancellation, shipped-at-pickup).
 BEGIN;
-
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir pgtap_public_execute.sql
+SET search_path = public, extensions;
 SELECT plan(5);
+GRANT USAGE ON SCHEMA extensions TO service_role;
 
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);

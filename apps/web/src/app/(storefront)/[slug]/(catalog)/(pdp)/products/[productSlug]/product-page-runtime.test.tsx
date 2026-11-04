@@ -73,10 +73,20 @@ vi.mock(
   })
 );
 
+vi.mock(
+  '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely',
+  () => ({
+    loadPdpBrandHubEligibilityInventorySafely: vi.fn().mockResolvedValue([]),
+    PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS: 1_000,
+  })
+);
+
 // Pure orchestration helpers stubbed so the test asserts the streaming boundary,
 // not schema content (covered by their own suites).
 vi.mock('@/lib/seo-utils', () => ({
   buildStorefrontAcceptedPaymentMethods: () => [],
+  generateAggregateRating: () => null,
+  generateReviewListSchema: () => [],
   generateBreadcrumbSchema,
   generateFAQSchema: () => ({ '@type': 'FAQPage' }),
   generateProductSchema: () => ({

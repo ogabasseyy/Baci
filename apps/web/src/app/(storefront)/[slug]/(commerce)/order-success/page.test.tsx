@@ -7,7 +7,7 @@ import {
   within,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import OrderSuccessPage from '@/app/(storefront)/[slug]/(commerce)/order-success/page';
+import { OrderSuccessContent as OrderSuccessPage } from './order-success-content';
 
 const mockSearchParams = vi.fn();
 const mockFetch = vi.fn();

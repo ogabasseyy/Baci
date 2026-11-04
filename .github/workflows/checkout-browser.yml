@@ -33,11 +33,19 @@ jobs:
         env:
           CHECKOUT_BROWSER_ARTIFACTS: ${{ runner.temp }}/checkout-browser
         run: pnpm --filter @baci/web test:checkout:browser
+      - name: Verify Oxygen checkout document policy
+        run: pnpm --filter @baci/web exec playwright test --config tests/oxygen-policy-browser/playwright.config.ts
+      - name: Verify Oxygen owned checkout document policy
+        env:
+          OXYGEN_COOKIE_BROWSER_ARTIFACTS: ${{ runner.temp }}/oxygen-owned-document
+        run: pnpm --filter @baci/web exec playwright test --config tests/oxygen-cookie-harness/playwright.config.ts
       - name: Retain failure traces and screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: checkout-browser-failures
-          path: ${{ runner.temp }}/checkout-browser
+          path: |
+            ${{ runner.temp }}/checkout-browser
+            ${{ runner.temp }}/oxygen-owned-document
           retention-days: 7
           if-no-files-found: ignore

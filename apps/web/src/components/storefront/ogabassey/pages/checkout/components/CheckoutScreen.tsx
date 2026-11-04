@@ -3,6 +3,7 @@
 import type { ComponentProps } from 'react';
 import { DiscountCodeInput } from '@/components/storefront/checkout/discount-code-input';
 import { MobileOrderSummary } from '../../../components/MobileCheckoutComponents';
+import type { OxygenCheckoutSlots } from '../../checkout-page';
 import type { deriveCheckoutOrderSummaryPresentation } from '../derive-checkout-order-summary-presentation';
 import type { useCheckoutFinancialSession } from '../hooks/use-checkout-financial-session';
 import { CheckoutHeader } from './CheckoutHeader';
@@ -15,7 +16,7 @@ import {
 import { DeferredCheckoutAuthModal as CheckoutAuthModal } from './DeferredCheckoutAuthModal';
 import { DesktopOrderSummary } from './DesktopOrderSummary';
 
-export interface CheckoutScreenProps {
+export interface CheckoutScreenProps extends OxygenCheckoutSlots {
   page: {
     onReturnToCart: () => void;
     merchantName?: string | null;
@@ -40,6 +41,9 @@ export function CheckoutScreen({
   overlays,
   summary,
   steps,
+  oxygenStep,
+  oxygenSummary,
+  oxygenMobileSummary,
 }: CheckoutScreenProps) {
   const { presentation, payment } = summary;
 
@@ -60,10 +64,12 @@ export function CheckoutScreen({
       />
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <CheckoutPageHeading />
-        {presentation.showMobile && (
-          <MobileOrderSummary {...presentation.mobile} />
-        )}
-        {presentation.discount.visible && (
+        {oxygenStep
+          ? (oxygenMobileSummary ?? oxygenSummary)
+          : presentation.showMobile && (
+              <MobileOrderSummary {...presentation.mobile} />
+            )}
+        {!oxygenStep && presentation.discount.visible && (
           <div className="mt-4">
             <DiscountCodeInput
               merchantId={presentation.discount.merchantId}
@@ -78,8 +84,8 @@ export function CheckoutScreen({
           </div>
         )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-          <CheckoutStepComposition session={steps} />
-          <DesktopOrderSummary {...presentation.desktop} />
+          {oxygenStep ?? <CheckoutStepComposition session={steps} />}
+          {oxygenSummary ?? <DesktopOrderSummary {...presentation.desktop} />}
         </div>
       </div>
     </div>

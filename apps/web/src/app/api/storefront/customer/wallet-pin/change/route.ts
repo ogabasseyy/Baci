@@ -12,6 +12,7 @@ export function POST(request: NextRequest) {
         ...context,
         currentPin: input.currentPin,
         newPin: input.newPin,
-      })
+      }),
+    'change'
   );
 }

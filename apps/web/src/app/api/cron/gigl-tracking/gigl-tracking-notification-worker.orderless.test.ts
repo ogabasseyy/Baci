@@ -7,7 +7,13 @@ import {
 
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: vi.fn() }));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyCustomerWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyCustomer(...args),
+  notifyMerchantWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyMerchant(...args),
+}));
 
 const notification = giglTrackingNotificationTestNotification;
 
@@ -32,7 +38,7 @@ describe('processClaimedGiglTrackingNotifications orderless repair pickups', () 
     expect(summary.skipped).toBe(1);
     expect(notifyCustomer).not.toHaveBeenCalled();
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({
         p_error: 'orderless_repair_pickup',
         p_outcome: 'skipped',
@@ -53,7 +59,7 @@ describe('processClaimedGiglTrackingNotifications orderless repair pickups', () 
     );
 
     expect(summary.sent).toBe(1);
-    expect(supabase.from).not.toHaveBeenCalledWith('repairs');
+    expect(supabase).not.toHaveProperty('from');
     expect(notifyMerchant).toHaveBeenCalledWith(
       notification.merchant_id,
       'Rider en route',

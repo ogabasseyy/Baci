@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { buildCategoryHubBrandCards } from '@/lib/storefront-category/category-hub-brand-cards';
+import { countBrandsByActiveProduct } from '@/lib/storefront-category/category-hub-brand-utils';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
 
 function buildProduct(
@@ -183,5 +184,113 @@ describe('buildCategoryHubBrandCards', () => {
 
     // Assert
     expect(cards).toEqual([]);
+  });
+
+  it('honors explicitly supplied empty brand authority entries without falling back to unverified product eligibility', () => {
+    const products = Array.from({ length: 5 }, (_, i) => ({
+      slug: `ipad-${i}`,
+      brand: 'Apple',
+      name: `iPad ${i}`,
+      price: 200_000,
+      category_slug: 'tablets',
+    }));
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'tablets',
+      storeUrl: 'https://ogabassey.com',
+      products,
+      brandAuthorityEntries: [],
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.href).toBe('https://ogabassey.com/tablets/ipad-0');
+    expect(cards[0]?.title).toBe('Apple');
+  });
+
+  it('excludes non-brand placeholders (gaming, generic, unbranded, other) from countBrandsByActiveProduct and brandCards', () => {
+    const products = [
+      buildProduct('game-1', 'Gaming', 100),
+      buildProduct('gen-1', 'generic', 100),
+      buildProduct('unbr-1', 'unbranded', 100),
+      buildProduct('oth-1', 'other', 100),
+      buildProduct('na-1', 'N/A', 100),
+      buildProduct('na-2', 'NA', 100),
+      buildProduct('unk-1', 'Unknown', 100),
+      buildProduct('nobr-1', 'No-Brand', 100),
+      buildProduct('unbr-prod-1', 'Unbranded Product', 100),
+      buildProduct('oth-brand-1', 'Other Brand', 100),
+      buildProduct('tecno-1', 'Tecno', 200),
+      buildProduct('apple-1', 'Apple', 300),
+    ];
+    const brandCounts = countBrandsByActiveProduct(products);
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+    expect(brandCounts).toEqual([
+      { key: 'apple', label: 'Apple', count: 1 },
+      { key: 'tecno', label: 'Tecno', count: 1 },
+    ]);
+    expect(cards.map((card) => card.title)).toEqual(['Apple', 'Tecno']);
+    expect(
+      cards.some((card) =>
+        /gaming|generic|unbranded|other|na|unknown|no-brand/i.test(card.title)
+      )
+    ).toBe(false);
+  });
+
+  it('resolves representative product card for fallback brands with leading/trailing whitespace via normalized brand key matching', () => {
+    const products = [buildProduct('konami-1', ' Konami ', 250)];
+    const brandCounts = countBrandsByActiveProduct(products);
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+    expect(brandCounts).toEqual([{ key: 'konami', label: 'Konami', count: 1 }]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe('Konami');
+    expect(cards[0]?.href).toBe('https://ogabassey.com/smartphones/konami-1');
+  });
+
+  it('does not drop or displace fallback brands with all zero-price products', () => {
+    const products = [
+      buildProduct('free-1', 'FreeBrand', 0),
+      buildProduct('free-2', 'FreeBrand', 0),
+      buildProduct('brand-b-1', 'BrandB', 100),
+      buildProduct('brand-c-1', 'BrandC', 100),
+      buildProduct('brand-d-1', 'BrandD', 100),
+    ];
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.title)).toEqual([
+      'FreeBrand',
+      'BrandB',
+      'BrandC',
+    ]);
+    const freeCard = cards.find((card) => card.title === 'FreeBrand');
+    expect(freeCard?.href).toBe('https://ogabassey.com/smartphones/free-1');
+  });
+
+  it('does not generate a secondary compare link to placeholder brands', () => {
+    const products = [
+      ...Array.from({ length: 3 }, (_, index) =>
+        buildProduct(`apple-${index}`, 'Apple', 100 + index)
+      ),
+      ...Array.from({ length: 3 }, (_, index) =>
+        buildProduct(`gaming-${index}`, 'Gaming', 200 + index)
+      ),
+    ];
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe('Apple');
+    expect(cards[0]?.secondaryHref).toBeUndefined();
   });
 });

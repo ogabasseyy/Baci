@@ -18,6 +18,7 @@ import {
   readPrimaryWalletSavingsRecoveryRuntime,
   readPrimaryWalletSavingsRuntime,
 } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import { chargeWalletPinCustomerLimit } from '@/lib/wallet-pin/wallet-pin-customer-limit';
 import { piggyvestGoalPinSchemas } from '@/schemas/piggyvest-goal-pin';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -169,6 +170,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           409
         );
     }
+    // Charged only now that the request will actually examine a PIN, so a
+    // mistyped goal id or an eligibility refusal never burns the budget.
+    const limited = await chargeWalletPinCustomerLimit(
+      'goal-verify',
+      identity.merchantId,
+      identity.userId
+    );
+    if (limited) return limited;
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

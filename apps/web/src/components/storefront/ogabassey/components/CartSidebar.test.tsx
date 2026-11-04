@@ -186,6 +186,14 @@ describe('CartSidebar', () => {
     ];
   });
 
+  it('shows cart totals without the shipping placeholder', () => {
+    render(<CartSidebar />);
+    expect(screen.queryByText('Subtotal')).not.toBeInTheDocument();
+    expect(screen.getByText('Total', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('Shipping', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText('Calculated at checkout')).not.toBeInTheDocument();
+  });
+
   it('renders cart items when open', () => {
     render(<CartSidebar />);
     expect(screen.getByText('Test Shoe')).toBeInTheDocument();
@@ -254,6 +262,11 @@ describe('CartSidebar', () => {
     expect(mockClearNegotiatedPrice).toHaveBeenCalled();
     // The NegotiationModal should now be visible
     expect(screen.getByPlaceholderText('Enter amount...')).toBeInTheDocument();
+    const modalLayer = screen.getByRole('dialog', { name: /negotiate price/i }).parentElement;
+    const cartLayer = screen.getByRole('button', { name: /dismiss cart backdrop/i }).parentElement;
+    expect(cartLayer).toHaveClass('z-80');
+    expect(modalLayer).toHaveClass('z-90');
+    expect(modalLayer?.parentElement).toBe(cartLayer?.parentElement);
     confirmSpy.mockRestore();
   });
 

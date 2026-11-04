@@ -8,6 +8,14 @@ import {
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
+const mockVat = vi.hoisted(() => vi.fn());
+vi.mock('./negotiation-live-vat', () => ({ readNegotiationVatRate: mockVat }));
+vi.mock('@/hooks/use-merchant-client', () => ({
+  useMerchantSafe: () => ({
+    merchant: { id: 'merchant-test-id', slug: 'shop' },
+  }),
+}));
+
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
   getSupabaseAnonKey: () => 'test-anon-key',
@@ -46,22 +54,22 @@ const defaultProps = {
 };
 
 /** Submit a low offer and advance fake timers past the 1500ms setTimeout */
-function submitLowOffer(value: string) {
+async function submitLowOffer(value: string) {
   const input = screen.getByPlaceholderText('Enter amount...');
   fireEvent.change(input, { target: { value } });
   fireEvent.click(screen.getByRole('button', { name: 'Submit Offer' }));
   // Advance past the 1500ms simulated AI delay
-  act(() => {
-    vi.advanceTimersByTime(1600);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1600);
   });
 }
 
-function reachUploadForm() {
-  submitLowOffer('1000');
+async function reachUploadForm() {
+  await submitLowOffer('1000');
   fireEvent.click(screen.getByText('Negotiate Again'));
-  submitLowOffer('1000');
+  await submitLowOffer('1000');
   fireEvent.click(screen.getByText('Negotiate Again'));
-  submitLowOffer('1000');
+  await submitLowOffer('1000');
   fireEvent.click(screen.getByRole('button', { name: /i saw it cheaper/i }));
   // Negotiations now require at least one delivery channel. Keep the shared
   // upload-form fixture reachable while individual tests override this value
@@ -77,6 +85,7 @@ describe('NegotiationModal', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
+    mockVat.mockReset().mockResolvedValue(0);
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.123456);
     mockGetUser.mockResolvedValue({
@@ -195,7 +204,7 @@ describe('NegotiationModal', () => {
     ['Itel products', 'Itel S24'],
     ['Honor products', 'Honor X8b'],
     ['Samsung A-series products', 'Samsung Galaxy A16 5G'],
-  ])('returns a final-price response for %s', (_label, productName) => {
+  ])('returns a final-price response for %s', async (_label, productName) => {
     const onSuccess = vi.fn();
     render(
       <NegotiationModal
@@ -205,7 +214,7 @@ describe('NegotiationModal', () => {
       />
     );
 
-    submitLowOffer('9000');
+    await submitLowOffer('9000');
 
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByText('Final Price')).toBeInTheDocument();
@@ -215,7 +224,7 @@ describe('NegotiationModal', () => {
     expect(screen.queryByText('Counter Offer')).not.toBeInTheDocument();
   });
 
-  it('treats a non-negotiable brand from the productBrand prop as final price', () => {
+  it('treats a non-negotiable brand from the productBrand prop as final price', async () => {
     const onSuccess = vi.fn();
     render(
       <NegotiationModal
@@ -226,14 +235,14 @@ describe('NegotiationModal', () => {
       />
     );
 
-    submitLowOffer('9000');
+    await submitLowOffer('9000');
 
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByText('Final Price')).toBeInTheDocument();
     expect(screen.queryByText('Counter Offer')).not.toBeInTheDocument();
   });
 
-  it('keeps Samsung non-A-series products negotiable', () => {
+  it('keeps Samsung non-A-series products negotiable', async () => {
     render(
       <NegotiationModal
         {...defaultProps}
@@ -241,7 +250,7 @@ describe('NegotiationModal', () => {
       />
     );
 
-    submitLowOffer('9000');
+    await submitLowOffer('9000');
 
     expect(screen.getByText('Counter Offer')).toBeInTheDocument();
     expect(screen.getByText('₦9,900')).toBeInTheDocument();
@@ -285,60 +294,69 @@ describe('NegotiationModal', () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it('shows counter offer for a low first attempt', () => {
+  it('shows counter offer for a low first attempt', async () => {
     render(<NegotiationModal {...defaultProps} />);
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
 
     expect(screen.getByText('Counter Offer')).toBeInTheDocument();
     expect(screen.getByText("That's a bit low. But I can do:")).toBeInTheDocument();
     expect(screen.getByText('₦9,900')).toBeInTheDocument();
   });
 
-  it('steps counter offers through 1%, 1.5%, and 2%', () => {
+  it('steps counter offers through 1%, 1.5%, and 2%', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
     expect(screen.getByText('₦9,900')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
     expect(screen.getByText('₦9,850')).toBeInTheDocument();
+    expect(mockVat).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
     expect(screen.getByText('₦9,800')).toBeInTheDocument();
+    expect(mockVat).toHaveBeenCalledOnce();
+    expect(mockVat).toHaveBeenCalledWith(
+      expect.anything(),
+      'shop',
+      'merchant-test-id',
+      expect.any(AbortSignal)
+    );
     expect(
       screen.getByRole('button', { name: /i saw it cheaper/i })
     ).toBeInTheDocument();
   });
 
-  it('keeps final 2% counter-offer within server-acceptable bounds for low subtotals', () => {
+  it('keeps final 2% counter-offer within server-acceptable bounds for low subtotals', async () => {
     render(<NegotiationModal {...defaultProps} currentPrice={999} />);
 
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
 
     expect(screen.getByText('₦980')).toBeInTheDocument();
     expect(screen.queryByText('₦979')).not.toBeInTheDocument();
   });
 
-  it('clamps final 2% counter-offers for fractional non-VAT totals', () => {
+  it('clamps final 2% counter-offers for fractional non-VAT totals', async () => {
     render(<NegotiationModal {...defaultProps} currentPrice={1048.95} />);
 
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
 
     expect(screen.getByText('₦1,028.95')).toBeInTheDocument();
     expect(screen.queryByText('₦1,027')).not.toBeInTheDocument();
   });
 
-  it('keeps final 2% counter-offers within VAT-aware backend bounds', () => {
+  it('keeps final 2% counter-offers within VAT-aware backend bounds', async () => {
+    mockVat.mockResolvedValueOnce(0.075);
     render(
       <NegotiationModal
         {...defaultProps}
@@ -347,20 +365,20 @@ describe('NegotiationModal', () => {
       />
     );
 
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
     fireEvent.click(screen.getByText('Negotiate Again'));
-    submitLowOffer('500');
+    await submitLowOffer('500');
 
     expect(screen.getByText('₦981')).toBeInTheDocument();
     expect(screen.queryByText('₦980')).not.toBeInTheDocument();
   });
 
-  it('clears counter-offer message when returning to input state', () => {
+  it('clears counter-offer message when returning to input state', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
     fireEvent.click(screen.getByText('Negotiate Again'));
 
     expect(
@@ -369,10 +387,10 @@ describe('NegotiationModal', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('returns focus to the offer input when negotiating again', () => {
+  it('returns focus to the offer input when negotiating again', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    submitLowOffer('1000');
+    await submitLowOffer('1000');
     fireEvent.click(screen.getByText('Negotiate Again'));
 
     act(() => {
@@ -387,7 +405,7 @@ describe('NegotiationModal', () => {
   it('includes customer_id and unique session_id in the insert payload', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     // Now in upload state — provide file and submit form directly
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
@@ -421,7 +439,7 @@ describe('NegotiationModal', () => {
   it('persists account email when signed-in customers omit contact fields', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
     fireEvent.change(screen.getByLabelText('Email Address (Optional)'), {
       target: { value: '' },
     });
@@ -453,7 +471,7 @@ describe('NegotiationModal', () => {
     });
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -495,7 +513,7 @@ describe('NegotiationModal', () => {
       screen.getByText('iPhone 14 Pro Max 256GB Deep Purple · Condition: used')
     ).toBeInTheDocument();
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -529,7 +547,7 @@ describe('NegotiationModal', () => {
   it('omits optional variant metadata when no selection details are provided', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -553,7 +571,7 @@ describe('NegotiationModal', () => {
   it('persists a normalized customer_phone when one is entered', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -578,7 +596,7 @@ describe('NegotiationModal', () => {
   it('uploads selected proof image through the evidence API and stores the private evidence path', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -620,7 +638,7 @@ describe('NegotiationModal', () => {
   it('submits a link-only evidence request without uploading a file', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     expect(fileInput).not.toBeRequired();
@@ -646,7 +664,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
     fireEvent.change(screen.getByLabelText('Link (Optional)'), {
       target: { value: 'not-a-url' },
     });
@@ -671,7 +689,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -699,7 +717,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} merchantId="" />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -724,7 +742,7 @@ describe('NegotiationModal', () => {
   it('persists a normalized customer_email when one is entered', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -750,7 +768,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -783,7 +801,7 @@ describe('NegotiationModal', () => {
     });
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -810,7 +828,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -836,7 +854,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -866,7 +884,7 @@ describe('NegotiationModal', () => {
     });
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -896,7 +914,7 @@ describe('NegotiationModal', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -925,7 +943,7 @@ describe('NegotiationModal', () => {
   it('sends a null customer_phone when the field is left blank', async () => {
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -998,7 +1016,7 @@ describe('NegotiationModal', () => {
       />
     );
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -1051,7 +1069,7 @@ describe('NegotiationModal', () => {
       />
     );
 
-    reachUploadForm();
+    await reachUploadForm();
 
     const fileInput = screen.getByLabelText('Upload proof') as HTMLInputElement;
     const file = new File(['proof'], 'screenshot.png', { type: 'image/png' });
@@ -1076,7 +1094,7 @@ describe('NegotiationModal', () => {
 
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     // Switch to real timers before async form submission
     vi.useRealTimers();
@@ -1102,7 +1120,7 @@ describe('NegotiationModal', () => {
 
     render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     vi.useRealTimers();
 
@@ -1136,7 +1154,7 @@ describe('NegotiationModal', () => {
 
     const { unmount } = render(<NegotiationModal {...defaultProps} />);
 
-    reachUploadForm();
+    await reachUploadForm();
 
     vi.useRealTimers();
 

@@ -53,6 +53,8 @@ describe('runSupabaseReplayStage', () => {
     'docker-api',
     'disk-full',
     'postgres-42501',
+    'startup-database',
+    'startup-schema',
   ])('retains the fixed Supabase diagnostic %s', async (diagnostic) => {
     const failure = await runSupabaseReplayStage('db start', async () => {
       throw new Error(

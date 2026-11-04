@@ -1,93 +1,97 @@
 import { generateSlug } from '@/lib/seo-utils';
 import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 
-declare module '@/lib/storefront-category/category-hub-types' {
-  interface BrandAuthorityEntry {
+function createBrandAuthorityEntry(
+  categorySlug: string,
+  brandKey: string,
+  brandQueryValue: string,
+  displayName: string,
+  options?: {
+    brandAliases?: string[];
     brandSlug?: string;
     intro?: string;
+    minimumProducts?: number;
   }
+): BrandAuthorityEntry {
+  return {
+    categorySlug,
+    brandKey,
+    brandQueryValue,
+    displayName,
+    minimumProducts: options?.minimumProducts ?? 5,
+    ...(options?.brandAliases ? { brandAliases: options.brandAliases } : {}),
+    ...(options?.brandSlug ? { brandSlug: options.brandSlug } : {}),
+    ...(options?.intro ? { intro: options.intro } : {}),
+  };
 }
 
 const BRAND_AUTHORITY_ENTRIES: readonly BrandAuthorityEntry[] = [
-  {
+  // smartphones
+  createBrandAuthorityEntry('smartphones', 'apple', 'Apple', 'Apple iPhone', {
     brandAliases: ['iPhone'],
-    brandKey: 'apple',
-    brandQueryValue: 'Apple',
     brandSlug: 'apple',
-    categorySlug: 'smartphones',
-    displayName: 'Apple iPhone',
     intro:
       'Compare Apple iPhone smartphones at {merchantName} across Pro Max flagships, Pro models, base iPhones, and budget-friendly options.',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'samsung',
-    brandQueryValue: 'Samsung',
-    categorySlug: 'smartphones',
-    displayName: 'Samsung',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'google',
-    brandQueryValue: 'Google',
-    categorySlug: 'smartphones',
-    displayName: 'Google Pixel',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'infinix',
-    brandQueryValue: 'Infinix',
-    categorySlug: 'smartphones',
-    displayName: 'Infinix',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'tecno',
-    brandQueryValue: 'Tecno',
-    categorySlug: 'smartphones',
-    displayName: 'Tecno',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'itel',
-    brandQueryValue: 'Itel',
-    categorySlug: 'smartphones',
-    displayName: 'Itel',
-    minimumProducts: 5,
-  },
-  {
-    brandAliases: ['Redmi'],
-    brandKey: 'xiaomi',
-    brandQueryValue: 'Xiaomi',
-    categorySlug: 'smartphones',
-    displayName: 'Xiaomi and Redmi',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'oppo',
-    brandQueryValue: 'Oppo',
-    categorySlug: 'smartphones',
-    displayName: 'Oppo',
-    minimumProducts: 5,
-  },
-  {
-    brandKey: 'honor',
-    brandQueryValue: 'Honor',
-    categorySlug: 'smartphones',
-    displayName: 'Honor',
-    minimumProducts: 5,
-  },
-  {
+  }),
+  createBrandAuthorityEntry('smartphones', 'samsung', 'Samsung', 'Samsung'),
+  createBrandAuthorityEntry('smartphones', 'google', 'Google', 'Google Pixel'),
+  createBrandAuthorityEntry('smartphones', 'infinix', 'Infinix', 'Infinix'),
+  createBrandAuthorityEntry('smartphones', 'tecno', 'Tecno', 'Tecno'),
+  createBrandAuthorityEntry('smartphones', 'itel', 'Itel', 'Itel'),
+  createBrandAuthorityEntry(
+    'smartphones',
+    'xiaomi',
+    'Xiaomi',
+    'Xiaomi and Redmi',
+    { brandAliases: ['Redmi'] }
+  ),
+  createBrandAuthorityEntry('smartphones', 'oppo', 'Oppo', 'Oppo'),
+  createBrandAuthorityEntry('smartphones', 'honor', 'Honor', 'Honor'),
+
+  // laptops
+  createBrandAuthorityEntry('laptops', 'apple', 'Apple', 'Apple MacBook', {
     brandAliases: ['MacBook'],
-    brandKey: 'apple',
-    brandQueryValue: 'Apple',
     brandSlug: 'apple',
-    categorySlug: 'laptops',
-    displayName: 'Apple MacBook',
     intro:
       'Compare Apple MacBook Air and MacBook Pro laptops at {merchantName} across M-series and Intel configurations.',
-    minimumProducts: 5,
-  },
+  }),
+  createBrandAuthorityEntry('laptops', 'hp', 'HP', 'HP'),
+  createBrandAuthorityEntry('laptops', 'dell', 'Dell', 'Dell'),
+  createBrandAuthorityEntry('laptops', 'lenovo', 'Lenovo', 'Lenovo'),
+
+  // gaming-laptops
+  createBrandAuthorityEntry('gaming-laptops', 'hp', 'HP', 'HP'),
+  createBrandAuthorityEntry('gaming-laptops', 'dell', 'Dell', 'Dell', {
+    brandAliases: ['Alienware'],
+  }),
+  createBrandAuthorityEntry('gaming-laptops', 'lenovo', 'Lenovo', 'Lenovo'),
+  createBrandAuthorityEntry('gaming-laptops', 'msi', 'MSI', 'MSI'),
+  createBrandAuthorityEntry('gaming-laptops', 'asus', 'ASUS', 'ASUS'),
+  createBrandAuthorityEntry('gaming-laptops', 'acer', 'Acer', 'Acer'),
+
+  // tablets
+  createBrandAuthorityEntry('tablets', 'apple', 'Apple', 'Apple'),
+  createBrandAuthorityEntry('tablets', 'samsung', 'Samsung', 'Samsung'),
+  createBrandAuthorityEntry('tablets', 'xiaomi', 'Xiaomi', 'Xiaomi and Redmi', {
+    brandAliases: ['Redmi'],
+  }),
+
+  // audio
+  createBrandAuthorityEntry('audio', 'jbl', 'JBL', 'JBL'),
+  createBrandAuthorityEntry('audio', 'riversong', 'Riversong', 'Riversong'),
+
+  // smartwatches
+  createBrandAuthorityEntry('smartwatches', 'apple', 'Apple', 'Apple'),
+  createBrandAuthorityEntry('smartwatches', 'samsung', 'Samsung', 'Samsung'),
+
+  // playstation-5
+  createBrandAuthorityEntry(
+    'playstation-5',
+    'playstation',
+    'PlayStation',
+    'PlayStation',
+    { brandAliases: ['PlayStation Studios'] }
+  ),
 ];
 
 function getBrandQueryValues(entry: BrandAuthorityEntry) {

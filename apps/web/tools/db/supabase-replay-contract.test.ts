@@ -15,7 +15,7 @@ const outputs = {
   node: '24.11.1',
   pnpm: '11.22.0\n',
   psql: 'psql (PostgreSQL) 18.3\n',
-  supabase: '2.95.4\n',
+  supabase: '2.111.0\n',
   tsc: 'Version 7.0.2\n',
   tsx: 'tsx v4.22.4\nnode v24.11.1\n',
 };

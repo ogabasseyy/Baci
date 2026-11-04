@@ -125,33 +125,7 @@ const merchant = {
   site_description: 'Store description',
 };
 
-const productIndex = {
-  hasError: false,
-  products: [
-    {
-      id: 'product-1',
-      name: 'iPhone 16',
-      slug: 'iphone-16',
-      description: 'Phone description',
-      image: 'https://cdn.example.com/iphone-16.png',
-      imageLarge: 'https://cdn.example.com/iphone-16.png',
-      images: ['https://cdn.example.com/iphone-16.png'],
-      category: 'Smartphones',
-      category_slug: 'smartphones',
-      brand: 'Apple',
-      price: 1200000,
-      compare_at_price: null,
-      condition: 'new',
-      stock: 5,
-      rating: 0,
-      availability: 'InStock' as const,
-      available_conditions: [],
-      variant_model: 'legacy' as const,
-    },
-  ],
-  totalCount: 21,
-  totalPages: 2,
-};
+import { mockProductIndex as productIndex } from './products-page.test-fixtures';
 
 const { default: ProductsPage, generateMetadata } = await import('./page');
 const actualProductsPageContentModule = await vi.importActual<

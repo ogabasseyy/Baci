@@ -33,6 +33,19 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('schedules the dark PiggyVest daily reconciliation once a day through run-web-cron', () => {
+    const deployScript = readDeployScript();
+    const lines = deployScript
+      .split('\n')
+      .filter((line) => line.includes('piggyvest-daily-reconciliation'));
+
+    assert.equal(lines.length, 1);
+    assert.match(
+      lines[0],
+      /^30 7 {3}\* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-daily-reconciliation\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/piggyvest-daily-reconciliation' >> \$REMOTE_DIR\/logs\/piggyvest-daily-reconciliation\.log 2>&1$/
+    );
+  });
+
   it('schedules the order notification outbox cron through run-web-cron', () => {
     const deployScript = readDeployScript();
 

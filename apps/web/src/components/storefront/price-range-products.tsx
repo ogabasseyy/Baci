@@ -14,8 +14,8 @@ import { apiGet } from '@/lib/api-client';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
 import { getProductUrl } from '@/lib/seo-utils';
-import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
 import { cn } from '@/lib/utils';
+import { resolvePriceRangeTitle } from './resolve-price-range-title';
 import { useViewportActivation } from './use-viewport-activation';
 
 interface PriceRangeProductsProps {
@@ -34,7 +34,7 @@ export function PriceRangeProducts({
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant ?? null;
   const basePath = merchantContext?.basePath || '';
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currencyCode } = useCurrency();
   const getFullProductUrl = (p: Product): string => {
     const productUrl = getProductUrl(p);
     return basePath ? `${basePath}${productUrl}` : productUrl;
@@ -192,31 +192,15 @@ export function PriceRangeProducts({
   const isOutOfStock = (p: Product) =>
     p.manage_stock !== false && getEffectiveStock(p) <= 0;
 
-  const formatPriceRange = () => {
-    const formattedMax = formatCurrency(maxPrice);
-    const formattedMin = formatCurrency(minPrice);
-
-    if (minPrice < 10000) {
-      return `${productCategory} Under ${formattedMax}`;
-    }
-
-    return `${productCategory} ${formattedMin} - ${formattedMax}`;
-  };
-
-  // Use the curated band label as descriptive heading copy when the product
-  // falls inside a defined band, but do NOT link it here: this client rail only
-  // sees a ±priceTolerance window, not the band's full inventory, so it cannot
-  // verify the band page is indexable (active product / spec thresholds). The
-  // server-gated, indexable band link is surfaced via CommercialSupportLinks
-  // ("Compare and Buying Guides") instead — linking here risks pointing at a
-  // thin band page that 404s.
-  const curatedPriceBand =
-    getCuratedPriceBands(categorySlug).find(
-      (band) =>
-        rawPrice <= band.ceiling &&
-        (band.floor === undefined || rawPrice >= band.floor)
-    ) ?? null;
-  const title = curatedPriceBand?.label ?? formatPriceRange();
+  const title = resolvePriceRangeTitle({
+    categorySlug,
+    currencyCode,
+    rawPrice,
+    minPrice,
+    maxPrice,
+    productCategory,
+    formatCurrency,
+  });
 
   return (
     <section ref={sectionRef} className={cn('w-full py-8 md:py-12', className)}>

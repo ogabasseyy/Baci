@@ -246,6 +246,22 @@ describe('loadPriceBandPage', () => {
     );
   });
 
+  it('returns null (downstream not-found) for NGN-gated category price bands when merchant currency is non-NGN', async () => {
+    mockGetMerchantByIdentifier.mockResolvedValueOnce({
+      ...merchant,
+      country: 'US',
+      payout_currency: 'USD',
+    });
+
+    const result = await loadPriceBandPage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'gaming-laptops',
+      priceBandSlug: 'under-1-5m',
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('returns a non-indexable model when the curated band is below threshold', async () => {
     const result = await loadPriceBandPage({
       merchantSlug: 'ogabassey',

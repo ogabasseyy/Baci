@@ -160,7 +160,9 @@ function rankSamePrice(currentProduct: ProductSemanticCandidate) {
 }
 
 function findContainingBand(input: BuildProductSemanticModelInput) {
-  return getCuratedPriceBands(input.categorySlug).find(
+  return getCuratedPriceBands(input.categorySlug, {
+    merchantCurrency: input.merchantCurrency,
+  }).find(
     (band) =>
       input.currentProduct.price <= band.ceiling &&
       (band.floor ? input.currentProduct.price > band.floor : true)

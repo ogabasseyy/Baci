@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
-import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { POST } from './route';
+import {
+  call,
+  cancel,
+  fund,
+  goalId,
+  merchantId,
+  operationId,
+  proof,
+} from './route.test-support';
 
 vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
   chargeWalletPinCustomerLimit: async () => null,
@@ -49,43 +56,6 @@ vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
 }));
 
-const merchantId = '11111111-1111-4111-8111-111111111111';
-const goalId = '22222222-2222-4222-8222-222222222222';
-const operationId = '33333333-3333-4333-8333-333333333333';
-const proof = createHash('sha256').update('s5-route-verify').digest('hex');
-const fund = {
-  merchantId,
-  pin: '482915',
-  action: 'fund',
-  goalId,
-  operationId,
-  amountKobo: 2000,
-};
-const cancel = {
-  merchantId,
-  pin: '482915',
-  action: 'cancel',
-  goalId,
-  operationId,
-};
-const complete = {
-  merchantId,
-  pin: '482915',
-  action: 'complete',
-  goalId,
-  operationId,
-};
-function call(body: unknown) {
-  return POST(
-    new NextRequest(
-      'https://example.com/api/storefront/customer/savings/goal-pin/verify',
-      {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }
-    )
-  );
-}
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({
@@ -163,74 +133,6 @@ it('fails closed for funding when the savings runtime is off', async () => {
   const response = await call(fund);
   expect(response.status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
-});
-it('returns a proof for complete bound to the goal and the server-issued operation id', async () => {
-  const response = await call(complete);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    proof,
-    expiresAt: '2026-11-03T12:02:00Z',
-  });
-  expect(mocks.verify).toHaveBeenCalledWith(
-    expect.objectContaining({
-      binding: {
-        purpose: 'goal_complete',
-        amountKobo: 1,
-        idempotencyKeySha256: createHash('sha256')
-          .update(`${goalId}:complete:${operationId}`)
-          .digest('hex'),
-      },
-    })
-  );
-  expect(mocks.completable).toHaveBeenCalledOnce();
-  expect(mocks.goal).not.toHaveBeenCalled();
-  expect(mocks.cancellable).not.toHaveBeenCalled();
-});
-it('mints no complete proof for an operation id that is not live for this customer and goal', async () => {
-  mocks.completeIssued.mockResolvedValue(false);
-  const response = await call(complete);
-  expect(response.status).toBe(409);
-  expect((await response.json()).code).toBe('COMPLETE_OPERATION_INVALID');
-  expect(mocks.verify).not.toHaveBeenCalled();
-  expect(mocks.issued).not.toHaveBeenCalled();
-  expect(mocks.completeIssued).toHaveBeenCalledWith(
-    expect.objectContaining({
-      goalId,
-      operationId,
-      scope: expect.objectContaining({
-        customerId: 'c',
-        merchantId,
-        integrationId: 'integration',
-      }),
-    })
-  );
-});
-it("answers goal not found for a complete of a goal that is not the customer's", async () => {
-  mocks.completable.mockResolvedValue(false);
-  const response = await call(complete);
-  expect(response.status).toBe(404);
-  expect(mocks.verify).not.toHaveBeenCalled();
-  expect(mocks.completeIssued).not.toHaveBeenCalled();
-});
-it('keeps complete working with the savings runtime, feature setting and flags off', async () => {
-  mocks.runtime.mockReturnValue(null);
-  mocks.features.mockResolvedValue({ savingsEnabled: false });
-  const response = await call(complete);
-  expect(response.status).toBe(200);
-  expect(mocks.runtime).not.toHaveBeenCalled();
-  expect(mocks.recovery).toHaveBeenCalledOnce();
-  expect(mocks.features).not.toHaveBeenCalled();
-});
-it('fails closed when the complete live-operation check is unavailable', async () => {
-  mocks.completeIssued.mockRejectedValue(new Error('database down'));
-  const response = await call(complete);
-  expect(response.status).toBe(503);
-  expect(mocks.verify).not.toHaveBeenCalled();
-});
-it('does not ask the complete store about a cancel or funding proof', async () => {
-  await call(cancel);
-  await call(fund);
-  expect(mocks.completeIssued).not.toHaveBeenCalled();
 });
 it('returns a proof for cancel bound to the goal and the server-issued operation id', async () => {
   const response = await call(cancel);

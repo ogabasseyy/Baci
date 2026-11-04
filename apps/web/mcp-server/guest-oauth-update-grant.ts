@@ -10,7 +10,7 @@ export async function updateGuestGrant(
 ) {
   const next = update(grant);
   if (next === grant) return next;
-  if (!(await store.compareAndSwap(`grant:${grant.id}`, row.revision, next, grant.expiresAt)))
+  if (!(await store.compareAndSwap(`grant:${grant.id}`, row.revision, next, next.expiresAt)))
     throw new GuestOAuthGrantConflict();
   return next;
 }

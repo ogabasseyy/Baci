@@ -70,6 +70,11 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     assert.throws(() => query(worker + "SET request.method='GET'; SET request.path='/rpc/mcp_guest_oauth_read';" + hook), /outside its capability scope/);
     assert.throws(() => query("SET ROLE anon; SET request.jwt.claims='{\"role\":\"anon\"}'; SET request.method='POST'; SET request.path='/rpc/__guest_oauth_hook_reload_canary__';" + hook), /GUEST OAUTH hook reload canary observed/);
     query(readFileSync(new URL('../migrations/20261104031016_mcp_guest_oauth_renewable_connections.sql', import.meta.url), 'utf8'));
+    assert.equal(query(`SELECT convalidated FROM pg_constraint WHERE conrelid='public.mcp_guest_oauth_records'::regclass AND conname='mcp_guest_oauth_record_lifetime';`), 'f');
+    // NOT VALID still enforces every new write.
+    assert.throws(() => query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at) VALUES('${tenant}','access:invalid',repeat('x',64),1,now()+interval '8 days');`), /check constraint/);
+    query(readFileSync(new URL('../migrations/20261104031017_validate_mcp_guest_oauth_lifetime.sql', import.meta.url), 'utf8'));
+    assert.equal(query(`SELECT convalidated FROM pg_constraint WHERE conrelid='public.mcp_guest_oauth_records'::regclass AND conname='mcp_guest_oauth_record_lifetime';`), 't');
     // Connection renewal is independent of immutable cart and short-lived record deadlines.
     assert.equal(query(worker + cas(2, "now()+interval '89 days'")), 't');
     assert.throws(() => query(worker + cas(3, "now()+interval '91 days'")), /invalid_expiry/);

@@ -5,7 +5,7 @@ ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_recor
 ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_record_lifetime CHECK (
   CASE WHEN record_key LIKE 'grant:%' THEN expires_at <= renewed_at + interval '90 days'
        ELSE expires_at <= created_at + interval '7 days' END
-);
+) NOT VALID;
 CREATE OR REPLACE FUNCTION public.mcp_guest_oauth_cas(p_merchant_id uuid,p_key text,p_revision bigint,p_ciphertext text,p_expires_at timestamptz)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE changed bigint; is_grant boolean := p_key LIKE 'grant:%';

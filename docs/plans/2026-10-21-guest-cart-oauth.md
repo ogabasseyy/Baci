@@ -60,3 +60,5 @@ The submission endpoint also depends on finite server-worker JWTs. Its dedicated
 Local validation is recorded separately from live activation. Reconnect the existing submission app after release to obtain the new consent; do not claim old grants gained renewable consent or extend the lifetime of existing carts.
 
 Admission contract: revoked encrypted grant rows continue to count toward the 2,000-grant and 10,000-record tenant ceilings until expiry and purge. Revocation does not release a slot or reveal status in plaintext. A renewed grant can retain that slot for up to 90 days. Capacity errors fail closed; monitor retained-row capacity before expanding the pilot.
+
+Owner-approved pending migration correction (4 November 2026): add the lifetime CHECK as NOT VALID in 20261104031016, then validate in the separate 20261104031017 migration transaction. New writes remain constrained immediately; validation scans existing rows after the DDL transaction releases its lock. Both migrations precede the MCP release. No remote application is implied by this correction.

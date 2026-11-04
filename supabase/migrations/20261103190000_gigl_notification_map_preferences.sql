@@ -62,6 +62,17 @@ BEGIN
     RAISE EXCEPTION 'invalid notification preferences'
       USING ERRCODE = '22023';
   END IF;
+  -- Mirror the route schema: quiet hours are set (or cleared) as a pair.
+  IF (p_fields ? 'quiet_hours_start') <> (p_fields ? 'quiet_hours_end')
+    OR (
+      p_fields ? 'quiet_hours_start'
+      AND ((p_fields ->> 'quiet_hours_start') IS NULL)
+        <> ((p_fields ->> 'quiet_hours_end') IS NULL)
+    )
+  THEN
+    RAISE EXCEPTION 'quiet hours start and end must be set together'
+      USING ERRCODE = '22023';
+  END IF;
   -- Mirror the route schema: a real IANA zone and HH:MM[:SS] times.
   IF (p_fields ? 'quiet_hours_time_zone' AND NOT EXISTS (
         SELECT 1 FROM pg_catalog.pg_timezone_names AS zone

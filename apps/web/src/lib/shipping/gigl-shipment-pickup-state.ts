@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const UNPICKED_STATUSES = new Set(['pending', 'booked', 'pickup_scheduled']);
 
@@ -22,7 +23,19 @@ export async function hasUnpickedGiglShipment(
     .eq('order_id', orderId)
     .eq('provider', 'GIGL')
     .neq('status', 'cancelled');
-  if (error || !data || data.length === 0) return knownGig;
+  if (error || !data || data.length === 0) {
+    if (knownGig) {
+      // Fail closed on the provider flag alone; leave a trace so a GIG order
+      // with no readable shipment row can be investigated.
+      logger.warn({
+        message:
+          'Deferring shipped push for GIG order without a readable shipment',
+        orderId,
+        error,
+      });
+    }
+    return knownGig;
+  }
   // Only the latest live shipment holds the notification; an abandoned older
   // booking must not suppress it forever.
   const latest = data.reduce((best, row) =>

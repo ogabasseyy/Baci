@@ -4,7 +4,7 @@
 -- A pickup-stage merchant alert is stale once the parcel has moved on, even
 -- when the merchant muted the later milestone that would have superseded it.
 CREATE OR REPLACE FUNCTION private.gigl_pickup_notification_stale(
-  p_shipment_id uuid, p_notification_kind text
+  p_shipment_id uuid, p_tracking_epoch_id uuid, p_notification_kind text
 )
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
@@ -13,13 +13,14 @@ AS $$
     AND EXISTS (
       SELECT 1 FROM public.shipment_tracking_events AS event
       WHERE event.shipment_id = p_shipment_id
+        AND event.tracking_epoch_id = p_tracking_epoch_id
         AND event.normalized_status IN (
           'picked_up', 'in_transit', 'out_for_delivery', 'delivered',
           'failed', 'returned', 'cancelled'
         )
     );
 $$;
-REVOKE ALL ON FUNCTION private.gigl_pickup_notification_stale(uuid, text)
+REVOKE ALL ON FUNCTION private.gigl_pickup_notification_stale(uuid, uuid, text)
   FROM PUBLIC, anon, authenticated;
 
 -- 6. Claim projects the merchant recipients (owner + orders.fulfill staff) --------
@@ -61,7 +62,9 @@ BEGIN
       skip_reason = 'stale_pickup_milestone'
     WHERE outbox.status = 'pending'
       AND outbox.audience = 'merchant'
-      AND private.gigl_pickup_notification_stale(outbox.shipment_id, outbox.notification_kind)
+      AND private.gigl_pickup_notification_stale(
+        outbox.shipment_id, outbox.tracking_epoch_id, outbox.notification_kind
+      )
     RETURNING outbox.id
   ), muted AS (
     UPDATE public.shipment_tracking_notification_outbox AS outbox
@@ -93,7 +96,9 @@ BEGIN
       )
       AND NOT (
         outbox.audience = 'merchant'
-        AND private.gigl_pickup_notification_stale(outbox.shipment_id, outbox.notification_kind)
+        AND private.gigl_pickup_notification_stale(
+        outbox.shipment_id, outbox.tracking_epoch_id, outbox.notification_kind
+      )
       )
       AND NOT (
         outbox.audience = 'customer' AND outbox.notification_kind = 'cancelled'
@@ -201,7 +206,9 @@ BEGIN
       outbox.audience = 'merchant'
       AND (
         NOT private.gigl_merchant_event_enabled(outbox.merchant_id, outbox.notification_kind)
-        OR private.gigl_pickup_notification_stale(outbox.shipment_id, outbox.notification_kind)
+        OR private.gigl_pickup_notification_stale(
+        outbox.shipment_id, outbox.tracking_epoch_id, outbox.notification_kind
+      )
       )
     )
     AND NOT (

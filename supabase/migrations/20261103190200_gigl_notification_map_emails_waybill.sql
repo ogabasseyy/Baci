@@ -126,6 +126,8 @@ BEGIN
       WHERE previous.order_id = NEW.order_id
         AND previous.id <> NEW.id
         AND previous.provider = 'GIGL'
+        -- A delivered predecessor means a new fulfilment cycle, not a replacement.
+        AND previous.status <> 'delivered'
         AND upper(btrim(previous.tracking_number)) <> upper(btrim(NEW.tracking_number))
     )
   THEN

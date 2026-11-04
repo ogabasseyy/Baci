@@ -1,0 +1,33 @@
+DO $$ BEGIN
+ INSERT INTO public.customer_savings_redemptions(order_id) VALUES ('00000000-0000-4000-8000-000000000001');
+ BEGIN UPDATE public.orders SET payment_method='oxygen' WHERE id='00000000-0000-4000-8000-000000000001'; RAISE EXCEPTION 'savings not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ INSERT INTO public.customer_wallet_transactions(source_id,source_type,type) VALUES ('00000000-0000-4000-8000-000000000002','order_redemption','redemption');
+ BEGIN INSERT INTO public.oxygen_workflows VALUES (gen_random_uuid(),'00000000-0000-4000-8000-000000000002'); RAISE EXCEPTION 'wallet not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN INSERT INTO public.customer_savings_redemptions(order_id) VALUES ('00000000-0000-4000-8000-000000000003'); RAISE EXCEPTION 'Oxygen savings not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.orders SET payment_method='oxygen' WHERE id='00000000-0000-4000-8000-000000000004'; RAISE EXCEPTION 'wallet amount not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.customer_savings_redemptions SET order_id='00000000-0000-4000-8000-000000000003' WHERE order_id='00000000-0000-4000-8000-000000000001'; RAISE EXCEPTION 'savings transfer not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN UPDATE public.customer_wallet_transactions SET source_id='00000000-0000-4000-8000-000000000003' WHERE source_id='00000000-0000-4000-8000-000000000002'; RAISE EXCEPTION 'wallet transfer not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ INSERT INTO public.orders VALUES ('00000000-0000-4000-8000-000000000006','oxygen',9);
+ BEGIN INSERT INTO public.oxygen_workflows VALUES (gen_random_uuid(),'00000000-0000-4000-8000-000000000006'); RAISE EXCEPTION 'inserted Oxygen order with credit not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ ALTER TABLE public.oxygen_workflows DISABLE TRIGGER oxygen_credit_workflow_guard;
+ INSERT INTO public.oxygen_workflows VALUES ('10000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000006');
+ ALTER TABLE public.oxygen_workflows ENABLE TRIGGER oxygen_credit_workflow_guard;
+ BEGIN INSERT INTO oxygen_private.commands VALUES ('10000000-0000-4000-8000-000000000006','queued'); RAISE EXCEPTION 'credit command not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN INSERT INTO oxygen_private.payment_recovery VALUES ('10000000-0000-4000-8000-000000000006','executing'); RAISE EXCEPTION 'credit recovery not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN INSERT INTO oxygen_private.general_activations VALUES ('10000000-0000-4000-8000-000000000006','executing'); RAISE EXCEPTION 'credit activation not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ BEGIN INSERT INTO oxygen_private.activation_trials VALUES ('10000000-0000-4000-8000-000000000006','queued'); RAISE EXCEPTION 'credit trial not fenced';
+ EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF; END;
+ INSERT INTO oxygen_private.commands VALUES ('10000000-0000-4000-8000-000000000006','succeeded');
+ -- Reversal records and completion recording must never be blocked by this fence.
+ INSERT INTO public.customer_wallet_transactions(source_id,source_type,type) VALUES ('00000000-0000-4000-8000-000000000003','order_reversal','credit');
+END $$;

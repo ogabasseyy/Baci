@@ -7,7 +7,13 @@ import {
 
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: vi.fn() }));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyCustomerWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyCustomer(...args),
+  notifyMerchantWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyMerchant(...args),
+}));
 
 const notification = giglTrackingNotificationTestNotification;
 
@@ -62,7 +68,9 @@ describe('processClaimedGiglTrackingNotifications', () => {
       expect(summary).toMatchObject({ failed: 0, skipped: 1, sent: 0 });
       expect(notifyMerchant).not.toHaveBeenCalled();
       // The lease is left to expire: no attempt is consumed.
-      expect(supabase.rpc).not.toHaveBeenCalled();
+      const names = supabase.rpc.mock.calls.map(([name]) => name);
+      expect(names).not.toContain('gigl_worker_begin_notification_dispatch');
+      expect(names).not.toContain('gigl_worker_complete_notification');
     });
 
     it('sends nobody when no owner or fulfil staff qualifies', async () => {

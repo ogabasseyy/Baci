@@ -117,6 +117,13 @@ function convertV2PostToLink(
   };
 }
 
+interface EligibleV2LinkItem {
+  slug: string;
+  link: InformationalGuideLink;
+  matchPriority: number;
+  originalIndex: number;
+}
+
 export function buildProductGuideLinks(
   input: BuildProductSemanticModelInput
 ): InformationalGuideLink[] {
@@ -140,51 +147,47 @@ export function buildProductGuideLinks(
     validCategorySlugs: input.currentProduct.category_slugs ?? undefined,
   };
 
-  const eligibleV2Links: Array<{ slug: string; link: InformationalGuideLink }> =
-    [];
-  const eligibleLegacyPosts: PublishedClusterPost[] = [];
+  const eligibleItems: EligibleV2LinkItem[] = [];
 
-  for (const post of posts) {
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i];
     if (hasV2Metadata(post)) {
       const evalResult = evaluateV2GuideCandidate(post, v2Context);
       if (evalResult.eligible) {
         const link = convertV2PostToLink(post, input.storeUrl);
         if (link) {
-          eligibleV2Links.push({ slug: post.slug, link });
+          let matchPriority = 3;
+          if (evalResult.reason?.startsWith('subject_')) {
+            matchPriority = 1;
+          } else if (evalResult.reason === 'brand_family_guide') {
+            matchPriority = 2;
+          }
+          eligibleItems.push({
+            slug: post.slug,
+            link,
+            matchPriority,
+            originalIndex: i,
+          });
         }
-      }
-    } else {
-      if (
-        post.merchant_intent === 'news' &&
-        (post.merchant_intent_source === 'merchant_declared' ||
-          post.merchant_intent_source === 'verified_receipt' ||
-          post.merchant_intent_source === 'reviewed')
-      ) {
-        continue;
-      }
-      if (
-        hasSupportedLegacyCluster &&
-        !hasConfiguredPostBrandMismatch(
-          post,
-          categorySlug,
-          input.currentProduct.brand,
-          input.currentProduct.name
-        )
-      ) {
-        eligibleLegacyPosts.push(post);
       }
     }
   }
 
-  // Handle legacy posts via buildCommercialGuideLinks if any
-  let legacyPriorityLinks: InformationalGuideLink[] = [];
-  let legacyFallbackLinks: InformationalGuideLink[] = [];
-
-  if (hasSupportedLegacyCluster && eligibleLegacyPosts.length > 0) {
-    const legacyPriorityPosts = eligibleLegacyPosts.filter((p) =>
-      priorityGuidePostSlugs.has(p.slug)
+  if (hasSupportedLegacyCluster) {
+    const legacyPosts = posts.filter(
+      (p) => !hasV2Metadata(p) && p.merchant_intent !== 'news'
     );
-    const legacyFallbackPosts = eligibleLegacyPosts.filter(
+    const legacyPriorityPosts = legacyPosts.filter(
+      (p) =>
+        priorityGuidePostSlugs.has(p.slug) &&
+        !hasConfiguredPostBrandMismatch(
+          p,
+          categorySlug,
+          input.currentProduct.brand,
+          input.currentProduct.name
+        )
+    );
+    const legacyFallbackPosts = legacyPosts.filter(
       (p) => !priorityGuidePostSlugs.has(p.slug)
     );
 
@@ -196,31 +199,54 @@ export function buildProductGuideLinks(
       productSlugs: [input.currentProduct.slug],
     };
 
-    legacyPriorityLinks = buildCommercialGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: legacyPriorityPosts,
-      context,
-    });
-    legacyFallbackLinks = buildCommercialGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: legacyFallbackPosts,
-      context,
-    });
+    if (legacyPriorityPosts.length > 0) {
+      const priorityLinks = buildCommercialGuideLinks({
+        storeUrl: input.storeUrl,
+        posts: legacyPriorityPosts,
+        context,
+      });
+      for (let i = 0; i < priorityLinks.length; i++) {
+        const link = priorityLinks[i];
+        const slug = link.href.split('/').pop() ?? '';
+        eligibleItems.push({
+          slug,
+          link,
+          matchPriority: 1,
+          originalIndex: i,
+        });
+      }
+    }
+
+    if (legacyFallbackPosts.length > 0) {
+      const fallbackLinks = buildCommercialGuideLinks({
+        storeUrl: input.storeUrl,
+        posts: legacyFallbackPosts,
+        context,
+      });
+      for (let i = 0; i < fallbackLinks.length; i++) {
+        const link = fallbackLinks[i];
+        const slug = link.href.split('/').pop() ?? '';
+        eligibleItems.push({
+          slug,
+          link,
+          matchPriority: 4,
+          originalIndex: i,
+        });
+      }
+    }
   }
 
-  // Combine V2 and Legacy, keeping priority slugs first (priority is ranking only, never permission)
-  const v2PriorityLinks = eligibleV2Links
-    .filter((item) => priorityGuidePostSlugs.has(item.slug))
-    .map((i) => i.link);
-  const v2FallbackLinks = eligibleV2Links
-    .filter((item) => !priorityGuidePostSlugs.has(item.slug))
-    .map((i) => i.link);
+  eligibleItems.sort((a, b) => {
+    const aPriority = priorityGuidePostSlugs.has(a.slug) ? 0 : 1;
+    const bPriority = priorityGuidePostSlugs.has(b.slug) ? 0 : 1;
+    if (aPriority !== bPriority) {
+      return aPriority - bPriority;
+    }
+    if (a.matchPriority !== b.matchPriority) {
+      return a.matchPriority - b.matchPriority;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
 
-  const combinedPriority = [...v2PriorityLinks, ...legacyPriorityLinks];
-  const combinedFallback = [...v2FallbackLinks, ...legacyFallbackLinks];
-
-  return dedupeGuideLinks([...combinedPriority, ...combinedFallback]).slice(
-    0,
-    3
-  );
+  return dedupeGuideLinks(eligibleItems.map((i) => i.link)).slice(0, 3);
 }

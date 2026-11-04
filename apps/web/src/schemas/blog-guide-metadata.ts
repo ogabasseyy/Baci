@@ -48,7 +48,8 @@ export function isNonBrandPlaceholderKey(key: string): boolean {
   const normalized = key
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   return NON_BRAND_PLACEHOLDER_KEYS.has(normalized);
 }
 

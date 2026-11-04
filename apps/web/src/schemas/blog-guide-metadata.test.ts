@@ -41,7 +41,10 @@ describe('blogGuideMetadataSchema', () => {
         expect(isNonBrandPlaceholderKey(key)).toBe(true);
         expect(isNonBrandPlaceholderKey(key.toUpperCase())).toBe(true);
         expect(isNonBrandPlaceholderKey(`  ${key}  `)).toBe(true);
+        expect(isNonBrandPlaceholderKey(` -${key}- `)).toBe(true);
       }
+      expect(isNonBrandPlaceholderKey('gaming!')).toBe(true);
+      expect(isNonBrandPlaceholderKey('--unbranded--')).toBe(true);
     });
 
     it('allows genuine brand keys', () => {

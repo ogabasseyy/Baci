@@ -1,3 +1,5 @@
+import { isNonBrandPlaceholderKey } from '@/schemas/blog-guide-metadata';
+
 export interface V2GuideCandidateSubject {
   productId: string;
   subjectRole: 'primary' | 'comparison' | 'product_support';
@@ -51,7 +53,8 @@ function normalizeSlug(str: string | null | undefined): string {
   return (str ?? '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -65,7 +68,7 @@ function normalizeSlug(str: string | null | undefined): string {
  *
  * Path B: Verified general category_guide or brand_family_guide:
  *   - buyer-guide | best-in-nigeria
- *   - exact category match
+ *   - exact category match (validated cluster category, never free-text display category)
  *   - declared brand match (or brand-neutral for category_guide)
  *   - no family restriction
  *
@@ -76,11 +79,15 @@ export function evaluateV2GuideCandidate(
   candidate: V2GuideCandidate,
   context: EvaluateV2GuideCandidateContext
 ): EvaluateV2GuideCandidateResult {
-  // 1. Verification status check
-  if (candidate.metadata_status && candidate.metadata_status !== 'verified') {
+  // 1. Fail closed on missing/null/unverified metadata status
+  const isVerified =
+    candidate.metadata_status === 'verified' ||
+    (candidate.metadata_status === undefined &&
+      Boolean(candidate.eligibility_reason));
+  if (!isVerified) {
     return {
       eligible: false,
-      exclusionReason: `metadata_status is "${candidate.metadata_status}", requires verified`,
+      exclusionReason: `metadata_status is "${candidate.metadata_status ?? 'missing'}", requires verified`,
     };
   }
 
@@ -99,7 +106,15 @@ export function evaluateV2GuideCandidate(
     };
   }
 
-  // 3. Path A: Explicit subject match targeting this product
+  // 3. Reject placeholder brand keys
+  if (candidate.applicable_brands?.some(isNonBrandPlaceholderKey)) {
+    return {
+      eligible: false,
+      exclusionReason: 'applicable_brands contains placeholder brand key',
+    };
+  }
+
+  // 4. Path A: Explicit subject match targeting this product
   if (context.productId) {
     if (candidate.subjects && candidate.subjects.length > 0) {
       const matchingSubject = candidate.subjects.find(
@@ -166,7 +181,7 @@ export function evaluateV2GuideCandidate(
     };
   }
 
-  // 4. Path B: Verified general category_guide or brand_family_guide
+  // 5. Path B: Verified general category_guide or brand_family_guide
   if (
     candidate.guide_scope === 'category_guide' ||
     candidate.guide_scope === 'brand_family_guide'
@@ -181,23 +196,16 @@ export function evaluateV2GuideCandidate(
       };
     }
 
-    // Category match
+    // Exact canonical category match (§2.5: no implicit parent/sibling expansion, no free-text category fallback)
     let categoryMatches = false;
     if (context.categoryId && candidate.cluster_category_id) {
-      categoryMatches =
-        context.categoryId === candidate.cluster_category_id ||
-        Boolean(
-          context.validCategoryIds?.includes(candidate.cluster_category_id)
-        );
-    } else {
+      categoryMatches = context.categoryId === candidate.cluster_category_id;
+    } else if (context.categorySlug && candidate.cluster_category_slug) {
       const targetSlug = normalizeSlug(context.categorySlug);
-      const candSlug = normalizeSlug(
-        candidate.cluster_category_slug || candidate.category
+      const candSlug = normalizeSlug(candidate.cluster_category_slug);
+      categoryMatches = Boolean(
+        targetSlug && candSlug && targetSlug === candSlug
       );
-      const validSlugs = (context.validCategorySlugs ?? []).map(normalizeSlug);
-      categoryMatches =
-        Boolean(targetSlug && candSlug && targetSlug === candSlug) ||
-        validSlugs.includes(candSlug);
     }
 
     if (!categoryMatches) {

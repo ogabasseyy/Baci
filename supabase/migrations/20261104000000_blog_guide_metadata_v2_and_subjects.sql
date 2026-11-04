@@ -122,16 +122,20 @@ DECLARE
   v_new_brand_norm text;
 BEGIN
   IF OLD.brand IS NOT DISTINCT FROM NEW.brand AND OLD.category_id IS NOT DISTINCT FROM NEW.category_id THEN RETURN NEW; END IF;
-  v_old_brand_norm := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(OLD.brand, ''))), '[^a-z0-9]+', '-', 'g');
-  v_new_brand_norm := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(NEW.brand, ''))), '[^a-z0-9]+', '-', 'g');
+  v_old_brand_norm := pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(OLD.brand, ''))), '[^a-z0-9]+', '-', 'g'), '-');
+  v_new_brand_norm := pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(NEW.brand, ''))), '[^a-z0-9]+', '-', 'g'), '-');
   IF OLD.category_id IS NOT DISTINCT FROM NEW.category_id AND v_old_brand_norm = v_new_brand_norm THEN RETURN NEW; END IF;
 
   UPDATE public.blog_posts AS post SET metadata_status = 'stale'
   WHERE post.merchant_id = NEW.merchant_id AND post.metadata_status = 'verified'
     AND (
       EXISTS (SELECT 1 FROM public.blog_post_guide_subjects AS subj WHERE subj.blog_post_id = post.id AND subj.product_id = NEW.id)
-      OR (v_old_brand_norm <> '' AND v_old_brand_norm = ANY(post.applicable_brands))
-      OR (v_new_brand_norm <> '' AND v_new_brand_norm = ANY(post.applicable_brands))
+      OR (
+        v_old_brand_norm IS DISTINCT FROM v_new_brand_norm AND (
+          (v_old_brand_norm <> '' AND v_old_brand_norm = ANY(post.applicable_brands))
+          OR (v_new_brand_norm <> '' AND v_new_brand_norm = ANY(post.applicable_brands))
+        )
+      )
     );
   RETURN NEW;
 END;
@@ -162,10 +166,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.merchant_feature_settings AS s WHERE s.merchant_id = p_merchant_id AND s.blog_enabled IS TRUE) THEN RETURN; END IF;
 
   SELECT prod.id, prod.category_id, prod.brand INTO v_target_product_id, v_target_category_id, v_target_brand
-  FROM public.products AS prod WHERE prod.id = p_product_id AND prod.merchant_id = p_merchant_id;
+  FROM public.products AS prod WHERE prod.id = p_product_id AND prod.merchant_id = p_merchant_id AND prod.status = 'active';
   IF v_target_product_id IS NULL THEN RETURN; END IF;
 
-  v_target_brand_norm := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(v_target_brand, ''))), '[^a-z0-9]+', '-', 'g');
+  v_target_brand_norm := pg_catalog.btrim(
+    pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(v_target_brand, ''))), '[^a-z0-9]+', '-', 'g'),
+    '-'
+  );
 
   IF p_category_id IS NOT NULL THEN
     IF p_category_id = v_target_category_id OR EXISTS (

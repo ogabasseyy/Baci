@@ -213,5 +213,48 @@ describe('evaluateV2GuideCandidate', () => {
         { categorySlug: 'smartphones', brandKey: 'Samsung' }
       ).eligible
     ).toBe(false);
+
+    // Missing / null metadata_status without eligibility_reason fails closed
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_status: null },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_status: undefined },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    // Placeholder brand key rejected in applicable_brands
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, applicable_brands: ['gaming'] },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    // Free-text category fallback removed (requires cluster_category_slug)
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, cluster_category_slug: null, category: 'Smartphones' },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    // Path B general guide requires exact category match, no expansion
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, cluster_category_slug: 'accessories' },
+        {
+          categorySlug: 'smartphones',
+          brandKey: 'Samsung',
+          validCategorySlugs: ['accessories'],
+        }
+      ).eligible
+    ).toBe(false);
   });
 });

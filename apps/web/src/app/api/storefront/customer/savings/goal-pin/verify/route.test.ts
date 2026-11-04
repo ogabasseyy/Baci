@@ -1,8 +1,18 @@
 import { createHash } from 'node:crypto';
-import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { POST } from './route';
+import {
+  call,
+  cancel,
+  fund,
+  goalId,
+  merchantId,
+  operationId,
+  proof,
+} from './route.test-support';
 
+vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
+  chargeWalletPinCustomerLimit: async () => null,
+}));
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
@@ -14,7 +24,9 @@ const mocks = vi.hoisted(() => ({
   features: vi.fn(),
   goal: vi.fn(),
   cancellable: vi.fn(),
+  completable: vi.fn(),
   issued: vi.fn(),
+  completeIssued: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -32,45 +44,18 @@ vi.mock(
 vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
   isActiveOwnGoal: mocks.goal,
   isCancellableOwnGoal: mocks.cancellable,
+  isCompletableOwnGoal: mocks.completable,
 }));
 vi.mock('@/lib/piggyvest/goal-cancel-runtime', () => ({
   isPrimaryWalletGoalCancelIssued: mocks.issued,
+}));
+vi.mock('@/lib/piggyvest/goal-complete-runtime', () => ({
+  isPrimaryWalletGoalCompleteIssued: mocks.completeIssued,
 }));
 vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
 }));
 
-const merchantId = '11111111-1111-4111-8111-111111111111';
-const goalId = '22222222-2222-4222-8222-222222222222';
-const operationId = '33333333-3333-4333-8333-333333333333';
-const proof = createHash('sha256').update('s5-route-verify').digest('hex');
-const fund = {
-  merchantId,
-  pin: '482915',
-  action: 'fund',
-  goalId,
-  operationId,
-  amountKobo: 2000,
-};
-const cancel = {
-  merchantId,
-  pin: '482915',
-  action: 'cancel',
-  goalId,
-  operationId,
-};
-const complete = { merchantId, pin: '482915', action: 'complete', goalId };
-function call(body: unknown) {
-  return POST(
-    new NextRequest(
-      'https://example.com/api/storefront/customer/savings/goal-pin/verify',
-      {
-        method: 'POST',
-        body: JSON.stringify(body),
-      }
-    )
-  );
-}
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({
@@ -85,6 +70,8 @@ beforeEach(() => {
     configuration: { integrationId: 'integration', environment: 'staging' },
   });
   mocks.issued.mockResolvedValue(true);
+  mocks.completeIssued.mockResolvedValue(true);
+  mocks.completable.mockResolvedValue(true);
   mocks.identity.mockResolvedValue({
     merchantId,
     customerId: 'c',
@@ -117,6 +104,7 @@ it.each([
   { ...fund, extra: 1 },
   { ...cancel, amountKobo: 5 },
   { merchantId, pin: '482915', action: 'cancel', goalId },
+  { merchantId, pin: '482915', action: 'complete', goalId },
   { merchantId, pin: '1234', action: 'spend', goalId },
 ])('rejects malformed input %j before any check', async (body) => {
   expect((await call(body)).status).toBe(400);
@@ -145,14 +133,6 @@ it('fails closed for funding when the savings runtime is off', async () => {
   const response = await call(fund);
   expect(response.status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
-});
-it('refuses complete before any PIN check until it binds to a server-issued operation', async () => {
-  const response = await call(complete);
-  expect(response.status).toBe(400);
-  expect((await response.json()).code).toBe('PIN_ACTION_NOT_AVAILABLE');
-  expect(mocks.verify).not.toHaveBeenCalled();
-  expect(mocks.goal).not.toHaveBeenCalled();
-  expect(mocks.cancellable).not.toHaveBeenCalled();
 });
 it('returns a proof for cancel bound to the goal and the server-issued operation id', async () => {
   const response = await call(cancel);

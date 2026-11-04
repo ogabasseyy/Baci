@@ -6,6 +6,10 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
 import {
+  chargeWalletPinCustomerLimit,
+  type WalletPinCustomerBudget,
+} from './wallet-pin-customer-limit';
+import {
   readWalletPinStatus,
   type WalletPinOutcome,
 } from './wallet-pin-operations';
@@ -80,9 +84,10 @@ type Prepared =
   | { response: NextResponse }
   | { context: WalletPinContext | null };
 
-// Auth first, then CSRF. Rate limiting is owned by the API proxy stage (the
-// /api/storefront/customer/wallet-pin buckets in rate-limit-routes.ts); doing
-// it here too would charge every mutation twice. The merchant comes from the
+// Auth first, then CSRF. The per-IP limit is owned by the API proxy stage (the
+// /api/storefront/customer/wallet-pin buckets in rate-limit-routes.ts); the
+// per-customer limit is charged once per mutation in handleWalletPinMutation,
+// after authentication and a valid body. The merchant comes from the
 // server's primary-wallet configuration and the customer from the signed-in
 // account, never from the request.
 async function prepare(request: NextRequest): Promise<Prepared> {
@@ -154,7 +159,8 @@ export async function handleWalletPinStatus(
 export async function handleWalletPinMutation<T>(
   request: NextRequest,
   schema: z.ZodType<T>,
-  run: (context: WalletPinContext, input: T) => Promise<WalletPinOutcome>
+  run: (context: WalletPinContext, input: T) => Promise<WalletPinOutcome>,
+  budget: WalletPinCustomerBudget = 'mutation'
 ): Promise<NextResponse> {
   try {
     const prepared = await prepare(request);
@@ -163,6 +169,12 @@ export async function handleWalletPinMutation<T>(
     if (!parsed.success)
       return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
     if (!prepared.context) return unavailable();
+    const limited = await chargeWalletPinCustomerLimit(
+      budget,
+      prepared.context.merchantId,
+      prepared.context.userId
+    );
+    if (limited) return limited;
     return walletPinOutcomeResponse(await run(prepared.context, parsed.data));
   } catch {
     return unavailable();

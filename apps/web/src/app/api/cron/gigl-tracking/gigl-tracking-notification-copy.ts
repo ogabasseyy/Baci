@@ -50,8 +50,53 @@ const notificationCopy: Record<string, { title: string; body: string }> = {
   },
 };
 
-export function copyFor(kind: string, description: string) {
+type Audience = 'merchant' | 'customer';
+
+const audienceCopy: Record<
+  Audience,
+  Record<string, { title: string; body: string }>
+> = {
+  customer: {
+    picked_up: {
+      title: 'Your order has shipped',
+      body: 'GIG Logistics has collected your parcel. Track it any time.',
+    },
+    cancelled: {
+      title: 'Shipment cancelled',
+      body: 'The shipment for your order was cancelled.',
+    },
+    waybill_changed: {
+      title: 'Your tracking number changed',
+      body: 'Your order has a new tracking number. Use the new link to follow it.',
+    },
+  },
+  merchant: {
+    delivered: {
+      title: 'Sale complete',
+      body: 'The order was delivered to your customer.',
+    },
+    out_for_delivery: {
+      title: 'Out for delivery',
+      body: 'A GIG Logistics rider is delivering the order.',
+    },
+    pickup_delayed: {
+      title: 'GIG pickup delayed',
+      body: 'Your GIG Logistics pickup is taking longer than expected.',
+    },
+    waybill_changed: {
+      title: 'GIG waybill updated',
+      body: 'The shipment now uses a new GIG waybill.',
+    },
+  },
+};
+
+export function copyFor(
+  kind: string,
+  description: string,
+  audience?: Audience
+) {
   return (
+    (audience ? audienceCopy[audience][kind] : undefined) ??
     notificationCopy[kind] ?? {
       title: 'Shipment update',
       body: description || 'Your shipment has a new update.',

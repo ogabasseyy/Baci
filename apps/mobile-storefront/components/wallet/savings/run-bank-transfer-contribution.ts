@@ -3,6 +3,11 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import {
+  isPinCancelled,
+  type PinProofRequester,
+  runWithPinProof,
+} from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
 import {
@@ -11,8 +16,8 @@ import {
   resolveStoredOperation,
 } from './stored-contribution-operation';
 
-const PIN_COMING_SOON_MESSAGE =
-  'Saving into goals from the app needs a wallet PIN, which is coming soon. Your money is still in your wallet.';
+const PIN_CLOSED_MESSAGE =
+  "Your goal was created. Add money to it from your wallet when you're ready.";
 
 /**
  * Moves the first contribution of a created goal, bound to the rail of the
@@ -23,7 +28,7 @@ export async function runBankTransferContribution(
   input: UseStartSavingsSubmitInput,
   goalId: string,
   amount: number,
-  ctx: { isMounted: () => boolean }
+  ctx: { isMounted: () => boolean; requestPinProof?: PinProofRequester }
 ): Promise<void> {
   try {
     const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
@@ -91,24 +96,37 @@ export async function runBankTransferContribution(
       operationId?: string;
     } = stored.confirmed
       ? { status: 'confirmed', operationId: idempotencyKey }
-      : await contribute({
-          amount,
-          goalId,
-          idempotencyKey,
-          merchantId: input.activeMerchantId,
-          merchantSlug: input.activeMerchantSlug,
-          ...(rail === 'primary'
-            ? {
-                // An id the server already knows on primary never goes to
-                // legacy: only a fresh id may fall back.
-                allowLegacyFallback: !stored.operationId,
-                onRail: (used: ContributionRail) => {
-                  usedRail = used;
-                  input.setInitialContributionRail?.(idempotencyKey, used);
-                },
-              }
-            : {}),
-        });
+      : await runWithPinProof(
+          (pinProof) =>
+            contribute({
+              amount,
+              goalId,
+              idempotencyKey,
+              merchantId: input.activeMerchantId,
+              merchantSlug: input.activeMerchantSlug,
+              ...(rail === 'primary'
+                ? {
+                    // An id the server already knows on primary never goes to
+                    // legacy: only a fresh id may fall back.
+                    allowLegacyFallback: !stored.operationId,
+                    onRail: (used: ContributionRail) => {
+                      usedRail = used;
+                      input.setInitialContributionRail?.(idempotencyKey, used);
+                    },
+                    // A clean "PIN needed" refusal opens the PIN sheet and
+                    // retries this same id on this same rail with the proof.
+                    ...(pinProof ? { pinProof } : {}),
+                  }
+                : {}),
+            }),
+          {
+            merchantId: input.activeMerchantId,
+            goalId,
+            operationId: idempotencyKey,
+            amountKobo: Math.round(amount * 100),
+          },
+          rail === 'primary' ? ctx.requestPinProof : undefined
+        );
     if (!ctx.isMounted()) return;
     const outcome = contributionResult.status;
     if (outcome === 'pending' || outcome === 'cancelled') {
@@ -161,6 +179,17 @@ export async function runBankTransferContribution(
     }
   } catch (error) {
     if (!ctx.isMounted()) return;
+    // The customer closed the PIN sheet: nothing was sent and the id and rail
+    // stay for the next attempt. Say plainly that the goal already exists.
+    if (isPinCancelled(error)) {
+      input.setFormError(PIN_CLOSED_MESSAGE);
+      showAppAlert({
+        title: 'Goal created',
+        message: PIN_CLOSED_MESSAGE,
+        variant: 'info',
+      });
+      return;
+    }
     if (getErrorCode(error) === 'WALLET_UNAVAILABLE') {
       // The server cancelled the reservation; the id can never be reused.
       input.setInitialContributionIdempotencyKey(null);
@@ -168,11 +197,9 @@ export async function runBankTransferContribution(
     // A clean refusal: nothing moved, so the id and rail stay as they are and
     // nothing is retried.
     const message =
-      getErrorCode(error) === 'PIN_PROOF_REQUIRED'
-        ? PIN_COMING_SOON_MESSAGE
-        : error instanceof Error && error.message
-          ? error.message
-          : 'Unable to record the contribution.';
+      error instanceof Error && error.message
+        ? error.message
+        : 'Unable to record the contribution.';
     input.setFormError(message);
     showAppAlert({
       title: 'Contribution not recorded',

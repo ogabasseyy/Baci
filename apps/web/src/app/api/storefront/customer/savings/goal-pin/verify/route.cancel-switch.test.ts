@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
+vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
+  chargeWalletPinCustomerLimit: async () => null,
+}));
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),

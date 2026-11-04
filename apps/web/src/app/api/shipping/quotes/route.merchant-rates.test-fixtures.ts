@@ -6,6 +6,10 @@ export const mockCreateServerClient = vi.fn();
 export const mockGetMerchantForApiRequest = vi.fn();
 export const mockGetQuotes = vi.fn();
 
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => mockCreateAdminClient(),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));

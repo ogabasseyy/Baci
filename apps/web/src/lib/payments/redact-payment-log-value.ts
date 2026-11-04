@@ -2,6 +2,41 @@ const REDACTED_PAYMENT_LOG_VALUE = '[REDACTED]';
 
 const SENSITIVE_PAYMENT_LOG_KEYS = new Set([
   'address',
+  'authorization',
+  'authorization_header',
+  'bank_account',
+  'bank_verification_number',
+  'national_identification_number',
+  'identity_number',
+  'identification_number',
+  'birth_date',
+  'session',
+  'session_id',
+  'sessionid',
+  'proxy_authorization',
+  'cookie',
+  'set_cookie',
+  'bvn',
+  'nin',
+  'pan',
+  'cvv',
+  'cvc',
+  'pin',
+  'otp',
+  'password',
+  'passcode',
+  'credential',
+  'credentials',
+  'secret',
+  'signature',
+  'date_of_birth',
+  'dob',
+  'national_id',
+  'account_number',
+  'card_number',
+  'api_key',
+  'private_key',
+  'public_key',
   'billing_address',
   'city',
   'customer_email',
@@ -20,6 +55,7 @@ const SENSITIVE_PAYMENT_LOG_KEYS = new Set([
   'phone_number',
   'postal_code',
   'state',
+  'tracking_token',
   'zip_code',
 ]);
 
@@ -34,8 +70,12 @@ function normalizePaymentLogKey(key: string): string {
 
 function shouldRedactPaymentLogKey(key: string): boolean {
   const normalizedKey = normalizePaymentLogKey(key);
+  const compactKey = normalizedKey.replaceAll('_', '');
   return (
     SENSITIVE_PAYMENT_LOG_KEYS.has(normalizedKey) ||
+    /(?:token|secret|password|passcode|credential|signature|apikey|privatekey|publickey|accountnumber|accountno|cardnumber|dateofbirth|birthdate|nationalid|bvn|bvnnumber|nin|ninnumber|cvv|cvc|otp|pin)(?:value|code|confirmation)?$/.test(
+      compactKey
+    ) ||
     normalizedKey.endsWith('_email') ||
     normalizedKey.endsWith('_phone') ||
     normalizedKey.endsWith('_phone_number')

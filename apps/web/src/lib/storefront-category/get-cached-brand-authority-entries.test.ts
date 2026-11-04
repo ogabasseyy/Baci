@@ -76,7 +76,7 @@ describe('getCachedBrandAuthorityEntries', () => {
     );
 
     await expect(
-      getCachedBrandAuthorityEntries('merchant-1', 'tablets')
+      getCachedBrandAuthorityEntries('merchant-1', 'monitors')
     ).resolves.toEqual([]);
     expect(mockGetCachedBrandAuthorityInventory).not.toHaveBeenCalled();
   });

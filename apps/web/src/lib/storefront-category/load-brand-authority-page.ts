@@ -6,8 +6,8 @@ import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub
 import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { formatBrandAuthorityCopy } from '@/lib/storefront-category/format-brand-authority-copy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
-import { getCategoryAuthorityNoun } from '@/lib/storefront-category/get-category-authority-noun';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
@@ -28,6 +28,7 @@ export interface BrandAuthorityPageProduct {
   price: number;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   availability: 'InStock' | 'OutOfStock';
   has_condition_offers: boolean;
   product_key_specs?: ProductKeySpecsRecord | null;
@@ -111,6 +112,7 @@ async function loadBrandAuthorityPage(
       price: product.price,
       condition: product.condition,
       stock: product.stock,
+      manage_stock: product.manage_stock ?? false,
       availability: product.availability,
       has_condition_offers: product.has_condition_offers ?? false,
       product_key_specs: product.product_key_specs,
@@ -125,14 +127,20 @@ async function loadBrandAuthorityPage(
 
   const storeUrl = buildStoreUrl(merchant);
   const categoryName = categoryData.name;
-  const categoryNoun = getCategoryAuthorityNoun(
-    args.categorySlug,
-    categoryName
-  );
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/brands/${authorityEntry.brandKey}`;
   const countryContext = getCountryShoppingContext(merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `${authorityEntry.displayName} ${categoryNoun.titleNoun} and Prices${countrySuffix}`;
+  const copy = formatBrandAuthorityCopy({
+    categorySlug: args.categorySlug,
+    categoryName,
+    brandKey: authorityEntry.brandKey,
+    brandDisplayName: authorityEntry.displayName,
+    merchantBusinessName: merchant.business_name,
+    productCount: products.length,
+    countrySuffix,
+    customIntro: authorityEntry.intro,
+  });
+  const heading = copy.heading;
   const supportedCategory =
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
@@ -166,7 +174,7 @@ async function loadBrandAuthorityPage(
         ? [
             {
               href: `${canonicalUrl}/families/${entry.familyKey}`,
-              label: `${entry.displayName} ${categoryNoun.lowerNoun}`,
+              label: copy.formatFamilyLinkLabel(entry.displayName),
               productCount,
             },
           ]
@@ -181,14 +189,9 @@ async function loadBrandAuthorityPage(
       suffix: merchant.business_name,
       fallback: authorityEntry.displayName,
     }).title,
-    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
+    metaDescription: copy.metaDescription,
     heading,
-    intro: authorityEntry.intro
-      ? authorityEntry.intro.replaceAll(
-          '{merchantName}',
-          merchant.business_name
-        )
-      : `Explore a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
+    intro: copy.intro,
     categoryName,
     brand: authorityEntry,
     products,

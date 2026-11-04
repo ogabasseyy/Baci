@@ -94,10 +94,11 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\b(?:and|or)\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/giu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[-–—|/&]+\s+\S)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\b(?:and|or)\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/giu,
     (
       match,
       innerBeforePunctOrEnd?: string,
+      innerBeforeSep?: string,
       innerBeforeNext?: string,
       innerNext?: string,
       innerOther?: string,
@@ -118,7 +119,11 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       }
 
       const inner =
-        innerBeforePunctOrEnd ?? innerBeforeNext ?? innerOther ?? '';
+        innerBeforePunctOrEnd ??
+        innerBeforeSep ??
+        innerBeforeNext ??
+        innerOther ??
+        '';
       if (!isRedundantPlatformListParenthetical(inner)) {
         return match;
       }
@@ -140,6 +145,9 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       }
       if (innerBeforePunctOrEnd !== undefined) {
         return '';
+      }
+      if (innerBeforeSep !== undefined) {
+        return ' ';
       }
       if (innerBeforeNext !== undefined) {
         return isRedundantPlatformListParenthetical(innerNext ?? '') ? '' : ' ';

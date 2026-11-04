@@ -201,7 +201,7 @@ describe('seo-meta-title-platform-compaction', () => {
       ).toBe('EA Sports FC 27 (PS5 / PlayStation 5)');
     });
 
-    it('cleans preceding conjunctions for mid-title lists', () => {
+    it('cleans preceding conjunctions and collapses adjoining separators for mid-title lists', () => {
       expect(
         stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
@@ -220,6 +220,11 @@ describe('seo-meta-title-platform-compaction', () => {
       expect(
         stripRedundantPlatformParentheticals('Buy Game OR (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch) - ₦112,000'
+        )
+      ).toBe('Buy EA Sports FC 27 - ₦112,000');
     });
 
     it('preserves nested platform lists inside non-platform qualifiers', () => {

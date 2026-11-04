@@ -49,6 +49,8 @@ export async function chargeWalletPinCustomerLimit(
       config
     );
     if (verdict === 'allowed') return null;
+    // A sliding window frees capacity gradually and the verdict carries no
+    // reset time, so the full window is a conservative upper bound.
     return limited(verdict === 'denied' ? config.windowMs / 1000 : 60);
   } catch {
     return limited(60);

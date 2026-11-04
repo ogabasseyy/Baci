@@ -89,12 +89,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         'PROFILE_VERIFICATION_REQUIRED',
         409
       );
-    const limited = await chargeWalletPinCustomerLimit(
-      'goal-verify',
-      identity.merchantId,
-      identity.userId
-    );
-    if (limited) return limited;
     const supabase = auth.supabase;
     // A funding proof is only issued for an active goal of this customer
     // while the customer savings feature is on. A cancel or complete proof
@@ -176,6 +170,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           409
         );
     }
+    // Charged only now that the request will actually examine a PIN, so a
+    // mistyped goal id or an eligibility refusal never burns the budget.
+    const limited = await chargeWalletPinCustomerLimit(
+      'goal-verify',
+      identity.merchantId,
+      identity.userId
+    );
+    if (limited) return limited;
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

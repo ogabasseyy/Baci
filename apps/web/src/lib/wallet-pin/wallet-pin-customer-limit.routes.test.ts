@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   tenant: vi.fn(),
   rpc: vi.fn(),
   verify: vi.fn(),
+  owned: vi.fn(),
+  issued: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({
@@ -26,14 +28,30 @@ vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   }),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-savings-runtime', () => ({
-  readPrimaryWalletSavingsRuntime: () => ({ merchantId: merchantA }),
-  readPrimaryWalletSavingsRecoveryRuntime: () => ({ merchantId: merchantA }),
+  readPrimaryWalletSavingsRuntime: () => ({
+    merchantId: merchantA,
+    businessId: 'b',
+    configuration: { integrationId: 'i', environment: 'sandbox' },
+  }),
+  readPrimaryWalletSavingsRecoveryRuntime: () => ({
+    merchantId: merchantA,
+    businessId: 'b',
+    configuration: { integrationId: 'i', environment: 'sandbox' },
+  }),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
 }));
 vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
+}));
+vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
+  isActiveOwnGoal: mocks.owned,
+  isCancellableOwnGoal: mocks.owned,
+  isCompletableOwnGoal: mocks.owned,
+}));
+vi.mock('@/lib/piggyvest/goal-cancel-runtime', () => ({
+  isPrimaryWalletGoalCancelIssued: mocks.issued,
 }));
 vi.mock(
   '@/app/api/storefront/customer/savings/customer-savings-feature-settings',
@@ -83,6 +101,9 @@ beforeEach(() => {
     supabase: { rpc: mocks.rpc },
   });
   mocks.rpc.mockResolvedValue({ data: null, error: { message: 'x' } });
+  mocks.owned.mockResolvedValue(true);
+  mocks.issued.mockResolvedValue(true);
+  mocks.verify.mockResolvedValue({ status: 'not_set' });
   mocks.tenant.mockImplementation(
     async (ns: string, key: string, cfg: { maxRequests: number }) => {
       if (redisDown) return 'unavailable';
@@ -151,20 +172,43 @@ describe('per-customer wallet-PIN limiter on the routes', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it('limits goal-pin verify per customer before any PIN check', async () => {
+  const goalBody = {
+    merchantId: merchantA,
+    pin: '482915',
+    action: 'cancel',
+    goalId,
+    operationId: goalId,
+  };
+
+  it('limits goal-pin verify per customer once PIN checks are reached', async () => {
     asCustomer(alice);
-    const body = {
-      merchantId: merchantA,
-      pin: '482915',
-      action: 'cancel',
-      goalId,
-      operationId: goalId,
-    };
     for (let i = 0; i < 5; i++)
-      await goalVerify(post('savings/goal-pin/verify', body));
-    const response = await goalVerify(post('savings/goal-pin/verify', body));
+      expect(
+        (await goalVerify(post('savings/goal-pin/verify', goalBody))).status
+      ).toBe(409);
+    expect(mocks.verify).toHaveBeenCalledTimes(5);
+    const response = await goalVerify(
+      post('savings/goal-pin/verify', goalBody)
+    );
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('RATE_LIMITED');
+    expect(mocks.verify).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not charge goal-pin requests that never reach a PIN check', async () => {
+    asCustomer(alice);
+    mocks.owned.mockResolvedValue(false);
+    for (let i = 0; i < 8; i++)
+      expect(
+        (await goalVerify(post('savings/goal-pin/verify', goalBody))).status
+      ).toBe(404);
+    mocks.owned.mockResolvedValue(true);
+    mocks.issued.mockResolvedValue(false);
+    for (let i = 0; i < 8; i++)
+      expect(
+        (await goalVerify(post('savings/goal-pin/verify', goalBody))).status
+      ).toBe(409);
+    expect(mocks.tenant).not.toHaveBeenCalled();
     expect(mocks.verify).not.toHaveBeenCalled();
   });
 });

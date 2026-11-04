@@ -54,6 +54,7 @@ const page = {
       price: 450_000,
       condition: 'new',
       stock: 4,
+      manage_stock: true,
       availability: 'InStock' as const,
       has_condition_offers: false,
     },

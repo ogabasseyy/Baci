@@ -23,7 +23,7 @@ import {
   getGamingLaptopGraphicsHub,
 } from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
-import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { getConfiguredPriceBands } from '@/lib/storefront-compare/get-configured-price-bands';
 import { isStorefrontDocumentNavigation } from '@/lib/storefront-document-navigation';
 import { storefrontInternalPreflight } from '@/lib/storefront-internal-preflight';
 import { callStorefrontPreflightRpc } from '@/lib/storefront-preflight-rpc';
@@ -59,11 +59,18 @@ function checkModelFamilyAuthorityEntry(
   );
 }
 
+/**
+ * Validates whether a price band slug exists in static taxonomy.
+ * Trade-off: preflight resolves only merchant publication status without
+ * fetching payout currency. Currency gating for NGN-gated categories is enforced
+ * downstream in loadPriceBandPage via getCuratedPriceBands(..., { merchantCurrency }),
+ * which returns notFound() for non-NGN merchants.
+ */
 function checkCuratedPriceBand(
   categorySlug: string,
   priceBandSlug: string
 ): boolean {
-  return getCuratedPriceBands(categorySlug).some(
+  return getConfiguredPriceBands(categorySlug).some(
     (band) => band.slug === priceBandSlug
   );
 }

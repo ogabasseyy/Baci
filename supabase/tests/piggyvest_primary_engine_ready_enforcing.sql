@@ -44,11 +44,12 @@ GRANT piggyvest_primary_evidence TO pv_er_exec;
 DO $$
 BEGIN
   IF to_regrole('baci_primary_bank_worker') IS NULL THEN
-    CREATE ROLE baci_primary_bank_worker LOGIN;
+    CREATE ROLE baci_primary_bank_worker LOGIN NOSUPERUSER NOBYPASSRLS NOREPLICATION;
   END IF;
 END $$;
-ALTER ROLE baci_primary_bank_worker LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE
-  NOCREATEDB NOREPLICATION VALID UNTIL '2100-01-01';
+-- Only the attributes a role manager may change; the superuser-only ones
+-- (SUPERUSER, BYPASSRLS, REPLICATION) are already off for a created role.
+ALTER ROLE baci_primary_bank_worker LOGIN NOCREATEROLE NOCREATEDB VALID UNTIL '2100-01-01';
 GRANT primary_bank_inbox_worker TO baci_primary_bank_worker;
 
 -- The privilege scan counts everything PUBLIC may execute on the database
@@ -218,6 +219,7 @@ SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'i
 ROLLBACK TO SAVEPOINT bank_inflow_authority;
 
 \ir piggyvest_primary_engine_ready_enforcing_shared_worker.inc.sql
+\ir piggyvest_primary_engine_ready_enforcing_review.inc.sql
 
 -- 4. Surfaces: unknown, NULL and listed-but-unchecked are never ready, and
 -- the executor's own session reads the same verdict through engine_ready.

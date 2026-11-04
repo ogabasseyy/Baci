@@ -26,7 +26,9 @@
 --   evidence_role_unsafe       (inflow) the evidence capability role is
 --                              missing, can log in or is elevated
 --   login_membership_unsafe    (inflow) the login is not a member of the
---                              evidence role, or holds any other membership
+--                              evidence role, or reaches any role other than
+--                              the evidence role and the readiness reader,
+--                              directly or through another role
 --   inflow_execute_missing     (inflow) the login cannot execute
 --                              apply_inflow_environment
 --   inflow_authority_not_enabled  no enabled inflow authority names the login
@@ -43,7 +45,6 @@
 -- engine_fences(surface, login) holds the rules so the SQL suite can test
 -- each fence for a throwaway login without logging in as one. Nobody but the
 -- owner (through engine_ready) can execute it.
-BEGIN;
 
 CREATE FUNCTION piggyvest_primary.engine_fences(p_surface text, p_login name)
 RETURNS text[] LANGUAGE plpgsql STABLE SET search_path = pg_catalog AS $$
@@ -90,11 +91,18 @@ BEGIN
       v_missing := array_append(v_missing, 'evidence_role_unsafe'::text);
     END IF;
     IF v_login_exists AND to_regrole('piggyvest_primary_evidence') IS NOT NULL THEN
+      -- Every role the login can reach, directly or through another role,
+      -- must be the evidence role or the readiness reader it carries. A
+      -- direct-only check would miss a privileged role inherited through them.
       IF NOT pg_has_role(p_login, 'piggyvest_primary_evidence', 'MEMBER')
-        OR EXISTS (SELECT 1 FROM pg_auth_members m
-          JOIN pg_roles member ON member.oid = m.member
-          JOIN pg_roles parent ON parent.oid = m.roleid
-          WHERE member.rolname = p_login AND parent.rolname <> 'piggyvest_primary_evidence') THEN
+        OR EXISTS (WITH RECURSIVE chain(roleid) AS (
+            SELECT m.roleid FROM pg_auth_members m
+              JOIN pg_roles member ON member.oid = m.member WHERE member.rolname = p_login
+            UNION
+            SELECT m.roleid FROM pg_auth_members m JOIN chain c ON m.member = c.roleid)
+          SELECT 1 FROM chain JOIN pg_roles parent ON parent.oid = chain.roleid
+          WHERE parent.rolname NOT IN ('piggyvest_primary_evidence',
+            'piggyvest_primary_readiness_reader')) THEN
         v_missing := array_append(v_missing, 'login_membership_unsafe'::text);
       END IF;
     END IF;
@@ -125,7 +133,8 @@ BEGIN
     END IF;
     IF to_regclass('piggyvest_primary.bank_inbox_authorities') IS NULL
       OR to_regclass('piggyvest_primary.integrations') IS NULL
-      OR to_regclass('piggyvest_primary.inflow_authorities') IS NULL THEN
+      OR to_regclass('piggyvest_primary.inflow_authorities') IS NULL
+      OR to_regclass('piggyvest_primary.bank_signed_inbox') IS NULL THEN
       v_missing := array_append(v_missing, 'ledger_objects_missing'::text);
     -- The worker login is a fixed name, so several integrations can share
     -- it, and engine_ready is asked without an integration id. The verdict
@@ -180,4 +189,3 @@ EXCEPTION WHEN OTHERS THEN
 END $$;
 COMMENT ON FUNCTION piggyvest_primary.engine_ready(text) IS
   'Enforcing readiness check for the PiggyVest engine: ready only when every fence the surface depends on is present; lists missing fences by stable code; any error is not ready.';
-COMMIT;

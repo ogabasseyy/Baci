@@ -100,7 +100,7 @@ export const blogGuideMetadataSchema = z
     metadataStatus: z
       .enum(['unverified', 'proposed', 'verified', 'stale', 'rejected'])
       .default('unverified'),
-    metadataContractVersion: z.number().int().default(1),
+    metadataContractVersion: z.number().int().default(2),
     metadataSourceRevision: z.string().nullish(),
     metadataContentHash: z.string().nullish(),
     metadataVerifiedAt: z.string().datetime().nullish(),

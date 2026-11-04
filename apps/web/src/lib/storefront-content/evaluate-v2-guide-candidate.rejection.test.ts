@@ -43,6 +43,15 @@ describe('evaluateV2GuideCandidate - rejection and edge cases', () => {
     ).toBe(false);
   });
 
+  it('rejects metadata_contract_version below 2', () => {
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_contract_version: 1 },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+  });
+
   it('rejects null guide_kind', () => {
     expect(
       evaluateV2GuideCandidate(

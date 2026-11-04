@@ -6,7 +6,7 @@ ALTER TABLE public.blog_posts
   ADD COLUMN IF NOT EXISTS applicable_brands text[] NOT NULL DEFAULT '{}'::text[],
   ADD COLUMN IF NOT EXISTS metadata_source text NOT NULL DEFAULT 'unverified',
   ADD COLUMN IF NOT EXISTS metadata_status text NOT NULL DEFAULT 'unverified',
-  ADD COLUMN IF NOT EXISTS metadata_contract_version integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS metadata_contract_version integer NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS metadata_source_revision text,
   ADD COLUMN IF NOT EXISTS metadata_content_hash text,
   ADD COLUMN IF NOT EXISTS metadata_verified_at timestamptz,
@@ -88,9 +88,17 @@ CREATE POLICY "Public can read published blog guide subjects" ON public.blog_pos
 
 DROP POLICY IF EXISTS "Merchant staff can manage blog guide subjects" ON public.blog_post_guide_subjects;
 CREATE POLICY "Merchant staff can manage blog guide subjects" ON public.blog_post_guide_subjects FOR ALL TO authenticated
-  USING (public.has_merchant_access(merchant_id))
+  USING (
+    merchant_id IS NOT NULL AND (
+      merchant_id IN (SELECT m.id FROM public.merchants AS m WHERE m.user_id = (SELECT auth.uid()))
+      OR public.check_staff_permission((SELECT auth.uid()), merchant_id, 'marketing', 'edit')
+    )
+  )
   WITH CHECK (
-    public.has_merchant_access(merchant_id)
+    merchant_id IS NOT NULL AND (
+      merchant_id IN (SELECT m.id FROM public.merchants AS m WHERE m.user_id = (SELECT auth.uid()))
+      OR public.check_staff_permission((SELECT auth.uid()), merchant_id, 'marketing', 'edit')
+    )
     AND EXISTS (SELECT 1 FROM public.blog_posts WHERE blog_posts.id = blog_post_guide_subjects.blog_post_id AND blog_posts.merchant_id = blog_post_guide_subjects.merchant_id)
     AND EXISTS (SELECT 1 FROM public.products WHERE products.id = blog_post_guide_subjects.product_id AND products.merchant_id = blog_post_guide_subjects.merchant_id)
   );
@@ -214,6 +222,7 @@ BEGIN
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
     WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
       AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
+      AND post.metadata_contract_version >= 2
       AND (
         (subj.subject_role = 'primary' AND post.guide_scope = 'product_specific' AND post.guide_kind = 'buyer-guide')
         OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support')
@@ -233,6 +242,7 @@ BEGIN
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
     WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
       AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
+      AND post.metadata_contract_version >= 2
       AND post.guide_kind IN ('buyer-guide', 'best-in-nigeria') AND v_category_match_id IS NOT NULL AND post.cluster_category_id = v_category_match_id
       AND (
         (post.guide_scope = 'brand_family_guide' AND v_target_brand_norm <> '' AND EXISTS (

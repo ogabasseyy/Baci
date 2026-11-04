@@ -87,7 +87,19 @@ export function evaluateV2GuideCandidate(
     };
   }
 
-  // 2. Disallow general_news and missing kind
+  // 2. Reject metadata contract version below 2
+  if (
+    candidate.metadata_contract_version !== undefined &&
+    candidate.metadata_contract_version !== null &&
+    candidate.metadata_contract_version < 2
+  ) {
+    return {
+      eligible: false,
+      exclusionReason: `metadata_contract_version "${candidate.metadata_contract_version}" is below required contract version 2`,
+    };
+  }
+
+  // 3. Disallow general_news and missing kind
   if (candidate.guide_scope === 'general_news') {
     return {
       eligible: false,

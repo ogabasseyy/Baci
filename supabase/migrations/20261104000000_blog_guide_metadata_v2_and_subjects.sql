@@ -242,6 +242,7 @@ BEGIN
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
     WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
       AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified' AND post.metadata_contract_version >= 2
+      AND NOT EXISTS (SELECT 1 FROM public.merchant_blog_classifications AS mc WHERE mc.post_id = post.id AND mc.merchant_id = p_merchant_id AND mc.stale_at IS NULL AND mc.intent = 'news')
       AND (
         (subj.subject_role = 'primary' AND post.guide_scope = 'product_specific' AND post.guide_kind = 'buyer-guide')
         OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support'
@@ -265,7 +266,7 @@ BEGIN
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
     WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
       AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
-      AND post.metadata_contract_version >= 2
+      AND post.metadata_contract_version >= 2 AND NOT EXISTS (SELECT 1 FROM public.merchant_blog_classifications AS mc WHERE mc.post_id = post.id AND mc.merchant_id = p_merchant_id AND mc.stale_at IS NULL AND mc.intent = 'news')
       AND post.guide_kind IN ('buyer-guide', 'best-in-nigeria') AND v_category_match_id IS NOT NULL AND post.cluster_category_id = v_category_match_id
       AND (
         (post.guide_scope = 'brand_family_guide' AND v_target_brand_norm <> '' AND EXISTS (
@@ -294,7 +295,6 @@ BEGIN
   LIMIT v_effective_limit;
 END;
 $function$;
-
 ALTER FUNCTION public.get_storefront_cluster_guide_candidates_v2(uuid, text, uuid, uuid, integer) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.get_storefront_cluster_guide_candidates_v2(uuid, text, uuid, uuid, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_storefront_cluster_guide_candidates_v2(uuid, text, uuid, uuid, integer) TO anon, authenticated, service_role;

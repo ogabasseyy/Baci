@@ -236,6 +236,26 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
         })
       )
     ).toEqual([]);
+
+    const partialUnverifiedV2Post = {
+      slug: 'best-iphone-buying-guide-nigeria',
+      title: 'Best iPhone Buying Guide in Nigeria',
+      excerpt: 'Compare iPhone models.',
+      category: 'Smartphones',
+      tags: ['iphone', 'buying guide'],
+      keywords: ['iphone'],
+      featured_image_url: null,
+      published_at: '2026-03-01T00:00:00Z',
+      reading_time_minutes: 5,
+      guide_kind: 'troubleshooting' as const,
+      metadata_status: 'unverified' as const,
+    };
+
+    expect(
+      buildProductGuideLinks(
+        makeInput({ guidePosts: [partialUnverifiedV2Post] })
+      )
+    ).toEqual([]);
   });
 
   it('rejects V2 post with category mismatch or invalid guide_kind and caps results at 3', () => {
@@ -270,10 +290,7 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
     );
 
     const result = buildProductGuideLinks(
-      makeInput({
-        categorySlug: 'playstation-5',
-        guidePosts: guides,
-      })
+      makeInput({ categorySlug: 'playstation-5', guidePosts: guides })
     );
     expect(result).toHaveLength(3);
   });

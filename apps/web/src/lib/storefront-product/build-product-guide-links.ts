@@ -76,9 +76,12 @@ function hasConfiguredPostBrandMismatch(
 function hasV2Metadata(post: PublishedClusterPost): boolean {
   return Boolean(
     post.guide_scope ||
+      post.guide_kind ||
       (post.metadata_status && post.metadata_status !== 'unverified') ||
       post.cluster_category_id ||
       post.cluster_category_slug ||
+      post.applicable_brands?.length ||
+      post.metadata_source_revision ||
       post.subjects?.length ||
       post.eligibility_reason
   );

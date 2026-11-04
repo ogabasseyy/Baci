@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T03:28:58+00:00",
-  "source_revision": "ebb3e7f2f24a03cac943c6de1d6551fc96193bb8",
-  "evidence_digest": "6cb3954a0b371dc26359abdecf3ea9dc09c0935e5fd89256e4fe59a62145eae3",
-  "claims_digest": "9811c786c5524489c756374f7979d38b643006baafcb4c08300474a3a4426511",
-  "review_scope": "Source evidence only, reviewed after main 65af43d872 and the PR 3993 boundary fixes. Full-code MCP build/prerender, private preview and signed runner/delivery exist in source; production composition remains uninstalled/disabled. Reviewed native PDP ownership/data, checkout layout fallback, categorized performance evidence and declared-route preview selection. Additive migration registration preserves the frozen baseline. Existing capability statuses and production/payment authority are unchanged. Local synthetic proofs do not establish deployed ChatGPT access, publication or CWV qualification. GitHub review, current-candidate CI, host/TLS/scoped verifier qualification and separate rollout authorization remain required. Benchmarks are parked.",
+  "reviewed_at": "2026-11-04T11:50:17+00:00",
+  "source_revision": "19157edc4f8dee460b187cc4d4515f8dd5bac3b4",
+  "evidence_digest": "efd97a68f3d1234bdedff8533a40e8bb59e47613c703c1c8d771d380fc97ff06",
+  "claims_digest": "3469cb76a800e33cdbf8b76851236dc30c497498ef495eded1132299222098da",
+  "review_scope": "Source evidence only after main 21f52993f8 and the latest PR 3993 Codex/Muse corrections. Reviewed native route layouts/providers, dynamic preview parameters, fresh cart-product admission, variant availability, image mapping, retention and five-project typecheck coverage. Private preview CORS is narrowed without treating opaque origins as identity; URL capabilities still require secrecy and expiry. Generated evidence is archived locally with digest receipts. Production composition remains uninstalled/disabled and other capability limitations are unchanged. Synthetic proofs do not establish live ChatGPT access, publication or CWV qualification. Current-candidate CI, runner/delivery host qualification and separate rollout authorization remain required. Benchmarks are parked.",
   "capabilities": [
     {
       "id": "payments",

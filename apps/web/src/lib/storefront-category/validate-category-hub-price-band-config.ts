@@ -3,8 +3,9 @@ import { getConfiguredPriceBands } from '@/lib/storefront-compare/get-configured
 
 export function validateCategoryHubPriceBandConfig(categorySlug: string): void {
   const bands = getConfiguredPriceBands(categorySlug);
-  const priorityDefaults =
-    CATEGORY_HUB_DEFAULTS[categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS];
+  const priorityDefaults = Object.hasOwn(CATEGORY_HUB_DEFAULTS, categorySlug)
+    ? CATEGORY_HUB_DEFAULTS[categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS]
+    : null;
 
   if (!priorityDefaults) {
     if (bands.length > 0) {

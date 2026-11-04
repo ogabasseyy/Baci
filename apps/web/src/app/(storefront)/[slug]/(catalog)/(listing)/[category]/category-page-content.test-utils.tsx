@@ -248,21 +248,25 @@ export function resetCategoryPageContentMocks() {
   mockGetCachedCategoryPageGraphicsOptions.mockResolvedValue([]);
   mockGetCachedBrandAuthorityEntries.mockResolvedValue([]);
   mockResolveCategoryPageName.mockReturnValue('Phones');
-  mockNormalizeCategoryPageProducts.mockReturnValue([
-    {
-      id: 'product-1',
-      name: 'Phone',
-      description: 'Phone description',
-      rawPrice: 250000,
-      stock: 5,
-      image: 'https://cdn.example.com/phone.png',
-      brand: 'Brand',
-      category: 'Phones',
-      category_slug: 'phones',
-      slug: 'phone',
-      condition: 'new',
-    },
-  ]);
+  mockNormalizeCategoryPageProducts.mockImplementation((products: unknown[]) =>
+    Array.isArray(products) && products.length === 0
+      ? []
+      : [
+          {
+            id: 'product-1',
+            name: 'Phone',
+            description: 'Phone description',
+            rawPrice: 250000,
+            stock: 5,
+            image: 'https://cdn.example.com/phone.png',
+            brand: 'Brand',
+            category: 'Phones',
+            category_slug: 'phones',
+            slug: 'phone',
+            condition: 'new',
+          },
+        ]
+  );
   mockBuildCategoryPageHubModel.mockReturnValue({
     intro: { heading: 'Phones', description: 'Phone collection' },
     trustFeatures: [],

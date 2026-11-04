@@ -41,7 +41,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 
 import { useRouter } from 'next/navigation';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
-import CustomerOrderDetailsPage from './page';
+import CustomerOrderDetailsPage from './customer-order-details-client';
 
 function createJsonResponse(body: unknown): Response {
   const textBody = JSON.stringify(body);

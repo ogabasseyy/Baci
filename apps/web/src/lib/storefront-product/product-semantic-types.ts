@@ -6,12 +6,14 @@ import type {
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 
 export interface ProductSemanticCandidate {
+  id?: string;
   slug: string;
   name: string;
   price: number;
   brand?: string | null;
   condition?: string | null;
   stock?: number | null;
+  category_id?: string | null;
   category_slug?: string | null;
   category_slugs?: string[] | null;
   product_key_specs?: Record<string, unknown> | null;

@@ -176,7 +176,7 @@ BEGIN
     -- Netting: closed goals expect 0, an unsettled cancel changes nothing.
     FOR expected IN SELECT item FROM jsonb_array_elements(snapshot->'wallets') item LOOP
       IF (expected->>'expectedKobo')::bigint IS DISTINCT FROM
-        CASE WHEN expected->>'walletId' IN ('rotation-wallet-00001','rotation-wallet-00002') THEN 0 ELSE 100 END THEN
+        (CASE WHEN expected->>'walletId' IN ('rotation-wallet-00001','rotation-wallet-00002') THEN 0 ELSE 100 END) THEN
         RAISE EXCEPTION 'Slot % wallet expected wrong amount: %', slot, expected;
       END IF;
       netted:=netted+1;

@@ -1,4 +1,5 @@
 import type { ExperienceManifest } from '@baci/shared/experience';
+import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 export const RESERVED_EXPERIENCE_PAGES = new Set([
   'about',
   'contact',
@@ -91,7 +92,14 @@ export function resolveExperienceRoute(
 }
 
 export function isCategorizedExperienceProductPath(path: string) {
-  return /^\/(?!pages\/|api\/|account\/|auth\/|checkout\/|cart\/|blog\/)[a-z0-9-]+\/[a-z0-9-]+$/.test(
-    path
+  const [, family, handle] = path.split('/');
+  return (
+    /^\/[a-z0-9-]+\/[a-z0-9-]+$/.test(path) &&
+    !storefrontRouteSegments.STOREFRONT_ROUTE_FIRST_SEGMENTS.has(family) &&
+    !storefrontRouteSegments.CUSTOM_DOMAIN_APP_ROUTE_FIRST_SEGMENTS.has(
+      family
+    ) &&
+    // Category compare hubs are native pages, not a product named "compare".
+    handle !== 'compare'
   );
 }

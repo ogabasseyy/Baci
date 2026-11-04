@@ -38,3 +38,22 @@ it('keeps the native cart continuation layout even when the experience owns prod
   expect(screen.queryByText('Custom product')).toBeNull();
   location.path = '/qa1';
 });
+
+it.each([
+  '/repair/status',
+  '/repairs/iphone-15',
+])('retains native providers for %s when product routes are authored', (path) => {
+  location.path = `/qa1${path}`;
+  render(
+    <ExperienceLayoutSwitch
+      routes={[{ path: '/products/[handle]', view: 'product' }]}
+      basePath="/qa1"
+      nativeLayout={<p>Native repair providers</p>}
+    >
+      <p>Custom product</p>
+    </ExperienceLayoutSwitch>
+  );
+  expect(screen.getByText('Native repair providers')).toBeVisible();
+  expect(screen.queryByText('Custom product')).toBeNull();
+  location.path = '/qa1';
+});

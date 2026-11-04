@@ -175,7 +175,7 @@ describe('ProductsPageContent', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     // Each merchant-defined distinct slug should render its own link. Assert
     // against the actual rendered anchors so we don't couple to React element
@@ -257,7 +257,7 @@ describe('ProductsPageContent', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(screen.getByText(/₹|INR/)).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
@@ -291,12 +291,11 @@ describe('ProductsPageContent', () => {
       ],
     });
 
-    render(
-      (await ProductsPageContent({
-        params: Promise.resolve({ slug: 'demo-store' }),
-        searchParams: Promise.resolve({ page: '1' }),
-      })) as React.ReactElement
-    );
+    const boundary = await ProductsPageContent({
+      params: Promise.resolve({ slug: 'demo-store' }),
+      searchParams: Promise.resolve({ page: '1' }),
+    });
+    render((boundary.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.getByRole('heading', { name: 'Galaxy S25' })
@@ -333,7 +332,7 @@ describe('ProductsPageContent', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(mockStorefrontPagination).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -379,7 +378,7 @@ describe('ProductsPageContent', () => {
       searchParams: Promise.resolve({ page: '1' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.queryByRole('heading', { name: 'Popular Product Links' })
@@ -441,7 +440,7 @@ describe('ProductsPageContent', () => {
       searchParams: Promise.resolve({ page: '2' }),
     });
 
-    render(result as React.ReactElement);
+    render((result.props as { fallback: React.ReactElement }).fallback);
 
     expect(
       screen.getByRole('heading', { name: 'Popular Product Links' })

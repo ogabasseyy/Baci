@@ -244,15 +244,9 @@ it('normal-auth HTTP upload -> real offline build -> private preview -> owner ap
       });
     }
 
-    const evidence = (
-      await f.pool.query(
-        'SELECT e.id FROM experience_evidence e JOIN experience_builds b ON b.job_id=e.job_id WHERE b.id=$1',
-        [built.buildId]
-      )
-    ).rows[0].id;
     const apply = await call('apply_experience', {
       buildId: built.buildId,
-      evidenceId: evidence,
+      evidenceId: preview.evidenceId,
       expectedVersion: 0,
       idempotencyKey: randomUUID(),
     });

@@ -210,3 +210,42 @@ it('charges pending launches against a merchant prerender quota without blocking
       .bindingId
   ).toBe('other');
 });
+
+it('counts consumed and pending previews together, scopes merchants, and releases slots after revocation/expiry', () => {
+  let now = 1000;
+  const vault = createPreviewVault({
+    now: () => now,
+    isActive: async () => true,
+    origin: 'http://localhost:4101',
+  });
+  const bytes = Buffer.from('export{}');
+  const make = (merchantId: string, bindingId: string) => ({
+    ownerId: 'owner',
+    merchantId,
+    bindingId,
+    buildDigest: 'a'.repeat(64),
+    files: [
+      {
+        path: 'app.js',
+        mime: 'text/javascript',
+        bytes,
+        digest: digestBytes(bytes),
+      },
+    ],
+  });
+  for (let i = 0; i < 8; i++) {
+    const ref = vault.create(make('a', `a-${i}`));
+    vault.consume('owner', ref);
+  }
+  expect(() => vault.create(make('a', 'extra'))).toThrow('QUOTA_EXCEEDED');
+  for (const tenant of ['b', 'c', 'd'])
+    for (let i = 0; i < 8; i++) {
+      const ref = vault.create(make(tenant, `${tenant}-${i}`));
+      if (i % 2 === 0) vault.consume('owner', ref);
+    }
+  expect(() => vault.create(make('e', 'extra'))).toThrow('QUOTA_EXCEEDED');
+  vault.revoke('a-0');
+  expect(() => vault.create(make('a', 'replacement'))).not.toThrow();
+  now = 601001;
+  expect(() => vault.create(make('a', 'after-expiry'))).not.toThrow();
+});

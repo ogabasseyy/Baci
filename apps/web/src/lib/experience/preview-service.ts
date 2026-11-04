@@ -79,8 +79,20 @@ export function createPreviewVault(deps: {
       const scopedLaunches = [...launches.values()].filter(
         (l) => scopeOf(l) === scope
       );
+      // Consuming a one-use reference does not retire its live resource lease.
+      const bindings = new Map<string, string>();
+      for (const launch of launches.values())
+        bindings.set(`${scopeOf(launch)}:${launch.bindingId}`, scopeOf(launch));
+      for (const resource of resources.values())
+        bindings.set(`${resource.scope}:${resource.bindingId}`, resource.scope);
+      const newBinding = !bindings.has(`${scope}:${input.bindingId}`);
+      const scopedBindings = [...bindings.values()].filter(
+        (value) => value === scope
+      ).length;
       if (
         launches.size >= 32 ||
+        (newBinding && bindings.size >= 32) ||
+        (newBinding && scopedBindings >= 8) ||
         scopedLaunches.length >= 8 ||
         input.files.length > 34 ||
         input.files.reduce((n, f) => n + f.bytes.length, 0) > 20971520

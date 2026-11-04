@@ -17,7 +17,7 @@ export async function recordLocalMcpEvidence(input: {
   png: Buffer;
 }) {
   const folder = new URL(
-    '../../../../docs/connectors/evidence/experience-checkpoint-d/',
+    '../../../../.superpowers/sdd/experience-mcp-current-proof/',
     import.meta.url
   );
   const files = await input.client

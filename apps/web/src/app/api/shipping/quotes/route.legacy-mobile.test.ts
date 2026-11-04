@@ -8,6 +8,7 @@ import {
   EMPTY_RATES_PAYLOAD,
   giglQuote,
   mockCreateAdminClient,
+  mockCreatePublicClient,
   mockCreateServerClient,
   mockGetMerchantForApiRequest,
   mockGetQuotes,
@@ -42,6 +43,7 @@ describe('legacy mobile shipping quotes without a client header', () => {
     };
     mockCreateServerClient.mockResolvedValue(client);
     mockCreateAdminClient.mockReturnValue(client);
+    mockCreatePublicClient.mockReturnValue(client);
     const { POST } = await import('./route');
     const request = buildDomesticRequest({
       merchantId: MERCHANT_ID,
@@ -109,10 +111,9 @@ describe('legacy mobile shipping quotes without a client header', () => {
       data: EMPTY_RATES_PAYLOAD,
       error: null,
     });
-    mockCreateAdminClient.mockReturnValue({
-      from: quoteWriteFrom,
-      rpc: rateRpc,
-    });
+    const ratesClient = { from: quoteWriteFrom, rpc: rateRpc };
+    mockCreateAdminClient.mockReturnValue(ratesClient);
+    mockCreatePublicClient.mockReturnValue(ratesClient);
     mockCreateServerClient.mockResolvedValue({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
       from: quoteWriteFrom,

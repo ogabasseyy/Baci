@@ -61,9 +61,21 @@ export async function runStorefrontEdit(
       const provider = Promise.resolve().then(() =>
         deps.generate({ source, instructions: lease.instructions, signal })
       );
-      void provider.then(acknowledge, acknowledge).catch(() => undefined);
+      const settled = provider.then(
+        async (generated) => {
+          await acknowledge();
+          return generated;
+        },
+        async (error: unknown) => {
+          await acknowledge();
+          throw error;
+        }
+      );
+      // Keep cleanup attached after a timeout. Successful generation waits for
+      // its acknowledgement transaction before finish_edit.
+      void settled.catch(() => undefined);
       const generated = await Promise.race([
-        provider,
+        settled,
         new Promise<never>((_, reject) => {
           const expired = () => reject(new Error('Provider timeout'));
           if (signal.aborted) expired();

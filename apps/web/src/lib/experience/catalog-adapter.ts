@@ -115,13 +115,10 @@ export async function loadExperienceCatalog(
       const products = r.data ?? [];
       if (!products.length) return projectExperienceCatalog(merchant, []);
       const ids = products.map((p) => p.id);
-      const [variants, visibility, summaries] = await Promise.all([
+      // The public RPC excludes inventory anchors. Anonymous RLS deliberately
+      // hides private variant metadata; it must not become a visibility join.
+      const [variants, summaries] = await Promise.all([
         client.rpc('get_storefront_product_variants', { p_product_ids: ids }),
-        client
-          .from('product_variants')
-          .select('id,product_id,is_inventory_anchor')
-          .eq('merchant_id', merchant.id)
-          .in('product_id', ids),
         getPublicSerializedVariantSummariesByProductId(
           client,
           merchant.id,
@@ -131,8 +128,7 @@ export async function loadExperienceCatalog(
       if (
         variants.error ||
         !Array.isArray(variants.data) ||
-        variants.data.length > 500 ||
-        visibility.error
+        variants.data.length > 500
       )
         throw Error('CATALOG_UNAVAILABLE');
       return projectExperienceCatalog(
@@ -156,14 +152,11 @@ export async function loadExperienceCatalog(
           product_variants: normalizeStorefrontProductVariants(
             variants.data
               .filter((v: Record<string, unknown>) => v.product_id === p.id)
-              .flatMap((v: Record<string, unknown>) => {
-                const metadata = visibility.data.find(
-                  (m) => m.id === v.id && m.product_id === p.id
-                );
-                return metadata
-                  ? [{ ...v, ...metadata, id: String(v.id) }]
-                  : [];
-              }),
+              .map((v: Record<string, unknown>) => ({
+                ...v,
+                id: String(v.id),
+              })),
+
             {
               merchantId: merchant.id,
               productId: p.id,

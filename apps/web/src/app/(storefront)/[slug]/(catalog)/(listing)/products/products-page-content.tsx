@@ -40,21 +40,17 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const resolvedSearchParams = await searchParams;
   const currentPage = parseStorefrontPageParam(resolvedSearchParams.page);
-
   if (!currentPage) {
     notFound();
   }
-
   if (!isValidMerchantIdentifier(slug)) {
     notFound();
   }
-
   const merchant = await getRequestScopedMerchant(slug);
 
   if (!merchant) {
     notFound();
   }
-
   const headersList = await headers();
 
   const showMaintainedLinkModules = merchant.id === OGABASSEY_MERCHANT_ID;
@@ -77,7 +73,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
   if (!currentProductIndex.hasError && currentPage > totalPages) {
     notFound();
   }
-
   const baseUrl = buildStoreUrl(merchant);
   const pathPrefix = getStorefrontPathPrefix(headersList, merchant);
   const description =
@@ -152,148 +147,150 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
           .slice(0, 18)
       : [];
 
-  return await ExperienceServerBoundary({
-    merchant,
-    path: '/products',
-    fallback: (
-      <>
-        <JsonLd data={collectionSchema} />
-        <JsonLd data={breadcrumbSchema} />
+  return (
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={'/products'}
+      fallback={
+        <>
+          <JsonLd data={collectionSchema} />
+          <JsonLd data={breadcrumbSchema} />
 
-        <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6">
-          <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-            <nav className="flex items-center gap-2 text-sm text-store-background-text/55">
-              <Link
-                href={asRoute(pathPrefix || '/')}
-                prefetch={false}
-                className="transition-colors hover:text-store-primary"
-              >
-                Home
-              </Link>
-              <span aria-hidden="true">/</span>
-              <span className="font-medium text-store-background-text">
-                Products
-              </span>
-            </nav>
-
-            <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">
+          <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6">
+            <div className="mx-auto max-w-[1400px] px-4 md:px-6">
+              <nav className="flex items-center gap-2 text-sm text-store-background-text/55">
+                <Link
+                  href={asRoute(pathPrefix || '/')}
+                  prefetch={false}
+                  className="transition-colors hover:text-store-primary"
+                >
+                  Home
+                </Link>
+                <span aria-hidden="true">/</span>
+                <span className="font-medium text-store-background-text">
                   Products
-                </h1>
-                <p className="max-w-2xl text-sm text-store-background-text/60 md:text-base">
-                  {description}
+                </span>
+              </nav>
+
+              <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">
+                    Products
+                  </h1>
+                  <p className="max-w-2xl text-sm text-store-background-text/60 md:text-base">
+                    {description}
+                  </p>
+                </div>
+
+                <p className="text-sm text-store-background-text/50">
+                  Showing {rangeStart}-{rangeEnd} of{' '}
+                  {currentProductIndex.totalCount} products
                 </p>
               </div>
 
-              <p className="text-sm text-store-background-text/50">
-                Showing {rangeStart}-{rangeEnd} of{' '}
-                {currentProductIndex.totalCount} products
-              </p>
-            </div>
+              {displayCategories.length > 0 && (
+                <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
+                  <h2 className="text-lg font-semibold text-store-background-text">
+                    Browse Categories
+                  </h2>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {displayCategories.map((category) => (
+                      <Link
+                        key={category.id}
+                        href={asRoute(`${pathPrefix}/${category.slug}`)}
+                        prefetch={false}
+                        className="rounded-full border border-store-background-text/10 bg-store-background px-4 py-2 text-sm font-medium text-store-background-text transition-colors hover:border-store-primary hover:text-store-primary"
+                      >
+                        {category.name}
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-            {displayCategories.length > 0 && (
-              <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
-                <h2 className="text-lg font-semibold text-store-background-text">
-                  Browse Categories
-                </h2>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  {displayCategories.map((category) => (
-                    <Link
-                      key={category.id}
-                      href={asRoute(`${pathPrefix}/${category.slug}`)}
-                      prefetch={false}
-                      className="rounded-full border border-store-background-text/10 bg-store-background px-4 py-2 text-sm font-medium text-store-background-text transition-colors hover:border-store-primary hover:text-store-primary"
-                    >
-                      {category.name}
-                    </Link>
-                  ))}
+              {currentProductIndex.products.length === 0 ? (
+                <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
+                  <h2 className="text-xl font-semibold text-store-background-text">
+                    No products available
+                  </h2>
+                  <p className="mt-2 text-sm text-store-background-text/55">
+                    This storefront does not have any published products yet.
+                  </p>
                 </div>
-              </section>
-            )}
+              ) : (
+                <>
+                  {deepLinkProducts.length > 0 && (
+                    <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
+                      <h2 className="text-lg font-semibold text-store-background-text">
+                        Popular Product Links
+                      </h2>
+                      <ul className="mt-4 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                        {deepLinkProducts.map((product) => {
+                          const categorySlug =
+                            canonicalizeCategorySlug(product.category_slug) ??
+                            'products';
+                          const href =
+                            categorySlug === 'products'
+                              ? `${pathPrefix}/products/${product.slug}`
+                              : `${pathPrefix}/${categorySlug}/${product.slug}`;
 
-            {currentProductIndex.products.length === 0 ? (
-              <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
-                <h2 className="text-xl font-semibold text-store-background-text">
-                  No products available
-                </h2>
-                <p className="mt-2 text-sm text-store-background-text/55">
-                  This storefront does not have any published products yet.
-                </p>
-              </div>
-            ) : (
-              <>
-                {deepLinkProducts.length > 0 && (
-                  <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
-                    <h2 className="text-lg font-semibold text-store-background-text">
-                      Popular Product Links
-                    </h2>
-                    <ul className="mt-4 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                      {deepLinkProducts.map((product) => {
-                        const categorySlug =
-                          canonicalizeCategorySlug(product.category_slug) ??
-                          'products';
-                        const href =
-                          categorySlug === 'products'
-                            ? `${pathPrefix}/products/${product.slug}`
-                            : `${pathPrefix}/${categorySlug}/${product.slug}`;
+                          return (
+                            <li key={`deep-link-${product.id}`}>
+                              <Link
+                                href={asRoute(href)}
+                                prefetch={false}
+                                className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
+                              >
+                                {product.name}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  )}
 
-                        return (
-                          <li key={`deep-link-${product.id}`}>
-                            <Link
-                              href={asRoute(href)}
-                              prefetch={false}
-                              className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
-                            >
-                              {product.name}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                )}
+                  <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                    {currentProductIndex.products.map((product) => (
+                      <ProductIndexCard
+                        key={product.id}
+                        formattedPrice={formatProductPrice(product.price)}
+                        pathPrefix={pathPrefix}
+                        product={product}
+                      />
+                    ))}
+                  </div>
 
-                <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                  {currentProductIndex.products.map((product) => (
-                    <ProductIndexCard
-                      key={product.id}
-                      formattedPrice={formatProductPrice(product.price)}
-                      pathPrefix={pathPrefix}
-                      product={product}
-                    />
-                  ))}
-                </div>
-
-                <StorefrontPagination
-                  ariaLabel="Products pagination"
-                  basePath={`${pathPrefix}/products`}
-                  crawlDiscoveryAllPagesThreshold={
-                    STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT
-                  }
-                  crawlDiscoveryLabel="Browse product index pages"
-                  crawlDiscoveryPageLabel="Products page"
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                />
-              </>
-            )}
-            {/* These links are independently streamed SEO enrichment. Keep them
+                  <StorefrontPagination
+                    ariaLabel="Products pagination"
+                    basePath={`${pathPrefix}/products`}
+                    crawlDiscoveryAllPagesThreshold={
+                      STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT
+                    }
+                    crawlDiscoveryLabel="Browse product index pages"
+                    crawlDiscoveryPageLabel="Products page"
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                  />
+                </>
+              )}
+              {/* These links are independently streamed SEO enrichment. Keep them
               after the catalog so their late arrival cannot push painted cards. */}
-            {showMaintainedLinkModules && (
-              <Suspense fallback={null}>
-                <ProductsPageDeferredLinkModules
-                  baseUrl={baseUrl}
-                  categories={displayCategories}
-                  merchantId={merchant.id}
-                  pathPrefix={pathPrefix}
-                  productTotalPages={totalPages}
-                />
-              </Suspense>
-            )}
+              {showMaintainedLinkModules && (
+                <Suspense fallback={null}>
+                  <ProductsPageDeferredLinkModules
+                    baseUrl={baseUrl}
+                    categories={displayCategories}
+                    merchantId={merchant.id}
+                    pathPrefix={pathPrefix}
+                    productTotalPages={totalPages}
+                  />
+                </Suspense>
+              )}
+            </div>
           </div>
-        </div>
-      </>
-    ),
-  });
+        </>
+      }
+    />
+  );
 }

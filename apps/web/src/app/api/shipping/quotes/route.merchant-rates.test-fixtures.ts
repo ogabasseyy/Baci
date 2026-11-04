@@ -6,12 +6,13 @@ import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 
 export const mockCreateAdminClient = vi.fn();
+export const mockCreatePublicClient = vi.fn();
 export const mockCreateServerClient = vi.fn();
 export const mockGetMerchantForApiRequest = vi.fn();
 export const mockGetQuotes = vi.fn();
 
 vi.mock('@/lib/supabase/public', () => ({
-  createPublicClient: () => mockCreateAdminClient(),
+  createPublicClient: () => mockCreatePublicClient(),
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -231,6 +232,7 @@ export async function postQuotes(
 ) {
   const supabase = buildSupabaseMock(merchantDetails, ratesPayload, options);
   mockCreateAdminClient.mockReturnValue(supabase);
+  mockCreatePublicClient.mockReturnValue(supabase);
   mockCreateServerClient.mockResolvedValue(supabase);
   const { POST } = await import('./route');
 

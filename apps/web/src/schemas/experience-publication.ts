@@ -22,4 +22,8 @@ export const experienceLifecyclePublicationBinding = z.object({
   merchantId: z.uuid(),
   buildId: z.uuid(),
   action: z.enum(['publish', 'rollback']),
+  status: z
+    .enum(['confirmation-required', 'verifying', 'live', 'superseded'])
+    .default('confirmation-required'),
+  receiptId: z.uuid().optional(),
 });

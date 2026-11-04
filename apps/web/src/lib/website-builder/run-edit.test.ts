@@ -221,3 +221,29 @@ it('finishes transiently when the provider deadline signal is already aborted', 
     timer.mockRestore();
   }
 });
+
+it('waits for settled-provider acknowledgement before finalizing on another RLS connection', async () => {
+  const s = setup();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  execution.acknowledge.mockClear();
+  execution.acknowledge.mockImplementationOnce(() => pending);
+  const result = runStorefrontEdit(s.ctx, s.lease, s);
+  try {
+    await vi.waitFor(() =>
+      expect(execution.acknowledge).toHaveBeenCalledOnce()
+    );
+    expect(s.rpc.mock.calls.map((call) => call[0])).not.toContain(
+      'builder_finish_edit'
+    );
+  } finally {
+    release();
+    await result;
+  }
+  expect(s.rpc).toHaveBeenCalledWith(
+    'builder_finish_edit',
+    expect.objectContaining({ p_outcome: 'ready' })
+  );
+});

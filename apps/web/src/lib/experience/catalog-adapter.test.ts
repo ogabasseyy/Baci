@@ -163,3 +163,53 @@ it('keeps active products with nullable database images in the public catalog', 
   expect(catalog.products).toHaveLength(2);
   expect(catalog.products[0].image).toBeNull();
 });
+
+it.each([
+  { stock: 2, policy: 'off' },
+  { stock: 0, policy: 'serialized_then_unlimited' },
+])('keeps public RPC variants when anonymous RLS hides private metadata: $policy', async ({
+  stock,
+  policy,
+}) => {
+  const variant = {
+    id: 'public-variant',
+    product_id: 'p1',
+    attributes: { Color: 'Black' },
+    stock_quantity: stock,
+    effective_policy: policy,
+    available_units: stock,
+    price_override: 13000,
+  };
+  const client = {
+    from: (table: string) =>
+      Object.assign(
+        Promise.resolve({
+          data:
+            table === 'products'
+              ? [{ ...row, has_variants: true, manage_stock: true }]
+              : [],
+          error: null,
+        }),
+        {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          or: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          range: vi.fn().mockReturnThis(),
+          in: vi.fn().mockReturnThis(),
+          returns: vi.fn().mockReturnThis(),
+          maybeSingle: async () => ({ data: { generation: 1 }, error: null }),
+        }
+      ),
+    rpc: async (name: string) => ({
+      data: name === 'get_storefront_product_variants' ? [variant] : [],
+      error: null,
+    }),
+  };
+  const result = await loadExperienceCatalog(client as never, merchant, {});
+  expect(result?.products[0]).toMatchObject({
+    available: true,
+    requiresVariant: true,
+    variants: [{ id: 'public-variant', available: true, price: 13000 }],
+  });
+});

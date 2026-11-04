@@ -58,10 +58,15 @@ export async function confirmExperiencePublication(
   const binding = experienceLifecyclePublicationBinding.parse(
     await loadLifecycleApproval(client, id)
   );
-  await requirePublicationPerformance(
-    { merchantId: binding.merchantId, supabase: client },
-    binding.buildId
-  );
+  if (binding.status === 'confirmation-required') {
+    await requirePublicationPerformance(
+      { merchantId: binding.merchantId, supabase: client },
+      binding.buildId
+    );
+  } else if (!binding.receiptId) {
+    // Only the normal authenticated SQL lifecycle read can certify a commit.
+    throw Error('UNAVAILABLE');
+  }
   const r = await client.rpc('experience_confirm_publication', {
     p_intent: id,
   });

@@ -115,15 +115,17 @@ export async function StorefrontPageContent({
         }
       : null;
 
-  return await ExperienceServerBoundary({
-    merchant,
-    path: '/',
-    fallback: (
-      <>
-        {storefrontGraphSchema && <JsonLd data={storefrontGraphSchema} />}
+  return (
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={'/'}
+      fallback={
+        <>
+          {storefrontGraphSchema && <JsonLd data={storefrontGraphSchema} />}
 
-        <StorefrontContent merchant={merchant} />
-      </>
-    ),
-  });
+          <StorefrontContent merchant={merchant} />
+        </>
+      }
+    />
+  );
 }

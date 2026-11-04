@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import {
+  isCategorizedExperienceProductPath,
   resolveExperienceRoute,
   validateExperienceRoutes,
 } from './route-ownership';
@@ -50,4 +51,18 @@ it('matches bounded literal and parameter segments without treating brackets as 
   expect(
     resolveExperienceRoute(routes, `/pages/${'a'.repeat(1100)}`)
   ).toBeNull();
+});
+
+it.each([
+  '/repair/status',
+  '/repairs/iphone-15',
+  '/auth/login',
+  '/compare/phones',
+  '/phones/compare',
+  '/collections/all',
+])('keeps authoritative native families outside categorized product ownership: %s', (path) => {
+  expect(isCategorizedExperienceProductPath(path)).toBe(false);
+});
+it('still admits a genuine categorized product candidate', () => {
+  expect(isCategorizedExperienceProductPath('/phones/device')).toBe(true);
 });

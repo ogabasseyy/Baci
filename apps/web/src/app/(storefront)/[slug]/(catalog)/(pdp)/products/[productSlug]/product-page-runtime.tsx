@@ -102,35 +102,37 @@ export async function ProductPageRuntime({
       ? generateFAQSchema(productFaqs)
       : null;
 
-  return await ExperienceServerBoundary({
-    merchant,
-    path: getProductUrl(product),
-    fallback: (
-      <>
-        <JsonLd data={productSchema} />
-        <JsonLd data={breadcrumbSchema} />
-        {faqSchema && <JsonLd data={faqSchema} />}
-        <ProductDetailClient product={product} faqs={productFaqs} />
-        {/* Optional SEO enrichment, live review structured data and the repairs
+  return (
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={getProductUrl(product)}
+      fallback={
+        <>
+          <JsonLd data={productSchema} />
+          <JsonLd data={breadcrumbSchema} />
+          {faqSchema && <JsonLd data={faqSchema} />}
+          <ProductDetailClient product={product} faqs={productFaqs} />
+          {/* Optional SEO enrichment, live review structured data and the repairs
           link stream BELOW the already-rendered product shell. fallback={null}
           is safe: this content appends beneath the visible PDP/LCP shell, so it
           never hides or shifts it (matches the canonical categorized PDP's
           semantic-section boundary). */}
-        <Suspense fallback={null}>
-          <ProductPageBelowFold
-            baseUrl={baseUrl}
-            categoryName={categoryName}
-            categorySlug={categorySlug}
-            currency={currency}
-            merchant={merchant}
-            product={product}
-            productUrl={productUrl}
-            slug={slug}
-          />
-        </Suspense>
-      </>
-    ),
-  });
+          <Suspense fallback={null}>
+            <ProductPageBelowFold
+              baseUrl={baseUrl}
+              categoryName={categoryName}
+              categorySlug={categorySlug}
+              currency={currency}
+              merchant={merchant}
+              product={product}
+              productUrl={productUrl}
+              slug={slug}
+            />
+          </Suspense>
+        </>
+      }
+    />
+  );
 }
 
 interface ProductPageBelowFoldProps {

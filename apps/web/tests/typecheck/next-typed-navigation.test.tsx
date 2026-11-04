@@ -3,10 +3,11 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 import { permanentRedirect, redirect, useRouter } from 'next/navigation';
+import { expect, it } from 'vitest';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
 import { asRoute } from '@/lib/routes';
 
-export function CheckedLinks({ path, slug }: { path: string; slug: string }) {
+function CheckedLinks({ path, slug }: { path: string; slug: string }) {
   const route: Route = asRoute(path);
   return (
     <>
@@ -30,7 +31,7 @@ export function CheckedLinks({ path, slug }: { path: string; slug: string }) {
   );
 }
 
-export function useCheckedRouter(path: string, slug: string) {
+function useCheckedRouter(path: string, slug: string) {
   const router = useRouter();
   const route: Route = asRoute(path);
   router.push(route, { scroll: false });
@@ -45,17 +46,33 @@ export function useCheckedRouter(path: string, slug: string) {
   router.prefetch('not-a-valid-route');
 }
 
-export function checkedRedirect(path: Route) {
+function checkedRedirect(path: Route) {
   return redirect(path);
 }
-export function checkedPermanentRedirect(path: Route) {
+function checkedPermanentRedirect(path: Route) {
   return permanentRedirect(path);
 }
-export function invalidRedirect(path: string) {
+function invalidRedirect(path: string) {
   // @ts-expect-error Redirects must not gain a broad unchecked string overload.
   return redirect(path);
 }
-export function invalidPermanentRedirect(path: string) {
+function invalidPermanentRedirect(path: string) {
   // @ts-expect-error Permanent redirects must retain their typed-route boundary.
   return permanentRedirect(path);
 }
+
+it('preserves the runtime string identity assumed by the checked-route compiler contract', () => {
+  void [
+    CheckedLinks,
+    useCheckedRouter,
+    checkedRedirect,
+    checkedPermanentRedirect,
+    invalidRedirect,
+    invalidPermanentRedirect,
+  ];
+  const path = '/qa1/products/synthetic-device';
+  expect(asRoute(path)).toBe(path);
+  expect(asRoute('https://synthetic.example/qa1')).toBe(
+    'https://synthetic.example/qa1'
+  );
+});

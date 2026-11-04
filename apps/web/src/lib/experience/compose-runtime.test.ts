@@ -173,9 +173,12 @@ it('registers explicit HTTPS production ports without granting the local feature
     expect((await request('get_experience_capabilities')).status).toBe(503);
     for (const route of ['admin', 'auth', 'storefront'] as const) {
       const policy = generateCSP(route, false);
-      expect(
-        policy.split('; ').find((part) => part.startsWith('frame-src '))
-      ).toContain('https://artifacts.execution.test');
+      const frame = policy
+        .split('; ')
+        .find((part) => part.startsWith('frame-src '));
+      if (route === 'storefront')
+        expect(frame).toContain('https://artifacts.execution.test');
+      else expect(frame).not.toContain('https://artifacts.execution.test');
       expect(
         policy.split('; ').find((part) => part.startsWith('script-src '))
       ).not.toContain('https://artifacts.execution.test');

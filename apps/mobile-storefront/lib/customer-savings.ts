@@ -129,6 +129,8 @@ export const fetchSavingsPlanFunding = customerSavingsPlanFunding.provision;
 export const fetchExistingSavingsPlanFunding =
   customerSavingsPlanFunding.recover;
 export const setupExistingSavingsGoal = customerSavingsPlanFunding.setup;
+export const retryExistingSavingsGoalSetup =
+  customerSavingsPlanFunding.retrySetup;
 
 export async function addSavingsContribution(input: {
   amount: number;

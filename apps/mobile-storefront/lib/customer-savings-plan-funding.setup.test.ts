@@ -87,3 +87,48 @@ describe('customerSavingsPlanFunding.setup', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('customerSavingsPlanFunding.retrySetup', () => {
+  it('posts to the setup endpoint with no interest answer, so the stored choice is reused', async () => {
+    await customerSavingsPlanFunding.retrySetup({
+      goalId: GOAL,
+      merchantId: MERCHANT,
+    });
+    expect(mockFetchJson).toHaveBeenCalledTimes(1);
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/storefront/customer/savings/primary-provisioning/setup',
+        method: 'POST',
+        includeCsrf: true,
+        expectedUserId: 'user-a',
+        body: { merchantId: MERCHANT, goalId: GOAL },
+      })
+    );
+  });
+
+  it('never falls back to the legacy rail', async () => {
+    mockProbe.mockResolvedValue(false);
+    await expect(
+      customerSavingsPlanFunding.retrySetup({
+        goalId: GOAL,
+        merchantId: OTHER_MERCHANT,
+      })
+    ).rejects.toThrow('Setup is not available');
+    expect(mockFetchJson).not.toHaveBeenCalled();
+  });
+});
+
+describe('status read of an expired claim', () => {
+  it('keeps the retryable flag the server sent on a pending answer', async () => {
+    mockFetchJson.mockResolvedValue({
+      status: 'pending',
+      goalId: GOAL,
+      setupRetryable: true,
+    });
+    const result = await customerSavingsPlanFunding.recover({
+      goalId: GOAL,
+      merchantId: MERCHANT,
+    });
+    expect(result).toMatchObject({ status: 'pending', setupRetryable: true });
+  });
+});

@@ -16,6 +16,7 @@ jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
 
 const refresh = jest.fn();
 const submit = jest.fn();
+const retry = jest.fn();
 const setChoice = jest.fn();
 const setupState = (change: Record<string, unknown> = {}) => ({
   choice: null,
@@ -24,6 +25,7 @@ const setupState = (change: Record<string, unknown> = {}) => ({
   attempted: false,
   error: null,
   submit,
+  retry,
   ...change,
 });
 const status = (planFundingPhase: string, requiresBvn = false) =>
@@ -142,5 +144,58 @@ describe('existing-goal setup prompt', () => {
     );
     renderNote();
     expect(screen.getByText(/couldn't confirm/)).toBeTruthy();
+  });
+});
+
+describe('retry of an expired claim', () => {
+  it('offers Try setup again, without a new interest question, once the claim is retryable', () => {
+    status('setup_retryable');
+    renderNote();
+    expect(
+      screen.getByRole('button', { name: 'Try setup again' })
+    ).toBeTruthy();
+    expect(screen.queryByText('Earn interest on this goal?')).toBeNull();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByText('Set up this goal')).toBeNull();
+  });
+
+  it('retries through the setup hook and never sends a choice', () => {
+    status('setup_retryable');
+    renderNote();
+    fireEvent.press(screen.getByRole('button', { name: 'Try setup again' }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the action disabled, not hidden, while status is re-read after a retry', () => {
+    status('loading');
+    mockSetupHook.mockReturnValue(
+      setupState({ attempted: true, retried: true })
+    );
+    renderNote();
+    expect(
+      screen.getByRole('button', { name: 'Try setup again' })
+    ).toBeDisabled();
+  });
+
+  it('shows a safe error after a failed retry', () => {
+    status('setup_retryable');
+    mockSetupHook.mockReturnValue(
+      setupState({ error: "We couldn't confirm this goal's setup." })
+    );
+    renderNote();
+    expect(screen.getByText(/couldn't confirm/)).toBeTruthy();
+  });
+
+  it('offers no retry without an available primary verdict', () => {
+    status('setup_retryable', true);
+    expect(renderNote().toJSON()).toBeNull();
+  });
+
+  it('still says a live claim is being set up, with no action', () => {
+    status('pending');
+    renderNote();
+    expect(screen.getByText(/still being set up/)).toBeTruthy();
+    expect(screen.queryByText('Try setup again')).toBeNull();
   });
 });

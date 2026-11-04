@@ -77,3 +77,44 @@ describe('not-started status reading', () => {
     });
   });
 });
+
+describe('expired-claim status reading', () => {
+  const read = async (answer: unknown, change = {}) => {
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockResolvedValue(answer as never);
+    const { result } = renderHook(() =>
+      useSavingsPlanFunding({ ...input, ...change })
+    );
+    await act(async () => {
+      await result.current.fetchExistingPlanFunding();
+    });
+    return result.current.planFundingPhase;
+  };
+
+  it('reports a pending answer flagged retryable as setup_retryable', async () => {
+    expect(await read({ status: 'pending', setupRetryable: true })).toBe(
+      'setup_retryable'
+    );
+  });
+
+  it.each([
+    [{ status: 'pending', setupRetryable: false }],
+    [{ status: 'pending' }],
+  ])('keeps a live claim %j as pending', async (answer) => {
+    expect(await read(answer)).toBe('pending');
+  });
+
+  it('never reports retryable for a caller that did not ask for setup status', async () => {
+    expect(
+      await read(
+        { status: 'pending', setupRetryable: true },
+        { notFoundMeansNotStarted: false }
+      )
+    ).toBe('pending');
+  });
+
+  it('never reports a ready answer as retryable', async () => {
+    expect(await read({ status: 'ready', setupRetryable: true })).toBe('ready');
+  });
+});

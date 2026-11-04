@@ -14,6 +14,9 @@ export type SavingsPlanFundingPhase =
   | 'ready'
   | 'pending'
   | 'not_started'
+  // Pending, but the stored setup claim expired: setup may run again. Only
+  // reported to a status-only caller that asked for setup status.
+  | 'setup_retryable'
   | 'unavailable'
   | 'error';
 
@@ -102,7 +105,11 @@ export function useSavingsPlanFunding({
     if (response.status === 'ready') {
       setPhase('ready');
     } else if (response.status === 'pending') {
-      setPhase('pending');
+      setPhase(
+        notFoundMeansNotStarted && response.setupRetryable === true
+          ? 'setup_retryable'
+          : 'pending'
+      );
     } else {
       setPhase('unavailable');
     }

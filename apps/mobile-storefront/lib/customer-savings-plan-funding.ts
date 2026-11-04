@@ -27,7 +27,7 @@ async function primaryFunding(
   input: Selection,
   interestAccepted?: boolean,
   expectedUserId?: string,
-  setup = false
+  setup: boolean | 'retry' = false
 ) {
   const selection = schemas.selection.parse({
     merchantId: input.merchantId,
@@ -50,7 +50,9 @@ async function primaryFunding(
       signal: input.signal,
       expectedUserId: expectedUserId ?? undefined,
       body: setup
-        ? schemas.setupRequest.parse({ ...selection, interestAccepted })
+        ? setup === 'retry'
+          ? schemas.setupRetryRequest.parse(selection)
+          : schemas.setupRequest.parse({ ...selection, interestAccepted })
         : interestAccepted === undefined
           ? selection
           : schemas.request.parse({
@@ -138,6 +140,18 @@ export const customerSavingsPlanFunding = {
       expectedUserId,
       true
     );
+  },
+  /**
+   * Re-runs setup for a goal whose earlier attempt stalled and whose claim
+   * has expired (the status read says setupRetryable). No interest answer is
+   * sent: the server reuses the one stored for the goal, and a live claim is
+   * never replaced.
+   */
+  async retrySetup(input: Selection) {
+    const expectedUserId = useAuthStore.getState().user?.id;
+    if (!(await resolvePrimaryRail(input.merchantId)))
+      throw new Error(PLAN_SETUP_UNAVAILABLE_MESSAGE);
+    return await primaryFunding(input, undefined, expectedUserId, 'retry');
   },
   async recover(input: Selection) {
     // Same entry capture as provision: the status read must not run

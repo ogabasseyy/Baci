@@ -11,6 +11,9 @@ export const PrimarySavingsPlanFundingSchemas = {
   }),
   // Existing-goal setup: the customer's explicit answer, no default.
   setupRequest: selection.extend({ interestAccepted: z.boolean() }),
+  // Retrying an expired setup: the answer stored for the goal is reused, so
+  // none is sent (and none can contradict it).
+  setupRetryRequest: selection,
   response: SavingsPlanFundingResponseSchema.extend({
     goalId: z.uuid(),
     status: z.enum([

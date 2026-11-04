@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { SavingsGoalRetryPrompt } from './SavingsGoalRetryPrompt';
 import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
@@ -17,7 +18,10 @@ type Props = {
  * never shows the goal's account number. A goal whose setup never started
  * (confirmed by a finished status read, on a primary merchant with an
  * available verdict) also gets the explicit interest question and a setup
- * action; setup is never offered while status is unknown or pending.
+ * action; setup is never offered while status is unknown or pending. The
+ * one exception is a pending goal the server flags retryable because its
+ * earlier claim expired: it gets a retry action that reuses the stored
+ * interest answer.
  */
 export function SavingsPlanStatusNote({
   colors,
@@ -41,6 +45,15 @@ export function SavingsPlanStatusNote({
   if (!primary || funding.planFundingRequiresBvn) return null;
   const phase = funding.planFundingPhase;
   const rereadingAfterSetup = phase === 'loading' && setup.attempted;
+  if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))
+    return (
+      <SavingsGoalRetryPrompt
+        colors={colors}
+        submitting={setup.submitting || phase === 'loading'}
+        error={setup.error}
+        onRetry={() => void setup.retry()}
+      />
+    );
   if (phase === 'not_started' || rereadingAfterSetup)
     return (
       <SavingsGoalSetupPrompt

@@ -1,12 +1,17 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { setupExistingSavingsGoal } from '@/lib/customer-savings';
+import {
+  retryExistingSavingsGoalSetup,
+  setupExistingSavingsGoal,
+} from '@/lib/customer-savings';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 
 jest.mock('@/lib/customer-savings', () => ({
   setupExistingSavingsGoal: jest.fn(),
+  retryExistingSavingsGoalSetup: jest.fn(),
 }));
 
 const setup = jest.mocked(setupExistingSavingsGoal);
+const retry = jest.mocked(retryExistingSavingsGoalSetup);
 const render = (onSettled = jest.fn()) => ({
   onSettled,
   ...renderHook(() =>
@@ -17,6 +22,7 @@ const render = (onSettled = jest.fn()) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   setup.mockResolvedValue({ status: 'pending' } as never);
+  retry.mockResolvedValue({ status: 'pending' } as never);
 });
 
 describe('useSavingsGoalSetup', () => {
@@ -85,5 +91,52 @@ describe('useSavingsGoalSetup', () => {
     expect(onSettled).toHaveBeenCalledTimes(1);
     expect(result.current.error).not.toContain('private');
     expect(result.current.attempted).toBe(true);
+  });
+});
+
+describe('useSavingsGoalSetup retry', () => {
+  it('re-runs setup without any interest answer, then re-reads status', async () => {
+    const { result, onSettled } = render();
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(setup).not.toHaveBeenCalled();
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledWith({ goalId: 'goal-1', merchantId: 'm-1' });
+    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(result.current.attempted).toBe(true);
+  });
+
+  it('ignores a second press while a retry is in flight', async () => {
+    let finish: () => void = () => {};
+    retry.mockReturnValue(
+      new Promise((resolve) => {
+        finish = () => resolve({ status: 'pending' } as never);
+      })
+    );
+    const { result } = render();
+    let first: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.retry();
+    });
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish();
+      await first;
+    });
+  });
+
+  it('treats a failed retry as indeterminate: safe message, status re-read', async () => {
+    retry.mockRejectedValue(new Error('private provider detail'));
+    const { result, onSettled } = render();
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(result.current.error).not.toContain('private');
   });
 });

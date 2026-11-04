@@ -41,21 +41,24 @@ describe('buildStorefrontClusterGuideRequest', () => {
     });
   });
 
-  it('clears category_names and article_tokens on gaming and laptops when requesting gaming-laptops so SQL pre-filtering allows cross-category promotion', () => {
+  it('omits gaming and laptops rules when requesting gaming-laptops so SQL pre-filtering stays schema-valid while allowing cross-category promotion', () => {
     const request = buildStorefrontClusterGuideRequest({
       pageKind: 'product',
       categorySlug: 'gaming-laptops',
       brands: ['ASUS'],
     });
-    const gamingRule = request.p_cluster_rules.find(
-      (r) => r.category_slug === 'gaming'
-    );
-    const laptopsRule = request.p_cluster_rules.find(
-      (r) => r.category_slug === 'laptops'
-    );
-    expect(gamingRule?.category_names).toEqual([]);
-    expect(gamingRule?.article_tokens).toEqual([]);
-    expect(laptopsRule?.category_names).toEqual([]);
-    expect(laptopsRule?.article_tokens).toEqual([]);
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'gaming')
+    ).toBe(false);
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'laptops')
+    ).toBe(false);
+    expect(
+      request.p_cluster_rules.some((r) => r.category_slug === 'gaming-laptops')
+    ).toBe(true);
+    for (const rule of request.p_cluster_rules) {
+      expect(rule.category_names.length).toBeGreaterThanOrEqual(1);
+      expect(rule.article_tokens.length).toBeGreaterThanOrEqual(1);
+    }
   });
 });

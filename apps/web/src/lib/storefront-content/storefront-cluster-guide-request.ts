@@ -59,10 +59,9 @@ export function buildStorefrontClusterGuideRequest(
 
   const rules =
     categorySlug === 'gaming-laptops'
-      ? STOREFRONT_CLUSTER_RULES.map((rule) =>
-          rule.category_slug === 'gaming' || rule.category_slug === 'laptops'
-            ? { ...rule, article_tokens: [], category_names: [] }
-            : rule
+      ? STOREFRONT_CLUSTER_RULES.filter(
+          (rule) =>
+            rule.category_slug !== 'gaming' && rule.category_slug !== 'laptops'
         )
       : STOREFRONT_CLUSTER_RULES;
 

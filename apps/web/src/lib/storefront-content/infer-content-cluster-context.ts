@@ -165,20 +165,16 @@ function inferCategorySlug(
     ) {
       return 'gaming-laptops';
     }
-    if (slug === 'gaming-laptops') {
-      if (hasExcludedGamingLaptopSubject(explicitCategory, true)) {
-        return getExcludedSubjectCategory(explicitCategory);
-      }
-      if (title && hasExcludedGamingLaptopSubject(title, true)) {
-        return getExcludedSubjectCategory(title);
-      }
-      return 'gaming-laptops';
+    if (slug !== 'gaming-laptops') return slug;
+    if (hasExcludedGamingLaptopSubject(explicitCategory, true)) {
+      return getExcludedSubjectCategory(explicitCategory);
     }
-    return slug;
+    return title && hasExcludedGamingLaptopSubject(title, true)
+      ? getExcludedSubjectCategory(title)
+      : 'gaming-laptops';
   }
 
   let best: { category: SupportedClusterCategory; score: number } | null = null;
-
   for (const [slug, support] of Object.entries(CONTENT_CLUSTER_SUPPORT) as [
     SupportedClusterCategory,
     ClusterSupport,
@@ -190,12 +186,13 @@ function inferCategorySlug(
     ) {
       continue;
     }
-    const score = support.articleTokens.filter(
-      (token) => tokens.includes(token) || hasPhrase(haystack, token)
-    ).length;
+    const score =
+      support.articleTokens.filter(
+        (token) => tokens.includes(token) || hasPhrase(haystack, token)
+      ).length +
+      (slug === 'gaming-laptops' && hasQualifiedFamilyToken(haystack) ? 1 : 0);
     if (score > (best?.score ?? 0)) best = { category: slug, score };
   }
-
   return best?.category ?? null;
 }
 

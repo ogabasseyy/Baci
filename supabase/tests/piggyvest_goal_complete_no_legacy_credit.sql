@@ -3,10 +3,10 @@
 -- writes a spendable customer_wallet_transactions row, because the money returns
 -- to the PiggyVest main wallet at PiggyVest. Funding no longer debits the legacy
 -- balance, so a credit here would be an unbacked double spend
--- (migration 20261104130500_piggyvest_goal_funding_primary_balance). The goal is
+-- (migrations 20261104130500 to 20261104130800, piggyvest_goal_funding_*). The goal is
 -- funded by a hold-free operation (wallet_transaction_id NULL), as the new
 -- reservation records it. Registered in the replay registry folder
--- 20261104130500_piggyvest_goal_funding_primary_balance.
+-- 20261104130800_piggyvest_goal_funding_reserve.
 \set ON_ERROR_STOP on
 \ir piggyvest_goal_complete_behaviour.fixture.inc.sql
 

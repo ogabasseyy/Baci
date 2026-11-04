@@ -209,9 +209,10 @@ BEGIN
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
   END;
 
-  -- Insufficient funds are reported without needing or spending a proof.
-  PERFORM pg_temp.gp_issue('too-large', 'goal_fund', 200000, c_goal || ':' || c_op4);
-  v_result := pg_temp.gp_call(c_op4, 200000, pg_temp.gp_token('too-large'));
+  -- An amount above the goal's remaining capacity is reported insufficient
+  -- without needing or spending a proof (there is no local balance gate).
+  PERFORM pg_temp.gp_issue('too-large', 'goal_fund', 1000001, c_goal || ':' || c_op4);
+  v_result := pg_temp.gp_call(c_op4, 1000001, pg_temp.gp_token('too-large'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'insufficient', 'insufficient: ' || v_result::text);
   PERFORM pg_temp.gp_assert(NOT pg_temp.gp_spent('too-large'), 'a proof was spent on a refused reservation');
 

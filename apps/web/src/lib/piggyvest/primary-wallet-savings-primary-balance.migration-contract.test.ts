@@ -8,13 +8,38 @@ import { expect, it } from 'vitest';
 // step only when the operation has no legacy wallet transaction.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../../../..');
-const sql = readFileSync(
-  path.join(
-    root,
-    'supabase/migrations/20261104130500_piggyvest_goal_funding_primary_balance.sql'
-  ),
-  'utf8'
+const names = [
+  '20261104130500_piggyvest_goal_funding_release_paths',
+  '20261104130600_piggyvest_goal_funding_settle_cancel',
+  '20261104130700_piggyvest_goal_funding_settle_complete',
+  '20261104130800_piggyvest_goal_funding_reserve',
+];
+const files = names.map((name) =>
+  readFileSync(path.join(root, `supabase/migrations/${name}.sql`), 'utf8')
 );
+const sql = files.join('\n');
+
+it('splits the change into ordered migrations of at most 300 lines, reserve last', () => {
+  for (const file of files) {
+    expect(file.split('\n').length).toBeLessThanOrEqual(300);
+  }
+  const reserveAt = sql.indexOf(
+    'CREATE OR REPLACE FUNCTION piggyvest_primary.reserve_savings_before_interest('
+  );
+  for (const name of [
+    'manage_savings',
+    'release_failed_savings',
+    'settle_savings_before_completion',
+    'settle_goal_cancel',
+    'settle_goal_complete',
+  ]) {
+    const at = sql.indexOf(
+      `CREATE OR REPLACE FUNCTION piggyvest_primary.${name}(`
+    );
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(reserveAt);
+  }
+});
 function body(name: string) {
   const start = sql.indexOf(
     `CREATE OR REPLACE FUNCTION piggyvest_primary.${name}(`
@@ -29,7 +54,12 @@ it('reserves without touching customer_wallets or wallet transactions', () => {
   expect(reserve).not.toContain('customer_wallets');
   expect(reserve).not.toContain('customer_wallet_transactions');
   expect(reserve).not.toContain('wallet_transaction_id');
-  expect(reserve).toContain('inflow_receipts');
+  // PiggyVest's balance is the authority: no local receipt-ledger balance gate.
+  expect(reserve).not.toContain('inflow_receipts');
+  expect(reserve).not.toContain('goal_cancel_operations');
+  expect(reserve).not.toContain('goal_complete_operations');
+  expect(reserve).not.toContain('available_kobo');
+  expect(reserve).toContain('capacity_kobo');
   expect(reserve).toContain(
     "RETURN jsonb_build_object('status','insufficient')"
   );

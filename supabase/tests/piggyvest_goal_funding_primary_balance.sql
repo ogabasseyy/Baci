@@ -1,6 +1,6 @@
 -- REGRESSION TEST (behaviour): goal funding from the PiggyVest main wallet is
 -- not gated by, and never touches, the legacy in-house balance
--- (migration 20261104130500_piggyvest_goal_funding_primary_balance).
+-- (migrations 20261104130500 to 20261104130800, piggyvest_goal_funding_*).
 --
 -- Before the fix the reservation read and debited public.customer_wallets, which
 -- PiggyVest deposits no longer credit, so a customer with PiggyVest money and a
@@ -10,8 +10,11 @@
 --     transaction history are untouched;
 --   * the reservation row carries no legacy wallet transaction;
 --   * replaying the operation is idempotent (one row, status 'pending');
---   * the database's own receipt ledger still refuses an amount above the
---     recorded deposits (nothing a caller supplies is the balance);
+--   * the customer has ZERO recorded deposit receipts (money in the PiggyVest
+--     main wallet that is not a recorded deposit, such as paid interest or a
+--     merchant top-up, must be usable) and still reserves: the database never
+--     gates on a local balance, PiggyVest's own balance is the authority;
+--   * the only database limit left is the goal's remaining target capacity;
 --   * cancel, terminal provider failure (release) and settlement work for an
 --     operation with no legacy hold, and settlement writes its contribution;
 --   * the legacy contribution path is unchanged: a customer with no balance is
@@ -24,7 +27,7 @@
 -- error that is not the exact legacy refusal under test.
 --
 -- Registered in the replay registry folder
--- 20261104130500_piggyvest_goal_funding_primary_balance.
+-- 20261104130800_piggyvest_goal_funding_reserve.
 
 BEGIN;
 
@@ -84,19 +87,12 @@ INSERT INTO piggyvest_primary.onboarding_intents (
 INSERT INTO piggyvest_primary.savings_destinations (integration_id, goal_id, intent_id, provider_wallet_id, enabled)
 VALUES ('f3880000-0000-4000-8000-000000000006', 'f3880000-0000-4000-8000-000000000005',
   'f3880000-0000-4000-8000-000000000007', 'synthetic-fundbal-destination', true);
--- The legacy wallet of the primary customer holds ZERO. A PiggyVest deposit is
--- a receipt only (no legacy wallet credit, no wallet transaction), exactly as
--- the ledger-only deposit path records it: 100000 kobo = 1000.00.
+-- The legacy wallet of the primary customer holds ZERO.
 INSERT INTO public.customer_wallets (id, customer_id, merchant_id, available_balance) VALUES
   ('f3880000-0000-4000-8000-000000000008', 'f3880000-0000-4000-8000-000000000003',
    'f3880000-0000-4000-8000-000000000002', 0);
-INSERT INTO piggyvest_primary.inflow_receipts (
-  integration_id, intent_id, provider_transaction_id, event_id, body_digest,
-  financial_identity, wallet_transaction_id
-) VALUES (
-  'f3880000-0000-4000-8000-000000000006', 'f3880000-0000-4000-8000-000000000007',
-  'synthetic-fundbal-inflow', 'synthetic-fundbal-event', repeat('e', 64),
-  '{"amountKobo":100000}', NULL);
+-- No inflow receipt is recorded: the customer's PiggyVest money is not a
+-- recorded deposit as far as this database knows.
 -- The legacy customer has a wallet row with no money and no PiggyVest binding.
 INSERT INTO public.customer_wallets (id, customer_id, merchant_id, available_balance) VALUES
   ('f3880000-0000-4000-8000-000000000018', 'f3880000-0000-4000-8000-000000000012',
@@ -178,13 +174,13 @@ BEGIN
   v_result := pg_temp.fb_reserve(c_op1, 5001);
   PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'conflict', 'replay with another amount was not a conflict: ' || v_result::text);
 
-  -- The receipt ledger (database state, never a caller value) still bounds funding.
+  -- Only the goal's remaining capacity bounds a reservation (no local balance gate).
   PERFORM pg_temp.fb_assert(
     piggyvest_primary.manage_savings(v_scope, c_op1::uuid, 'cancel'), 'the hold-free reservation was not cancelled');
   PERFORM pg_temp.fb_assert(pg_temp.fb_state(c_op1) = 'cancelled' AND pg_temp.fb_legacy_untouched(),
     'cancel changed the legacy wallet or did not cancel');
-  v_result := pg_temp.fb_reserve(c_op4, 100001);
-  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'above the recorded deposits was not refused: ' || v_result::text);
+  v_result := pg_temp.fb_reserve(c_op4, 1000001);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'above the goal capacity was not refused: ' || v_result::text);
   PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched()
     AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations WHERE id = c_op4::uuid),
     'a refused reservation left a row or touched the legacy wallet');
@@ -230,17 +226,17 @@ BEGIN
     'settlement wrote no hold-free contribution');
   PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'settlement changed the legacy wallet or its history');
 
-  -- The local guard is conservative: every recorded outflow is subtracted. The
-  -- confirmed 5000 leaves 95000, and a dispatched (in-flight) transfer is
-  -- subtracted too, so a further reservation is refused until it is released.
-  v_result := pg_temp.fb_reserve(c_op5, 95001);
-  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'a confirmed outflow was not subtracted: ' || v_result::text);
-  v_result := pg_temp.fb_reserve(c_op5, 95000);
-  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'the remaining balance was not reservable: ' || v_result::text);
+  -- No local balance gate: with zero recorded receipts a large reservation is
+  -- claimed and even a further one is claimed while goal capacity remains.
+  -- Capacity left after the confirmed 5000 kobo is 995000 kobo.
+  v_result := pg_temp.fb_reserve(c_op5, 900000);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'a reservation was gated on a local balance: ' || v_result::text);
   PERFORM pg_temp.fb_assert(piggyvest_primary.manage_savings(v_scope, c_op5::uuid, 'dispatch'), 'dispatch of the fifth failed');
   v_result := pg_temp.fb_reserve(c_op6, 1);
-  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'a dispatched outflow was not subtracted: ' || v_result::text);
-  PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'the guard checks changed the legacy wallet');
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'a dispatched outflow gated a later reservation on a local balance: ' || v_result::text);
+  v_result := pg_temp.fb_reserve('f3880000-0000-4000-8000-0000000000a7', 95000);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'open reservations did not consume goal capacity: ' || v_result::text);
+  PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'the reservations changed the legacy wallet');
 
   -- Legacy path unchanged: no balance is still refused, and the refusal is the
   -- legacy wallet check (not any PiggyVest rule).
@@ -271,6 +267,10 @@ BEGIN
   IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
      LIKE '%customer_wallets%' THEN
     RAISE EXCEPTION 'the funding reservation still references the legacy wallet';
+  END IF;
+  IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
+     LIKE '%inflow_receipts%' THEN
+    RAISE EXCEPTION 'the funding reservation still gates on the local receipt ledger';
   END IF;
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)',

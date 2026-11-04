@@ -162,6 +162,23 @@ DROP TRIGGER IF EXISTS products_stale_blog_guide_metadata_trigger ON public.prod
 CREATE TRIGGER products_stale_blog_guide_metadata_trigger
   AFTER UPDATE OF brand, category_id ON public.products FOR EACH ROW EXECUTE FUNCTION public.products_stale_blog_guide_metadata();
 
+CREATE OR REPLACE FUNCTION public.categories_stale_blog_guide_metadata()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
+BEGIN
+  UPDATE public.blog_posts
+  SET metadata_status = 'stale'
+  WHERE cluster_category_id = OLD.id AND metadata_status = 'verified';
+  RETURN OLD;
+END;
+$$;
+
+ALTER FUNCTION public.categories_stale_blog_guide_metadata() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.categories_stale_blog_guide_metadata() FROM PUBLIC;
+
+DROP TRIGGER IF EXISTS categories_stale_blog_guide_metadata_trigger ON public.categories;
+CREATE TRIGGER categories_stale_blog_guide_metadata_trigger
+  BEFORE DELETE ON public.categories FOR EACH ROW EXECUTE FUNCTION public.categories_stale_blog_guide_metadata();
+
 CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
   p_merchant_id uuid, p_page_kind text, p_category_id uuid DEFAULT NULL, p_product_id uuid DEFAULT NULL, p_limit integer DEFAULT 64
 )

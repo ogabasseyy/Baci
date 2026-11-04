@@ -80,7 +80,7 @@ describe('bounded price-band destination projection', () => {
       'cat',
       'child',
     ]);
-    expect(query.limit).toHaveBeenCalledWith(151);
+    expect(query.limit).toHaveBeenCalledWith(150);
     expect(query.abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
     expect(execute).toHaveBeenCalledWith(false);
   });
@@ -144,15 +144,24 @@ describe('bounded price-band destination projection', () => {
     const signal = query.abortSignal.mock.calls[0]?.[0] as AbortSignal;
     expect(signal.aborted).toBe(true);
   });
-  it('rejects an otherwise complete over-cap catalogue', async () => {
+  it('returns the bounded 150-product destination window when the category catalogue exceeds 150 items', async () => {
+    const windowRows = Array.from({ length: 150 }, (_, i) => ({
+      ...row,
+      id: `p${i}`,
+      slug: `phone-${i}`,
+    }));
     execute.mockResolvedValue({
-      data: Array.from({ length: 151 }, (_, i) => ({ ...row, id: `p${i}` })),
-      count: 151,
+      data: windowRows,
+      count: 320,
       error: null,
     });
-    expect(
-      await getCachedPriceBandDestinationProjection('m1', 'smartphones')
-    ).toBeNull();
+    const result = await getCachedPriceBandDestinationProjection(
+      'm1',
+      'smartphones'
+    );
+    expect(result).toHaveLength(150);
+    expect(result?.[0]?.id).toBe('p0');
+    expect(result?.[149]?.id).toBe('p149');
   });
 
   it.each([

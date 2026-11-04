@@ -66,11 +66,12 @@ function toProduct(value: unknown): PriceBandDestinationProduct | null {
 }
 
 /**
- * Small complete-catalogue proof for optional links, not a display catalogue.
+ * Bounded destination window proof for optional links, not a display catalogue.
  * Reuses destination category/children and legacy membership, counts all active
  * rows (including unavailable stock), and never fetches rich detail chunks.
- * Over-cap, truncated or malformed pools suppress links rather than certify a
- * partial catalogue. The exact count also detects server-side row truncation.
+ * Truncated or malformed pools suppress links rather than certify a partial
+ * window. Comparing rows.length against Math.min(count, PRODUCT_LIMIT) detects
+ * server-side row truncation while allowing categories larger than 150 items.
  */
 export async function getCachedPriceBandDestinationProjection(
   merchantId: string,
@@ -117,14 +118,14 @@ export async function getCachedPriceBandDestinationProjection(
         query
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
-          .limit(PRODUCT_LIMIT + 1),
+          .limit(PRODUCT_LIMIT),
         deadline.signal
       ),
       deadline.promise,
     ]);
     if (error) throw error;
     const rows: unknown[] = data ?? [];
-    if (count === null || count > PRODUCT_LIMIT || count !== rows.length)
+    if (count === null || rows.length !== Math.min(count, PRODUCT_LIMIT))
       return null;
     const products = rows.map(toProduct);
     if (products.some((product) => product === null)) return null;

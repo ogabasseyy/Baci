@@ -50,8 +50,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-intake', () => ({
   dispatchPrimaryWalletBankInboxIntake: boundary.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () =>
-    withCaptureRpc(boundary.legacyClient()),
+  createPiggyvestIntakeClient: () => withCaptureRpc(boundary.legacyClient()),
 }));
 vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
   recordPiggyvestEvent: boundary.legacyRecord,

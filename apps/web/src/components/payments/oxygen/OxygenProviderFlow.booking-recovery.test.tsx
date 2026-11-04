@@ -1,6 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), capture: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -30,6 +36,13 @@ beforeAll(() => {
   );
 });
 afterAll(() => vi.unstubAllGlobals());
+afterEach(() => {
+  if (vi.isFakeTimers()) {
+    // input-otp schedules selection synchronization after the input event.
+    act(() => vi.advanceTimersByTime(50));
+    vi.useRealTimers();
+  }
+});
 
 it('shows a bank statement requirement after a rejected booking without claiming identity is unverified', async () => {
   mocks.fetch.mockClear();
@@ -167,10 +180,12 @@ it('does not call an unconfirmed code incorrect when the provider check is unava
     );
   });
   render(<OxygenProviderFlow orderId={id} />);
-  fireEvent.change(await screen.findByLabelText('Verification code'), {
-    target: { value: '123456' },
+  const input = await screen.findByLabelText('Verification code');
+  vi.useFakeTimers();
+  await act(async () => {
+    fireEvent.change(input, { target: { value: '123456' } });
   });
-  expect(await screen.findByRole('alert')).toHaveTextContent(
+  expect(screen.getByRole('alert')).toHaveTextContent(
     'We couldn’t check your code right now. Please try again shortly.'
   );
   expect(screen.queryByText(/code isn’t valid/)).toBeNull();

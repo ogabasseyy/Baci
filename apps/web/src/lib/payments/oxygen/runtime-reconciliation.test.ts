@@ -49,6 +49,116 @@ it('does not query or mutate the provider for unmatched callbacks', async () => 
   expect(rpc).toHaveBeenCalledTimes(1);
 });
 
+it('leaves the second payment callback queued when the deadline is near', async () => {
+  const first = '60000000-0000-4000-8000-000000000001';
+  const second = '60000000-0000-4000-8000-000000000002';
+  const retry = '60000000-0000-4000-8000-000000000003';
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
+    error: null,
+    data:
+      args.p_operation === 'pending'
+        ? [first, second].map((id) => ({
+            id,
+            kind: 'transaction',
+            retryKey: retry,
+            workflowIds: [id],
+          }))
+        : { recorded: true },
+  }));
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+  const payment = vi.fn().mockImplementation(async () => {
+    clock.mockReturnValue(70_000);
+  });
+  try {
+    await reconcileOxygenCallbacks(
+      { rpc },
+      { call: vi.fn() },
+      'partner',
+      new Set(),
+      payment,
+      undefined,
+      { deadlineMs: 300_000 }
+    );
+  } finally {
+    clock.mockRestore();
+  }
+  expect(payment).toHaveBeenCalledExactlyOnceWith(first, first, retry);
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_callback',
+    expect.objectContaining({
+      p_operation: 'complete',
+      p_payload: { id: first, retryKey: retry },
+    })
+  );
+  expect(rpc).not.toHaveBeenCalledWith(
+    'oxygen_callback',
+    expect.objectContaining({
+      p_operation: 'complete',
+      p_payload: { id: second, retryKey: retry },
+    })
+  );
+});
+
+it('processes two payment callbacks when both fit within the deadline', async () => {
+  const first = '60000000-0000-4000-8000-000000000001';
+  const second = '60000000-0000-4000-8000-000000000002';
+  const retry = '60000000-0000-4000-8000-000000000003';
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
+    error: null,
+    data:
+      args.p_operation === 'pending'
+        ? [first, second].map((id) => ({
+            id,
+            kind: 'transaction',
+            retryKey: retry,
+            workflowIds: [id],
+          }))
+        : { recorded: true },
+  }));
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+  const payment = vi.fn().mockResolvedValue(undefined);
+  try {
+    await reconcileOxygenCallbacks(
+      { rpc },
+      { call: vi.fn() },
+      'partner',
+      new Set(),
+      payment,
+      undefined,
+      { deadlineMs: 300_000 }
+    );
+  } finally {
+    clock.mockRestore();
+  }
+  expect(payment).toHaveBeenCalledTimes(2);
+});
+
+it('does not start a payment callback without enough time remaining', async () => {
+  const id = '60000000-0000-4000-8000-000000000001';
+  const retry = '60000000-0000-4000-8000-000000000002';
+  const rpc = vi.fn().mockResolvedValue({
+    error: null,
+    data: [{ id, kind: 'transaction', retryKey: retry, workflowIds: [id] }],
+  });
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+  const payment = vi.fn();
+  try {
+    await reconcileOxygenCallbacks(
+      { rpc },
+      { call: vi.fn() },
+      'partner',
+      new Set(),
+      payment,
+      undefined,
+      { deadlineMs: 239_999 }
+    );
+  } finally {
+    clock.mockRestore();
+  }
+  expect(payment).not.toHaveBeenCalled();
+  expect(rpc).toHaveBeenCalledTimes(1);
+});
+
 it.each([
   'success',
   'blocked',

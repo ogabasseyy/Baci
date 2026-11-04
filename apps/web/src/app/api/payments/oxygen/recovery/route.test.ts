@@ -27,7 +27,13 @@ vi.mock('@/lib/payments/oxygen/payment-recovery-evidence', () => ({
   createOxygenPaymentRecoveryRecorder: vi.fn(),
 }));
 
-import { GET, POST } from './route';
+import { GET, maxDuration, POST } from './route';
+
+it('allows time for login, payment confirmation, activation, and persistence', () => {
+  // Each of the three provider calls may need a separate cold login.
+  const providerBudgetSeconds = 3 * 2 * 30;
+  expect(maxDuration).toBeGreaterThanOrEqual(providerBudgetSeconds + 60);
+});
 
 const id = '60000000-0000-4000-8000-000000000001';
 const input = {

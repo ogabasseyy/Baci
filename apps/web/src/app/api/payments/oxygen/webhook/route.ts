@@ -8,8 +8,10 @@ import {
   reconcileOxygenCallbacks,
 } from '@/lib/payments/oxygen/runtime-reconciliation';
 import { receiveOxygenWebhook } from '@/lib/payments/oxygen/webhook-receiver';
-export const maxDuration = 120;
+// after() shares this deadline; Next.js requires a literal route config.
+export const maxDuration = 300;
 export async function POST(request: Request) {
+  const deadlineMs = Date.now() + maxDuration * 1000;
   const configuration = oxygenRuntimeCallbackConfiguration();
   const connection = connectOxygenRuntime();
   if (!configuration || !connection)
@@ -46,7 +48,8 @@ export async function POST(request: Request) {
                   kind: 'address',
                   applicationReference: event.applicationReference,
                 }
-              : { kind: 'transaction' }
+              : { kind: 'transaction' },
+            { deadlineMs }
           );
         } catch {
           /* Durable queued inbox remains available for replay. */

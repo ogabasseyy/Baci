@@ -19,7 +19,17 @@ vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   oxygenRuntimeCallbackConfiguration: m.configuration,
 }));
 
-import { POST } from './route';
+import { OXYGEN_CALLBACK_DURATION_MS } from '@/lib/payments/oxygen/reconciliation-budget';
+import { maxDuration, POST } from './route';
+
+it('budgets after-response work for one callback and activation sequence', () => {
+  // Three calls may each require a separate cold login in staging.
+  const providerBudgetSeconds = 3 * 2 * 30;
+  expect(maxDuration).toBeGreaterThanOrEqual(providerBudgetSeconds + 60);
+  expect(maxDuration * 1000).toBeGreaterThanOrEqual(
+    OXYGEN_CALLBACK_DURATION_MS
+  );
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -58,6 +68,58 @@ const request = (authenticated: boolean) =>
 it('authenticates callbacks before touching the worker account', async () => {
   expect((await POST(request(false))).status).toBe(401);
   expect(m.worker).not.toHaveBeenCalled();
+});
+
+it('does not begin callback activation after most of the invocation has elapsed', async () => {
+  const id = '60000000-0000-4000-8000-000000000001';
+  const retry = '60000000-0000-4000-8000-000000000002';
+  const payment = vi.fn();
+  m.connect.mockReturnValue({
+    partnerReference: 'partner',
+    hosts: new Set(),
+    provider: { call: vi.fn() },
+    worker: m.worker,
+    reconcilePaymentCallback: payment,
+  });
+  m.rpc.mockImplementation(
+    async (_name: string, args: Record<string, unknown>) => ({
+      error: null,
+      data:
+        args.p_operation === 'pending'
+          ? [{ id, kind: 'transaction', retryKey: retry, workflowIds: [id] }]
+          : { result: 'accepted' },
+    })
+  );
+  const incoming = new Request('https://local/api/payments/oxygen/webhook', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      api_key: 'synthetic-key',
+      api_secret: 'synthetic-secret',
+    },
+    body: JSON.stringify({
+      phone_number: '08000000000',
+      transaction_reference: 'synthetic-transaction',
+      amount_deducted: '100.00',
+      amount_sent: '100.00',
+      loan_request_reference: '70000000-0000-4000-8000-000000000001',
+    }),
+  });
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(0);
+  try {
+    expect((await POST(incoming)).status).toBe(200);
+    clock.mockReturnValue(61_000);
+    await m.after.mock.calls[0][0]();
+    expect(payment).not.toHaveBeenCalled();
+    expect(m.rpc).not.toHaveBeenCalledWith(
+      'oxygen_callback',
+      expect.objectContaining({
+        p_operation: 'complete',
+      })
+    );
+  } finally {
+    clock.mockRestore();
+  }
 });
 it('stores phone-only address hints without scheduling a provider read', async () => {
   expect((await POST(request(true))).status).toBe(200);

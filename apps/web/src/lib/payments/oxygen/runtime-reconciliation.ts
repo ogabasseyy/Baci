@@ -6,6 +6,10 @@ import {
 } from '@/schemas/oxygen-runtime';
 import { type OxygenProvider, OxygenProviderFailure } from './provider';
 import { oxygenDiagnostic } from './provider-diagnostic';
+import {
+  OXYGEN_CALLBACK_DURATION_MS,
+  OXYGEN_CALLBACK_MIN_REMAINING_MS,
+} from './reconciliation-budget';
 import { recordOxygenFailure } from './record-failure';
 import { executeOxygenAction, oxygenActionAllowed } from './runtime-executor';
 import { trackOxygenExecution } from './runtime-failure';
@@ -54,8 +58,11 @@ export async function reconcileOxygenCallbacks(
     callbackId: string,
     retryKey: string
   ) => Promise<void>,
-  filter?: { kind: 'address' | 'transaction'; applicationReference?: string }
+  filter?: { kind: 'address' | 'transaction'; applicationReference?: string },
+  options?: { deadlineMs: number }
 ): Promise<void> {
+  const deadlineMs =
+    options?.deadlineMs ?? Date.now() + OXYGEN_CALLBACK_DURATION_MS;
   const jobs = z
     .array(
       z.object({
@@ -76,7 +83,14 @@ export async function reconcileOxygenCallbacks(
     }
     let complete = job.workflowIds.length > 0;
     for (const id of job.workflowIds) {
-      if (reads >= 2) return;
+      // A staging payment check can make three provider calls, each with a
+      // cold login and a 30-second timeout. Keep a minute for storage and
+      // leave remaining callbacks queued when the invocation is nearly spent.
+      if (
+        reads >= 2 ||
+        deadlineMs - Date.now() < OXYGEN_CALLBACK_MIN_REMAINING_MS
+      )
+        return;
       try {
         if (job.kind === 'transaction' && paymentCheck) {
           reads++;

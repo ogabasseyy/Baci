@@ -15,7 +15,9 @@ const headers = {
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
 };
-export const maxDuration = 60;
+// A cold login and staging confirmation/activation can make three sequential
+// provider requests. Leave room to persist the outcome before termination.
+export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)

@@ -12,7 +12,8 @@ vi.mock('@/lib/payments/oxygen/runtime-reconciliation', () => ({
   reconcileOxygenCallbacks: mocks.reconcile,
 }));
 
-import { GET } from './route';
+import { OXYGEN_CALLBACK_DURATION_MS } from '@/lib/payments/oxygen/reconciliation-budget';
+import { GET, maxDuration } from './route';
 
 const request = (authorization?: string) =>
   new Request('https://example.test/api/cron/oxygen-callback-reconciliation', {
@@ -20,6 +21,13 @@ const request = (authorization?: string) =>
   });
 
 describe('Oxygen callback reconciliation cron', () => {
+  it('budgets one payment and activation sequence with storage headroom', () => {
+    const providerBudgetSeconds = 3 * 2 * 30;
+    expect(maxDuration).toBeGreaterThanOrEqual(providerBudgetSeconds + 60);
+    expect(maxDuration * 1000).toBeGreaterThanOrEqual(
+      OXYGEN_CALLBACK_DURATION_MS
+    );
+  });
   beforeEach(() => {
     vi.stubEnv('CRON_SECRET', 'secret');
     vi.stubEnv('OXYGEN_CALLBACK_DRAIN_ENABLED', 'true');

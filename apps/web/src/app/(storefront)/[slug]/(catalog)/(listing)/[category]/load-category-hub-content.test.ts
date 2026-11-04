@@ -176,7 +176,7 @@ describe('loadCategoryHubContent', () => {
     ]);
   });
 
-  it('logs warning when hub pool fetch fails and falls back open gracefully', async () => {
+  it('logs warning when hub pool fetch fails and fails closed to empty array', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockCategoryPageData.mockRejectedValue(
       new Error('DB connection timed out')
@@ -201,7 +201,7 @@ describe('loadCategoryHubContent', () => {
         error: expect.any(Error),
       })
     );
-    expect(result.hubProducts).toBeUndefined();
+    expect(result.hubProducts).toEqual([]);
     warnSpy.mockRestore();
   });
 

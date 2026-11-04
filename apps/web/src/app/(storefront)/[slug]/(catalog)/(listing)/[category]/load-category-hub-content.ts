@@ -77,6 +77,10 @@ export async function loadCategoryHubContent(input: {
         : Promise.resolve(null),
     ]);
 
+  const hubPoolFetchFailed =
+    shouldFetchHubPool &&
+    (!hubCategoryData || hubCategoryData.productsQueryFailed);
+
   const hubProducts =
     hubCategoryData && !hubCategoryData.productsQueryFailed
       ? (hubCategoryData.products as RawDbProduct[])
@@ -87,7 +91,7 @@ export async function loadCategoryHubContent(input: {
             0,
             COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
           ) as RawDbProduct[])
-        : input.isFiltered && hasHubDefaults
+        : hubPoolFetchFailed || input.isFiltered
           ? []
           : undefined;
 

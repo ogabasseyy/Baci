@@ -23,7 +23,12 @@ vi.mock('@/lib/payments/oxygen/runtime-service', () => ({
 }));
 
 import { OxygenProviderFailure } from '@/lib/payments/oxygen/provider';
-import { POST } from './route';
+import { maxDuration, POST } from './route';
+
+it('budgets the complete payment confirmation and activation chain', () => {
+  // Four provider calls may each require a cold login, plus persistence.
+  expect(maxDuration).toBeGreaterThanOrEqual(4 * 2 * 30 + 60);
+});
 
 beforeEach(() => {
   vi.resetAllMocks();

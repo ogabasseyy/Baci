@@ -26,7 +26,9 @@ import {
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenPlanQuoteSchema } from '@/schemas/oxygen-plan-quote';
 
-export const maxDuration = 120;
+// Payment confirmation can lead to a staging activation with additional
+// provider calls; keep time to persist its outcome before termination.
+export const maxDuration = 300;
 const headers = {
   'Cache-Control': 'no-store',
   'Referrer-Policy': 'no-referrer',

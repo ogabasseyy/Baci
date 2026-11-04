@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T14:49:20+00:00",
-  "source_revision": "de42aaa4b3ee4f26199608aac9438ef4af23b2ca",
-  "evidence_digest": "3560eff8dbe005e357875ee7d99d523178d56174929d4b2fd301814c5fbb6fd0",
-  "claims_digest": "cf70f9e6cc9f41fb034d29e2e5eb86cec8cc454363f58d6c60c40912897f327d",
-  "review_scope": "Source evidence only after main 0e842c0393 and PR 3993 corrections. Reviewed native providers, fetched-product navigation/cart admission, nullable images, collection preflights, chunk pagination, private capture and retention. Fixed TS2589 with an equivalent checked-route fast path in generated declarations and explicit hover-link props; compile-time regressions preserve invalid-URL rejection. OAuth renewal retains separate cart expiry and legacy deadlines; activation is unverified. Oxygen owned-order resume and origin restrictions remain intact and local-staging QA only. Preview bearer URLs still require secrecy; opaque origins are not identity. Production experience composition remains uninstalled/disabled, with other capability limitations unchanged. Synthetic proofs do not establish live ChatGPT access, publication or CWV qualification. Current-head CI, host qualification and separate rollout authorization remain required. Benchmarks are parked.",
+  "reviewed_at": "2026-11-04T20:32:04+00:00",
+  "source_revision": "6ae86ee01c8582f21e63770bf29fb9ae11ea31c3",
+  "evidence_digest": "918bbfd2a407a2f3557b1290d08134e9218e4d0d6e574a6fdfc3eb4f6dcde52b",
+  "claims_digest": "159d40abc3bc476921f9e3c1006f7089f7208465854f0ca29df1e63efeb9d845",
+  "review_scope": "Source-only experience re-review after main 6e359d04f8. Covered gateway admission tests, native repair/auth/compare ownership, consumed preview limits, capture-to-build attestation binding under owner RLS, committed publication reconciliation without a new performance gate, and public-RPC variants without private metadata joins. Corrected RSC JSX composition, shipping/CSP fixtures and repository contracts. Serialized/unlimited public variant policy is preserved by the existing commerce RPC. Settled legacy execution now waits for acknowledgement before edit finalization. Local synthetic proofs passed; no hosted state or payment/provider behavior was activated. Existing payment/rollout limitations remain; no capability is promoted to production_verified. Experience production composition stays uninstalled/disabled. Current-head CI/review, host qualification and separate rollout authorization remain required. Benchmarks stay parked.",
   "capabilities": [
     {
       "id": "payments",

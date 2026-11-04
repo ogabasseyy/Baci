@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { GuestOAuth } from './guest-oauth';
-import { GUEST_CART_TTL, GUEST_CLOCK_MARGIN } from './guest-oauth-lifetime';
+import { GUEST_CART_TTL, GUEST_CLOCK_MARGIN } from './config/guest-oauth-lifetime';
 
 export class GuestOAuthGrantConflict extends Error {
   constructor() { super('temporarily_unavailable'); }

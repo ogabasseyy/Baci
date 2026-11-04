@@ -18,5 +18,5 @@ it('keeps the stored expiry synchronized with an updated grant deadline', async 
   await auth.updateGrant(grant.id, current => ({ ...current, expiresAt: deadline }));
   const record = rows.get(`grant:${grant.id}`)!;
   expect(record.expiresAt).toBe(deadline);
-  expect((record.value as { expiresAt: number }).expiresAt).toBe(deadline);
+  expect(record.value).toMatchObject({ expiresAt: deadline });
 });

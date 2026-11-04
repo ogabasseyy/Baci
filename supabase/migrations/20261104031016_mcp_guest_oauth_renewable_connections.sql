@@ -1,7 +1,30 @@
 -- Renewable authorization metadata only. Cart tables, grants and retention are unchanged.
 -- Only valid, unexpired revision-matched grants can advance their authorization lease.
-ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN renewed_at timestamptz NOT NULL DEFAULT now();
-ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_records_check;
+-- Owner-approved correction of this unapplied migration: guards never mask drift.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+    WHERE a.attrelid='public.mcp_guest_oauth_records'::regclass
+      AND a.attname='renewed_at' AND NOT a.attisdropped)
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+      JOIN pg_catalog.pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+      WHERE a.attrelid='public.mcp_guest_oauth_records'::regclass
+        AND a.attname='renewed_at' AND NOT a.attisdropped
+        AND a.atttypid='timestamptz'::regtype AND a.attnotnull
+        AND pg_catalog.pg_get_expr(d.adbin,d.adrelid)='now()') THEN
+    RAISE EXCEPTION 'unexpected_oauth_renewed_at_schema';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint c
+    WHERE c.conrelid='public.mcp_guest_oauth_records'::regclass
+      AND c.conname='mcp_guest_oauth_records_check' AND c.contype='c'
+      AND c.convalidated AND NOT c.connoinherit
+      AND regexp_replace(pg_catalog.pg_get_expr(c.conbin,c.conrelid), '[[:space:]()]', '', 'g')
+        = 'expires_at<=created_at+''7days''::interval') THEN
+    RAISE EXCEPTION 'unexpected_oauth_lifetime_schema';
+  END IF;
+END $$;
+ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN IF NOT EXISTS renewed_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT IF EXISTS mcp_guest_oauth_records_check;
 ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_record_lifetime CHECK (
   CASE WHEN record_key LIKE 'grant:%' THEN expires_at <= renewed_at + interval '90 days'
        ELSE expires_at <= created_at + interval '7 days' END

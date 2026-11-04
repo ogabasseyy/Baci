@@ -69,7 +69,20 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     }
     assert.throws(() => query(worker + "SET request.method='GET'; SET request.path='/rpc/mcp_guest_oauth_read';" + hook), /outside its capability scope/);
     assert.throws(() => query("SET ROLE anon; SET request.jwt.claims='{\"role\":\"anon\"}'; SET request.method='POST'; SET request.path='/rpc/__guest_oauth_hook_reload_canary__';" + hook), /GUEST OAUTH hook reload canary observed/);
-    query(readFileSync(new URL('../migrations/20261104031016_mcp_guest_oauth_renewable_connections.sql', import.meta.url), 'utf8'));
+    const renewalMigration = readFileSync(new URL('../migrations/20261104031016_mcp_guest_oauth_renewable_connections.sql', import.meta.url), 'utf8');
+    query(`BEGIN; ${renewalMigration} ROLLBACK;`);
+    // Existing incompatible schema must abort before any old protection is dropped.
+    query('ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN renewed_at text;');
+    assert.throws(() => query(`BEGIN; ${renewalMigration} COMMIT;`), /unexpected_oauth_renewed_at_schema/);
+    query('ALTER TABLE public.mcp_guest_oauth_records DROP COLUMN renewed_at;');
+    query('ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN renewed_at timestamptz NOT NULL DEFAULT now();');
+    query(`ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_records_check;
+      ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_records_check CHECK(expires_at <= created_at + interval '8 days');`);
+    assert.throws(() => query(`BEGIN; ${renewalMigration} COMMIT;`), /unexpected_oauth_lifetime_schema/);
+    query(`ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_records_check;
+      ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_records_check CHECK(expires_at <= created_at + interval '7 days');`);
+    query(renewalMigration);
+
     assert.equal(query(`SELECT convalidated FROM pg_constraint WHERE conrelid='public.mcp_guest_oauth_records'::regclass AND conname='mcp_guest_oauth_record_lifetime';`), 'f');
     // NOT VALID still enforces every new write.
     assert.throws(() => query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at) VALUES('${tenant}','access:invalid',repeat('x',64),1,now()+interval '8 days');`), /check constraint/);

@@ -1,6 +1,6 @@
 import { updateGuestGrant } from './guest-oauth-update-grant';
 import { currentGuestCart } from './guest-oauth-cart-lifetime';
-import { GUEST_CONNECTION_IDLE_TTL, GUEST_CART_TTL, GUEST_CLOCK_MARGIN, GUEST_REFRESH_MAX_GENERATION } from './guest-oauth-lifetime';
+import { GUEST_CONNECTION_IDLE_TTL, GUEST_CART_TTL, GUEST_CLOCK_MARGIN, GUEST_REFRESH_MAX_GENERATION } from './config/guest-oauth-lifetime';
 import { refreshReceipt, recoverRefresh } from './guest-oauth-refresh-receipt';
 import { createGuestConsent } from './guest-oauth-consent';
 import { authenticRefreshToken, mintRefreshToken, refreshGrantId } from './guest-oauth-refresh-token';

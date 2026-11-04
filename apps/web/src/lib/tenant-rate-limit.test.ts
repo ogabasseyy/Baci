@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkTenantRateLimit } from './tenant-rate-limit';
+import {
+  checkTenantRateLimit,
+  checkTenantRateLimitDetailed,
+} from './tenant-rate-limit';
 
 const mockGetRedis = vi.hoisted(() => vi.fn<() => object | null>(() => ({})));
 const mockLimiterLimit = vi.hoisted(() => vi.fn());
@@ -49,6 +52,16 @@ describe('checkTenantRateLimit', () => {
     );
   });
 
+  it('reports a Redis timeout verdict as unavailable, not allowed', async () => {
+    mockLimiterLimit.mockResolvedValue({ success: true, reason: 'timeout' });
+    await expect(
+      checkTenantRateLimit('wallet-pin:mutation', 'm1:c1', {
+        maxRequests: 5,
+        windowMs: 600_000,
+      })
+    ).resolves.toBe('unavailable');
+  });
+
   it('denies when the budget is exhausted', async () => {
     mockLimiterLimit.mockResolvedValue({ success: false });
     await expect(
@@ -57,6 +70,19 @@ describe('checkTenantRateLimit', () => {
         windowMs: 60_000,
       })
     ).resolves.toBe('denied');
+  });
+
+  it('reports the limiter reset time with a denial', async () => {
+    mockLimiterLimit.mockResolvedValue({
+      success: false,
+      reset: 1_700_000_042_000,
+    });
+    await expect(
+      checkTenantRateLimitDetailed('wallet-pin:mutation', 'm1:c1', {
+        maxRequests: 5,
+        windowMs: 600_000,
+      })
+    ).resolves.toEqual({ verdict: 'denied', resetAt: 1_700_000_042_000 });
   });
 
   it('logs budget exhaustion for abuse alerting', async () => {

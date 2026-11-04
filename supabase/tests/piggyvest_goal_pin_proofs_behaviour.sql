@@ -222,8 +222,8 @@ BEGIN
   PERFORM pg_temp.gp_issue('exact', 'goal_fund', 5000, c_goal || ':' || c_op1);
   v_result := pg_temp.gp_call(c_op1, 5000, pg_temp.gp_token('exact'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'claimed', 'exact proof: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950,
-    'reservation or hold missing after a spent proof');
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 1000,
+    'reservation missing, or legacy wallet changed, after a spent proof');
   PERFORM pg_temp.gp_assert(pg_temp.gp_spent('exact'), 'the proof was not spent with the reservation');
 
   -- A replay of the reserved operation needs no new proof and spends none.
@@ -231,19 +231,19 @@ BEGIN
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'replay without proof: ' || v_result::text);
   v_result := pg_temp.gp_call(c_op1, 5000, pg_temp.gp_token('exact'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'replay with spent proof: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950,
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 1000,
     'replay changed the reservation');
 
   -- Only one transfer per goal may be in flight (primary_savings_single_pending_goal_idx),
   -- so the reserved row is removed to let the next claim be attempted. The
-  -- wallet hold from it stays, so the balance remains 950 below.
+  -- reservation never touches the legacy wallet, so the balance stays 1000.
   DELETE FROM piggyvest_primary.savings_operations WHERE id = c_op1::uuid;
 
   -- A spent proof cannot fund a different operation.
   v_result := pg_temp.gp_call(c_op2, 5000, pg_temp.gp_token('exact'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'mismatch',
     'spent proof reused: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 950,
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 1000,
     'reused proof left a reservation');
 
   -- Cancel and complete proofs are spent only for an active goal of this
@@ -299,7 +299,7 @@ BEGIN
   v_result := pg_temp.gp_call(c_op5, 5000, pg_temp.gp_token('switched-off'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'unavailable',
     'merchant off: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 950
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 1000
     AND NOT pg_temp.gp_spent('switched-off'), 'merchant off left a reservation or spent a proof');
   -- A merchant with PIN checking off funds with no proof (empty or missing);
   -- the reservation stands and nothing is spent. A garbage proof is still refused.
@@ -308,7 +308,7 @@ BEGIN
     'merchant off with garbage proof: ' || v_result::text);
   v_result := pg_temp.gp_call(c_op5, 5000, '');
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'claimed', 'merchant off without proof: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 900
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 1000
     AND NOT pg_temp.gp_spent('switched-off'), 'merchant off funding changed a proof or the hold');
 
   -- The operation c_op5 was reserved while checking was off and is still
@@ -332,7 +332,7 @@ BEGIN
   v_result := pg_temp.gp_call(c_op5, 5000, pg_temp.gp_token('replay-exact'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'pending replay with the exact proof: ' || v_result::text);
   PERFORM pg_temp.gp_assert(pg_temp.gp_spent('replay-exact') AND pg_temp.gp_operations() = 1
-    AND pg_temp.gp_balance() = 900, 'the replay proof was not spent or the reservation changed');
+    AND pg_temp.gp_balance() = 1000, 'the replay proof was not spent or the reservation changed');
   v_result := pg_temp.gp_call(c_op5, 5000, NULL);
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'replay after the proof was spent: ' || v_result::text);
   -- Pinned vectors shared with goal-pin-binding.test.ts: the TypeScript

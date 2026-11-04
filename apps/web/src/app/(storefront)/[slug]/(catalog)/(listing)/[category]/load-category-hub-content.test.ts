@@ -17,10 +17,13 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: (...args: unknown[]) =>
     mockCategoryPageData(...args),
 }));
-vi.mock('@/lib/storefront-compare/load-compare-category-inventory-safely', () => ({
-  loadCompareCategoryInventorySafely: (...args: unknown[]) =>
-    mockCompareInventory(...args),
-}));
+vi.mock(
+  '@/lib/storefront-compare/load-compare-category-inventory-safely',
+  () => ({
+    loadCompareCategoryInventorySafely: (...args: unknown[]) =>
+      mockCompareInventory(...args),
+  })
+);
 
 describe('loadCategoryHubContent', () => {
   beforeEach(() => {

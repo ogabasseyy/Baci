@@ -42,6 +42,7 @@ export function buildCategoryHubModel(
     storeUrl: input.storeUrl,
     products: input.products,
     brandAuthorityEntries: input.brandAuthorityEntries,
+    merchantCurrency: input.merchantCurrency,
   });
   const guideLinks =
     input.categorySlug in CONTENT_CLUSTER_SUPPORT
@@ -68,6 +69,7 @@ export function buildCategoryHubModel(
         categorySlug: input.categorySlug,
         categoryName: input.categoryName,
         products: input.products,
+        merchantCurrency: input.merchantCurrency,
       }),
     guideLinks,
     faqItems,

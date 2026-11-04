@@ -95,6 +95,8 @@ export async function OgabasseyPdpSemanticSections({
     stock: resolveSemanticCandidateStock(product),
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
+    manage_stock: product.manage_stock,
+    has_condition_offers: product.has_condition_offers,
   };
   const compareInventory = inventory.some(
     (candidate) => candidate.slug === currentProduct.slug
@@ -110,12 +112,14 @@ export async function OgabasseyPdpSemanticSections({
     anchorProductSlug: currentProduct.slug,
     maxLinks: MAX_PRODUCT_COMPARE_LINKS,
   });
+  const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const semanticModel = buildProductSemanticModel({
     storeUrl,
     merchantBusinessName: merchant.business_name || 'Baci Store',
     categorySlug,
     categoryName,
     countryCode: merchant.country,
+    merchantCurrency,
     currentProduct,
     inventory,
     hubEligibilityInventory,
@@ -126,7 +130,7 @@ export async function OgabasseyPdpSemanticSections({
     product,
     merchantDisplayName: merchant.business_name || 'Baci Store',
     categoryName,
-    currency: resolveMerchantCurrencyConfig(merchant).code,
+    currency: merchantCurrency,
     country: merchant.country,
   });
 

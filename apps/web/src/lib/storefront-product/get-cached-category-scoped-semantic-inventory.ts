@@ -135,6 +135,7 @@ function toScopedSemanticCandidate(
     is_parent: row.is_parent ?? null,
     parent_product_id: row.parent_product_id ?? null,
     manage_stock: row.manage_stock,
+    has_condition_offers: row.has_condition_offers ?? false,
   };
 }
 

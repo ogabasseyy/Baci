@@ -13,6 +13,7 @@
 
 import { generateSlug } from '@/lib/seo-utils';
 import {
+  // Phase 1B: Coerces raw manage_stock to strict boolean contract
   coerceStorefrontManageStock,
   getStorefrontAgentAvailability,
 } from '@/lib/storefront-agent-availability';
@@ -52,6 +53,7 @@ export interface NormalizedProduct {
   compare_at_price: number | null;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   rating: number;
   availability: 'InStock' | 'OutOfStock';
   product_key_specs?: ProductKeySpecsRecord | null;
@@ -199,6 +201,7 @@ export function normalizeProduct(
     compare_at_price: raw.compare_at_price ?? null,
     condition: raw.condition || 'New',
     stock,
+    manage_stock: coerceStorefrontManageStock(raw.manage_stock),
     rating: raw.rating ?? 0,
     availability,
     product_key_specs: normalizeProductKeySpecs(raw.product_key_specs, {

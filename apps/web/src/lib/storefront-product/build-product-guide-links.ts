@@ -1,12 +1,12 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import { buildCommercialGuideDescription } from '@/lib/storefront-content/build-commercial-guide-description';
+import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
-  ContentClusterKind,
-  InformationalGuideLink,
   PublishedClusterPost,
   SupportedClusterCategory,
 } from '@/lib/storefront-content/content-cluster-types';
+import { getContextBrandKeys } from '@/lib/storefront-content/get-context-brand-keys';
+import { getPostTokenGroups } from '@/lib/storefront-content/get-post-token-groups';
 import { inferContentClusterContext } from '@/lib/storefront-content/infer-content-cluster-context';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
 
@@ -23,22 +23,53 @@ function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
   });
 }
 
-function inferPriorityGuideKind(
-  post: PublishedClusterPost
-): ContentClusterKind {
-  return inferContentClusterContext(post).kind ?? 'buyer-guide';
-}
+function hasConfiguredPostBrandMismatch(
+  post: PublishedClusterPost,
+  categorySlug: SupportedClusterCategory,
+  productBrand: string | null | undefined,
+  productName: string
+): boolean {
+  const brandAliases = CONTENT_CLUSTER_SUPPORT[categorySlug].brandTokens;
+  const productBrands = productBrand ? [productBrand] : [];
+  const normalizedBrands = getContextBrandKeys(
+    productBrands,
+    [productName],
+    brandAliases
+  );
+  const configuredProductBrands = normalizedBrands.filter(
+    (brand) => brand in brandAliases
+  );
 
-function buildPriorityProductGuideLinks(input: {
-  posts: PublishedClusterPost[];
-  storeUrl: string;
-}): InformationalGuideLink[] {
-  return input.posts.map((post) => ({
-    href: `${input.storeUrl}/blog/${post.slug}`,
-    title: post.title,
-    description: buildCommercialGuideDescription(post),
-    kind: inferPriorityGuideKind(post),
-  }));
+  if (configuredProductBrands.length === 0) {
+    return false;
+  }
+
+  const inferred = inferContentClusterContext(post);
+  const configuredPostBrands = inferred.brands.filter(
+    (brand) => generateSlug(brand) in brandAliases
+  );
+
+  if (configuredPostBrands.length === 0) {
+    return false;
+  }
+
+  const hasBrandMatch =
+    inferred.brands.some((brand) =>
+      normalizedBrands.includes(generateSlug(brand))
+    ) ||
+    normalizedBrands.some((brand) => {
+      const brandTokens = brand.split('-').filter(Boolean);
+      return (
+        brandTokens.length > 0 &&
+        getPostTokenGroups(post).some((tokens) =>
+          tokens.some((_, idx) =>
+            brandTokens.every((token, offset) => tokens[idx + offset] === token)
+          )
+        )
+      );
+    });
+
+  return !hasBrandMatch;
 }
 
 export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
@@ -46,38 +77,55 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
     return [];
   }
 
-  const guidePosts = (input.guidePosts ?? []).filter(
+  const categorySlug = input.categorySlug as SupportedClusterCategory;
+
+  const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
+
+  const validGuidePosts = (input.guidePosts ?? []).filter((post) => {
+    if (
+      post.merchant_intent === 'news' &&
+      (post.merchant_intent_source === 'merchant_declared' ||
+        post.merchant_intent_source === 'verified_receipt' ||
+        post.merchant_intent_source === 'reviewed')
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const priorityGuidePosts = validGuidePosts.filter(
     (post) =>
-      !(
-        post.merchant_intent === 'news' &&
-        (post.merchant_intent_source === 'merchant_declared' ||
-          post.merchant_intent_source === 'verified_receipt' ||
-          post.merchant_intent_source === 'reviewed')
+      priorityGuidePostSlugs.has(post.slug) &&
+      !hasConfiguredPostBrandMismatch(
+        post,
+        categorySlug,
+        input.currentProduct.brand,
+        input.currentProduct.name
       )
   );
-  const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
-  const priorityGuidePosts = guidePosts.filter((post) =>
-    priorityGuidePostSlugs.has(post.slug)
-  );
-  const fallbackGuidePosts = guidePosts.filter(
+  const fallbackGuidePosts = validGuidePosts.filter(
     (post) => !priorityGuidePostSlugs.has(post.slug)
   );
 
-  return dedupeGuideLinks([
-    ...buildPriorityProductGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: priorityGuidePosts,
-    }),
-    ...buildCommercialGuideLinks({
-      storeUrl: input.storeUrl,
-      posts: fallbackGuidePosts,
-      context: {
-        pageKind: 'product',
-        categorySlug: input.categorySlug as SupportedClusterCategory,
-        brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
-        productNames: [input.currentProduct.name],
-        productSlugs: [input.currentProduct.slug],
-      },
-    }),
-  ]).slice(0, 3);
+  const context = {
+    pageKind: 'product' as const,
+    categorySlug,
+    brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
+    productNames: [input.currentProduct.name],
+    productSlugs: [input.currentProduct.slug],
+  };
+
+  const priorityLinks = buildCommercialGuideLinks({
+    storeUrl: input.storeUrl,
+    posts: priorityGuidePosts,
+    context,
+  });
+  const fallbackLinks = buildCommercialGuideLinks({
+    storeUrl: input.storeUrl,
+    posts: fallbackGuidePosts,
+    context,
+  });
+
+  return dedupeGuideLinks([...priorityLinks, ...fallbackLinks]).slice(0, 3);
 }

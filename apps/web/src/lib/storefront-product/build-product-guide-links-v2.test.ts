@@ -216,6 +216,26 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
       })
     );
     expect(links).toEqual([]);
+
+    const reclassifiedNewsV2Post = makeV2Post({
+      slug: 'reclassified-news-v2-guide',
+      title: 'Reclassified News V2 Guide',
+      guide_scope: 'category_guide',
+      guide_kind: 'buyer-guide',
+      metadata_status: 'verified',
+      cluster_category_slug: 'smartphones',
+      merchant_intent: 'news',
+      merchant_intent_source: 'merchant_declared',
+    });
+
+    expect(
+      buildProductGuideLinks(
+        makeInput({
+          priorityGuidePostSlugs: [reclassifiedNewsV2Post.slug],
+          guidePosts: [reclassifiedNewsV2Post],
+        })
+      )
+    ).toEqual([]);
   });
 
   it('rejects V2 post with category mismatch or invalid guide_kind and caps results at 3', () => {

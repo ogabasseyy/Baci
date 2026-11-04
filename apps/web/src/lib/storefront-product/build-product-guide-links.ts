@@ -127,7 +127,15 @@ interface EligibleV2LinkItem {
 export function buildProductGuideLinks(
   input: BuildProductSemanticModelInput
 ): InformationalGuideLink[] {
-  const posts = input.guidePosts ?? [];
+  const posts = (input.guidePosts ?? []).filter(
+    (p) =>
+      !(
+        p.merchant_intent === 'news' &&
+        (p.merchant_intent_source === 'merchant_declared' ||
+          p.merchant_intent_source === 'verified_receipt' ||
+          p.merchant_intent_source === 'reviewed')
+      )
+  );
   const anyHasV2 = posts.some(hasV2Metadata);
   const hasSupportedLegacyCluster =
     input.categorySlug in CONTENT_CLUSTER_SUPPORT;
@@ -174,16 +182,7 @@ export function buildProductGuideLinks(
   }
 
   if (hasSupportedLegacyCluster) {
-    const legacyPosts = posts.filter(
-      (p) =>
-        !hasV2Metadata(p) &&
-        !(
-          p.merchant_intent === 'news' &&
-          (p.merchant_intent_source === 'merchant_declared' ||
-            p.merchant_intent_source === 'verified_receipt' ||
-            p.merchant_intent_source === 'reviewed')
-        )
-    );
+    const legacyPosts = posts.filter((p) => !hasV2Metadata(p));
     const legacyPriorityPosts = legacyPosts.filter(
       (p) =>
         priorityGuidePostSlugs.has(p.slug) &&

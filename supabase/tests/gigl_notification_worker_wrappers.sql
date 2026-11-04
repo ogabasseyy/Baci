@@ -116,7 +116,8 @@ SELECT ok(
 
 -- Behaviour fixtures ------------------------------------------------------
 ALTER TABLE public.shipments DISABLE TRIGGER stamp_gigl_shipment_economics;
-SET LOCAL ROLE service_role;
+-- Fixtures run as the migration owner with the service-role claim, like the
+-- other gigl suites (service_role itself cannot write auth.users).
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 CREATE TEMP TABLE gnw_fixture (

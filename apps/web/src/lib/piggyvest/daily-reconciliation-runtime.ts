@@ -23,7 +23,9 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * owner email and the money page. It has its own switch and stays off until
  * the owner sets PIGGYVEST_RECONCILIATION_ENABLED=true; it only reads and
  * never moves money. It uses the recovery reader, so it keeps running when
- * the savings flags are off (a rollback cannot hide a stuck transfer).
+ * the savings flags are off (a rollback cannot hide a stuck transfer). Each
+ * day it reads a different rotating window of wallets and stuck transfers, so
+ * a book larger than one window is fully checked across runs.
  */
 export const RECONCILIATION_STALE_AFTER_SECONDS = 1800;
 /**
@@ -32,6 +34,21 @@ export const RECONCILIATION_STALE_AFTER_SECONDS = 1800;
  * still fit, so reads get 200.
  */
 export const RECONCILIATION_READ_BUDGET_MS = 200_000;
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * The window position for this run: the UTC day number. Consecutive days move
+ * the database window by one page, so every wallet and stuck transfer is
+ * returned across runs instead of the same first rows every day.
+ */
+function rotationSlotOf(nowMs: number): number {
+  const slot = Math.floor(nowMs / MS_PER_DAY);
+  // Whole, non-negative and within the nine digits the database accepts.
+  if (!Number.isSafeInteger(slot) || slot < 0 || slot > 999_999_999)
+    throw new Error('Unusable rotation slot');
+  return slot;
+}
 
 const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
@@ -92,6 +109,7 @@ function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
         environment,
         JSON.stringify({
           staleAfterSeconds: RECONCILIATION_STALE_AFTER_SECONDS,
+          rotationSlot: rotationSlotOf(deps.nowMs()),
         }),
       ]);
       const parsed = schemas.snapshotRows.safeParse(rows);

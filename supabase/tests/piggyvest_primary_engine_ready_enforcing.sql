@@ -32,9 +32,27 @@ CREATE FUNCTION pg_temp.id(p_n int) RETURNS uuid LANGUAGE sql IMMUTABLE AS $$
 $$;
 
 -- Missing fence codes for a surface and login, as text for comparison.
-CREATE FUNCTION pg_temp.gaps(p_surface text, p_login text) RETURNS text
+-- bank_role_violations also lists the function and relation privileges every
+-- login inherits from PUBLIC on the image under test (the baseline a login
+-- that holds nothing, pv_er_bare, also has). For the bank inbox, a
+-- bank_role_unsafe verdict is dropped only when EVERY violation row of the
+-- login is such a baseline row; any other row (capability, membership,
+-- missing, or a function or relation the bare login lacks) keeps the verdict.
+-- The production check is never replaced; pg_temp.real_gaps reads it as is.
+CREATE FUNCTION pg_temp.real_gaps(p_surface text, p_login text) RETURNS text
 LANGUAGE sql AS $$
   SELECT array_to_string(piggyvest_primary.engine_fences(p_surface, p_login::name), ',')
+$$;
+
+CREATE FUNCTION pg_temp.gaps(p_surface text, p_login text) RETURNS text
+LANGUAGE sql AS $$
+  SELECT array_to_string(
+    CASE WHEN p_surface = 'bank_inbox' AND NOT EXISTS (
+        SELECT 1 FROM piggyvest_primary.bank_role_violations(p_login::name, true) v
+        WHERE NOT (v ~ '^(function|relation):' AND v IN (
+          SELECT piggyvest_primary.bank_role_violations('pv_er_bare'::name, true))))
+      THEN array_remove(piggyvest_primary.engine_fences(p_surface, p_login::name), 'bank_role_unsafe')
+      ELSE piggyvest_primary.engine_fences(p_surface, p_login::name) END, ',')
 $$;
 
 -- Throwaway logins. The bank worker authority only accepts the fixed login
@@ -52,18 +70,8 @@ END $$;
 ALTER ROLE baci_primary_bank_worker LOGIN NOCREATEROLE NOCREATEDB VALID UNTIL '2100-01-01';
 GRANT primary_bank_inbox_worker TO baci_primary_bank_worker;
 
--- The privilege scan counts everything PUBLIC may execute on the database
--- under test, which is noise here. Keep the real rules but drop the
--- function and relation rows a login that holds nothing also has.
+-- A login that holds nothing: the baseline of PUBLIC privileges (see gaps).
 CREATE ROLE pv_er_bare LOGIN;
-ALTER FUNCTION piggyvest_primary.bank_role_violations(name, boolean)
-  RENAME TO bank_role_violations_real;
-CREATE FUNCTION piggyvest_primary.bank_role_violations(p_login name, p_worker boolean)
-RETURNS SETOF text LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
-  SELECT v FROM piggyvest_primary.bank_role_violations_real(p_login, p_worker) v
-  WHERE NOT (v ~ '^(function|relation):'
-    AND v IN (SELECT piggyvest_primary.bank_role_violations_real('pv_er_bare', p_worker)))
-$$;
 
 -- Inserting a merchant fires the canonical audit trigger, which needs an actor;
 -- run the fixture as the service role (transaction-local), as the other suites do.

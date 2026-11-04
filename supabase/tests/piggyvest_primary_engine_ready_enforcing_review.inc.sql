@@ -37,27 +37,39 @@ SELECT pg_temp.check(pg_temp.gaps('inflow', 'pv_er_exec') = 'login_membership_un
   'a delegable readiness reader grant along the chain must be reported alone');
 ROLLBACK TO SAVEPOINT evidence_reader_admin;
 
--- 3e. The real privilege scan. The suite wrapper drops function and relation
--- rows a bare login also has (PUBLIC privileges of the image). Put the
--- unmodified scan back: the worker is ready exactly when the image has no such
--- shared rows, and otherwise fails closed with bank_role_unsafe.
-SAVEPOINT real_bank_scan;
-ALTER FUNCTION piggyvest_primary.bank_role_violations(name, boolean)
-  RENAME TO bank_role_violations_wrapped;
-ALTER FUNCTION piggyvest_primary.bank_role_violations_real(name, boolean)
-  RENAME TO bank_role_violations;
-SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') =
-  CASE WHEN EXISTS (SELECT 1 FROM piggyvest_primary.bank_role_violations('pv_er_bare', true) v
-      WHERE v ~ '^(function|relation):')
+-- 3e. The unmodified privilege scan (pg_temp.real_gaps never filters). The
+-- worker is ready exactly when no violation row exists at all, and otherwise
+-- fails closed with bank_role_unsafe, so PUBLIC noise is never trusted here.
+SELECT pg_temp.check(pg_temp.real_gaps('bank_inbox', 'baci_primary_bank_worker') =
+  CASE WHEN EXISTS (SELECT 1 FROM piggyvest_primary.bank_role_violations(
+      'baci_primary_bank_worker', true))
     THEN 'bank_role_unsafe' ELSE '' END,
-  'the unmodified scan must make the worker ready, or fail closed on shared privileges');
-ROLLBACK TO SAVEPOINT real_bank_scan;
+  'the unmodified scan must make the worker ready, or fail closed on any violation');
+
+-- An extra non-baseline privilege is always reported by the unmodified check
+-- and is never hidden by the baseline filter.
+SAVEPOINT real_bank_extra_relation;
+GRANT SELECT ON piggyvest_primary.integrations TO baci_primary_bank_worker;
+SELECT pg_temp.check(pg_temp.real_gaps('bank_inbox', 'baci_primary_bank_worker') = 'bank_role_unsafe',
+  'the unmodified scan must report an extra relation privilege');
+SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'bank_role_unsafe',
+  'the baseline filter must not hide an extra relation privilege');
+ROLLBACK TO SAVEPOINT real_bank_extra_relation;
+
+SAVEPOINT real_bank_extra_member;
+CREATE ROLE pv_er_real_extra NOLOGIN;
+GRANT pv_er_real_extra TO primary_bank_inbox_worker;
+SELECT pg_temp.check(pg_temp.real_gaps('bank_inbox', 'baci_primary_bank_worker') = 'bank_role_unsafe',
+  'the unmodified scan must report an extra bank capability membership');
+ROLLBACK TO SAVEPOINT real_bank_extra_member;
 
 -- 3f. A non-owner reads the same verdict through engine_ready: the reader
 -- grant is inherited, no SET-able owner is needed, and the answer is that of
 -- the session login.
 SELECT piggyvest_primary.engine_ready('inflow') AS owner_inflow \gset
 SELECT piggyvest_primary.engine_ready('bank_inbox') AS owner_bank \gset
+-- The suite session may not be allowed to SET ROLE to roles it created.
+GRANT pv_er_exec, baci_primary_bank_worker TO CURRENT_USER;
 SET LOCAL ROLE pv_er_exec;
 SELECT pg_temp.check(current_user = 'pv_er_exec'
     AND piggyvest_primary.engine_ready('inflow') = :'owner_inflow'::jsonb

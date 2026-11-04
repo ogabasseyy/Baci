@@ -11,17 +11,13 @@ ALTER TABLE public.blog_posts
   ADD COLUMN IF NOT EXISTS metadata_content_hash text,
   ADD COLUMN IF NOT EXISTS metadata_verified_at timestamptz,
   ADD COLUMN IF NOT EXISTS metadata_verified_by text;
-
 CREATE INDEX IF NOT EXISTS idx_blog_posts_cluster_category_id ON public.blog_posts (cluster_category_id);
-
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_scope_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_scope_check
   CHECK (guide_scope IS NULL OR guide_scope IN ('product_specific', 'model_comparison', 'brand_family_guide', 'category_guide', 'troubleshooting', 'general_news'));
-
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_kind_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_kind_check
   CHECK (guide_kind IS NULL OR guide_kind IN ('buyer-guide', 'best-in-nigeria', 'decision-support', 'troubleshooting'));
-
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_metadata_source_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_metadata_source_check
   CHECK (metadata_source IN ('publisher', 'author', 'backfill_verified', 'unverified'));

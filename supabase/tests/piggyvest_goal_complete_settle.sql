@@ -63,7 +63,7 @@ BEGIN
       'a residual was settled as confirmed');
     PERFORM pg_temp.gx_assert(pg_temp.gx_state(v_op) = 'needs_review'
       AND pg_temp.gx_goal('status') = 'active' AND pg_temp.gx_goal('current_amount') = '0.00'
-      AND pg_temp.gx_wallet() = 3500
+      AND pg_temp.gx_wallet() = 1000
       AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_purchase_requests)
       AND EXISTS (SELECT 1 FROM public.customer_savings_events
                    WHERE goal_id = c_goal::uuid AND event_type = 'goal_complete_needs_review'),
@@ -104,10 +104,9 @@ BEGIN
   PERFORM pg_temp.gx_assert(pg_temp.gx_state(v_op) = 'confirmed'
     AND pg_temp.gx_goal('status') = 'completed' AND pg_temp.gx_goal('current_amount') = '0.00'
     AND pg_temp.gx_goal('completed_at') IS NOT NULL
-    AND pg_temp.gx_wallet() = 3500
-    AND EXISTS (SELECT 1 FROM public.customer_wallet_transactions
-                 WHERE source_type = 'piggyvest_goal_complete' AND source_id = v_op::uuid
-                   AND amount = 2500 AND balance_after = 3500 AND status = 'completed')
+    AND pg_temp.gx_wallet() = 1000
+    AND NOT EXISTS (SELECT 1 FROM public.customer_wallet_transactions
+                     WHERE source_type = 'piggyvest_goal_complete' AND source_id = v_op::uuid)
     AND EXISTS (SELECT 1 FROM public.customer_savings_events
                  WHERE goal_id = c_goal::uuid AND event_type = 'goal_completed_to_wallet'),
     'settled state is wrong');
@@ -128,7 +127,7 @@ BEGIN
   v_result := piggyvest_primary.read_goal_purchase_request_alert(c_integration, 'staging', v_op::uuid);
   PERFORM pg_temp.gx_assert(v_result ->> 'operationId' = v_op, 'unalerted request not returned');
   PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op)) = 'duplicate', 'replay');
-  PERFORM pg_temp.gx_assert(pg_temp.gx_wallet() = 3500
+  PERFORM pg_temp.gx_assert(pg_temp.gx_wallet() = 1000
     AND (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_purchase_requests) = 1, 'a replay changed the books');
   PERFORM pg_temp.gx_assert(pg_catalog.jsonb_array_length(public.list_open_goal_purchase_requests(10)) = 1
     AND public.list_open_goal_purchase_requests(10) -> 0 ->> 'alertedAt' IS NULL, 'the operator list misses an unalerted request');

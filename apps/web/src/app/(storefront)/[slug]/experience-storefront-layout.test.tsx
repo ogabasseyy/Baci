@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
 const load = vi.hoisted(() => vi.fn());
+const location = vi.hoisted(() => ({ path: '/qa1' }));
 vi.mock('@/lib/experience/published-manifest', () => ({
   loadPublishedExperience: load,
 }));
@@ -11,9 +12,17 @@ vi.mock('@/components/storefront/experience/ExperienceShell', () => ({
   ),
 }));
 vi.mock('./storefront-layout-renderer', () => ({
-  StorefrontLayoutRenderer: () => <p>Native store</p>,
+  StorefrontLayoutRenderer: ({ children }: { children: React.ReactNode }) => (
+    <div>
+      <p>Native store</p>
+      {children}
+    </div>
+  ),
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+  usePathname: () => location.path,
+}));
 
 import { ResolvedExperienceStorefrontLayout } from './experience-storefront-layout';
 
@@ -46,4 +55,26 @@ it('preserves the existing native layout when no experience is enabled', async (
     })
   );
   expect(screen.getByText('Native store')).toBeVisible();
+});
+
+it.each([
+  '/qa1/checkout',
+  '/checkout',
+])('preserves native checkout when its parent published head throws: %s', async (path) => {
+  location.path = path;
+  try {
+    load.mockRejectedValueOnce(Error('MERCHANT_MISMATCH'));
+    render(
+      await ResolvedExperienceStorefrontLayout({
+        merchant: { id: 'm', slug: 'qa1' } as never,
+        children: <p>Checkout form</p>,
+        preloadHeroLcpImages: false,
+        routingMode: path.startsWith('/qa1') ? 'path' : 'domain',
+      })
+    );
+    expect(screen.getByText('Checkout form')).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+  } finally {
+    location.path = '/qa1';
+  }
 });

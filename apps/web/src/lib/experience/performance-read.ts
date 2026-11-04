@@ -14,7 +14,7 @@ import {
   type CandidatePerformanceQualificationReason,
   EXPERIENCE_PERFORMANCE_QUALIFICATION_POLICY,
 } from './candidate-performance-qualification';
-import { resolveExperienceRoute } from './route-ownership';
+import { resolveExperienceRoute } from './route-resolver';
 
 export interface PerformanceBinding {
   merchantId: string;
@@ -54,7 +54,7 @@ export type PerformanceQualificationSummary =
       releaseQualified: false;
     };
 
-function representativeRoutes(
+async function representativeRoutes(
   input: unknown,
   samples: ExperiencePerformanceReport['samples']
 ) {
@@ -66,7 +66,13 @@ function representativeRoutes(
 
   const representedViews = new Set<string>();
   for (const route of routes) {
-    const resolved = resolveExperienceRoute(manifest.routes, route);
+    // Classification of trusted retained samples only. The pipeline reader separately
+    // validates canonical identity and fingerprints against fresh catalog bootstraps.
+    const result = await resolveExperienceRoute(manifest.routes, route, {
+      product: async (handle) => ({ id: handle, canonicalPath: route }),
+      collection: async (handle) => ({ id: handle }),
+    });
+    const resolved = result.kind === 'route' ? result.route : null;
     if (
       !resolved ||
       resolved.canonicalPath !== route ||
@@ -181,7 +187,10 @@ export async function readExperiencePerformance(
       routes,
       bootstrapDigests: report.data.bootstrapDigests ?? [],
     });
-    const representatives = representativeRoutes(manifest, report.data.samples);
+    const representatives = await representativeRoutes(
+      manifest,
+      report.data.samples
+    );
     if (
       routes.length !== representatives.length ||
       routes.some((route) => !representatives.includes(route))

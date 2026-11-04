@@ -29,7 +29,9 @@ it('uses the current safe price/currency and current missing-product result for 
     revision: 'current',
   });
   mocked.runtime.mockReturnValue({ catalog });
-  mocked.head.mockResolvedValue({});
+  mocked.head.mockResolvedValue({
+    routes: [{ path: '/products/[handle]', view: 'product' }],
+  });
   expect(
     await loadFreshExperienceProduct(merchant as never, 'device')
   ).toMatchObject({
@@ -45,4 +47,17 @@ it('uses the current safe price/currency and current missing-product result for 
   expect(await loadFreshExperienceProduct(merchant as never, 'device')).toEqual(
     { active: false }
   );
+});
+
+it('leaves native PDP reads intact for a home-only published experience', async () => {
+  const catalog = vi.fn();
+  mocked.runtime.mockReturnValue({ catalog });
+  mocked.head.mockResolvedValue({ routes: [{ path: '/', view: 'home' }] });
+  expect(
+    await loadFreshExperienceProduct(
+      { id: 'm', slug: 'qa1' } as never,
+      'device'
+    )
+  ).toEqual({ active: false });
+  expect(catalog).not.toHaveBeenCalled();
 });

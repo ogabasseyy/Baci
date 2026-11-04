@@ -13,7 +13,9 @@ export const loadFreshExperienceProduct = cache(
     | { active: true; merchant: CachedMerchant; product: Product | null }
   > => {
     const runtime = getExperienceStorefrontRuntime();
-    if (!runtime || !(await loadPublishedExperience(merchant)))
+    if (!runtime) return { active: false };
+    const head = await loadPublishedExperience(merchant);
+    if (!head?.routes.some((route) => route.view === 'product'))
       return { active: false };
     const catalog = await runtime.catalog(merchant, { productSlug: slug });
     if (!catalog) throw Error('CURRENT_CATALOG_UNAVAILABLE');

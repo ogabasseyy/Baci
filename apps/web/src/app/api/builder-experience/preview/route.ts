@@ -1,12 +1,14 @@
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { requireExperienceOwner } from '@/lib/experience/authorization';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-import { experiencePreviewInput } from '@/schemas/experience-preview';
+import {
+  experiencePreviewInput,
+  experiencePreviewStatusInput,
+} from '@/schemas/experience-preview';
 
 const headers = {
   'Cache-Control': 'private, no-store',
@@ -14,18 +16,19 @@ const headers = {
   'X-Robots-Tag': 'noindex, nofollow',
 };
 export async function GET(request?: NextRequest) {
-  const parsed = z
-    .object({ merchantId: z.uuid(), bindingId: z.uuid() })
-    .safeParse(request ? Object.fromEntries(request.nextUrl.searchParams) : {});
-  if (!parsed.success)
-    return Response.json(
-      { error: 'Use an authenticated POST to launch.' },
-      { status: 405, headers }
-    );
   try {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw Error('UNAUTHORIZED');
+    const parsed = experiencePreviewStatusInput.safeParse(
+      request ? Object.fromEntries(request.nextUrl.searchParams) : {}
+    );
+    if (!parsed.success)
+      return Response.json(
+        { error: 'Use an authenticated POST to launch.' },
+        { status: 405, headers }
+      );
+
     const merchant = await getMerchantForApiRequest(supabase, data.user.id, {
       requestedMerchantId: parsed.data.merchantId,
     });

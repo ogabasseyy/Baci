@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useCartSafe } from '@/hooks/cart/cart-context';
-import { resolveExperienceRoute } from '@/lib/experience/route-ownership';
+import { resolveCatalogExperienceRoute } from '@/lib/experience/catalog-route-ownership';
 import { asRoute } from '@/lib/routes';
 import { ExperienceFrame } from './ExperienceFrame';
 import { createPublishedExperienceHost } from './experience-host-runtime';
@@ -115,10 +115,11 @@ export function ExperienceShell({
           : null;
     if (
       !relative ||
-      (!resolveExperienceRoute(state.data.manifest.routes, relative) &&
-        !state.data.bootstrap.catalog.products.some(
-          (p) => p.canonicalPath === relative
-        ))
+      !resolveCatalogExperienceRoute(
+        state.data.manifest.routes,
+        relative,
+        state.data.bootstrap.catalog.products
+      )
     )
       controller.exit();
   }, [controller, pathname, state]);

@@ -6,11 +6,14 @@ import { expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: 'owner' } }, error: null }),
+      getUser: async () => ({
+        data: { user: merchant.user ? { id: 'owner' } : null },
+        error: null,
+      }),
     },
   }),
 }));
-const merchant = vi.hoisted(() => ({ owner: true }));
+const merchant = vi.hoisted(() => ({ owner: true, user: true }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: async (
     _client: unknown,
@@ -67,5 +70,14 @@ it('denies staff status polling before querying private bindings', async () => {
     expect(await response.json()).toEqual({ active: false });
   } finally {
     merchant.owner = true;
+  }
+});
+
+it('authenticates malformed status requests before parsing their locator', async () => {
+  merchant.user = false;
+  try {
+    expect((await GET()).status).toBe(403);
+  } finally {
+    merchant.user = true;
   }
 });

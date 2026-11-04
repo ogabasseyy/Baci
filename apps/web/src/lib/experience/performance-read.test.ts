@@ -22,7 +22,9 @@ const manifest = {
   capabilities: [],
 };
 
-function context(options: { missing?: boolean; noArtifact?: boolean } = {}) {
+function context(
+  options: { missing?: boolean; noArtifact?: boolean; product?: boolean } = {}
+) {
   const tables = new Map<string, string[]>();
   const results = [
     {
@@ -39,7 +41,19 @@ function context(options: { missing?: boolean; noArtifact?: boolean } = {}) {
       error: null,
     },
     {
-      data: options.noArtifact ? null : { manifest },
+      data: options.noArtifact
+        ? null
+        : {
+            manifest: options.product
+              ? {
+                  ...manifest,
+                  routes: [
+                    { path: '/', view: 'home' },
+                    { path: '/products/[handle]', view: 'product' },
+                  ],
+                }
+              : manifest,
+          },
       error: null,
     },
   ];
@@ -271,4 +285,16 @@ it('fails closed when the owner-scoped source artifact is missing', async () => 
       async () => report()
     )
   ).rejects.toThrow('NOT_FOUND');
+});
+
+it('retains the route matrix for trusted categorized PDP samples', async () => {
+  const { ctx } = context({ product: true });
+  const raw = report();
+  for (const sample of raw.samples)
+    if (sample.route === '/pages/story') sample.route = '/phones/device';
+  raw.bootstrapDigests[1].route = '/phones/device';
+  expect(
+    (await readExperiencePerformance(ctx, 'build', async () => raw))
+      .qualification.status
+  ).toBe('passed');
 });

@@ -27,7 +27,6 @@ export function PreviewClient({
       const launch = await apiPost<Launch>('/api/builder-experience/preview', {
         merchantId,
         buildId,
-        routeId: 'home',
       });
 
       setSession({

@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { writeFileSync } from 'node:fs';
-import { expect, it } from 'vitest';
+import { expect, it as qualificationTest } from 'vitest';
+
+const it = qualificationTest.skipIf(
+  process.env.BACI_LOCAL_EXPERIENCE_QUALIFICATION !== '1'
+);
+
 import { verifyCompiledCandidate } from '../../src/lib/experience/build-service';
 import { runLocalQualification } from '../../tools/experience-runner/local-oci-executor';
 import { packPrivateBuild } from '../../tools/experience-runner/private-build-payload';

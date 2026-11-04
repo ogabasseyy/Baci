@@ -19,7 +19,22 @@ export async function ResolvedExperienceStorefrontLayout({
   try {
     experience = await loadPublishedExperience(merchant);
   } catch {
-    return <ExperienceUnavailable />;
+    return (
+      <ExperienceUnavailable
+        checkoutPath={
+          routingMode === 'domain' ? '/checkout' : `/${merchant.slug}/checkout`
+        }
+        checkoutFallback={
+          <StorefrontLayoutRenderer
+            merchant={merchant}
+            preloadHeroLcpImages={preloadHeroLcpImages}
+            routingMode={routingMode}
+          >
+            {children}
+          </StorefrontLayoutRenderer>
+        }
+      />
+    );
   }
   if (!experience)
     return (

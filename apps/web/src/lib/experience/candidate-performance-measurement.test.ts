@@ -369,3 +369,31 @@ it('binds prerender HTTPS resources and rewritten CSS integrity to the same deli
     `sha256-${Buffer.from(digestBytes(css), 'hex').toString('base64')}`
   );
 });
+
+it('measures a canonical categorized PDP while rejecting its noncanonical alias', async () => {
+  const execute = vi.fn(async (_kind: string, payload: unknown) => ({
+    jobId: 'synthetic',
+    output: output(payload),
+  }));
+  const input = makeInput(execute);
+  input.bootstrap.mockImplementation(async (view) => {
+    const bootstrap = routeBootstrap(view);
+    if (view === 'product') {
+      bootstrap.route.canonicalPath = '/phones/sample-item';
+      bootstrap.catalog.products[0].canonicalPath = '/phones/sample-item';
+    }
+    return bootstrap;
+  });
+  expect((await measureCandidatePerformance(input as never)).status).toBe(
+    'measured'
+  );
+  input.bootstrap.mockImplementation(async (view) => {
+    const bootstrap = routeBootstrap(view);
+    if (view === 'product')
+      bootstrap.catalog.products[0].canonicalPath = '/phones/sample-item';
+    return bootstrap;
+  });
+  expect((await measureCandidatePerformance(input as never)).status).toBe(
+    'not-measured'
+  );
+});

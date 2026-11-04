@@ -101,8 +101,9 @@ function createPreviewRuntime(
           .maybeSingle();
         if (a.error || !a.data) throw Error('NOT_FOUND');
         const manifest = parseExperienceManifest(a.data.manifest);
+        const routeId = input.routeId ?? manifest.routes[0]?.path;
         const route = manifest.routes.find(
-          (r) => r.path === input.routeId || r.view === input.routeId
+          (r) => r.path === routeId || r.view === routeId
         );
         if (!route) throw Error('NOT_FOUND');
         await requireExperienceOwner(owner);

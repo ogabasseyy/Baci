@@ -10,6 +10,14 @@
 
 CREATE TEMP TABLE definer_exposure_allowlist ON COMMIT DROP AS
 SELECT * FROM (VALUES
+  ('public.experience_preview_binding_active(uuid)', 'opaque expiring preview binding; returns liveness only'),
+  ('public.experience_public_manifest(text)', 'published approved verified storefront projection; excludes private source'),
+  ('public.experience_public_file(text,text,text)', 'published verified output only, scoped by merchant slug and build digest'),
+  ('public.experience_public_snapshot(text,text,text)', 'published verified semantic snapshot, exact merchant/build/path'),
+  ('public.experience_public_prerender_binding(text,text)', 'published verified companion binding, exact merchant/build'),
+  ('public.persist_storefront_shipping_quote(jsonb,jsonb)', 'guest shipping quote requires scoped server attestation; does not create orders'),
+  ('public.read_storefront_shipping_quotes(uuid,text,uuid,jsonb)', 'guest shipping quote requires matching cart/session scope'),
+  ('public.storefront_shipping_quote_storage_ready(uuid,uuid,jsonb)', 'guest storage readiness requires matching cart/session scope'),
   ('public.can_access_order(uuid,uuid)',
    'RLS/policy helper evaluated for anon sessions'),
   ('public.cancel_storefront_order_as_guest(uuid,text,text)',

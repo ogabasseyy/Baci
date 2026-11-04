@@ -75,3 +75,31 @@ it('does not fetch a caller-selected URL, malformed token or evidence path', asy
     await expect(read(token, path)).rejects.toThrow('INVALID_REQUEST');
   expect(fetchImpl).not.toHaveBeenCalled();
 });
+
+it('uses only the trusted staging origin while retaining its fixed evidence path', async () => {
+  const fetchImpl = vi.fn(
+    async () =>
+      new Response(image, {
+        headers: {
+          'content-type': 'image/png',
+          'content-length': String(image.length),
+        },
+      })
+  );
+  await createExperienceEvidenceClient({
+    backendOrigin: 'https://staging.example.test',
+    fetchImpl,
+  })('outer.token', id);
+  expect(fetchImpl).toHaveBeenCalledWith(
+    `https://staging.example.test/api/integrations/chatgpt/experience-evidence/${id}`,
+    expect.anything()
+  );
+  for (const backendOrigin of [
+    'https://user:pass@staging.example.test',
+    'https://staging.example.test/other',
+    'http://staging.example.test',
+  ])
+    expect(() =>
+      createExperienceEvidenceClient({ backendOrigin, fetchImpl })
+    ).toThrow('INVALID_BACKEND_ORIGIN');
+});

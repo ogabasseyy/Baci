@@ -24,7 +24,7 @@ export interface ExperienceOwnerRuntime {
       merchantId: string;
       requestOrigin?: string;
     },
-    input: { buildId: string; routeId: string }
+    input: { buildId: string; routeId?: string }
   ): Promise<unknown>;
 }
 let installed: ExperienceOwnerRuntime | undefined;

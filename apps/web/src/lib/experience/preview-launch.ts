@@ -12,7 +12,7 @@ import {
 import type { PreviewFile, PreviewVault } from './preview-service';
 export async function createPreviewLaunch(
   inputCtx: OwnerRequestContext,
-  input: { buildId: string; routeId: string },
+  input: { buildId: string; routeId?: string },
   vault: PreviewVault,
   expectedHostOrigin?: string,
   prerender?: PrerenderPreviewOptions
@@ -42,11 +42,9 @@ export async function createPreviewLaunch(
     .maybeSingle();
   if (artifact.error || !artifact.data) throw Error('NOT_FOUND');
   const manifest = parseExperienceManifest(artifact.data.manifest);
-  if (
-    !manifest.routes.some(
-      (r) => r.path === input.routeId || r.view === input.routeId
-    )
-  )
+  const routeId = input.routeId ?? manifest.routes[0]?.path;
+  if (!routeId) throw Error('NOT_FOUND');
+  if (!manifest.routes.some((r) => r.path === routeId || r.view === routeId))
     throw Error('NOT_FOUND');
   const bytes = await ctx.supabase
     .from('experience_build_files')
@@ -95,7 +93,7 @@ export async function createPreviewLaunch(
               buildId: input.buildId,
               buildDigest: build.data.build_digest,
               manifest,
-              routeId: input.routeId,
+              routeId,
               ref,
             },
             vault,

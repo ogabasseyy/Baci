@@ -113,6 +113,7 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       'tools/builder-auth/*.node.test.ts',
+      'experience-runtime/*.test.mjs',
       'tools/experience-runner/**',
       'tools/experience-sql/**',
       'tests/experience-authoring/**',

@@ -1,5 +1,6 @@
 import type { RouteState } from '@baci/shared/experience';
 import type { CartContextType } from '@/hooks/cart/cart-types';
+import { resolveCatalogExperienceRoute } from '@/lib/experience/catalog-route-ownership';
 import { resolveExperienceRoute } from '@/lib/experience/route-ownership';
 import { asRoute } from '@/lib/routes';
 import type { PublishedExperienceFrameHost } from './experience-frame-types';
@@ -191,6 +192,29 @@ export function createPublishedExperienceHost({
               (product) => product.slug === route.params.handle
             )?.canonicalPath ?? path)
           : path;
+      const owned = resolveCatalogExperienceRoute(
+        s.data.manifest.routes,
+        destination,
+        s.data.bootstrap.catalog.products
+      );
+      if (!owned) {
+        // The native PDP has no experience boundary to acknowledge this transition.
+        controller.exit();
+        live.current.router.push(
+          asRoute(
+            new URL(
+              s.data.launch.canonicalBase.replace(/\/$/, '') + destination
+            ).pathname
+          )
+        );
+        return {
+          ...s.data.bootstrap.route,
+          epoch: s.data.bootstrap.route.epoch + 1,
+          canonicalPath: destination,
+          routeId: 'product',
+          params: { handle: destination.split('/').at(-1) ?? '' },
+        };
+      }
       if (s.data.bootstrap.route.canonicalPath === destination)
         return s.data.bootstrap.route;
       controller.beginTransition();

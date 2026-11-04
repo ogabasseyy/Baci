@@ -69,3 +69,41 @@ it.each([
     vi.useRealTimers();
   }
 });
+
+it('hands known native products to Baci navigation without waiting for an experience boundary', async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = createExperienceShellController();
+    controller.activate('home', {
+      manifest: { routes: [{ path: '/', view: 'home' }] },
+      launch: { canonicalBase: 'http://localhost/qa1' },
+      bootstrap: {
+        route: { epoch: 1, canonicalPath: '/' },
+        catalog: {
+          products: [{ slug: 'device', canonicalPath: '/phones/device' }],
+        },
+      },
+    } as never);
+    const push = vi.fn();
+    const runtime = createPublishedExperienceHost({
+      controller,
+      live: { current: { cart: null, router: { push, refresh: vi.fn() } } },
+      merchantSlug: 'qa1',
+      present: vi.fn(),
+    });
+    const result = runtime.host.navigate('/phones/device').then(
+      (value) => ({ value, error: null }),
+      (error) => ({ value: null, error: error.message })
+    );
+    await vi.advanceTimersByTimeAsync(8001);
+    expect(await result).toMatchObject({
+      value: { canonicalPath: '/phones/device' },
+      error: null,
+    });
+    expect(push).toHaveBeenCalledWith('/qa1/phones/device');
+    expect(controller.getSnapshot()).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});

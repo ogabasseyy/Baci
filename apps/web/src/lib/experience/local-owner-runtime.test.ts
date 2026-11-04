@@ -134,3 +134,31 @@ it('retains the launch after successful descriptor and owner checks', async () =
   });
   expect(revoke).not.toHaveBeenCalled();
 });
+
+it('uses a declared initial route when the owner client omits its route locator', async () => {
+  const manifest = fixtureManifest('device-configurator');
+  manifest.routes = [{ path: '/pages/story', view: 'editorial' }];
+  const results = [
+    { job_id: 'job' },
+    { artifact_id: 'artifact' },
+    { manifest },
+  ];
+  const q = {
+    select: () => q,
+    eq: () => q,
+    maybeSingle: async () => ({ data: results.shift(), error: null }),
+  };
+  const ctx = {
+    merchantId: 'merchant',
+    actorUserId: 'owner',
+    supabase: { from: () => q },
+  };
+  authorize.mockResolvedValue(ctx);
+  const runtime = createLocalExperienceRuntime(
+    { revoke: vi.fn() } as never,
+    'http://127.0.0.1:4100/qa1'
+  );
+  await expect(
+    runtime.createPreviewLaunch(ctx as never, { buildId: 'build' })
+  ).resolves.toMatchObject({ routes: manifest.routes });
+});

@@ -5,7 +5,7 @@ import type {
 } from '@baci/shared/experience';
 import type { ExperiencePerformanceReport } from '@/schemas/experience-performance';
 import {
-  performancePublicBootstrap,
+  type performancePublicBootstrap,
   performanceWorkerOutput,
 } from '@/schemas/experience-performance-worker';
 import {
@@ -23,8 +23,8 @@ import {
 } from './candidate-performance-qualification';
 import { experienceBootstrapFingerprint } from './experience-bootstrap-fingerprint';
 import { digestBytes } from './manifest-digest';
+import { validatePerformanceBootstrap } from './performance-bootstrap';
 import { createPrivatePrerenderDocument } from './private-prerender-document';
-import { resolveExperienceRoute } from './route-ownership';
 
 const qualification = EXPERIENCE_PERFORMANCE_QUALIFICATION_POLICY;
 
@@ -43,32 +43,6 @@ function representativeViews(manifest: ExperienceManifest) {
   const views = [...new Set(manifest.routes.map((route) => route.view))];
   if (!views.length) throw Error('BUILD_FAILED');
   return views;
-}
-
-function validateBootstrap(
-  raw: PublicBootstrap,
-  manifest: ExperienceManifest,
-  view: ExperienceManifest['routes'][number]['view']
-) {
-  const bootstrap = performancePublicBootstrap.parse(raw);
-  const match = resolveExperienceRoute(
-    manifest.routes,
-    bootstrap.route.canonicalPath
-  );
-  if (
-    !match ||
-    match.view !== view ||
-    Object.values(match.params).some((value) => !value.trim()) ||
-    (view === 'product' &&
-      !bootstrap.catalog.products.some(
-        (product) =>
-          product.slug === match.params.handle &&
-          (!product.canonicalPath ||
-            product.canonicalPath === bootstrap.route.canonicalPath)
-      ))
-  )
-    throw Error('INVALID_ROUTE');
-  return bootstrap;
 }
 
 function mapAssets(
@@ -128,7 +102,7 @@ export async function measureCandidatePerformance(
     for (const view of representativeViews(input.manifest)) {
       let cleanBootstrap: ReturnType<typeof performancePublicBootstrap.parse>;
       try {
-        cleanBootstrap = validateBootstrap(
+        cleanBootstrap = await validatePerformanceBootstrap(
           await input.bootstrap(view),
           input.manifest,
           view

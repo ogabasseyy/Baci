@@ -1,7 +1,20 @@
 'use client';
-import { useRouter } from 'next/navigation';
-export function ExperienceUnavailable() {
+import { usePathname, useRouter } from 'next/navigation';
+import type { ReactNode } from 'react';
+export function ExperienceUnavailable({
+  checkoutFallback,
+  checkoutPath,
+}: {
+  checkoutFallback?: ReactNode;
+  checkoutPath?: string;
+} = {}) {
   const router = useRouter();
+  const pathname = usePathname();
+  if (
+    checkoutPath &&
+    (pathname === checkoutPath || pathname?.startsWith(`${checkoutPath}/`))
+  )
+    return checkoutFallback;
   return (
     <main role="alert">
       <h1>Storefront temporarily unavailable</h1>

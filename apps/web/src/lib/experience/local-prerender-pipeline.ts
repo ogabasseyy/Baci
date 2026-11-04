@@ -20,9 +20,9 @@ import {
   createProductionExperienceRuntime,
 } from './local-owner-runtime';
 import { createLocalPerformanceReports } from './local-performance-reports';
+import { validatePerformanceBootstrap } from './performance-bootstrap';
 import type { PreviewVault } from './preview-service';
 import { productionDeliveryOrigins } from './production-origins';
-import { resolveExperienceRoute } from './route-ownership';
 /** Explicit local composition: the build and owner preview share exact companion output. */
 export interface PrerenderPipelineSettings {
   artifactDirectory?: string;
@@ -190,33 +190,14 @@ function createPrerenderPipeline(
         ...new Set(trusted.manifest.routes.map((route) => route.view)),
       ];
       if (bootstrapDigests.length !== views.length) return undefined;
-      const routesByView = new Map<string, string>();
-      for (const entry of bootstrapDigests) {
-        const route = resolveExperienceRoute(
-          trusted.manifest.routes,
-          entry.route
-        );
-        if (
-          !route ||
-          route.canonicalPath !== entry.route ||
-          routesByView.has(route.view)
-        )
-          return undefined;
-        routesByView.set(route.view, entry.route);
-      }
-      if (
-        routesByView.size !== views.length ||
-        views.some((view) => !routesByView.has(view))
-      )
-        return undefined;
       try {
         for (const view of views) {
-          const fresh = await settings.bootstrap(
-            trusted.ctx,
+          const fresh = await validatePerformanceBootstrap(
+            await settings.bootstrap(trusted.ctx, trusted.manifest, view),
             trusted.manifest,
             view
           );
-          const route = routesByView.get(view);
+          const route = fresh.route.canonicalPath;
           const expected = bootstrapDigests.find(
             (entry) => entry.route === route
           );

@@ -82,7 +82,6 @@ it('creates the preview and makes a scoped activity check that fails closed', as
   expect(apiPost).toHaveBeenCalledWith('/api/builder-experience/preview', {
     merchantId: 'merchant-1',
     buildId: 'build-1',
-    routeId: 'home',
   });
   const activeButton = screen.getByRole('button', { name: 'Check active' });
   fireEvent.click(activeButton);

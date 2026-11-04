@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { readCartJsonBody } from '@/lib/cart/request-context';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import {
   admitPublicExperienceRead,
   parseExperiencePublicRequest,
@@ -13,7 +13,7 @@ const headers = {
   'Referrer-Policy': 'same-origin',
 };
 export async function POST(request: NextRequest) {
-  const body = await readCartJsonBody(request);
+  const body = await readBoundedJsonBody(request, 4096);
   let input: ReturnType<typeof parseExperiencePublicRequest>;
   try {
     if (!body.ok) throw Error('INVALID_REQUEST');

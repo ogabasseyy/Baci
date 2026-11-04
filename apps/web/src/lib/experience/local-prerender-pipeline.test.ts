@@ -145,7 +145,11 @@ it('treats a corrupted signed report as not-measured while preserving owner auth
   expect(authorize).toHaveBeenCalledTimes(3);
   expect(input.bootstrap).not.toHaveBeenCalled();
 });
-it('returns signed evidence only while its public bootstrap fingerprint is current', async () => {
+it.each([
+  'home',
+  'product',
+] as const)('returns signed %s evidence only while its public bootstrap fingerprint is current', async (view) => {
+  const canonicalPath = view === 'home' ? '/' : '/phones/product-1';
   const artifactDirectory = mkdtempSync(join(tmpdir(), 'experience-pipeline-'));
   directories.push(artifactDirectory);
   const key = new Uint8Array(32).fill(7);
@@ -157,7 +161,10 @@ it('returns signed evidence only while its public bootstrap fingerprint is curre
     entry: 'Experience.tsx',
     files: [{ path: 'Experience.tsx', content: 'export default () => null' }],
     packages: [],
-    routes: [{ path: '/', view: 'home' }],
+    routes:
+      view === 'home'
+        ? [{ path: '/', view: 'home' }]
+        : [{ path: '/products/[handle]', view: 'product' }],
     assets: [],
     capabilities: [],
   };
@@ -166,9 +173,12 @@ it('returns signed evidence only while its public bootstrap fingerprint is curre
     assets: { product: 'http://127.0.0.1:4100/old-asset' },
     route: {
       epoch: 1,
-      routeId: 'home',
-      params: {},
-      canonicalPath: '/',
+      routeId: view,
+      params: (view === 'home' ? {} : { handle: 'product-1' }) as Record<
+        string,
+        string
+      >,
+      canonicalPath,
       publicDataRevision: 'catalog-v1',
     },
     catalog: {
@@ -177,6 +187,7 @@ it('returns signed evidence only while its public bootstrap fingerprint is curre
         {
           id: 'product-1',
           slug: 'product-1',
+          canonicalPath: '/phones/product-1',
           name: 'Product',
           price: 100,
           currency: 'NGN',
@@ -207,14 +218,14 @@ it('returns signed evidence only while its public bootstrap fingerprint is curre
     browser: '142.0.7444.0',
     bootstrapDigests: [
       {
-        route: '/',
+        route: canonicalPath,
         digest: experienceBootstrapFingerprint(currentBootstrap),
       },
     ],
     samples: [390, 390, 390, 1440, 1440, 1440].map((width) => ({
       width: width as 390 | 1440,
       cache: 'cold-context' as const,
-      route: '/',
+      route: canonicalPath,
       frameLcpMs: 1200,
       hostLcpMs: 1300,
       frameCls: 0.01,

@@ -9,13 +9,14 @@ import {
 import { expect, it, vi } from 'vitest';
 
 const f = vi.hoisted(() => ({
+  path: '/qa1',
   present: () => {},
   push: vi.fn(),
   active: vi.fn(async () => true),
 }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: f.push, refresh: vi.fn() }),
-  usePathname: () => '/qa1',
+  usePathname: () => f.path,
 }));
 vi.mock('@/hooks/cart/cart-context', () => ({ useCartSafe: () => null }));
 vi.mock('./experience-host-runtime', () => ({
@@ -203,4 +204,45 @@ it('withdraws frame admission when a focus verification rejects', async () => {
   await waitFor(() => expect(frame).toHaveAttribute('data-admitted', 'true'));
   act(() => window.dispatchEvent(new Event('focus')));
   await waitFor(() => expect(frame).toHaveAttribute('data-admitted', 'false'));
+});
+
+it('retires a home-only frame when a catalog product opens its native PDP', async () => {
+  f.path = '/qa1';
+  f.active.mockResolvedValue(true);
+  const data = {
+    title: 'Synthetic',
+    canonicalUrl: 'http://localhost/qa1',
+    manifest: {
+      buildDigest: 'b',
+      policyRevision: 'p',
+      routes: [{ path: '/', view: 'home' }],
+    },
+    launch: { instanceId: 'native-pdp', canonicalBase: 'http://localhost/qa1' },
+    bootstrap: {
+      route: { epoch: 1 },
+      catalog: {
+        products: [{ slug: 'device', canonicalPath: '/phones/device' }],
+      },
+    },
+  };
+  const { rerender } = render(
+    <ExperienceShell merchantSlug="qa1">
+      <ExperienceRouteBoundary
+        data={data as never}
+        fallback={<p>Fallback</p>}
+      />
+    </ExperienceShell>
+  );
+  await screen.findByText('Custom source frame');
+  f.path = '/qa1/phones/device';
+  rerender(
+    <ExperienceShell merchantSlug="qa1">
+      <p>Native PDP</p>
+    </ExperienceShell>
+  );
+  await waitFor(() =>
+    expect(screen.queryByText('Custom source frame')).toBeNull()
+  );
+  expect(screen.getByText('Native PDP')).toBeVisible();
+  f.path = '/qa1';
 });

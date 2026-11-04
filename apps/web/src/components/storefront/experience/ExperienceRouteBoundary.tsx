@@ -8,7 +8,6 @@ import {
   useSyncExternalStore,
 } from 'react';
 import type { ExperienceBoundaryData } from '@/lib/experience/storefront-runtime';
-import styles from './ExperienceRouteBoundary.module.css';
 import { ExperienceShellContext } from './experience-shell-context';
 export function ExperienceRouteBoundary({
   data,
@@ -55,11 +54,15 @@ export function ExperienceRouteBoundary({
       data-experience-pending={pending || undefined}
     >
       {pending && (
-        <div className={styles.loading} role="status" aria-live="polite">
+        <div
+          className="baci-experience-loading"
+          role="status"
+          aria-live="polite"
+        >
           Loading storefront…
         </div>
       )}
-      <div className={styles.fallback}>{fallback}</div>
+      <div className="baci-experience-fallback">{fallback}</div>
     </div>
   );
 }

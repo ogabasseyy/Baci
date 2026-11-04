@@ -9,6 +9,10 @@ const f = vi.hoisted(() => ({
   rpc: vi.fn(),
   getMerchant: vi.fn(),
   client: vi.fn(),
+  performance: vi.fn(),
+}));
+vi.mock('@/lib/experience/publication-performance', () => ({
+  requirePublicationPerformance: f.performance,
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: async () => ({ valid: f.csrf }),
@@ -30,6 +34,7 @@ beforeEach(() => {
   f.rpc.mockImplementation(async (name: string) => ({
     data:
       name === 'experience_require_owner' ||
+      name === 'experience_authorize_publish' ||
       name === 'experience_authorize_read'
         ? true
         : {
@@ -141,5 +146,26 @@ it('body-selected other storefront and model approval flags are rejected', async
     f.rpc.mock.calls.some(
       ([name]) => String(name) === 'experience_request_lifecycle'
     )
+  ).toBe(false);
+});
+
+it('keeps publication closed when current performance qualification rejects', async () => {
+  f.performance.mockRejectedValueOnce(Error('PERFORMANCE_UNQUALIFIED'));
+  const r = await POST(
+    req({
+      action: 'publish',
+      merchantId: id,
+      input: {
+        storefrontId: id,
+        buildId: id,
+        expectedDraftVersion: 0,
+        expectedPublishedVersion: 0,
+        idempotencyKey: id,
+      },
+    })
+  );
+  expect(r.status).toBe(403);
+  expect(
+    f.rpc.mock.calls.some(([name]) => name === 'experience_request_lifecycle')
   ).toBe(false);
 });

@@ -1,28 +1,17 @@
 import type { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { admitPublicExperienceRead } from '@/lib/experience/public-request';
 import { parsePublishedExperience } from '@/lib/experience/published-manifest';
 import { resolvePublishedExperienceRequest } from '@/lib/experience/published-request-context';
 import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import { publicExperienceCatalogSchema } from '@/schemas/experience-catalog';
+import { experienceCatalogSelection } from '@/schemas/experience-catalog-selection';
 
-const selection = z.strictObject({
-  handle: z
-    .string()
-    .regex(/^[a-z0-9-]{1,240}$/)
-    .optional(),
-  productSlug: z
-    .string()
-    .regex(/^[a-z0-9-]{1,240}$/)
-    .optional(),
-  productId: z.uuid().optional(),
-});
 const headers = {
   'Cache-Control': 'no-store',
   'Referrer-Policy': 'same-origin',
 };
 export async function GET(request: NextRequest) {
-  const input = selection.safeParse(
+  const input = experienceCatalogSelection.safeParse(
     Object.fromEntries(
       [...request.nextUrl.searchParams].filter(([k]) => k !== 'merchantSlug')
     )

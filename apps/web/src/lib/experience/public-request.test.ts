@@ -1,20 +1,17 @@
 // @vitest-environment node
 import { expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/cart/request-quota', () => ({
-  checkCartQuota: vi.fn(async () => ({ allowed: true })),
-}));
 vi.mock('@/lib/rate-limit', () => ({
-  getTrustedClientIdentifier: () => 'synthetic-public-IP',
+  checkRateLimit: vi.fn(async () => ({ allowed: true })),
 }));
 
-import { checkCartQuota } from '@/lib/cart/request-quota';
+import { checkRateLimit } from '@/lib/rate-limit';
 import {
   admitPublicExperienceRead,
   parseExperiencePublicRequest,
 } from './public-request';
 
-it('rejects route traversal and uses a separate hashed quota subject with no cart provisioning', async () => {
+it('rejects route traversal and uses standard anonymous rate limiting with no cart provisioning', async () => {
   expect(() =>
     parseExperiencePublicRequest({
       buildDigest: 'a'.repeat(64),
@@ -22,9 +19,10 @@ it('rejects route traversal and uses a separate hashed quota subject with no car
     })
   ).toThrow();
   await admitPublicExperienceRead('resolved', {} as never);
-  expect(checkCartQuota).toHaveBeenCalledWith({
-    merchantId: 'resolved',
-    operation: 'snapshot',
-    subject: expect.stringMatching(/^[a-f0-9]{64}$/),
-  });
+  expect(checkRateLimit).toHaveBeenCalledWith({}, '/api/storefront/experience');
+});
+
+it('rejects anonymous experience reads when the limiter denies admission', async () => {
+  vi.mocked(checkRateLimit).mockResolvedValueOnce({ allowed: false } as never);
+  expect(await admitPublicExperienceRead('resolved', {} as never)).toBe(false);
 });

@@ -2,8 +2,19 @@ const maximum = 2097152;
 const png = [137, 80, 78, 71, 13, 10, 26, 10];
 /** Distinct bounded binary transport. Ordinary JSON caps/timeouts are untouched. */
 export function createExperienceEvidenceClient(
-  deps: { fetchImpl?: typeof fetch } = {}
+  deps: { fetchImpl?: typeof fetch; backendOrigin?: string } = {}
 ) {
+  // Trusted composition only. Neither tools nor evidence IDs can select an origin.
+  const origin = new URL(deps.backendOrigin ?? 'https://usebaci.com');
+  if (
+    origin.protocol !== 'https:' ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash
+  )
+    throw Error('INVALID_BACKEND_ORIGIN');
   return async (token: string, evidenceId: string, signal?: AbortSignal) => {
     if (
       !/^[A-Za-z0-9_.-]{1,8192}$/.test(token) ||
@@ -11,7 +22,7 @@ export function createExperienceEvidenceClient(
     )
       throw Error('INVALID_REQUEST');
     const response = await (deps.fetchImpl ?? fetch)(
-      `https://usebaci.com/api/integrations/chatgpt/experience-evidence/${evidenceId}`,
+      `${origin.origin}/api/integrations/chatgpt/experience-evidence/${evidenceId}`,
       {
         method: 'GET',
         headers: {

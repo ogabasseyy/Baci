@@ -64,7 +64,9 @@ export function toProductSemanticCandidate(
   product: ProductSeoRow,
   fallbackCategorySlug: string
 ): ProductSemanticCandidate | null {
-  const slug = product.slug?.trim();
+  const hasExplicitSlug = Boolean(product.slug?.trim());
+  const slug =
+    product.slug?.trim() || (product.id ? String(product.id).trim() : '');
   const name = product.name?.trim();
   const price = parseSemanticProductPrice(product.price);
   if (!slug || !name || price === null) {
@@ -72,6 +74,7 @@ export function toProductSemanticCandidate(
   }
 
   return {
+    id: product.id ? String(product.id) : undefined,
     slug,
     name,
     brand: product.brand,
@@ -83,6 +86,7 @@ export function toProductSemanticCandidate(
       fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(product.product_key_specs),
     manage_stock: product.manage_stock,
+    has_explicit_slug: hasExplicitSlug,
     ...(product.has_condition_offers !== undefined
       ? { has_condition_offers: product.has_condition_offers }
       : {}),

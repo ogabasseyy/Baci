@@ -76,6 +76,7 @@ export function toProductSemanticCandidateFromJson(
 
   return toProductSemanticCandidate(
     {
+      id: typeof value.id === 'string' ? value.id : null,
       brand: typeof value.brand === 'string' ? value.brand : null,
       categories,
       category: typeof value.category === 'string' ? value.category : null,

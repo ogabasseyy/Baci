@@ -41,8 +41,10 @@ export function buildCategorySupportLinks(input: {
   preferredPriceBandSlugs?: string[];
   approvedCompareSlugs?: ReadonlySet<string>;
   merchantCurrency?: string | null;
-  /** Destination compare inventory. Brand/price-band candidates derive from it; callers that cannot supply it must pass a pool identical to the destination compare inventory, or those links may point at a candidate the compare page rejects. */
+  /** Destination compare inventory. Brand candidates derive from it; callers that cannot supply it must pass a pool identical to the destination compare inventory, or those links may point at a candidate the compare page rejects. */
   compareProducts?: CommercialSupportProduct[];
+  /** Bounded price-band pool. Callers that separate price bands from brand compare pass the 150-product pool here. */
+  priceBandProducts?: CommercialSupportProduct[];
   /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
   requireInferredBrandRelevance?: boolean;
   /** When true, emits all indexable price-band links (e.g. for discovery/sitemap parity) instead of stopping at the first match. */
@@ -109,9 +111,9 @@ export function buildCategorySupportLinks(input: {
     }
   }
 
-  // Destination eligibility uses the full pool; relevance only requires
+  // Destination eligibility uses the price-band pool (or caller pool); relevance only requires
   // the chosen band to contain inferred-brand products.
-  const fullPool = input.compareProducts ?? input.products;
+  const fullPool = input.priceBandProducts ?? input.products;
   if (!brandRelevanceRequired || hasInferredBrand) {
     const candidates = buildCategoryPriceBandCandidates(
       input.categorySlug,

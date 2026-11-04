@@ -14,6 +14,7 @@ import { buildCategoryHubModel } from '@/lib/storefront-category/build-category-
 import type {
   BrandAuthorityEntry,
   CategoryHubComparisonLink,
+  CategoryHubProduct,
 } from '@/lib/storefront-category/category-hub-types';
 import { parseCandidatePrice } from '@/lib/storefront-compare/is-price-band-candidate-available';
 import type { getPublishedClusterPosts } from '@/lib/storefront-content/get-published-cluster-posts';
@@ -114,6 +115,7 @@ export function buildCategoryPageHubModel(input: {
   merchantCurrency?: string | null;
   storeUrl: string;
   products: StorefrontCategoryProduct[];
+  compareProducts?: CategoryHubProduct[];
   comparisonLinks?: CategoryHubComparisonLink[];
   guidePosts?: Awaited<ReturnType<typeof getPublishedClusterPosts>>;
   brandAuthorityEntries?: Array<
@@ -132,6 +134,7 @@ export function buildCategoryPageHubModel(input: {
     guidePosts: input.guidePosts ?? [],
     comparisonLinks: input.comparisonLinks,
     brandAuthorityEntries: input.brandAuthorityEntries,
+    compareProducts: input.compareProducts,
     products: input.products.map((product) => ({
       id: product.id != null ? String(product.id) : undefined,
       slug: product.slug || '',

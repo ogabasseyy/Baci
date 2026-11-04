@@ -84,6 +84,25 @@ describe('toProductSemanticCandidate', () => {
     );
   });
 
+  it('falls back to id for slug-less products to preserve raw pool index and price-band membership', () => {
+    const candidate = toProductSemanticCandidate(
+      {
+        id: 'prod-123',
+        slug: '',
+        name: 'Slugless Phone',
+        price: 1500,
+      },
+      'fallback'
+    );
+    expect(candidate).toEqual(
+      expect.objectContaining({
+        id: 'prod-123',
+        slug: 'prod-123',
+        has_explicit_slug: false,
+      })
+    );
+  });
+
   it('returns null for rows without crawlable product identity or finite price', () => {
     expect(
       toProductSemanticCandidate(

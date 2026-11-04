@@ -5,7 +5,9 @@ import {
   getCachedCategoryPageData,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
+import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
 import { getCachedBrandAuthorityEntries } from '@/lib/storefront-category/get-cached-brand-authority-entries';
+import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
@@ -48,7 +50,7 @@ export async function loadCategoryHubContent(input: {
   const shouldFetchHubPool =
     canLoadHubPool && hasHubDefaults && !isPageDataSufficient;
 
-  const [guidePosts, brandAuthorityEntries, hubCategoryData] =
+  const [guidePosts, brandAuthorityEntries, hubCategoryData, compareInventory] =
     await Promise.all([
       supportedCategory
         ? loadPublishedClusterPostsSafely(input.merchantId, {
@@ -75,7 +77,17 @@ export async function loadCategoryHubContent(input: {
             return null;
           })
         : Promise.resolve(null),
+      canLoadAuthority
+        ? loadCompareCategoryInventorySafely({
+            merchantId: input.merchantId,
+            categorySlug: input.categorySlug,
+          })
+        : Promise.resolve(null),
     ]);
+
+  const compareProducts = compareInventory?.products as
+    | CategoryHubProduct[]
+    | undefined;
 
   const hubPoolFetchFailed =
     shouldFetchHubPool &&
@@ -100,5 +112,6 @@ export async function loadCategoryHubContent(input: {
     guidePosts,
     brandAuthorityEntries,
     ...(hubProducts !== undefined ? { hubProducts } : {}),
+    ...(compareProducts !== undefined ? { compareProducts } : {}),
   };
 }

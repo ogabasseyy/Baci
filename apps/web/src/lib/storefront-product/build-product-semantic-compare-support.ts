@@ -78,6 +78,7 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
 
   return [input.currentProduct, ...input.inventory]
     .filter((product) => product.category_slug === input.categorySlug)
+    .filter((product) => product.has_explicit_slug !== false)
     .filter((product) => {
       if (seenSlugs.has(product.slug)) {
         return false;

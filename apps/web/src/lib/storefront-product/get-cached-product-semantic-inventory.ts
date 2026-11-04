@@ -36,6 +36,7 @@ export interface ProductSemanticInventoryCategoryJoin {
 }
 
 export interface ProductSemanticInventoryRow {
+  id?: string | null;
   brand?: string | null;
   condition?: string | null;
   name?: string | null;
@@ -76,6 +77,7 @@ export const PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT = `
 `;
 
 const PRODUCT_SEMANTIC_INVENTORY_SELECT = `
+  id,
   ${PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT},
   product_categories!inner(categories!inner(slug))
 `;
@@ -177,7 +179,8 @@ function toProductSemanticCandidate(
   row: ProductSemanticInventoryRow,
   fallbackCategorySlug: string
 ): ProductSemanticCandidate | null {
-  const slug = row.slug?.trim();
+  const hasExplicitSlug = Boolean(row.slug?.trim());
+  const slug = row.slug?.trim() || (row.id ? String(row.id).trim() : '');
   const name = row.name?.trim();
   const price = parseSemanticProductPrice(row.price);
 
@@ -186,6 +189,7 @@ function toProductSemanticCandidate(
   }
 
   return {
+    id: row.id ? String(row.id) : undefined,
     slug,
     name,
     price,
@@ -200,5 +204,6 @@ function toProductSemanticCandidate(
     parent_product_id: row.parent_product_id ?? null,
     manage_stock: row.manage_stock ?? null,
     has_condition_offers: row.has_condition_offers ?? false,
+    has_explicit_slug: hasExplicitSlug,
   };
 }

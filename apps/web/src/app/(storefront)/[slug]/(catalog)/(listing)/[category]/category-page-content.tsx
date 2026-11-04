@@ -119,7 +119,7 @@ export async function CategoryPageContent({
     return renderCategoryNotFound(slug);
   }
 
-  const { guidePosts, brandAuthorityEntries, hubProducts } =
+  const { guidePosts, brandAuthorityEntries, hubProducts, compareProducts } =
     await loadCategoryHubContent({
       merchantId: merchant.id,
       categorySlug: category,
@@ -198,6 +198,7 @@ export async function CategoryPageContent({
     merchantCurrency: currencyCode,
     storeUrl: requestScopedBaseUrl,
     products: hubNormalizedProducts,
+    compareProducts,
     ...(graphicsHubLinks.length > 0
       ? { comparisonLinks: graphicsHubLinks }
       : {}),

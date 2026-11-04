@@ -253,4 +253,43 @@ describe('buildProductSemanticCompareSupport price-band destination parity', () 
     );
     expect(priceBandLink).toBeUndefined();
   });
+
+  it('includes slugless products within the 150 pool so product 151 does not qualify a price band', () => {
+    const currentProduct = makeCandidate({
+      slug: 'current-phone',
+      name: 'Current Phone',
+      brand: 'Apple',
+      price: 300_000,
+    });
+
+    const sluglessAboveBudget = Array.from({ length: 149 }, (_, i) =>
+      makeCandidate({
+        slug: `id-fallback-${i}`,
+        name: `Above Budget ${i}`,
+        brand: 'Apple',
+        price: 2_000_000,
+        has_explicit_slug: false,
+      })
+    );
+
+    const olderQualifying = [
+      { slug: 's1', brand: 'Samsung', price: 200_000 },
+      { slug: 's2', brand: 'Samsung', price: 250_000 },
+      { slug: 'g1', brand: 'Google', price: 300_000 },
+      { slug: 'g2', brand: 'Google', price: 350_000 },
+      { slug: 't1', brand: 'Tecno', price: 400_000 },
+    ].map((c) => makeCandidate({ ...c, name: c.slug }));
+
+    const support = buildProductSemanticCompareSupport(
+      makeInput({
+        currentProduct,
+        inventory: [...sluglessAboveBudget, ...olderQualifying],
+      })
+    );
+
+    const priceBandLink = support.supportLinks.find((link) =>
+      link.href.includes('/best-under/under-500k')
+    );
+    expect(priceBandLink).toBeUndefined();
+  });
 });

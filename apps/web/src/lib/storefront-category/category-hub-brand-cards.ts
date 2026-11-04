@@ -36,6 +36,7 @@ export function buildCategoryHubBrandCards(input: {
   categorySlug: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {
       productCount: number;
@@ -76,7 +77,7 @@ export function buildCategoryHubBrandCards(input: {
   );
   const canonicalBrandCandidate = buildBrandCompareCandidate({
     categorySlug: input.categorySlug,
-    products: input.products,
+    products: input.compareProducts ?? input.products,
   });
 
   const displayedBrands =

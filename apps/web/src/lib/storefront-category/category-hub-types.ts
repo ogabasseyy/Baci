@@ -115,6 +115,8 @@ export interface BuildCategoryHubModelInput {
   merchantBusinessName: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  priceBandProducts?: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
   merchantCurrency?: string | null;
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {

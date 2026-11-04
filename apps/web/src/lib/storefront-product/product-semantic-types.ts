@@ -6,6 +6,7 @@ import type {
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 
 export interface ProductSemanticCandidate {
+  id?: string | null;
   slug: string;
   name: string;
   price: number;
@@ -19,6 +20,7 @@ export interface ProductSemanticCandidate {
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
   has_condition_offers?: boolean | null;
+  has_explicit_slug?: boolean;
 }
 
 export interface ProductSemanticCard {

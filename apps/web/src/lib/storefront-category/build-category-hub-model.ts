@@ -41,6 +41,8 @@ export function buildCategoryHubModel(
     categorySlug: input.categorySlug,
     storeUrl: input.storeUrl,
     products: input.products,
+    priceBandProducts: input.priceBandProducts,
+    compareProducts: input.compareProducts,
     brandAuthorityEntries: input.brandAuthorityEntries,
     merchantCurrency: input.merchantCurrency,
   });
@@ -68,7 +70,8 @@ export function buildCategoryHubModel(
         storeUrl: input.storeUrl,
         categorySlug: input.categorySlug,
         categoryName: input.categoryName,
-        products: input.products,
+        products: input.priceBandProducts ?? input.products,
+        compareProducts: input.compareProducts,
         merchantCurrency: input.merchantCurrency,
       }),
     guideLinks,

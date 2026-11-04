@@ -87,11 +87,13 @@ export async function loadCategoryHubContent(input: {
             0,
             COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
           ) as RawDbProduct[])
-        : undefined;
+        : input.isFiltered && hasHubDefaults
+          ? []
+          : undefined;
 
   return {
     guidePosts,
     brandAuthorityEntries,
-    ...(hubProducts ? { hubProducts } : {}),
+    ...(hubProducts !== undefined ? { hubProducts } : {}),
   };
 }

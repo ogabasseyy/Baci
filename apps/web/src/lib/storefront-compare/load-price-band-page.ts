@@ -157,7 +157,11 @@ export async function loadPriceBandPage(
     COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
   );
 
-  if (!categoryData || categoryData.isCollection) {
+  if (
+    !categoryData ||
+    categoryData.isCollection ||
+    categoryData.isInactiveCategory
+  ) {
     return null;
   }
 

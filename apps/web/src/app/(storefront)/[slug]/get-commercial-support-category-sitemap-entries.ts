@@ -15,7 +15,8 @@ export async function getCommercialSupportCategorySitemapEntries({
   const { data: categories, error } = await supabase
     .from('categories')
     .select('slug, updated_at')
-    .eq('merchant_id', merchantId);
+    .eq('merchant_id', merchantId)
+    .eq('is_active', true);
 
   if (error) {
     throw error;

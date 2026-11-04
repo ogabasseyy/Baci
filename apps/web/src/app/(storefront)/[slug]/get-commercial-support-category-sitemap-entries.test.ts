@@ -3,14 +3,15 @@ import { getCommercialSupportCategorySitemapEntries } from './get-commercial-sup
 
 describe('getCommercialSupportCategorySitemapEntries', () => {
   it('maps each usable merchant category into a commercial support sitemap entry', async () => {
-    const eq = vi.fn(async () => ({
+    const eqActive = vi.fn(async () => ({
       data: [
         { slug: 'laptops', updated_at: '2026-08-02T12:00:00.000Z' },
         { slug: ' ', updated_at: '2026-08-03T12:00:00.000Z' },
       ],
       error: null,
     }));
-    const select = vi.fn(() => ({ eq }));
+    const eqMerchant = vi.fn(() => ({ eq: eqActive }));
+    const select = vi.fn(() => ({ eq: eqMerchant }));
 
     await expect(
       getCommercialSupportCategorySitemapEntries({
@@ -27,6 +28,7 @@ describe('getCommercialSupportCategorySitemapEntries', () => {
       },
     ]);
     expect(select).toHaveBeenCalledWith('slug, updated_at');
-    expect(eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(eqMerchant).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(eqActive).toHaveBeenCalledWith('is_active', true);
   });
 });

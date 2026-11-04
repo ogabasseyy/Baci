@@ -101,13 +101,13 @@ vi.mock('@/lib/supabase/anon', async () => {
 
 export function createEq(table: string) {
   return vi.fn((...args: unknown[]) => {
-    const [key, value] = args as [string, string];
+    const [key, value] = args as [string, unknown];
     const response = mockQueryResults.get(table);
     const isTerminalQuery =
       (table === 'products' && key === 'status' && value === 'active') ||
       (table === 'categories' &&
-        key === 'merchant_id' &&
-        value === 'merchant-1');
+        ((key === 'merchant_id' && value === 'merchant-1') ||
+          (key === 'is_active' && value === true)));
 
     if (isTerminalQuery) {
       if (table === 'products') {
@@ -140,6 +140,7 @@ export function createEq(table: string) {
       return {
         data: response?.data ?? [],
         error: response?.error ?? null,
+        eq: createEq(table),
       };
     }
 

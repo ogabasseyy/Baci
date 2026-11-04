@@ -274,4 +274,22 @@ describe('loadCategoryHubContent', () => {
     expect(result.hubProducts?.[0]?.id).toBe('p-0');
     expect(result.hubProducts?.[149]?.id).toBe('p-149');
   });
+
+  it('fails closed to empty array when filtered page fails to fetch canonical pool', async () => {
+    mockCategoryPageData.mockResolvedValue(null);
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 1,
+        products: [{ id: 'filtered-product' }],
+      },
+      storeSlug: 'ogabassey',
+      isFiltered: true,
+    } as never);
+    expect(result.hubProducts).toEqual([]);
+  });
 });

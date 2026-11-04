@@ -98,6 +98,14 @@ export const AMOUNTS_KOBO = {
  * The S8 first pass may take out: the goal funding, a wire-level second tap
  * (only if the provider books it) and the transfer whose submit times out.
  */
+/**
+ * Live polling window for a sandbox money movement: 24 polls 5s apart (two
+ * minutes). The 2026-11-03 live runs showed the sandbox usually settles in
+ * under 20s but sometimes far later, and 30s misread that as unsettled.
+ */
+export const LIVE_POLL_INTERVAL_MS = 5_000;
+export const LIVE_MAX_POLLS = 24;
+
 export const S8_OUTFLOWS_KOBO =
   AMOUNTS_KOBO.s8FundGoal * 2 + AMOUNTS_KOBO.s8TimeoutTransfer;
 

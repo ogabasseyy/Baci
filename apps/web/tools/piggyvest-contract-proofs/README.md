@@ -84,6 +84,14 @@ drops `--proof p10`). Evidence is written to `docs/piggyvest-contract-evidence`
 (override with `--evidence-dir`). Exit code 0 means no proof failed; read the
 `s8_*` findings in the evidence for the answers.
 
+### How long a live run waits
+
+Each money movement is polled for up to two minutes (24 polls, 5s apart;
+`LIVE_POLL_INTERVAL_MS` and `LIVE_MAX_POLLS` in constants.ts). The 2026-11-03
+live runs showed the sandbox usually settles in under 20s, but once dropped a
+test funding entirely and once credited a goal an hour late; a movement that
+does not settle in the window is reported as `unknown`, never as a failure.
+
 ### Reading the result
 
 Each `s8_*` finding is `yes`, `no`, `unknown` or `not_applicable`.

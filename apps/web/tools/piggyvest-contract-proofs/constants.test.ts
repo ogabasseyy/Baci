@@ -3,6 +3,8 @@ import {
   AMOUNTS_KOBO,
   FEE_RESERVE_KOBO,
   FUNDING_FLOOR_KOBO,
+  LIVE_MAX_POLLS,
+  LIVE_POLL_INTERVAL_MS,
   MAX_MUTATION_KOBO,
   MAX_RUN_TOTAL_KOBO,
   MUTATION_CAPABLE_MODES,
@@ -119,5 +121,20 @@ describe('money limits', () => {
     ];
     expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.s8DepositMain);
     expect(AMOUNTS_KOBO.fundMain).toBeGreaterThan(FUNDING_FLOOR_KOBO);
+  });
+});
+
+describe('live polling window', () => {
+  it('waits at least two minutes for a sandbox movement to settle', () => {
+    // 2026-11-03 live runs: a ₦10,000 test funding never credited in one run,
+    // and a goal credit landed an hour late in another, while the same calls
+    // settled in under 20s on later runs. 30s (15 x 2s) misread slow
+    // settlement as unsettled; two minutes absorbs ordinary sandbox lag.
+    expect(LIVE_POLL_INTERVAL_MS * LIVE_MAX_POLLS).toBeGreaterThanOrEqual(
+      120_000
+    );
+    // Not so long that every stable-balance check (which always runs all
+    // rounds) makes a run take hours.
+    expect(LIVE_POLL_INTERVAL_MS * LIVE_MAX_POLLS).toBeLessThanOrEqual(300_000);
   });
 });

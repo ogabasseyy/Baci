@@ -245,7 +245,19 @@ describe('evaluateV2GuideCandidate', () => {
       ).eligible
     ).toBe(false);
 
-    // Path B general guide requires exact category match, no expansion
+    // Path B general guide rejects completely unlinked categories
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, cluster_category_slug: 'shoes' },
+        {
+          categorySlug: 'smartphones',
+          brandKey: 'Samsung',
+          validCategorySlugs: ['accessories'],
+        }
+      ).eligible
+    ).toBe(false);
+
+    // Path B honors secondary category slug membership
     expect(
       evaluateV2GuideCandidate(
         { ...baseGuide, cluster_category_slug: 'accessories' },
@@ -253,6 +265,23 @@ describe('evaluateV2GuideCandidate', () => {
           categorySlug: 'smartphones',
           brandKey: 'Samsung',
           validCategorySlugs: ['accessories'],
+        }
+      ).eligible
+    ).toBe(true);
+
+    // Blind eligibility_reason without matching subject is rejected
+    expect(
+      evaluateV2GuideCandidate(
+        {
+          ...baseGuide,
+          guide_scope: 'product_specific',
+          subjects: [],
+          eligibility_reason: 'subject_primary',
+        },
+        {
+          productId: 'prod-target',
+          categorySlug: 'smartphones',
+          brandKey: 'Samsung',
         }
       ).eligible
     ).toBe(false);

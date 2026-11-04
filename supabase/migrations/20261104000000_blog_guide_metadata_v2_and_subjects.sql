@@ -132,8 +132,14 @@ BEGIN
       EXISTS (SELECT 1 FROM public.blog_post_guide_subjects AS subj WHERE subj.blog_post_id = post.id AND subj.product_id = NEW.id)
       OR (
         v_old_brand_norm IS DISTINCT FROM v_new_brand_norm AND (
-          (v_old_brand_norm <> '' AND v_old_brand_norm = ANY(post.applicable_brands))
-          OR (v_new_brand_norm <> '' AND v_new_brand_norm = ANY(post.applicable_brands))
+          (v_old_brand_norm <> '' AND EXISTS (
+            SELECT 1 FROM pg_catalog.unnest(post.applicable_brands) AS b(val)
+            WHERE pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(b.val)), '[^a-z0-9]+', '-', 'g'), '-') = v_old_brand_norm
+          ))
+          OR (v_new_brand_norm <> '' AND EXISTS (
+            SELECT 1 FROM pg_catalog.unnest(post.applicable_brands) AS b(val)
+            WHERE pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(b.val)), '[^a-z0-9]+', '-', 'g'), '-') = v_new_brand_norm
+          ))
         )
       )
     );
@@ -181,7 +187,7 @@ BEGIN
     ELSE v_category_match_id := v_target_category_id; END IF;
   ELSE v_category_match_id := v_target_category_id; END IF;
 
-  v_effective_limit := pg_catalog.least(pg_catalog.greatest(coalesce(p_limit, 64), 1), 64);
+  v_effective_limit := LEAST(GREATEST(coalesce(p_limit, 64), 1), 64);
 
   RETURN QUERY
   WITH candidate_matches AS (
@@ -203,7 +209,8 @@ BEGIN
     INNER JOIN public.blog_post_guide_subjects AS subj
       ON subj.blog_post_id = post.id AND subj.merchant_id = p_merchant_id AND subj.product_id = v_target_product_id
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
-    WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL AND post.metadata_status = 'verified'
+    WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
+      AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
       AND (
         (subj.subject_role = 'primary' AND post.guide_scope = 'product_specific' AND post.guide_kind = 'buyer-guide')
         OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support')
@@ -221,11 +228,18 @@ BEGIN
       CASE WHEN post.guide_scope = 'brand_family_guide' THEN 2 ELSE 3 END AS match_priority
     FROM public.blog_posts AS post
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
-    WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL AND post.metadata_status = 'verified'
+    WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
+      AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
       AND post.guide_kind IN ('buyer-guide', 'best-in-nigeria') AND v_category_match_id IS NOT NULL AND post.cluster_category_id = v_category_match_id
       AND (
-        (post.guide_scope = 'brand_family_guide' AND v_target_brand_norm <> '' AND v_target_brand_norm = ANY(post.applicable_brands))
-        OR (post.guide_scope = 'category_guide' AND (pg_catalog.cardinality(post.applicable_brands) = 0 OR (v_target_brand_norm <> '' AND v_target_brand_norm = ANY(post.applicable_brands))))
+        (post.guide_scope = 'brand_family_guide' AND v_target_brand_norm <> '' AND EXISTS (
+          SELECT 1 FROM pg_catalog.unnest(post.applicable_brands) AS b(val)
+          WHERE pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(b.val)), '[^a-z0-9]+', '-', 'g'), '-') = v_target_brand_norm
+        ))
+        OR (post.guide_scope = 'category_guide' AND (pg_catalog.cardinality(post.applicable_brands) = 0 OR (v_target_brand_norm <> '' AND EXISTS (
+          SELECT 1 FROM pg_catalog.unnest(post.applicable_brands) AS b(val)
+          WHERE pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(b.val)), '[^a-z0-9]+', '-', 'g'), '-') = v_target_brand_norm
+        ))))
       )
   ),
   deduped_candidates AS (

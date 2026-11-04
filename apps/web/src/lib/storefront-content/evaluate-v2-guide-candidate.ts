@@ -80,11 +80,7 @@ export function evaluateV2GuideCandidate(
   context: EvaluateV2GuideCandidateContext
 ): EvaluateV2GuideCandidateResult {
   // 1. Fail closed on missing/null/unverified metadata status
-  const isVerified =
-    candidate.metadata_status === 'verified' ||
-    (candidate.metadata_status === undefined &&
-      Boolean(candidate.eligibility_reason));
-  if (!isVerified) {
+  if (candidate.metadata_status !== 'verified') {
     return {
       eligible: false,
       exclusionReason: `metadata_status is "${candidate.metadata_status ?? 'missing'}", requires verified`,
@@ -144,28 +140,6 @@ export function evaluateV2GuideCandidate(
           return { eligible: true, reason: 'subject_product_support' };
         }
       }
-    } else if (candidate.eligibility_reason?.startsWith('subject_')) {
-      if (
-        candidate.eligibility_reason === 'subject_primary' &&
-        candidate.guide_scope === 'product_specific' &&
-        candidate.guide_kind === 'buyer-guide'
-      ) {
-        return { eligible: true, reason: 'subject_primary' };
-      }
-      if (
-        candidate.eligibility_reason === 'subject_comparison' &&
-        candidate.guide_scope === 'model_comparison' &&
-        candidate.guide_kind === 'decision-support'
-      ) {
-        return { eligible: true, reason: 'subject_comparison' };
-      }
-      if (
-        candidate.eligibility_reason === 'subject_product_support' &&
-        candidate.guide_scope === 'troubleshooting' &&
-        candidate.guide_kind === 'troubleshooting'
-      ) {
-        return { eligible: true, reason: 'subject_product_support' };
-      }
     }
   }
 
@@ -196,15 +170,21 @@ export function evaluateV2GuideCandidate(
       };
     }
 
-    // Exact canonical category match (§2.5: no implicit parent/sibling expansion, no free-text category fallback)
+    // Exact canonical category match (§2.5: supports primary and secondary memberships)
     let categoryMatches = false;
     if (context.categoryId && candidate.cluster_category_id) {
-      categoryMatches = context.categoryId === candidate.cluster_category_id;
-    } else if (context.categorySlug && candidate.cluster_category_slug) {
-      const targetSlug = normalizeSlug(context.categorySlug);
+      categoryMatches =
+        context.categoryId === candidate.cluster_category_id ||
+        Boolean(
+          context.validCategoryIds?.includes(candidate.cluster_category_id)
+        );
+    }
+    if (!categoryMatches && candidate.cluster_category_slug) {
       const candSlug = normalizeSlug(candidate.cluster_category_slug);
+      const targetSlug = normalizeSlug(context.categorySlug);
+      const validSlugs = (context.validCategorySlugs ?? []).map(normalizeSlug);
       categoryMatches = Boolean(
-        targetSlug && candSlug && targetSlug === candSlug
+        candSlug && (candSlug === targetSlug || validSlugs.includes(candSlug))
       );
     }
 

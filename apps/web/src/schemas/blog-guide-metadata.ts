@@ -43,14 +43,17 @@ export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
   'default',
 ]);
 
-export function isNonBrandPlaceholderKey(key: string): boolean {
-  if (!key) return true;
-  const normalized = key
+export function normalizeBrandKey(key: string): string {
+  return (key ?? '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return NON_BRAND_PLACEHOLDER_KEYS.has(normalized);
+}
+
+export function isNonBrandPlaceholderKey(key: string): boolean {
+  if (!key) return true;
+  return NON_BRAND_PLACEHOLDER_KEYS.has(normalizeBrandKey(key));
 }
 
 export const blogPostGuideSubjectSchema = z.object({
@@ -84,7 +87,9 @@ export const blogGuideMetadataSchema = z
       ])
       .nullish(),
     clusterCategoryId: z.string().uuid().nullish(),
-    applicableBrands: z.array(z.string().min(1)).default([]),
+    applicableBrands: z
+      .array(z.string().min(1).transform(normalizeBrandKey))
+      .default([]),
     subjects: z.array(blogPostGuideSubjectSchema).default([]),
     familyScope: z
       .union([z.string(), z.array(z.string()), z.null(), z.undefined()])

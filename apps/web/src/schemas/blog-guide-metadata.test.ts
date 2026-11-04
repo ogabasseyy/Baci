@@ -67,6 +67,20 @@ describe('blogGuideMetadataSchema', () => {
         );
       }
     });
+
+    it('transforms raw brand names to normalized slug keys', () => {
+      const result = blogGuideMetadataSchema.safeParse({
+        applicableBrands: [' Apple ', 'EA Sports', 'Sony PlayStation'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.applicableBrands).toEqual([
+          'apple',
+          'ea-sports',
+          'sony-playstation',
+        ]);
+      }
+    });
   });
 
   describe('familyScope restriction', () => {

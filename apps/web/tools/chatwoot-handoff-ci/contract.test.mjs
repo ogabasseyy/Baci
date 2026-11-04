@@ -12,6 +12,7 @@ const workflow = await readFile(
   'utf8'
 );
 const harness = await readFile(new URL('run.mjs', directory), 'utf8');
+const seed = await readFile(new URL('seed.rb', directory), 'utf8');
 
 test('pins service images and keeps the Compose network unpublished and internal', () => {
   assert.match(
@@ -47,6 +48,7 @@ test('workflow uses read-only permissions, bounded runs, pull-first and uncondit
 });
 
 test('harness covers bot handoff, human attribution and resumed bot reply through APIs', () => {
+  assert.match(seed, /user\.password = 'Synthetic-password-123'/);
   assert.match(harness, /toggle_status/);
   assert.match(harness, /status: 'open'/);
   assert.match(harness, /status: 'pending'/);

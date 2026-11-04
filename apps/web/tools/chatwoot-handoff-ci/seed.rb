@@ -4,7 +4,7 @@ require 'fileutils'
 email = 'ci-operator@example.invalid'
 user = User.find_or_initialize_by(email: email)
 user.name = 'Synthetic CI Operator'
-user.password = 'synthetic-password-only'
+user.password = 'Synthetic-password-123'
 user.confirmed_at = Time.current if user.respond_to?(:confirmed_at=)
 user.save!
 account = Account.find_or_create_by!(name: 'Synthetic Handoff CI')

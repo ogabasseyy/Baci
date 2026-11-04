@@ -88,7 +88,7 @@ export async function inspectSupabaseReplayResources(
   };
 }
 
-const DATABASE_IMAGE = 'public.ecr.aws/supabase/postgres:17.6.1.106';
+const DATABASE_IMAGE = 'public.ecr.aws/supabase/postgres:17.6.1.156';
 const PROJECT_ID = /^[a-z0-9][a-z0-9_-]{2,62}$/;
 
 export function expectedSupabaseReplayResources(

@@ -25,6 +25,11 @@ export const FIRST_RELEASE_COHORT_PART_1: FirstReleaseCohortPdpEntry[] = [
         postSlug: 'alienware-vs-rog-vs-omen',
         rejectionReason: 'Laptop comparison does not apply to PlayStation game',
       },
+      {
+        postSlug: 'playstation-5-guide',
+        rejectionReason:
+          'PS5 console guide requires Sony brand, does not apply to EA Sports game',
+      },
     ],
     emptySectionReason:
       'No verified guide currently published for EA Sports FC 27; cross-category gaming laptop reviews rejected.',

@@ -136,6 +136,34 @@ describe('first-release-guide-cohort acceptance gate (§2.4 & §2.7)', () => {
         const result = evaluateV2GuideCandidate(candidate, context);
         expect(result.eligible).toBe(false);
       }
+
+      // 3. Bounded cohort safety invariant: no non-expected reviewed post evaluates as eligible
+      const expectedSlugs = new Set(
+        entry.expectedGuides.map((g) => g.postSlug)
+      );
+      for (const [slug, post] of Object.entries(REVIEWED_COHORT_POSTS)) {
+        if (expectedSlugs.has(slug)) continue;
+        const candidate = {
+          slug: post.postSlug,
+          title: post.title,
+          cluster_category_slug: post.clusterCategorySlug,
+          guide_scope: post.scope,
+          guide_kind: post.kind,
+          metadata_status: 'verified',
+          metadata_source_revision: post.revision,
+          metadata_contract_version: 2,
+          applicable_brands: post.applicableBrands,
+          subjects: post.subjects?.map((s) => ({
+            productId: s.productId,
+            subjectRole: s.role,
+          })),
+        };
+        const result = evaluateV2GuideCandidate(candidate, context);
+        expect(
+          result.eligible,
+          `Unintended match: post "${slug}" evaluated as eligible for PDP "${entry.productId}" (${entry.productSlug})`
+        ).toBe(false);
+      }
     }
   });
 });

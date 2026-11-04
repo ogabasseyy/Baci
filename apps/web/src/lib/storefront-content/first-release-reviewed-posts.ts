@@ -97,7 +97,7 @@ export const REVIEWED_COHORT_POSTS: Record<string, ReviewedCohortPost> = {
     scope: 'category_guide',
     kind: 'buyer-guide',
     clusterCategorySlug: 'playstation-5',
-    applicableBrands: [],
+    applicableBrands: ['sony'],
     contentHash: 'hash-ps5-008',
     revision: 'rev-ps5-v1',
   },

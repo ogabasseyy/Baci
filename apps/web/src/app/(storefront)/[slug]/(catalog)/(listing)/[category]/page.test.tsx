@@ -1,4 +1,4 @@
-import './page.test-mocks';
+import './page.test-support';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,7 +31,7 @@ import {
   mockHeaders,
   NORMALIZED_PLACEHOLDER_IMAGE,
   notFound,
-} from './page.test-mocks';
+} from './page.test-support';
 
 const { default: CategoryPageRoute, generateMetadata } = await import('./page');
 const actualCategoryPageContentModule = await vi.importActual<

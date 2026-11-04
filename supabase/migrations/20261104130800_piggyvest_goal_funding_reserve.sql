@@ -71,7 +71,11 @@ BEGIN
   RETURN jsonb_build_object('status','claimed','reservation',jsonb_build_object('operationId',operation.id,'goalId',goal.id,'amountKobo',amount,'sourceWalletId',source_wallet,'destinationWalletId',destination.provider_wallet_id,'reference',operation.reference,'businessId',scope->>'businessId','providerCustomerId',source_customer));
 END $$;
 
+-- No role is granted EXECUTE on the inner function: it was already closed to the
+-- executor login (piggyvest_primary_authorizer) by 20261007181000, and the login
+-- reaches it only through the SECURITY DEFINER reserve_savings wrapper, whose
+-- grant is unchanged. The revoke stays explicit and idempotent.
 REVOKE EXECUTE ON FUNCTION
   piggyvest_primary.reserve_savings_before_interest(jsonb, jsonb)
-  FROM PUBLIC, anon, authenticated, service_role;
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer;
 COMMIT;

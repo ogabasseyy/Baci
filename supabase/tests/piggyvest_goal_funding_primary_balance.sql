@@ -227,13 +227,14 @@ BEGIN
   PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'settlement changed the legacy wallet or its history');
 
   -- No local balance gate: with zero recorded receipts a large reservation is
-  -- claimed and even a further one is claimed while goal capacity remains.
-  -- Capacity left after the confirmed 5000 kobo is 995000 kobo.
+  -- claimed (995000 kobo of capacity remain). One transfer per goal may be in
+  -- flight (primary_savings_single_pending_goal_idx), so settle it before the next.
   v_result := pg_temp.fb_reserve(c_op5, 900000);
   PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'a reservation was gated on a local balance: ' || v_result::text);
   PERFORM pg_temp.fb_assert(piggyvest_primary.manage_savings(v_scope, c_op5::uuid, 'dispatch'), 'dispatch of the fifth failed');
+  PERFORM pg_temp.fb_assert(piggyvest_primary.settle_savings(c_integration, 'staging', pg_temp.fb_proof(c_op5, 900000)) = 'confirmed', 'large transfer not settled');
   v_result := pg_temp.fb_reserve(c_op6, 1);
-  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'a dispatched outflow gated a later reservation on a local balance: ' || v_result::text);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'a settled outflow gated a later reservation on a local balance: ' || v_result::text);
   v_result := pg_temp.fb_reserve('f3880000-0000-4000-8000-0000000000a7', 95000);
   PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'open reservations did not consume goal capacity: ' || v_result::text);
   PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'the reservations changed the legacy wallet');
@@ -259,18 +260,20 @@ BEGIN
 END
 $behaviour$;
 
--- Catalog: the reservation must never again read or write the legacy wallet,
--- and the grants stay closed (denied EXECUTE is asserted via the catalog).
+-- Catalog: no legacy wallet use; grants stay closed (asserted via the catalog).
 DO $catalog$
 DECLARE v_role text; v_signature text;
 BEGIN
   IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
-     LIKE '%customer_wallets%' THEN
-    RAISE EXCEPTION 'the funding reservation still references the legacy wallet';
+     ~ 'customer_wallets|inflow_receipts' THEN
+    RAISE EXCEPTION 'the funding reservation still uses the legacy wallet or the local receipt ledger';
   END IF;
-  IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
-     LIKE '%inflow_receipts%' THEN
-    RAISE EXCEPTION 'the funding reservation still gates on the local receipt ledger';
+  -- The login reaches the inner reservation only via the reserve_savings wrapper.
+  IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure, 'EXECUTE')
+     OR NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.reserve_savings(jsonb,jsonb)'::regprocedure, 'EXECUTE') THEN
+    RAISE EXCEPTION 'authorizer must hold the wrapper, not the inner reservation';
   END IF;
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)',

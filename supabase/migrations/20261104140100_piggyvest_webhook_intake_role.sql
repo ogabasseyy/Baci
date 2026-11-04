@@ -20,8 +20,10 @@ BEGIN
   END IF;
 END $$;
 
-ALTER ROLE piggyvest_webhook_intake NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB
-  NOCREATEROLE NOREPLICATION NOINHERIT;
+-- Only NOLOGIN is converged here: the migration owner may not alter
+-- superuser-class attributes (42501). CREATE ROLE defaults leave them off and
+-- supabase/tests/piggyvest_webhook_intake_role.sql asserts them via the catalog.
+ALTER ROLE piggyvest_webhook_intake NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
 
 CREATE SCHEMA IF NOT EXISTS piggyvest_webhook_intake;
 REVOKE ALL ON SCHEMA piggyvest_webhook_intake FROM PUBLIC, anon, authenticated, service_role;

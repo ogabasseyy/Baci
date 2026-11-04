@@ -1,4 +1,8 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import {
+  MODEL_FAMILY_ALIAS_TOKENS,
+  NUMERIC_MODEL_FAMILY_ALIAS_TOKENS,
+} from '@/config/storefront-model-family-taxonomy';
 import type { BuildCommercialGuideLinksContext } from './content-cluster-types';
 import { isProductModelMetadataToken } from './is-product-model-metadata-token';
 import { modelTokenMatchers } from './model-token-matchers';
@@ -6,26 +10,6 @@ import { modelTokenMatchers } from './model-token-matchers';
 const { isDimensionToken } = modelTokenMatchers;
 
 const YEAR_TOKEN_PATTERN = /^(?:19|20)\d{2}$/u;
-const MODEL_FAMILY_ALIAS_TOKENS = new Set([
-  'airpods',
-  'buds',
-  'legion',
-  'laserjet',
-  'latitude',
-  'pavilion',
-  'quest',
-  'redmi',
-  'rog',
-  'series',
-  'thinkpad',
-  'watch',
-  'xps',
-  'inspiron',
-  'omen',
-  'optiplex',
-  'fire',
-]);
-const NUMERIC_MODEL_FAMILY_ALIAS_TOKENS = new Set(['fire', 'omen', 'optiplex']);
 const HARDWARE_METADATA_TOKEN_PATTERN = /^(?:rtx|core|i[3579]|\d{3,4})$/u;
 
 export function getExcludedModelIdentifierTokens(

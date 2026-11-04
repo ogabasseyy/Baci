@@ -19,7 +19,9 @@ export type { ClaimedGiglTrackingNotification };
 export { claimedGiglTrackingNotificationsSchema };
 
 type WorkerSupabase = GiglNotificationRpcClient;
-type NotificationProcessingState = { rejectionCompleted: boolean };
+// Completion is deferred until ticket processing and attempt recording have
+// written under the still-active lease.
+type NotificationProcessingState = { deliveryRejected: boolean };
 
 const SHIPMENT_UPDATE_CAPABILITY = 1;
 
@@ -58,7 +60,6 @@ async function processNotification(
       notification.merchant_id
     );
   }
-  let deliveryRejected = false;
   const onDeliveryStart = async () => {
     const { data: started, error: beginError } = await supabase.rpc(
       'gigl_worker_begin_notification_dispatch',
@@ -71,15 +72,8 @@ async function processNotification(
       );
     }
   };
-  const onDeliveryRejected = async () => {
-    deliveryRejected = true;
-    processingState.rejectionCompleted = await complete(
-      supabase,
-      notification.id,
-      workerId,
-      'rejected',
-      'all_push_tickets_rejected'
-    );
+  const onDeliveryRejected = () => {
+    processingState.deliveryRejected = true;
   };
   if (notification.audience === 'merchant') {
     if (!notification.recipient_user_ids) {
@@ -112,8 +106,7 @@ async function processNotification(
       notification.id,
       workerId,
       result,
-      deliveryRejected,
-      processingState.rejectionCompleted
+      processingState.deliveryRejected
     );
   }
 
@@ -179,8 +172,7 @@ async function processNotification(
     notification.id,
     workerId,
     result,
-    deliveryRejected,
-    processingState.rejectionCompleted
+    processingState.deliveryRejected
   );
 }
 
@@ -206,22 +198,25 @@ async function completeNotificationResult(
   id: string,
   workerId: string,
   result: NotificationSendResult,
-  deliveryRejected: boolean,
-  rejectionCompleted: boolean
+  deliveryRejected: boolean
 ) {
-  if (rejectionCompleted) return 'failed' as const;
+  if (deliveryRejected) {
+    await complete(
+      supabase,
+      id,
+      workerId,
+      'rejected',
+      'all_push_tickets_rejected'
+    );
+    return 'failed' as const;
+  }
   // A retry after any accepted ticket can duplicate a customer-visible update.
   if (result.sent > 0) {
     await complete(supabase, id, workerId, 'sent');
     return 'sent' as const;
   }
   if (result.errors.length > 0 || result.failed > 0) {
-    await complete(
-      supabase,
-      id,
-      workerId,
-      deliveryRejected ? 'rejected' : 'failed'
-    );
+    await complete(supabase, id, workerId, 'failed');
     return 'failed' as const;
   }
   await complete(supabase, id, workerId, 'skipped', 'no_active_push_token');
@@ -242,7 +237,7 @@ export async function processClaimedGiglTrackingNotifications(
   };
   for (const notification of notifications) {
     const processingState: NotificationProcessingState = {
-      rejectionCompleted: false,
+      deliveryRejected: false,
     };
     try {
       const outcome = await processNotification(
@@ -258,22 +253,28 @@ export async function processClaimedGiglTrackingNotifications(
         notificationId: notification.id,
         error,
       });
-      if (!processingState.rejectionCompleted) {
-        try {
-          await complete(
-            supabase,
-            notification.id,
-            workerId,
-            'failed',
-            error instanceof Error ? error.message : 'unknown_error'
-          );
-        } catch (completionError) {
-          logger.error({
-            message: 'Failed to record GIGL tracking notification failure',
-            notificationId: notification.id,
-            error: completionError,
-          });
-        }
+      try {
+        await (processingState.deliveryRejected
+          ? complete(
+              supabase,
+              notification.id,
+              workerId,
+              'rejected',
+              'all_push_tickets_rejected'
+            )
+          : complete(
+              supabase,
+              notification.id,
+              workerId,
+              'failed',
+              error instanceof Error ? error.message : 'unknown_error'
+            ));
+      } catch (completionError) {
+        logger.error({
+          message: 'Failed to record GIGL tracking notification failure',
+          notificationId: notification.id,
+          error: completionError,
+        });
       }
       summary.failed += 1;
     }

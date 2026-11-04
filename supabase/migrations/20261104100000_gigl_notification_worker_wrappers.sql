@@ -221,6 +221,8 @@ AS $$
 DECLARE
   lease record;
   customer_user uuid;
+  previous_role text;
+  eligible_users uuid[];
 BEGIN
   SELECT * INTO lease
   FROM private.gigl_worker_leased_notification(p_id, p_worker_id);
@@ -228,6 +230,29 @@ BEGIN
     RETURN;
   END IF;
   IF lease.audience = 'merchant' THEN
+    -- check_staff_permission only answers for the service role or the staff
+    -- member themselves, and SECURITY DEFINER keeps the caller's JWT claims.
+    -- Elevate the claim for exactly the recipient recompute (as the claim
+    -- delegate does) and restore it before anything else runs.
+    previous_role := current_setting('request.jwt.claim.role', true);
+    PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+    SELECT coalesce(array_agg(member.user_id), '{}'::uuid[])
+    INTO eligible_users
+    FROM (
+      SELECT merchant.user_id FROM public.merchants AS merchant
+      WHERE merchant.id = lease.merchant_id
+      UNION
+      SELECT staff.user_id FROM public.staff_members AS staff
+      WHERE staff.merchant_id = lease.merchant_id
+        AND staff.status = 'active'
+        AND public.check_staff_permission(
+          staff.user_id, staff.merchant_id, 'orders', 'fulfill'
+        )
+    ) AS member
+    WHERE member.user_id IS NOT NULL;
+    PERFORM set_config(
+      'request.jwt.claim.role', coalesce(previous_role, ''), true
+    );
     RETURN QUERY
     SELECT pt.token, pt.platform
     FROM public.push_tokens AS pt
@@ -235,17 +260,7 @@ BEGIN
       AND pt.is_active = true
       AND pt.app_type = 'admin'
       AND pt.user_id = ANY (coalesce(p_recipient_user_ids, '{}'::uuid[]))
-      AND pt.user_id IN (
-        SELECT merchant.user_id FROM public.merchants AS merchant
-        WHERE merchant.id = lease.merchant_id
-        UNION
-        SELECT staff.user_id FROM public.staff_members AS staff
-        WHERE staff.merchant_id = lease.merchant_id
-          AND staff.status = 'active'
-          AND public.check_staff_permission(
-            staff.user_id, staff.merchant_id, 'orders', 'fulfill'
-          )
-      )
+      AND pt.user_id = ANY (eligible_users)
       AND (
         p_required_capability IS NULL
         OR pt.shipment_update_capability >= p_required_capability

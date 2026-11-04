@@ -305,4 +305,37 @@ describe('processClaimedGiglTrackingNotifications', () => {
     );
     expect(supabase).not.toHaveProperty('from');
   });
+
+  it('defers rejection completion until the push helper finishes persisting', async () => {
+    const supabase = createGiglTrackingNotificationSupabase({
+      description: 'Rider assigned',
+    });
+    let completionsBeforeReturn = -1;
+    notifyMerchant.mockImplementation(
+      async (_merchantId, _title, _body, _payload, _channel, options) => {
+        await options?.onDeliveryStart?.();
+        await options?.onDeliveryRejected?.();
+        completionsBeforeReturn = supabase.rpc.mock.calls.filter(
+          ([name]) => name === 'gigl_worker_complete_notification'
+        ).length;
+        return { errors: ['DeviceNotRegistered'], failed: 1, sent: 0 };
+      }
+    );
+
+    const summary = await processClaimedGiglTrackingNotifications(
+      supabase as never,
+      [notification],
+      'worker'
+    );
+
+    expect(completionsBeforeReturn).toBe(0);
+    expect(summary.failed).toBe(1);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'gigl_worker_complete_notification',
+      expect.objectContaining({
+        p_error: 'all_push_tickets_rejected',
+        p_outcome: 'rejected',
+      })
+    );
+  });
 });

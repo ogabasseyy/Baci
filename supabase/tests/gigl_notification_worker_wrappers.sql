@@ -133,6 +133,7 @@ DECLARE
   v_owner_a uuid := '7b2d0000-0000-4000-8000-0000000000a1';
   v_owner_b uuid := '7b2d0000-0000-4000-8000-0000000000a2';
   v_buyer uuid := '7b2d0000-0000-4000-8000-0000000000a3';
+  v_staff uuid := '7b2d0000-0000-4000-8000-0000000000a4';
   v_order uuid := '7b2d0000-0000-4000-8000-000000000010';
   v_customer uuid := '7b2d0000-0000-4000-8000-000000000020';
   v_shipment uuid;
@@ -140,7 +141,7 @@ DECLARE
   v_event uuid;
   v_uid uuid;
 BEGIN
-  FOREACH v_uid IN ARRAY ARRAY[v_owner_a, v_owner_b, v_buyer] LOOP
+  FOREACH v_uid IN ARRAY ARRAY[v_owner_a, v_owner_b, v_buyer, v_staff] LOOP
     INSERT INTO auth.users (
       id, instance_id, aud, role, email, encrypted_password,
       email_confirmed_at, created_at, updated_at,
@@ -154,6 +155,12 @@ BEGIN
   INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
     (v_a, v_owner_a, 'gnw-a@example.com', 'GNW A', 'gnw-a'),
     (v_b, v_owner_b, 'gnw-b@example.com', 'GNW B', 'gnw-b');
+  INSERT INTO public.staff_members (
+    merchant_id, user_id, email, name, role, permissions, status
+  ) VALUES (
+    v_a, v_staff, 'staff@gnw.example.com', 'Staff', 'sales_rep',
+    '{"orders": {"fulfill": true, "view": true}}'::jsonb, 'active'
+  );
   INSERT INTO public.customers (id, merchant_id, user_id, email)
   VALUES (v_customer, v_a, v_buyer, 'buyer@gnw.example.com');
   INSERT INTO public.orders (id, merchant_id, order_number, total, customer_id)
@@ -177,6 +184,7 @@ BEGIN
   INSERT INTO public.push_tokens (token, user_id, merchant_id, platform, app_type, is_active, shipment_update_capability)
   VALUES
     ('ExponentPushToken[gnw-owner-a]', v_owner_a, v_a, 'ios', 'admin', true, 1),
+    ('ExponentPushToken[gnw-staff-a]', v_staff, v_a, 'ios', 'admin', true, 1),
     ('ExponentPushToken[gnw-owner-b]', v_owner_b, v_b, 'ios', 'admin', true, 1),
     ('ExponentPushToken[gnw-buyer-a]', v_buyer, v_a, 'android', 'storefront', true, 1),
     ('ExponentPushToken[gnw-buyer-b]', v_buyer, v_b, 'android', 'storefront', true, 1);
@@ -203,6 +211,9 @@ CREATE TEMP TABLE gnw_claimed ON COMMIT DROP AS
 SELECT id, audience, recipient_user_ids
 FROM public.gigl_worker_claim_notifications(10, 'gnw-worker');
 GRANT SELECT ON gnw_claimed TO PUBLIC;
+-- The claim wrapper elevates the claim for its own transaction; PostgREST
+-- starts every later call with a fresh worker claim, so model that here.
+SELECT set_config('request.jwt.claim.role', 'gigl_tracking_worker', true);
 
 SELECT is(
   (SELECT count(*)::int FROM gnw_claimed), 2,
@@ -231,9 +242,10 @@ SELECT is(
   (SELECT array_agg(token ORDER BY token) FROM public.gigl_worker_notification_push_tokens(
      (SELECT id FROM gnw_claimed WHERE audience = 'merchant'), 'gnw-worker',
      ARRAY[(SELECT owner_a FROM gnw_fixture), (SELECT owner_b FROM gnw_fixture),
-           (SELECT buyer FROM gnw_fixture)], 1)),
-  ARRAY['ExponentPushToken[gnw-owner-a]'],
-  'merchant tokens are limited to the tenant''s own owner and fulfil staff'
+           (SELECT buyer FROM gnw_fixture),
+           '7b2d0000-0000-4000-8000-0000000000a4'::uuid], 1)),
+  ARRAY['ExponentPushToken[gnw-owner-a]', 'ExponentPushToken[gnw-staff-a]'],
+  'merchant tokens cover the owner and orders.fulfill staff but never foreign or customer users'
 );
 SELECT is(
   (SELECT array_agg(token) FROM public.gigl_worker_notification_push_tokens(

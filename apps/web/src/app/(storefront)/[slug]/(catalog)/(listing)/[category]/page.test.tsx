@@ -206,6 +206,25 @@ vi.mock(
   })
 );
 
+vi.mock(
+  '@/lib/storefront-compare/load-compare-category-inventory-safely',
+  () => ({
+    loadCompareCategoryInventorySafely: async ({
+      categorySlug,
+    }: {
+      categorySlug: string;
+    }) =>
+      categorySlug === 'smartphones'
+        ? {
+            categoryId: 'cat-1',
+            categoryName: 'Smartphones',
+            categorySlug: 'smartphones',
+            products: smartphoneHubProducts,
+          }
+        : null,
+  })
+);
+
 vi.mock('@/lib/storefront-category/get-cached-brand-authority-entries', () => ({
   getCachedBrandAuthorityEntries: vi.fn().mockResolvedValue([]),
 }));

@@ -94,6 +94,11 @@ export type NotificationChannel =
 type MerchantNotificationOptions = DeliveryStartOptions & {
   /** Skip these tokens (already delivered on an earlier partial attempt). */
   excludeTokens?: string[];
+  /**
+   * Restrict delivery to tokens registered by these users (owner plus
+   * permitted staff). An empty list delivers to nobody.
+   */
+  recipientUserIds?: string[];
 };
 
 // ── Core send functions ──────────────────────────────────────────────────────
@@ -158,13 +163,20 @@ export async function notifyMerchant(
 ): Promise<NotificationSendResult> {
   const supabase = createAdminClient();
 
+  if (options?.recipientUserIds?.length === 0) {
+    return { sent: 0, failed: 0, errors: [] };
+  }
+
+  const adminTokenQuery = supabase
+    .from('push_tokens')
+    .select('token, platform')
+    .eq('merchant_id', merchantId)
+    .eq('is_active', true)
+    .eq('app_type', 'admin');
   const tokenQuery = filterPushTokensByShipmentUpdateCapability(
-    supabase
-      .from('push_tokens')
-      .select('token, platform')
-      .eq('merchant_id', merchantId)
-      .eq('is_active', true)
-      .eq('app_type', 'admin'),
+    options?.recipientUserIds
+      ? adminTokenQuery.in('user_id', options.recipientUserIds)
+      : adminTokenQuery,
     options?.requiredShipmentUpdateCapability
   );
   const { data: fetchedTokens, error } = await tokenQuery;

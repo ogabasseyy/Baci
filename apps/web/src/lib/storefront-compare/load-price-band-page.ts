@@ -35,6 +35,7 @@ interface PriceBandPageProduct {
   price: number;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   availability: 'InStock' | 'OutOfStock';
   has_condition_offers: boolean;
   product_key_specs?: ProductKeySpecsRecord | null;
@@ -187,6 +188,7 @@ export async function loadPriceBandPage(
       price: product.price,
       condition: product.condition,
       stock: product.stock,
+      manage_stock: product.manage_stock,
       availability: product.availability,
       has_condition_offers: product.has_condition_offers ?? false,
       product_key_specs: product.product_key_specs,

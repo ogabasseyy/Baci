@@ -9,6 +9,7 @@ import {
 } from '@/lib/normalize-product';
 import type { Product as SeoProduct } from '@/lib/products';
 import { generateMetaDescription } from '@/lib/seo-utils';
+import { coerceStorefrontManageStock } from '@/lib/storefront-agent-availability';
 import { buildCategoryHubModel } from '@/lib/storefront-category/build-category-hub-model';
 import type {
   BrandAuthorityEntry,
@@ -94,10 +95,7 @@ export function normalizeCategoryPageProducts(
       brand: normalized.brand ?? undefined,
       condition: CONDITION_MAP[normalized.condition] || 'New',
       stock: normalized.stock,
-      manage_stock:
-        typeof product.manage_stock === 'boolean'
-          ? product.manage_stock
-          : undefined,
+      manage_stock: normalized.manage_stock,
       has_condition_offers: Boolean(normalized.has_condition_offers),
       category_slug: normalized.category_slug,
       ...(createdAt !== undefined ? { created_at: createdAt } : {}),
@@ -182,7 +180,7 @@ export function toCollectionSchemaProduct(
     description: product.description,
     status: 'active',
     price: product.rawPrice,
-    manage_stock: true,
+    manage_stock: coerceStorefrontManageStock(product.manage_stock),
     stock: product.stock ?? 0,
     image: product.image,
     imageLarge: product.image,

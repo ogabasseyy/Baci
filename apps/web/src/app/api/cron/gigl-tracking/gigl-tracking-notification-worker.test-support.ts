@@ -11,28 +11,32 @@ export const giglTrackingNotificationTestNotification = {
   tracking_event_id: '00000000-0000-4000-8000-000000000004',
 };
 
-export function createGiglTrackingNotificationQuery(
-  data: unknown,
-  selections: string[] = []
-) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    maybeSingle: vi.fn().mockResolvedValue({ data, error: null }),
-    select: vi.fn((columns: string) => {
-      selections.push(columns);
-      return builder;
-    }),
-  };
-  return builder;
-}
-
+/**
+ * Fake notification-worker RPC client. Rows keep the old fixture order:
+ * the tracking event, the order, then the customer account.
+ */
 export function createGiglTrackingNotificationSupabase(...rows: unknown[]) {
-  const selections: string[] = [];
-  const from = vi
-    .fn()
-    .mockImplementation(() =>
-      createGiglTrackingNotificationQuery(rows.shift() ?? null, selections)
-    );
-  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-  return { from, rpc, selections };
+  const [event, order, customer] = rows as [
+    { description?: string | null } | null | undefined,
+    { customer_id?: string | null } | null | undefined,
+    { user_id?: string | null } | null | undefined,
+  ];
+  const rpc = vi.fn().mockImplementation((name: string) => {
+    if (name === 'gigl_worker_notification_event') {
+      return Promise.resolve({
+        data: event ? [{ description: event.description ?? null }] : [],
+        error: null,
+      });
+    }
+    if (name === 'gigl_worker_notification_customer') {
+      return Promise.resolve({
+        data: order?.customer_id
+          ? [{ customer_user_id: customer?.user_id ?? null }]
+          : [],
+        error: null,
+      });
+    }
+    return Promise.resolve({ data: true, error: null });
+  });
+  return { rpc };
 }

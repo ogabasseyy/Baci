@@ -137,6 +137,13 @@ describe('blogGuideMetadataSchema', () => {
   });
 
   describe('Verification validation', () => {
+    it('rejects metadataContractVersion below 2', () => {
+      expect(
+        blogGuideMetadataSchema.safeParse({ metadataContractVersion: 1 })
+          .success
+      ).toBe(false);
+    });
+
     it('rejects general_news when metadataStatus is verified', () => {
       const result = blogGuideMetadataSchema.safeParse({
         metadataStatus: 'verified',

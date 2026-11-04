@@ -14,16 +14,16 @@ ALTER TABLE public.blog_posts
 CREATE INDEX IF NOT EXISTS idx_blog_posts_cluster_category_id ON public.blog_posts (cluster_category_id);
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_scope_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_scope_check
-  CHECK (guide_scope IS NULL OR guide_scope IN ('product_specific', 'model_comparison', 'brand_family_guide', 'category_guide', 'troubleshooting', 'general_news'));
+  CHECK (guide_scope IS NULL OR guide_scope IN ('product_specific', 'model_comparison', 'brand_family_guide', 'category_guide', 'troubleshooting', 'general_news')) NOT VALID;
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_kind_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_kind_check
-  CHECK (guide_kind IS NULL OR guide_kind IN ('buyer-guide', 'best-in-nigeria', 'decision-support', 'troubleshooting'));
+  CHECK (guide_kind IS NULL OR guide_kind IN ('buyer-guide', 'best-in-nigeria', 'decision-support', 'troubleshooting')) NOT VALID;
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_metadata_source_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_metadata_source_check
-  CHECK (metadata_source IN ('publisher', 'author', 'backfill_verified', 'unverified'));
+  CHECK (metadata_source IN ('publisher', 'author', 'backfill_verified', 'unverified')) NOT VALID;
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_metadata_status_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_metadata_status_check
-  CHECK (metadata_status IN ('unverified', 'proposed', 'verified', 'stale', 'rejected'));
+  CHECK (metadata_status IN ('unverified', 'proposed', 'verified', 'stale', 'rejected')) NOT VALID;
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_scope_kind_matrix_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_scope_kind_matrix_check
   CHECK (
@@ -40,7 +40,7 @@ ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_scope_kind_matrix_
       metadata_status IS DISTINCT FROM 'verified'
       OR (guide_scope IS NOT NULL AND guide_scope <> 'general_news' AND guide_kind IS NOT NULL AND cluster_category_id IS NOT NULL AND metadata_source_revision IS NOT NULL AND metadata_source_revision <> '')
     )
-  );
+  ) NOT VALID;
 
 CREATE TABLE IF NOT EXISTS public.blog_post_guide_subjects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -75,7 +75,7 @@ CREATE TRIGGER blog_post_guide_subjects_merchant_consistency_trigger
 ALTER TABLE public.blog_post_guide_subjects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can read published blog guide subjects" ON public.blog_post_guide_subjects;
 CREATE POLICY "Public can read published blog guide subjects" ON public.blog_post_guide_subjects FOR SELECT
-  USING (EXISTS (SELECT 1 FROM public.blog_posts WHERE blog_posts.id = blog_post_guide_subjects.blog_post_id AND blog_posts.merchant_id = blog_post_guide_subjects.merchant_id AND blog_posts.status = 'published' AND blog_posts.published_at IS NOT NULL));
+  USING (EXISTS (SELECT 1 FROM public.blog_posts WHERE blog_posts.id = blog_post_guide_subjects.blog_post_id AND blog_posts.merchant_id = blog_post_guide_subjects.merchant_id AND blog_posts.status = 'published' AND blog_posts.published_at IS NOT NULL AND blog_posts.published_at <= statement_timestamp()));
 
 DROP POLICY IF EXISTS "Merchant staff can manage blog guide subjects" ON public.blog_post_guide_subjects;
 CREATE POLICY "Merchant staff can manage blog guide subjects" ON public.blog_post_guide_subjects FOR ALL TO authenticated
@@ -100,8 +100,10 @@ GRANT ALL ON public.blog_post_guide_subjects TO service_role;
 CREATE OR REPLACE FUNCTION public.blog_posts_stale_on_content_change_trigger()
 RETURNS trigger LANGUAGE plpgsql SET search_path TO '' AS $$
 BEGIN
+  IF (SELECT auth.role()) = 'authenticated' AND (OLD.metadata_verified_at IS DISTINCT FROM NEW.metadata_verified_at OR OLD.metadata_verified_by IS DISTINCT FROM NEW.metadata_verified_by OR OLD.metadata_source_revision IS DISTINCT FROM NEW.metadata_source_revision OR (OLD.metadata_status IS DISTINCT FROM 'verified' AND NEW.metadata_status = 'verified'))
+  THEN RAISE EXCEPTION 'Verification metadata fields are restricted' USING ERRCODE = '42501'; END IF;
   IF OLD.metadata_status = 'verified' AND NEW.metadata_status = 'verified'
-     AND (OLD.title IS DISTINCT FROM NEW.title OR OLD.content IS DISTINCT FROM NEW.content OR OLD.excerpt IS DISTINCT FROM NEW.excerpt OR OLD.category IS DISTINCT FROM NEW.category OR OLD.tags IS DISTINCT FROM NEW.tags OR OLD.keywords IS DISTINCT FROM NEW.keywords)
+     AND (OLD.title IS DISTINCT FROM NEW.title OR OLD.content IS DISTINCT FROM NEW.content OR OLD.excerpt IS DISTINCT FROM NEW.excerpt OR OLD.category IS DISTINCT FROM NEW.category OR OLD.tags IS DISTINCT FROM NEW.tags OR OLD.keywords IS DISTINCT FROM NEW.keywords OR OLD.cluster_category_id IS DISTINCT FROM NEW.cluster_category_id OR OLD.guide_scope IS DISTINCT FROM NEW.guide_scope OR OLD.guide_kind IS DISTINCT FROM NEW.guide_kind OR OLD.applicable_brands IS DISTINCT FROM NEW.applicable_brands)
      AND OLD.metadata_verified_at IS NOT DISTINCT FROM NEW.metadata_verified_at
      AND OLD.metadata_source_revision IS NOT DISTINCT FROM NEW.metadata_source_revision
   THEN NEW.metadata_status := 'stale'; END IF;
@@ -128,7 +130,7 @@ BEGIN
     AND (
       EXISTS (SELECT 1 FROM public.blog_post_guide_subjects AS subj WHERE subj.blog_post_id = post.id AND subj.product_id = NEW.id)
       OR (
-        v_old_brand_norm IS DISTINCT FROM v_new_brand_norm AND (
+        v_old_brand_norm IS DISTINCT FROM v_new_brand_norm AND (post.cluster_category_id IS NULL OR post.cluster_category_id IS NOT DISTINCT FROM OLD.category_id OR post.cluster_category_id IS NOT DISTINCT FROM NEW.category_id) AND (
           (v_old_brand_norm <> '' AND EXISTS (
             SELECT 1 FROM pg_catalog.unnest(post.applicable_brands) AS b(val)
             WHERE pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(b.val)), '[^a-z0-9]+', '-', 'g'), '-') = v_old_brand_norm
@@ -145,11 +147,9 @@ END;
 $$;
 ALTER FUNCTION public.products_stale_blog_guide_metadata() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.products_stale_blog_guide_metadata() FROM PUBLIC;
-
 DROP TRIGGER IF EXISTS products_stale_blog_guide_metadata_trigger ON public.products;
 CREATE TRIGGER products_stale_blog_guide_metadata_trigger
   AFTER UPDATE OF brand, category_id ON public.products FOR EACH ROW EXECUTE FUNCTION public.products_stale_blog_guide_metadata();
-
 CREATE OR REPLACE FUNCTION public.categories_stale_blog_guide_metadata()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 BEGIN
@@ -191,7 +191,7 @@ CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
 RETURNS TABLE (
   id uuid, slug text, title text, excerpt text, category text, tags text[], keywords text[], featured_image_url text,
   published_at timestamp with time zone, reading_time_minutes integer, cluster_category_id uuid, cluster_category_slug text,
-  guide_scope text, guide_kind text, applicable_brands text[], eligibility_reason text, metadata_source_revision text, metadata_contract_version integer
+  guide_scope text, guide_kind text, applicable_brands text[], eligibility_reason text, metadata_status text, metadata_source_revision text, metadata_contract_version integer, subjects jsonb
 )
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO '' ROWS 64 AS $function$
 DECLARE
@@ -233,7 +233,8 @@ BEGIN
         WHEN subj.subject_role = 'product_support' THEN 'subject_product_support'
         ELSE 'subject_match'
       END AS post_eligibility_reason,
-      post.metadata_source_revision AS post_metadata_source_revision, post.metadata_contract_version AS post_metadata_contract_version,
+      post.metadata_status AS post_metadata_status, post.metadata_source_revision AS post_metadata_source_revision, post.metadata_contract_version AS post_metadata_contract_version,
+      pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('productId', subj.product_id, 'subjectRole', subj.subject_role, 'sourceRevision', subj.source_revision)) AS post_subjects,
       1 AS match_priority
     FROM public.blog_posts AS post
     INNER JOIN public.blog_post_guide_subjects AS subj
@@ -257,7 +258,8 @@ BEGIN
       post.cluster_category_id AS post_cluster_category_id, cat.slug AS post_cluster_category_slug,
       post.guide_scope AS post_guide_scope, post.guide_kind AS post_guide_kind, post.applicable_brands AS post_applicable_brands,
       CASE WHEN post.guide_scope = 'brand_family_guide' THEN 'brand_family_guide' ELSE 'category_guide' END AS post_eligibility_reason,
-      post.metadata_source_revision AS post_metadata_source_revision, post.metadata_contract_version AS post_metadata_contract_version,
+      post.metadata_status AS post_metadata_status, post.metadata_source_revision AS post_metadata_source_revision, post.metadata_contract_version AS post_metadata_contract_version,
+      '[]'::jsonb AS post_subjects,
       CASE WHEN post.guide_scope = 'brand_family_guide' THEN 2 ELSE 3 END AS match_priority
     FROM public.blog_posts AS post
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
@@ -280,14 +282,14 @@ BEGIN
     SELECT DISTINCT ON (c.post_id)
       c.post_id, c.post_slug, c.post_title, c.post_excerpt, c.post_category, c.post_tags, c.post_keywords, c.post_featured_image_url,
       c.post_published_at, c.post_reading_time_minutes, c.post_cluster_category_id, c.post_cluster_category_slug, c.post_guide_scope,
-      c.post_guide_kind, c.post_applicable_brands, c.post_eligibility_reason, c.post_metadata_source_revision, c.post_metadata_contract_version,
+      c.post_guide_kind, c.post_applicable_brands, c.post_eligibility_reason, c.post_metadata_status, c.post_metadata_source_revision, c.post_metadata_contract_version, c.post_subjects,
       c.match_priority
     FROM candidate_matches AS c ORDER BY c.post_id, c.match_priority ASC, c.post_published_at DESC
   )
   SELECT
     d.post_id, d.post_slug, d.post_title, d.post_excerpt, d.post_category, d.post_tags, d.post_keywords, d.post_featured_image_url,
     d.post_published_at, d.post_reading_time_minutes, d.post_cluster_category_id, d.post_cluster_category_slug, d.post_guide_scope,
-    d.post_guide_kind, d.post_applicable_brands, d.post_eligibility_reason, d.post_metadata_source_revision, d.post_metadata_contract_version
+    d.post_guide_kind, d.post_applicable_brands, d.post_eligibility_reason, d.post_metadata_status, d.post_metadata_source_revision, d.post_metadata_contract_version, d.post_subjects
   FROM deduped_candidates AS d ORDER BY d.match_priority ASC, d.post_published_at DESC, d.post_id ASC
   LIMIT v_effective_limit;
 END;

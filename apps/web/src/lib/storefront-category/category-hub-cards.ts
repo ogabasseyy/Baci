@@ -11,6 +11,8 @@ export function buildCategoryHubCards(input: {
   categorySlug: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  priceBandProducts?: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
   merchantCurrency?: string | null;
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {
@@ -34,7 +36,7 @@ export function buildCategoryHubCards(input: {
     priceBandCards: buildPriceBandCards({
       categorySlug: input.categorySlug,
       storeUrl: input.storeUrl,
-      products: input.products,
+      products: input.priceBandProducts ?? input.products,
       merchantCurrency: input.merchantCurrency,
     }),
   };

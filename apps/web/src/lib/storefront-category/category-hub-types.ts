@@ -66,7 +66,8 @@ export interface CategoryHubProduct {
   slug: string;
   name: string;
   price: number;
-  stock?: number | null;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
   manage_stock?: boolean | null;
   has_condition_offers?: boolean | null;
   brand?: string | null;
@@ -114,6 +115,8 @@ export interface BuildCategoryHubModelInput {
   merchantBusinessName: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  priceBandProducts?: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
   merchantCurrency?: string | null;
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {

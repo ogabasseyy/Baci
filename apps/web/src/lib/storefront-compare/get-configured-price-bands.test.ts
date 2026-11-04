@@ -34,4 +34,10 @@ describe('getConfiguredPriceBands', () => {
   it('returns empty array for an unconfigured category', () => {
     expect(getConfiguredPriceBands('unknown-category')).toEqual([]);
   });
+
+  it('returns empty array for prototype property names and does not throw', () => {
+    expect(getConfiguredPriceBands('constructor')).toEqual([]);
+    expect(getConfiguredPriceBands('toString')).toEqual([]);
+    expect(getConfiguredPriceBands('hasOwnProperty')).toEqual([]);
+  });
 });

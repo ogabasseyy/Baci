@@ -14,10 +14,15 @@ export interface PriceBandLinkLike {
 }
 
 export interface PriceBandProductLike {
+  id?: string | null;
   slug: string;
   name: string;
   brand?: string | null;
   price: number;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
 }

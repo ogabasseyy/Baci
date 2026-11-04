@@ -9,9 +9,9 @@ describe('resolvePriceRangeTitle', () => {
     const title = resolvePriceRangeTitle({
       categorySlug: 'smartphones',
       currencyCode: 'NGN',
-      rawPrice: 450_000,
-      minPrice: 380_000,
-      maxPrice: 520_000,
+      rawPrice: 400_000,
+      minPrice: 340_000,
+      maxPrice: 460_000,
       productCategory: 'Smartphones',
       formatCurrency,
     });
@@ -61,13 +61,54 @@ describe('resolvePriceRangeTitle', () => {
     const title = resolvePriceRangeTitle({
       categorySlug: 'smartphones',
       currencyCode: 'USD',
-      rawPrice: 450_000,
-      minPrice: 380_000,
-      maxPrice: 520_000,
+      rawPrice: 400_000,
+      minPrice: 340_000,
+      maxPrice: 460_000,
       productCategory: 'Smartphones',
       formatCurrency: (amount) => `$${amount}`,
     });
     expect(title).toBe('Best Smartphones Under ₦500,000');
+  });
+
+  it('falls back to formatted range when maxPrice exceeds curated band ceiling', () => {
+    vi.spyOn(priceBandTaxonomy, 'getCuratedPriceBands').mockReturnValueOnce([
+      {
+        slug: 'under-500k',
+        label: 'Best Smartphones Under ₦500,000',
+        ceiling: 500_000,
+      },
+    ]);
+    const title = resolvePriceRangeTitle({
+      categorySlug: 'smartphones',
+      currencyCode: 'NGN',
+      rawPrice: 490_000,
+      minPrice: 416_500,
+      maxPrice: 563_500,
+      productCategory: 'Smartphones',
+      formatCurrency,
+    });
+    expect(title).toBe('Smartphones ₦416,500 - ₦563,500');
+  });
+
+  it('falls back to formatted range when minPrice falls below curated band floor', () => {
+    vi.spyOn(priceBandTaxonomy, 'getCuratedPriceBands').mockReturnValueOnce([
+      {
+        slug: '500k-to-1m',
+        label: 'Best Smartphones ₦500,000 - ₦1,000,000',
+        ceiling: 1_000_000,
+        floor: 500_000,
+      },
+    ]);
+    const title = resolvePriceRangeTitle({
+      categorySlug: 'smartphones',
+      currencyCode: 'NGN',
+      rawPrice: 550_000,
+      minPrice: 467_500,
+      maxPrice: 632_500,
+      productCategory: 'Smartphones',
+      formatCurrency,
+    });
+    expect(title).toBe('Smartphones ₦467,500 - ₦632,500');
   });
 
   it('treats band floor as exclusive (rawPrice equal to floor does not match)', () => {

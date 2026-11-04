@@ -13,6 +13,7 @@ export type SavingsPlanFundingPhase =
   | 'loading'
   | 'ready'
   | 'pending'
+  | 'not_started'
   | 'unavailable'
   | 'error';
 
@@ -25,6 +26,9 @@ type UseSavingsPlanFundingInput = {
   // A never-started goal (404 SAVINGS_WALLET_NOT_FOUND) reads as 'pending'
   // (still being set up), not as an error, for status-only callers.
   notFoundMeansPending?: boolean;
+  // A never-started goal reads as 'not_started', so a status-only caller
+  // can offer setup. Takes precedence over notFoundMeansPending.
+  notFoundMeansNotStarted?: boolean;
 };
 
 function isWalletNotFound(error: unknown): boolean {
@@ -55,6 +59,7 @@ export function useSavingsPlanFunding({
   identityKey,
   loadExisting = false,
   notFoundMeansPending = false,
+  notFoundMeansNotStarted = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
   const [statusCode, setStatusCode] = useState<string | null>(null);
@@ -119,9 +124,12 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      if (notFoundMeansPending && isWalletNotFound(error)) {
+      if (
+        (notFoundMeansNotStarted || notFoundMeansPending) &&
+        isWalletNotFound(error)
+      ) {
         setStatusCode(null);
-        setPhase('pending');
+        setPhase(notFoundMeansNotStarted ? 'not_started' : 'pending');
         return;
       }
       setFundingError(planFundingErrorMessage(error));

@@ -128,6 +128,7 @@ export async function createSavingsGoal(input: {
 export const fetchSavingsPlanFunding = customerSavingsPlanFunding.provision;
 export const fetchExistingSavingsPlanFunding =
   customerSavingsPlanFunding.recover;
+export const setupExistingSavingsGoal = customerSavingsPlanFunding.setup;
 
 export async function addSavingsContribution(input: {
   amount: number;

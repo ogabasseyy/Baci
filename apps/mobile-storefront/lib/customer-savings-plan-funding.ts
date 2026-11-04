@@ -18,10 +18,16 @@ type Selection = {
   signal?: AbortSignal;
 };
 
+const PRIMARY_PROVISIONING_PATH =
+  '/api/storefront/customer/savings/primary-provisioning';
+export const PLAN_SETUP_UNAVAILABLE_MESSAGE =
+  'Setup is not available for this goal right now.';
+
 async function primaryFunding(
   input: Selection,
   interestAccepted?: boolean,
-  expectedUserId?: string
+  expectedUserId?: string,
+  setup = false
 ) {
   const selection = schemas.selection.parse({
     merchantId: input.merchantId,
@@ -36,13 +42,16 @@ async function primaryFunding(
   // and fail a legitimate request).
   const response = schemas.response.parse(
     await createStorefrontCustomerApiClient().fetchJson({
-      path: '/api/storefront/customer/savings/primary-provisioning',
-      method: interestAccepted === undefined ? 'PATCH' : 'POST',
+      path: setup
+        ? `${PRIMARY_PROVISIONING_PATH}/setup`
+        : PRIMARY_PROVISIONING_PATH,
+      method: interestAccepted === undefined && !setup ? 'PATCH' : 'POST',
       includeCsrf: true,
       signal: input.signal,
       expectedUserId: expectedUserId ?? undefined,
-      body:
-        interestAccepted === undefined
+      body: setup
+        ? schemas.setupRequest.parse({ ...selection, interestAccepted })
+        : interestAccepted === undefined
           ? selection
           : schemas.request.parse({
               ...selection,
@@ -112,6 +121,22 @@ export const customerSavingsPlanFunding = {
         signal: input.signal,
         expectedUserId: expectedUserId ?? undefined,
       })
+    );
+  },
+  /**
+   * Finishes setup of an existing goal that was never provisioned. Primary
+   * rail only (there is no legacy equivalent), and the interest answer is
+   * required: nothing here supplies a default.
+   */
+  async setup(input: Selection & { interestAccepted: boolean }) {
+    const expectedUserId = useAuthStore.getState().user?.id;
+    if (!(await resolvePrimaryRail(input.merchantId)))
+      throw new Error(PLAN_SETUP_UNAVAILABLE_MESSAGE);
+    return await primaryFunding(
+      input,
+      input.interestAccepted,
+      expectedUserId,
+      true
     );
   },
   async recover(input: Selection) {

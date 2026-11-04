@@ -65,6 +65,9 @@ export const primarySavingsProvisioningSchemas = {
     interestAccepted: z.boolean(),
   }),
   interestAccepted: z.boolean(),
+  // Existing-goal setup: no consent flag and no required choice, because a
+  // choice already stored for the goal is used instead of this one.
+  setupRequest: selection.extend({ interestAccepted: z.boolean().optional() }),
   selection,
   scope: piggyvestPrimaryWalletStoreSchemas.scope,
   goalId: z.uuid(),

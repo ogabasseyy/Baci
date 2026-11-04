@@ -9,6 +9,8 @@ export const PrimarySavingsPlanFundingSchemas = {
     consent: z.literal(true),
     interestAccepted: z.boolean(),
   }),
+  // Existing-goal setup: the customer's explicit answer, no default.
+  setupRequest: selection.extend({ interestAccepted: z.boolean() }),
   response: SavingsPlanFundingResponseSchema.extend({
     goalId: z.uuid(),
     status: z.enum([

@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
+import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
 type Props = {
@@ -11,9 +13,11 @@ type Props = {
 };
 
 /**
- * Tells a customer whose plan wallet is not ready yet to check back. It only
- * reads status (never provisions) and never shows the goal's account number.
- * Setting up an existing goal is a separate, status-gated change.
+ * Tells a customer whose plan wallet is not ready yet to check back, and
+ * never shows the goal's account number. A goal whose setup never started
+ * (confirmed by a finished status read, on a primary merchant with an
+ * available verdict) also gets the explicit interest question and a setup
+ * action; setup is never offered while status is unknown or pending.
  */
 export function SavingsPlanStatusNote({
   colors,
@@ -27,10 +31,28 @@ export function SavingsPlanStatusNote({
     goalId,
     identityKey,
     loadExisting: primary,
-    notFoundMeansPending: true,
+    notFoundMeansNotStarted: true,
+  });
+  const setup = useSavingsGoalSetup({
+    goalId,
+    merchantId,
+    onSettled: () => void funding.fetchExistingPlanFunding(),
   });
   if (!primary || funding.planFundingRequiresBvn) return null;
   const phase = funding.planFundingPhase;
+  const rereadingAfterSetup = phase === 'loading' && setup.attempted;
+  if (phase === 'not_started' || rereadingAfterSetup)
+    return (
+      <SavingsGoalSetupPrompt
+        colors={colors}
+        choice={setup.choice}
+        statusReady={phase === 'not_started'}
+        submitting={setup.submitting}
+        error={setup.error}
+        onChoose={setup.setChoice}
+        onSubmit={() => void setup.submit()}
+      />
+    );
   if (phase === 'idle' || phase === 'loading' || phase === 'ready') return null;
   if (phase === 'error') {
     return (

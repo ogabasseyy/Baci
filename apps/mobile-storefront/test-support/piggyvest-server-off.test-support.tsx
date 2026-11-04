@@ -27,5 +27,7 @@ export function expectNoPiggyvestUi() {
   expect(screen.queryByText(/still being set up/)).toBeNull();
   expect(screen.queryByText(/Setup is not available/)).toBeNull();
   expect(screen.queryByText(/check this goal/)).toBeNull();
+  expect(screen.queryByText(/Earn interest on this goal/)).toBeNull();
+  expect(screen.queryByText('Set up this goal')).toBeNull();
   expect(screen.queryByText(/\d{10}/)).toBeNull();
 }

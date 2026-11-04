@@ -17,6 +17,9 @@ const response = z
     ]),
     interestAccepted: z.boolean().nullable(),
     interestEnrollment: z.enum(['requested', 'not_requested', 'unknown']),
+    // True only on a pending status whose stored claim has expired, so the
+    // customer may run setup again. A live claim is never retryable.
+    setupRetryable: z.boolean().optional(),
     accounts: z
       .array(
         z.strictObject({
@@ -33,6 +36,12 @@ const response = z
         code: 'custom',
         path: ['accounts'],
         message: 'Only ready wallets expose verified accounts',
+      });
+    if (value.setupRetryable === true && value.status !== 'pending')
+      context.addIssue({
+        code: 'custom',
+        path: ['setupRetryable'],
+        message: 'Only a pending status can be retryable',
       });
     if (
       value.interestEnrollment !==
@@ -56,6 +65,8 @@ const record = z.strictObject({
   walletName: z.string().min(1).max(200),
   providerWalletId: piggyvestProviderIdSchema.nullable(),
   interestAccepted: z.boolean(),
+  // Only a status read reports it: the claim is past its expiry.
+  setupRetryable: z.boolean().optional(),
 });
 
 export const primarySavingsProvisioningSchemas = {
@@ -65,6 +76,9 @@ export const primarySavingsProvisioningSchemas = {
     interestAccepted: z.boolean(),
   }),
   interestAccepted: z.boolean(),
+  // Existing-goal setup: no consent flag and no required choice, because a
+  // choice already stored for the goal is used instead of this one.
+  setupRequest: selection.extend({ interestAccepted: z.boolean().optional() }),
   selection,
   scope: piggyvestPrimaryWalletStoreSchemas.scope,
   goalId: z.uuid(),

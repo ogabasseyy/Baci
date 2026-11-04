@@ -146,6 +146,7 @@ export interface InformationalClusterCategoryData {
     is_parent?: boolean | null;
     parent_product_id?: string | null;
     manage_stock?: boolean | null;
+    has_condition_offers?: boolean | null;
   }>;
   fallbackName?: string | null;
   isCollection?: boolean;
@@ -159,6 +160,7 @@ export interface BuildInformationalClusterModelInput {
   /** Test seam only: override pools skip destination verification. Hub links still exact-filter the pool to the override category (the destination counts only exact category membership, never child categories); compare and price-band links trust the caller's destination-verified pool as supplied. Production callers omit this. Without destinationVerified, compare and price-band links are fail-closed (dropped) while hub links still verify live. */
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
+  merchantCurrency?: string | null;
 }
 
 export interface BlogClusterCollection {

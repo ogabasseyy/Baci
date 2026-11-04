@@ -98,8 +98,36 @@ describe('getCachedProductSemanticInventory', () => {
         is_parent: null,
         parent_product_id: null,
         manage_stock: undefined,
+        has_condition_offers: false,
       },
     ]);
+  });
+
+  it('preserves condition-offer availability flag on candidates', async () => {
+    const productsQuery = createProductsQuery({
+      data: [
+        {
+          slug: 'offers-phone',
+          name: 'Offers Phone',
+          price: 250_000,
+          brand: 'Apple',
+          stock: 0,
+          stock_quantity: 0,
+          manage_stock: true,
+          has_condition_offers: true,
+          product_categories: [{ categories: { slug: 'smartphones' } }],
+        },
+      ],
+      error: null,
+    });
+    mockGetPublicSupabaseClient.mockReturnValue({
+      from: vi.fn(() => productsQuery),
+    });
+    const result = await getCachedProductSemanticInventory(
+      'merchant-1',
+      'smartphones'
+    );
+    expect(result[0]?.has_condition_offers).toBe(true);
   });
 
   it('keeps legacy stock when stock_quantity is zero (effective stock)', async () => {

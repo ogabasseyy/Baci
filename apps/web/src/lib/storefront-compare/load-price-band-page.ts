@@ -131,9 +131,10 @@ export async function loadPriceBandPage(
     return null;
   }
 
-  const band = getCuratedPriceBands(args.categorySlug).find(
-    (candidate) => candidate.slug === args.priceBandSlug
-  );
+  const payoutCurrency = resolveMerchantCurrencyConfig(merchant).code;
+  const band = getCuratedPriceBands(args.categorySlug, {
+    merchantCurrency: payoutCurrency,
+  }).find((candidate) => candidate.slug === args.priceBandSlug);
 
   if (!band) {
     return null;
@@ -208,7 +209,6 @@ export async function loadPriceBandPage(
     : [];
   const categoryName = categoryData.fallbackName || args.categorySlug;
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/best-under/${band.slug}`;
-  const payoutCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceBandFormatter(
     getStorefrontLocale(merchant.country),
     payoutCurrency

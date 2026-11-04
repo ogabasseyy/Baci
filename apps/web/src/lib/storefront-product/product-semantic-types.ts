@@ -20,6 +20,7 @@ export interface ProductSemanticCandidate {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 export interface ProductSemanticCard {
@@ -56,4 +57,5 @@ export interface BuildProductSemanticModelInput {
   guidePosts?: PublishedClusterPost[];
   priorityGuidePostSlugs?: string[];
   countryCode?: string | null;
+  merchantCurrency?: string | null;
 }

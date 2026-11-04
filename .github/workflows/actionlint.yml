@@ -12,6 +12,8 @@ on:
       - ".github/scripts/production-typecheck-scope.test.mjs"
       - "apps/web/next.config.ts"
       - "apps/web/tsconfig*.json"
+      - "apps/web/package.json"
+      - "apps/web/src/config/build-typecheck.ts"
   pull_request:
     branches: [main]
     paths:
@@ -23,6 +25,8 @@ on:
       - ".github/scripts/production-typecheck-scope.test.mjs"
       - "apps/web/next.config.ts"
       - "apps/web/tsconfig*.json"
+      - "apps/web/package.json"
+      - "apps/web/src/config/build-typecheck.ts"
   workflow_dispatch:
 
 permissions:

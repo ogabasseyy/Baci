@@ -25,8 +25,9 @@ permissions:
 
 concurrency:
   group: deploy-${{ github.ref }}
+  # No workflow-level queue: max. Preserving stale pending runs would let them
+  # sync workers and migrate before the exact-main guard in deploy-production.
   cancel-in-progress: false
-  queue: max
 
 # TURBO_TOKEN/TURBO_TEAM (Vercel Remote Cache secrets) are scoped to the `deploy`
 # job's env below — the only job that builds — instead of the workflow level, so

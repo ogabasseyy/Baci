@@ -56,8 +56,13 @@ test('production and both Android builds share a non-cancelling VPS resource que
   assert.equal(deployment.jobs['deploy-production']['runs-on'], 'baci-deploy');
 });
 
-test('outer release queues preserve pending runs instead of replacing them', () => {
-  for (const release of [deployment, ...android]) {
+test('web deploy keeps replace-pending semantics so stale runs never sync workers or migrate', () => {
+  assert.equal(deployment.concurrency['cancel-in-progress'], false);
+  assert.equal(deployment.concurrency.queue, undefined);
+});
+
+test('outer Android release queues preserve pending runs instead of replacing them', () => {
+  for (const release of android) {
     assert.equal(release.concurrency['cancel-in-progress'], false);
     assert.equal(release.concurrency.queue, 'max');
     assert.notEqual(release.concurrency.group, queue.group);

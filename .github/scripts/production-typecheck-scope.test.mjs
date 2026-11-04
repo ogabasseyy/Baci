@@ -47,5 +47,7 @@ test('production budgets the native Go compiler without changing the full CI typ
   const workflow = YAML.parse(readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8'));
   const build = workflow.jobs['deploy-production'].steps.find(step => step.name === 'Build for Vercel');
   assert.equal(build.env.GOMEMLIMIT, '6GiB');
+  const turbo = JSON.parse(readFileSync(new URL('../../turbo.json', import.meta.url), 'utf8'));
+  assert.ok(turbo.globalPassThroughEnv.includes('GOMEMLIMIT'), 'strict Turbo must forward GOMEMLIMIT to the compiler');
   assert.equal(build['continue-on-error'], undefined);
 });

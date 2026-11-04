@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import { matchAllowlistedTarget } from './piggyvest-egress-relay-allowlist.mjs';
 import {
   createReplayCache,
@@ -108,6 +108,24 @@ describe('replay cache', () => {
     clock = 101;
     assert.equal(cache.has('a'), false);
     assert.equal(cache.add('c'), true);
+  });
+});
+
+describe('replay cache clock', () => {
+  it('keeps an entry through wall-clock jumps (expiry is monotonic)', () => {
+    let wall = 1_700_000_000_000;
+    const dateNow = mock.method(Date, 'now', () => wall);
+    try {
+      const cache = createReplayCache();
+      assert.equal(cache.add('sig'), true);
+      wall += 3_600_000; // wall clock stepped an hour forward
+      assert.equal(cache.has('sig'), true);
+      assert.equal(cache.add('other'), true); // a sweep must not drop it
+      wall -= 3_600_000; // and corrected back into the signature's window
+      assert.equal(cache.has('sig'), true);
+    } finally {
+      dateNow.mock.restore();
+    }
   });
 });
 

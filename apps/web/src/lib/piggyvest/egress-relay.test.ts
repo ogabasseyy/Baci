@@ -109,6 +109,21 @@ describe('routeThroughRelay', () => {
     }
   });
 
+  it('cannot be redirected to another host by a path that normalizes to //host', () => {
+    const routed = routeThroughRelay(
+      {
+        ...request,
+        url: 'https://api.piggyvest.business/.//attacker.example/path?x=1',
+      },
+      options
+    );
+    expect(routed).not.toBeNull();
+    expect(new URL(routed?.url ?? '').origin).toBe(
+      'https://pv-egress.example.com'
+    );
+    expect(new URL(routed?.url ?? '').hostname).not.toBe('attacker.example');
+  });
+
   it('keeps the exact path and query, keeps credentials, and signs the target', () => {
     const routed = routeThroughRelay(request, options);
     expect(routed?.url).toBe(

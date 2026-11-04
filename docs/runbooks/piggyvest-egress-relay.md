@@ -52,7 +52,12 @@ Merging the code changes nothing in production:
   after 35 seconds (the web client's own limit is 30 seconds).
 - Logs contain only method, allowlisted path template, status and latency.
   nginx access logging is off for this host because request lines carry wallet
-  ids, references and account numbers.
+  ids, references and account numbers. The 443 vhost also sets
+  `error_log /dev/null crit;` because nginx writes the request line (with its
+  query string) into error-level upstream-failure entries; a relay outage is
+  therefore diagnosed from `systemctl --user status`/journald, not nginx logs.
+  The relay port is fixed at 18910 (no env override) so nginx and the service
+  cannot drift apart.
 
 ### How the app reads relay failures
 

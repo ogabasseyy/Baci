@@ -81,4 +81,23 @@ describe('restart replay guard', () => {
     assert.equal(res.status, 200);
     assert.equal(seen.length, 1);
   });
+
+  it('does not forward the same signed request again after a restart', async () => {
+    const first = await startRelay({ upstreamHandler: ok });
+    const nonce = 'ab'.repeat(16);
+    const target = '/api/v1/transfer/wallet';
+    const send = (relayPort) =>
+      call(relayPort, { method: 'POST', target, body: '{}', nonce });
+    assert.equal((await send(first.relayPort)).status, 200);
+    assert.equal(first.seen.length, 1);
+
+    const restarted = await startRelay({
+      upstreamHandler: ok,
+      nowMs: (NOW_SECONDS + 5) * 1000,
+    });
+    const replay = await send(restarted.relayPort);
+    assert.equal(replay.status, 401);
+    assert.equal(replay.headers['x-baci-relay-error'], 'auth_predates_start');
+    assert.equal(restarted.seen.length, 0);
+  });
 });

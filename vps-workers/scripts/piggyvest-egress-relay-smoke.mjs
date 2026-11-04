@@ -16,8 +16,31 @@ if (!base || !secret || !key) {
   );
   process.exit(2);
 }
+// The PiggyVest key travels in the Authorization header: only over TLS, or to
+// a loopback relay, and never to a URL carrying credentials.
+let relayUrl;
+try {
+  relayUrl = new URL(base);
+} catch {
+  relayUrl = null;
+}
+const loopback = ['127.0.0.1', 'localhost', '[::1]'];
+if (
+  !relayUrl ||
+  relayUrl.username ||
+  relayUrl.password ||
+  !(
+    relayUrl.protocol === 'https:' ||
+    (relayUrl.protocol === 'http:' && loopback.includes(relayUrl.hostname))
+  )
+) {
+  console.error(
+    'PIGGYVEST_EGRESS_RELAY_URL must be https (or http to a loopback host) without credentials.'
+  );
+  process.exit(2);
+}
 const target = '/api/v1/transfer/bank-list';
-const response = await fetch(new URL(target, base), {
+const response = await fetch(new URL(target, relayUrl), {
   headers: {
     authorization: `Bearer ${key}`,
     'x-baci-relay-auth': signRelayRequest({

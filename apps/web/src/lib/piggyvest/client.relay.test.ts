@@ -5,6 +5,7 @@ import {
   PiggyvestApiError,
   piggyvestRequest,
 } from './client';
+import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 
 const SECRET = 'test-relay-secret-0123456789abcdef0123';
 const dataSchema = z.object({ id: z.string() });
@@ -29,6 +30,8 @@ afterEach(() => {
 
 describe('piggyvestRequest through the egress relay', () => {
   it('goes direct, with no relay header, when the relay is unset', async () => {
+    vi.stubEnv('PIGGYVEST_EGRESS_RELAY_URL', '');
+    vi.stubEnv('PIGGYVEST_EGRESS_RELAY_SECRET', '');
     const fetchMock = vi.fn().mockResolvedValue(Response.json(okBody));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -166,5 +169,42 @@ describe('piggyvestRequest through the egress relay', () => {
       })
     ).rejects.toBeInstanceOf(PiggyvestApiError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('relay-proven not-sent failures', () => {
+  it('count as a definitive no-transfer rejection (still lookup-gated by the caller)', async () => {
+    relayEnv();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(relayError(503, 'overloaded', 'not-sent'))
+    );
+    const error = await piggyvestRequest(
+      { token: 'tok' },
+      dataSchema,
+      '/api/v1/transfer/wallet',
+      { body: { amount: 100 } }
+    ).catch((e: unknown) => e);
+    expect((error as PiggyvestApiError).code).toBe(
+      'PIGGYVEST_RELAY_UNAVAILABLE'
+    );
+    expect(isDefinitiveNoTransferRejection(error)).toBe(true);
+  });
+
+  it('keep an indeterminate relay outcome ambiguous', async () => {
+    relayEnv();
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(relayError(504, 'upstream_timeout', 'maybe-sent'))
+    );
+    const error = await piggyvestRequest(
+      { token: 'tok' },
+      dataSchema,
+      '/api/v1/transfer/wallet',
+      { body: { amount: 100 } }
+    ).catch((e: unknown) => e);
+    expect(isDefinitiveNoTransferRejection(error)).toBe(false);
   });
 });

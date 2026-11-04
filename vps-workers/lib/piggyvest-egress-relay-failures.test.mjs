@@ -89,4 +89,21 @@ describe('piggyvest egress relay server failure modes', () => {
     assert.equal(huge.headers['x-baci-relay-error'], 'response_too_large');
     assert.equal(huge.headers['x-baci-relay-upstream'], 'maybe-sent');
   });
+
+  it('returns 413, not a reset, for a chunked body over the limit', async () => {
+    const { relayPort, seen } = await startRelay({
+      upstreamHandler: (_req, res) => res.end('{}'),
+      limits: { maxRequestBytes: 100 },
+    });
+    const res = await call(relayPort, {
+      method: 'POST',
+      target: '/api/v1/transfer/wallet',
+      body: 'y'.repeat(200),
+      headers: { 'transfer-encoding': 'chunked' },
+    });
+    assert.equal(res.status, 413);
+    assert.equal(res.headers['x-baci-relay-error'], 'request_too_large');
+    assert.equal(res.headers['x-baci-relay-upstream'], 'not-sent');
+    assert.equal(seen.length, 0);
+  });
 });

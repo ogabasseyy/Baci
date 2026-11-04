@@ -48,11 +48,12 @@ export function createRelayServer({
   secret,
   upstream = PRODUCTION_UPSTREAM,
   now = Date.now,
+  monotonicNow = () => performance.now(),
   log = noop,
   limits = {},
 } = {}) {
   const config = { ...DEFAULT_LIMITS, ...limits };
-  const replays = createReplayCache({ now });
+  const replays = createReplayCache({ now: monotonicNow });
   // Replay cache is memory-only: refuse anything signed before this start.
   const startedAtSeconds = Math.floor(now() / 1000);
   let inFlight = 0;

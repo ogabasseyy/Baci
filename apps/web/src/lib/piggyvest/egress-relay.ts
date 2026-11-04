@@ -130,7 +130,11 @@ export function routeThroughRelay(
     return null;
   }
   if (original.origin !== PIGGYVEST_PRODUCTION_ORIGIN) return null;
-  const relayUrl = new URL(original.pathname + original.search, config.origin);
+  // Concatenate onto the origin: a path that normalizes to `//host/...`
+  // would otherwise be parsed as a protocol-relative URL and swap the host,
+  // sending the PiggyVest credentials to it. The origin must survive.
+  const relayUrl = new URL(config.origin + original.pathname + original.search);
+  if (relayUrl.origin !== config.origin) return null;
   const target = relayUrl.pathname + relayUrl.search;
   const timestamp = Math.floor((options.now ?? Date.now)() / 1000);
   const nonce = (options.nonce ?? (() => randomBytes(16).toString('hex')))();

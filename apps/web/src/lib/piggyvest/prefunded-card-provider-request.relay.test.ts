@@ -30,6 +30,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe('requestPrefundedCardProviderJson through the egress relay', () => {
   it('is byte-for-byte direct when the relay is unset', async () => {
+    vi.stubEnv('PIGGYVEST_EGRESS_RELAY_URL', '');
+    vi.stubEnv('PIGGYVEST_EGRESS_RELAY_SECRET', '');
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: 1 }));
     await call(`${PV}/api/v1/wallet/w1`, fetchMock as unknown as typeof fetch);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

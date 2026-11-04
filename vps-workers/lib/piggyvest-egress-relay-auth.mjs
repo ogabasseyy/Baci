@@ -46,11 +46,15 @@ export function signRelayRequest({
   return `v1.${timestamp}.${nonce}.${signature}`;
 }
 
-/** Bounded set of recently accepted signatures. */
+/**
+ * Bounded set of recently accepted signatures. Expiry runs on a monotonic
+ * clock: the wall clock can be stepped (NTP, manual), and a forward step must
+ * not sweep a signature that becomes valid again once the clock is corrected.
+ */
 export function createReplayCache({
   ttlMs = REPLAY_TTL_MS,
   maxEntries = 10_000,
-  now = Date.now,
+  now = () => performance.now(),
 } = {}) {
   const seen = new Map();
   function sweep(current) {

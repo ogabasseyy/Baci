@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 const read = (name) =>
@@ -53,4 +56,41 @@ describe('piggyvest egress relay deployment files', () => {
     assert.equal((conf.match(/proxy_pass/g) ?? []).length, 1);
     assert.doesNotMatch(conf, /access_log\s+(?!off)/);
   });
+
+  it('keeps request lines (with query strings) out of the nginx error log', () => {
+    const conf = read('config/piggyvest-egress-relay.nginx.conf')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('#'))
+      .join('\n');
+    // Upstream failures log `request: "GET /path?query"` at error level.
+    assert.match(conf, /error_log \/dev\/null crit;/);
+  });
+
+  for (const [name, line] of [
+    ['too short', 'PIGGYVEST_EGRESS_RELAY_SECRET=short'],
+    ['missing', 'OTHER=1'],
+    ['empty', 'PIGGYVEST_EGRESS_RELAY_SECRET='],
+  ]) {
+    it(`refuses to install when the relay secret is ${name}`, () => {
+      const dir = mkdtempSync(join(tmpdir(), 'pv-relay-install-'));
+      writeFileSync(join(dir, 'piggyvest-egress-relay.env'), `${line}\n`, {
+        mode: 0o600,
+      });
+      const home = mkdtempSync(join(tmpdir(), 'pv-relay-home-'));
+      const result = spawnSync(
+        'bash',
+        [
+          new URL(
+            '../install-piggyvest-egress-relay-service.sh',
+            import.meta.url
+          ).pathname,
+          dir,
+        ],
+        { env: { PATH: process.env.PATH, HOME: home }, encoding: 'utf8' }
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /PIGGYVEST_EGRESS_RELAY_SECRET/);
+      assert.doesNotMatch(result.stdout + result.stderr, /=short/);
+    });
+  }
 });

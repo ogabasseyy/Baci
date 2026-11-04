@@ -17,6 +17,16 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "[piggyvest-egress-relay] create $ENV_FILE (mode 600) first; see the runbook" >&2
   exit 1
 fi
+# Read (never print) the shared secret: a short or missing one makes the relay
+# refuse every request, so fail before installing rather than after.
+SECRET_VALUE="$(grep -E '^PIGGYVEST_EGRESS_RELAY_SECRET=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+SECRET_VALUE="${SECRET_VALUE%\"}"
+SECRET_VALUE="${SECRET_VALUE#\"}"
+if [ "${#SECRET_VALUE}" -lt 32 ]; then
+  echo "[piggyvest-egress-relay] PIGGYVEST_EGRESS_RELAY_SECRET in $ENV_FILE must be at least 32 characters" >&2
+  exit 1
+fi
+unset SECRET_VALUE
 if [ "$(stat -c '%a' "$ENV_FILE")" != "600" ]; then
   echo "[piggyvest-egress-relay] $ENV_FILE must be mode 600" >&2
   exit 1

@@ -23,6 +23,7 @@ const clean: ReconciliationReport = {
     },
   ],
   truncated: { stuck: false, wallets: false },
+  deferred: { stuck: 0, wallets: 0 },
   reasons: [],
 };
 const attention: ReconciliationReport = {
@@ -110,6 +111,33 @@ describe('renderReconciliationEmail', () => {
     expect(email.text).toContain('could not be read');
   });
 
+  it('says how many wallets were deferred to later runs, and is not a plain all clear', () => {
+    const email = renderReconciliationEmail({
+      ...clean,
+      walletsTotal: 601,
+      truncated: { stuck: false, wallets: true },
+      deferred: { stuck: 0, wallets: 600 },
+    });
+    expect(email.subject).toBe(
+      'PiggyVest daily reconciliation: all clear, 600 wallet(s) deferred to later runs (2026-11-03)'
+    );
+    expect(email.text).toContain(
+      "600 wallet(s) were not in today's window and will be checked on later runs."
+    );
+  });
+
+  it('says how many stuck transfers are not listed', () => {
+    const email = renderReconciliationEmail({
+      ...attention,
+      stuckTotal: 250,
+      truncated: { stuck: true, wallets: false },
+      deferred: { stuck: 249, wallets: 0 },
+    });
+    expect(email.text).toContain(
+      '249 stuck transfer(s) are not listed above; they rotate into view on later runs.'
+    );
+  });
+
   it('escapes provider-influenced text in the html body', () => {
     const email = renderReconciliationEmail(attention);
     expect(email.html).not.toContain('<b>x</b>');
@@ -158,6 +186,17 @@ describe('pageReasonOf', () => {
       })
     ).toBe('reconciliation_failed:snapshot_invalid');
   });
+  it('does not page for deferred wallets alone', () => {
+    expect(
+      pageReasonOf({
+        ...clean,
+        walletsTotal: 601,
+        truncated: { stuck: false, wallets: true },
+        deferred: { stuck: 0, wallets: 600 },
+      })
+    ).toBeNull();
+  });
+
   it('says so when the read budget ran out', () => {
     const cutOff = { ...attention, deadlineReached: true as const };
     expect(pageReasonOf(cutOff)).toBe(

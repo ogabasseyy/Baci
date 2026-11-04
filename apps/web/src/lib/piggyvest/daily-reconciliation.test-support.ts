@@ -28,8 +28,10 @@ export function snapshot(overrides: Record<string, unknown> = {}) {
     businessId: 'synthetic-business',
     stuck: [],
     stuckTotal: 0,
+    stuckDeferred: 0,
     wallets: [],
     walletsTotal: 0,
+    walletsDeferred: 0,
     ...overrides,
   };
 }

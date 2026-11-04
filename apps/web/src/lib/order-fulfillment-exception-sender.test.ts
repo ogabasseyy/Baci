@@ -54,7 +54,7 @@ describe('sendDeliveryExceptionNotification', () => {
     });
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        subject: 'Your order #A-1 was returned',
+        subject: 'Your order #A-1 is being returned',
         clientReference: 'order:o1:returned_email',
       })
     );

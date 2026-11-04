@@ -29,7 +29,7 @@ describe('order delivery exception email', () => {
       ...base,
       kind: 'returned',
     });
-    expect(text).toContain('returned to');
+    expect(text).toContain('being returned to');
     expect(text).toContain('A-100');
   });
 

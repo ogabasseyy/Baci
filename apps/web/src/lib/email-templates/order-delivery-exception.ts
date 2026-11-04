@@ -22,7 +22,7 @@ const COPY: Record<
   },
   returned: {
     heading: 'Your order is being returned',
-    body: 'Your order could not be delivered and has been returned to the seller. Please contact the seller to arrange a new delivery or a refund.',
+    body: 'Your order could not be delivered and is being returned to the seller. Please contact the seller to arrange a new delivery or a refund.',
   },
 };
 
@@ -32,7 +32,7 @@ export function orderDeliveryExceptionSubject(
 ): string {
   return kind === 'failed'
     ? `Delivery problem with your order #${orderNumber}`
-    : `Your order #${orderNumber} was returned`;
+    : `Your order #${orderNumber} is being returned`;
 }
 
 export function generateOrderDeliveryExceptionEmail(

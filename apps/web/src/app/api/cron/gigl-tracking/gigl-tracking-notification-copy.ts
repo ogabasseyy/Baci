@@ -85,7 +85,7 @@ const audienceCopy: Record<
     },
     waybill_changed: {
       title: 'GIG waybill updated',
-      body: 'The shipment now uses a new GIG waybill. Customers were told.',
+      body: 'The shipment now uses a new GIG waybill.',
     },
   },
 };

@@ -1,5 +1,6 @@
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
+import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-category-price-band-candidates';
 import {
   buildProductSupportLinks,
   type CommercialSupportLink,
@@ -9,6 +10,7 @@ import {
   PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT,
 } from '@/lib/storefront-compare/build-compare-discovery-links';
 import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
+import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import type {
   BuildProductSemanticModelInput,
@@ -85,6 +87,21 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
       return true;
     })
     .slice(0, PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT);
+}
+
+function getDestinationPriceBandInventory(
+  input: BuildProductSemanticModelInput
+) {
+  const seenSlugs = new Set<string>();
+
+  return input.inventory
+    .filter((product) => product.category_slug === input.categorySlug)
+    .filter((product) => {
+      if (seenSlugs.has(product.slug)) return false;
+      seenSlugs.add(product.slug);
+      return true;
+    })
+    .slice(0, COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT);
 }
 
 function extractCategoryCompareSlug(href: string, categorySlug: string) {
@@ -229,6 +246,11 @@ export function buildProductSemanticCompareSupport(
   );
   const brandAndFamilyHubLinks = buildBrandAndFamilyHubLinks(normalizedInput);
   const supportLinkProducts = compareApprovalInventory;
+  const priceBandCandidates = buildCategoryPriceBandCandidates(
+    normalizedInput.categorySlug,
+    getDestinationPriceBandInventory(normalizedInput),
+    { merchantCurrency: normalizedInput.merchantCurrency }
+  );
   const rawSupportLinks: CommercialSupportLink[] = [
     buildCategoryHubLink(normalizedInput),
     ...brandAndFamilyHubLinks,
@@ -240,6 +262,7 @@ export function buildProductSemanticCompareSupport(
       currentProductPrice: normalizedInput.currentProduct.price,
       includeBrandCompareLink: false,
       products: supportLinkProducts,
+      priceBandCandidates,
       merchantCurrency: normalizedInput.merchantCurrency,
     }),
   ];

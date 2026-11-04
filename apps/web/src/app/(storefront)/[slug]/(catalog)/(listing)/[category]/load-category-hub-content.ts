@@ -1,3 +1,4 @@
+import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import {
   type CachedCategoryPageData,
@@ -27,6 +28,12 @@ export async function loadCategoryHubContent(input: {
     !input.categoryData.isCollection &&
     !input.categoryData.isInactiveCategory &&
     Boolean(input.storeSlug);
+  const hasHubDefaults = input.categorySlug in CATEGORY_HUB_DEFAULTS;
+  const isPageDataSufficient =
+    input.categoryData.productCount !== undefined &&
+    input.categoryData.products.length >= input.categoryData.productCount;
+  const shouldFetchHubPool =
+    canLoadHubPool && hasHubDefaults && !isPageDataSufficient;
 
   const [guidePosts, brandAuthorityEntries, hubCategoryData] =
     await Promise.all([
@@ -39,7 +46,7 @@ export async function loadCategoryHubContent(input: {
       canLoadAuthority
         ? getCachedBrandAuthorityEntries(input.merchantId, input.categorySlug)
         : Promise.resolve([]),
-      canLoadHubPool && input.storeSlug
+      shouldFetchHubPool && input.storeSlug
         ? getCachedCategoryPageData(
             input.merchantId,
             input.categorySlug,
@@ -53,7 +60,11 @@ export async function loadCategoryHubContent(input: {
   const hubProducts =
     hubCategoryData && !hubCategoryData.productsQueryFailed
       ? (hubCategoryData.products as RawDbProduct[])
-      : undefined;
+      : hasHubDefaults &&
+          isPageDataSufficient &&
+          !input.categoryData.productsQueryFailed
+        ? (input.categoryData.products as RawDbProduct[])
+        : undefined;
 
   return {
     guidePosts,

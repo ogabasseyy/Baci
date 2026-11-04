@@ -73,6 +73,8 @@ describe('loadCategoryHubContent', () => {
         isCollection: false,
         isInactiveCategory: false,
         category: { id: 'cat-1' },
+        productCount: 50,
+        products: [{ id: 'p-initial' }],
       },
       storeSlug: 'ogabassey',
     } as never);
@@ -84,6 +86,50 @@ describe('loadCategoryHubContent', () => {
       150
     );
     expect(result.hubProducts).toEqual([{ id: 'prod-1', name: 'Product 1' }]);
+  });
+
+  it('skips 150-product fetch for non-priority categories without hub defaults', async () => {
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'headphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-hp' },
+        productCount: 50,
+        products: [{ id: 'p-hp' }],
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(mockCategoryPageData).not.toHaveBeenCalled();
+    expect(result.hubProducts).toBeUndefined();
+  });
+
+  it('reuses loaded page data without an extra fetch when products already cover the count', async () => {
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const pageProducts = [
+      { id: 'p1', name: 'P1' },
+      { id: 'p2', name: 'P2' },
+    ];
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 2,
+        products: pageProducts,
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(mockCategoryPageData).not.toHaveBeenCalled();
+    expect(result.hubProducts).toEqual(pageProducts);
   });
 
   it('loads 150-product canonical pool for legacy categories without a category row', async () => {
@@ -101,6 +147,8 @@ describe('loadCategoryHubContent', () => {
         isCollection: false,
         isInactiveCategory: false,
         category: null,
+        productCount: 80,
+        products: [{ id: 'p-init' }],
       },
       storeSlug: 'ogabassey',
     } as never);

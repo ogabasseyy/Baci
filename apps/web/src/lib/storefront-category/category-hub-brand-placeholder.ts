@@ -2,6 +2,7 @@ import { generateSlug } from '@/lib/seo-utils';
 
 export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
   'gaming',
+  'game',
   'generic',
   'unbranded',
   'other',

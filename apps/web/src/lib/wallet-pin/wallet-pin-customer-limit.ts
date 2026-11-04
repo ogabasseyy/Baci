@@ -1,6 +1,6 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
-import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
+import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
 
 // Per signed-in customer budgets for the wallet-PIN routes, charged AFTER
 // authentication on top of the proxy's per-IP bucket. Carrier NAT puts many
@@ -34,6 +34,15 @@ function limited(retryAfterSeconds: number) {
   );
 }
 
+// Seconds until the limiter frees capacity, kept within 1 s and the window;
+// the full window when the limiter gave no reset time.
+function retryAfterSeconds(resetAt: number | undefined, windowMs: number) {
+  const windowSeconds = windowMs / 1000;
+  if (resetAt === undefined || !Number.isFinite(resetAt)) return windowSeconds;
+  const seconds = Math.ceil((resetAt - Date.now()) / 1000);
+  return Math.min(windowSeconds, Math.max(1, seconds));
+}
+
 // userId is the authenticated customer auth user id, not customers.id.
 // Returns null when the call may proceed, otherwise the refusal to send.
 // Redis unavailable or erroring denies closed, like the proxy PIN buckets.
@@ -44,15 +53,14 @@ export async function chargeWalletPinCustomerLimit(
 ): Promise<NextResponse | null> {
   const config = BUDGETS[budget];
   try {
-    const verdict = await checkTenantRateLimit(
+    const { verdict, resetAt } = await checkTenantRateLimitDetailed(
       `wallet-pin:${budget}`,
       `${merchantId}:${userId}`,
       config
     );
     if (verdict === 'allowed') return null;
-    // A sliding window frees capacity gradually and the verdict carries no
-    // reset time, so the full window is a conservative upper bound.
-    return limited(verdict === 'denied' ? config.windowMs / 1000 : 60);
+    if (verdict !== 'denied') return limited(60);
+    return limited(retryAfterSeconds(resetAt, config.windowMs));
   } catch {
     return limited(60);
   }

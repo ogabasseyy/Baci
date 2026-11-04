@@ -5,7 +5,10 @@ import { chargeWalletPinCustomerLimit } from './wallet-pin-customer-limit';
 vi.mock('server-only', () => ({}));
 const mocks = vi.hoisted(() => ({ tenant: vi.fn() }));
 vi.mock('@/lib/tenant-rate-limit', () => ({
-  checkTenantRateLimit: mocks.tenant,
+  checkTenantRateLimitDetailed: async (...args: unknown[]) => {
+    const result = await mocks.tenant(...args);
+    return typeof result === 'string' ? { verdict: result } : result;
+  },
 }));
 
 const merchantA = '11111111-1111-4111-8111-111111111111';
@@ -58,6 +61,23 @@ describe('chargeWalletPinCustomerLimit', () => {
       error: 'Too many attempts. Please try again later.',
       code: 'RATE_LIMITED',
     });
+  });
+
+  it('sends the seconds left until the limiter resets as Retry-After', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    mocks.tenant.mockResolvedValue({
+      verdict: 'denied',
+      resetAt: 1_700_000_042_500,
+    });
+    const response = await chargeWalletPinCustomerLimit(
+      'mutation',
+      merchantA,
+      alice
+    );
+    vi.useRealTimers();
+    expect(response?.status).toBe(429);
+    expect(response?.headers.get('Retry-After')).toBe('43');
   });
 
   it('gives change-PIN its own tighter budget and bucket', async () => {

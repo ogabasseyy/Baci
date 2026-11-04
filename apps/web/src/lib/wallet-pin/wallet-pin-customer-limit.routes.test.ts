@@ -20,7 +20,9 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: async () => ({ valid: true }),
 }));
 vi.mock('@/lib/tenant-rate-limit', () => ({
-  checkTenantRateLimit: mocks.tenant,
+  checkTenantRateLimitDetailed: async (...args: unknown[]) => ({
+    verdict: await mocks.tenant(...args),
+  }),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: () => ({

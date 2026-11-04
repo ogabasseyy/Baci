@@ -1,23 +1,24 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T11:06:48.167488+00:00",
-  "source_revision": "4c6622c95f21f472a83a47bb050004f8c0ac2006",
-  "evidence_digest": "70d1955707e6f103470ccdd8d66ad6bd6b2b9f98cc2272fff491341002df80df",
-  "claims_digest": "570b83bc22606df27775f7a1ad2d73b7296121c03b149da3eb213d0986b35ef3",
-  "review_scope": "Source evidence only. Re-reviewed guest OAuth consent and renewal: new consent enables a refresh-renewed 90-day idle connection, while existing grants and pending legacy consent/code records retain their original deadline. Cart lifetime remains seven days; expired carts roll over by CAS to a fresh empty handle. Revocation, replay detection, tenant isolation and storage capacity limits remain enforced. Focused OAuth and PostgreSQL tests pass; this renewal change is not yet deployed or verified in the submission app. All register-cited capability sources are unchanged since the prior reviewed revision. No capability status is promoted to production_verified; live release, native acceptance and transaction readiness remain separate.",
+  "reviewed_at": "2026-11-04T12:27:04.022546+00:00",
+  "source_revision": "8112075d5e29f6534e3d414e372a99559ec71247",
+  "evidence_digest": "5681a489fcb0de868a31c728ddbe5126273a2f1cb21eb2f53d84328bc5f712b1",
+  "claims_digest": "bf85ed60b9025ae49386d8105fc8819845a6c1cec5e9b7684c8a005fff861e7b",
+  "review_scope": "Source evidence only. Re-reviewed guest OAuth consent and renewal: new consent enables a refresh-renewed 90-day idle connection, while existing grants and pending legacy consent/code records retain their original deadline. Cart lifetime remains seven days; expired carts roll over by CAS to a fresh empty handle. Revocation, replay detection, tenant isolation and storage capacity limits remain enforced. Focused OAuth and PostgreSQL tests pass; this renewal change is not yet deployed or verified in the submission app. Upstream payment review: uncertain agentic DVA creation and persistence outcomes retain their claim for reconciliation; stale claims without a confirmed provider outcome require manual review. Merchant protocol claims and checkout eligibility after CredPal retirement remain accurate. Oxygen remains local staging QA only; carrier configuration and transaction readiness need separate verification. No capability status is promoted to production_verified; live release, native acceptance and transaction readiness remain separate.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout is restricted to local staging QA and is not enabled for production shoppers. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
+        "apps/web/src/config/oxygen-storefront-staging.ts"
       ]
     },
     {

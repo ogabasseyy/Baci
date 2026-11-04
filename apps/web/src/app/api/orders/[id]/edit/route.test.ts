@@ -151,6 +151,23 @@ describe('PATCH /api/orders/[id]/edit', () => {
   it.each([
     ['order_not_found', 404, undefined],
     ['order_edit_forbidden', 403, undefined],
+    [
+      'oxygen_financial_edit_locked',
+      409,
+      {
+        code: 'oxygen_financial_edit_locked',
+        error:
+          'Financial edits are unavailable while Oxygen financing is in progress.',
+      },
+    ],
+    [
+      'oxygen_order_edit_retry',
+      409,
+      {
+        code: 'oxygen_order_edit_retry',
+        error: 'The order is being updated. Please try again.',
+      },
+    ],
     ['order_financial_edit_has_payments', 409, undefined],
     ['order_financial_edit_after_fulfillment', 409, undefined],
     [

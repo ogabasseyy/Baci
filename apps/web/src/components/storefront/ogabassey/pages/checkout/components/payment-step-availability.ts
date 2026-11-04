@@ -1,3 +1,4 @@
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { PaymentMethod } from '../types';
 import { isGatewayAmountDifferentFromOrderTotal } from '../utils';
 
@@ -150,6 +151,8 @@ export function isPaymentMethodAvailable({
   payableAmount: number;
 }): boolean {
   switch (paymentMethod) {
+    case 'oxygen':
+      return isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount);
     case 'paystack':
       return paystackCheckoutAvailable;
     case 'uba_redvault':
@@ -168,11 +171,7 @@ export function isPaymentMethodAvailable({
     case 'pod':
       return featureSettings?.pay_on_delivery_enabled === true;
     case 'credpal':
-      // NGN-only Nigerian BNPL rail (see resolveChargeCurrency).
-      return (
-        featureSettings?.credpal_enabled === true &&
-        isNgnChargeCurrency(currency)
-      );
+      return false;
     case 'credit_direct':
       return isCreditDirectEligible({
         featureSettings,
@@ -208,7 +207,7 @@ export function hasAnyInstallmentOption({
   payableAmount: number;
 }): boolean {
   return Boolean(
-    (featureSettings?.credpal_enabled && isNgnChargeCurrency(currency)) ||
+    (isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) ||
       isCreditDirectEligible({
         featureSettings,
         currency,

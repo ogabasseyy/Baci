@@ -5,7 +5,7 @@
  * trust the client-submitted `shipping_fee`. This helper re-derives the fee
  * authoritatively from the merchant's rate config:
  *   1. load the merchant's zones/locations/rates through the storefront RPC
- *      (service-role client — the tables have no anon grants), failing LOUD:
+ *      (anonymous-safe RPC; underlying tables remain protected), failing LOUD:
  *      a load error throws `MerchantShippingRatesLoadError` rather than reading
  *      as an empty rate set (see the return-contract note below),
  *   2. confirm the selected rate exists, is active, and belongs to an active
@@ -44,7 +44,7 @@ export type VerifyOrderShippingRateRejectionCode =
   | 'SHIPPING_RATE_CONDITION_UNMET';
 
 export interface VerifyOrderShippingRateInput {
-  /** Service-role client (the storefront rates RPC is the only read path). */
+  /** Normal public/session client; reads only the anonymous-safe storefront RPC. */
   supabase: SupabaseClient;
   merchantId: string;
   /** The `merchant_shipping_rates.id` the checkout selected. */

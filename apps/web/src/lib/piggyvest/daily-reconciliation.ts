@@ -77,7 +77,14 @@ export type ReconciliationReport =
       stuck: StuckFinding[];
       walletsTotal: number;
       balances: BalanceFinding[];
+      /**
+       * A list holds one rotating window, not every row. Stuck rows left out
+       * page (`list_truncated`); wallets left out do not, because the window
+       * moves each day so every wallet is checked across runs.
+       */
       truncated: { stuck: boolean; wallets: boolean };
+      /** How many rows each list left out of this run's window. */
+      deferred: { stuck: number; wallets: number };
       /** Set when provider reads were cut off to leave time to report. */
       deadlineReached?: true;
       reasons: AttentionReason[];
@@ -221,9 +228,13 @@ export async function runDailyReconciliation(
     snapshot.wallets,
     () => !budget.expired()
   );
+  const deferred = {
+    stuck: snapshot.stuckDeferred,
+    wallets: snapshot.walletsDeferred,
+  };
   const truncated = {
-    stuck: snapshot.stuckTotal > snapshot.stuck.length,
-    wallets: snapshot.walletsTotal > snapshot.wallets.length,
+    stuck: deferred.stuck > 0,
+    wallets: deferred.wallets > 0,
   };
   const reasons: AttentionReason[] = [];
   if (snapshot.stuckTotal > 0 || stuck.length > 0)
@@ -232,7 +243,7 @@ export async function runDailyReconciliation(
     reasons.push('balance_below_expected');
   if (balances.some((balance) => balance.kind === 'unreadable'))
     reasons.push('balance_unreadable');
-  if (truncated.stuck || truncated.wallets) reasons.push('list_truncated');
+  if (truncated.stuck) reasons.push('list_truncated');
   if (budget.hit) reasons.push('read_deadline_reached');
   return {
     status: reasons.length > 0 ? 'attention' : 'clean',
@@ -243,6 +254,7 @@ export async function runDailyReconciliation(
     walletsTotal: snapshot.walletsTotal,
     balances,
     truncated,
+    deferred,
     ...(budget.hit ? { deadlineReached: true as const } : {}),
     reasons,
   };

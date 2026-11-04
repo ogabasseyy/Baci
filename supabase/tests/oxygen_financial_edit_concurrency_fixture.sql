@@ -1,0 +1,37 @@
+CREATE ROLE anon;
+
+CREATE ROLE authenticated;
+CREATE ROLE service_role BYPASSRLS;
+CREATE SCHEMA auth; CREATE SCHEMA oxygen_private;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION public.check_staff_permission(uuid,uuid,text,text) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT $1='efb10000-0000-4000-8000-000000000003'::uuid $$;
+CREATE TABLE auth.users(id uuid PRIMARY KEY,instance_id uuid,aud text,role text,email text,encrypted_password text,email_confirmed_at timestamptz,created_at timestamptz,updated_at timestamptz,raw_app_meta_data jsonb,raw_user_meta_data jsonb);
+CREATE TABLE public.merchants(id uuid PRIMARY KEY,user_id uuid,email text,business_name text,slug text);
+CREATE TABLE public.staff_members(merchant_id uuid,user_id uuid,email text,name text,role text,permissions jsonb,status text);
+CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid,user_id uuid,first_name text,last_name text,email text);
+CREATE TABLE public.orders(id uuid PRIMARY KEY,merchant_id uuid,customer_id uuid,order_number text,subtotal numeric,total numeric,currency text,payment_status text,payment_method text,shipping_fee numeric,discount_amount numeric,gift_wrapping_fee numeric,tax_basis text,tax_amount numeric,tax_exclusive_amount numeric,tax_inclusive_amount numeric,notes text);
+CREATE TABLE public.order_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),order_id uuid REFERENCES public.orders(id),product_id uuid,name text,price numeric,quantity integer,fulfillment_data jsonb,cost_price numeric,supplier_name text);
+CREATE TABLE public.order_tax_subtotals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),order_id uuid REFERENCES public.orders(id),vat_category_code text,vat_rate numeric,taxable_amount numeric,tax_amount numeric);
+CREATE TABLE public.oxygen_workflows(id uuid PRIMARY KEY,order_id uuid UNIQUE,merchant_id uuid,customer_id uuid,stage text);
+CREATE TABLE oxygen_private.commands(workflow_id uuid,idempotency_key uuid,expected_version integer,channel text,status text,command jsonb);
+CREATE TABLE oxygen_private.provider_states(workflow_id uuid,state jsonb);
+CREATE TABLE oxygen_private.provider_reference_history(workflow_id uuid,booking_reference uuid);
+CREATE TABLE oxygen_private.saved_plans(workflow_id uuid);
+CREATE TABLE oxygen_private.plan_selections(workflow_id uuid);
+CREATE TABLE oxygen_private.payment_recovery(workflow_id uuid);
+CREATE TABLE oxygen_private.activation_trials(workflow_id uuid);
+CREATE TABLE oxygen_private.general_activations(workflow_id uuid);
+GRANT USAGE ON SCHEMA auth TO authenticated;
+GRANT SELECT ON public.merchants TO authenticated;
+GRANT SELECT,UPDATE ON public.orders TO authenticated;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.order_items,public.order_tax_subtotals TO authenticated;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY owners ON public.orders TO authenticated USING ((merchant_id IN (SELECT id FROM public.merchants WHERE user_id=auth.uid()) OR public.check_staff_permission(auth.uid(),merchant_id,'orders','edit'))) WITH CHECK ((merchant_id IN (SELECT id FROM public.merchants WHERE user_id=auth.uid()) OR public.check_staff_permission(auth.uid(),merchant_id,'orders','edit')));
+ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY item_owners ON public.order_items TO authenticated USING (order_id IN (SELECT id FROM public.orders)) WITH CHECK (order_id IN (SELECT id FROM public.orders));
+ALTER TABLE public.order_tax_subtotals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tax_owners ON public.order_tax_subtotals TO authenticated USING (order_id IN (SELECT id FROM public.orders)) WITH CHECK (order_id IN (SELECT id FROM public.orders));
+
+ALTER ROLE service_role BYPASSRLS;
+GRANT USAGE ON SCHEMA auth TO service_role;
+GRANT SELECT,INSERT,UPDATE,DELETE ON public.orders,public.order_items,public.order_tax_subtotals TO service_role;

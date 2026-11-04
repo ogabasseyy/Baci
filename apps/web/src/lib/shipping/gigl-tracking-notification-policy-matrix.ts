@@ -19,9 +19,12 @@ export const GIGL_TRACKING_NOTIFICATION_KINDS = [
   'failed',
   'returned',
   'cancelled',
+  'waybill_changed',
 ] as const;
 
 export const GIGL_PICKUP_EN_ROUTE_RAW_STATUS = 'RIDER EN ROUTE FOR PICKUP';
+/** GIG raw code for a delayed pickup; normalises to pickup_scheduled. */
+export const GIGL_PICKUP_DELAYED_RAW_STATUS = 'DLP';
 
 export type GiglTrackingNotificationAudience =
   (typeof GIGL_TRACKING_NOTIFICATION_AUDIENCES)[number];
@@ -49,6 +52,16 @@ export const GIGL_TRACKING_NOTIFICATION_POLICY_MATRIX = [
   },
   {
     audience: 'merchant',
+    rawStatus: GIGL_PICKUP_DELAYED_RAW_STATUS,
+    notificationKind: 'pickup_delayed',
+  },
+  {
+    audience: 'merchant',
+    normalizedStatus: 'picked_up',
+    notificationKind: 'picked_up',
+  },
+  {
+    audience: 'customer',
     normalizedStatus: 'picked_up',
     notificationKind: 'picked_up',
   },
@@ -58,9 +71,19 @@ export const GIGL_TRACKING_NOTIFICATION_POLICY_MATRIX = [
     notificationKind: 'transit_started',
   },
   {
+    audience: 'merchant',
+    normalizedStatus: 'out_for_delivery',
+    notificationKind: 'out_for_delivery',
+  },
+  {
     audience: 'customer',
     normalizedStatus: 'out_for_delivery',
     notificationKind: 'out_for_delivery',
+  },
+  {
+    audience: 'merchant',
+    normalizedStatus: 'delivered',
+    notificationKind: 'delivered',
   },
   {
     audience: 'customer',
@@ -89,6 +112,11 @@ export const GIGL_TRACKING_NOTIFICATION_POLICY_MATRIX = [
   },
   {
     audience: 'merchant',
+    normalizedStatus: 'cancelled',
+    notificationKind: 'cancelled',
+  },
+  {
+    audience: 'customer',
     normalizedStatus: 'cancelled',
     notificationKind: 'cancelled',
   },

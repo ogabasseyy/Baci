@@ -1,23 +1,24 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T20:34:23+00:00",
-  "source_revision": "740122683e1c16979372ce963ca2aabd0b8f3fed",
-  "evidence_digest": "0768371803be406d0d4f5c025f46d9162c68f1769b19f3c3894586c642a76fae",
-  "claims_digest": "55262d91c0adc6264e692c92fb5e8608a885c79e68e215d1a6c8b16251b14f60",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-04T03:35:07+00:00",
+  "source_revision": "7fe1e82ae62268b64c579a34fde39568d68dabd3",
+  "evidence_digest": "f81738a211598985521c35fc7a2227190d14ef60edac8121357dd683ecf93b3e",
+  "claims_digest": "582ba8df0661a943a9b94a024d5e494e777947d7306dd97e5f631f5121614cfb",
+  "review_scope": "Source review: uncertain agentic DVA creation and persistence outcomes retain their claim for reconciliation; stale claims without a confirmed provider outcome require manual review. Merchant protocol claims remain accurate. Reviewed checkout eligibility after CredPal retirement; the listed payment capabilities remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout is restricted to local staging QA and is not enabled for production shoppers. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
+        "apps/web/src/config/oxygen-storefront-staging.ts"
       ]
     },
     {

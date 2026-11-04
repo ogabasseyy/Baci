@@ -6,6 +6,9 @@ import { POST as setRoute } from '@/app/api/storefront/customer/wallet-pin/set/r
 import { GET as statusRoute } from '@/app/api/storefront/customer/wallet-pin/status/route';
 
 vi.mock('server-only', () => ({}));
+vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
+  chargeWalletPinCustomerLimit: async () => null,
+}));
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),

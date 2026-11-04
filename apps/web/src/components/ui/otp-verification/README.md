@@ -67,3 +67,5 @@ Unknown timing stays read-only until a fresh acknowledged request is available.
 The simulation has its own demonstration clock and never requests a real code.
 
 Server-confirmed animation: `pending` keeps the red highlight orbiting the separate grey boxes for the whole request. It never starts the stack or indicates success. Set `verified` only after the server has confirmed the operation; this starts the 420 ms stack followed by the green tick. `onStackComplete` is a visual callback after confirmation, never evidence of verification. Oxygen approval holds its confirmed destination briefly for this success sequence, skips the pause for reduced motion, and releases it safely if the component unmounts. Errors and indeterminate responses never receive a success transition.
+
+Oxygen may set `resendAfterExpiry` to show the five-minute countdown in place of resend. `hidePendingMessage` removes duplicate visible checking text while retaining screen-reader status. These options preserve caller-specific cooldown, expiry-advisory and focus recovery behavior.

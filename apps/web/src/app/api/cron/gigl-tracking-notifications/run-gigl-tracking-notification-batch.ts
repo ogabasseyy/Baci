@@ -1,11 +1,10 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   claimedGiglTrackingNotificationsSchema,
   processClaimedGiglTrackingNotifications,
 } from '@/app/api/cron/gigl-tracking/gigl-tracking-notification-worker';
-import type { Database } from '@/types/supabase';
+import type { GiglNotificationRpcClient } from '@/lib/gigl-notification-worker-client';
 
 type ProcessNotifications = typeof processClaimedGiglTrackingNotifications;
 
@@ -16,17 +15,14 @@ export async function runGiglTrackingNotificationBatch({
   workerId,
 }: {
   batchSize: number;
-  client: SupabaseClient<Database>;
+  client: GiglNotificationRpcClient;
   processNotifications?: ProcessNotifications;
   workerId: string;
 }) {
-  const { data, error } = await client.rpc(
-    'claim_shipment_tracking_notifications',
-    {
-      p_limit: batchSize,
-      p_worker_id: workerId,
-    }
-  );
+  const { data, error } = await client.rpc('gigl_worker_claim_notifications', {
+    p_limit: batchSize,
+    p_worker_id: workerId,
+  });
   if (error) return { ok: false as const, reason: 'claim_failed' as const };
 
   const notifications = claimedGiglTrackingNotificationsSchema.safeParse(

@@ -13,6 +13,10 @@ export type SavingsPlanFundingPhase =
   | 'loading'
   | 'ready'
   | 'pending'
+  | 'not_started'
+  // Pending, but the stored setup claim expired: setup may run again. Only
+  // reported to a status-only caller that asked for setup status.
+  | 'setup_retryable'
   | 'unavailable'
   | 'error';
 
@@ -25,6 +29,9 @@ type UseSavingsPlanFundingInput = {
   // A never-started goal (404 SAVINGS_WALLET_NOT_FOUND) reads as 'pending'
   // (still being set up), not as an error, for status-only callers.
   notFoundMeansPending?: boolean;
+  // A never-started goal reads as 'not_started', so a status-only caller
+  // can offer setup. Takes precedence over notFoundMeansPending.
+  notFoundMeansNotStarted?: boolean;
 };
 
 function isWalletNotFound(error: unknown): boolean {
@@ -55,6 +62,7 @@ export function useSavingsPlanFunding({
   identityKey,
   loadExisting = false,
   notFoundMeansPending = false,
+  notFoundMeansNotStarted = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
   const [statusCode, setStatusCode] = useState<string | null>(null);
@@ -97,7 +105,11 @@ export function useSavingsPlanFunding({
     if (response.status === 'ready') {
       setPhase('ready');
     } else if (response.status === 'pending') {
-      setPhase('pending');
+      setPhase(
+        notFoundMeansNotStarted && response.setupRetryable === true
+          ? 'setup_retryable'
+          : 'pending'
+      );
     } else {
       setPhase('unavailable');
     }
@@ -119,9 +131,12 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      if (notFoundMeansPending && isWalletNotFound(error)) {
+      if (
+        (notFoundMeansNotStarted || notFoundMeansPending) &&
+        isWalletNotFound(error)
+      ) {
         setStatusCode(null);
-        setPhase('pending');
+        setPhase(notFoundMeansNotStarted ? 'not_started' : 'pending');
         return;
       }
       setFundingError(planFundingErrorMessage(error));

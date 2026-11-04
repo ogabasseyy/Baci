@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-03T19:11:49+00:00",
-  "source_revision": "6bc50011e2b87e83b3159d38f6a35e311baa602b",
-  "evidence_digest": "4cca566f903ce55ba3aee330fb886ce7e88dcbc599abb4fb231ef4d64fb23e79",
-  "claims_digest": "fa4ef7806f3f9ea0915119059a4269df5232da050a13b13d9ddd327198088815",
-  "review_scope": "Source evidence only, re-reviewed after main 5dd047a7c6. Full-code MCP build/prerender, private preview and signed runner/delivery exist in source; production composition remains uninstalled/disabled. Reviewed the publication performance/publish-scope, native PDP ownership, cart observer retention and semantic/navigation corrections. The map-cited DVA test-source inventory changes do not change provider/payment runtime authority. Other capability limitations remain. Local synthetic proofs do not establish deployed ChatGPT access, merchant activation, publication or CWV qualification. GitHub review, exact-candidate CI, real host/TLS/scoped verifier qualification and separate rollout authorization remain required. Benchmarks are parked.",
+  "reviewed_at": "2026-11-04T03:27:24+00:00",
+  "source_revision": "fbb9deb0a5942c05b3a9b45401c7df4105ded5cc",
+  "evidence_digest": "653ca8862f9be875bfb26c5453281a8a42555353906a888028994aa75c26bce9",
+  "claims_digest": "a3711655682ff6ad3ecdc003d8e6a75013396551a8973726bd1df8ad7f8b85b0",
+  "review_scope": "Source evidence only, reviewed after main e92081814d and the PR 3993 boundary fixes. Full-code MCP build/prerender, private preview and signed runner/delivery exist in source; production composition remains uninstalled/disabled. Reviewed native PDP ownership/data, checkout layout fallback, categorized performance evidence and declared-route preview selection. Additive migration registration preserves the frozen baseline. Existing capability statuses and production/payment authority are unchanged. Local synthetic proofs do not establish deployed ChatGPT access, publication or CWV qualification. GitHub review, current-candidate CI, host/TLS/scoped verifier qualification and separate rollout authorization remain required. Benchmarks are parked.",
   "capabilities": [
     {
       "id": "payments",

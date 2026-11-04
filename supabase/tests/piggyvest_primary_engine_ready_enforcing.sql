@@ -217,6 +217,8 @@ SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'i
   'a disabled inflow authority must be reported alone for the bank inbox');
 ROLLBACK TO SAVEPOINT bank_inflow_authority;
 
+\ir piggyvest_primary_engine_ready_enforcing_shared_worker.inc.sql
+
 -- 4. Surfaces: unknown, NULL and listed-but-unchecked are never ready, and
 -- the executor's own session reads the same verdict through engine_ready.
 DO $$

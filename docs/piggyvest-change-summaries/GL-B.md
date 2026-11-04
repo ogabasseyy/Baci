@@ -12,7 +12,7 @@ The database check that decides whether a bank deposit may be credited to a Pigg
 - The deposit ledger tables and functions exist.
 - The database login the path runs as exists, can log in, is not elevated and has not expired.
 - Inflow: the login holds exactly the evidence role, can run the ledger entry point, has an enabled inflow authority and its integration is enabled.
-- Bank inbox: the worker's session safety check is clean, its bank authority and integration are enabled and agree on merchant, business and environment, and the integration's inflow authority is enabled.
+- Bank inbox: the worker's session safety check is clean, its bank authority and integration are enabled and agree on merchant, business and environment, and the integration's inflow authority is enabled. When several integrations share the one worker login, every one of them must pass: a healthy integration cannot make the worker look ready while another is disabled or broken (a retired authority row for the login must be removed, or it keeps the worker not ready).
 
 ## Not checked here (open questions)
 

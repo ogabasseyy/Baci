@@ -30,7 +30,8 @@
 --   inflow_execute_missing     (inflow) the login cannot execute
 --                              apply_inflow_environment
 --   inflow_authority_not_enabled  no enabled inflow authority names the login
---                              (inflow) or the bank integration (bank_inbox)
+--                              (inflow) or some bank integration of the
+--                              worker login lacks one (bank_inbox)
 --   integration_not_enabled    the authorised integration is disabled
 --   bank_role_unsafe           (bank_inbox) bank_role_violations lists any
 --                              violation for the login
@@ -126,25 +127,31 @@ BEGIN
       OR to_regclass('piggyvest_primary.integrations') IS NULL
       OR to_regclass('piggyvest_primary.inflow_authorities') IS NULL THEN
       v_missing := array_append(v_missing, 'ledger_objects_missing'::text);
+    -- The worker login is a fixed name, so several integrations can share
+    -- it, and engine_ready is asked without an integration id. The verdict
+    -- therefore holds only if EVERY binding of the login satisfies every
+    -- fence: a healthy integration B must never make the worker look ready
+    -- while integration A's chain is broken, because the worker would claim
+    -- deposits it cannot process.
     ELSIF NOT EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
-        WHERE b.worker_login = p_login AND b.enabled) THEN
+        WHERE b.worker_login = p_login)
+      OR EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
+        WHERE b.worker_login = p_login AND NOT b.enabled) THEN
       v_missing := array_append(v_missing, 'bank_authority_not_enabled'::text);
-    ELSIF NOT EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
+    ELSIF EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
         JOIN piggyvest_primary.integrations i ON i.id = b.integration_id
-        WHERE b.worker_login = p_login AND b.enabled AND i.enabled) THEN
+        WHERE b.worker_login = p_login AND NOT i.enabled) THEN
       v_missing := array_append(v_missing, 'integration_not_enabled'::text);
-    ELSIF NOT EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
+    ELSIF EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
         JOIN piggyvest_primary.integrations i ON i.id = b.integration_id
-        WHERE b.worker_login = p_login AND b.enabled AND i.enabled
-          AND b.merchant_id = i.merchant_id AND b.business_id = i.business_id
-          AND b.environment = i.environment) THEN
+        WHERE b.worker_login = p_login
+          AND NOT (b.merchant_id = i.merchant_id AND b.business_id = i.business_id
+            AND b.environment = i.environment)) THEN
       v_missing := array_append(v_missing, 'bank_binding_mismatch'::text);
-    ELSIF NOT EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
-        JOIN piggyvest_primary.integrations i ON i.id = b.integration_id
-        JOIN piggyvest_primary.inflow_authorities a ON a.integration_id = i.id
-        WHERE b.worker_login = p_login AND b.enabled AND i.enabled AND a.enabled
-          AND b.merchant_id = i.merchant_id AND b.business_id = i.business_id
-          AND b.environment = i.environment) THEN
+    ELSIF EXISTS (SELECT 1 FROM piggyvest_primary.bank_inbox_authorities b
+        WHERE b.worker_login = p_login
+          AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.inflow_authorities a
+            WHERE a.integration_id = b.integration_id AND a.enabled)) THEN
       v_missing := array_append(v_missing, 'inflow_authority_not_enabled'::text);
     END IF;
   END IF;

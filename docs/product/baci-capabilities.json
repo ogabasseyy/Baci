@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T02:08:23+00:00",
-  "source_revision": "c545b281fa5ff19551daba98940fb4151449dbda",
-  "evidence_digest": "fec48783e47d8330a4c565804d7128fa4a33f52190d4fc88736d6817dc5d47e6",
-  "claims_digest": "8b49d6229c22c4e7d81a799605816650027b76a5ab129ced4cc3c08cec350c21",
+  "reviewed_at": "2026-11-04T03:04:36+00:00",
+  "source_revision": "b600f8235021f7b50aaf8b11950a0d7a11818ed8",
+  "evidence_digest": "0a3b34f6652baa4fb1f8af8ed8a968a9882215aa6341d18d4a6a6d35d1cd6211",
+  "claims_digest": "b8d9d6dc5df12ec297ae5cdd0e10e80ff624085413adf9b644d3fd48d72d2ae1",
   "review_scope": "Source review: uncertain agentic DVA creation and persistence outcomes retain their claim for reconciliation; stale claims without a confirmed provider outcome require manual review. Merchant protocol claims remain accurate. Reviewed checkout eligibility after CredPal retirement; the listed payment capabilities remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
   "capabilities": [
     {

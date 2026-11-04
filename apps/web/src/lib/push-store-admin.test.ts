@@ -38,7 +38,7 @@ describe('createAdminPushStore', () => {
 
   it('deactivates, stores tickets and attempts on their tables', () => {
     const builder = chain();
-    const from = vi.fn(() => builder);
+    const from = vi.fn((_table: string) => builder);
     const store = createAdminPushStore({ from } as never);
 
     store.deactivateTokens('DeviceNotRegistered', ['t']);

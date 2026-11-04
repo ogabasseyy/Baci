@@ -43,7 +43,7 @@ async function processNotification(
 
   const copy = copyFor(
     notification.notification_kind,
-    event.description,
+    event.description ?? '',
     notification.audience
   );
   if (

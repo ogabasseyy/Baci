@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadCategoryHubContent } from './load-category-hub-content';
 
 const mockAuthority = vi.fn();
 const mockGuides = vi.fn();
@@ -25,9 +26,6 @@ describe('loadCategoryHubContent', () => {
   });
 
   it('loads supported guides and authority entries for a public category', async () => {
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     await expect(
       loadCategoryHubContent({
         merchantId: 'merchant-1',
@@ -45,9 +43,6 @@ describe('loadCategoryHubContent', () => {
   });
 
   it('skips authority inventory for collections', async () => {
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -63,9 +58,6 @@ describe('loadCategoryHubContent', () => {
       products: [{ id: 'prod-1', name: 'Product 1' }],
       productsQueryFailed: false,
     });
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -89,9 +81,6 @@ describe('loadCategoryHubContent', () => {
   });
 
   it('skips 150-product fetch for non-priority categories without hub defaults', async () => {
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'headphones',
@@ -109,9 +98,6 @@ describe('loadCategoryHubContent', () => {
   });
 
   it('reuses loaded page data without an extra fetch when products already cover the count', async () => {
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const pageProducts = [
       { id: 'p1', name: 'P1' },
       { id: 'p2', name: 'P2' },
@@ -137,9 +123,6 @@ describe('loadCategoryHubContent', () => {
       products: [{ id: 'prod-legacy', name: 'Legacy Product' }],
       productsQueryFailed: false,
     });
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -171,9 +154,6 @@ describe('loadCategoryHubContent', () => {
       products: [{ id: 'prod-pool', name: 'Pool Product' }],
       productsQueryFailed: false,
     });
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -201,9 +181,6 @@ describe('loadCategoryHubContent', () => {
     mockCategoryPageData.mockRejectedValue(
       new Error('DB connection timed out')
     );
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -229,9 +206,6 @@ describe('loadCategoryHubContent', () => {
   });
 
   it('does not treat prototype properties as hub default categories', async () => {
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'constructor',
@@ -253,9 +227,6 @@ describe('loadCategoryHubContent', () => {
       products: [{ id: 'canonical-pool-product', name: 'Canonical' }],
       productsQueryFailed: false,
     });
-    const { loadCategoryHubContent } = await import(
-      './load-category-hub-content'
-    );
     const result = await loadCategoryHubContent({
       merchantId: 'merchant-1',
       categorySlug: 'smartphones',
@@ -279,5 +250,28 @@ describe('loadCategoryHubContent', () => {
     expect(result.hubProducts).toEqual([
       { id: 'canonical-pool-product', name: 'Canonical' },
     ]);
+  });
+
+  it('caps reused page products to the first 150 when productCount exceeds 150', async () => {
+    const manyProducts = Array.from({ length: 200 }, (_, i) => ({
+      id: `p-${i}`,
+      name: `Product ${i}`,
+    }));
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 200,
+        products: manyProducts,
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(mockCategoryPageData).not.toHaveBeenCalled();
+    expect(result.hubProducts).toHaveLength(150);
+    expect(result.hubProducts?.[0]?.id).toBe('p-0');
+    expect(result.hubProducts?.[149]?.id).toBe('p-149');
   });
 });

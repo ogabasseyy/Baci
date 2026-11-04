@@ -40,7 +40,11 @@ export async function loadCategoryHubContent(input: {
   const isPageDataSufficient =
     !input.isFiltered &&
     input.categoryData.productCount !== undefined &&
-    input.categoryData.products.length >= input.categoryData.productCount;
+    input.categoryData.products.length >=
+      Math.min(
+        input.categoryData.productCount,
+        COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
+      );
   const shouldFetchHubPool =
     canLoadHubPool && hasHubDefaults && !isPageDataSufficient;
 
@@ -79,7 +83,10 @@ export async function loadCategoryHubContent(input: {
       : hasHubDefaults &&
           isPageDataSufficient &&
           !input.categoryData.productsQueryFailed
-        ? (input.categoryData.products as RawDbProduct[])
+        ? (input.categoryData.products.slice(
+            0,
+            COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
+          ) as RawDbProduct[])
         : undefined;
 
   return {

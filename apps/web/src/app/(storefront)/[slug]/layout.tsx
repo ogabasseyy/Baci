@@ -1,3 +1,4 @@
+import '@/app/(storefront)/storefront-cart-drawer.css';
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import type React from 'react';

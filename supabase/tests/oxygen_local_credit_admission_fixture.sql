@@ -1,0 +1,11 @@
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA oxygen_private;
+CREATE TABLE public.orders(id uuid PRIMARY KEY,payment_method text,wallet_amount_used numeric);
+CREATE TABLE public.oxygen_workflows(id uuid PRIMARY KEY,order_id uuid);
+CREATE TABLE public.customer_wallet_transactions(source_id uuid,source_type text,type text,amount numeric DEFAULT 1);
+CREATE TABLE public.customer_savings_redemptions(order_id uuid,amount numeric DEFAULT 1);
+CREATE TABLE oxygen_private.commands(workflow_id uuid,status text);
+CREATE TABLE oxygen_private.payment_recovery(workflow_id uuid,status text);
+CREATE TABLE oxygen_private.general_activations(workflow_id uuid,status text);
+CREATE TABLE oxygen_private.activation_trials(workflow_id uuid,status text);
+INSERT INTO public.orders VALUES ('00000000-0000-4000-8000-000000000001','paystack',0),('00000000-0000-4000-8000-000000000002','paystack',0),('00000000-0000-4000-8000-000000000003','oxygen',0),('00000000-0000-4000-8000-000000000004','paystack',12);

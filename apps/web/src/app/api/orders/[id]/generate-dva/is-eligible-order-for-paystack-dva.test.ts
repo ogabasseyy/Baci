@@ -32,4 +32,12 @@ describe('isEligibleOrderForPaystackDva', () => {
       })
     ).toBe(false);
   });
+  it('rejects an Oxygen-owned order', () => {
+    expect(
+      isEligibleOrderForPaystackDva({
+        payment_status: 'unpaid',
+        payment_method: ' Oxygen ',
+      })
+    ).toBe(false);
+  });
 });

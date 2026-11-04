@@ -321,7 +321,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-18=18.3-1.pgdg24.04+1 postgresql-client-18=18.3-1.pgdg24.04+1
           SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
             "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
             --output "${SUPABASE_ARCHIVE}"
           echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
@@ -340,6 +340,26 @@ jobs:
         run: node --test tools/test/loyalty-checkout-replay-local.test.mjs
       - name: Test merchant blog classification permissions and lifecycle
         run: bash supabase/tests/run-merchant-blog-classification.sh
+      - name: Test Oxygen draft and workflow lock ordering
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_draft_workflow_first_concurrency.sh
+      - name: Test Oxygen queued phone verification claim race
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_phone_retirement_concurrency.sh
+      - name: Test Oxygen queued address recovery claim race
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_address_retirement_concurrency.sh
+      - name: Test Oxygen financial edit concurrency
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_financial_edit_concurrency.sh
+      - name: Test Oxygen activation recovery
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_general_activation_recovery.sh
+      - name: Test REDVAULT fresh-claim concurrency
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/redvault_fresh_claim_concurrency.sh
+      - name: Test Oxygen local credit admission
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_local_credit_admission.sh
+      - name: Test Oxygen recorded gateway admission
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_recorded_gateway_fence.sh
+      - name: Test Oxygen payment rail origin and in-flight gateway fence
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_payment_rail_origin.sh
+      - name: Test interrupted Oxygen eligibility status recovery
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_interrupted_eligibility_read.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder

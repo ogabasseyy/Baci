@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { ResolvedCheckoutPage } from './resolved-checkout-page';
+import { CheckoutContent } from './checkout-content';
+import CheckoutLoading from './loading';
 
 export const metadata: Metadata = {
   title: 'Checkout',
@@ -8,12 +9,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function CheckoutPage(
-  props: Parameters<typeof ResolvedCheckoutPage>[0]
-) {
+export default function CheckoutPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ oxygenOrderId?: string }>;
+}) {
   return (
-    <Suspense fallback={<main role="status">Loading secure checkout…</main>}>
-      <ResolvedCheckoutPage {...props} />
+    <Suspense fallback={<CheckoutLoading />}>
+      <CheckoutContent params={params} searchParams={searchParams} />
     </Suspense>
   );
 }

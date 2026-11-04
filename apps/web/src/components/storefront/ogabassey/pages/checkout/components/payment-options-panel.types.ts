@@ -12,6 +12,7 @@ export interface PaymentOptionsPanelProps {
   bankTransferCheckoutAvailable: boolean;
   featureSettings?: FeatureSettings | null;
   klumpEligible: boolean;
+  oxygenEligible?: boolean;
   hasInstallmentOptions: boolean;
   currency?: string | null;
   redvaultAvailable: boolean;

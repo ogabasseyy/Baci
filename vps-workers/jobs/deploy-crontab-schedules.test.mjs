@@ -11,6 +11,11 @@ function readDeployScript() {
 }
 
 describe('deploy crontab schedules', () => {
+  it('schedules the gated Oxygen callback drain every five minutes', () => {
+    const script = readDeployScript();
+    assert.match(script, /\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/oxygen-callback-reconciliation\.lock/);
+    assert.match(script, /run-web-cron\.mjs \/api\/cron\/oxygen-callback-reconciliation/);
+  });
   it('schedules the gateway paid-order reconcile drain hourly through run-web-cron', () => {
     const deployScript = readDeployScript();
 

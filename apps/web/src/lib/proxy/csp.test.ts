@@ -56,6 +56,21 @@ function directive(policy: string, name: string): string[] {
       .slice(1) ?? []
   );
 }
+it.each([
+  true,
+  false,
+])('does not allow the retired CredPal service on storefronts (local=%s)', (isLocal) => {
+  const policy = generateCSP('storefront', isLocal);
+  for (const name of ['script-src', 'connect-src', 'frame-src']) {
+    expect(directive(policy, name)).not.toContain(
+      'https://checkout.credpal.com'
+    );
+    expect(directive(policy, name)).not.toContain('https://api.credpal.com');
+  }
+  expect(directive(policy, 'frame-src')).toContain(
+    'https://checkout.creditdirect.ng'
+  );
+});
 it('permits consent-gated social SDKs and collectors only on storefronts', () => {
   const policy = generateCSP('storefront', false);
   expect(directive(policy, 'script-src')).toEqual(

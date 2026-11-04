@@ -20,6 +20,7 @@ import type {
 import { getMerchantCartState } from './merchant-cart-storage';
 import { delegatedCartValue } from './storefront-cart-delegated-value';
 import { useDeferredValidationActivation } from './use-deferred-validation-activation';
+import { useLegacyCartInstanceAdoption } from './use-legacy-cart-instance-adoption';
 import { useLegacyCartValidation } from './use-legacy-cart-validation';
 import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 import { useStorefrontCartLineHandlers } from './use-storefront-cart-line-handlers';
@@ -139,6 +140,8 @@ export function StorefrontCartProvider({
     onActivate: setIdleValidationActivated,
   });
 
+  useLegacyCartInstanceAdoption(cart, isHydrated && !delegated, setCart);
+
   useLegacyCartValidation({
     cart,
     cartWideNegotiationActive,
@@ -168,21 +171,23 @@ export function StorefrontCartProvider({
     };
   }, []);
 
-  const { clearCart, setMerchantSlug } = useStorefrontCartSessionHandlers({
-    bumpSessionGeneration,
-    cartRef,
-    delegated,
-    delegatedActions,
-    initialMerchantSlug,
-    merchantId,
-    merchantSlug,
-    merchantSlugRef,
-    setCart,
-    setCartWideNegotiationActive,
-    setIsHydrated,
-    setMerchantSlugState,
-    sharedCartEnabled,
-  });
+  const { clearCart, setMerchantSlug, completeOxygenPurchasedLines } =
+    useStorefrontCartSessionHandlers({
+      bumpSessionGeneration,
+      cartWideNegotiationActive,
+      cartRef,
+      delegated,
+      delegatedActions,
+      initialMerchantSlug,
+      merchantId,
+      merchantSlug,
+      merchantSlugRef,
+      setCart,
+      setCartWideNegotiationActive,
+      setIsHydrated,
+      setMerchantSlugState,
+      sharedCartEnabled,
+    });
   const { addToCart, removeFromCart, updateQuantity } =
     useStorefrontCartLineHandlers({
       cartRef,
@@ -233,6 +238,9 @@ export function StorefrontCartProvider({
     removeFromCart,
     updateQuantity,
     clearCart,
+    completeOxygenPurchasedLines: delegated
+      ? undefined
+      : completeOxygenPurchasedLines,
     setMerchantSlug,
     cartCount: delegated ? shared.cartCount : cartCount,
     cartTotal: delegated ? shared.cartTotal : cartTotal,

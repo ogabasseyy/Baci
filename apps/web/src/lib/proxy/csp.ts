@@ -1,15 +1,28 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
+import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
   isLocal: boolean,
   nonce?: string,
-  builderExperiencePreview = false
+  pathname?: string,
+  searchParams?: URLSearchParams,
+  oxygenOwned = false
 ): string {
-  const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
+  const hostedOrigins =
+    oxygenOwned &&
+    routeType === 'storefront' &&
+    isOxygenPaymentSurface(pathname ?? '', searchParams)
+      ? readOxygenHostedOrigins().hosted
+      : [];
   const executionOrigin = getExperienceExecutionOrigin();
+  const builderExperiencePreview = isExperienceBuilderPreviewPath(
+    pathname ?? ''
+  );
+  const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`
     : "'self' 'unsafe-inline'";
@@ -48,11 +61,10 @@ export function generateCSP(
       : routeType === 'storefront'
         ? {
             ...baseDirectives,
-            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
+            'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
-            'connect-src': `'self' ${socialCollectors} https://*.supabase.co https://vitals.vercel-insights.com https://cloudflareinsights.com https://bzr.openai.com https://bzrcdn.openai.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://api.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://www.google.com https://googleads.g.doubleclick.net https://pubads.g.doubleclick.net https://cdn.ampproject.org https://cm.g.doubleclick.net`,
-            'frame-src':
-              "'self' https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net",
+            'connect-src': `'self' ${socialCollectors} https://*.supabase.co https://vitals.vercel-insights.com https://cloudflareinsights.com https://bzr.openai.com https://bzrcdn.openai.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://www.google.com https://googleads.g.doubleclick.net https://pubads.g.doubleclick.net https://cdn.ampproject.org https://cm.g.doubleclick.net`,
+            'frame-src': `'self'${hostedOrigins.map((origin) => ` ${origin}`).join('')} https://payment.hydrogenpay.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net`,
           }
         : {
             'default-src': "'self'",
@@ -103,10 +115,7 @@ export function buildStrictCspResponse(
   isLocal: boolean
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
-  const builderPreview = isExperienceBuilderPreviewPath(
-    request.nextUrl.pathname
-  );
-  const csp = generateCSP(routeType, isLocal, nonce, builderPreview);
+  const csp = generateCSP(routeType, isLocal, nonce, request.nextUrl.pathname);
   const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);

@@ -5,8 +5,13 @@ import {
 } from '@/config/storefront-cdn-cache-control';
 import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-cache-kind';
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from '@/config/storefront-metadata-cache-bots';
-import { generateCSP, isExperienceBuilderPreviewPath } from '@/lib/proxy/csp';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { generateCSP } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
+import {
+  isOxygenPaymentSurface,
+  isStorefrontCheckoutPath,
+} from '@/lib/proxy/oxygen-payment-surface';
 import {
   canUseLongDownstreamStorefrontCache,
   isCacheablePublicStorefrontDocument,
@@ -61,14 +66,17 @@ export function applySecurityHeaders(
   isLocal: boolean,
   nonce?: string,
   request?: NextRequest,
-  hostname?: string
+  hostname?: string,
+  oxygenOwned = false
 ): NextResponse {
   // Apply Content Security Policy
   const csp = generateCSP(
     routeType,
     isLocal,
     nonce,
-    isExperienceBuilderPreviewPath(pathname)
+    pathname,
+    request?.nextUrl.searchParams,
+    oxygenOwned
   );
   response.headers.set('Content-Security-Policy', csp);
 
@@ -90,12 +98,31 @@ export function applySecurityHeaders(
   //
   // To avoid handing camera/mic to every storefront page (getRouteType() buckets
   // all marketing/product/category pages as "storefront"), this is scoped to
-  // checkout paths only. Everywhere else stays fully disabled.
+  // checkout paths and the Oxygen payment surface. Everywhere else stays disabled.
   const isCheckoutRoute =
-    routeType === 'storefront' && /\/checkout(\/|$)/.test(pathname);
-  const cameraAllowlist = isCheckoutRoute
-    ? 'camera=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")'
-    : 'camera=(), microphone=()';
+    routeType === 'storefront' && isStorefrontCheckoutPath(pathname);
+  const launcherPath = pathname.endsWith('/')
+    ? pathname.slice(0, -1)
+    : pathname;
+  const isBnplLauncher =
+    launcherPath.endsWith('/bnpl') &&
+    isStorefrontCheckoutPath(launcherPath.slice(0, -5));
+  const isCreditDirectRoute =
+    isCheckoutRoute || (routeType === 'storefront' && isBnplLauncher);
+  const isOxygenRoute =
+    oxygenOwned &&
+    routeType === 'storefront' &&
+    isOxygenPaymentSurface(pathname, request?.nextUrl.searchParams);
+  const selfieOrigins = isOxygenRoute
+    ? readOxygenHostedOrigins()
+        .selfie.map((origin) => `"${origin}" `)
+        .join('')
+    : '';
+  const cameraAllowlist = isCreditDirectRoute
+    ? `camera=(self ${selfieOrigins}"https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")`
+    : isOxygenRoute && selfieOrigins
+      ? `camera=(self ${selfieOrigins.trimEnd()}), microphone=()`
+      : 'camera=(), microphone=()';
   response.headers.set(
     'Permissions-Policy',
     `${cameraAllowlist}, geolocation=(), browsing-topics=()`

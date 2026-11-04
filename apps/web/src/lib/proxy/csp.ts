@@ -103,9 +103,9 @@ export function buildStrictCspResponse(
   isLocal: boolean
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
-  const builderPreview =
-    request.nextUrl.pathname === '/builder/experience' ||
-    request.nextUrl.pathname.startsWith('/builder/experience/');
+  const builderPreview = isExperienceBuilderPreviewPath(
+    request.nextUrl.pathname
+  );
   const csp = generateCSP(routeType, isLocal, nonce, builderPreview);
   const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
@@ -119,4 +119,11 @@ export function buildStrictCspResponse(
       },
     }),
   };
+}
+
+export function isExperienceBuilderPreviewPath(pathname: string) {
+  return (
+    pathname === '/builder/experience' ||
+    pathname.startsWith('/builder/experience/')
+  );
 }

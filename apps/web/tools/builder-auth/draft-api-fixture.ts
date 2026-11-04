@@ -70,6 +70,10 @@ export async function startDraftApi(
           (result.statusCode ?? 0) >= 400 &&
           req.url === '/rest/v1/rpc/builder_finish_edit'
         ) {
+          console.error(
+            'Synthetic builder_finish_edit HTTP status:',
+            result.statusCode
+          );
           let bytes = 0;
           let body = '';
           result.on('data', (chunk: Buffer) => {

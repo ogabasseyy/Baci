@@ -22,3 +22,19 @@ it('uses custom layout only on owned routes and restores native providers on nav
   expect(screen.queryByText('Custom page')).toBeNull();
   location.path = '/qa1';
 });
+
+it('keeps the native cart continuation layout even when the experience owns product routes', () => {
+  location.path = '/qa1/cart/experience';
+  render(
+    <ExperienceLayoutSwitch
+      routes={[{ path: '/products/[handle]', view: 'product' }]}
+      basePath="/qa1"
+      nativeLayout={<p>Native cart providers</p>}
+    >
+      <p>Custom product</p>
+    </ExperienceLayoutSwitch>
+  );
+  expect(screen.getByText('Native cart providers')).toBeVisible();
+  expect(screen.queryByText('Custom product')).toBeNull();
+  location.path = '/qa1';
+});

@@ -5,7 +5,7 @@ import {
 } from '@/config/storefront-cdn-cache-control';
 import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-cache-kind';
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from '@/config/storefront-metadata-cache-bots';
-import { generateCSP } from '@/lib/proxy/csp';
+import { generateCSP, isExperienceBuilderPreviewPath } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import {
   canUseLongDownstreamStorefrontCache,
@@ -64,7 +64,12 @@ export function applySecurityHeaders(
   hostname?: string
 ): NextResponse {
   // Apply Content Security Policy
-  const csp = generateCSP(routeType, isLocal, nonce);
+  const csp = generateCSP(
+    routeType,
+    isLocal,
+    nonce,
+    isExperienceBuilderPreviewPath(pathname)
+  );
   response.headers.set('Content-Security-Policy', csp);
 
   // Add missing security headers

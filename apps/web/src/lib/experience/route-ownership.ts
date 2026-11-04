@@ -91,7 +91,7 @@ export function resolveExperienceRoute(
 }
 
 export function isCategorizedExperienceProductPath(path: string) {
-  return /^\/(?!pages\/|api\/|account\/|auth\/|checkout\/|blog\/)[a-z0-9-]+\/[a-z0-9-]+$/.test(
+  return /^\/(?!pages\/|api\/|account\/|auth\/|checkout\/|cart\/|blog\/)[a-z0-9-]+\/[a-z0-9-]+$/.test(
     path
   );
 }

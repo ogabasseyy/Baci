@@ -4,7 +4,7 @@ import { createGuestOAuthConnection } from './guest-oauth-connection';
 import { fixture, request, verifier } from './guest-oauth.test-support';
 const DAY = 86400_000;
 async function connect(auth: ReturnType<typeof fixture>['auth']) {
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   return auth.exchange({ ...request, code, code_verifier: verifier });
 }
 it('refreshes beyond seven days without extending the original cart deadline', async () => {
@@ -89,4 +89,13 @@ it('supports renewable connections beyond 1024 rotations', async () => {
   await auth.updateGrant(grant.id, current => ({ ...current, tokenGenerations: 1024 }));
   const next = await auth.refresh({ ...request, refresh_token: tokens.refresh_token });
   expect((await auth.verify(next.access_token)).tokenGenerations).toBe(1025);
+});
+
+it('requires explicit renewable consent for direct authorization', async () => {
+  const { auth, options } = fixture();
+  const { code } = await auth.authorize(request);
+  const tokens = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const grant = await auth.verify(tokens.access_token);
+  expect(grant.connectionRenewable).toBeUndefined();
+  expect(grant.expiresAt).toBeLessThanOrEqual(options.now() + 7 * DAY);
 });

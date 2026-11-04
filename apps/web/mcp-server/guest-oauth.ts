@@ -1,4 +1,4 @@
-import { currentGuestCart } from './guest-oauth-cart-lifetime';
+import { currentGuestCart, GuestOAuthGrantConflict } from './guest-oauth-cart-lifetime';
 import { GUEST_CONNECTION_IDLE_TTL, GUEST_CART_TTL, GUEST_CLOCK_MARGIN, GUEST_REFRESH_MAX_GENERATION } from './guest-oauth-lifetime';
 import { refreshReceipt, recoverRefresh } from './guest-oauth-refresh-receipt';
 import { createGuestConsent } from './guest-oauth-consent';
@@ -106,7 +106,7 @@ export class GuestOAuth {
       };
     return this.authorize(consent.request, consent.connectionRenewable === true);
   }
-  async authorize(input: unknown, connectionRenewable = true) {
+  async authorize(input: unknown, connectionRenewable = false) {
     const request = this.validateAuthorization(input);
     const code = opaque();
     await this.put(`code:${hash(code)}`, { request, used: false, ...(connectionRenewable ? { connectionRenewable: true } : {}) }, this.now() + 5 * 60_000);
@@ -301,7 +301,7 @@ export class GuestOAuth {
         grant.expiresAt,
       ))
     )
-      throw new Error('temporarily_unavailable');
+      throw new GuestOAuthGrantConflict();
     return next;
   }
 }

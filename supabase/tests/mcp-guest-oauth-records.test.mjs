@@ -76,6 +76,9 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     query(`UPDATE public.mcp_guest_oauth_records SET created_at=now()-interval '200 days' WHERE record_key='grant:test';`);
     assert.equal(query(worker + cas(3, "now()+interval '89 days'")), 't');
     assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:too-long',0,repeat('x',64),now()+interval '8 days');`), /invalid_expiry/);
+    query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,created_at,renewed_at,expires_at) VALUES('${tenant}','access:old',repeat('x',64),1,now()-interval '6 days',now(),now()+interval '1 hour');`);
+    assert.equal(query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:old',1,repeat('x',64),now()+interval '2 days');`), 'f');
+    query(`DELETE FROM public.mcp_guest_oauth_records WHERE record_key='access:old';`);
     assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_seed_cart('${tenant}','${'d'.repeat(64)}',now()+interval '8 days');`), /invalid_request/);
     assert.throws(() => query(worker.replace(tenant, other) + cas(4)), /unauthorized/);
     assert.equal(query(worker + cas(3)), 'f');

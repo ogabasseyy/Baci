@@ -37,7 +37,12 @@ export function verifyPrimaryWalletSavingsProof(
     actual.third_party_reference !== expected.reference ||
     actual.source_wallet !== expected.sourceWalletId ||
     actual.destination_wallet !== expected.destinationWalletId ||
-    actual.customer_id !== expected.providerCustomerId ||
+    // The live sandbox (2026-11-04, S12) reports the BUSINESS id in
+    // customer_id for an API-key wallet-to-wallet transfer, and sends no
+    // business_id; the customer id is still accepted in case live differs.
+    // The wallets above already bind the transfer to this customer.
+    (actual.customer_id !== expected.providerCustomerId &&
+      actual.customer_id !== expected.businessId) ||
     (actual.business_id !== undefined &&
       actual.business_id !== expected.businessId)
   )

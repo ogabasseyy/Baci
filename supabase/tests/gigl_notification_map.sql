@@ -72,7 +72,6 @@ BEGIN
   );
 END;
 $fixture$;
-
 -- 1. Policy rows ---------------------------------------------------------------
 SELECT is(
   (SELECT count(*)::int FROM private.gigl_tracking_notification_policy AS p
@@ -84,7 +83,6 @@ SELECT is(
   5,
   'approved map adds DLP, customer picked_up, merchant out_for_delivery/delivered and customer cancelled'
 );
-
 -- 2. Role filter: owner + orders.fulfill staff only --------------------------------
 DO $roles$
 DECLARE
@@ -111,7 +109,6 @@ BEGIN
 END;
 $roles$;
 SELECT pass('merchant push recipients are the owner plus orders.fulfill staff only');
-
 -- 3. Toggle defaults ------------------------------------------------------------
 DO $toggles$
 DECLARE
@@ -134,7 +131,6 @@ BEGIN
   IF v_status <> 'skipped' OR v_reason <> 'merchant_preference_off' THEN
     RAISE EXCEPTION 'out_for_delivery must default OFF, got % / %', v_status, v_reason;
   END IF;
-
   INSERT INTO public.shipment_tracking_notification_outbox (
     shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
     audience, notification_kind
@@ -148,7 +144,6 @@ BEGIN
   IF v_status <> 'pending' THEN
     RAISE EXCEPTION 'delivered must default ON, got %', v_status;
   END IF;
-
   INSERT INTO public.notification_preferences (merchant_id, shipment_event_preferences)
   VALUES (f.merchant_id, '{"failed": false, "returned": true}'::jsonb);
   INSERT INTO public.shipment_tracking_notification_outbox (
@@ -169,7 +164,6 @@ BEGIN
 END;
 $toggles$;
 SELECT pass('merchant event toggles default sensibly and can be muted per event');
-
 -- 4. Customer cancellation only without a newer live shipment -------------------------
 DO $cancel$
 DECLARE
@@ -189,7 +183,6 @@ BEGIN
         AND notification_kind = 'cancelled') <> 'pending' THEN
     RAISE EXCEPTION 'cancellation with no replacement must notify the customer';
   END IF;
-
   DELETE FROM public.shipment_tracking_notification_outbox
   WHERE shipment_id = f.shipment_id AND audience = 'customer'
     AND notification_kind = 'cancelled';
@@ -240,7 +233,6 @@ BEGIN
 END;
 $cancel$;
 SELECT pass('customer cancellation is dropped only when a newer live shipment exists');
-
 -- 5. No shipped email at booking; shipped/failed/returned emails from GIG events --------------------------------
 DO $shipped$
 DECLARE
@@ -263,7 +255,6 @@ BEGIN
   ) RETURNING id INTO v_shipment;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment;
-
   UPDATE public.orders SET shipping_status = 'shipped' WHERE id = v_order;
   IF EXISTS (
     SELECT 1 FROM public.order_notification_outbox
@@ -271,7 +262,6 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'no shipped email may be queued while the GIG parcel is uncollected';
   END IF;
-
   INSERT INTO public.shipment_tracking_events (
     shipment_id, tracking_epoch_id, tracking_number, provider,
     provider_event_key, raw_status, normalized_status, description, occurred_at
@@ -289,7 +279,6 @@ BEGIN
       WHERE order_id = v_order AND event_type = 'order_shipped') <> 1 THEN
     RAISE EXCEPTION 'GIG pickup must queue exactly one shipped email';
   END IF;
-
   FOR v_kind IN SELECT unnest(ARRAY['delivery_attempt_failed', 'return_in_progress']) LOOP
     INSERT INTO public.shipment_tracking_notification_outbox (
       shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
@@ -304,7 +293,6 @@ BEGIN
         WHERE order_id = v_order AND event_type = 'order_returned') <> 1 THEN
     RAISE EXCEPTION 'failed and returned GIG events must each queue one customer email';
   END IF;
-
 END;
 $shipped$;
 SELECT pass('shipped email waits for GIG pickup and is queued exactly once');

@@ -5,7 +5,7 @@
 
 BEGIN;
 
-SET LOCAL ROLE service_role;
+RESET ROLE;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $setup$
@@ -271,7 +271,13 @@ BEGIN
     RAISE EXCEPTION 'expected cross-category laptop brand guide to remain verified, got %', v_status_laptops;
   END IF;
 
-  -- Deleting subject row marks subject-linked verified post stale
+  -- Re-verify subject-linked post, confirm it starts verified, then delete subject row
+  UPDATE public.blog_posts SET metadata_status = 'verified' WHERE id = v_post_subject;
+  SELECT metadata_status INTO v_status_subject FROM public.blog_posts WHERE id = v_post_subject;
+  IF v_status_subject IS DISTINCT FROM 'verified' THEN
+    RAISE EXCEPTION 'expected subject-linked post to start verified before delete, got %', v_status_subject;
+  END IF;
+
   DELETE FROM public.blog_post_guide_subjects WHERE blog_post_id = v_post_subject;
   SELECT metadata_status INTO v_status_subject FROM public.blog_posts WHERE id = v_post_subject;
 

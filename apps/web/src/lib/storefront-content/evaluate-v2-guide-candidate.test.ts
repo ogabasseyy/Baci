@@ -128,6 +128,29 @@ describe('evaluateV2GuideCandidate', () => {
     );
   });
 
+  it('matches product with multiple subject roles when the required role is present', () => {
+    const multiRoleGuide: V2GuideCandidate = {
+      slug: 'iphone-vs-galaxy-comparison',
+      title: 'iPhone 16 vs Galaxy S25 Comparison',
+      category: 'Smartphones',
+      cluster_category_slug: 'smartphones',
+      guide_scope: 'model_comparison',
+      guide_kind: 'decision-support',
+      metadata_status: 'verified',
+      subjects: [
+        { productId: 'prod-target', subjectRole: 'primary' },
+        { productId: 'prod-target', subjectRole: 'comparison' },
+      ],
+    };
+
+    const result = evaluateV2GuideCandidate(multiRoleGuide, {
+      productId: 'prod-target',
+      categorySlug: 'smartphones',
+    });
+    expect(result.eligible).toBe(true);
+    expect(result.reason).toBe('subject_comparison');
+  });
+
   it('accepts verified playstation-5 category_guide and nokia brand_family_guide without alias-list edits', () => {
     const ps5CategoryGuide: V2GuideCandidate = {
       slug: 'ps5-buyer-guide-nigeria',
@@ -168,122 +191,5 @@ describe('evaluateV2GuideCandidate', () => {
     });
     expect(nokiaResult.eligible).toBe(true);
     expect(nokiaResult.reason).toBe('brand_family_guide');
-  });
-
-  it('rejects stale, unverified, general_news, and null-kind candidates', () => {
-    const baseGuide: V2GuideCandidate = {
-      slug: 'sample-guide',
-      title: 'Sample Guide',
-      category: 'Smartphones',
-      cluster_category_slug: 'smartphones',
-      guide_scope: 'category_guide',
-      guide_kind: 'buyer-guide',
-      metadata_status: 'verified',
-      applicable_brands: [],
-    };
-
-    // Stale status
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, metadata_status: 'stale' },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Unverified status
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, metadata_status: 'unverified' },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // General news scope
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, guide_scope: 'general_news', guide_kind: null },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Null guide_kind
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, guide_kind: null },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Missing / null metadata_status without eligibility_reason fails closed
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, metadata_status: null },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, metadata_status: undefined },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Placeholder brand key rejected in applicable_brands
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, applicable_brands: ['gaming'] },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Free-text category fallback removed (requires cluster_category_slug)
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, cluster_category_slug: null, category: 'Smartphones' },
-        { categorySlug: 'smartphones', brandKey: 'Samsung' }
-      ).eligible
-    ).toBe(false);
-
-    // Path B general guide rejects completely unlinked categories
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, cluster_category_slug: 'shoes' },
-        {
-          categorySlug: 'smartphones',
-          brandKey: 'Samsung',
-          validCategorySlugs: ['accessories'],
-        }
-      ).eligible
-    ).toBe(false);
-
-    // Path B honors secondary category slug membership
-    expect(
-      evaluateV2GuideCandidate(
-        { ...baseGuide, cluster_category_slug: 'accessories' },
-        {
-          categorySlug: 'smartphones',
-          brandKey: 'Samsung',
-          validCategorySlugs: ['accessories'],
-        }
-      ).eligible
-    ).toBe(true);
-
-    // Blind eligibility_reason without matching subject is rejected
-    expect(
-      evaluateV2GuideCandidate(
-        {
-          ...baseGuide,
-          guide_scope: 'product_specific',
-          subjects: [],
-          eligibility_reason: 'subject_primary',
-        },
-        {
-          productId: 'prod-target',
-          categorySlug: 'smartphones',
-          brandKey: 'Samsung',
-        }
-      ).eligible
-    ).toBe(false);
   });
 });

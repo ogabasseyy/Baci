@@ -113,32 +113,36 @@ export function evaluateV2GuideCandidate(
   // 4. Path A: Explicit subject match targeting this product
   if (context.productId) {
     if (candidate.subjects && candidate.subjects.length > 0) {
-      const matchingSubject = candidate.subjects.find(
-        (s) => s.productId === context.productId
-      );
-
-      if (matchingSubject) {
-        if (
-          matchingSubject.subjectRole === 'primary' &&
-          candidate.guide_scope === 'product_specific' &&
-          candidate.guide_kind === 'buyer-guide'
-        ) {
-          return { eligible: true, reason: 'subject_primary' };
-        }
-        if (
-          matchingSubject.subjectRole === 'comparison' &&
-          candidate.guide_scope === 'model_comparison' &&
-          candidate.guide_kind === 'decision-support'
-        ) {
+      if (
+        candidate.guide_scope === 'product_specific' &&
+        candidate.guide_kind === 'buyer-guide'
+      ) {
+        const hasPrimary = candidate.subjects.some(
+          (s) =>
+            s.productId === context.productId && s.subjectRole === 'primary'
+        );
+        if (hasPrimary) return { eligible: true, reason: 'subject_primary' };
+      } else if (
+        candidate.guide_scope === 'model_comparison' &&
+        candidate.guide_kind === 'decision-support'
+      ) {
+        const hasComparison = candidate.subjects.some(
+          (s) =>
+            s.productId === context.productId && s.subjectRole === 'comparison'
+        );
+        if (hasComparison)
           return { eligible: true, reason: 'subject_comparison' };
-        }
-        if (
-          matchingSubject.subjectRole === 'product_support' &&
-          candidate.guide_scope === 'troubleshooting' &&
-          candidate.guide_kind === 'troubleshooting'
-        ) {
+      } else if (
+        candidate.guide_scope === 'troubleshooting' &&
+        candidate.guide_kind === 'troubleshooting'
+      ) {
+        const hasSupport = candidate.subjects.some(
+          (s) =>
+            s.productId === context.productId &&
+            s.subjectRole === 'product_support'
+        );
+        if (hasSupport)
           return { eligible: true, reason: 'subject_product_support' };
-        }
       }
     }
   }

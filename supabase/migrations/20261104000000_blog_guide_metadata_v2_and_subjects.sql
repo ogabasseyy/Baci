@@ -116,7 +116,7 @@ CREATE TRIGGER blog_posts_stale_on_content_change
   BEFORE UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION public.blog_posts_stale_on_content_change_trigger();
 
 CREATE OR REPLACE FUNCTION public.products_stale_blog_guide_metadata()
-RETURNS trigger LANGUAGE plpgsql SET search_path TO '' AS $$
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 DECLARE
   v_old_brand_norm text;
   v_new_brand_norm text;
@@ -146,6 +146,9 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+ALTER FUNCTION public.products_stale_blog_guide_metadata() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.products_stale_blog_guide_metadata() FROM PUBLIC;
 
 DROP TRIGGER IF EXISTS products_stale_blog_guide_metadata_trigger ON public.products;
 CREATE TRIGGER products_stale_blog_guide_metadata_trigger

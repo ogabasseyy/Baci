@@ -1,6 +1,10 @@
 import 'server-only';
-import { prefundedCardTransferVerificationSchemas as verification } from '@/schemas/prefunded-card-transfer-verification';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
+import {
+  classifyTransferReferenceFailure,
+  classifyTransferReferenceResponse,
+  type TransferReferenceLookup,
+} from './transfer-reference-lookup';
 
 export async function lookupSavingsTransferReference(input: {
   reference: string;
@@ -10,7 +14,7 @@ export async function lookupSavingsTransferReference(input: {
   token: string;
   baseUrl: string;
   fetchImplementation?: typeof fetch;
-}): Promise<'submitted' | 'absent' | 'uncertain'> {
+}): Promise<TransferReferenceLookup> {
   let response: unknown;
   try {
     response = await requestPrefundedCardProviderJson({
@@ -22,33 +26,15 @@ export async function lookupSavingsTransferReference(input: {
       init: { method: 'GET' },
     });
   } catch (error) {
-    // Only an authoritative 404 proves the previous holder died before
-    // submitting. Any other failure stays uncertain so the caller records
-    // unknown instead of risking a double submission.
-    if (
-      error instanceof Error &&
-      (error as Error & { httpStatus?: unknown }).httpStatus === 404
-    )
-      return 'absent';
-    return 'uncertain';
+    // A 404 is 'not_found', never proof that nothing was submitted: a
+    // just-accepted transfer answers 404 until PiggyVest indexes it
+    // (docs/piggyvest-contract-evidence/2026-10-31.md, P2).
+    return classifyTransferReferenceFailure(error);
   }
-  const rich = verification.rich.safeParse(response);
-  if (
-    rich.success &&
-    rich.data.data.third_party_reference === input.reference &&
-    rich.data.data.amount === input.amountKobo &&
-    rich.data.data.source_wallet === input.walletId &&
-    rich.data.data.destination_wallet === input.destinationWalletId
-  )
-    return 'submitted';
-  const normalized = verification.normalized.safeParse(response);
-  if (
-    normalized.success &&
-    normalized.data.data.reference === input.reference &&
-    normalized.data.data.amount === input.amountKobo &&
-    normalized.data.data.source_wallet === input.walletId &&
-    normalized.data.data.destination_wallet === input.destinationWalletId
-  )
-    return 'submitted';
-  return 'uncertain';
+  return classifyTransferReferenceResponse(response, {
+    reference: input.reference,
+    amountKobo: input.amountKobo,
+    sourceWalletId: input.walletId,
+    destinationWalletId: input.destinationWalletId,
+  });
 }

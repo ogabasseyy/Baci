@@ -31,6 +31,7 @@ import {
 } from './image-utils';
 import { generateMetaDescription } from './meta-description';
 import { normalizeOgabasseyCdnImageUrl } from './ogabassey-cdn-image-url';
+import { buildSharedOfferPolicies } from './product-schema-shared-offer-policies';
 import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
 import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
 import type {
@@ -1000,16 +1001,13 @@ export function generateProductSchema(
       }
     }
 
-    // Shared shipping + return policy for all variant Offers (2026 best practice)
-    const variantShippingDetails = buildOfferShippingDetails(
-      country,
-      currency,
-      trustProfile
-    );
-
-    const variantReturnPolicy = buildMerchantReturnPolicyFromTrustProfile(
-      country,
-      trustProfile
+    // Shared shipping + return policy for all variant Offers, defined once and
+    // referenced by @id (2026 best practice)
+    const variantOfferPolicies = buildSharedOfferPolicies(
+      structuredDataProductUrl,
+      String(schema.productGroupID),
+      buildOfferShippingDetails(country, currency, trustProfile),
+      buildMerchantReturnPolicyFromTrustProfile(country, trustProfile)
     );
 
     const variantPriceValidUntil = new Date(Date.now() + THIRTY_DAYS_MS)
@@ -1017,7 +1015,9 @@ export function generateProductSchema(
       .substring(0, 10);
 
     // Build hasVariant array — each variant becomes a @type Product
-    schema.hasVariant = product.variants.map((variant) => {
+    // Brand and the shared description live on the ProductGroup only; Google
+    // does not need them repeated on every variant.
+    schema.hasVariant = product.variants.map((variant, variantIndex) => {
       const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
       const variantUrl = buildStructuredDataVariantUrl(
@@ -1048,13 +1048,8 @@ export function generateProductSchema(
       return {
         '@type': 'Product',
         name: variantName,
-        description: safeDescription,
         ...(variantUrl && { url: variantUrl }),
         ...(variantImages && { image: variantImages }),
-        brand: {
-          '@type': 'Brand',
-          name: safeBrand,
-        },
         inProductGroupWithID: schema.productGroupID,
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
@@ -1077,8 +1072,7 @@ export function generateProductSchema(
             name: safeMerchantName,
           },
           ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-          shippingDetails: variantShippingDetails,
-          hasMerchantReturnPolicy: variantReturnPolicy,
+          ...variantOfferPolicies(variantIndex),
         },
       };
     });
@@ -1515,7 +1509,9 @@ function stringsMatchCaseInsensitive(left: string, right: string): boolean {
   return left.localeCompare(right, undefined, { sensitivity: 'base' }) === 0;
 }
 
-function getTrailingSeparatedSegment(value: string) {
+function getTrailingSeparatedSegment(
+  value: string
+): { base: string; suffix: string } | null {
   const trimmedValue = value.trim();
 
   let bestIndex = -1;
@@ -1578,6 +1574,14 @@ function removeTrailingDuplicateSuffix(value: string, suffix: string): string {
   return normalizedValue;
 }
 
+export {
+  isRedundantPlatformListParenthetical,
+  PLATFORM_ID_BY_ALIAS,
+  stripRedundantPlatformParentheticals,
+} from './seo-meta-title-platform-compaction';
+
+import { stripRedundantPlatformParentheticals } from './seo-meta-title-platform-compaction';
+
 /**
  * Generates a normalized SEO title with optional suffix and length cap.
  */
@@ -1626,13 +1630,45 @@ export function generateMetaTitle(
       const baseTitle = normalizedTitle
         .slice(0, normalizedTitle.length - suffixFragment.length)
         .trim();
+      const compactBaseTitle = stripRedundantPlatformParentheticals(baseTitle);
+      const isCompacted = compactBaseTitle !== baseTitle;
+
+      if (isCompacted) {
+        if (!compactBaseTitle) {
+          return normalizedSuffix.length <= maxLength
+            ? normalizedSuffix
+            : `${normalizedSuffix.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+        }
+        if (compactBaseTitle.length + suffixFragment.length <= maxLength) {
+          return `${compactBaseTitle}${suffixFragment}`;
+        }
+      }
+
+      const effectiveBaseTitle = isCompacted ? compactBaseTitle : baseTitle;
       const allowedBaseLength =
         maxLength - suffixFragment.length - ELLIPSIS_LENGTH;
 
       if (allowedBaseLength > 0) {
-        return `${baseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
+        return `${effectiveBaseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
       }
     }
+  }
+
+  if (!suffix) {
+    const compactTitle = stripRedundantPlatformParentheticals(normalizedTitle);
+    const isCompacted = compactTitle !== normalizedTitle;
+
+    if (isCompacted) {
+      if (!compactTitle) {
+        return '';
+      }
+      if (compactTitle.length <= maxLength) {
+        return compactTitle;
+      }
+    }
+
+    const effectiveTitle = isCompacted ? compactTitle : normalizedTitle;
+    return `${effectiveTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
   }
 
   return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;

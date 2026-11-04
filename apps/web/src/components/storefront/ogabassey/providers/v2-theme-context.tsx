@@ -13,21 +13,15 @@ import {
   createCommittedSnapshotStore,
   type CommittedSnapshotStore,
 } from '@/lib/committed-snapshot-store';
+import {
+  V2ThemeContext,
+  type V2ThemeMode,
+  getNoTheme,
+  subscribeToMissingTheme,
+} from './v2-theme-context-def';
 
-export type V2ThemeMode = 'standard' | 'santa';
+export type { V2ThemeMode };
 const MAX_BROWSER_TIMEOUT_MS = 2_147_000_000;
-
-interface V2ThemeContextType {
-  theme: V2ThemeMode;
-  setTheme: (theme: V2ThemeMode) => void;
-  toggleTheme: () => void;
-}
-
-const V2ThemeContext = createContext<
-  CommittedSnapshotStore<V2ThemeContextType> | undefined
->(undefined);
-const getNoTheme = () => null;
-const subscribeToMissingTheme = () => () => undefined;
 
 const THEME_COOKIE_NAME = 'storefront-theme-v2';
 
@@ -95,6 +89,7 @@ export const useV2Theme = () => {
   }
   return snapshot;
 };
+
 
 interface V2ThemeProviderProps {
   children: React.ReactNode;

@@ -1,47 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
+import {
+  customerListing,
+  onboardingFixture,
+} from './primary-wallet-onboarding.test-fixture';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 vi.mock('server-only', () => ({}));
+vi.mock('./webhook-alerts', () => ({
+  emitPiggyvestWebhookAlert: vi.fn(),
+}));
 
-function fixture() {
-  return {
-    configuration: {
-      environment: 'production',
-      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      integrationId: 'd91d9e87-8e0d-44de-9b84-1e1d709633d2',
-      businessId: 'business-fixture',
-      businessBindingVerified: true,
-      fingerprintKey: 'test-only-fingerprint-key-not-a-real-secret',
-    },
-    verifiedIdentity: {
-      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      customerId: 'e648eb14-928a-427b-9719-b105f6d4b8b4',
-      userId: 'f4f01e61-691f-494a-a895-872f17f8e55e',
-      email: 'TEST@example.com',
-      emailVerified: true,
-      name: 'Test Customer',
-      phone: '08000000000',
-    },
-    request: { consent: true, bvn: '00000000000' },
-    storage: {
-      claim: vi.fn().mockResolvedValue({
-        status: 'claimed',
-        intentId: 'intent',
-        claimToken: 'claim',
-      }),
-      recordAccepted: vi.fn().mockResolvedValue(true),
-      recordUncertain: vi.fn().mockResolvedValue(undefined),
-      recordRejected: vi.fn().mockResolvedValue(undefined),
-      releaseIntent: vi.fn().mockResolvedValue(true),
-    },
-    createCustomer: vi.fn().mockResolvedValue({
-      customer_id: 'customer-fixture',
-      wallet_id: 'wallet-fixture',
-      new_customer: true,
-    }),
-  };
-}
+const fixture = onboardingFixture;
 
 describe('primary wallet onboarding', () => {
   it('rejects missing consent before storage or provider contact', async () => {
@@ -95,7 +66,7 @@ describe('primary wallet onboarding', () => {
       expect.objectContaining({
         bvn: '00000000000',
         email: 'test@example.com',
-        enable_interest_accrual: false,
+        enable_interest_accrual: true,
       })
     );
     const persisted = JSON.stringify([
@@ -180,6 +151,81 @@ describe('primary wallet onboarding', () => {
     expect(input.createCustomer).toHaveBeenCalledOnce();
     expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+  });
+
+  it('durably holds a reclaimed intent after create persistence fails and lookup becomes ambiguous', async () => {
+    vi.clearAllMocks();
+    const input = fixture();
+    input.storage.recordAccepted.mockResolvedValue(false);
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(input.createCustomer).toHaveBeenCalledOnce();
+
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent',
+      claimToken: 'reclaimed-claim',
+      reclaimed: true,
+    });
+    input.findCustomers.mockResolvedValue(
+      customerListing(['customer-fixture', 'duplicate-customer'])
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(input.createCustomer).toHaveBeenCalledOnce();
+    expect(input.storage.recordOwnershipHold).toHaveBeenCalledExactlyOnceWith({
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerId: 'e648eb14-928a-427b-9719-b105f6d4b8b4',
+      userId: 'f4f01e61-691f-494a-a895-872f17f8e55e',
+      integrationId: 'd91d9e87-8e0d-44de-9b84-1e1d709633d2',
+      businessId: 'business-fixture',
+      environment: 'production',
+      intentId: 'intent',
+      claimToken: 'reclaimed-claim',
+    });
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(emitPiggyvestWebhookAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      { reason: 'several provider customers', operationId: 'intent' }
+    );
+  });
+
+  it.each([
+    ['a false persistence result', vi.fn().mockResolvedValue(false)],
+    [
+      'a persistence exception',
+      vi.fn().mockRejectedValue(new Error('db detail')),
+    ],
+  ])('returns unavailable but still alerts when the ownership hold write has %s', async (_label, recordOwnershipHold) => {
+    vi.clearAllMocks();
+    const input = fixture();
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent',
+      claimToken: 'claim',
+      reclaimed: true,
+    });
+    input.storage.recordOwnershipHold = recordOwnershipHold;
+    input.findCustomers.mockResolvedValue(
+      customerListing(['customer-one', 'customer-two'])
+    );
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(input.createCustomer).not.toHaveBeenCalled();
+    expect(input.storage.recordOwnershipHold).toHaveBeenCalledOnce();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(emitPiggyvestWebhookAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      { reason: 'several provider customers', operationId: 'intent' }
+    );
   });
 
   it('releases the uncreated intent on a definitive provider BVN rejection so the value can be corrected', async () => {

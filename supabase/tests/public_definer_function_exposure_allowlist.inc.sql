@@ -58,6 +58,8 @@ SELECT * FROM (VALUES
    'public storefront/feed read; anon-safe projection'),
   ('public.get_order_inventory_proof(uuid,text,text)',
    'guest or bearer flow; token/secret verified in the body'),
+  ('public.get_order_paystack_split_retained_shipping_kobo(uuid,uuid,text)',
+   'guest checkout; order id + merchant + customer email verified in the body, returns only the customer-facing delivery fee'),
   ('public.get_order_receipt_bank_details(uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.get_order_tracking(text,uuid,text,text,text)',
@@ -201,8 +203,6 @@ SELECT * FROM (VALUES
   ('public.unsubscribe_merchant_onboarding_emails(uuid)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.unsubscribe_newsletter(text,uuid)',
-   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership'),
-  ('public.refund_customer_wallet_for_vtu(uuid,uuid,numeric,uuid,text,text)',
-   'PENDING: PR 3853 (20261030165610) revokes anon; prod already fixed; delete row once merged')
+   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

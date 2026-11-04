@@ -55,7 +55,8 @@ it.each([
     name: 'Synthetic',
     phone: '08000000000',
     third_party_identifier: 'synthetic-correlation',
-    enable_interest_accrual: false,
+    enable_interest_accrual: true,
+    interest_payout_wallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
   });
   await retrievePiggyvestWallet(provider, 'wallet-with-hyphens');
   await retrievePiggyvestFundingAccounts(provider, 'wallet-with-hyphens');
@@ -64,7 +65,7 @@ it.each([
     `${origin}/api/v1/customers?returnIfExist=true`,
     expect.objectContaining({
       method: 'POST',
-      body: expect.stringContaining('"enable_interest_accrual":false'),
+      body: expect.stringContaining('"enable_interest_accrual":true'),
     })
   );
   expect(fetcher).toHaveBeenNthCalledWith(

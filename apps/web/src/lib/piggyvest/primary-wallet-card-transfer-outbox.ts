@@ -16,7 +16,6 @@ export async function runPrimaryCardTransferOutbox(input: {
     | 'reconciliation_required'
     | 'approved_policy_and_storage_ready'
     | 'submitted_for_custody'
-    | 'requeued_for_retry'
     | 'raced'
     | 'idle';
   selectedCount: number;
@@ -75,11 +74,9 @@ export async function runPrimaryCardTransferOutbox(input: {
           ? 'approved_policy_and_storage_ready'
           : outcome === 'submitted'
             ? 'submitted_for_custody'
-            : outcome === 'requeued'
-              ? 'requeued_for_retry'
-              : outcome === 'existing'
-                ? 'raced'
-                : 'idle',
+            : outcome === 'existing'
+              ? 'raced'
+              : 'idle',
     selectedCount: selected.operationIds.length,
     submittedCount: outcome === 'submitted' ? 1 : 0,
     unknownCount: selected.unknownCount + (outcome === 'unknown' ? 1 : 0),

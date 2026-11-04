@@ -31,7 +31,9 @@ export function buildProductTrustBullets(
     );
   }
 
-  const containingBand = getCuratedPriceBands(input.categorySlug).find(
+  const containingBand = getCuratedPriceBands(input.categorySlug, {
+    merchantCurrency: input.merchantCurrency,
+  }).find(
     (band) =>
       input.currentProduct.price <= band.ceiling &&
       (band.floor ? input.currentProduct.price > band.floor : true)

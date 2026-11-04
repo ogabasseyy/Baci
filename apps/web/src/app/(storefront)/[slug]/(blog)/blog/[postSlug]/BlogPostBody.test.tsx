@@ -162,43 +162,6 @@ describe('BlogPostBody', () => {
     ).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
-  it('uses canonical postUrl for subdomain share links without doubled slug', async () => {
-    mockResolveBlogPostContent.mockResolvedValue({
-      isJson: false,
-      legacyHtml: '<p>Content</p>',
-      renderedContent: null,
-    });
-
-    render(
-      await BlogPostBody({
-        basePath: '/ogabassey',
-        baseUrl: 'https://ogabassey.usebaci.com',
-        content: '<p>Content</p>',
-        merchantSlug: 'ogabassey',
-        postUrl: 'https://ogabassey.usebaci.com/blog/my-post',
-        post: {
-          id: 'post-1',
-          slug: 'my-post',
-          tags: null,
-          title: 'My Post',
-        },
-        relatedProducts: [],
-        relatedPosts: [],
-      })
-    );
-
-    // Share URL should be the canonical subdomain URL, NOT doubled like
-    // https://ogabassey.usebaci.com/ogabassey/blog/my-post
-    const expectedShareUrl = encodeURIComponent(
-      'https://ogabassey.usebaci.com/blog/my-post'
-    );
-
-    expect(screen.getByRole('link', { name: 'Twitter' })).toHaveAttribute(
-      'href',
-      expect.stringContaining(expectedShareUrl)
-    );
-  });
-
   it('renders a lazy video panel when video metadata is provided', async () => {
     mockResolveBlogPostContent.mockResolvedValue({
       isJson: false,

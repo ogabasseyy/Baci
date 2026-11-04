@@ -14,6 +14,7 @@ export async function createPrimaryWalletProviderCustomer(
     phone: request.phone,
     thirdPartyIdentifier: request.third_party_identifier,
     enableInterestAccrual: request.enable_interest_accrual,
+    interestPayoutWallet: request.interest_payout_wallet,
     returnIfExist: true,
   });
 }

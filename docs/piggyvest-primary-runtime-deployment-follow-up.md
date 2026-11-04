@@ -8,7 +8,36 @@ remote database, provider account or nginx configuration were changed.
 
 - `/api/storefront/customer/wallet/piggyvest-primary`: authenticated GET reads
   owned wallet/accounts and persists exact accepted-to-verified proof; CSRF
-  protected POST dispatches ordinary, non-interest-bearing customer setup.
+  protected POST creates the customer with main-wallet interest accrual on and
+  routed to the configured Ogabassey payout wallet (fixed at creation), then
+  records the wallet only after `GET /wallet/:id` reads that routing back.
+  An existing customer returned on a fresh claim is an ownership verdict
+  (`OWNERSHIP_REVIEW_REQUIRED`, terminal). A readback that contradicts the
+  routing (another wallet, customer, business or payout wallet, or accrual
+  explicitly off) goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`, with a
+  `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` alert carrying the intent id). A
+  failed or not-yet-settled readback, including a reclaimed existing
+  customer's, keeps the created wallet's ids and its creation-time payout
+  wallet in an unusable `routing_pending` state (migration 20261031230000): it
+  is never exposed or credited, setup is never re-dispatched, and each GET
+  re-reads it read-only against that stored payout wallet, making it usable
+  once the routing is proven or rejecting it (same alert) when contradicted.
+  A rejected wallet keeps its ids, so deleting that customer still waits for
+  its DVA closure; a recheck never promotes a wallet whose closure was
+  attested. A wallet sent to review at onboarding is rejected with its ids
+  in one write, so no recheck can ever promote it; if that write fails,
+  nothing else is written and the retry after the claim lease keeps the ids.
+  A retried setup first asks PiggyVest for customers carrying our
+  identifier: it creates again only when none exist, and adopts an existing
+  customer only when it is exactly the one listed. Several listed customers,
+  a duplicate created despite a listed one, or an existing customer that is
+  not listed are never adopted (`OWNERSHIP_REVIEW_REQUIRED` or still
+  pending, with a `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` alert carrying
+  the intent id). A setup stored before interest routing is recognised by
+  its earlier fingerprint format for the same customer and goes through the
+  same lookup-gated retry; a customer it created has accrual off, so it goes
+  to routing review. The onboarding role's readiness list includes every
+  function the runtime calls.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another
@@ -31,6 +60,18 @@ Primary onboarding requires all of these server-only settings:
 - `PIGGYVEST_PRIMARY_FINGERPRINT_KEY`, stable across retries and at least 32
   characters; rotating it requires a separately reviewed replay policy
 - `PIGGYVEST_PRIMARY_PROVIDER_TOKEN`, belonging to that business/environment
+- `PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID`, the Ogabassey business wallet
+  (26-character uppercase PiggyVest wallet ULID, no whitespace) that receives
+  main-wallet interest. Only new setups need it: when it is missing or
+  malformed, POST returns `PIGGYVEST_ONBOARDING_NOT_READY` (not the
+  merchant-wide `PIGGYVEST_NOT_READY`, so clients never fall back to a legacy
+  account) and no customer is created. Reads, savings and the recheck of
+  routing-pending wallets keep working without it, because each pending
+  wallet stores the payout wallet it was created with. Each customer's
+  routing is immutable, so set it before any onboarding, and change it only
+  while no setup is in flight: a retried setup checks the customer it adopts
+  against the current value, so one created under the previous value goes
+  to routing review.
 - `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`
@@ -45,6 +86,58 @@ Goal provisioning additionally requires
 `PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD`. It deliberately inherits all
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
+
+### Client build floors and onboarding rollout cohort (gate not wired yet)
+
+`apps/web/src/lib/piggyvest/primary-client-capability.ts` and
+`primary-onboarding-capability.ts` hold the build-aware capability gate; no route calls it yet. When wired, it reads:
+
+- `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
+  `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
+  build (iOS `CFBundleVersion`, Android `versionCode`) allowed to use the
+  primary wallet, as a positive whole number with no spaces. While either is
+  unset or malformed every build is refused, whatever the cohort. The owner
+  sets them only after the release that sends the build headers passes App
+  Review. Clients send `X-Baci-Client-Platform` (`ios` or `android`) and
+  `X-Baci-Client-Build`; a missing or malformed pair counts as an old build.
+  A refusal uses `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, which
+  released builds already treat as "use the legacy flow" (never the base
+  `PIGGYVEST_NOT_READY`, which they cache merchant-wide); a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+- A floor proves only the native build. What reads wallet responses is the
+  JavaScript bundle, and an over-the-air update can replace it: the Android
+  runtime version is shared by every `versionCode`, so one Android update
+  reaches every build, and an iOS export targets one build's runtime. Never
+  publish or export an update whose source predates the wallet response
+  contract that the builds at or above a floor rely on. If an update
+  rollback must cross such a contract change, first unset both floors (or
+  raise them past every affected build), and set them again only after the
+  forward fix ships. This rule belongs on the storefront release checklist
+  (P9-mobile-build-header-pilot-removal); a later change may instead have
+  the client send a contract number compiled into the bundle, so the gate
+  keys on the JavaScript rather than the native build.
+- `piggyvest_primary.rollout_cohort` (migration 20261103012500), keyed by
+  merchant and customer. It ships empty and only a privileged operator adds
+  rows. A customer with no primary onboarding may start one only while
+  listed and while every readiness reader in
+  `primary-readiness-registry.ts` reports ready; none is registered yet, so
+  onboarding stays closed. A customer whose wallet is verified, or whose
+  onboarding is in flight (an intent or mapping not yet released), needs
+  only the build floor: removing them from the cohort, or a reader dropping
+  to not ready, never strands a provider-side wallet. Route wiring admits an
+  in-flight customer to resume that onboarding only, never a fresh claim.
+  Include
+  `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
+  verified grants; it returns only a boolean for the scoped customer.
+- Claim-time binding (route wiring PR, P4-capability-gate-routes). A `fresh`
+  verdict is a point-in-time read, not a token. The wiring must re-run
+  `resolvePrimaryOnboardingCapability` immediately before dispatching the
+  claim, and a follow-up migration must make `claim_onboarding(jsonb,text)`
+  re-check `rollout_cohort` membership inside its own transaction, so a
+  customer removed from the cohort between the gate and the claim cannot
+  create a backed wallet. Until both land no route calls the gate.
+- Refusal codes. Gate refusals are per customer or per build, so they use
+  only `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, never the base
+  `PIGGYVEST_NOT_READY` that released storefront builds cache merchant-wide.
 
 ## Restricted database preparation
 
@@ -82,6 +175,42 @@ not provision these primary logins, group memberships or authority bindings;
 running it is not a substitute for this preparation.
 
 ## Route/deployment verification still required
+
+Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql`,
+`20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql`, and
+`20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql`, and
+`20261101190000_piggyvest_primary_onboarding_review_classification.sql` before
+deploying the review-status reader or ambiguous-onboarding recovery. Include
+`record_onboarding_ownership_hold(jsonb,uuid,uuid)` and
+`read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
+The former retains an immutable review hold without choosing or exposing a
+provider wallet; the latter returns only the scoped terminal-review reason.
+An unresolved dispatched/unknown intent also blocks customer deletion, including
+the window where provider creation succeeded but its custody write failed.
+Mapped wallets still require their existing DVA closure attestation. Unmapped
+ownership holds require operator reconciliation of all matching provider
+customers and their DVAs; no automatic hold-clear or wallet-adoption permission
+is introduced. A separately reviewed, evidence-backed operator resolution path
+is required before production activation.
+
+Legacy `record_onboarding_rejection` writes have no durable reason that
+distinguishes a definitive foreign-customer response from an ambiguous
+provider creation handled by an older application instance. The compatibility
+migration therefore blocks deletion for every rejected intent without a
+provider wallet ID, including rows whose `review_reason` is NULL and explicit
+foreign rejections. Treat these rows as requiring operator reconciliation;
+do not infer safe deletion from the old response or clear the hold
+automatically. No migration grant or automatic release path is added.
+
+A mapped rejected review with `review_reason` NULL also requires ownership
+reconciliation. This includes duplicate-creation reviews that retain the
+duplicate wallet IDs: attesting closure of that wallet satisfies only its DVA
+closure condition and cannot prove the original provider customer was
+reconciled. Such a customer remains undeletable after closure. A rejected row
+classified as `review_reason='routing'` has proven ownership and keeps the
+existing mapped-DVA rule: deletion remains blocked until closure is attested,
+then becomes allowed. No automatic ownership release, wallet adoption or
+additional runtime RPC is introduced.
 
 The existing staging wallet nginx installer covers the legacy exact wallet
 GET path. It does not establish or probe the new primary paths. Verify actual
@@ -138,3 +267,11 @@ Current primary runtime/integration tables do not enforce this approval expiry;
 an activation owner must implement and verify the revocation procedure.
 PostgreSQL password validity does not terminate existing sessions. The legacy
 installer or its route/role receipts cannot satisfy missing primary evidence.
+
+Apply the review-classification migration before deploying the new six-argument review and four-argument routing-resolution statements. Verify both overloads in the restricted provisioner readiness check. The old signatures remain conservative wrappers: they do not infer routing-only review from an unclassified contradiction. Identity-matched interest-setting contradictions retain a routing reason atomically; identity mismatches remain ownership-held after the recorded DVA closes.
+
+## Onboarding presence
+
+Apply `20261102121549_piggyvest_onboarding_presence.sql` before deploying the GET presence check, and include `has_onboarding(jsonb)` in the restricted provisioner's verified grants. The migration grants EXECUTE on `has_onboarding(jsonb)` only to the `piggyvest_primary_provisioner` group; execution stays denied to `PUBLIC`, client roles and `service_role`. It changes no login roles, environment variables or runtime settings. Because the group's executable-function set grows by one, readiness evidence must be re-captured against an artifact that includes this change; evidence from an earlier artifact fails the onboarding role check by design.
+
+When the scoped customer has no onboarding intent at all, GET answers before any provider, mapping or review read. A failed or malformed presence read fails closed with 503. Only a client that sends `x-baci-piggyvest-snapshot-version: 2` receives `{ "status": "not_started", "account": null }`; every other client, including every installed mobile build, receives the `{ "status": "pending", "account": null }` reply its strict snapshot schema already accepts, which is also what a never-started customer received before this change. The reply varies on that header and is never cached. A mobile build may send the header only once its snapshot schema accepts `not_started`.

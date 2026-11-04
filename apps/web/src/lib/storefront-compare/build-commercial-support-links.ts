@@ -24,6 +24,10 @@ export interface CommercialSupportProduct {
   price: number;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
+  stock?: number | null;
+  stock_quantity?: number | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 export function buildCategorySupportLinks(input: {
@@ -33,7 +37,9 @@ export function buildCategorySupportLinks(input: {
   includeBrandCompareLink?: boolean;
   products: CommercialSupportProduct[];
   inferredBrands?: string[];
+  preferredPriceBandSlugs?: string[];
   approvedCompareSlugs?: ReadonlySet<string>;
+  merchantCurrency?: string | null;
   /** Destination compare inventory. Brand/price-band candidates derive from it; callers that cannot supply it must pass a pool identical to the destination compare inventory, or those links may point at a candidate the compare page rejects. */
   compareProducts?: CommercialSupportProduct[];
   /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
@@ -107,9 +113,10 @@ export function buildCategorySupportLinks(input: {
     if (brandRelevanceRequired && !hasInferredBrand) return null;
     const candidates = buildCategoryPriceBandCandidates(
       input.categorySlug,
-      fullPool
+      fullPool,
+      { merchantCurrency: input.merchantCurrency }
     );
-    const chosen = candidates.find((candidate) => {
+    const isEligibleCandidate = (candidate: (typeof candidates)[number]) => {
       if (!candidate.isIndexable) return false;
       if (!brandRelevanceRequired) return true;
       const bandProducts = filterProductsByBrandSlugs(
@@ -118,7 +125,16 @@ export function buildCategorySupportLinks(input: {
         normalizedInferred
       );
       return bandProducts.length > 0;
-    });
+    };
+    const preferredSlugs = new Set(input.preferredPriceBandSlugs ?? []);
+    const chosen =
+      (preferredSlugs.size > 0
+        ? candidates.find(
+            (candidate) =>
+              preferredSlugs.has(candidate.band.slug) &&
+              isEligibleCandidate(candidate)
+          )
+        : undefined) ?? candidates.find(isEligibleCandidate);
     if (!chosen) return null;
     return {
       href: `${input.storeUrl}/${input.categorySlug}/best-under/${chosen.band.slug}`,
@@ -146,6 +162,7 @@ export function buildProductSupportLinks(input: {
   // list instead of rebuilding it per product. Omitted callers keep the old
   // self-computing behavior.
   priceBandCandidates?: PriceBandCandidate[];
+  merchantCurrency?: string | null;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
   const currentProduct = input.products.find(
@@ -215,7 +232,9 @@ export function buildProductSupportLinks(input: {
 
   const priceBandCandidates =
     input.priceBandCandidates ??
-    buildCategoryPriceBandCandidates(input.categorySlug, input.products);
+    buildCategoryPriceBandCandidates(input.categorySlug, input.products, {
+      merchantCurrency: input.merchantCurrency,
+    });
   const priceBandCandidate = priceBandCandidates.find(
     (candidate) =>
       candidate.isIndexable &&

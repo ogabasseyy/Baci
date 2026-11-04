@@ -1,98 +1,70 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { descendantAlreadyDeployed } from './deploy-guard-descendants.mjs';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const ROOT_WEB_FILES = new Set([
-  '.npmrc',
-  '.vercelignore',
-  'biome.json',
-  'next.config.test.ts',
-  'next.config.ts',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'turbo.json',
-  'vercel.json',
-]);
-const WEB_PREFIXES = [
-  '.github/actions/pnpm-install-cached/',
-  '.github/actions/postdeploy-migrations/',
-  'apps/web/',
-  'infra/cwv-runner/',
-  'packages/shared/',
-  'public/badges/',
-  'public/guides/',
-  'supabase/migrations/',
-];
-const WEB_WORKFLOW_FILES = new Set([
-  '.github/filters/deploy.yml',
-  '.github/scripts/assert-guide-prebuilt.mjs',
-  '.github/scripts/assert-guide-prebuilt.test.mjs',
-  '.github/scripts/blog-smoke-check.mjs',
-  '.github/scripts/apply-atomic-migration-group.sh',
-  '.github/scripts/apply-pending-migration.sh',
-  '.github/scripts/repair-sales-migration-collision.sh',
-  '.github/scripts/apply-pending-migrations.sh',
-  '.github/scripts/cloudflare-purge-cache.mjs',
-  '.github/scripts/current-main-deploy-guard.mjs',
-  '.github/scripts/deploy-with-retry.sh',
-  '.github/scripts/deploy-with-retry-overlap.sh',
-  '.github/scripts/refuse-publish-on-promote-overlap.sh',
-  '.github/scripts/probe-gigl-hook-reload.sh',
-  '.github/scripts/check-gigl-cutover-latch.sh',
-  '.github/scripts/refresh-gigl-cutover-latch.sh',
-  '.github/scripts/check-production-release-outcome.mjs',
-  '.github/scripts/resolve-gigl-latch-identity.sh',
-  '.github/scripts/smoke-gigl-worker-capability.sh',
-  '.github/scripts/verify-gigl-fallback-token.sh',
-  '.github/scripts/verify-gigl-worker-final-state.sh',
-  '.github/scripts/verify-coordinated-release.sh',
-  '.github/scripts/gigl-dotenv.sh',
-  '.github/scripts/deferred-production-migrations.sh',
-  '.github/scripts/pending-postdeploy-migrations.sh',
-  '.github/scripts/assert-vercel-pulled-sensitive-env.mjs',
-  '.github/scripts/assert-vercel-pulled-sensitive-env.test.mjs',
-  '.github/scripts/normalize-vercel-sensitive-placeholders.mjs',
-  '.github/scripts/normalize-vercel-sensitive-placeholders.test.mjs',
-  '.github/scripts/ensure-vercel-sensitive-env.mjs',
-  '.github/scripts/ensure-vercel-sensitive-env.test.mjs',
-  '.github/scripts/inject-prebuilt-env-secret.mjs',
-  '.github/scripts/merge-static-union.sh',
-  '.github/scripts/merge-static-union.test.sh',
-  '.github/scripts/pnpm-install-with-retry.sh',
-  '.github/scripts/run-pinned-vercel.sh',
-  '.github/scripts/storefront-release-coherence.mjs',
-  '.github/scripts/storefront-release-config.mjs',
-  '.github/scripts/storefront-release-marker.mjs',
-  '.github/scripts/storefront-sitemap-purge.mjs',
-  '.github/scripts/sync-cloudflare-vercel-production-env.sh',
-  '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs',
-  '.github/workflows/deploy.yml',
-]);
+
+export function validateDeployPattern(pat) {
+  if (/\s|#|[!?{}[\]()+@]/.test(pat) || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
+    throw new Error(`unsupported glob: ${pat}`);
+  }
+}
+
+function loadDeployPatterns() {
+  const text = readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8');
+  const patterns = [];
+  let section = null;
+  let webCount = 0;
+  let migrationsCount = 0;
+  for (const line of text.split('\n')) {
+    if (/^[^\s#][^:\n]*:/.test(line)) {
+      section = line.startsWith('web:') ? 'web' : line.startsWith('migrations:') ? 'migrations' : null;
+    } else if (section && /^\s*-\s*['"]?([^'"]+)['"]?/.test(line)) {
+      const pat = line.match(/^\s*-\s*['"]?([^'"]+)['"]?/)[1];
+      validateDeployPattern(pat);
+      patterns.push(pat);
+      section === 'web' ? webCount++ : migrationsCount++;
+    } else if (section && line.trim() && !line.trim().startsWith('#')) {
+      throw new Error(`unsupported line format in deploy filter: ${line}`);
+    }
+  }
+  if (webCount === 0 || migrationsCount === 0) throw new Error('deploy filter web or migrations patterns underloaded');
+  return patterns;
+}
+
+let deployPatternsCache = null;
+export function getDeployPatterns() {
+  return (deployPatternsCache ??= loadDeployPatterns());
+}
+export const DEPLOY_PATTERNS = new Proxy([], {
+  get: (_, prop) => Reflect.get(getDeployPatterns(), prop),
+  has: (_, prop) => Reflect.has(getDeployPatterns(), prop),
+});
+
+function isWebDeployPath(path) {
+  const normPath = path.replace(/\/+/g, '/');
+  return getDeployPatterns().some((pat) => {
+    if (pat.endsWith('/**')) return normPath.startsWith(pat.slice(0, -2));
+    if (pat.includes('*')) {
+      const [p, s] = pat.split('*');
+      return normPath.length >= p.length + s.length && normPath.startsWith(p) && normPath.endsWith(s) &&
+        !normPath.slice(p.length, normPath.length - s.length).includes('/');
+    }
+    return normPath === pat;
+  });
+}
 
 function required(value, label) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`missing ${label}`);
-  }
+  if (typeof value !== 'string' || value.length === 0) throw new Error(`missing ${label}`);
   return value;
 }
 
 function safeApiUrl(value) {
   const url = new URL(value ?? 'https://api.github.com');
-  if (url.protocol !== 'https:' || url.username || url.password) {
-    throw new Error('invalid GitHub API URL');
-  }
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('invalid GitHub API URL');
   return url.href.replace(/\/$/, '');
-}
-
-function isWebDeployPath(path) {
-  return (
-    ROOT_WEB_FILES.has(path) ||
-    WEB_WORKFLOW_FILES.has(path) ||
-    /^tsconfig[^/]*\.json$/.test(path) ||
-    WEB_PREFIXES.some((prefix) => path.startsWith(prefix))
-  );
 }
 
 async function githubJson(fetchImpl, url, token) {
@@ -105,13 +77,114 @@ async function githubJson(fetchImpl, url, token) {
     },
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok) {
-    throw new Error(`GitHub lookup failed with status ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`GitHub lookup failed with status ${response.status}`);
   return response.json();
 }
 
-async function supersedingChangesAreNonWeb({
+function collectSupersedingShas(comparison, currentSha) {
+  const shas = new Set([currentSha.toLowerCase()]);
+  if (Array.isArray(comparison.commits)) {
+    if (comparison.commits.length !== comparison.total_commits) {
+      throw new Error('incomplete superseding commit list');
+    }
+    for (let i = comparison.commits.length - 1; i >= 0; i--) {
+      const commit = comparison.commits[i];
+      if (typeof commit?.sha !== 'string' || !SHA_PATTERN.test(commit.sha)) {
+        throw new Error('invalid superseding commit SHA');
+      }
+      shas.add(commit.sha.toLowerCase());
+    }
+  } else if (comparison.total_commits > 1) {
+    throw new Error('incomplete superseding commit list');
+  }
+  return shas;
+}
+
+async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token) {
+  if (!Number.isSafeInteger(run?.id) || run.id <= 0) {
+    throw new Error('invalid workflow run id');
+  }
+  if (run?.status === 'queued' && Number.isSafeInteger(run.run_attempt) && run.run_attempt <= 1) {
+    return false;
+  }
+  const jobsBody = await githubJson(
+    fetchImpl,
+    `${apiRoot}/repos/${repository}/actions/runs/${run.id}/jobs?filter=all&per_page=100`,
+    token
+  );
+  if (
+    !Array.isArray(jobsBody?.jobs) ||
+    (typeof jobsBody?.total_count === 'number' && jobsBody.total_count > jobsBody.jobs.length)
+  ) {
+    throw new Error('incomplete or invalid workflow jobs response');
+  }
+  const deployJobs = jobsBody.jobs.filter((j) => j?.name === 'deploy-production');
+  if (deployJobs.length === 0) {
+    if (run.status === 'completed' && (run.conclusion !== 'cancelled' || jobsBody.jobs.length > 0)) {
+      throw new Error('missing deploy-production job in workflow run');
+    }
+    return false;
+  }
+  for (const deployJob of deployJobs) {
+    if (deployJob.conclusion === 'success') return true;
+    if (deployJob.conclusion !== 'skipped') {
+      if (Array.isArray(deployJob.steps) && deployJob.steps.length > 0) {
+        const deployStep = deployJob.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
+        if (!deployStep) {
+          throw new Error('missing Deploy to Vercel step in deploy-production job');
+        }
+        const attempted =
+          deployStep.status === 'in_progress' ||
+          (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
+        if (attempted) return true;
+      } else if (deployJob.status !== 'queued' && deployJob.conclusion !== 'cancelled') {
+        throw new Error('incomplete or invalid workflow job steps response');
+      }
+    }
+  }
+  return false;
+}
+
+// Residual risk note: tracks canonical deploy.yml workflow runs on main. Manual emergency
+// runs executed outside GitHub Actions leave no workflow run records and are accepted as an
+// operational rollback window.
+async function hasSupersedingDeployment({
+  apiRoot,
+  fetchImpl,
+  repository,
+  supersedingShas,
+  token,
+}) {
+  for (const sha of supersedingShas) {
+    const runsBody = await githubJson(
+      fetchImpl,
+      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}&branch=main&per_page=100`,
+      token
+    );
+    if (
+      !Array.isArray(runsBody?.workflow_runs) ||
+      (typeof runsBody?.total_count === 'number' &&
+        runsBody.total_count > runsBody.workflow_runs.length)
+    ) {
+      throw new Error('incomplete or invalid workflow runs response');
+    }
+    for (const run of runsBody.workflow_runs) {
+      if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
+        throw new Error('invalid workflow run SHA');
+      }
+      if (
+        run.head_sha.toLowerCase() === sha.toLowerCase() &&
+        (run.head_branch == null || run.head_branch === 'main')
+      ) {
+        const deployed = await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token);
+        if (deployed) return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function supersedingChangesCanProceed({
   apiRoot,
   currentSha,
   expectedSha,
@@ -126,23 +199,35 @@ async function supersedingChangesAreNonWeb({
   );
   if (
     comparison?.status !== 'ahead' ||
-    comparison?.merge_base_commit?.sha?.toLowerCase() !==
-      expectedSha.toLowerCase() ||
-    !Number.isSafeInteger(comparison?.total_commits) ||
-    comparison.total_commits < 1 ||
-    comparison.total_commits > 100 ||
-    !Array.isArray(comparison?.files) ||
-    comparison.files.length >= 300
+    comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
+    !(Number.isSafeInteger(comparison?.total_commits) && comparison.total_commits >= 1) ||
+    (comparison.files != null && !Array.isArray(comparison.files))
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
   }
+  if (comparison.total_commits > 100 || !(comparison.files?.length < 300)) {
+    return !(await descendantAlreadyDeployed({ apiRoot, comparison, currentSha, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }));
+  }
+  let nonWebOnly = true;
   for (const file of comparison.files) {
     const paths = [file?.filename, file?.previous_filename].filter(Boolean);
     if (paths.length === 0 || paths.some((path) => isWebDeployPath(path))) {
-      return false;
+      nonWebOnly = false;
+      break;
     }
   }
-  return true;
+  if (nonWebOnly) {
+    return true;
+  }
+  const supersedingShas = collectSupersedingShas(comparison, currentSha);
+  const alreadyDeployed = await hasSupersedingDeployment({
+    apiRoot,
+    fetchImpl,
+    repository,
+    supersedingShas,
+    token,
+  });
+  return !alreadyDeployed;
 }
 
 export async function verifyCurrentMainDeployment({
@@ -174,7 +259,7 @@ export async function verifyCurrentMainDeployment({
     throw new Error('invalid current main SHA');
   }
   if (currentSha.toLowerCase() !== expectedSha.toLowerCase()) {
-    const nonWebOnly = await supersedingChangesAreNonWeb({
+    const canProceed = await supersedingChangesCanProceed({
       apiRoot,
       currentSha,
       expectedSha,
@@ -182,10 +267,8 @@ export async function verifyCurrentMainDeployment({
       repository,
       token,
     });
-    if (!nonWebOnly) {
-      throw new Error(
-        `superseded deployment SHA ${expectedSha}; current main is ${currentSha}`
-      );
+    if (!canProceed) {
+      throw new Error(`superseded deployment SHA ${expectedSha}; current main is ${currentSha}`);
     }
   }
 
@@ -193,10 +276,7 @@ export async function verifyCurrentMainDeployment({
 }
 
 function escapeWorkflowCommand(value) {
-  return value
-    .replaceAll('%', '%25')
-    .replaceAll('\r', '%0D')
-    .replaceAll('\n', '%0A');
+  return value.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
 }
 
 async function main() {
@@ -207,14 +287,10 @@ async function main() {
       repository: process.env.GITHUB_REPOSITORY,
       token: process.env.GITHUB_TOKEN,
     });
-    console.log(
-      `Exact-main deployment guard accepted ${result.expectedSha} for production.`
-    );
+    console.log(`Exact-main deployment guard accepted ${result.expectedSha} for production.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown refusal';
-    console.error(
-      `::error title=Production deployment refused::${escapeWorkflowCommand(message)}`
-    );
+    console.error(`::error title=Production deployment refused::${escapeWorkflowCommand(message)}`);
     process.exitCode = 78;
   }
 }

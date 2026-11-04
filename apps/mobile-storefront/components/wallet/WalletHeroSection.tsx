@@ -3,25 +3,17 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { BRAND } from '@/constants/Colors';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
-import { WalletHeroSavingsAccount } from './WalletHeroSavingsAccount';
 import { WalletQuickUtilities } from './WalletQuickUtilities';
 import { WALLET_COLORS } from './wallet.colors';
 import { styles } from './wallet.styles';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type WalletHeroSectionProps = {
-  activeSavingsGoal?: Pick<
-    WalletActiveSavingsGoal,
-    'id' | 'status' | 'source_mode'
-  > | null;
-  isRefetching?: boolean;
   canCreateFundingAccount?: boolean;
   createFundingAccountUnavailableMessage?: string;
   isCreatingFundingAccount?: boolean;
@@ -49,8 +41,6 @@ function formatTierLabel(tier: string | null | undefined) {
 }
 
 export function WalletHeroSection({
-  activeSavingsGoal,
-  isRefetching = false,
   canCreateFundingAccount = false,
   createFundingAccountUnavailableMessage,
   isCreatingFundingAccount = false,
@@ -69,13 +59,6 @@ export function WalletHeroSection({
   totalBalance,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
-  const savingsGoalId =
-    !fundingAccount &&
-    isHostedStagingTestPaymentsEnabled() &&
-    activeSavingsGoal?.status === 'active' &&
-    activeSavingsGoal.source_mode === 'manual'
-      ? activeSavingsGoal.id
-      : null;
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.walletHero}>
       <View style={styles.walletHeroHeader}>
@@ -116,11 +99,6 @@ export function WalletHeroSection({
         </View>
         {fundingAccount ? (
           <WalletHeroFundingAccount account={fundingAccount} />
-        ) : savingsGoalId ? (
-          <WalletHeroSavingsAccount
-            goalId={savingsGoalId}
-            isRefetching={isRefetching}
-          />
         ) : (
           <WalletHeroCreateAccount
             canCreate={canCreateFundingAccount}
@@ -131,9 +109,7 @@ export function WalletHeroSection({
           />
         )}
       </View>
-      {!fundingAccount &&
-      !savingsGoalId &&
-      createFundingAccountUnavailableMessage ? (
+      {!fundingAccount && createFundingAccountUnavailableMessage ? (
         <Text style={styles.accountUnavailableMessage}>
           {createFundingAccountUnavailableMessage}
         </Text>

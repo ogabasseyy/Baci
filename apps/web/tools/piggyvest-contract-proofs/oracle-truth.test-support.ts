@@ -35,6 +35,17 @@ const ifFunded = (c: TruthContext): Truth =>
 /** Findings about the P7 customer exist only if its creation was accepted. */
 const ifP7Created = (c: TruthContext, truth: Truth): Truth =>
   c.o.customerPayoutWallet === 'accepted' ? truth : 'unobservable';
+/**
+ * A goal created with no payout of its own pays itself only when the mock is
+ * told to; inheriting names the P7 customer's business payout; otherwise the
+ * readback is null, which proves nothing either way.
+ */
+const unsetGoalPaysItself = (c: TruthContext): Truth =>
+  c.o.subWalletPaysItselfWhenUnset
+    ? 'yes'
+    : c.o.subWalletInheritsPayout
+      ? ifP7Created(c, 'no')
+      : 'unobservable';
 
 export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
   // proof 1
@@ -103,13 +114,30 @@ export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
   main_wallet_accrual_flag_readable: (c) =>
     ifP7Created(c, bool(c.o.payoutReadback !== 'none')),
   goal_without_payout_created: YES,
+  // Judged from goal (a)'s readback: a goal that pays itself is a no, one that
+  // names the P7 customer's business payout is a yes, and null proves nothing.
   goal_without_payout_inherits_business_payout: (c) =>
-    ifP7Created(c, bool(c.o.subWalletInheritsPayout)),
+    c.o.subWalletPaysItselfWhenUnset
+      ? 'no'
+      : c.o.subWalletInheritsPayout
+        ? ifP7Created(c, 'yes')
+        : 'unobservable',
   goal_explicit_payout_accepted: (c) => bool(c.o.subAccountAcceptsPayout),
   goal_explicit_readback_names_payout_destination: (c) =>
     c.o.subAccountAcceptsPayout
       ? bool(c.o.payoutReadback === 'fields' && !c.o.goalReadbackOmitsPayout)
       : 'unobservable',
+  goal_opted_out_created: YES,
+  goal_opted_out_reads_accrual_off: (c) =>
+    c.o.payoutReadback === 'none' ? 'unobservable' : 'yes',
+  goal_payout_main_accepted: (c) => bool(c.o.subAccountAcceptsPayout),
+  goal_a_interest_stays_in_goal: unsetGoalPaysItself,
+  // Goal (b) is opted out: no interest accrues, so naming itself proves nothing.
+  goal_b_interest_stays_in_goal: (c) =>
+    c.o.subWalletPaysItselfWhenUnset ? 'unobservable' : unsetGoalPaysItself(c),
+  goal_c_interest_stays_in_goal: NO,
+  goal_d_interest_stays_in_goal: NO,
+  goal_payout_update_after_creation_documented: NO,
 };
 
 /** Published values that are measurements: when non-null they must equal the truth. */

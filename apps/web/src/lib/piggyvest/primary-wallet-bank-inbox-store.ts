@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import type { z } from 'zod';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
+import { readPrimaryEngineReady } from './primary-wallet-engine-ready';
 
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (role.rolcanlogin AND NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -27,10 +28,17 @@ const statements = {
     'SELECT piggyvest_primary.retry_bank_inbox($1::uuid,$2::text,$3::jsonb,$4::jsonb) AS result',
 };
 
+type Action = keyof typeof statements | 'engineReady';
+
 export function createPrimaryWalletBankInboxStore(configuration: unknown) {
   const config = schemas.runtime.parse(configuration);
   const intake = config.database.login === 'baci_primary_bank_intake';
-  async function execute(action: keyof typeof statements, command?: unknown) {
+  async function withVerifiedSession<T>(
+    action: Action,
+    run: (client: Client) => Promise<T>
+  ): Promise<T> {
+    // Engine readiness is a worker capability only: the intake login is
+    // never granted the readiness reader.
     if (
       intake
         ? action !== 'readiness' && action !== 'enqueue'
@@ -76,6 +84,15 @@ export function createPrimaryWalletBankInboxStore(configuration: unknown) {
         session.tls !== true
       )
         throw new Error('Unsafe session');
+      return await run(client);
+    } catch {
+      throw new Error('Primary bank inbox database unavailable');
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }
+  function execute(action: keyof typeof statements, command?: unknown) {
+    return withVerifiedSession(action, async (client): Promise<unknown> => {
       const parameters = [
         config.integrationId,
         config.environment,
@@ -84,17 +101,21 @@ export function createPrimaryWalletBankInboxStore(configuration: unknown) {
       if (command !== undefined) parameters.push(JSON.stringify(command));
       const result = await client.query(statements[action], parameters);
       if (result.rows.length !== 1) throw new Error('Invalid acknowledgement');
-      const value: unknown = result.rows[0]?.result;
-      return value;
-    } catch {
-      throw new Error('Primary bank inbox database unavailable');
-    } finally {
-      await client.end().catch(() => undefined);
-    }
+      return result.rows[0]?.result;
+    });
   }
   return {
     readiness: async () =>
       schemas.acknowledgement.parse(await execute('readiness')),
+    // Fails closed: a readiness query error reads as not ready, while an
+    // unsafe or unreachable session still throws like every other action.
+    engineReady: () =>
+      withVerifiedSession('engineReady', (client) =>
+        readPrimaryEngineReady(
+          (statement, parameters) => client.query(statement, [...parameters]),
+          'bank_inbox'
+        )
+      ),
     enqueue: async (command: z.infer<typeof schemas.enqueue>) =>
       schemas.intake.parse(
         await execute('enqueue', schemas.enqueue.parse(command))

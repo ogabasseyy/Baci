@@ -28,6 +28,7 @@ export interface BrandAuthorityPageProduct {
   price: number;
   condition: string;
   stock: number;
+  manage_stock: boolean;
   availability: 'InStock' | 'OutOfStock';
   has_condition_offers: boolean;
   product_key_specs?: ProductKeySpecsRecord | null;
@@ -111,6 +112,7 @@ async function loadBrandAuthorityPage(
       price: product.price,
       condition: product.condition,
       stock: product.stock,
+      manage_stock: product.manage_stock ?? false,
       availability: product.availability,
       has_condition_offers: product.has_condition_offers ?? false,
       product_key_specs: product.product_key_specs,

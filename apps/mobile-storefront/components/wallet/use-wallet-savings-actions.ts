@@ -1,13 +1,22 @@
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
+import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
-import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import {
+  type PinProofRequester,
+  runWithPinProof,
+} from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
+import type { ContributionRail } from './savings/stored-contribution-operation';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
+import {
+  EARLIER_CONTRIBUTION_CHECKING_MESSAGE,
+  planWalletSavingsRail,
+} from './wallet-savings-rail';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 export function createWalletSavingsActions({
@@ -15,7 +24,9 @@ export function createWalletSavingsActions({
   activeMerchantSlug,
   goal,
   idempotencyKeyRef,
+  operationRailRef,
   refetchWallet,
+  requestPinProof,
   savingsContributionAmount,
   spendableBalance,
   startWalletTopUp,
@@ -28,7 +39,12 @@ export function createWalletSavingsActions({
   activeMerchantSlug?: string;
   goal: WalletActiveSavingsGoal | null;
   idempotencyKeyRef: { current: string | null };
+  // Rail of the attempt that minted the stored id: same scope as the id,
+  // written before each request and cleared together with it.
+  operationRailRef: { current: ContributionRail | null };
   refetchWallet: () => Promise<unknown>;
+  /** Opens the wallet PIN sheet; resolves a single-use proof or null. */
+  requestPinProof?: PinProofRequester;
   savingsContributionAmount: string;
   spendableBalance: number;
   startWalletTopUp?: () => void;
@@ -69,13 +85,6 @@ export function createWalletSavingsActions({
     if (requestedAmount <= spendableBalance) {
       return;
     }
-    if (isHostedStagingTestPaymentsEnabled()) {
-      router.push({
-        pathname: '/savings/funding',
-        params: { amount: String(requestedAmount), goalId: goal.id },
-      });
-      return;
-    }
     if (startWalletTopUp) startWalletTopUp();
     else if (walletTopUp)
       void startSavingsWalletTopUp({
@@ -88,32 +97,73 @@ export function createWalletSavingsActions({
       });
   };
 
+  const releaseOperation = () => {
+    idempotencyKeyRef.current = null;
+    operationRailRef.current = null;
+  };
+
   const handleAddSavingsContribution = () => {
-    if (
-      isPiggyvestPrimaryMerchant(activeMerchantId) &&
-      idempotencyKeyRef.current
-    ) {
+    const isPrimary = isPiggyvestPrimaryMerchant(activeMerchantId);
+    const plan = planWalletSavingsRail({
+      hasStoredId: idempotencyKeyRef.current !== null,
+      isPrimary,
+      storedRail: operationRailRef.current,
+    });
+    if (plan.kind === 'blocked') {
+      // The original rail is no longer available and the id must never move
+      // to legacy: keep it and wait.
+      Alert.alert('Still checking', EARLIER_CONTRIBUTION_CHECKING_MESSAGE);
+      return;
+    }
+    if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
       return checkPendingPrimarySavings({
         merchantId: activeMerchantId,
         operationId: idempotencyKeyRef.current,
-        clearOperation: () => (idempotencyKeyRef.current = null),
+        clearOperation: releaseOperation,
         clearAmount: () => setSavingsContributionAmount(''),
         refetchWallet,
         setPending: setIsAddingSavingsContribution,
       });
     }
+    const rail: ContributionRail =
+      plan.kind === 'submit' ? plan.rail : 'primary';
     return addSavingsContributionToGoal({
       activeMerchantId,
       activeMerchantSlug,
-      addSavingsContribution: isPiggyvestPrimaryMerchant(activeMerchantId)
-        ? addPiggyvestPrimarySavingsContribution
-        : addSavingsContribution,
+      addSavingsContribution:
+        rail === 'primary'
+          ? (input) =>
+              // A clean "PIN needed" refusal opens the PIN sheet and retries
+              // the same stored id on the same rail with the proof.
+              runWithPinProof(
+                (pinProof) =>
+                  addPiggyvestPrimarySavingsContribution({
+                    ...input,
+                    ...(pinProof ? { pinProof } : {}),
+                    // A fallback sends the id on legacy, so retries must follow it.
+                    onRail: (sentOn) => {
+                      operationRailRef.current = sentOn;
+                    },
+                  }),
+                {
+                  merchantId: input.merchantId,
+                  goalId: input.goalId,
+                  operationId: input.idempotencyKey,
+                  amountKobo: Math.round(input.amount * 100),
+                },
+                requestPinProof
+              )
+          : addSavingsContribution,
       cancelSavingsReminder: cancelSavingsReminderNotification,
-      clearIdempotencyKey: () => (idempotencyKeyRef.current = null),
+      clearIdempotencyKey: releaseOperation,
       clearSavingsContributionAmount: () => setSavingsContributionAmount(''),
-      createIdempotencyKey: () =>
-        (idempotencyKeyRef.current =
-          idempotencyKeyRef.current ?? Crypto.randomUUID()),
+      createIdempotencyKey: () => {
+        const key = idempotencyKeyRef.current ?? Crypto.randomUUID();
+        idempotencyKeyRef.current = key;
+        // Written before the request, so a retry stays on this rail.
+        operationRailRef.current = rail;
+        return key;
+      },
       goal,
       rawAmount: savingsContributionAmount,
       refetchWallet,

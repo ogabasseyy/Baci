@@ -8,6 +8,7 @@ import { StartSavingsForm } from './StartSavingsForm';
 import { StartSavingsModals } from './StartSavingsModals';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import { useStartSavingsController } from './use-start-savings-controller';
+import { WalletPinSheet } from './WalletPinSheet';
 
 export function LegacyStartSavingsScreen() {
   const colorScheme = useColorScheme();
@@ -69,6 +70,7 @@ export function LegacyStartSavingsScreen() {
       </AppKeyboardAwareScrollView>
 
       <StartSavingsModals colors={colors} controller={controller} />
+      <WalletPinSheet colors={colors} {...controller.pinSheetProps} />
     </View>
   );
 }

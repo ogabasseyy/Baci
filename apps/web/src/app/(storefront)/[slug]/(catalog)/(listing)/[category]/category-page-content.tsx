@@ -173,7 +173,6 @@ export async function CategoryPageContent({
   const categoryPageProducts = data.productsQueryFailed
     ? paginatedNormalizedProducts
     : normalizedProducts;
-  const categoryPageCurrentPage = currentPage;
   const productsArePrePaginated =
     data.productsArePrePaginated ||
     (data.productsQueryFailed && !data.productIdsQueryFailed);
@@ -193,11 +192,13 @@ export async function CategoryPageContent({
     slug,
     store: merchant,
   });
+  const currencyCode = resolveMerchantCurrencyConfig(merchant).code;
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
     categoryName,
     merchantBusinessName: merchant.business_name,
+    merchantCurrency: currencyCode,
     storeUrl: requestScopedBaseUrl,
     products: normalizedProducts,
     ...(graphicsHubLinks.length > 0
@@ -222,7 +223,7 @@ export async function CategoryPageContent({
       canonicalCategoryUrl,
       categoryName,
       country: merchant.country,
-      currencyCode: resolveMerchantCurrencyConfig(merchant).code,
+      currencyCode,
       hubContent,
       isCollection: data.isCollection,
       merchantBusinessName: merchant.business_name,
@@ -258,7 +259,7 @@ export async function CategoryPageContent({
             canonicalBaseUrl,
             requestScopedBaseUrl,
           })}
-          currentPage={categoryPageCurrentPage}
+          currentPage={currentPage}
           productsArePrePaginated={productsArePrePaginated}
           categoryImage={
             !data.isCollection ? data.category?.image_url : undefined

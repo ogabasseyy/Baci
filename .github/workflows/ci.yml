@@ -43,6 +43,7 @@ jobs:
       quiz_db: ${{ steps.gate.outputs.quiz_db }}
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
+      piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,17 +56,24 @@ jobs:
       - name: Test capability register binding
         uses: ./.github/actions/capability-gate
       - name: Test Android release SDK alignment
-        run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
+        run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/android-release-sdk-compat.test.mjs .github/scripts/android-admin-release-budget.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
+      - name: Test loyalty replay binary discovery
+        run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening
         run: node --test .github/actions/setup-pnpm-store/setup-pnpm-store-allowlist.test.mjs .github/actions/pnpm-install-cached/pnpm-install-cached-allowlist.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
+      - name: Test storefront release gate
+        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
+      - name: Test PiggyVest stuck-funds runbook CI wiring
+        run: node --test .github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -84,6 +92,7 @@ jobs:
           FILTER_QUIZ_DB: ${{ steps.filter.outputs.quiz_db }}
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
+          FILTER_PIGGYVEST_RUNBOOK: ${{ steps.filter.outputs.piggyvest_runbook }}
           # Generated Muse pin PRs must run the real gates in their
           # pull_request context; workflow_dispatch checks do not satisfy
           # required PR checks.
@@ -117,7 +126,11 @@ jobs:
   quality-lint:
     name: Quality Gate - Lint
     needs: [changes]
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    # Mobile-only PRs never trip the web filter, so lint must also run for the
+    # mobile filters; otherwise the bypassable pre-commit hook is their only
+    # Biome gate. `turbo lint --affected` keeps the run scoped to the changed
+    # packages.
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -203,7 +216,9 @@ jobs:
             src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts \
-            src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts
+            src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts \
+            src/lib/shipping/gigl-external-waybill-link.postgres.test.ts \
+            src/lib/shipping/gigl-price-round-100.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -301,7 +316,7 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-18=18.3-1.pgdg24.04+1
+          sudo apt-get install -y postgresql-18=18.3-1.pgdg24.04+1 postgresql-client-18=18.3-1.pgdg24.04+1
           SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
           curl --fail --silent --show-error --location \
             "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
@@ -315,6 +330,10 @@ jobs:
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
+      - name: Test loyalty checkout replay fixture against PostgreSQL
+        env:
+          PG_BINDIR: /usr/lib/postgresql/18/bin
+        run: node --test tools/test/loyalty-checkout-replay-local.test.mjs
       - name: Test merchant blog classification permissions and lifecycle
         run: bash supabase/tests/run-merchant-blog-classification.sh
       # Every replay SQL suite is registered in
@@ -374,6 +393,13 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql-client postgresql-16
+      - name: Test storefront order explicit delegation
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_storefront_order_explicit_columns.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_storefront_order_explicit_columns.py
+
       - name: Run disposable search suites
         env:
           PGHOST: localhost
@@ -381,6 +407,24 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-disposable-search-suites.sh
+
+      - name: Test serialized inventory pagination
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-serialized-inventory-pagination.sh
+
+      - name: Test serialized inventory listing edit fields
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-inventory-listing-fields.sh
+          TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-inventory-listing-fields.sh
 
       - name: Run X token authentication SQL contract
         env:
@@ -393,6 +437,13 @@ jobs:
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
 
+      - name: Test PiggyVest stuck-funds runbook SQL
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          set -euo pipefail
+          python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
+
       - name: Run IMEI authenticated access SQL contracts
         env:
           IMEI_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -401,7 +452,7 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -411,6 +462,8 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Test hoisted patched dependency installation
+        run: node --test .github/scripts/pnpm-hoisted-patch-install.test.mjs
       - name: Run backfill scripts unit tests
         run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
@@ -436,6 +489,16 @@ jobs:
           pnpm --filter @baci/shared test -- src/storefront/delivery-evidence.test.ts src/storefront/delivery-evidence-manifest.test.ts &&
           pnpm --filter @baci/cloudflare-evidence-qualification-worker test &&
           pnpm --filter @baci/web exec vitest run tools/cost/storefront-origin-budget.test.ts tools/cost/ogabassey-current-origin-baseline.test.ts tools/cost/qualify-cloudflare-evidence-sources.test.ts tools/cost/cloudflare-evidence-process-isolation.test.ts tools/cost/mutate-cloudflare-evidence-sources.test.ts tools/cost/measure-cloudflare-evidence-sources.test.ts tools/cost/verify-cloudflare-evidence-token-policy.test.ts tools/cost/verify-cloudflare-evidence-read-token-policy.test.ts tools/cost/cloudflare-evidence-run-journal.test.ts
+      - name: Run PiggyVest legacy runbook SQL against scratch PostgreSQL
+        if: needs.changes.outputs.piggyvest_runbook == 'true'
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+          REQUIRE_PG_TESTS: '1'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          pnpm --filter @baci/web exec vitest run tools/db/piggyvest-legacy
       - name: Test cart quota guard staging and signed PostgREST
         if: needs.changes.outputs.deploy_scripts == 'true'
         env:
@@ -460,6 +523,7 @@ jobs:
           node --test
           .github/scripts/assert-guide-prebuilt.test.mjs
           .github/scripts/current-main-deploy-guard.test.mjs
+          .github/scripts/deploy-guard-descendants.test.mjs
           .github/scripts/deploy-mcp-server.test.mjs
           .github/scripts/deploy-vps-readiness-checkout.test.mjs
           .github/scripts/deploy-with-retry-current-main.test.mjs
@@ -628,6 +692,9 @@ jobs:
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
           QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
+          WEB_CHANGED: ${{ needs.changes.outputs.web }}
+          MOBILE_ADMIN_CHANGED: ${{ needs.changes.outputs.mobile_admin }}
+          MOBILE_STOREFRONT_CHANGED: ${{ needs.changes.outputs.mobile_storefront }}
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
@@ -648,6 +715,13 @@ jobs:
                 exit 1
               fi
             done
+          fi
+
+          # Same rule for lint: a skip is only success when no lintable
+          # web or mobile paths changed.
+          if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBILE_STOREFRONT_CHANGED" == "true" ) && "$TEST_PLAN_MODE" != "config-smoke" && "$LINT_RESULT" == "skipped" ]]; then
+            echo "Web or mobile paths changed but the lint gate was skipped"
+            exit 1
           fi
 
           for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
@@ -708,6 +782,13 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Reclaim unused hosted-runner SDK space
+        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: |
+          df -h .
+          # This web-only hosted job does not use .NET, Android, or Haskell.
+          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h .
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache

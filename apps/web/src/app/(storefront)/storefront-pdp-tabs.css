@@ -28,7 +28,7 @@
     border-bottom: 3px solid transparent;
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 58%,
+      var(--store-background-text, #111827) 68%,
       transparent
     );
     display: inline-flex;
@@ -151,7 +151,7 @@
   .ogabassey-pdp-tabs__spec-label {
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 58%,
+      var(--store-background-text, #111827) 68%,
       transparent
     );
     font-size: 0.875rem;

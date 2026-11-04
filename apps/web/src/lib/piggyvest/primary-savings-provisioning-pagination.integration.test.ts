@@ -15,7 +15,7 @@ vi.mock('./primary-savings-provisioning-store', () => ({
 vi.mock('./primary-savings-provisioning-executor', () => ({
   createPrimarySavingsProvisioningExecutor: () => vi.fn(),
 }));
-const walletName = `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`;
+const { walletName } = provisioningFixture;
 const target = {
   id: 'destination-with-hyphens',
   name: walletName,

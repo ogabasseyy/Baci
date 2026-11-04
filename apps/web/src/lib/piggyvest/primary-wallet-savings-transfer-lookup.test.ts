@@ -58,9 +58,18 @@ describe('savings transfer reference lookup', () => {
     });
     expect(await lookup()).toBe('uncertain');
   });
-  it('reports uncertain for failed or malformed provider evidence', async () => {
+  it.each([
+    ['pending', 'pending'],
+    ['failed', 'failed'],
+  ] as const)('reports bound %s evidence as %s', async (status, outcome) => {
+    const { lookup } = lookupWith({
+      ...success,
+      data: { ...success.data, status },
+    });
+    expect(await lookup()).toBe(outcome);
+  });
+  it('reports uncertain for malformed provider evidence', async () => {
     for (const body of [
-      { ...success, data: { ...success.data, status: 'failed' } },
       { status: true, data: { status: 'successful' } },
       'not-json-at-all{{{',
     ]) {
@@ -68,9 +77,15 @@ describe('savings transfer reference lookup', () => {
       expect(await lookup()).toBe('uncertain');
     }
   });
-  it('reports absent only on an authoritative 404', async () => {
-    const { lookup } = lookupWith({ status: false, message: 'not found' }, 404);
-    expect(await lookup()).toBe('absent');
+  it('reports a 404 as not found, never as proof the transfer is absent', async () => {
+    // docs/piggyvest-contract-evidence/2026-10-31.md, P2: a just-accepted
+    // transfer answers 404 before it is indexed, exactly like a reference
+    // that never existed.
+    const { lookup } = lookupWith(
+      { status: false, message: 'Transaction Not Found', data: {} },
+      404
+    );
+    expect(await lookup()).toBe('not_found');
   });
   it.each([
     400, 429, 500,

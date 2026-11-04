@@ -45,10 +45,27 @@ export async function GET() {
     const { data: preferences, error } = await supabase
       .from('notification_preferences')
       .select(
-        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
       )
       .eq('merchant_id', merchantId)
       .single();
+
+    // Staff are filtered out of the owner-only table policy: read the row
+    // through the staff-authorised RPC before falling back to defaults.
+    if (!preferences && error?.code === 'PGRST116') {
+      const { data: viaRpc, error: rpcError } = await supabase.rpc(
+        'get_notification_preferences',
+        { p_merchant_id: merchantId }
+      );
+      if (rpcError) {
+        console.error('Error fetching preferences via RPC:', rpcError);
+        return NextResponse.json(
+          { error: 'Failed to fetch preferences' },
+          { status: 500 }
+        );
+      }
+      if (viaRpc) return NextResponse.json(viaRpc);
+    }
 
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = no rows found
@@ -66,6 +83,7 @@ export async function GET() {
         in_app_enabled: true,
         banner_enabled: true,
         follow_up_notifications_enabled: true,
+        shipment_event_preferences: {},
         quiet_hours_start: null,
         quiet_hours_end: null,
         quiet_hours_time_zone: 'Africa/Lagos',
@@ -159,12 +177,35 @@ export async function PATCH(request: NextRequest) {
     if (body.quiet_hours_time_zone !== undefined)
       updates.quiet_hours_time_zone = body.quiet_hours_time_zone;
 
+    // Toggles (alone or with ordinary fields) are saved in one atomic,
+    // permission-checked RPC, so a combined PATCH fully applies or not at all
+    // and staff with settings.edit are not sent through owner-only policies.
+    if (body.shipment_event_preferences !== undefined) {
+      const { merchant_id: _merchantId, ...fields } = updates;
+      const { data: mergedRow, error: mergeError } = await supabase.rpc(
+        'merge_shipment_event_preferences',
+        {
+          p_merchant_id: merchantId,
+          p_patch: body.shipment_event_preferences,
+          p_fields: fields as never,
+        }
+      );
+      if (mergeError || !mergedRow) {
+        console.error('Error saving notification preferences:', mergeError);
+        return NextResponse.json(
+          { error: 'Failed to update preferences' },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(mergedRow);
+    }
+
     // Upsert preferences (create if not exists, update if exists)
     const { data: updated, error: updateError } = await supabase
       .from('notification_preferences')
       .upsert(updates, { onConflict: 'merchant_id' })
       .select(
-        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
       )
       .single();
 

@@ -18,6 +18,8 @@ import {
   getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
+  isRedundantPlatformListParenthetical,
+  stripRedundantPlatformParentheticals,
 } from './seo-utils';
 import { makeSeoProduct as makeProduct } from './seo-utils-product-schema-test-helper';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
@@ -512,17 +514,19 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    expect(variants[0]?.brand).toEqual({
+    expect(schema.brand).toEqual({
       '@type': 'Brand',
       name: 'Samsung',
     });
+    expect(variants[0]).not.toHaveProperty('brand');
     expect(schema.gtin).toBe('1234567890123');
     expect(schema.mpn).toBe('SM-S25-256-JB');
     expect(variants[0]).not.toHaveProperty('gtin');
     expect(variants[0]).not.toHaveProperty('mpn');
-    expect(variants[0]?.description).toBe(
+    expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
+    expect(variants[0]).not.toHaveProperty('description');
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -543,7 +547,6 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    expect(variants[0]?.description).toBe('A test product');
     expect(variants[0]).not.toHaveProperty('color');
     expect(variants[0]).not.toHaveProperty('size');
   });
@@ -689,6 +692,48 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(returnPolicy.applicableCountry).toBe('NG');
     expect(returnPolicy.returnPolicyCountry).toBe('NG');
     expect(returnPolicy.merchantReturnDays).toBe(7);
+  });
+
+  it('defines shared offer policies once and references them from later variants', () => {
+    const product = makeProduct({
+      variants: [1, 2, 3].map((n) => ({
+        id: `v${n}`,
+        product_id: 'test-123',
+        merchant_id: 'm1',
+        attributes: { storage: `${n * 128}GB` },
+        stock_quantity: 5,
+      })),
+    });
+
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      undefined,
+      { productUrl: 'https://shop.example/phones/test-product' }
+    );
+    const offers = (schema.hasVariant as Record<string, unknown>[]).map(
+      (variant) => variant.offers as Record<string, unknown>
+    );
+
+    expect(offers[0]?.shippingDetails).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      '@type': 'OfferShippingDetails',
+    });
+    expect(offers[0]?.hasMerchantReturnPolicy).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#return-policy',
+      '@type': 'MerchantReturnPolicy',
+    });
+    for (const offer of offers.slice(1)) {
+      expect(offer.shippingDetails).toEqual({
+        '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      });
+      expect(offer.hasMerchantReturnPolicy).toEqual({
+        '@id': 'https://shop.example/phones/test-product#return-policy',
+      });
+    }
   });
 
   it('uses structured trust profile shipping and return settings instead of hardcoded defaults', () => {
@@ -1372,6 +1417,846 @@ describe('generateMetaTitle', () => {
         maxLength: 70,
       })
     ).toBe('Restore your phone fast | Store');
+  });
+
+  describe('platform-list-only parenthetical compaction', () => {
+    it('compacts redundant platform list with suffix and returns full title without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - ₦112,000',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - ₦112,000 | Ogabassey');
+    });
+
+    it('compacts (PS5 & Xbox Series X) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 & Xbox Series X) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
+    it('compacts (PS5 or Xbox) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 or Xbox) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
+    it('compacts (Nintendo Switch / Nintendo Switch 2) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy The Legend of Zelda (Nintendo Switch / Nintendo Switch 2) Pre-Order Now',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy The Legend of Zelda Pre-Order Now | Ogabassey');
+    });
+
+    it('retains parenthetical untouched when short title already fits within maxLength', () => {
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4)');
+
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+          suffix: 'Store',
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4) | Store');
+    });
+
+    it('preserves single-platform parentheticals even when over maxLength', () => {
+      const ps5 = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5) - Ultimate Edition With Lots of Extra Bonus Content',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(ps5).toContain('(PS5)');
+
+      const switchTitle = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch) Tears of the Kingdom Special Edition Full Guide',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switchTitle).toContain('(Nintendo Switch)');
+
+      const switch2 = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch 2) Next Chapter Next-Gen Deluxe Set',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switch2).toContain('(Nintendo Switch 2)');
+
+      const xbox = generateMetaTitle(
+        'Forza Motorsport (Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xbox).toContain('(Xbox Series X)');
+    });
+
+    it('preserves single-platform synonym lists (fewer than 2 distinct identities) even when over maxLength', () => {
+      const ps5Synonyms = generateMetaTitle(
+        'EA Sports FC 27 (PS5 / PlayStation 5) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(ps5Synonyms).toContain('(PS5 / PlayStation 5)');
+
+      const pcSynonyms = generateMetaTitle(
+        'EA Sports FC 27 (PC / Windows / Steam) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(pcSynonyms).toContain('(PC / Windows / Steam)');
+
+      const xboxSeriesSynonyms = generateMetaTitle(
+        'Forza Motorsport (Xbox, Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxSeriesSynonyms).toContain('(Xbox, Xbox Series X)');
+
+      const xboxOneSynonyms = generateMetaTitle(
+        'Forza Horizon 4 (Xbox, Xbox One) Complete Ultimate Edition Racing Pass Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxOneSynonyms).toContain('(Xbox, Xbox One)');
+    });
+
+    it('preserves mixed, unknown, edition, and condition qualifiers even when over maxLength', () => {
+      const mixed = generateMetaTitle(
+        'Sony PlayStation 5 (PS5, Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(mixed).toContain('(PS5, Disc Edition)');
+
+      const edition = generateMetaTitle(
+        'Sony PlayStation 5 Slim (Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(edition).toContain('(Disc Edition)');
+
+      const wifi = generateMetaTitle(
+        'Apple iPad Pro (Wi-Fi Only) 11-inch M4 Chip Liquid Retina Display Space Gray',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(wifi).toContain('(Wi-Fi Only)');
+
+      const refurbished = generateMetaTitle(
+        'Apple iPhone 14 Pro Max (Refurbished) 256GB Deep Purple Unlocked Grade A Best Deal',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(refurbished).toContain('(Refurbished)');
+    });
+
+    it('compacts Oxford-comma and pipe platform lists', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, and Xbox) - Best Price in Nigeria',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 | PS4) - Best Price in Nigeria Today',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria Today | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5, Xbox Series X|S) at Best Price Guaranteed',
+          {
+            maxLength: 65,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy Monster Hunter Wilds at Best Price Guaranteed | Ogabassey');
+    });
+
+    it('compacts unspaced parenthetical without token concatenation', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy EA Sports FC 27 Edition Now Online at Best Price | Ogabassey'
+      );
+    });
+
+    it('compacts parenthetical before punctuation without leaving a leading space', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today | Ogabassey');
+    });
+
+    it('slices compacted title to allowedBaseLength and appends ellipsis when still too long with suffix', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship Edition with Extra DLC and Season Pass',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(title).toBe(
+        'Buy EA Sports FC 27 - Ultimate Championship Edition wit... | Ogabassey'
+      );
+      expect(title.length).toBeLessThanOrEqual(70);
+    });
+
+    it('preserves existing fallback slice behavior when suffix is overlong and allowedBaseLength <= 0', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2)',
+        {
+          maxLength: 20,
+          suffix: 'Very Long Merchant Suffix That Exceeds Max',
+        }
+      );
+      expect(title).toBe('Buy EA Sports FC ...');
+      expect(title.length).toBe(20);
+    });
+
+    it('handles genuine no-suffix path when title fits after compaction without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Best Price',
+          {
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price');
+    });
+
+    it('handles genuine no-suffix path when title is still too long after compaction', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship League Edition',
+          {
+            maxLength: 40,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Ultimate Champi...');
+    });
+
+    it('handles empty titles, fallbacks, and identity suffixes correctly', () => {
+      expect(generateMetaTitle('', { fallback: 'Default Title' })).toBe(
+        'Default Title'
+      );
+      expect(generateMetaTitle('')).toBe('');
+      expect(generateMetaTitle('Ogabassey', { suffix: 'Ogabassey' })).toBe(
+        'Ogabassey'
+      );
+    });
+
+    it('handles titles consisting solely of a redundant platform list when over length', () => {
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 30,
+        })
+      ).toBe('Ogabassey');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', { maxLength: 20 })
+      ).toBe('');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey Electronics Store',
+          maxLength: 15,
+        })
+      ).toBe('Ogabassey El...');
+    });
+
+    it('strips orphan trailing separators before suffix or end of title when over length', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27, (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27: (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27');
+    });
+
+    it('handles titles with orphan separators before terminal punctuation when compacted', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27. | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27.');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5 - PS4)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 Pro, Xbox Series X) - Best Deal',
+          {
+            suffix: 'Ogabassey',
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Deal | Ogabassey');
+    });
+  });
+
+  describe('isRedundantPlatformListParenthetical detector', () => {
+    it('returns true for multi-platform lists', () => {
+      expect(
+        isRedundantPlatformListParenthetical(
+          'PS5, PS4, Xbox, Switch & Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 & Xbox Series X')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical(
+          'Nintendo Switch / Nintendo Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('switch, pc')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('playstation 4; xbox one; steam')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, and Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, & Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5 | PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X|S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X/S')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X & S')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X and S')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Series X & S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Series S and X')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox, Xbox Series X, PS5')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 - PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 – PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 — PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5-PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X - PS5')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Pro, Xbox Series X')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PlayStation 5 Pro, Steam Deck')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch OLED, Xbox One X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Switch OLED, PS5')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Steam Deck, Switch')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox One X, PS4')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Switch Lite, PS5')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Slim, Xbox Series X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox 360, PS3')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS Vita, Nintendo Switch')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Wii U, Nintendo Switch')
+      ).toBe(true);
+    });
+
+    it('returns false for single-platform parentheticals', () => {
+      expect(isRedundantPlatformListParenthetical('PS5')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PlayStation 5 Pro')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Steam Deck')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox 360')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS Vita')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wii U')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch OLED')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Switch OLED')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Switch Lite')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch 2')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series S')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X|S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X/S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X & S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X and S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Series X & S')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Series S and X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox Series X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox One')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox / Xbox Series X')).toBe(
+        false
+      );
+    });
+
+    it('returns false for single-platform synonym lists with fewer than 2 distinct identities', () => {
+      expect(isRedundantPlatformListParenthetical('PS5 / PlayStation 5')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4, PS4 Pro')).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox Series X, Xbox Series S')
+      ).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch, Switch OLED')
+      ).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One, Xbox One X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PC / Windows / Steam')).toBe(
+        false
+      );
+    });
+
+    it('returns false for mixed, unknown, condition, or edition qualifiers', () => {
+      expect(isRedundantPlatformListParenthetical('PS5, Disc Edition')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Disc Edition')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wi-Fi Only')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Refurbished')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, ')).toBe(false);
+    });
+  });
+
+  describe('stripRedundantPlatformParentheticals', () => {
+    it('strips redundant platform parentheticals and normalizes spacing and punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27 Edition Now Online at Best Price');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today'
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4), Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27, Best Price');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4)! In Stock'
+        )
+      ).toBe('Buy EA Sports FC 27! In Stock');
+    });
+
+    it('preserves meaningful qualifiers unchanged', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'PlayStation 5 Console (Disc Edition)'
+        )
+      ).toBe('PlayStation 5 Console (Disc Edition)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPad Pro 11-inch (Wi-Fi Only)')
+      ).toBe('iPad Pro 11-inch (Wi-Fi Only)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPhone 13 128GB (Refurbished)')
+      ).toBe('iPhone 13 128GB (Refurbished)');
+    });
+
+    it('does not mutate unrelated punctuation spacing elsewhere in the string', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Console (Disc Edition) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Console (Disc Edition) : Best Price ... Guaranteed !');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Game: Best Price ... Guaranteed !');
+    });
+
+    it('handles leading redundant parentheticals without leaving orphan punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4): Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4), Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) - Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) / Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) & Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) -30% Deal Today')
+      ).toBe('-30% Deal Today');
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) /deal')).toBe(
+        '/deal'
+      );
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) &sons')).toBe(
+        '&sons'
+      );
+    });
+
+    it('compacts adjacent redundant parentheticals without creating double spaces', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Xbox, PC) Edition'
+        )
+      ).toBe('Game Edition');
+    });
+
+    it('preserves single space before a preserved parenthetical following a redundant parenthetical', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Disc Edition) Edition'
+        )
+      ).toBe('Game (Disc Edition) Edition');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Refurbished) Edition'
+        )
+      ).toBe('Game (Refurbished) Edition');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) (Disc Edition)')
+      ).toBe('(Disc Edition)');
+    });
+
+    it('handles trailing redundant parentheticals without leaving orphan separators', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man (PS5, PS4)')
+      ).toBe('Spider-Man');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (Disc Edition) (PS5, PS4)'
+        )
+      ).toBe('Buy Game - (Disc Edition)');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) -')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) and')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) |')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) /')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) &')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) –')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) —')
+      ).toBe('Buy Game');
+    });
+
+    it('drops orphan separators before retained terminal punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4),')
+      ).toBe('Buy Game,');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4):')
+      ).toBe('Buy Game:');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4);')
+      ).toBe('Buy Game;');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)!')
+      ).toBe('Buy Game!');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)?')
+      ).toBe('Buy Game?');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5 - PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (PS5 Pro, Xbox Series X).'
+        )
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man - (PS5, PS4).')
+      ).toBe('Spider-Man.');
+    });
+
+    it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {
+      expect(
+        stripRedundantPlatformParentheticals('-30% Deal (PS5, PS4) Today')
+      ).toBe('-30% Deal Today');
+      expect(
+        stripRedundantPlatformParentheticals(
+          '| Special Offer (PS5, PS4) Right Now'
+        )
+      ).toBe('| Special Offer Right Now');
+    });
+
+    it('localizes spacing normalization without collapsing double spaces elsewhere', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Deal  of the Day (PS5, PS4) Sale  Now'
+        )
+      ).toBe('Deal  of the Day Sale  Now');
+    });
+
+    it('localizes orphan separator cleanup to the removed parenthetical boundary without touching distant punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All'
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
+
+      expect(
+        stripRedundantPlatformParentheticals('Game (PS5, PS4) Finals - : Sale')
+      ).toBe('Game Finals - : Sale');
+
+      expect(
+        generateMetaTitle(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All',
+          { maxLength: 45 }
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
+    });
+
+    it('handles adjoining word conjunctions when platform list is stripped', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) and Best Game')
+      ).toBe('Best Game');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5 or PS4) or Best Game')
+      ).toBe('Best Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4).')
+      ).toBe('Buy Game.');
+    });
+
+    it('processes long separator runs without catastrophic backtracking', () => {
+      const longSeparatorsNoParen = `Buy Game ${'-'.repeat(50)} Edition Today`;
+      expect(stripRedundantPlatformParentheticals(longSeparatorsNoParen)).toBe(
+        longSeparatorsNoParen
+      );
+
+      const longSeparatorsWithParen = `Buy Game ${'-'.repeat(50)} (PS5, PS4) Edition Today`;
+      expect(
+        stripRedundantPlatformParentheticals(longSeparatorsWithParen)
+      ).toBe(`Buy Game ${'-'.repeat(50)} Edition Today`);
+    });
   });
 });
 

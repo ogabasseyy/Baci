@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "91023620b9fe262475d214dab47b86a0194631f5",
+  "originMainSha": "ae930d3e2464076a9c87925e67f4cfaa460cf2fa",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "fc15cfaee63ba2016a959c3449bb4f4cfd8ed4a9fc809fae36b142261686758e",
-  "routingProxyInputSha256": "dacc788004a783d0db1ca87b1b6983907d571a3e47330ffc9ad95bb005c273c9",
+  "routeTreeSha256": "2d080b08dbdd37e8d0ce58593c8d22ace4bc93e64bb0ecc8831fefb335368630",
+  "routingProxyInputSha256": "9331ad67cbf4d1d5ca2e7a1757592e30ad2bf746164955d59a751526fc9a1dba",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1146,6 +1146,44 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-cancel/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-complete/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-complete",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-pin/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-pin/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/customer/savings/goals/route.ts",
       "methods": [
         "GET",
@@ -1244,6 +1282,18 @@
       "routePattern": "/api/storefront/customer/savings/primary-provisioning",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-provisioning/setup/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-provisioning/setup",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/setup/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1435,6 +1485,55 @@
       "routePattern": "/api/storefront/customer/wallet/top-up/usdt/{reference}",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/wallet/top-up/usdt/[reference]/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/change/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/change",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/change/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/reset/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/reset",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/reset/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/set/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/set",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/set/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/status/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8648,5 +8747,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "22685a125d34f0460457c7726cb7fd0fbf9e59de8f09e4e9bf6ce44aca2eaab6"
+  "inventorySha256": "de5a60fd0cce595fcd015d8be6015409917e03e579ac7987f495ed595c985c2d"
 }

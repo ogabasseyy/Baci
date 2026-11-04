@@ -5,6 +5,7 @@ import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/stagin
 import { transferToBank, transferToWallet } from '@/lib/piggyvest/transfers';
 import { fundPiggyvestWalletTestMode } from '@/lib/piggyvest/wallet-funding';
 import { createPiggyvestWallet } from '@/lib/piggyvest/wallets';
+import { goalWalletBaseName, goalWalletName } from './goal-wallet-names';
 import type { MutationIntent } from './mutation-gate';
 import type { JournalOutcome } from './mutation-journal';
 import { type CallResult, ProviderReads } from './provider-reads';
@@ -36,7 +37,7 @@ export function qaIdentityFor(qaKey: string): QaIdentity {
   return {
     qaKey,
     thirdPartyIdentifier: `pvbproof:${qaKey}`,
-    goalWalletName: `pvbproof-goal-${qaKey}`.slice(0, 120),
+    goalWalletName: goalWalletBaseName(qaKey),
   };
 }
 
@@ -63,7 +64,7 @@ export function classifyOutcome(call: CallResult): JournalOutcome {
 }
 
 export class ProviderApi extends ProviderReads {
-  private async mutate(
+  protected async mutate(
     intent: MutationIntent,
     send: (reference: string) => Promise<unknown>
   ): Promise<MutationOutcome> {
@@ -152,15 +153,26 @@ export class ProviderApi extends ProviderReads {
     );
   }
 
-  createGoalWallet(
+  /**
+   * `subaccountName` is the full name to send (default: this QA key's goal
+   * name); accrual defaults to on. Both are pinned in the journaled intent.
+   * A name over the provider limit rejects before anything is journaled.
+   */
+  async createGoalWallet(
     qa: QaIdentity,
     customerId: string,
     slot: string,
-    options: { nameSuffix?: string; payoutWalletId?: string } = {}
+    options: {
+      subaccountName?: string;
+      payoutWalletId?: string;
+      enableInterestAccrual?: boolean;
+    } = {}
   ) {
-    const subaccountName =
-      `${qa.goalWalletName}${options.nameSuffix ?? ''}`.slice(0, 120);
-    return this.mutate(
+    const subaccountName = goalWalletName(
+      options.subaccountName ?? qa.goalWalletName
+    );
+    const enableInterestAccrual = options.enableInterestAccrual ?? true;
+    return await this.mutate(
       {
         slot,
         op: 'create_wallet',
@@ -169,6 +181,7 @@ export class ProviderApi extends ProviderReads {
         bodyMatch: {
           subaccount_name: subaccountName,
           customer_id: customerId,
+          enable_interest_accrual: enableInterestAccrual,
           ...(options.payoutWalletId
             ? { interest_payout_wallet: options.payoutWalletId }
             : {}),
@@ -181,7 +194,7 @@ export class ProviderApi extends ProviderReads {
           subaccountName,
           customerId,
           reserveVirtualAccount: true,
-          enableInterestAccrual: true,
+          enableInterestAccrual,
           interestPayoutWallet: options.payoutWalletId,
         })
     );

@@ -14,12 +14,32 @@ import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
  * treat it as authoritative permission to use the working legacy flows
  * for that call. Only the base code is cacheable (see below): the
  * feature codes describe independently configured runtimes.
+ *
+ * PRIMARY_CARD_FUNDING_RETIRED is the card feature's permanent form: the
+ * server answers every card initialize with it before reserving anything,
+ * so a saved placeholder with no operation ID is released and the regular
+ * top-up runs, exactly as for PRIMARY_CARD_NOT_READY.
  */
 const PRIMARY_NOT_READY_CODES = new Set([
   'PIGGYVEST_NOT_READY',
   'PRIMARY_CARD_NOT_READY',
+  'PRIMARY_CARD_FUNDING_RETIRED',
   'SAVINGS_NOT_READY',
 ]);
+const PRIMARY_WALLET_REVIEW_CODES = new Set([
+  'OWNERSHIP_REVIEW_REQUIRED',
+  'INTEREST_ROUTING_REVIEW_REQUIRED',
+]);
+
+export function isPrimaryWalletReviewRequired(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    PRIMARY_WALLET_REVIEW_CODES.has((error as { code: string }).code)
+  );
+}
 
 export function isPrimaryWalletNotReady(error: unknown): boolean {
   return (
@@ -181,6 +201,12 @@ async function sharedProbe(
       observePiggyvestPrimaryCapability(merchantId, true);
       return { available: true, account: snapshot.account };
     } catch (error) {
+      if (isPrimaryWalletReviewRequired(error)) {
+        // Review codes prove this merchant is primary-enabled, but the
+        // response has no account snapshot to retain or share.
+        observePiggyvestPrimaryCapability(merchantId, true);
+        return { available: true };
+      }
       if (isProfileVerificationRequired(error)) {
         // The wallet GET emits this 409 only after the runtime check
         // passes, so it proves the merchant is primary-enabled even

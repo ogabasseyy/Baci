@@ -18,6 +18,7 @@ import {
   readPrimaryWalletSavingsRecoveryRuntime,
   readPrimaryWalletSavingsRuntime,
 } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import { chargeWalletPinCustomerLimit } from '@/lib/wallet-pin/wallet-pin-customer-limit';
 import { piggyvestGoalPinSchemas } from '@/schemas/piggyvest-goal-pin';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -88,6 +89,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         'PROFILE_VERIFICATION_REQUIRED',
         409
       );
+    const limited = await chargeWalletPinCustomerLimit(
+      'goal-verify',
+      identity.merchantId,
+      identity.userId
+    );
+    if (limited) return limited;
     const supabase = auth.supabase;
     // A funding proof is only issued for an active goal of this customer
     // while the customer savings feature is on. A cancel or complete proof

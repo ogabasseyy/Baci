@@ -116,4 +116,14 @@ describe('buildPriceBandCards availability and price filtering', () => {
 
     expect(cards).toEqual([]);
   });
+
+  it('returns [] for prototype keys like constructor without throwing', () => {
+    const cards = buildPriceBandCards({
+      categorySlug: 'constructor',
+      storeUrl: 'https://ogabassey.com',
+      products: [],
+      merchantCurrency: 'NGN',
+    });
+    expect(cards).toEqual([]);
+  });
 });

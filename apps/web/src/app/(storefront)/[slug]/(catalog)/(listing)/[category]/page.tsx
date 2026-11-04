@@ -55,18 +55,10 @@ function buildCategoryNotFoundMetadata(
   return {
     title,
     description,
-    // Replace root metadata alternates so soft-404 pages do not inherit a canonical.
     alternates: null,
     robots: { index: false, follow: true },
-    openGraph: {
-      title,
-      description,
-    },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-    },
+    openGraph: { title, description },
+    twitter: { card: 'summary', title, description },
   };
 }
 

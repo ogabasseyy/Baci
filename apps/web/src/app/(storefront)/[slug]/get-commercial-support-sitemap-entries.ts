@@ -4,13 +4,16 @@ import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
 import type { RawDbProduct } from '@/lib/raw-db-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildCommercialSupportDiscoveryLinks } from '@/lib/storefront-compare/build-compare-discovery-links';
+import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 import { isStorefrontSitemapPublished } from '@/lib/storefront-seo/is-storefront-sitemap-published';
+import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { getGamingGraphicsHubSitemapEntries } from './gaming-graphics-hub-sitemap';
 import { getCommercialSupportCategorySitemapEntries } from './get-commercial-support-category-sitemap-entries';
 import type { StorefrontSitemapContext } from './sitemap-data';
 
 export const SITEMAP_MAX_COMMERCIAL_SUPPORT_URLS = 45_000;
-const SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT = 150;
+const SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT =
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT;
 export const SITEMAP_COMMERCIAL_SUPPORT_CATEGORY_CONCURRENCY = 4;
 
 function isCategoryWithSlug(category: unknown): category is { slug: string } {
@@ -128,7 +131,11 @@ export async function getCommercialSupportSitemapEntries(
     );
     const batchEntries = await Promise.all(
       categoryBatch.map(async (entry) => {
-        const categorySlug = entry.url.replace(`${context.storeUrl}/`, '');
+        const categorySlug =
+          entry.categorySlug ?? entry.url.replace(`${context.storeUrl}/`, '');
+        if (!categorySlug || !evaluateStorefrontSlugSafety(categorySlug).safe) {
+          return [];
+        }
         const categoryData = await getCachedCategoryPageData(
           context.merchant.id,
           categorySlug,
@@ -137,13 +144,21 @@ export async function getCommercialSupportSitemapEntries(
           SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
         );
 
-        if (!categoryData || categoryData.isCollection) {
+        if (
+          !categoryData ||
+          categoryData.isCollection ||
+          categoryData.isInactiveCategory ||
+          categoryData.categoryQueryFailed ||
+          categoryData.productsQueryFailed ||
+          categoryData.productIdsQueryFailed
+        ) {
           return [];
         }
 
         const products = (categoryData.products ?? [])
           .filter(isSitemapProductRecord)
           .map((product) => ({
+            id: product.id,
             slug: product.slug || product.id,
             name: product.name,
             brand: product.brand ?? null,
@@ -161,7 +176,10 @@ export async function getCommercialSupportSitemapEntries(
                   ? Number(product.stock_quantity)
                   : null,
             manage_stock: product.manage_stock,
-            has_condition_offers: product.has_condition_offers ?? false,
+            ...(product.has_condition_offers !== undefined &&
+            product.has_condition_offers !== null
+              ? { has_condition_offers: Boolean(product.has_condition_offers) }
+              : {}),
             category_slug: getRawProductCategorySlug(product, categorySlug),
             product_key_specs: normalizeProductKeySpecs(
               product.product_key_specs

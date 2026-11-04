@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T06:53:14.429489+00:00",
-  "source_revision": "8c3126ea63c325d6d8060de0f30175add87d07e5",
-  "evidence_digest": "57491a81e97745971d0cc7207ab15bd657d7443d576376389d7df3db8d031279",
-  "claims_digest": "be85a416486306ca59ddb7bc4b330ff8cc7b5a19766e496e45ca8411fcebef01",
+  "reviewed_at": "2026-11-04T11:06:48.167488+00:00",
+  "source_revision": "4c6622c95f21f472a83a47bb050004f8c0ac2006",
+  "evidence_digest": "70d1955707e6f103470ccdd8d66ad6bd6b2b9f98cc2272fff491341002df80df",
+  "claims_digest": "570b83bc22606df27775f7a1ad2d73b7296121c03b149da3eb213d0986b35ef3",
   "review_scope": "Source evidence only. Re-reviewed guest OAuth consent and renewal: new consent enables a refresh-renewed 90-day idle connection, while existing grants and pending legacy consent/code records retain their original deadline. Cart lifetime remains seven days; expired carts roll over by CAS to a fresh empty handle. Revocation, replay detection, tenant isolation and storage capacity limits remain enforced. Focused OAuth and PostgreSQL tests pass; this renewal change is not yet deployed or verified in the submission app. All register-cited capability sources are unchanged since the prior reviewed revision. No capability status is promoted to production_verified; live release, native acceptance and transaction readiness remain separate.",
   "capabilities": [
     {

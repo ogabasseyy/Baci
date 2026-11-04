@@ -70,12 +70,9 @@ test('outer Android release queues preserve pending runs instead of replacing th
 });
 
 test('the actionlint compatibility exception covers exactly the validated queue locations', () => {
-  const lintConfig = YAML.parse(readFileSync(new URL('../actionlint.yaml', import.meta.url), 'utf8'));
-  assert.deepEqual(lintConfig.paths, {
-    '.github/workflows/{deploy,android-release,android-storefront-release}.yml': {
-      ignore: ['^unexpected key "queue" for "concurrency" section\\. expected one of "cancel-in-progress", "group"$'],
-    },
-  });
+  // The CWV runner authority pins actionlint.yaml, so the ignore is a CLI flag.
+  const lintConfig = readFileSync(new URL('../actionlint.yaml', import.meta.url), 'utf8');
+  assert.doesNotMatch(lintConfig, /queue|ignore/);
   for (const release of [deployment, ...android]) {
     const queuedJobs = Object.entries(release.jobs).filter(([, job]) => job.concurrency?.queue !== undefined);
     assert.equal(queuedJobs.length, 1);
@@ -85,6 +82,8 @@ test('the actionlint compatibility exception covers exactly the validated queue 
   const steps = lintWorkflow.jobs.actionlint.steps;
   const validatorIndex = steps.findIndex(step => step.run === 'node --test .github/scripts/vps-build-resource-queue.test.mjs .github/scripts/production-typecheck-scope.test.mjs');
   const lintIndex = steps.findIndex(step => step.name === 'Run actionlint');
+  assert.match(steps[lintIndex].run, /rhysd\/actionlint@sha256:[0-9a-f]{64}/);
+  assert.match(steps[lintIndex].run, /-ignore '\^unexpected key "queue" for "concurrency" section/);
   assert.ok(validatorIndex >= 0 && validatorIndex < lintIndex);
   assert.equal(steps[validatorIndex]['continue-on-error'], undefined);
   for (const event of ['push', 'pull_request']) {

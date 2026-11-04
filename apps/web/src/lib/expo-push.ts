@@ -71,7 +71,7 @@ export function formatCurrency(amount: number, currency = 'NGN'): string {
 
 type AdminSupabase = ReturnType<typeof createAdminClient>;
 
-const getExpo = createLazyExpoGetter(getExpoAccessToken);
+const getExpo = createLazyExpoGetter(() => getExpoAccessToken());
 
 function createAdminDelivery(supabase: AdminSupabase): PushDelivery {
   return { ...createAdminPushStore(supabase), getExpo };

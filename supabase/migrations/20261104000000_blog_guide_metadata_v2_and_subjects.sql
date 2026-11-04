@@ -21,11 +21,9 @@ ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_kind_check
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_metadata_source_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_metadata_source_check
   CHECK (metadata_source IN ('publisher', 'author', 'backfill_verified', 'unverified'));
-
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_metadata_status_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_metadata_status_check
   CHECK (metadata_status IN ('unverified', 'proposed', 'verified', 'stale', 'rejected'));
-
 ALTER TABLE public.blog_posts DROP CONSTRAINT IF EXISTS blog_posts_guide_scope_kind_matrix_check;
 ALTER TABLE public.blog_posts ADD CONSTRAINT blog_posts_guide_scope_kind_matrix_check
   CHECK (
@@ -54,7 +52,6 @@ CREATE TABLE IF NOT EXISTS public.blog_post_guide_subjects (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT blog_post_guide_subjects_unique UNIQUE (blog_post_id, product_id, subject_role)
 );
-
 CREATE INDEX IF NOT EXISTS idx_blog_post_guide_subjects_merchant_id ON public.blog_post_guide_subjects (merchant_id);
 CREATE INDEX IF NOT EXISTS idx_blog_post_guide_subjects_blog_post_id ON public.blog_post_guide_subjects (blog_post_id);
 CREATE INDEX IF NOT EXISTS idx_blog_post_guide_subjects_product_id ON public.blog_post_guide_subjects (product_id);
@@ -76,7 +73,6 @@ DROP TRIGGER IF EXISTS blog_post_guide_subjects_merchant_consistency_trigger ON 
 CREATE TRIGGER blog_post_guide_subjects_merchant_consistency_trigger
   BEFORE INSERT OR UPDATE ON public.blog_post_guide_subjects FOR EACH ROW
   EXECUTE FUNCTION public.enforce_blog_post_guide_subjects_merchant_consistency();
-
 ALTER TABLE public.blog_post_guide_subjects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can read published blog guide subjects" ON public.blog_post_guide_subjects;
 CREATE POLICY "Public can read published blog guide subjects" ON public.blog_post_guide_subjects FOR SELECT
@@ -98,7 +94,6 @@ CREATE POLICY "Merchant staff can manage blog guide subjects" ON public.blog_pos
     AND EXISTS (SELECT 1 FROM public.blog_posts WHERE blog_posts.id = blog_post_guide_subjects.blog_post_id AND blog_posts.merchant_id = blog_post_guide_subjects.merchant_id)
     AND EXISTS (SELECT 1 FROM public.products WHERE products.id = blog_post_guide_subjects.product_id AND products.merchant_id = blog_post_guide_subjects.merchant_id)
   );
-
 GRANT SELECT ON public.blog_post_guide_subjects TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.blog_post_guide_subjects TO authenticated;
 GRANT ALL ON public.blog_post_guide_subjects TO service_role;
@@ -174,16 +169,21 @@ CREATE TRIGGER categories_stale_blog_guide_metadata_trigger
 CREATE OR REPLACE FUNCTION public.blog_post_guide_subjects_stale_on_delete()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 BEGIN
-  UPDATE public.blog_posts SET metadata_status = 'stale'
-  WHERE id = OLD.blog_post_id AND merchant_id = OLD.merchant_id AND metadata_status = 'verified';
-  RETURN OLD;
+  IF TG_OP = 'DELETE' THEN
+    UPDATE public.blog_posts SET metadata_status = 'stale' WHERE id = OLD.blog_post_id AND merchant_id = OLD.merchant_id AND metadata_status = 'verified';
+    RETURN OLD;
+  END IF;
+  IF OLD.blog_post_id IS DISTINCT FROM NEW.blog_post_id OR OLD.product_id IS DISTINCT FROM NEW.product_id OR OLD.subject_role IS DISTINCT FROM NEW.subject_role OR OLD.merchant_id IS DISTINCT FROM NEW.merchant_id THEN
+    UPDATE public.blog_posts SET metadata_status = 'stale' WHERE metadata_status = 'verified' AND ((id = OLD.blog_post_id AND merchant_id = OLD.merchant_id) OR (id = NEW.blog_post_id AND merchant_id = NEW.merchant_id));
+  END IF;
+  RETURN NEW;
 END;
 $$;
 ALTER FUNCTION public.blog_post_guide_subjects_stale_on_delete() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.blog_post_guide_subjects_stale_on_delete() FROM PUBLIC;
 DROP TRIGGER IF EXISTS blog_post_guide_subjects_stale_on_delete_trigger ON public.blog_post_guide_subjects;
 CREATE TRIGGER blog_post_guide_subjects_stale_on_delete_trigger
-  AFTER DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
+  AFTER UPDATE OR DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
 
 CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
   p_merchant_id uuid, p_page_kind text, p_category_id uuid DEFAULT NULL, p_product_id uuid DEFAULT NULL, p_limit integer DEFAULT 64

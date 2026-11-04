@@ -23,6 +23,10 @@ export async function loadCategoryHubContent(input: {
     !input.categoryData.isCollection &&
     !input.categoryData.isInactiveCategory &&
     Boolean(input.categoryData.category?.id);
+  const canLoadHubPool =
+    !input.categoryData.isCollection &&
+    !input.categoryData.isInactiveCategory &&
+    Boolean(input.storeSlug);
 
   const [guidePosts, brandAuthorityEntries, hubCategoryData] =
     await Promise.all([
@@ -35,7 +39,7 @@ export async function loadCategoryHubContent(input: {
       canLoadAuthority
         ? getCachedBrandAuthorityEntries(input.merchantId, input.categorySlug)
         : Promise.resolve([]),
-      canLoadAuthority && input.storeSlug
+      canLoadHubPool && input.storeSlug
         ? getCachedCategoryPageData(
             input.merchantId,
             input.categorySlug,

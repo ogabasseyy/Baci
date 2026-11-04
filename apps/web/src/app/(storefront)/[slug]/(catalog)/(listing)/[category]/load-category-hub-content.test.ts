@@ -85,4 +85,36 @@ describe('loadCategoryHubContent', () => {
     );
     expect(result.hubProducts).toEqual([{ id: 'prod-1', name: 'Product 1' }]);
   });
+
+  it('loads 150-product canonical pool for legacy categories without a category row', async () => {
+    mockCategoryPageData.mockResolvedValue({
+      products: [{ id: 'prod-legacy', name: 'Legacy Product' }],
+      productsQueryFailed: false,
+    });
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: null,
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(result.brandAuthorityEntries).toEqual([]);
+    expect(mockAuthority).not.toHaveBeenCalled();
+    expect(mockCategoryPageData).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      'ogabassey',
+      0,
+      150
+    );
+    expect(result.hubProducts).toEqual([
+      { id: 'prod-legacy', name: 'Legacy Product' },
+    ]);
+  });
 });

@@ -36,6 +36,7 @@ import {
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
 } from './category-page-content-helpers';
+import { loadCategoryHubContent } from './load-category-hub-content';
 import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
@@ -55,18 +56,10 @@ function buildCategoryNotFoundMetadata(
   return {
     title,
     description,
-    // Replace root metadata alternates so soft-404 pages do not inherit a canonical.
     alternates: null,
     robots: { index: false, follow: true },
-    openGraph: {
-      title,
-      description,
-    },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-    },
+    openGraph: { title, description },
+    twitter: { card: 'summary', title, description },
   };
 }
 
@@ -181,6 +174,15 @@ export async function generateMetadata({
     getCanonicalStorefrontFilterSearchParams(resolvedSearchParams);
   const canonicalFilterQuery = canonicalFilterParams.toString();
   const categoryUrl = `${baseUrl}/${category}${canonicalFilterQuery ? `?${canonicalFilterQuery}` : ''}`;
+  const { hubProducts } = await loadCategoryHubContent({
+    merchantId: merchant.id,
+    categorySlug: category,
+    categoryData: data,
+    storeSlug: slug,
+  });
+  const hubNormalizedProducts = hubProducts
+    ? normalizeCategoryPageProducts(hubProducts, category, merchant.country)
+    : normalizedProducts;
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
@@ -188,7 +190,7 @@ export async function generateMetadata({
     merchantBusinessName: merchant.business_name,
     merchantCurrency: resolveMerchantCurrencyConfig(merchant).code,
     storeUrl: baseUrl,
-    products: normalizedProducts,
+    products: hubNormalizedProducts,
   });
   const paginatedCategoryUrl = buildStorefrontPageHref(
     categoryUrl,

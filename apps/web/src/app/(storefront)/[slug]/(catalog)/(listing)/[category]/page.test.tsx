@@ -555,7 +555,7 @@ describe('category page route', () => {
   });
 
   it('renders non-priority category intro, features, and faq without hub cards', async () => {
-    vi.mocked(getCachedCategoryPageData).mockResolvedValueOnce({
+    vi.mocked(getCachedCategoryPageData).mockResolvedValue({
       ...categoryPageData,
       category: {
         ...categoryPageData.category,

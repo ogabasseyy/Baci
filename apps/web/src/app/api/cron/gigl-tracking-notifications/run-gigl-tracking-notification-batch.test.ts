@@ -1,10 +1,9 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
-import type { Database } from '@/types/supabase';
+import type { GiglNotificationRpcClient } from '@/lib/gigl-notification-worker-client';
 import { runGiglTrackingNotificationBatch } from './run-gigl-tracking-notification-batch';
 
 function clientWithRpc(rpc: ReturnType<typeof vi.fn>) {
-  return { rpc } as unknown as SupabaseClient<Database>;
+  return { rpc } as unknown as GiglNotificationRpcClient;
 }
 
 describe('runGiglTrackingNotificationBatch', () => {
@@ -37,7 +36,7 @@ describe('runGiglTrackingNotificationBatch', () => {
       workerId: 'gigl-notification-worker-1',
     });
 
-    expect(rpc).toHaveBeenCalledWith('claim_shipment_tracking_notifications', {
+    expect(rpc).toHaveBeenCalledWith('gigl_worker_claim_notifications', {
       p_limit: 10,
       p_worker_id: 'gigl-notification-worker-1',
     });

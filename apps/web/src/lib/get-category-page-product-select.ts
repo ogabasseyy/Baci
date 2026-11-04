@@ -15,6 +15,7 @@ const CATEGORY_PAGE_PRODUCT_BASE_SELECT = `
           stock,
           stock_quantity,
           manage_stock,
+          has_condition_offers,
           ${PRODUCT_KEY_SPECS_RELATION_SELECT}
         `;
 

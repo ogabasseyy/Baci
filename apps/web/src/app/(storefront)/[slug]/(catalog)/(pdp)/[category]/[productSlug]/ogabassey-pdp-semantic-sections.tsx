@@ -3,6 +3,10 @@ import type { Product } from '@/lib/products';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 import {
+  loadPriceBandDestinationPoolSafely,
+  type PriceBandDestinationProduct,
+} from '@/lib/storefront-content/load-price-band-destination-pool-safely';
+import {
   buildCompareLinkGraph,
   MAX_PRODUCT_COMPARE_LINKS,
 } from '@/lib/storefront-link-modules/compare-link-graph';
@@ -55,26 +59,33 @@ export async function OgabasseyPdpSemanticSections({
   // stale-while-revalidate and do not reach this catch.
   let seoLinkData: ProductSeoLinkData;
   let hubEligibilityInventory: EligibleHubProductInput[];
+  let priceBandDestinationPool: PriceBandDestinationProduct[] | null;
 
   try {
-    [seoLinkData, hubEligibilityInventory] = await Promise.all([
-      getCachedProductSeoLinkData({
-        blogEnabled: Boolean(merchant.feature_settings?.blog_enabled),
-        categorySlug,
-        merchantId: merchant.id,
-        productBrand: product.brand,
-        productId: String(product.id || ''),
-        productName: product.name,
-        productSlug: product.slug || String(product.id || ''),
-        storeSlug,
-      }),
-      loadPdpBrandHubEligibilityInventorySafely({
-        merchantId: merchant.id,
-        categorySlug,
-        productBrand: product.brand,
-        timeoutMs: PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
-      }),
-    ]);
+    [seoLinkData, hubEligibilityInventory, priceBandDestinationPool] =
+      await Promise.all([
+        getCachedProductSeoLinkData({
+          blogEnabled: Boolean(merchant.feature_settings?.blog_enabled),
+          categorySlug,
+          merchantId: merchant.id,
+          productBrand: product.brand,
+          productId: String(product.id || ''),
+          productName: product.name,
+          productSlug: product.slug || String(product.id || ''),
+          storeSlug,
+        }),
+        loadPdpBrandHubEligibilityInventorySafely({
+          merchantId: merchant.id,
+          categorySlug,
+          productBrand: product.brand,
+          timeoutMs: PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
+        }),
+        loadPriceBandDestinationPoolSafely({
+          merchantId: merchant.id,
+          merchantSlug: storeSlug,
+          categorySlug,
+        }),
+      ]);
   } catch (error) {
     console.warn('Failed to load Ogabassey PDP semantic links', {
       merchantId: merchant.id,
@@ -95,6 +106,8 @@ export async function OgabasseyPdpSemanticSections({
     stock: resolveSemanticCandidateStock(product),
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
+    manage_stock: product.manage_stock,
+    has_condition_offers: product.has_condition_offers,
   };
   const compareInventory = inventory.some(
     (candidate) => candidate.slug === currentProduct.slug
@@ -110,14 +123,17 @@ export async function OgabasseyPdpSemanticSections({
     anchorProductSlug: currentProduct.slug,
     maxLinks: MAX_PRODUCT_COMPARE_LINKS,
   });
+  const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const semanticModel = buildProductSemanticModel({
     storeUrl,
     merchantBusinessName: merchant.business_name || 'Baci Store',
     categorySlug,
     categoryName,
     countryCode: merchant.country,
+    merchantCurrency,
     currentProduct,
     inventory,
+    priceBandInventory: priceBandDestinationPool ?? [],
     hubEligibilityInventory,
     guidePosts,
     priorityGuidePostSlugs,
@@ -126,7 +142,7 @@ export async function OgabasseyPdpSemanticSections({
     product,
     merchantDisplayName: merchant.business_name || 'Baci Store',
     categoryName,
-    currency: resolveMerchantCurrencyConfig(merchant).code,
+    currency: merchantCurrency,
     country: merchant.country,
   });
 

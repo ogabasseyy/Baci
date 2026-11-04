@@ -9,6 +9,9 @@ import {
 } from '@/lib/proxy/api-security';
 
 vi.mock('server-only', () => ({}));
+vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
+  chargeWalletPinCustomerLimit: async () => null,
+}));
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   limit: vi.fn(),

@@ -165,6 +165,37 @@ describe('storefront-pdp-semantic-candidate-parser', () => {
       expect(candidate).toBeNull();
     });
 
+    it('parses has_condition_offers when present', () => {
+      const candidate = toProductSemanticCandidateFromJson(
+        {
+          slug: 'has-condition-offers',
+          name: 'Has Condition Offers',
+          price: 5000,
+          has_condition_offers: true,
+        },
+        'accessories'
+      );
+      expect(candidate?.has_condition_offers).toBe(true);
+    });
+
+    it.each([
+      ['number 1', 1],
+      ['string true', 'true'],
+      ['object', {}],
+    ])('rejects malformed present has_condition_offers value (%s) by returning null', (_label, malformedValue) => {
+      const candidate = toProductSemanticCandidateFromJson(
+        {
+          slug: 'test-product',
+          name: 'Test Product',
+          price: 10000,
+          has_condition_offers: malformedValue,
+        },
+        'smartphones'
+      );
+
+      expect(candidate).toBeNull();
+    });
+
     it('returns null when price is invalid', () => {
       expect(
         toProductSemanticCandidateFromJson(

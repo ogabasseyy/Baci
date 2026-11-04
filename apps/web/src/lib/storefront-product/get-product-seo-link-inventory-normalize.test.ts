@@ -18,9 +18,26 @@ describe('getProductSeoSelect', () => {
     expect(getProductSeoSelect(false)).toContain('manage_stock');
     expect(getProductSeoSelect(true)).toContain('manage_stock');
   });
+
+  it('includes has_condition_offers in category-scoped and unscoped select strings', () => {
+    expect(getProductSeoSelect(false)).toContain('has_condition_offers');
+    expect(getProductSeoSelect(true)).toContain('has_condition_offers');
+  });
 });
 
 describe('toProductSemanticCandidate', () => {
+  it('preserves has_condition_offers when present on product row', () => {
+    const candidate = toProductSemanticCandidate(
+      {
+        slug: 'macbook-pro',
+        name: 'MacBook Pro',
+        price: 1500,
+        has_condition_offers: true,
+      },
+      'fallback'
+    );
+    expect(candidate?.has_condition_offers).toBe(true);
+  });
   it('normalizes numeric string prices and prefers the direct category slug', () => {
     const candidate = toProductSemanticCandidate(
       {
@@ -63,6 +80,25 @@ describe('toProductSemanticCandidate', () => {
       expect.objectContaining({
         slug: 'legion-5',
         category_slug: 'gaming-laptops',
+      })
+    );
+  });
+
+  it('falls back to id for slug-less products to preserve raw pool index and price-band membership', () => {
+    const candidate = toProductSemanticCandidate(
+      {
+        id: 'prod-123',
+        slug: '',
+        name: 'Slugless Phone',
+        price: 1500,
+      },
+      'fallback'
+    );
+    expect(candidate).toEqual(
+      expect.objectContaining({
+        id: 'prod-123',
+        slug: 'prod-123',
+        has_explicit_slug: false,
       })
     );
   });

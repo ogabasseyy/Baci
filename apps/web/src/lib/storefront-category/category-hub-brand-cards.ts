@@ -7,6 +7,7 @@ import type {
   CategoryHubCard,
   CategoryHubProduct,
 } from '@/lib/storefront-category/category-hub-types';
+import { isCategoryHubProductAvailable } from '@/lib/storefront-category/is-category-hub-product-available';
 import { buildBrandCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 
 const BRAND_CARD_FALLBACK_LIMIT = 5;
@@ -21,14 +22,21 @@ function pickFirstBrandProduct(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)
     );
+  const pricedAvailableProducts = brandProducts.filter(
+    (product) =>
+      isCategoryHubProductAvailable(product) &&
+      Number.isFinite(product.price) &&
+      product.price > 0
+  );
 
-  return brandProducts[0] ?? null;
+  return pricedAvailableProducts[0] ?? brandProducts[0] ?? null;
 }
 
 export function buildCategoryHubBrandCards(input: {
   categorySlug: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  compareProducts?: CategoryHubProduct[];
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {
       productCount: number;
@@ -36,18 +44,22 @@ export function buildCategoryHubBrandCards(input: {
     }
   >;
 }) {
-  const priorityDefaults =
-    CATEGORY_HUB_DEFAULTS[
-      input.categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS
-    ];
+  const priorityDefaults = Object.hasOwn(
+    CATEGORY_HUB_DEFAULTS,
+    input.categorySlug
+  )
+    ? CATEGORY_HUB_DEFAULTS[
+        input.categorySlug as keyof typeof CATEGORY_HUB_DEFAULTS
+      ]
+    : null;
   if (!priorityDefaults) {
     return [];
   }
 
   const sortedBrands = countBrandsByActiveProduct(input.products);
-  const explicitAuthorityEntries = input.brandAuthorityEntries ?? [];
+  const explicitAuthorityEntries = input.brandAuthorityEntries;
   const eligibleAuthorityEntries =
-    explicitAuthorityEntries.length > 0
+    explicitAuthorityEntries !== undefined
       ? explicitAuthorityEntries
       : brandAuthorityTaxonomy.getEligibleEntries(
           input.categorySlug,
@@ -65,7 +77,7 @@ export function buildCategoryHubBrandCards(input: {
   );
   const canonicalBrandCandidate = buildBrandCompareCandidate({
     categorySlug: input.categorySlug,
-    products: input.products,
+    products: input.compareProducts ?? input.products,
   });
 
   const displayedBrands =

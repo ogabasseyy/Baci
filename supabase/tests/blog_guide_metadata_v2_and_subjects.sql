@@ -65,11 +65,11 @@ DECLARE
 BEGIN
   BEGIN
     INSERT INTO public.blog_posts (
-      id, merchant_id, title, slug, content, excerpt, category, status,
+      id, merchant_id, title, slug, content, excerpt, category, author_name, status,
       published_at, cluster_category_id, guide_scope, guide_kind, metadata_status
     ) VALUES (
       v_post_1, v_merchant, 'Spoofed Verified Insert', 'spoofed-verified-insert',
-      'Body', 'Excerpt', 'Smartphones', 'published', now(),
+      'Body', 'Excerpt', 'Smartphones', 'Guide Editor', 'published', now(),
       v_cat_phones, 'category_guide', 'buyer-guide', 'verified'
     );
   EXCEPTION
@@ -83,11 +83,11 @@ BEGIN
 
   -- Unverified authenticated INSERT succeeds
   INSERT INTO public.blog_posts (
-    id, merchant_id, title, slug, content, excerpt, category, status,
+    id, merchant_id, title, slug, content, excerpt, category, author_name, status,
     published_at, reading_time_minutes, cluster_category_id, guide_scope, guide_kind, applicable_brands
   ) VALUES (
     v_post_1, v_merchant, 'iPhone 16 Pro Max Buyer Guide', 'iphone-16-pro-max-buyer-guide',
-    'Detailed buyer guide.', 'Choose the right iPhone.', 'Smartphones', 'published',
+    'Detailed buyer guide.', 'Choose the right iPhone.', 'Smartphones', 'Guide Editor', 'published',
     now() - INTERVAL '2 hours', 6, v_cat_phones, 'product_specific', 'buyer-guide', ARRAY['Apple']
   );
 
@@ -139,28 +139,28 @@ BEGIN
    WHERE id = v_post_subject;
 
   INSERT INTO public.blog_posts (
-    id, merchant_id, title, slug, content, excerpt, category, status,
+    id, merchant_id, title, slug, content, excerpt, category, author_name, status,
     published_at, reading_time_minutes, cluster_category_id, guide_scope,
     guide_kind, applicable_brands, metadata_status, metadata_verified_at,
     metadata_verified_by, metadata_source_revision, metadata_contract_version
   ) VALUES
     (
       v_post_brand, v_merchant, 'Best Apple Phones in Nigeria', 'best-apple-phones-nigeria',
-      'Apple phone family comparison.', 'Compare Apple phones.', 'Smartphones', 'published',
+      'Apple phone family comparison.', 'Compare Apple phones.', 'Smartphones', 'Guide Editor', 'published',
       now() - INTERVAL '3 hours', 5, v_cat_phones, 'brand_family_guide',
       'best-in-nigeria', ARRAY['Apple'], 'verified', now(),
       'backfill_worker', 'rev-brand-1', 2
     ),
     (
       v_post_news, v_merchant, 'Apple Event News', 'apple-event-news',
-      'News coverage.', 'News excerpt.', 'Smartphones', 'published',
+      'News coverage.', 'News excerpt.', 'Smartphones', 'Guide Editor', 'published',
       now() - INTERVAL '1 hour', 4, v_cat_phones, 'category_guide',
       'buyer-guide', ARRAY[]::text[], 'verified', now(),
       'backfill_worker', 'rev-news-1', 2
     ),
     (
       v_post_laptop_brand, v_merchant, 'Best Apple Laptops in Nigeria', 'best-apple-laptops-nigeria',
-      'MacBook family guide.', 'Compare MacBooks.', 'Laptops', 'published',
+      'MacBook family guide.', 'Compare MacBooks.', 'Laptops', 'Guide Editor', 'published',
       now() - INTERVAL '4 hours', 7, v_cat_laptops, 'brand_family_guide',
       'buyer-guide', ARRAY['Apple'], 'verified', now(),
       'backfill_worker', 'rev-laptop-1', 2

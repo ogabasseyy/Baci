@@ -93,9 +93,16 @@ function getDestinationPriceBandInventory(
   input: BuildProductSemanticModelInput
 ) {
   const seenSlugs = new Set<string>();
+  const hasJunctionCandidates = input.inventory.some(
+    (product) =>
+      product.category_slugs !== null && product.category_slugs !== undefined
+  );
 
   return input.inventory
     .filter((product) => {
+      if (hasJunctionCandidates && product.category_slugs === null) {
+        return false;
+      }
       if (seenSlugs.has(product.slug)) return false;
       seenSlugs.add(product.slug);
       return true;

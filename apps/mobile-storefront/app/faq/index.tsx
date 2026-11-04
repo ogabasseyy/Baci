@@ -28,7 +28,7 @@ const faqItems: FAQItem[] = [
     id: '2',
     question: 'What payment methods do you accept?',
     answer:
-      'We accept multiple payment methods including card payments via Paystack, bank transfers, and Pay on Delivery. We also offer Buy Now Pay Later options through CredPal and Credit Direct for eligible orders.',
+      'We accept multiple payment methods including card payments via Paystack, bank transfers, and Pay on Delivery. We also offer Buy Now Pay Later options through Credit Direct for eligible orders.',
   },
   {
     id: '3',

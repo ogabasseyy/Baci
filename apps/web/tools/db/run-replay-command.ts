@@ -1,9 +1,9 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import { boundedPsqlDiagnostic } from './psql-replay-diagnostic';
 import { readSupabaseHistoryEffects } from './read-supabase-history-effects';
 import { replayRepository } from './replay-repository-root';
-import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 import { supabaseHistoryEffectQueryContract } from './supabase-history-effect-query-contract';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 import type {
@@ -44,32 +44,12 @@ function sanitizedCommandName(command: string): string {
   return /^[A-Za-z0-9._-]+$/.test(basename) ? basename : 'command';
 }
 
-function boundedPsqlDiagnostic(
-  command: string,
-  stderr: readonly Buffer[]
-): string {
-  const commandName = sanitizedCommandName(command);
-  if (commandName === 'supabase') {
-    return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
-  }
-  if (!/^psql(?:-[A-Za-z0-9._-]+)?$/.test(commandName)) {
-    return '';
-  }
-  const output = Buffer.concat(stderr).toString('utf8');
-  const escapedCommandName = commandName.replaceAll('.', '\\.');
-  const match = new RegExp(
-    `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+(?:ERROR|error):(?:[ \\t]+([0-9A-Z]{5})(?=[: \\t]|$))?`,
-    'm'
-  ).exec(output);
-  const line = Number(match?.[1]);
-  if (!Number.isSafeInteger(line) || line < 1) return '';
-  return ` (line=${line}${match?.[2] ? `,sqlstate=${match[2]}` : ''})`;
-}
-
 function commandFailure(
   command: string,
   failure: FailureClass,
-  stderr: readonly Buffer[] = []
+  stderr: readonly Buffer[] = [],
+  stdout: readonly Buffer[] = [],
+  exitCode: number | null = null
 ): Error {
   const diagnostic =
     failure !== 'non-zero-exit'
@@ -78,7 +58,12 @@ function commandFailure(
         ? supabaseReplayFailureDiagnostic(
             Buffer.concat(stderr).toString('utf8')
           )
-        : boundedPsqlDiagnostic(command, stderr);
+        : boundedPsqlDiagnostic(
+            sanitizedCommandName(command),
+            stderr,
+            stdout,
+            exitCode
+          );
   return new Error(
     `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
   );
@@ -179,7 +164,9 @@ function createReplayCommand(
             return;
           }
           if (code !== 0 || stdinFailed) {
-            reject(commandFailure(command, 'non-zero-exit', stderr));
+            reject(
+              commandFailure(command, 'non-zero-exit', stderr, stdout, code)
+            );
             return;
           }
           resolve({

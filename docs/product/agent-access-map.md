@@ -1,11 +1,12 @@
 # Baci capabilities and agent access
 
-Reviewed 31 October 2026 against source revision
-`740122683e1c16979372ce963ca2aabd0b8f3fed`. The order-details shipment flow
-transition change was re-reviewed and tested; other cited source evidence remains
-unchanged across the latest main sync. This is a navigation map, not authorization or proof
-of current deployment. Check the current implementation, live tool discovery and
-merchant entitlement before calling or claiming a tool.
+Reviewed 4 November 2026 against source revision
+`7fe1e82ae62268b64c579a34fde39568d68dabd3`. Oxygen remains local-staging QA only.
+The Paystack DVA helper now avoids a second-bank retry after an uncertain result;
+the merchant protocol claims remain accurate. Checkout eligibility was reviewed after
+CredPal retirement. This is a navigation map,
+not authorization or proof of current deployment. Check the current implementation,
+live tool discovery and merchant entitlement before calling or claiming a tool.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions

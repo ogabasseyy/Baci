@@ -1,8 +1,9 @@
 -- Round-12 P1 regressions: evidence-review attempts block cancellation;
--- stale init leases are reclaimable; orphaned submission claims enter
+-- uncertain init leases remain fenced; orphaned submission claims enter
 -- reconciliation; split sales record wallet-free direct settlements.
 BEGIN;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
+\ir uba_redvault_round12_initialization_lease.inc.sql
 
 DO $$
 DECLARE
@@ -43,7 +44,6 @@ DECLARE
     'cardBrands', jsonb_build_array('verve', 'visa', 'mastercard'));
   v_state text;
   v_status text;
-  v_claimed boolean;
   v_claim_id uuid;
   v_token uuid;
   v_net numeric;
@@ -196,40 +196,9 @@ BEGIN
   END;
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
 
-  -- P1 (initialization lease): created claims, stale initializing
-  -- reclaims (once), fresh initializing refuses.
-  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
-  PERFORM set_config('request.jwt.claim.sub', v_user::text, true);
-  PERFORM set_config('request.jwt.claims', jsonb_build_object(
-    'role', 'authenticated', 'storefront_order_context', 'route',
-    'storefront_order_merchant_id', v_merchant::text,
-    'storefront_redvault_customer_email', 'redvault-p12@example.com')::text, true);
-  SELECT initialization_claimed INTO v_claimed
-  FROM public.claim_storefront_redvault_payment_attempt_initialization_v2(v_attempt_lease);
-  IF v_claimed IS NOT TRUE THEN
-    RAISE EXCEPTION 'created attempt was not claimable';
-  END IF;
-  SELECT initialization_claimed INTO v_claimed
-  FROM public.claim_storefront_redvault_payment_attempt_initialization_v2(v_attempt_lease_stale);
-  IF v_claimed IS NOT TRUE THEN
-    RAISE EXCEPTION 'stale initializing lease was not reclaimed';
-  END IF;
-  SELECT initialization_claimed INTO v_claimed
-  FROM public.claim_storefront_redvault_payment_attempt_initialization_v2(v_attempt_lease_stale);
-  IF v_claimed IS NOT FALSE THEN
-    RAISE EXCEPTION 'reclaimed lease did not heartbeat; double-claimed';
-  END IF;
-  SELECT initialization_claimed INTO v_claimed
-  FROM public.claim_storefront_redvault_payment_attempt_initialization_v2(v_attempt_lease_null);
-  IF v_claimed IS NOT TRUE THEN
-    RAISE EXCEPTION 'NULL-lease initializing row was not reclaimed';
-  END IF;
-  SELECT initialization_claimed INTO v_claimed
-  FROM public.claim_storefront_redvault_payment_attempt_initialization_v2(v_attempt_lease);
-  IF v_claimed IS NOT FALSE THEN
-    RAISE EXCEPTION 'fresh initializing lease was reclaimed too early';
-  END IF;
-  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_temp.assert_redvault_initialization_leases(
+    v_user, v_merchant, v_attempt_lease, v_attempt_lease_stale, v_attempt_lease_null
+  );
 
   -- P1 (orphaned submission claims): a stale reference-less processing
   -- row enters reconciliation; a fresh one does not.

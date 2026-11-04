@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Deploy VPS workers to bassey@82.29.190.219
 # Usage: bash vps-workers/deploy.sh
-
 set -euo pipefail
 
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +14,6 @@ source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
 source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
 # shellcheck source=lib/install-worker-services.sh
 source "$WORKER_ROOT/lib/install-worker-services.sh"
-
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
 REMEDIATION_DISABLED_MARKER="/home/bassey/.config/baci/remediation.disabled"
@@ -142,6 +140,7 @@ $CRON_BLOCK_START
 0 5    * * * flock -n $REMOTE_DIR/locks/process-settlements.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements' >> $REMOTE_DIR/logs/process-settlements.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/order-cancellation-side-effects.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements?cancellationsOnly=true' >> $REMOTE_DIR/logs/order-cancellation-side-effects.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
+*/5 * * * * flock -n $REMOTE_DIR/locks/oxygen-callback-reconciliation.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/oxygen-callback-reconciliation' >> $REMOTE_DIR/logs/oxygen-callback-reconciliation.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
 # process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.

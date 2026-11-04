@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import {
   buildWebCronUrl,
   CACHE_INVALIDATION_DEAD_LETTER_CODE,
@@ -17,6 +17,30 @@ const noopLogger = {
 };
 
 describe('web cron worker', () => {
+  it('allows the Oxygen drain to finish before the VPS request times out', async () => {
+    const timer = mock.method(AbortSignal, 'timeout');
+    try {
+      await runWebCron({
+        path: '/api/cron/oxygen-callback-reconciliation',
+        env: { BACI_WEB_BASE_URL: 'https://example.test', CRON_SECRET: 'secret' },
+        fetchFn: () => new Response('{}'),
+        logger: noopLogger,
+      });
+      assert.ok(timer.mock.calls[0].arguments[0] >= 360_000);
+    } finally {
+      timer.mock.restore();
+    }
+  });
+  it('calls the Oxygen callback drain with the cron secret', async () => {
+    let authorization;
+    await runWebCron({
+      path: '/api/cron/oxygen-callback-reconciliation',
+      env: { BACI_WEB_BASE_URL: 'https://ogabassey.com', CRON_SECRET: 'secret' },
+      fetchFn: (_url, init) => { authorization = init.headers.Authorization; return new Response('{}'); },
+      logger: noopLogger,
+    });
+    assert.equal(authorization, 'Bearer secret');
+  });
   it('builds normalized URLs for allowlisted cron paths', () => {
     assert.equal(
       buildWebCronUrl({

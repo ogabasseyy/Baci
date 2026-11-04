@@ -6,13 +6,13 @@ const now = new Date('2026-07-20T12:00:00.000Z');
 const { accountReadyRow, claimingRow } = agenticDvaCutoverEvidenceTestSupport;
 
 describe('assessAgenticDvaCutoverSession', () => {
-  it('permits release only for a stale claim with no account evidence', () => {
+  it('requires manual review for a stale claim with no account evidence', () => {
     const result = assessAgenticDvaCutoverSession(claimingRow(), now);
 
     expect(result).toMatchObject({
-      disposition: 'release_stale_no_account_claim',
+      disposition: 'manual_review',
+      reason: 'provider_outcome_unconfirmed',
       merchantId: 'merchant-1',
-      reason: null,
       sessionId: 'agentic_session_1',
       state: 'claiming_payment',
     });

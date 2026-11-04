@@ -55,7 +55,11 @@ describe('runPiggyvestDailyReconciliation', () => {
     const result = await runPiggyvestDailyReconciliation({ env, deps });
     expect(execute).toHaveBeenCalledWith(
       'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result',
-      [INTEGRATION, 'staging', JSON.stringify({ staleAfterSeconds: 1800 })]
+      [
+        INTEGRATION,
+        'staging',
+        JSON.stringify({ staleAfterSeconds: 1800, rotationSlot: 0 }),
+      ]
     );
     expect(deps.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({

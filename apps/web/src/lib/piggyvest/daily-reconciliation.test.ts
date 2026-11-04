@@ -157,14 +157,51 @@ describe('runDailyReconciliation', () => {
     expect(report.stuck[0].reading).toBe('uncertain');
   });
 
-  it('needs attention when the database lists fewer rows than it counted', async () => {
+  it('needs attention, with the deferred count, when more transfers are stuck than one window lists', async () => {
     const report = await runDailyReconciliation(
-      ports(snapshot({ stuck: [stuck(1)], stuckTotal: 250, walletsTotal: 600 }))
+      ports(
+        snapshot({ stuck: [stuck(1)], stuckTotal: 250, stuckDeferred: 249 })
+      )
     );
     if (report.status === 'failed') throw new Error('unreachable');
     expect(report.status).toBe('attention');
     expect(report.reasons).toEqual(['stuck_transfers', 'list_truncated']);
-    expect(report.truncated).toEqual({ stuck: true, wallets: true });
+    expect(report.truncated).toEqual({ stuck: true, wallets: false });
+    expect(report.deferred).toEqual({ stuck: 249, wallets: 0 });
+  });
+
+  it('reports deferred wallets without paging: rotation checks them on later runs', async () => {
+    const report = await runDailyReconciliation(
+      ports(
+        snapshot({
+          wallets: [{ walletId: 'goal-a', expectedKobo: 100 }],
+          walletsTotal: 601,
+          walletsDeferred: 600,
+        }),
+        { readWalletBalance: vi.fn(async () => 100) }
+      )
+    );
+    if (report.status === 'failed') throw new Error('unreachable');
+    expect(report.status).toBe('clean');
+    expect(report.reasons).toEqual([]);
+    expect(report.truncated).toEqual({ stuck: false, wallets: true });
+    expect(report.deferred).toEqual({ stuck: 0, wallets: 600 });
+  });
+
+  it('still pages on a shortfall found in a rotated window', async () => {
+    const report = await runDailyReconciliation(
+      ports(
+        snapshot({
+          wallets: [{ walletId: 'goal-a', expectedKobo: 100 }],
+          walletsTotal: 601,
+          walletsDeferred: 600,
+        }),
+        { readWalletBalance: vi.fn(async () => 50) }
+      )
+    );
+    if (report.status === 'failed') throw new Error('unreachable');
+    expect(report.status).toBe('attention');
+    expect(report.reasons).toEqual(['balance_below_expected']);
   });
 
   it('fails when the snapshot cannot be loaded', async () => {

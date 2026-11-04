@@ -95,6 +95,7 @@ it('requires the browser-bound single-use consent before issuing a code', async 
   const pending = await auth.beginConsent(request);
   await expect(auth.completeConsent(pending.id, 'wrong-browser', true)).rejects.toThrow();
   const code = await auth.completeConsent(pending.id, pending.cookie, true);
+  if (!('code' in code)) throw new Error('Expected approved consent');
   expect(code.code).toMatch(/^[a-f0-9]{64}$/);
   await expect(auth.completeConsent(pending.id, pending.cookie, true)).rejects.toThrow();
 });
@@ -142,12 +143,12 @@ it('rejects expired codes and refreshes after the absolute deadline', async () =
     code: fresh.code,
     code_verifier: verifier,
   });
-  advance(7 * 86400_000 + 1);
+  advance(90 * 86400_000 + 1);
   await expect(auth.refresh({ ...request, refresh_token: tokens.refresh_token })).rejects.toThrow();
 });
 it('keeps grant expiry within the database cap when the app clock is slightly ahead', async () => {
   const { options } = fixture();
-  const deadline = 1700000000000 + 7 * 86400_000;
+  const deadline = 1700000000000 + 90 * 86400_000;
   const compare = options.store.compareAndSwap.bind(options.store);
   const auth = new GuestOAuth({
     ...options,
@@ -212,14 +213,14 @@ it('retries a refresh after cart initialization changes only the grant revision'
   expect((await auth.verify(next.access_token)).cartInitialized).toBe(true);
 });
 
-it('caps refresh history without losing reuse detection', async () => {
+it('fails closed before the refresh generation counter overflows', async () => {
   const { auth, rows } = fixture();
   const { code } = await auth.authorize(request);
   let token = await auth.exchange({ ...request, code, code_verifier: verifier });
   const grant = await auth.verify(token.access_token);
   const key = `grant:${grant.id}`;
   const row = rows.get(key)!;
-  rows.set(key, { ...row, value: { ...grant, tokenGenerations: 1023 } });
+  rows.set(key, { ...row, value: { ...grant, tokenGenerations: 0xffff_fffe } });
   token = await auth.refresh({ ...request, refresh_token: token.refresh_token });
   const size = rows.size;
   await expect(auth.refresh({ ...request, refresh_token: token.refresh_token })).rejects.toThrow('invalid_grant');

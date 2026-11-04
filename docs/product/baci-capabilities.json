@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T03:27:24+00:00",
-  "source_revision": "fbb9deb0a5942c05b3a9b45401c7df4105ded5cc",
-  "evidence_digest": "653ca8862f9be875bfb26c5453281a8a42555353906a888028994aa75c26bce9",
-  "claims_digest": "a3711655682ff6ad3ecdc003d8e6a75013396551a8973726bd1df8ad7f8b85b0",
-  "review_scope": "Source evidence only, reviewed after main e92081814d and the PR 3993 boundary fixes. Full-code MCP build/prerender, private preview and signed runner/delivery exist in source; production composition remains uninstalled/disabled. Reviewed native PDP ownership/data, checkout layout fallback, categorized performance evidence and declared-route preview selection. Additive migration registration preserves the frozen baseline. Existing capability statuses and production/payment authority are unchanged. Local synthetic proofs do not establish deployed ChatGPT access, publication or CWV qualification. GitHub review, current-candidate CI, host/TLS/scoped verifier qualification and separate rollout authorization remain required. Benchmarks are parked.",
+  "reviewed_at": "2026-11-04T03:28:58+00:00",
+  "source_revision": "ebb3e7f2f24a03cac943c6de1d6551fc96193bb8",
+  "evidence_digest": "6cb3954a0b371dc26359abdecf3ea9dc09c0935e5fd89256e4fe59a62145eae3",
+  "claims_digest": "9811c786c5524489c756374f7979d38b643006baafcb4c08300474a3a4426511",
+  "review_scope": "Source evidence only, reviewed after main 65af43d872 and the PR 3993 boundary fixes. Full-code MCP build/prerender, private preview and signed runner/delivery exist in source; production composition remains uninstalled/disabled. Reviewed native PDP ownership/data, checkout layout fallback, categorized performance evidence and declared-route preview selection. Additive migration registration preserves the frozen baseline. Existing capability statuses and production/payment authority are unchanged. Local synthetic proofs do not establish deployed ChatGPT access, publication or CWV qualification. GitHub review, current-candidate CI, host/TLS/scoped verifier qualification and separate rollout authorization remain required. Benchmarks are parked.",
   "capabilities": [
     {
       "id": "payments",

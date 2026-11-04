@@ -56,7 +56,7 @@
     "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json",
     "verify:builder-release": "vitest run tests/builder-chatgpt builder-mcp-server --maxWorkers=1",
     "verify:builder-provider": "pnpm --dir tools/builder-auth test",
-    "test:experience:runner": "vitest run --config vitest.experience-runner.config.ts",
+    "test:experience:runner": "node --test experience-runtime/local-prerequisites.test.mjs && vitest run --config vitest.experience-runner.config.ts",
     "qualify:experience:sandbox": "pnpm test:experience:browser",
     "test:experience:browser": "node experience-runtime/build.mjs && playwright test --config tests/experience-browser/playwright.config.ts",
     "probe:experience:sandbox": "tsx tools/experience-runner/qualify-sandbox.ts",

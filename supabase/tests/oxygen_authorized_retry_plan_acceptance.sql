@@ -10,9 +10,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000003','approval-retry-merchant@example.test','Booking block fixture','oxygen-approval-retry-rls-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efad0000-0000-4000-8000-000000000021','efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000001','Test','Customer','approval-retry-owner@example.test');
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES ('efad0000-0000-4000-8000-000000000031','efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid');
-UPDATE public.orders SET payment_method='oxygen' WHERE id='efad0000-0000-4000-8000-000000000031';
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efad0000-0000-4000-8000-000000000031','efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES ('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000031','efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000021');
 

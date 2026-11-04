@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { trackOxygenJourney } from '@/lib/payments/oxygen/journey-events';
-import { oxygenInvalidOtpMessage } from '@/lib/payments/oxygen/otp-rejection';
+import { OxygenPaymentOriginUnverifiedError } from '@/lib/payments/oxygen/payment-origin-error';
 import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
 import {
   type OxygenRuntimeSnapshot,
@@ -13,15 +13,14 @@ import {
   retireQueuedAddress,
   selectOxygenActionKey,
 } from './oxygen-address-recovery';
+import { mayRetryFailedSelfie } from './oxygen-failed-selfie-retry';
 import { retireQueuedPhoneVerification } from './oxygen-phone-recovery';
 import {
   decodeOxygenResponse as decode,
-  OxygenInvalidOtpError,
-  OxygenRateLimitError,
-  oxygenRateLimitMessage,
   SignInRequired,
 } from './oxygen-provider-response';
 import { pendingReadRecovery } from './oxygen-read-recovery';
+import { oxygenSubmitErrorMessage } from './oxygen-submit-error-message';
 
 export { oxygenRateLimitMessage } from './oxygen-provider-response';
 
@@ -37,6 +36,7 @@ export function useOxygenProvider(orderId: string) {
   const [snapshot, setSnapshot] = useState<OxygenRuntimeSnapshot | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
+  const [safeSelfieRetry, setSafeSelfieRetry] = useState(false);
   const [errorAction, setErrorAction] = useState<
     OxygenRuntimeAction['action'] | null
   >(null);
@@ -68,6 +68,7 @@ export function useOxygenProvider(orderId: string) {
     ++scope.current;
     setSnapshot(null);
     setError('');
+    setSafeSelfieRetry(false);
     setNeedsSignIn(false);
     setBusy(true);
     const token = generation.current + 1;
@@ -79,7 +80,9 @@ export function useOxygenProvider(orderId: string) {
           trackOxygenJourney('load_failed', orderId, 'loading');
           setNeedsSignIn(failure instanceof SignInRequired);
           setError(
-            'Unable to load your finance application. Try again to continue.'
+            failure instanceof OxygenPaymentOriginUnverifiedError
+              ? failure.message
+              : 'Unable to load your finance application. Try again to continue.'
           );
         }
       } finally {
@@ -122,6 +125,7 @@ export function useOxygenProvider(orderId: string) {
     locked.current = lock;
     setBusy(true);
     setError('');
+    setSafeSelfieRetry(false);
     setErrorAction(null);
     trackOxygenJourney(
       'action_started',
@@ -223,22 +227,12 @@ export function useOxygenProvider(orderId: string) {
         /* Preserve last known snapshot. */
       }
       if (alive.current && requestScope === scope.current) {
-        setErrorAction(command.action);
-        setError(
-          failure instanceof OxygenRateLimitError
-            ? oxygenRateLimitMessage
-            : failure instanceof OxygenInvalidOtpError
-              ? oxygenInvalidOtpMessage
-              : command.action === 'validate_customer' &&
-                  !recovered?.pending &&
-                  recovered?.stage !== 'reconciliation_required'
-                ? 'We couldn’t check your code right now. Please try again shortly.'
-                : command.action === 'resend_customer_otp'
-                  ? 'We couldn’t send a new code right now. Please wait a moment and try again.'
-                  : failure instanceof Error
-                    ? failure.message
-                    : 'We couldn’t complete this step. Your progress is saved.'
+        setSafeSelfieRetry(
+          command.action === 'selfie_link' &&
+            mayRetryFailedSelfie(snapshot, recovered)
         );
+        setErrorAction(command.action);
+        setError(oxygenSubmitErrorMessage(failure, command.action, recovered));
       }
       return false;
     } finally {
@@ -268,11 +262,16 @@ export function useOxygenProvider(orderId: string) {
         setNeedsSignIn(false);
         setError('');
         setErrorAction(null);
+        setSafeSelfieRetry(false);
       }
     } catch (failure) {
       if (alive.current && token === generation.current) {
         setNeedsSignIn(failure instanceof SignInRequired);
-        setError('We couldn’t check for an update. Your progress is saved.');
+        setError(
+          failure instanceof OxygenPaymentOriginUnverifiedError
+            ? failure.message
+            : 'We couldn’t check for an update. Your progress is saved.'
+        );
       }
     } finally {
       if (locked.current === lock) locked.current = null;
@@ -284,6 +283,7 @@ export function useOxygenProvider(orderId: string) {
     busy,
     error,
     errorAction,
+    safeSelfieRetry,
     clearError: () => setError(''),
     submit,
     refresh,

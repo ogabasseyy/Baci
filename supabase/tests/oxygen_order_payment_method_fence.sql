@@ -29,15 +29,28 @@ DO $$ BEGIN
   IF SQLERRM <> 'order_not_cancellable' THEN RAISE; END IF;
  END;
 END $$;
--- Opening an application alone must not trap a customer in Oxygen.
-UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';
-UPDATE public.orders SET payment_method='oxygen' WHERE id='ab120000-0000-4000-8000-000000000004';
+-- An uncommitted application can be left, but cannot re-enter after a
+-- gateway may have been initialized. The exception rolls the trial exit back.
+DO $$ BEGIN
+ BEGIN
+  UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';
+  UPDATE public.orders SET payment_method='oxygen' WHERE id='ab120000-0000-4000-8000-000000000004';
+  RAISE EXCEPTION 'Released Oxygen order re-entered' USING ERRCODE='P1001';
+ EXCEPTION WHEN check_violation THEN
+  IF SQLERRM <> 'oxygen_previous_payment_unresolved' THEN RAISE; END IF;
+ END;
+END $$;
 INSERT INTO oxygen_private.commands(workflow_id,idempotency_key,expected_version,channel,command,status)
 SELECT id,'ab120000-0000-4000-8000-000000000005',0,'web','{"action":"refresh_eligibility"}','succeeded'
 FROM public.oxygen_workflows WHERE order_id='ab120000-0000-4000-8000-000000000004';
--- A completed eligibility check does not by itself create a booking.
-UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';
-UPDATE public.orders SET payment_method='oxygen' WHERE id='ab120000-0000-4000-8000-000000000004';
+-- A completed eligibility check does not by itself prevent a safe exit.
+DO $$ BEGIN
+ BEGIN
+  UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';
+  RAISE EXCEPTION 'Rollback trial exit' USING ERRCODE='P1002';
+ EXCEPTION WHEN SQLSTATE 'P1002' THEN NULL;
+ END;
+END $$;
 INSERT INTO oxygen_private.commands(workflow_id,idempotency_key,expected_version,channel,command,status)
 SELECT id,'ab120000-0000-4000-8000-000000000006',0,'web','{"action":"book"}','indeterminate'
 FROM public.oxygen_workflows WHERE order_id='ab120000-0000-4000-8000-000000000004';

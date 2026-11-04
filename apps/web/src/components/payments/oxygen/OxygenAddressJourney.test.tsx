@@ -51,7 +51,7 @@ async function open(fixture: ReturnType<typeof createProviderJourney>) {
     return fixture.fetch(url, init);
   });
   vi.useFakeTimers();
-  render(<OxygenProviderFlow orderId={fixtureId} />);
+  render(<OxygenProviderFlow orderId={fixtureId} productAmount={400000} />);
   await waitForUI(() =>
     expect(screen.getByLabelText('Verification code')).toBeVisible()
   );

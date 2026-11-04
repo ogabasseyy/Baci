@@ -9,6 +9,7 @@ import { oxygenRateLimitMessage } from './use-oxygen-provider';
 export function OxygenWorkflowError({
   snapshot,
   action,
+  safeSelfieRetry = false,
   activeLoan,
   error,
   merchantSlug,
@@ -18,6 +19,7 @@ export function OxygenWorkflowError({
 }: {
   snapshot: OxygenRuntimeSnapshot | null;
   action: OxygenRuntimeAction['action'] | null;
+  safeSelfieRetry?: boolean;
   activeLoan: boolean;
   error: string;
   merchantSlug?: string;
@@ -43,6 +45,13 @@ export function OxygenWorkflowError({
       !snapshot.pending
   );
   const retryBreakdown = action === 'refresh_details' && !snapshot?.pending;
+  const retrySelfie = Boolean(
+    safeSelfieRetry &&
+      action === 'selfie_link' &&
+      snapshot?.executionEnabled &&
+      !snapshot.pending &&
+      ['eligibility_required', 'kyc_required'].includes(snapshot.stage)
+  );
   return (
     <OxygenApplicationError
       activeLoan={activeLoan}
@@ -50,19 +59,22 @@ export function OxygenWorkflowError({
       retryBreakdown={retryBreakdown}
       retryNin={retryNin}
       retryEligibility={retryEligibility}
+      retrySelfie={retrySelfie}
       error={error}
       validated={snapshot?.state.validated}
       stage={snapshot?.stage}
       merchantSlug={merchantSlug}
       busy={busy}
       refresh={
-        retryNin
-          ? () => submit({ action: 'validate_nin' })
-          : retryEligibility
-            ? () => submit({ action: 'refresh_eligibility' })
-            : retryBreakdown
-              ? () => submit({ action: 'refresh_details' })
-              : refresh
+        retrySelfie
+          ? () => submit({ action: 'selfie_link' })
+          : retryNin
+            ? () => submit({ action: 'validate_nin' })
+            : retryEligibility
+              ? () => submit({ action: 'refresh_eligibility' })
+              : retryBreakdown
+                ? () => submit({ action: 'refresh_details' })
+                : refresh
       }
     />
   );

@@ -92,6 +92,19 @@ describe('Oxygen workflow draft route', () => {
     mocks.rpc.mockResolvedValue({ data: null, error: null });
     expect((await POST(request({ orderId, channel: 'web' }))).status).toBe(503);
   });
+  it('explains an unverified previous payment without exposing database details', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '23514', message: 'oxygen_payment_origin_unverified' },
+    });
+    const response = await POST(request({ orderId, channel: 'web' }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      code: 'OXYGEN_PAYMENT_ORIGIN_UNVERIFIED',
+      error:
+        'We need to check your existing payment before continuing. Please contact support with your order number.',
+    });
+  });
   it('enforces CSRF and rate limits before storage access', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
     expect((await POST(request({ orderId, channel: 'web' }))).status).toBe(403);

@@ -63,6 +63,7 @@ function OxygenProviderSession({
     busy,
     error,
     errorAction,
+    safeSelfieRetry,
     clearError,
     submit,
     refresh,
@@ -201,6 +202,7 @@ function OxygenProviderSession({
             snapshot={snapshot}
             activeLoan={activeLoanError}
             action={errorAction}
+            safeSelfieRetry={safeSelfieRetry}
             error={error}
             merchantSlug={merchantSlug}
             busy={busy}
@@ -241,6 +243,7 @@ function OxygenProviderSession({
             snapshot={snapshot}
             activeLoan={activeLoanError}
             action={errorAction}
+            safeSelfieRetry={safeSelfieRetry}
             error={error}
             merchantSlug={merchantSlug}
             busy={busy}

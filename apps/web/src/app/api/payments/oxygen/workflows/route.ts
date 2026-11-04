@@ -1,6 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  isOxygenPaymentOriginError,
+  oxygenPaymentOriginCode,
+  oxygenPaymentOriginMessage,
+} from '@/lib/payments/oxygen/payment-origin-error';
 import { projectWorkflow } from '@/lib/payments/oxygen/workflow';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import {
@@ -42,6 +47,11 @@ export async function POST(request: NextRequest) {
       p_channel: parsed.data.channel,
     });
     if (error) {
+      if (isOxygenPaymentOriginError(error))
+        return NextResponse.json(
+          { code: oxygenPaymentOriginCode, error: oxygenPaymentOriginMessage },
+          { status: 409 }
+        );
       if (error.code === '42501')
         return NextResponse.json({ error: 'Order not found' }, { status: 404 });
       if (error.code === '22023')

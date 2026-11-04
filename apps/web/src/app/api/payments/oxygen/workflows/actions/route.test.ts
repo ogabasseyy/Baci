@@ -22,6 +22,7 @@ vi.mock('@/lib/payments/oxygen/runtime-service', () => ({
   readOxygenSnapshot: vi.fn(),
 }));
 
+import { OxygenPaymentOriginUnverifiedError } from '@/lib/payments/oxygen/payment-origin-error';
 import { OxygenProviderFailure } from '@/lib/payments/oxygen/provider';
 import { maxDuration, POST } from './route';
 
@@ -45,6 +46,34 @@ it('does not touch runtime credentials for unauthenticated callers', async () =>
   );
   expect(result.status).toBe(401);
   expect(m.connect).not.toHaveBeenCalled();
+});
+it('explains a fenced existing payment without exposing database details', async () => {
+  m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
+  m.connect.mockReturnValue({
+    worker: vi.fn(),
+    provider: {},
+    partnerReference: 'partner',
+    hosts: new Set(),
+  });
+  m.perform.mockRejectedValue(new OxygenPaymentOriginUnverifiedError());
+  const response = await POST(
+    new NextRequest('http://localhost/api/payments/oxygen/workflows/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflowId: '60000000-0000-4000-8000-000000000001',
+        idempotencyKey: '60000000-0000-4000-8000-000000000002',
+        version: 1,
+        command: { action: 'refresh_eligibility' },
+      }),
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    code: 'OXYGEN_PAYMENT_ORIGIN_UNVERIFIED',
+    error:
+      'We need to check your existing payment before continuing. Please contact support with your order number.',
+  });
 });
 it('rejects activation as unsupported input', async () => {
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });

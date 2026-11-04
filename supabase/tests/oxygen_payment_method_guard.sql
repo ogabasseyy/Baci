@@ -22,7 +22,11 @@ DO $$ BEGIN
  BEGIN PERFORM public.oxygen_start_workflow('efab0000-0000-4000-8000-000000000031','web'); RAISE EXCEPTION 'Wrong payment method created workflow'; EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
 END $$;
 RESET ROLE;
-UPDATE public.orders SET payment_method='oxygen' WHERE id='efab0000-0000-4000-8000-000000000031';
+-- Use a separately created Oxygen order; a gateway order can no longer be
+-- repurposed once a provider session could have been initialized.
+DELETE FROM public.orders WHERE id='efab0000-0000-4000-8000-000000000031';
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efab0000-0000-4000-8000-000000000031','efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000021','OXYGEN-ENV-RLS',400000,'NGN','unpaid','oxygen');
 SET LOCAL ROLE authenticated;
 SELECT public.oxygen_start_workflow('efab0000-0000-4000-8000-000000000031','web');
 RESET ROLE;

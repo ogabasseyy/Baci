@@ -62,3 +62,25 @@ it('restores the active-loan recovery screen after reopening and a fresh page mo
     false
   );
 });
+
+it('tells the customer to contact support when an existing payment needs checking', async () => {
+  mocks.fetch.mockResolvedValue(
+    Response.json({ code: 'OXYGEN_PAYMENT_ORIGIN_UNVERIFIED' }, { status: 409 })
+  );
+  render(
+    <OxygenProviderFlow
+      orderId="60000000-0000-4000-8000-000000000001"
+      merchantSlug="shop"
+    />
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'We need to check your existing payment before continuing. Please contact support with your order number.'
+  );
+  expect(screen.getByRole('link', { name: 'Contact support' })).toHaveAttribute(
+    'href',
+    '/shop/contact'
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Check for an update' })
+  ).toBeNull();
+});

@@ -4,6 +4,42 @@ vi.mock('server-only', () => ({}));
 
 import { reconcileOxygenCallbacks } from './runtime-reconciliation';
 
+it('retires a redelivered address hint for an activated workflow without rechecking or changing it', async () => {
+  const id = '60000000-0000-4000-8000-000000000001';
+  const retryKey = '60000000-0000-4000-8000-000000000002';
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => {
+    const operation = args.p_operation;
+    let data: unknown = { recorded: true };
+    if (operation === 'pending')
+      data = [{ id, retryKey, kind: 'address', workflowIds: [id] }];
+    if (operation === 'worker_status')
+      data = {
+        workflowId: id,
+        stage: 'activated',
+        version: 10,
+        environment: 'staging',
+        executionEnabled: true,
+        state: { paymentComplete: true, setupComplete: true },
+        approvalOtpReady: false,
+        activationEnabled: false,
+        settlementEnabled: false,
+      };
+    return { data, error: null };
+  });
+  const call = vi.fn();
+  await reconcileOxygenCallbacks({ rpc }, { call }, 'partner', new Set());
+  expect(call).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalledWith(
+    'oxygen_runtime',
+    expect.objectContaining({ p_operation: 'reconcile' })
+  );
+  expect(rpc).toHaveBeenCalledWith('oxygen_callback', {
+    p_operation: 'complete',
+    p_partner: 'partner',
+    p_payload: { id, retryKey },
+  });
+});
+
 it.each([
   'DONE',
   'PROCESSING',

@@ -8,6 +8,10 @@ import {
 } from '@/schemas/oxygen-runtime';
 import { oxygenActiveLoanCode } from './booking-rejection';
 import { oxygenLocalValidationDiagnostic } from './local-validation-diagnostic';
+import {
+  isOxygenPaymentOriginError,
+  OxygenPaymentOriginUnverifiedError,
+} from './payment-origin-error';
 import { type OxygenProvider, OxygenProviderFailure } from './provider';
 import { recordOxygenFailure } from './record-failure';
 import { executeOxygenAction, oxygenActionAllowed } from './runtime-executor';
@@ -17,7 +21,10 @@ export interface OxygenRuntimeRpc {
   rpc(
     name: string,
     args: Record<string, unknown>
-  ): PromiseLike<{ data: unknown; error: { code?: string } | null }>;
+  ): PromiseLike<{
+    data: unknown;
+    error: { code?: string; message?: string } | null;
+  }>;
 }
 export {
   type OxygenRuntimeSnapshot,
@@ -39,7 +46,11 @@ export async function oxygenRuntimeRpc(
     p_id: id,
     p_payload: payload,
   });
-  if (error) throw new Error('Workflow unavailable');
+  if (error) {
+    if (isOxygenPaymentOriginError(error))
+      throw new OxygenPaymentOriginUnverifiedError();
+    throw new Error('Workflow unavailable');
+  }
   return data;
 }
 export async function readOxygenSnapshot(

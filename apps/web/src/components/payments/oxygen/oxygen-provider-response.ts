@@ -8,6 +8,10 @@ import {
   oxygenInvalidOtpCode,
   oxygenInvalidOtpMessage,
 } from '@/lib/payments/oxygen/otp-rejection';
+import {
+  OxygenPaymentOriginUnverifiedError,
+  oxygenPaymentOriginCode,
+} from '@/lib/payments/oxygen/payment-origin-error';
 
 export class SignInRequired extends Error {}
 export class OxygenRateLimitError extends Error {}
@@ -22,6 +26,13 @@ export async function decodeOxygenResponse(
     throw new OxygenRateLimitError(oxygenRateLimitMessage);
   if (response.status === 409) {
     const body: unknown = await response.json().catch(() => null);
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'code' in body &&
+      body.code === oxygenPaymentOriginCode
+    )
+      throw new OxygenPaymentOriginUnverifiedError();
     if (
       typeof body === 'object' &&
       body !== null &&

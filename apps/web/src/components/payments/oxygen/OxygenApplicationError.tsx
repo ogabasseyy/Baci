@@ -4,6 +4,7 @@ import {
   oxygenActiveLoanMessage,
   oxygenStatementRequiredMessage,
 } from '@/lib/payments/oxygen/booking-rejection';
+import { oxygenPaymentOriginMessage } from '@/lib/payments/oxygen/payment-origin-error';
 import type { OxygenRuntimeAction } from '@/schemas/oxygen-runtime';
 import { oxygenCheckFailureTitle } from './oxygen-check-failure-title';
 import { oxygenButtonClass as button } from './oxygen-checkout-styles';
@@ -15,6 +16,7 @@ type Props = {
   retryBreakdown?: boolean;
   retryNin?: boolean;
   retryEligibility?: boolean;
+  retrySelfie?: boolean;
   error: string;
   validated?: boolean;
   stage?: string;
@@ -30,6 +32,7 @@ export function OxygenApplicationError({
   retryBreakdown = false,
   retryNin = false,
   retryEligibility = false,
+  retrySelfie = false,
   error,
   validated,
   stage,
@@ -38,6 +41,7 @@ export function OxygenApplicationError({
   refresh,
 }: Props) {
   const [retrying, setRetrying] = useState(false);
+  const paymentOriginBlocked = error === oxygenPaymentOriginMessage;
   const locked = useRef(false);
   async function retry() {
     if (busy || locked.current) return;
@@ -68,14 +72,15 @@ export function OxygenApplicationError({
       <p role="alert" className="text-sm leading-relaxed text-gray-600">
         {activeLoan
           ? oxygenActiveLoanMessage
-          : error === oxygenRateLimitMessage ||
+          : paymentOriginBlocked ||
+              error === oxygenRateLimitMessage ||
               error === oxygenStatementRequiredMessage
             ? error
             : retryEligibility
               ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
               : 'We couldn’t complete this step right now. Your progress is saved.'}
       </p>
-      {activeLoan ? (
+      {activeLoan || paymentOriginBlocked ? (
         merchantSlug ? (
           <a className={button} href={`/${merchantSlug}/contact`}>
             Contact support
@@ -89,15 +94,17 @@ export function OxygenApplicationError({
           aria-busy={busy || retrying}
           onClick={() => void retry()}
         >
-          {retryNin
-            ? 'Try NIN check again'
-            : retryEligibility
-              ? busy || retrying
-                ? 'Checking your payment options…'
-                : 'Try again'
-              : retryBreakdown
-                ? 'Retry payment breakdown'
-                : 'Check for an update'}
+          {retrySelfie
+            ? 'Try selfie verification again'
+            : retryNin
+              ? 'Try NIN check again'
+              : retryEligibility
+                ? busy || retrying
+                  ? 'Checking your payment options…'
+                  : 'Try again'
+                : retryBreakdown
+                  ? 'Retry payment breakdown'
+                  : 'Check for an update'}
         </button>
       )}
     </div>

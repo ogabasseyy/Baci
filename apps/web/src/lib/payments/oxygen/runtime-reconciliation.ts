@@ -100,6 +100,10 @@ export async function reconcileOxygenCallbacks(
         const snapshot = oxygenRuntimeSnapshotSchema.parse(
           await oxygenRuntimeRpc(worker, 'worker_status', id)
         );
+        // Address hints only advance pre-activation verification. Preserve the
+        // event in the inbox but retire its current generation once the bound
+        // workflow is already activated; replaying KYC cannot advance it.
+        if (job.kind === 'address' && snapshot.stage === 'activated') continue;
         const command =
           job.kind === 'address'
             ? { action: 'refresh_kyc' as const }

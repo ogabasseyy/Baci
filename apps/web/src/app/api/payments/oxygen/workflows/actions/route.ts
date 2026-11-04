@@ -14,6 +14,11 @@ import {
   oxygenInvalidOtpMessage,
 } from '@/lib/payments/oxygen/otp-rejection';
 import { confirmOxygenPaymentForActivation } from '@/lib/payments/oxygen/payment-activation-confirmation';
+import {
+  OxygenPaymentOriginUnverifiedError,
+  oxygenPaymentOriginCode,
+  oxygenPaymentOriginMessage,
+} from '@/lib/payments/oxygen/payment-origin-error';
 import { performOxygenPaymentRecovery } from '@/lib/payments/oxygen/payment-recovery';
 import { OxygenProviderFailure } from '@/lib/payments/oxygen/provider';
 import { restoreOxygenEligibilityRecovery } from '@/lib/payments/oxygen/restore-eligibility-recovery';
@@ -184,6 +189,11 @@ export async function POST(request: NextRequest) {
       { headers }
     );
   } catch (failure) {
+    if (failure instanceof OxygenPaymentOriginUnverifiedError)
+      return NextResponse.json(
+        { code: oxygenPaymentOriginCode, error: oxygenPaymentOriginMessage },
+        { status: 409, headers }
+      );
     if (
       input.submission.command.action === 'validate_customer' &&
       failure instanceof OxygenProviderFailure &&

@@ -5,6 +5,25 @@ proposal nor that fence proves two-way payment exclusivity. Production Oxygen
 must remain disabled until the implementation, rollout and reconciliation gates
 below are complete. This document does not authorize a provider request.
 
+## Conservative order-origin guard
+
+The proposed `20261104063000_oxygen_payment_rail_origin.sql` migration permits
+new Oxygen workflows and mutating commands only for orders created with Oxygen
+as their payment method. An order from another rail cannot be switched into
+Oxygen, even when no gateway transaction is recorded. An order that safely exits
+Oxygen cannot later re-enter it. Existing orders have no origin marker and must
+not be backfilled merely because they have no transaction record. Read-only
+status checks and persistence of already completed responses remain available;
+other work on those older applications is held for reconciliation. The checkout
+also preserves a known pending prior order rather than silently opening another.
+
+This is a same-order containment measure, not the shared pre-dispatch claim
+described below. It does not prove exclusivity across different orders, devices
+or legacy client SDKs. Before relying on it, deploy the gateway snapshot guards
+to every entry point, drain old application instances, reconcile existing
+provider sessions and validate the new migration against the full schema. Keep
+Oxygen disabled until those steps and the release gates below are complete.
+
 ## Required contract
 
 An ordinary gateway initializer must obtain an order-bound durable claim before

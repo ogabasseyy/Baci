@@ -46,7 +46,7 @@ async function waitForUI(assertion: () => void) {
 async function open(fixture: ReturnType<typeof createProviderJourney>) {
   api.fetch.mockImplementation(fixture.fetch);
   vi.useFakeTimers();
-  render(<OxygenProviderFlow orderId={fixtureId} />);
+  render(<OxygenProviderFlow orderId={fixtureId} productAmount={400000} />);
   await waitForUI(() =>
     expect(screen.getByLabelText('Verification code')).toBeVisible()
   );

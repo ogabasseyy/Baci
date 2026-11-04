@@ -1,6 +1,11 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import {
+  clearOrderUnlessOxygenIsUnresolved,
+  oxygenPreviousPaymentUnresolved,
+  resolveOxygenCheckoutFence,
+} from './pending-checkout-oxygen-fence';
+import {
   fetchFencedOrderState,
   isNonReusableOrderState,
   isPaidOrderState,
@@ -193,6 +198,19 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  const oxygenFence = await resolveOxygenCheckoutFence({
+    pendingOrder,
+    merchantId,
+    merchantSlug,
+    customerEmail,
+    checkoutFingerprint,
+    paymentMethod,
+    shippingProvider,
+    selectedQuoteId,
+    shippingRateId,
+    fetchImpl,
+  });
+  if (oxygenFence) return oxygenFence;
   // REDVAULT entry/exit validates the stored order against the server fence
   // first; a non-REDVAULT submission falls through to the ordinary flow.
   const redvaultFence = await resolveRedvaultCheckoutFence({
@@ -207,6 +225,9 @@ export async function resolvePendingCheckoutOrder({
   if (!pendingOrder) {
     return { reusableOrder: null, clearStoredOrder: false };
   }
+
+  const oxygenOrder =
+    paymentMethod === 'oxygen' || pendingOrder.paymentMethod === 'oxygen';
 
   if (
     !pendingOrder.trackingToken ||
@@ -228,7 +249,7 @@ export async function resolvePendingCheckoutOrder({
   });
 
   if (!existingOrder) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   // Same paid-fence rule as the REDVAULT branch: the stored order committed
@@ -242,7 +263,7 @@ export async function resolvePendingCheckoutOrder({
   }
 
   if (isNonReusableOrderState(existingOrder)) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   const mutationFetch = fetchImpl === fetch ? fetchWithCsrf : fetchImpl;
@@ -268,8 +289,11 @@ export async function resolvePendingCheckoutOrder({
     if (failure?.code === 'oxygen_payment_in_progress') {
       throw new Error('Your Oxygen payment is in progress. Return to your existing application or contact support before paying again.');
     }
+    if (failure?.code === 'oxygen_previous_payment_unresolved') {
+      throw new Error(oxygenPreviousPaymentUnresolved);
+    }
     if (shouldClearStoredOrder(reuseResponse.status)) {
-      return { reusableOrder: null, clearStoredOrder: true };
+      return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
     }
 
     throw new Error('Failed to reopen pending checkout order');
@@ -280,7 +304,7 @@ export async function resolvePendingCheckoutOrder({
   };
 
   if (!reusedOrderData.order?.id) {
-    return { reusableOrder: null, clearStoredOrder: true };
+    return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
 
   return {

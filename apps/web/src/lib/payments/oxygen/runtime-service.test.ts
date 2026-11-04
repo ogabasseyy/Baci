@@ -2,9 +2,28 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { performOxygenAction } from './runtime-service';
+import { OxygenPaymentOriginUnverifiedError } from './payment-origin-error';
+import { oxygenRuntimeRpc, performOxygenAction } from './runtime-service';
 
 const id = '60000000-0000-4000-8000-000000000001';
+it('maps only the exact payment-origin database guard to a safe recovery error', async () => {
+  const client = {
+    rpc: vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '23514', message: 'oxygen_payment_origin_unverified' },
+    }),
+  };
+  await expect(oxygenRuntimeRpc(client, 'enqueue', id)).rejects.toBeInstanceOf(
+    OxygenPaymentOriginUnverifiedError
+  );
+  client.rpc.mockResolvedValue({
+    data: null,
+    error: { code: '23514', message: 'private provider details' },
+  });
+  await expect(oxygenRuntimeRpc(client, 'enqueue', id)).rejects.toThrow(
+    'Workflow unavailable'
+  );
+});
 it('requires ownership and readiness before worker login or provider calls', async () => {
   const worker = vi.fn();
   const call = vi.fn();

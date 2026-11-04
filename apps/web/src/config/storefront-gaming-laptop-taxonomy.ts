@@ -50,6 +50,11 @@ export const AMBIGUOUS_FAMILY_ALIAS_PARENT: Readonly<Record<string, string>> = {
   blade: 'razer',
   predator: 'acer',
   nitro: 'acer',
+  stealth: 'msi',
+  titan: 'msi',
+  raider: 'msi',
+  vector: 'msi',
+  crosshair: 'msi',
 };
 
 export const NON_EXEMPT_MONITOR_PHRASES = [

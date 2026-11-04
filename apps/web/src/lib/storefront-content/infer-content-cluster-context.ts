@@ -42,8 +42,9 @@ const hasGamingLaptopPhrase = (t: string) =>
 const hasLaptopPhrase = (t: string) =>
   hasPhrase(t, 'laptop') || hasPhrase(t, 'laptops') || hasGamingLaptopPhrase(t);
 
-const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
-  s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
+const isExemptSubject = (s: string, rawT: string, hasGaming: boolean) => {
+  const t = rawT.replace(/gaming-laptop(s?)/g, 'gaming laptop$1');
+  return s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
     ? hasGaming && !NON_EXEMPT_GPU_PHRASES.some((p) => hasPhrase(t, p))
     : s.startsWith('monitor')
       ? hasGaming &&
@@ -60,6 +61,7 @@ const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
               (k === 'desktop' || k === 'battery' || hasGaming) &&
               GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
           );
+};
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
@@ -74,10 +76,18 @@ function hasExcludedGamingLaptopSubject(
   );
 }
 
-const hasTitleLaptopSubject = (t: string) =>
+const hasQualifiedFamilyToken = (t: string, ctx = t) =>
+  DEDICATED_GAMING_LAPTOP_TOKENS.some(
+    (k) =>
+      hasPhrase(t, k) &&
+      (!AMBIGUOUS_FAMILY_ALIAS_PARENT[k] ||
+        hasPhrase(ctx, AMBIGUOUS_FAMILY_ALIAS_PARENT[k]) ||
+        hasGamingLaptopPhrase(ctx))
+  );
+
+const hasTitleLaptopSubject = (t: string, ctx = t) =>
   hasGamingLaptopPhrase(t) ||
-  (hasLaptopPhrase(t) &&
-    DEDICATED_GAMING_LAPTOP_TOKENS.some((k) => hasPhrase(t, k)));
+  (hasLaptopPhrase(t) && hasQualifiedFamilyToken(t, ctx));
 
 const getSubjectTarget = (title?: string, excerpt?: string) =>
   hasTitleLaptopSubject(title ?? '')
@@ -112,20 +122,12 @@ function isDedicatedGamingLaptopContent(
     return false;
   }
   const c = [title, excerpt].filter(Boolean).join(' ');
+  const full = [c, content].join(' ');
   if (hasPhrase(title, 'game') && !hasGamingLaptopPhrase(c)) return false;
-  if (
-    hasPhrase(title, 'blade') &&
-    !hasPhrase([c, content].join(' '), 'razer')
-  ) {
-    return false;
-  }
-  if (hasTitleLaptopSubject(title)) {
+  if (hasTitleLaptopSubject(title, full)) {
     return !hasExcludedGamingLaptopSubject(title);
   }
-  const hasDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((t) =>
-    hasPhrase(title, t)
-  );
-  if (!hasDedicated) return false;
+  if (!hasQualifiedFamilyToken(title, full)) return false;
   const target = hasLaptopPhrase(c)
     ? c
     : hasPhrase(title, 'rtx') ||

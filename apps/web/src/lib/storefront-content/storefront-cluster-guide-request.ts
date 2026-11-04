@@ -57,9 +57,18 @@ export function buildStorefrontClusterGuideRequest(
     };
   }
 
+  const rules =
+    categorySlug === 'gaming-laptops'
+      ? STOREFRONT_CLUSTER_RULES.map((rule) =>
+          rule.category_slug === 'gaming' || rule.category_slug === 'laptops'
+            ? { ...rule, category_names: [] }
+            : rule
+        )
+      : STOREFRONT_CLUSTER_RULES;
+
   return {
     p_category_slug: categorySlug,
-    p_cluster_rules: STOREFRONT_CLUSTER_RULES,
+    p_cluster_rules: rules,
     p_search_query: buildClusterGuideSearchQuery({
       ...context,
       categorySlug,

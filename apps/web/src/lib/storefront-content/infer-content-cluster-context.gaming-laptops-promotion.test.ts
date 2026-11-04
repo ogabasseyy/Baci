@@ -166,6 +166,30 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
 
     expect(
       inferContentClusterContext({
+        title: 'Gaming-Laptop GPU Upgrade Buyer Guide',
+        excerpt: 'Mobile graphics.',
+        category: 'Gaming',
+      }).categorySlug
+    ).toBe('gaming');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Stealth Travel Laptop Review',
+        excerpt: 'Ultrabook for flights.',
+        category: 'Laptops',
+      }).categorySlug
+    ).toBe('laptops');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Titan Workstation Laptop Review',
+        excerpt: 'CAD workstation.',
+        category: 'Laptops',
+      }).categorySlug
+    ).toBe('laptops');
+
+    expect(
+      inferContentClusterContext({
         title: 'Top Picks for Your Setup',
         excerpt: 'Mechanical switches.',
         category: 'Gaming Laptop Keyboard',

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { hasBlogAuthorPage } from '@/lib/blog-authors';
 import { getBlogPostRedirect } from '@/lib/blog-post-redirects';
 import { getRequestLocale } from '@/lib/request-locale';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
@@ -132,11 +133,13 @@ async function renderBlogPostContent({
   });
 
   const [clusterPost] = await loadClassifiedClusterPosts(merchant.id, [post]);
+  const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const clusterModel = await buildInformationalClusterModel({
     merchantId: merchant.id,
     merchantSlug: merchant.slug,
     storeUrl: baseUrl,
     countryCode: merchant.country,
+    merchantCurrency,
     post: clusterPost,
   });
 

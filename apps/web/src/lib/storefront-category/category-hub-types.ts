@@ -9,8 +9,10 @@ export interface BrandAuthorityEntry {
   brandAliases?: string[];
   brandKey: string;
   brandQueryValue: string;
+  brandSlug?: string;
   categorySlug: string;
   displayName: string;
+  intro?: string;
   minimumProducts: number;
 }
 
@@ -60,9 +62,13 @@ export interface CategoryHubComparisonLink {
 }
 
 export interface CategoryHubProduct {
+  id?: string | null;
   slug: string;
   name: string;
   price: number;
+  stock?: number | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
   brand?: string | null;
   condition?: string | null;
   category_slug?: string | null;
@@ -108,6 +114,7 @@ export interface BuildCategoryHubModelInput {
   merchantBusinessName: string;
   storeUrl: string;
   products: CategoryHubProduct[];
+  merchantCurrency?: string | null;
   brandAuthorityEntries?: Array<
     BrandAuthorityEntry & {
       productCount: number;

@@ -45,6 +45,7 @@ export function verifyPriceBandLinkAgainstDestination(args: {
   curatedCompareSlugs?: ReadonlySet<string>;
   /** Article brands: a kept band must contain these brands in the destination pool, mirroring emission-side relevance. */
   inferredBrands?: string[];
+  merchantCurrency?: string | null;
 }): PriceBandLinkLike[] {
   const brandCandidate = args.compareProducts
     ? buildBrandCompareCandidate({
@@ -59,7 +60,9 @@ export function verifyPriceBandLinkAgainstDestination(args: {
   );
   const indexableBandSlugs = new Set(
     bandPool
-      ? buildCategoryPriceBandCandidates(args.categorySlug, bandPool)
+      ? buildCategoryPriceBandCandidates(args.categorySlug, bandPool, {
+          merchantCurrency: args.merchantCurrency,
+        })
           .filter((candidate) => {
             if (!candidate.isIndexable) return false;
             // Emission required the chosen band to contain inferred-brand

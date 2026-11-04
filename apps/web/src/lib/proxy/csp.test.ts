@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
+import { installExperienceExecutionOrigin } from '@/lib/experience/execution-origin-runtime';
 import {
   buildStrictCspResponse,
   generateCSP,
@@ -99,4 +100,35 @@ it('allows the Snapchat SDK dynamic configuration script only on storefronts', (
     expect(
       directive(generateCSP(route, false, 'nonce'), 'script-src')
     ).not.toContain(configurationScript.origin);
+});
+
+it('limits execution framing to storefronts and the private builder subtree', () => {
+  const uninstall = installExperienceExecutionOrigin(
+    'https://execution.example.net'
+  );
+  try {
+    expect(generateCSP('storefront', false)).toContain(
+      'https://execution.example.net'
+    );
+    for (const type of ['admin', 'auth', 'api'] as const)
+      expect(generateCSP(type, false)).not.toContain(
+        'https://execution.example.net'
+      );
+    expect(
+      buildStrictCspResponse(
+        new NextRequest('https://usebaci.com/builder/experience/preview'),
+        'admin',
+        false
+      ).response.headers.get('x-middleware-request-content-security-policy')
+    ).toContain('https://execution.example.net');
+    expect(
+      buildStrictCspResponse(
+        new NextRequest('https://usebaci.com/dashboard'),
+        'admin',
+        false
+      ).response.headers.get('x-middleware-request-content-security-policy')
+    ).not.toContain('https://execution.example.net');
+  } finally {
+    uninstall();
+  }
 });

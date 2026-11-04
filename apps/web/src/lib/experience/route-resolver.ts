@@ -1,5 +1,6 @@
 import type { ExperienceManifest } from '@baci/shared/experience';
 import {
+  isCategorizedExperienceProductPath,
   resolveExperienceRoute as matchRoute,
   normalizeExperiencePath,
 } from './route-ownership';
@@ -30,9 +31,7 @@ export async function resolveExperienceRoute(
   // authored wildcard. Static/auth/checkout routes are excluded before lookup.
   if (
     !route &&
-    /^\/(?!pages\/|api\/|account\/|auth\/|checkout\/|blog\/)[a-z0-9-]+\/[a-z0-9-]+$/.test(
-      normalized
-    ) &&
+    isCategorizedExperienceProductPath(normalized) &&
     routes.some((r) => r.view === 'product')
   ) {
     const product = await deps.product(normalized.split('/')[2], normalized);

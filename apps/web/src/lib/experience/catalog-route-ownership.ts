@@ -3,6 +3,7 @@ import type {
   PublicProduct,
 } from '@baci/shared/experience';
 import {
+  isCategorizedExperienceProductPath,
   normalizeExperiencePath,
   resolveExperienceRoute,
 } from './route-ownership';
@@ -21,13 +22,7 @@ export function resolveCatalogExperienceRoute(
     return null;
   }
   const product = products.find((product) => product.canonicalPath === path);
-  if (
-    !product ||
-    !/^\/(?!pages\/|api\/|account\/|auth\/|checkout\/|blog\/)[a-z0-9-]+\/[a-z0-9-]+$/.test(
-      path
-    )
-  )
-    return null;
+  if (!product || !isCategorizedExperienceProductPath(path)) return null;
   return {
     view: 'product' as const,
     canonicalPath: path,

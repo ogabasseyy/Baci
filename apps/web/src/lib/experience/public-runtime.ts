@@ -97,15 +97,17 @@ export function createPublicExperienceRuntime(
       if (!r.data) return null;
       categoryId = r.data.id;
     }
-    const result = await loadExperienceCatalog(client, m, {
-      limit: 100,
-      ...(categoryId ? { categoryId } : {}),
-      ...(productSlug ? { productSlug } : {}),
-      ...(productId ? { productId } : {}),
-    });
-    if (result && options.catalogImages)
-      for (const p of result.products)
-        p.image = options.catalogImages.get(p.id) ?? null;
+    const result = await loadExperienceCatalog(
+      client,
+      m,
+      {
+        limit: 100,
+        ...(categoryId ? { categoryId } : {}),
+        ...(productSlug ? { productSlug } : {}),
+        ...(productId ? { productId } : {}),
+      },
+      options.catalogImages
+    );
     if (result)
       result.revision = digestBytes(
         JSON.stringify([result.revision, result.products])

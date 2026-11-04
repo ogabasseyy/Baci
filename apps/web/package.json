@@ -62,7 +62,7 @@
     "probe:experience:sandbox": "tsx tools/experience-runner/qualify-sandbox.ts",
     "test:experience:sql": "node tools/experience-sql/run.mjs",
     "qualify:experience:private": "node tools/experience-sql/qualify-private.mjs",
-    "typecheck:experience": "tsc --noEmit -p tsconfig.experience-runner.json && tsc --noEmit -p tsconfig.experience-authoring.json && tsc --noEmit -p tsconfig.experience-commerce.json",
+    "typecheck:experience": "tsc --noEmit -p tsconfig.experience-runner.json && tsc --noEmit -p tsconfig.experience-authoring.json && tsc --noEmit -p tsconfig.experience-commerce.json && tsc --noEmit -p tsconfig.experience-durable.json && tsc --noEmit -p tsconfig.experience-performance.json",
     "qualify:experience:release": "node tools/experience-runner/qualify-release.mjs",
     "test:experience:lifecycle": "vitest run --config vitest.experience-lifecycle.config.ts"
   },

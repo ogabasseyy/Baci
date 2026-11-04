@@ -29,3 +29,21 @@ it('retains port across same-document routes; rapid transitions discard late dat
   expect(routes.current().epoch).toBe(3);
   expect(port).toBe(before);
 });
+
+it('retains matched dynamic parameters in the committed route state', async () => {
+  const routes = createRouteCoordinator({
+    epoch: 1,
+    routeId: 'home',
+    canonicalPath: '/',
+    params: {},
+    publicDataRevision: '1',
+  });
+  expect(
+    await routes.transitionRoute(
+      '/products/device',
+      async () => '2',
+      'product',
+      { handle: 'device' }
+    )
+  ).toMatchObject({ routeId: 'product', params: { handle: 'device' } });
+});

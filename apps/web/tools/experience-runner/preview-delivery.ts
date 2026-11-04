@@ -16,7 +16,7 @@ export function createProductionPreviewDelivery(config: {
     'Cache-Control': 'private, no-store',
     'Referrer-Policy': 'no-referrer',
     'X-Robots-Tag': 'noindex, nofollow',
-    'Access-Control-Allow-Origin': '*',
+    Vary: 'Origin',
     'Cross-Origin-Resource-Policy': 'cross-origin',
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': `default-src 'none'; script-src ${executionOrigin}; style-src ${executionOrigin} 'unsafe-inline'; img-src ${executionOrigin}; font-src ${executionOrigin}; connect-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors ${hostOrigins.join(' ')}`,
@@ -25,6 +25,9 @@ export function createProductionPreviewDelivery(config: {
   };
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
+    const origin = request.headers.get('origin');
+    if (origin && origin !== 'null' && !hostOrigins.includes(origin))
+      return new Response(null, { status: 404, headers });
     if (
       url.origin !== executionOrigin ||
       request.method !== 'GET' ||
@@ -43,7 +46,15 @@ export function createProductionPreviewDelivery(config: {
         match[2]
       );
       return new Response(Uint8Array.from(file.bytes), {
-        headers: { ...headers, 'Content-Type': file.mime },
+        headers: {
+          ...headers,
+          'Content-Type': file.mime,
+          // Sandboxed module/font requests carry the opaque Origin: null.
+          // Documents never grant CORS read access; ordinary foreign origins are rejected.
+          ...(file.mime !== 'text/html' && origin
+            ? { 'Access-Control-Allow-Origin': origin }
+            : {}),
+        },
       });
     } catch {
       return new Response('Preview expired or unavailable.', {

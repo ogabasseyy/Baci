@@ -16,7 +16,10 @@ export async function retainBuildPerformanceReport(
   },
   reports: BuildPerformanceDependencies['performanceReports']
 ) {
-  if (!performance.report) return performance.status;
+  if (!performance.report)
+    return performance.status === 'measured'
+      ? ('not-measured' as const)
+      : performance.status;
   if (!reports) return 'not-measured' as const;
   await requireExperienceOwner(ctx);
   try {

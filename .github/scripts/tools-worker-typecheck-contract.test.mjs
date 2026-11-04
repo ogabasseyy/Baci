@@ -149,3 +149,8 @@ test('full web shards install the isolated builder auth lockfile before fixture 
   assert.ok(pkg.dependencies['oidc-provider']);
   assert.match(await readFile('apps/web/tools/builder-auth/pnpm-lock.yaml', 'utf8'), /oidc-provider:/);
 });
+
+test('experience checks cover runner, authoring, commerce, durable and performance projects',async()=>{
+ const pkg=JSON.parse(await readFile(new URL('../../apps/web/package.json',import.meta.url),'utf8'));
+ assert.equal(pkg.scripts['typecheck:experience'],['runner','authoring','commerce','durable','performance'].map(name=>`tsc --noEmit -p tsconfig.experience-${name}.json`).join(' && '));
+});

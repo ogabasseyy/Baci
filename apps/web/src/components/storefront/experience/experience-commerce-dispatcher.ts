@@ -10,6 +10,7 @@ import {
 } from '@/lib/experience/commerce-context';
 import { createExperienceCartAdapter } from './experience-cart-adapter';
 import type { ExperienceHostLive } from './experience-host-runtime';
+import { readExperienceCatalog } from './experience-launch-client';
 import type { ExperienceShellState } from './experience-shell-controller';
 
 type Admit = () =>
@@ -74,6 +75,20 @@ export function dispatchExperienceCommerceRequest(
     },
     capabilities: state.data.bootstrap.capabilities,
     catalog: () => state.data.bootstrap.catalog,
+    ...(state.data.bootstrap.capabilities.includes('catalog.read')
+      ? {
+          resolveProduct: async (id) => {
+            if (!admit().allowed) return null;
+            const catalog = await readExperienceCatalog(state.data.stateUrl, {
+              productId: id,
+            });
+            if (!admit().allowed) return null;
+            return (
+              catalog.products.find((product) => product.id === id) ?? null
+            );
+          },
+        }
+      : {}),
   });
   const checkout = createExperienceCheckout({
     admit: () => admit().allowed,

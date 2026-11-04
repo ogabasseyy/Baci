@@ -34,6 +34,18 @@ export function projectExperienceCatalog(
       if (!parsed.success) throw Error('INVALID_CATALOG');
       const p = parsed.data;
       if (p.merchant_id !== merchant.id || p.status !== 'active') continue;
+      const variants = p.product_variants.map((v) => ({
+        id: v.id,
+        price: v.price_override ?? p.price,
+        label:
+          Object.values(v.attributes ?? {})
+            .filter((x) => typeof x === 'string')
+            .join(' / ') || 'Option',
+        available: isProductVariantPurchasable(p.manage_stock, {
+          ...v,
+          is_purchasable: v.is_purchasable ?? undefined,
+        }),
+      }));
       products.push({
         id: p.id,
         slug: p.slug,
@@ -49,23 +61,12 @@ export function projectExperienceCatalog(
             null,
         }),
         available:
-          p.has_variants === true && !p.product_variants.length
-            ? false
+          p.has_variants === true || variants.length > 0
+            ? variants.some((variant) => variant.available)
             : (p.available ?? getProductStockBucket(p) !== 'out_of_stock'),
+        variants,
         requiresVariant:
           p.has_variants === true || p.product_variants.length > 0,
-        variants: p.product_variants.map((v) => ({
-          id: v.id,
-          price: v.price_override ?? p.price,
-          label:
-            Object.values(v.attributes ?? {})
-              .filter((x) => typeof x === 'string')
-              .join(' / ') || 'Option',
-          available: isProductVariantPurchasable(p.manage_stock, {
-            ...v,
-            is_purchasable: v.is_purchasable ?? undefined,
-          }),
-        })),
       });
     }
   products.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -78,7 +79,8 @@ export function projectExperienceCatalog(
 export async function loadExperienceCatalog(
   client: SupabaseClient,
   merchant: ExperienceCatalogMerchant,
-  selection: unknown
+  selection: unknown,
+  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): Promise<PublicCatalog | null> {
   const input = experienceCatalogSelectionSchema.parse(selection);
   if (!merchant.is_published) return null;
@@ -176,7 +178,8 @@ export async function loadExperienceCatalog(
             effective_policy: v.effective_policy,
             available_units: v.available_units,
           })),
-        }))
+        })),
+        images
       );
     },
   });

@@ -1,3 +1,4 @@
+import { resolveExperienceRoute } from '@/lib/experience/route-ownership';
 import type {
   ExperienceFrameLaunch,
   PublishedExperienceFrameHost,
@@ -56,14 +57,8 @@ export function createFrameDispatcher({
             .transitionRoute(
               path,
               async () => launch.bootstrap.catalog.revision,
-              launch.routes.find((r) => {
-                try {
-                  canonicalExperiencePath(launch.canonicalBase, [r.path], path);
-                  return true;
-                } catch {
-                  return false;
-                }
-              })?.view ?? path
+              resolveExperienceRoute(launch.routes, path)?.view ?? path,
+              resolveExperienceRoute(launch.routes, path)?.params ?? {}
             )
             .then((route) => ({ status: 'ok' as const, value: route }));
         },

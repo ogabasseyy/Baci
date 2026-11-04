@@ -50,3 +50,37 @@ it('uses only the host command port and rejects variant, amount and quantity inj
   ).toMatchObject({ status: 'ok' });
   expect(submit).toHaveBeenCalledOnce();
 });
+
+it('admits a fresh trusted product outside the initial catalog and fails closed on lookup errors', async () => {
+  const productId = '10000000-0000-4000-8000-000000000002';
+  const submit = vi.fn(async () => ({
+    status: 'ok' as const,
+    value: { lines: [], version: 1, total: 0, currency: 'NGN' },
+  }));
+  const resolveProduct = vi.fn(async () => ({
+    id: productId,
+    slug: 'extra',
+    name: 'Extra',
+    price: 1,
+    currency: 'NGN',
+    image: null,
+    variants: [],
+    available: true,
+  }));
+  const adapter = createExperienceCartAdapter({
+    commandPort: { submit, reconcile: vi.fn() },
+    readPublicCart: vi.fn(),
+    capabilities: ['cart.mutate'],
+    catalog: () => ({ products: [], revision: 'r' }),
+    resolveProduct,
+  });
+  expect(await adapter.add({ productId, quantity: 1 })).toMatchObject({
+    status: 'ok',
+  });
+  expect(resolveProduct).toHaveBeenCalledWith(productId);
+  resolveProduct.mockRejectedValueOnce(Error('unavailable'));
+  expect(await adapter.add({ productId, quantity: 1 })).toMatchObject({
+    code: 'INVALID_REQUEST',
+  });
+  expect(submit).toHaveBeenCalledOnce();
+});

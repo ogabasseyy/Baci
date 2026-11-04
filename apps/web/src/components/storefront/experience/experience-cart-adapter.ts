@@ -5,6 +5,7 @@ import type {
   PublicCart,
   PublicCartCommand,
   PublicCatalog,
+  PublicProduct,
   SharedCartCommandPort,
 } from '@baci/shared/experience';
 import { experienceCartCommandSchema } from '@/schemas/experience-cart-command';
@@ -14,6 +15,7 @@ export function createExperienceCartAdapter(input: {
   readPublicCart: () => Promise<BridgeResult<PublicCart>>;
   capabilities: ExperienceCapability[];
   catalog: () => PublicCatalog;
+  resolveProduct?: (id: string) => Promise<PublicProduct | null>;
 }): ExperienceCommerce['cart'] {
   const error = (
     code: 'CART_ENROLLMENT_REQUIRED' | 'INSUFFICIENT_SCOPE' | 'INVALID_REQUEST'
@@ -30,7 +32,14 @@ export function createExperienceCartAdapter(input: {
     if (!parsed.success) return error('INVALID_REQUEST');
     const c = parsed.data;
     if (c.kind === 'add') {
-      const p = input.catalog().products.find((p) => p.id === c.productId);
+      let p: PublicProduct | null | undefined;
+      try {
+        p = input.resolveProduct
+          ? await input.resolveProduct(c.productId)
+          : input.catalog().products.find((p) => p.id === c.productId);
+      } catch {
+        return error('INVALID_REQUEST');
+      }
       if (
         !p ||
         p.available === false ||

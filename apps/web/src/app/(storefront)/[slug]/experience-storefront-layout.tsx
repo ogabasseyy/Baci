@@ -1,6 +1,7 @@
 import { type ReactNode, Suspense } from 'react';
 import { ExperienceShell } from '@/components/storefront/experience/ExperienceShell';
 import { ExperienceUnavailable } from '@/components/storefront/experience/ExperienceUnavailable';
+import { ExperienceLayoutSwitch } from '@/components/storefront/experience/experience-layout-switch';
 import type { MerchantData } from '@/hooks/merchant/types';
 import { loadPublishedExperience } from '@/lib/experience/published-manifest';
 import { StorefrontLayoutRenderer } from './storefront-layout-renderer';
@@ -48,7 +49,21 @@ export async function ResolvedExperienceStorefrontLayout({
     );
   return (
     <ExperienceShell merchantSlug={merchant.slug ?? ''}>
-      {children}
+      <ExperienceLayoutSwitch
+        routes={experience.routes}
+        basePath={routingMode === 'domain' ? '' : `/${merchant.slug}`}
+        nativeLayout={
+          <StorefrontLayoutRenderer
+            merchant={merchant}
+            preloadHeroLcpImages={preloadHeroLcpImages}
+            routingMode={routingMode}
+          >
+            {children}
+          </StorefrontLayoutRenderer>
+        }
+      >
+        {children}
+      </ExperienceLayoutSwitch>
     </ExperienceShell>
   );
 }

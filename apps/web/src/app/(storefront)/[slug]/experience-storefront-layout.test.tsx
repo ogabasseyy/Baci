@@ -78,3 +78,26 @@ it.each([
     location.path = '/qa1';
   }
 });
+
+it.each([
+  '/qa1/phones/device',
+  '/qa1/saved-items',
+  '/qa1/checkout',
+])('retains native chrome/providers outside a home-only experience: %s', async (path) => {
+  location.path = path;
+  try {
+    load.mockResolvedValueOnce({ routes: [{ path: '/', view: 'home' }] });
+    render(
+      await ResolvedExperienceStorefrontLayout({
+        merchant: { id: 'm', slug: 'qa1' } as never,
+        children: <p>Native route</p>,
+        preloadHeroLcpImages: false,
+        routingMode: 'path',
+      })
+    );
+    expect(screen.getByText('Native store')).toBeVisible();
+    expect(screen.getByText('Native route')).toBeVisible();
+  } finally {
+    location.path = '/qa1';
+  }
+});

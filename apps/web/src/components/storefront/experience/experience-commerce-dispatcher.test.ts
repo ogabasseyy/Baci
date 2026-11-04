@@ -1,70 +1,72 @@
 import { expect, it, vi } from 'vitest';
 
-vi.mock('@/hooks/cart/shared-cart-client', () => ({
-  prepareSharedCartCheckout: vi.fn(),
+const f = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock('./experience-launch-client', () => ({
+  readExperienceCatalog: f.read,
 }));
 
 import { dispatchExperienceCommerceRequest } from './experience-commerce-dispatcher';
-import type { ExperienceHostLive } from './experience-host-runtime';
-import type { ExperienceShellState } from './experience-shell-controller';
 
-function setup(allowed: boolean) {
-  const refreshSharedCart = vi.fn(async () => {});
-  const present = vi.fn();
-  const state = {
-    data: {
-      bootstrap: {
-        currency: 'USD',
-        catalog: { products: [], revision: 'catalog-r1' },
-        capabilities: [],
-      },
-    },
-  } as unknown as ExperienceShellState;
-  const live = {
-    current: {
-      cart: { syncStatus: 'synced', refreshSharedCart },
-    },
-  } as unknown as { current: ExperienceHostLive };
-  const admit = vi.fn(() =>
-    allowed
-      ? { allowed: true as const }
-      : { allowed: false as const, code: 'STALE_ROUTE' as const }
-  );
-  return { state, live, admit, present, refreshSharedCart };
-}
-
-it('opens trusted checkout only after the shared cart is admitted and refreshed', async () => {
-  const f = setup(true);
+it.each([
+  false,
+  true,
+])('rechecks admission after fetching a product outside the bootstrap (revoked=%s)', async (revoked) => {
+  let allowed = true;
+  const productId = '10000000-0000-4000-8000-000000000002';
+  const submit = vi.fn(async () => ({
+    status: 'ok' as const,
+    value: { lines: [], version: 1, total: 0, currency: 'NGN' },
+  }));
+  const port = { submit, reconcile: vi.fn() };
+  f.read.mockImplementationOnce(async () => {
+    allowed = !revoked;
+    return {
+      products: [
+        {
+          id: productId,
+          slug: 'extra',
+          name: 'Extra',
+          price: 1,
+          currency: 'NGN',
+          image: null,
+          variants: [],
+          available: true,
+        },
+      ],
+      revision: 'fresh',
+    };
+  });
   const result = await dispatchExperienceCommerceRequest(
-    { method: 'checkout.open', requestId: 'checkout-1', args: {} } as never,
     {
-      ...f,
-      merchantSlug: 'shop',
+      method: 'cart.add',
+      requestId: 'request',
+      args: { productId, quantity: 1 },
+    } as never,
+    {
+      state: {
+        data: {
+          stateUrl: '/api/storefront/experience/state',
+          bootstrap: {
+            capabilities: ['cart.mutate', 'catalog.read'],
+            catalog: { products: [], revision: 'initial' },
+          },
+        },
+      } as never,
+      live: {
+        current: {
+          cart: { experienceCommandPort: { withAdmission: () => port } },
+          router: { push: vi.fn(), refresh: vi.fn() },
+        },
+      } as never,
+      merchantSlug: 'qa1',
+      present: vi.fn(),
+      admit: () =>
+        allowed ? { allowed: true } : { allowed: false, code: 'STALE_ROUTE' },
       rebind: vi.fn(),
       isActive: async () => true,
       identityMatches: () => true,
     }
   );
-
-  expect(result).toMatchObject({ status: 'ok', value: { presented: true } });
-  expect(f.refreshSharedCart).toHaveBeenCalledOnce();
-  expect(f.present).toHaveBeenCalledOnce();
-});
-
-it('rejects checkout when route admission is stale without refreshing or presenting', async () => {
-  const f = setup(false);
-  const result = await dispatchExperienceCommerceRequest(
-    { method: 'checkout.open', requestId: 'checkout-stale', args: {} } as never,
-    {
-      ...f,
-      merchantSlug: 'shop',
-      rebind: vi.fn(),
-      isActive: async () => true,
-      identityMatches: () => true,
-    }
-  );
-
-  expect(result).toMatchObject({ status: 'error', code: 'STALE_ROUTE' });
-  expect(f.refreshSharedCart).not.toHaveBeenCalled();
-  expect(f.present).not.toHaveBeenCalled();
+  expect(result.status).toBe(revoked ? 'error' : 'ok');
+  expect(submit).toHaveBeenCalledTimes(revoked ? 0 : 1);
 });

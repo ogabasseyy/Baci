@@ -18,7 +18,7 @@ import { createTransientOutputStore } from '../../tools/experience-runner/transi
 import { fixtureCatalog } from '../experience-browser/fixtures/qualification-fixtures';
 import { hash, type lifecycleFixture } from './sql.test-support';
 export const rollbackFolder = new URL(
-  '../../../../docs/connectors/evidence/experience-checkpoint-d/rollback/',
+  '../../../../.superpowers/sdd/experience-rollback-output/',
   import.meta.url
 );
 const routes: ExperienceManifest['routes'] = [

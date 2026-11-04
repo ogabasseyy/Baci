@@ -26,7 +26,8 @@ it('serves immutable output on a separate HTTPS site, rechecking revocation and 
       },
     ],
   });
-  const file = vault.consume('synthetic-owner', ref).resources[0];
+  const launch = vault.consume('synthetic-owner', ref);
+  const file = launch.resources[0];
   const serve = createProductionPreviewDelivery({
     vault,
     executionOrigin,
@@ -41,6 +42,20 @@ it('serves immutable output on a separate HTTPS site, rechecking revocation and 
   expect(response.headers.get('content-security-policy')).toContain(
     'frame-ancestors https://builder.baci.test https://shop.merchant.test'
   );
+  expect(response.headers.has('access-control-allow-origin')).toBe(false);
+  const opaque = await serve(
+    new Request(file.url, { headers: { origin: 'null' } })
+  );
+  expect(opaque.status).toBe(200);
+  expect(opaque.headers.get('access-control-allow-origin')).toBe('null');
+  const hostile = await serve(
+    new Request(file.url, { headers: { origin: 'https://evil.test' } })
+  );
+  expect(hostile.status).toBe(404);
+  expect(hostile.headers.has('access-control-allow-origin')).toBe(false);
+  const document = await serve(new Request(launch.src));
+  expect(document.status).toBe(200);
+  expect(document.headers.has('access-control-allow-origin')).toBe(false);
   expect(response.headers.has('set-cookie')).toBe(false);
   expect(response.headers.has('access-control-allow-credentials')).toBe(false);
   for (const request of [

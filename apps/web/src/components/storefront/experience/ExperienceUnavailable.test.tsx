@@ -3,7 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
 const refresh = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh }),
+  usePathname: () => '/qa1',
+}));
 
 import { ExperienceUnavailable } from './ExperienceUnavailable';
 

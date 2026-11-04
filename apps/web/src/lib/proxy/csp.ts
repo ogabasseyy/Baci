@@ -5,7 +5,8 @@ import { buildProxyRequestHeaders } from './request-headers';
 export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
   isLocal: boolean,
-  nonce?: string
+  nonce?: string,
+  builderExperiencePreview = false
 ): string {
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const executionOrigin = getExperienceExecutionOrigin();
@@ -62,7 +63,10 @@ export function generateCSP(
   return Object.entries(directives)
     .map(([key, value]) => {
       const source =
-        key === 'frame-src' && executionOrigin
+        key === 'frame-src' &&
+        executionOrigin &&
+        (routeType === 'storefront' ||
+          (routeType === 'admin' && builderExperiencePreview))
           ? `${value} ${executionOrigin}`
           : value;
       return (source ? `${key} ${source}` : key).trim();
@@ -99,7 +103,10 @@ export function buildStrictCspResponse(
   isLocal: boolean
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
-  const csp = generateCSP(routeType, isLocal, nonce);
+  const builderPreview =
+    request.nextUrl.pathname === '/builder/experience' ||
+    request.nextUrl.pathname.startsWith('/builder/experience/');
+  const csp = generateCSP(routeType, isLocal, nonce, builderPreview);
   const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);

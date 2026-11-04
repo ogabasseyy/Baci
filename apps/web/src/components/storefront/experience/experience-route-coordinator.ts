@@ -11,7 +11,8 @@ export function createRouteCoordinator(initial: RouteState) {
     async transitionRoute(
       path: string,
       load: () => Promise<string>,
-      routeId = path
+      routeId = path,
+      params: Record<string, string> = {}
     ) {
       if (destroyed) throw Error('LAUNCH_EXPIRED');
       if (
@@ -32,7 +33,7 @@ export function createRouteCoordinator(initial: RouteState) {
           epoch,
           routeId,
           canonicalPath: path,
-          params: {},
+          params: { ...params },
           publicDataRevision: revision,
         };
         return state;

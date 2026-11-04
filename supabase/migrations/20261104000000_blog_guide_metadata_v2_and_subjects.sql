@@ -246,7 +246,7 @@ BEGIN
         OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support'
           AND (SELECT pg_catalog.count(DISTINCT peer_subj.product_id) FROM public.blog_post_guide_subjects AS peer_subj
                INNER JOIN public.products AS peer_prod ON peer_prod.id = peer_subj.product_id AND peer_prod.merchant_id = p_merchant_id AND peer_prod.status = 'active'
-               WHERE peer_subj.blog_post_id = post.id AND peer_subj.merchant_id = p_merchant_id AND peer_subj.subject_role = 'comparison') = 2)
+               WHERE peer_subj.blog_post_id = post.id AND peer_subj.merchant_id = p_merchant_id AND peer_subj.subject_role = 'comparison') >= 2)
         OR (subj.subject_role = 'product_support' AND post.guide_scope = 'troubleshooting' AND post.guide_kind = 'troubleshooting')
       )
     UNION ALL

@@ -58,7 +58,9 @@ export async function handlePrimaryProvisioning(
       supabase: auth.supabase,
       user: auth.user,
       merchantId: runtime.onboarding.merchantId,
-      forOnboarding: mode !== 'recover',
+      // Only creating a provider customer needs the original contact details;
+      // setup and recover work under the already-bound provider customer.
+      forOnboarding: mode === 'provision',
     });
     if (!identity)
       return NextResponse.json(

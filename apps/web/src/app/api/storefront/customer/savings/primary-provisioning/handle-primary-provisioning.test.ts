@@ -94,6 +94,23 @@ describe('handlePrimaryProvisioning', () => {
     );
   });
 
+  it('resolves setup with the post-onboarding identity, provision with the onboarding one', async () => {
+    await handlePrimaryProvisioning(
+      request({ ...base, interestAccepted: true }),
+      'setup'
+    );
+    expect(mocks.identity).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forOnboarding: false })
+    );
+    await handlePrimaryProvisioning(
+      request({ ...base, consent: true, interestAccepted: true }),
+      'provision'
+    );
+    expect(mocks.identity).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forOnboarding: true })
+    );
+  });
+
   it('refuses a non-boolean choice before any provisioning', async () => {
     const response = await handlePrimaryProvisioning(
       request({ ...base, interestAccepted: 'yes' }),

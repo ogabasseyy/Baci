@@ -146,25 +146,34 @@ export async function finalizeUpload(
   const template = parseExperienceManifest(u.data.manifest.manifest);
   const files = [];
   for (const f of desc.files) {
-    const chunks = await ctx.supabase
-      .from('experience_chunks')
-      .select('byte_offset,bytes,digest')
-      .eq('merchant_id', ctx.merchantId)
-      .eq('upload_id', uploadId)
-      .eq('path', f.path)
-      .order('byte_offset')
-      .limit(128);
-    if (chunks.error || !chunks.data) throw Error('NOT_FOUND');
+    const chunks: Array<{ offset: number; bytes: Uint8Array; digest: string }> =
+      [];
+    let after = -1;
+    let received = 0;
+    for (;;) {
+      const page = await ctx.supabase
+        .from('experience_chunks')
+        .select('byte_offset,bytes,digest')
+        .eq('merchant_id', ctx.merchantId)
+        .eq('upload_id', uploadId)
+        .eq('path', f.path)
+        .gt('byte_offset', after)
+        .order('byte_offset')
+        .limit(128);
+      if (page.error || !page.data) throw Error('NOT_FOUND');
+      if (!page.data.length) break;
+      for (const chunk of page.data) {
+        const bytes = Buffer.from(chunk.bytes.slice(2), 'hex');
+        received += bytes.length;
+        if (chunk.byte_offset <= after || !bytes.length || received > f.bytes)
+          throw Error('INVALID_REQUEST');
+        chunks.push({ offset: chunk.byte_offset, bytes, digest: chunk.digest });
+        after = chunk.byte_offset;
+      }
+    }
     files.push({
       path: f.path,
-      content: assembleSource(
-        chunks.data.map((c) => ({
-          offset: c.byte_offset,
-          bytes: Buffer.from(c.bytes.slice(2), 'hex'),
-          digest: c.digest,
-        })),
-        f
-      ),
+      content: assembleSource(chunks, f),
     });
   }
   const manifest = parseExperienceManifest({ ...template, files });

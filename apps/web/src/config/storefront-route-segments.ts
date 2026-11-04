@@ -41,6 +41,8 @@ const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
   // Singular `/product/{slug}` is a legacy redirect-only / noindex route (not in
   // RESERVED, which only has plural `products`) — keep it no-store.
   'product',
+  // Collection documents must bypass both categorized-PDP preflights.
+  'collections',
   'my-account',
   'delete-account',
   'receipts',
@@ -105,7 +107,6 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // retired alias and redirects non-OgaBassey stores to their home. A suffixed
 // `/unlock-orders/<path>` remains eligible for the proxy's retired-alias redirect.
 const RETIRED_SLUG_STRIP_LIVE_PAGE_SEGMENTS = new Set<string>([
-  'collections',
   ...STOREFRONT_ROUTE_FIRST_SEGMENTS,
   'unlock-orders',
 ]);

@@ -33,7 +33,8 @@ export const experienceCatalogRowSchema = z.object({
         z.object({ url: z.string(), alt: z.string().optional() }),
       ])
     )
-    .default([]),
+    .nullish()
+    .transform((images) => images ?? []),
   product_variants: z
     .array(
       z.object({

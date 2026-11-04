@@ -154,3 +154,12 @@ it('retains mapped product image IDs and alt text through the normal RLS loader'
       ?.products[0].image
   ).toEqual(images.get('p1'));
 });
+
+it('keeps active products with nullable database images in the public catalog', () => {
+  const catalog = projectExperienceCatalog(merchant, [
+    { ...row, images: null },
+    row,
+  ]);
+  expect(catalog.products).toHaveLength(2);
+  expect(catalog.products[0].image).toBeNull();
+});

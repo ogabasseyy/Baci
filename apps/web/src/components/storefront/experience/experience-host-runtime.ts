@@ -1,11 +1,16 @@
 import type { RouteState } from '@baci/shared/experience';
 import type { CartContextType } from '@/hooks/cart/cart-types';
 import { resolveCatalogExperienceRoute } from '@/lib/experience/catalog-route-ownership';
-import { resolveExperienceRoute } from '@/lib/experience/route-ownership';
+import {
+  isCategorizedExperienceProductPath,
+  normalizeExperiencePath,
+  resolveExperienceRoute,
+} from '@/lib/experience/route-ownership';
 import { asRoute } from '@/lib/routes';
 import type { PublishedExperienceFrameHost } from './experience-frame-types';
 import { createExperienceHostDispatcher } from './experience-host-dispatcher';
 import {
+  readExperienceCatalog,
   readExperiencePublicationState,
   renewExperienceLaunch,
 } from './experience-launch-client';
@@ -177,25 +182,43 @@ export function createPublishedExperienceHost({
         if (s) listener(s.data.bootstrap.route);
       });
     },
-    async navigate(path) {
+    async navigate(requestedPath) {
       const s = current();
+      const path = normalizeExperiencePath(requestedPath);
       const route = resolveExperienceRoute(s.data.manifest.routes, path);
-      const safe =
-        route ||
-        s.data.bootstrap.catalog.products.some((p) => p.canonicalPath === path);
-      if (!safe) throw Error('INVALID_ROUTE');
-      // Product routes redirect to Baci's catalog canonical URL. Wait for that
-      // trusted destination, rather than timing out on the authored alias.
-      const destination =
+      let products = s.data.bootstrap.catalog.products;
+      const handle =
         route?.view === 'product'
-          ? (s.data.bootstrap.catalog.products.find(
-              (product) => product.slug === route.params.handle
-            )?.canonicalPath ?? path)
-          : path;
+          ? route.params.handle
+          : isCategorizedExperienceProductPath(path)
+            ? path.split('/')[2]
+            : /^\/products\/[a-z0-9-]+$/.test(path)
+              ? path.split('/')[2]
+              : null;
+      let product = products.find(
+        (p) => p.canonicalPath === path || (handle && p.slug === handle)
+      );
+      if (
+        !product &&
+        handle &&
+        s.data.manifest.capabilities?.includes('catalog.read')
+      ) {
+        const result = await readExperienceCatalog(s.data.stateUrl, {
+          productSlug: handle,
+        });
+        if (controller.getSnapshot() !== s || !s.active)
+          throw Error('INVALID_ROUTE');
+        product = result.products.find((p) => p.slug === handle);
+        if (product) products = [...products, product];
+      }
+      if (!route && !product) throw Error('INVALID_ROUTE');
+      const destination = normalizeExperiencePath(
+        product?.canonicalPath ?? path
+      );
       const owned = resolveCatalogExperienceRoute(
         s.data.manifest.routes,
         destination,
-        s.data.bootstrap.catalog.products
+        products
       );
       if (!owned) {
         // The native PDP has no experience boundary to acknowledge this transition.

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import {
   assembleSource,
   finalizeUpload,
@@ -79,4 +79,86 @@ it('a finalized upload replay returns the same source digest and artifact refere
   await expect(
     finalizeUpload(ctx as never, { uploadId: 'upload' })
   ).resolves.toEqual({ artifactId: 'artifact', sourceDigest: 'a'.repeat(64) });
+});
+
+it.each([
+  129, 256,
+])('finalizes accepted uploads containing %i immutable chunks', async (count) => {
+  const content = 'a'.repeat(count * 1024);
+  const chunks = Array.from({ length: count }, (_, i) => ({
+    byte_offset: i * 1024,
+    bytes: `\\x${Buffer.from('a'.repeat(1024)).toString('hex')}`,
+    digest: hash('a'.repeat(1024)),
+  }));
+  const manifest = {
+    format: 'baci.experience/v2',
+    runtime: 'react-browser-sandbox/v1',
+    sdkVersion: 'commerce-bridge/v1',
+    entry: 'app.tsx',
+    files: [{ path: 'app.tsx', content: '' }],
+    packages: [],
+    routes: [{ path: '/', view: 'home' }],
+    assets: [],
+    capabilities: ['navigation'],
+  };
+  const rpc = vi.fn(async (name: string) => ({
+    data: name === 'experience_require_owner' ? true : 'artifact',
+    error: null,
+  }));
+  const reads: number[] = [];
+  const ctx = {
+    merchantId: 'merchant',
+    supabase: {
+      auth: {
+        getUser: async () => ({ data: { user: { id: 'owner' } }, error: null }),
+      },
+      rpc,
+      from(table: string) {
+        let after = -1;
+        const q = {
+          select: () => q,
+          eq: () => q,
+          order: () => q,
+          gt: (_column: string, value: number) => {
+            after = value;
+            return q;
+          },
+          maybeSingle: async () => ({
+            data: {
+              manifest: {
+                manifest,
+                files: [
+                  {
+                    path: 'app.tsx',
+                    bytes: content.length,
+                    digest: hash(content),
+                  },
+                ],
+              },
+              expires_at: new Date(Date.now() + 60000).toISOString(),
+              finalized_artifact_id: null,
+            },
+            error: null,
+          }),
+          limit: async (limit: number) => {
+            expect(table).toBe('experience_chunks');
+            reads.push(after);
+            return {
+              data: chunks.filter((c) => c.byte_offset > after).slice(0, limit),
+              error: null,
+            };
+          },
+        };
+        return q;
+      },
+    },
+  };
+  await expect(
+    finalizeUpload(ctx as never, { uploadId: 'upload' })
+  ).resolves.toMatchObject({ artifactId: 'artifact' });
+  expect(reads.length).toBeGreaterThan(1);
+  expect(rpc).toHaveBeenCalledWith(
+    'experience_finalize_upload',
+    expect.objectContaining({ p_merchant: 'merchant' })
+  );
 });

@@ -1,6 +1,6 @@
 -- REGRESSION TEST (behaviour): goal funding from the PiggyVest main wallet is
 -- not gated by, and never touches, the legacy in-house balance
--- (migration 20261104130000_piggyvest_goal_funding_primary_balance).
+-- (migration 20261104130500_piggyvest_goal_funding_primary_balance).
 --
 -- Before the fix the reservation read and debited public.customer_wallets, which
 -- PiggyVest deposits no longer credit, so a customer with PiggyVest money and a
@@ -24,7 +24,7 @@
 -- error that is not the exact legacy refusal under test.
 --
 -- Registered in the replay registry folder
--- 20261104130000_piggyvest_goal_funding_primary_balance.
+-- 20261104130500_piggyvest_goal_funding_primary_balance.
 
 BEGIN;
 
@@ -153,6 +153,8 @@ DECLARE
   c_op2 constant text := 'f3880000-0000-4000-8000-0000000000a2';
   c_op3 constant text := 'f3880000-0000-4000-8000-0000000000a3';
   c_op4 constant text := 'f3880000-0000-4000-8000-0000000000a4';
+  c_op5 constant text := 'f3880000-0000-4000-8000-0000000000a5';
+  c_op6 constant text := 'f3880000-0000-4000-8000-0000000000a6';
   c_integration constant uuid := 'f3880000-0000-4000-8000-000000000006';
   v_scope jsonb := pg_catalog.current_setting('test.fundbal_scope')::jsonb;
   v_result jsonb;
@@ -227,6 +229,18 @@ BEGIN
         AND wallet_transaction_id IS NULL AND amount = 50 AND idempotency_key = 'pvb-save-' || c_op4) = 1,
     'settlement wrote no hold-free contribution');
   PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'settlement changed the legacy wallet or its history');
+
+  -- The local guard is conservative: every recorded outflow is subtracted. The
+  -- confirmed 5000 leaves 95000, and a dispatched (in-flight) transfer is
+  -- subtracted too, so a further reservation is refused until it is released.
+  v_result := pg_temp.fb_reserve(c_op5, 95001);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'a confirmed outflow was not subtracted: ' || v_result::text);
+  v_result := pg_temp.fb_reserve(c_op5, 95000);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'claimed', 'the remaining balance was not reservable: ' || v_result::text);
+  PERFORM pg_temp.fb_assert(piggyvest_primary.manage_savings(v_scope, c_op5::uuid, 'dispatch'), 'dispatch of the fifth failed');
+  v_result := pg_temp.fb_reserve(c_op6, 1);
+  PERFORM pg_temp.fb_assert(v_result ->> 'status' = 'insufficient', 'a dispatched outflow was not subtracted: ' || v_result::text);
+  PERFORM pg_temp.fb_assert(pg_temp.fb_legacy_untouched(), 'the guard checks changed the legacy wallet');
 
   -- Legacy path unchanged: no balance is still refused, and the refusal is the
   -- legacy wallet check (not any PiggyVest rule).

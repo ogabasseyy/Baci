@@ -11,7 +11,7 @@ const root = path.resolve(here, '../../../../..');
 const sql = readFileSync(
   path.join(
     root,
-    'supabase/migrations/20261104130000_piggyvest_goal_funding_primary_balance.sql'
+    'supabase/migrations/20261104130500_piggyvest_goal_funding_primary_balance.sql'
   ),
   'utf8'
 );
@@ -48,5 +48,35 @@ it.each([
 it('does not trust a caller-supplied balance', () => {
   expect(body('reserve_savings_before_interest')).not.toMatch(
     /request->>'(balance|availableKobo|walletBalance)'/
+  );
+});
+
+function settleBody(name: string) {
+  const start = sql.indexOf(
+    `CREATE OR REPLACE FUNCTION piggyvest_primary.${name}(`
+  );
+  expect(start).toBeGreaterThan(-1);
+  const end = sql.indexOf('END;\n$$;', start);
+  expect(end).toBeGreaterThan(start);
+  return sql
+    .slice(start, end)
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+}
+
+it.each([
+  'settle_goal_cancel',
+  'settle_goal_complete',
+])('%s never credits the legacy wallet', (name) => {
+  const fn = settleBody(name);
+  expect(fn).not.toContain('customer_wallets');
+  expect(fn).not.toContain('customer_wallet_transactions');
+  expect(fn).toContain("RETURN 'conflict'");
+});
+
+it('keeps the goal complete purchase request in the settlement', () => {
+  expect(settleBody('settle_goal_complete')).toContain(
+    'INSERT INTO piggyvest_primary.goal_purchase_requests'
   );
 });

@@ -34,8 +34,8 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"amountKobo":101000}'::jsonb) = 'confirmed',
     'the interest-inclusive refund was not settled');
-  PERFORM pg_temp.gc_assert(pg_temp.gc_goal('status') = 'cancelled' AND pg_temp.gc_wallet() = 2010,
-    'the interest-inclusive refund did not cancel the goal and credit its own amount');
+  PERFORM pg_temp.gc_assert(pg_temp.gc_goal('status') = 'cancelled' AND pg_temp.gc_wallet() = 1000,
+    'the interest-inclusive refund did not cancel the goal, or changed the legacy wallet');
   v_result := piggyvest_primary.read_daily_reconciliation(
     'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', '{"staleAfterSeconds":60}'::jsonb);
   PERFORM pg_temp.gc_assert(v_result -> 'wallets' =

@@ -10,8 +10,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efaa0000-0000-4000-8000-000000000011','efaa0000-0000-4000-8000-000000000003','draft-merchant@example.test','Draft RLS fixture','oxygen-draft-rls-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efaa0000-0000-4000-8000-000000000021','efaa0000-0000-4000-8000-000000000011','efaa0000-0000-4000-8000-000000000001','Test','Customer','draft-owner@example.test');
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES ('efaa0000-0000-4000-8000-000000000031','efaa0000-0000-4000-8000-000000000011','efaa0000-0000-4000-8000-000000000021','OXYGEN-DRAFT-RLS',400000,'NGN','unpaid');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efaa0000-0000-4000-8000-000000000031','efaa0000-0000-4000-8000-000000000011','efaa0000-0000-4000-8000-000000000021','OXYGEN-DRAFT-RLS',400000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES ('efaa0000-0000-4000-8000-000000000041','efaa0000-0000-4000-8000-000000000031','efaa0000-0000-4000-8000-000000000011','efaa0000-0000-4000-8000-000000000021');
 

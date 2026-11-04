@@ -10,8 +10,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000003','saved-plan-merchant@example.test','Booking block fixture','oxygen-saved-plan-rls-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efae0000-0000-4000-8000-000000000021','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000001','Test','Customer','saved-plan-owner@example.test');
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES ('efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES ('efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021');
 
@@ -27,8 +27,8 @@ VALUES('efae0000-0000-4000-8000-000000000012','efae0000-0000-4000-8000-000000000
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES('efae0000-0000-4000-8000-000000000022','efae0000-0000-4000-8000-000000000012','efae0000-0000-4000-8000-000000000002','Other','Customer','saved-plan-stranger@example.test');
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000004',true);
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES('efae0000-0000-4000-8000-000000000032','efae0000-0000-4000-8000-000000000012','efae0000-0000-4000-8000-000000000022','OXYGEN-OTHER-WORKER',400000,'NGN','unpaid');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES('efae0000-0000-4000-8000-000000000032','efae0000-0000-4000-8000-000000000012','efae0000-0000-4000-8000-000000000022','OXYGEN-OTHER-WORKER',400000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES('efae0000-0000-4000-8000-000000000042','efae0000-0000-4000-8000-000000000032','efae0000-0000-4000-8000-000000000012','efae0000-0000-4000-8000-000000000022');
 INSERT INTO oxygen_private.partner_workers(partner_reference,worker_user_id) VALUES('other-partner','efae0000-0000-4000-8000-000000000004');

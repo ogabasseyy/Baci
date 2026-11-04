@@ -34,18 +34,19 @@ function limited(retryAfterSeconds: number) {
   );
 }
 
+// userId is the authenticated customer auth user id, not customers.id.
 // Returns null when the call may proceed, otherwise the refusal to send.
 // Redis unavailable or erroring denies closed, like the proxy PIN buckets.
 export async function chargeWalletPinCustomerLimit(
   budget: WalletPinCustomerBudget,
   merchantId: string,
-  customerId: string
+  userId: string
 ): Promise<NextResponse | null> {
   const config = BUDGETS[budget];
   try {
     const verdict = await checkTenantRateLimit(
       `wallet-pin:${budget}`,
-      `${merchantId}:${customerId}`,
+      `${merchantId}:${userId}`,
       config
     );
     if (verdict === 'allowed') return null;

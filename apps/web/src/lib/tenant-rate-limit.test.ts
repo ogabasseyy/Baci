@@ -49,6 +49,16 @@ describe('checkTenantRateLimit', () => {
     );
   });
 
+  it('reports a Redis timeout verdict as unavailable, not allowed', async () => {
+    mockLimiterLimit.mockResolvedValue({ success: true, reason: 'timeout' });
+    await expect(
+      checkTenantRateLimit('wallet-pin:mutation', 'm1:c1', {
+        maxRequests: 5,
+        windowMs: 600_000,
+      })
+    ).resolves.toBe('unavailable');
+  });
+
   it('denies when the budget is exhausted', async () => {
     mockLimiterLimit.mockResolvedValue({ success: false });
     await expect(

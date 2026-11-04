@@ -17,6 +17,7 @@ const tenantLimiters = new Map<string, Ratelimit>();
 // paging once.
 let warnedRedisUnavailable = false;
 let warnedRedisError = false;
+let warnedRedisTimeout = false;
 
 export type TenantRateLimitVerdict = 'allowed' | 'denied' | 'unavailable';
 
@@ -61,6 +62,20 @@ export async function checkTenantRateLimit(
         tenantId,
       });
       return 'denied';
+    }
+    // Upstash resolves { success: true, reason: 'timeout' } when Redis stalls
+    // past its timeout: a fail-OPEN verdict that never charged the budget.
+    // Treat it as an outage so every caller denies closed.
+    if (result.reason === 'timeout') {
+      if (!warnedRedisTimeout) {
+        warnedRedisTimeout = true;
+        logger.warn({
+          message: 'Tenant rate limit timed out; denying closed',
+          namespace,
+          tenantId,
+        });
+      }
+      return 'unavailable';
     }
     return 'allowed';
   } catch {

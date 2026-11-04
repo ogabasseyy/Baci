@@ -127,14 +127,58 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
     }
   });
 
-  it('does not attribute razer brand to blade titles lacking razer parent brand', () => {
+  it('does not attribute razer or acer brand to ambiguous family titles lacking parent brand', () => {
     const post = inferContentClusterContext({
       title: 'Blade Vampire Action Game Review',
       excerpt: 'Exciting gothic combat and vampire hunter lore.',
       category: 'Laptops',
-      tags: ['blade', 'action'],
+      tags: ['blade', 'predator', 'nitro', 'action'],
       keywords: ['review'],
     });
     expect(post.brands).not.toContain('razer');
+    expect(post.brands).not.toContain('acer');
+  });
+
+  it('handles hyphenated gaming-laptop phrases, monitor-led pairings, for-gaming-laptop GPUs, explicit accessory categories, and game-title excerpts', () => {
+    expect(
+      inferContentClusterContext({
+        title: 'Best Gaming-Laptop Deals in Nigeria',
+        excerpt: null,
+        category: 'Gaming',
+      }).categorySlug
+    ).toBe('gaming-laptops');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Best Monitor Pairings for Gaming Laptops',
+        excerpt: 'External displays.',
+        category: 'Gaming',
+      }).categorySlug
+    ).not.toBe('gaming-laptops');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Best GPUs for Gaming Laptops',
+        excerpt: 'Mobile graphics.',
+        category: 'Gaming',
+      }).categorySlug
+    ).toBe('gaming');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Top Picks for Your Setup',
+        excerpt: 'Mechanical switches.',
+        category: 'Gaming Laptop Keyboard',
+      }).categorySlug
+    ).toBe('accessories');
+
+    expect(
+      inferContentClusterContext({
+        title: 'Blade Predator Game Review',
+        excerpt: 'Playable on laptops.',
+        category: 'Hardware Reviews',
+        tags: ['blade', 'predator'],
+      }).categorySlug
+    ).not.toBe('gaming-laptops');
   });
 });

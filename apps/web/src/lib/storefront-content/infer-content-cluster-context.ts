@@ -5,6 +5,7 @@ import {
   EXPLICIT_CONTENT_CLUSTER_CATEGORIES,
 } from '@/config/storefront-content-clusters';
 import {
+  AMBIGUOUS_FAMILY_ALIAS_PARENT,
   DEDICATED_GAMING_LAPTOP_TOKENS,
   EXCLUDED_CATEGORY_MAP,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
@@ -33,7 +34,10 @@ const tokenize = (values: Array<string | null | undefined>) => [
 ];
 
 const hasGamingLaptopPhrase = (t: string) =>
-  hasPhrase(t, 'gaming laptop') || hasPhrase(t, 'gaming laptops');
+  hasPhrase(t, 'gaming laptop') ||
+  hasPhrase(t, 'gaming laptops') ||
+  hasPhrase(t, 'gaming-laptop') ||
+  hasPhrase(t, 'gaming-laptops');
 
 const hasLaptopPhrase = (t: string) =>
   hasPhrase(t, 'laptop') || hasPhrase(t, 'laptops') || hasGamingLaptopPhrase(t);
@@ -43,6 +47,7 @@ const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
     ? hasGaming && !NON_EXEMPT_GPU_PHRASES.some((p) => hasPhrase(t, p))
     : s.startsWith('monitor')
       ? hasGaming &&
+        !/\bmonitors?\b.*\blaptops?\b/.test(t) &&
         !NON_EXEMPT_MONITOR_PHRASES.some((p) => hasPhrase(t, p)) &&
         GAMING_LAPTOP_EXEMPT_PHRASES.monitor.some((p) => hasPhrase(t, p))
       : s.startsWith('keyboard')
@@ -90,14 +95,12 @@ const hasLaptopSubjectEvidence = (
   haystack?: string
 ) => {
   const target = getSubjectTarget(title, excerpt);
+  if (hasPhrase(title ?? '', 'game') && !hasGamingLaptopPhrase(target)) {
+    return false;
+  }
   if (hasLaptopPhrase(target)) return true;
   if (!haystack || !hasLaptopPhrase(haystack)) return false;
-  const gameTitle =
-    hasPhrase(title ?? '', 'game') && !hasGamingLaptopPhrase(target);
-  return (
-    !gameTitle &&
-    !(hasPhrase(haystack, 'blade') && !hasPhrase(haystack, 'razer'))
-  );
+  return !(hasPhrase(haystack, 'blade') && !hasPhrase(haystack, 'razer'));
 };
 
 function isDedicatedGamingLaptopContent(
@@ -161,6 +164,9 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
+      if (hasExcludedGamingLaptopSubject(explicitCategory, true)) {
+        return getExcludedSubjectCategory(explicitCategory);
+      }
       if (title && hasExcludedGamingLaptopSubject(title, true)) {
         return getExcludedSubjectCategory(title);
       }
@@ -238,8 +244,9 @@ function inferBrands(
         )
         .filter(([, a]) =>
           a.some((alias) =>
-            alias === 'blade'
-              ? hasPhrase(haystack, 'blade') && hasPhrase(haystack, 'razer')
+            AMBIGUOUS_FAMILY_ALIAS_PARENT[alias]
+              ? hasPhrase(haystack, alias) &&
+                hasPhrase(haystack, AMBIGUOUS_FAMILY_ALIAS_PARENT[alias])
               : hasPhrase(haystack, alias)
           )
         )

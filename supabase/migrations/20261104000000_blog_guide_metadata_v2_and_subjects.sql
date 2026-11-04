@@ -68,7 +68,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS blog_post_guide_subjects_merchant_consistency_trigger ON public.blog_post_guide_subjects;
 CREATE TRIGGER blog_post_guide_subjects_merchant_consistency_trigger
   BEFORE INSERT OR UPDATE ON public.blog_post_guide_subjects FOR EACH ROW
@@ -109,7 +108,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 DROP TRIGGER IF EXISTS blog_posts_stale_on_content_change ON public.blog_posts;
 CREATE TRIGGER blog_posts_stale_on_content_change
   BEFORE UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION public.blog_posts_stale_on_content_change_trigger();
@@ -145,7 +143,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 ALTER FUNCTION public.products_stale_blog_guide_metadata() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.products_stale_blog_guide_metadata() FROM PUBLIC;
 
@@ -172,8 +169,11 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     UPDATE public.blog_posts SET metadata_status = 'stale' WHERE id = OLD.blog_post_id AND merchant_id = OLD.merchant_id AND metadata_status = 'verified';
     RETURN OLD;
+  ELSIF TG_OP = 'INSERT' THEN
+    UPDATE public.blog_posts SET metadata_status = 'stale' WHERE id = NEW.blog_post_id AND merchant_id = NEW.merchant_id AND metadata_status = 'verified';
+    RETURN NEW;
   END IF;
-  IF OLD.blog_post_id IS DISTINCT FROM NEW.blog_post_id OR OLD.product_id IS DISTINCT FROM NEW.product_id OR OLD.subject_role IS DISTINCT FROM NEW.subject_role OR OLD.merchant_id IS DISTINCT FROM NEW.merchant_id THEN
+  IF OLD.blog_post_id IS DISTINCT FROM NEW.blog_post_id OR OLD.product_id IS DISTINCT FROM NEW.product_id OR OLD.subject_role IS DISTINCT FROM NEW.subject_role OR OLD.merchant_id IS DISTINCT FROM NEW.merchant_id OR OLD.source_revision IS DISTINCT FROM NEW.source_revision THEN
     UPDATE public.blog_posts SET metadata_status = 'stale' WHERE metadata_status = 'verified' AND ((id = OLD.blog_post_id AND merchant_id = OLD.merchant_id) OR (id = NEW.blog_post_id AND merchant_id = NEW.merchant_id));
   END IF;
   RETURN NEW;
@@ -183,7 +183,7 @@ ALTER FUNCTION public.blog_post_guide_subjects_stale_on_delete() OWNER TO postgr
 REVOKE ALL ON FUNCTION public.blog_post_guide_subjects_stale_on_delete() FROM PUBLIC;
 DROP TRIGGER IF EXISTS blog_post_guide_subjects_stale_on_delete_trigger ON public.blog_post_guide_subjects;
 CREATE TRIGGER blog_post_guide_subjects_stale_on_delete_trigger
-  AFTER UPDATE OR DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
+  AFTER INSERT OR UPDATE OR DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
 
 CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
   p_merchant_id uuid, p_page_kind text, p_category_id uuid DEFAULT NULL, p_product_id uuid DEFAULT NULL, p_limit integer DEFAULT 64

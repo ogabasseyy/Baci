@@ -12,6 +12,7 @@ const base: {
   stuck: [];
   walletsTotal: number;
   truncated: { stuck: boolean; wallets: boolean };
+  deferred: { stuck: number; wallets: number };
 } = {
   generatedAt: '2026-11-03T00:30:00.000+01:00',
   staleAfterSeconds: 1800,
@@ -19,6 +20,7 @@ const base: {
   stuck: [],
   walletsTotal: 1,
   truncated: { stuck: false, wallets: false },
+  deferred: { stuck: 0, wallets: 0 },
 };
 
 const huge: ReconciliationReport = {

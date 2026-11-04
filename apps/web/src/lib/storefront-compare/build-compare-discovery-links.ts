@@ -228,6 +228,7 @@ export function buildCommercialSupportDiscoveryLinks(
   const categorySupportLinks = buildCategorySupportLinks({
     ...input,
     storeUrl,
+    allPriceBands: true,
     includeBrandCompareLink: input.includeBrandCompareLinks,
   }).filter(
     (link) => extractCategoryCompareSlug(link.href, input.categorySlug) === null

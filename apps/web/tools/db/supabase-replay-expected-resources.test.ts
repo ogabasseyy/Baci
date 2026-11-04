@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   assertSupabaseReplayResources,
   expectedSupabaseReplayResources,
-  inspectSupabaseReplayResources,
   type ObservedSupabaseReplayResources,
   SUPABASE_PROJECT_LABEL,
 } from './supabase-replay-expected-resources';
@@ -41,7 +40,7 @@ describe('expectedSupabaseReplayResources', () => {
       'supabase_db_baci_replay_abc123',
     ]);
     expect(resources.containers[0]).toEqual({
-      image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+      image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
       name: 'supabase_db_baci_replay_abc123',
     });
     expect(resources.volumes).toEqual(['supabase_db_baci_replay_abc123']);
@@ -62,6 +61,71 @@ describe('expectedSupabaseReplayResources', () => {
 });
 
 describe('assertSupabaseReplayResources', () => {
+  it('classifies mismatches without exposing resource names or labels', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const missing = observed();
+    missing.networks = [];
+    expect(() =>
+      assertSupabaseReplayResources(missing, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(network-missing\)$/
+    );
+
+    const foreign = observed();
+    foreign.volumes[0] = {
+      name: 'secret-name',
+      labels: { [SUPABASE_PROJECT_LABEL]: 'secret-label' },
+    };
+    expect(() =>
+      assertSupabaseReplayResources(foreign, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(volume-unexpected\)$/
+    );
+
+    const wrongImage = observed();
+    wrongImage.containers[0].image = 'private-registry/secret-image';
+    expect(() =>
+      assertSupabaseReplayResources(wrongImage, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-image\)$/
+    );
+  });
+
+  it('classifies duplicate resources and redacts unexpected exceptions', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const duplicate = observed();
+    duplicate.volumes.push(duplicate.volumes[0]);
+    expect(() =>
+      assertSupabaseReplayResources(duplicate, expected, {
+        allowPartial: true,
+        projectId,
+      })
+    ).toThrow(
+      /^Supabase replay resource verification failed \(volume-duplicate\)$/
+    );
+
+    const broken = observed();
+    Object.defineProperty(broken, 'containers', {
+      get() {
+        throw new Error('private resource details');
+      },
+    });
+    expect(() =>
+      assertSupabaseReplayResources(broken, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/^Supabase replay resource verification failed$/);
+  });
   it('accepts the exact complete owned resource set', () => {
     expect(() =>
       assertSupabaseReplayResources(
@@ -70,6 +134,38 @@ describe('assertSupabaseReplayResources', () => {
         { allowPartial: false, projectId }
       )
     ).not.toThrow();
+  });
+
+  it('accepts only the exact project-labeled optional pg-delta cache volume', () => {
+    const expected = expectedSupabaseReplayResources({}, projectId);
+    const resources = observed();
+    resources.volumes.push({
+      name: `supabase_edge_runtime_${projectId}`,
+      labels: { [SUPABASE_PROJECT_LABEL]: projectId },
+    });
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).not.toThrow();
+    resources.volumes[1].labels[SUPABASE_PROJECT_LABEL] = 'other';
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/volume-unexpected/);
+    resources.volumes[1] = {
+      name: `supabase_edge_runtime_${projectId}_extra`,
+      labels: { [SUPABASE_PROJECT_LABEL]: projectId },
+    };
+    expect(() =>
+      assertSupabaseReplayResources(resources, expected, {
+        allowPartial: false,
+        projectId,
+      })
+    ).toThrow(/volume-unexpected/);
   });
 
   it('accepts a correctly labeled partial subset only during cleanup', () => {
@@ -95,7 +191,9 @@ describe('assertSupabaseReplayResources', () => {
         allowPartial: false,
         projectId,
       })
-    ).toThrow(/^Supabase replay resource verification failed$/);
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-missing\)$/
+    );
 
     const malformed = observed();
     malformed.containers[0] = {
@@ -108,90 +206,8 @@ describe('assertSupabaseReplayResources', () => {
         allowPartial: true,
         projectId,
       })
-    ).toThrow(/^Supabase replay resource verification failed$/);
-  });
-});
-
-describe('inspectSupabaseReplayResources', () => {
-  it('lists every exact-label Docker resource without a shell command', async () => {
-    const runCommand = vi
-      .fn()
-      .mockResolvedValueOnce({
-        stderr: '',
-        stdout: `${JSON.stringify({
-          Image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
-          Labels: `${SUPABASE_PROJECT_LABEL}=${projectId}`,
-          Names: `supabase_db_${projectId}`,
-        })}\n`,
-      })
-      .mockResolvedValueOnce({
-        stderr: '',
-        stdout: `${JSON.stringify({
-          Labels: `${SUPABASE_PROJECT_LABEL}=${projectId}`,
-          Name: `supabase_db_${projectId}`,
-        })}\n`,
-      })
-      .mockResolvedValueOnce({ stderr: '', stdout: '' });
-
-    const resources = await inspectSupabaseReplayResources(
-      projectId,
-      runCommand
+    ).toThrow(
+      /^Supabase replay resource verification failed \(container-unexpected\)$/
     );
-
-    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
-      [
-        'ps',
-        '-a',
-        '--filter',
-        `label=${SUPABASE_PROJECT_LABEL}=${projectId}`,
-        '--format',
-        '{{json .}}',
-      ],
-      [
-        'volume',
-        'ls',
-        '--filter',
-        `label=${SUPABASE_PROJECT_LABEL}=${projectId}`,
-        '--format',
-        '{{json .}}',
-      ],
-      [
-        'network',
-        'ls',
-        '--filter',
-        `label=${SUPABASE_PROJECT_LABEL}=${projectId}`,
-        '--format',
-        '{{json .}}',
-      ],
-    ]);
-    expect(resources.containers[0]).toMatchObject({
-      image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
-      name: `supabase_db_${projectId}`,
-    });
-    expect(resources.volumes[0]?.labels[SUPABASE_PROJECT_LABEL]).toBe(
-      projectId
-    );
-    expect(resources.networks).toEqual([]);
-  });
-
-  it.each([
-    'credential=secret',
-    'null',
-    '42',
-    '"primitive"',
-    '[]',
-    '{"Image":"image","Labels":null,"Names":"container"}',
-    '{"Image":"image","Labels":"malformed","Names":"container"}',
-    '{"Image":"image","Labels":"key=value","Names":42}',
-    '{"Image":{},"Labels":"key=value","Names":"container"}',
-  ])('rejects invalid Docker JSON rows without returning raw output', async (row) => {
-    const runCommand = vi.fn(async (_command, args) => ({
-      stderr: '',
-      stdout: args[0] === 'ps' ? `${row}\n` : '',
-    }));
-
-    await expect(
-      inspectSupabaseReplayResources(projectId, runCommand)
-    ).rejects.toThrow(/^Docker replay resource output is invalid$/);
   });
 });

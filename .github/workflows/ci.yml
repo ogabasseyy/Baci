@@ -305,8 +305,8 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Install Supabase replay toolchain
         env:
-          SUPABASE_CLI_SHA256: 01a3b8f5861d108a934937cae88e8d503093c3f7d3aa32d959f69b099b4f9ef3
-          SUPABASE_CLI_VERSION: 2.95.4
+          SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
+          SUPABASE_CLI_VERSION: 2.111.0
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -322,8 +322,9 @@ jobs:
             "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
             --output "${SUPABASE_ARCHIVE}"
           echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
-          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase
-          sudo chmod 0755 /usr/local/bin/supabase
+          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go
+          sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go
+          test -x /usr/local/bin/supabase-go
           test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'

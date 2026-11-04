@@ -1,46 +1,27 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  type NotificationSendResult,
-  notifyCustomer,
-  notifyMerchant,
-} from '@/lib/expo-push';
-import { maybeNotifyActivateProtection } from '@/lib/insurance/notify-activate-protection';
+  notifyCustomerWithStore,
+  notifyMerchantWithStore,
+} from '@/lib/expo-push-core';
+import type { NotificationSendResult } from '@/lib/expo-push-types';
+import type { GiglNotificationRpcClient } from '@/lib/gigl-notification-worker-client';
 import { logger } from '@/lib/logger';
-import type { Database } from '@/types/supabase';
 import { buildGiglTrackingMerchantPushPayload } from './build-gigl-tracking-merchant-push-payload';
+import { createGiglNotificationPushStore } from './gigl-notification-push-store';
+import { notifyGiglDeliveredProtection } from './gigl-tracking-delivered-protection';
 import {
   type ClaimedGiglTrackingNotification,
   claimedGiglTrackingNotificationsSchema,
 } from './gigl-tracking-notification-claim-schema';
+import { completeGiglTrackingNotification as complete } from './gigl-tracking-notification-complete';
 import { copyFor } from './gigl-tracking-notification-copy';
 
 export type { ClaimedGiglTrackingNotification };
 export { claimedGiglTrackingNotificationsSchema };
 
-type WorkerSupabase = SupabaseClient<Database>;
+type WorkerSupabase = GiglNotificationRpcClient;
 type NotificationProcessingState = { rejectionCompleted: boolean };
 
 const SHIPMENT_UPDATE_CAPABILITY = 1;
-
-async function complete(
-  supabase: WorkerSupabase,
-  id: string,
-  workerId: string,
-  outcome: 'sent' | 'skipped' | 'failed' | 'rejected',
-  error?: string
-): Promise<boolean> {
-  const { data, error: rpcError } = await supabase.rpc(
-    'complete_shipment_tracking_notification',
-    {
-      ...(error ? { p_error: error } : {}),
-      p_id: id,
-      p_outcome: outcome,
-      p_worker_id: workerId,
-    }
-  );
-  if (rpcError) throw rpcError;
-  return data === true;
-}
 
 async function processNotification(
   supabase: WorkerSupabase,
@@ -48,13 +29,17 @@ async function processNotification(
   workerId: string,
   processingState: NotificationProcessingState
 ) {
-  const { data: event, error: eventError } = await supabase
-    .from('shipment_tracking_events')
-    .select('description')
-    .eq('id', notification.tracking_event_id)
-    .maybeSingle();
+  const { data: eventRows, error: eventError } = await supabase.rpc(
+    'gigl_worker_notification_event',
+    { p_id: notification.id, p_worker_id: workerId }
+  );
+  const event = (eventRows as { description: string | null }[] | null)?.[0];
   if (eventError || !event)
     throw eventError ?? new Error('Tracking event missing');
+  const store = createGiglNotificationPushStore(supabase, {
+    notificationId: notification.id,
+    workerId,
+  });
 
   const copy = copyFor(
     notification.notification_kind,
@@ -67,6 +52,8 @@ async function processNotification(
     notification.order_id
   ) {
     await notifyDeliveredProtectionActivation(
+      supabase,
+      { notificationId: notification.id, workerId },
       notification.order_id,
       notification.merchant_id
     );
@@ -74,7 +61,7 @@ async function processNotification(
   let deliveryRejected = false;
   const onDeliveryStart = async () => {
     const { data: started, error: beginError } = await supabase.rpc(
-      'begin_shipment_tracking_notification_dispatch',
+      'gigl_worker_begin_notification_dispatch',
       { p_id: notification.id, p_worker_id: workerId }
     );
     if (beginError) throw beginError;
@@ -106,7 +93,8 @@ async function processNotification(
       return 'skipped' as const;
     }
     const payload = buildGiglTrackingMerchantPushPayload(notification);
-    const result = await notifyMerchant(
+    const result = await notifyMerchantWithStore(
+      store,
       notification.merchant_id,
       copy.title,
       copy.body,
@@ -139,13 +127,15 @@ async function processNotification(
     );
     return 'skipped' as const;
   }
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .select('customer_id')
-    .eq('id', notification.order_id)
-    .maybeSingle();
-  if (orderError) throw orderError;
-  if (!order?.customer_id) {
+  const { data: customerRows, error: customerError } = await supabase.rpc(
+    'gigl_worker_notification_customer',
+    { p_id: notification.id, p_worker_id: workerId }
+  );
+  if (customerError) throw customerError;
+  const customer = (
+    customerRows as { customer_user_id: string | null }[] | null
+  )?.[0];
+  if (!customer) {
     await complete(
       supabase,
       notification.id,
@@ -155,13 +145,7 @@ async function processNotification(
     );
     return 'skipped' as const;
   }
-  const { data: customer, error: customerError } = await supabase
-    .from('customers')
-    .select('user_id')
-    .eq('id', order.customer_id)
-    .maybeSingle();
-  if (customerError) throw customerError;
-  if (!customer?.user_id) {
+  if (!customer.customer_user_id) {
     await complete(
       supabase,
       notification.id,
@@ -176,8 +160,9 @@ async function processNotification(
     type: 'shipment_tracking',
     event: notification.notification_kind,
   };
-  const result = await notifyCustomer(
-    customer.user_id,
+  const result = await notifyCustomerWithStore(
+    store,
+    customer.customer_user_id,
     copy.title,
     copy.body,
     payload,
@@ -200,11 +185,13 @@ async function processNotification(
 }
 
 async function notifyDeliveredProtectionActivation(
+  supabase: WorkerSupabase,
+  lease: { notificationId: string; workerId: string },
   orderId: string,
   merchantId: string
 ) {
   try {
-    await maybeNotifyActivateProtection(orderId, merchantId);
+    await notifyGiglDeliveredProtection(supabase, lease, merchantId, orderId);
   } catch (error) {
     logger.error({
       message: 'Failed to send activate-protection push after GIGL delivery',

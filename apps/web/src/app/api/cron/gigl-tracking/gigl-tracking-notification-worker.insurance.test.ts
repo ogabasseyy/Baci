@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processClaimedGiglTrackingNotifications } from './gigl-tracking-notification-worker';
+import { createGiglTrackingNotificationSupabase } from './gigl-tracking-notification-worker.test-support';
 
-const maybeNotifyActivateProtection = vi.hoisted(() => vi.fn());
+const notifyGiglDeliveredProtection = vi.hoisted(() => vi.fn());
 const notifyMerchant = vi.hoisted(() => vi.fn());
 const notifyCustomer = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/insurance/notify-activate-protection', () => ({
-  maybeNotifyActivateProtection,
+vi.mock('./gigl-tracking-delivered-protection', () => ({
+  notifyGiglDeliveredProtection,
 }));
-vi.mock('@/lib/expo-push', () => ({ notifyCustomer, notifyMerchant }));
+vi.mock('@/lib/expo-client', () => ({ getExpoClient: vi.fn() }));
+vi.mock('@/lib/expo-push-core', () => ({
+  notifyCustomerWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyCustomer(...args),
+  notifyMerchantWithStore: (_store: unknown, ...args: unknown[]) =>
+    notifyMerchant(...args),
+}));
 
 const merchantNotification = {
   audience: 'merchant' as const,
@@ -23,31 +30,24 @@ const merchantNotification = {
 
 const notification = { ...merchantNotification, audience: 'customer' as const };
 
-function supabaseFor(event: unknown) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    maybeSingle: vi.fn().mockResolvedValue({ data: event, error: null }),
-    select: vi.fn(() => builder),
-  };
-  const from = vi.fn().mockReturnValue(builder);
-  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
-  return { from, rpc };
+function supabaseFor() {
+  return createGiglTrackingNotificationSupabase(
+    { description: 'Delivered' },
+    { customer_id: 'c1' },
+    { user_id: 'u1' }
+  );
 }
 
 describe('GIGL delivered notification protection fanout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    maybeNotifyActivateProtection.mockResolvedValue(undefined);
+    notifyGiglDeliveredProtection.mockResolvedValue(undefined);
     notifyMerchant.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
     notifyCustomer.mockResolvedValue({ errors: [], failed: 0, sent: 1 });
   });
 
   it('fans out protection activation from the notification worker', async () => {
-    const supabase = supabaseFor({
-      description: 'Delivered',
-      customer_id: 'c1',
-      user_id: 'u1',
-    });
+    const supabase = supabaseFor();
 
     const summary = await processClaimedGiglTrackingNotifications(
       supabase as never,
@@ -56,33 +56,31 @@ describe('GIGL delivered notification protection fanout', () => {
     );
 
     expect(summary).toMatchObject({ failed: 0, sent: 1 });
-    expect(maybeNotifyActivateProtection).toHaveBeenCalledWith(
-      notification.order_id,
-      notification.merchant_id
+    expect(notifyGiglDeliveredProtection).toHaveBeenCalledWith(
+      supabase,
+      { notificationId: notification.id, workerId: 'worker' },
+      notification.merchant_id,
+      notification.order_id
     );
     expect(notifyCustomer).toHaveBeenCalled();
   });
 
   it('does not repeat the protection prompt for the merchant delivered alert', async () => {
-    const supabase = supabaseFor({ description: 'Delivered' });
+    const supabase = supabaseFor();
     await processClaimedGiglTrackingNotifications(
       supabase as never,
       [merchantNotification],
       'worker'
     );
-    expect(maybeNotifyActivateProtection).not.toHaveBeenCalled();
+    expect(notifyGiglDeliveredProtection).not.toHaveBeenCalled();
     expect(notifyMerchant).toHaveBeenCalled();
   });
 
   it('keeps delivery notification completion successful when protection fanout fails', async () => {
-    maybeNotifyActivateProtection.mockRejectedValueOnce(
+    notifyGiglDeliveredProtection.mockRejectedValueOnce(
       new Error('push unavailable')
     );
-    const supabase = supabaseFor({
-      description: 'Delivered',
-      customer_id: 'c1',
-      user_id: 'u1',
-    });
+    const supabase = supabaseFor();
 
     const summary = await processClaimedGiglTrackingNotifications(
       supabase as never,
@@ -92,7 +90,7 @@ describe('GIGL delivered notification protection fanout', () => {
 
     expect(summary).toMatchObject({ failed: 0, sent: 1 });
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'complete_shipment_tracking_notification',
+      'gigl_worker_complete_notification',
       expect.objectContaining({ p_outcome: 'sent' })
     );
   });

@@ -65,6 +65,10 @@ RETURNS SETOF text LANGUAGE sql STABLE SET search_path = pg_catalog AS $$
     AND v IN (SELECT piggyvest_primary.bank_role_violations_real('pv_er_bare', p_worker)))
 $$;
 
+-- Inserting a merchant fires the canonical audit trigger, which needs an actor;
+-- run the fixture as the service role (transaction-local), as the other suites do.
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 -- Integration 1: inflow executor pv_er_exec. Integration 2: bank worker.
 INSERT INTO public.merchants(id, email) VALUES
   (pg_temp.id(1), 'engine-ready-1@example.test');

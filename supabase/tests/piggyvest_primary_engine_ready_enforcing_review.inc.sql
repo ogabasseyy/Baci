@@ -24,6 +24,19 @@ SELECT pg_temp.check(pg_temp.gaps('inflow', 'pv_er_exec') = 'login_membership_un
   'a role inherited through the readiness reader must be reported alone');
 ROLLBACK TO SAVEPOINT reader_inherits_extra;
 
+-- 3d2. A delegable grant (WITH ADMIN OPTION) lets the login hand the role on.
+SAVEPOINT login_evidence_admin;
+GRANT piggyvest_primary_evidence TO pv_er_exec WITH ADMIN OPTION;
+SELECT pg_temp.check(pg_temp.gaps('inflow', 'pv_er_exec') = 'login_membership_unsafe',
+  'an evidence grant WITH ADMIN OPTION on the login must be reported alone');
+ROLLBACK TO SAVEPOINT login_evidence_admin;
+
+SAVEPOINT evidence_reader_admin;
+GRANT piggyvest_primary_readiness_reader TO piggyvest_primary_evidence WITH ADMIN OPTION;
+SELECT pg_temp.check(pg_temp.gaps('inflow', 'pv_er_exec') = 'login_membership_unsafe',
+  'a delegable readiness reader grant along the chain must be reported alone');
+ROLLBACK TO SAVEPOINT evidence_reader_admin;
+
 -- 3e. The real privilege scan. The suite wrapper drops function and relation
 -- rows a bare login also has (PUBLIC privileges of the image). Put the
 -- unmodified scan back: the worker is ready exactly when the image has no such

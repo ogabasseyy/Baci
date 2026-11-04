@@ -95,14 +95,17 @@ BEGIN
       -- must be the evidence role or the readiness reader it carries. A
       -- direct-only check would miss a privileged role inherited through them.
       IF NOT pg_has_role(p_login, 'piggyvest_primary_evidence', 'MEMBER')
-        OR EXISTS (WITH RECURSIVE chain(roleid) AS (
-            SELECT m.roleid FROM pg_auth_members m
+        OR EXISTS (WITH RECURSIVE chain(roleid, admin_option) AS (
+            SELECT m.roleid, m.admin_option FROM pg_auth_members m
               JOIN pg_roles member ON member.oid = m.member WHERE member.rolname = p_login
             UNION
-            SELECT m.roleid FROM pg_auth_members m JOIN chain c ON m.member = c.roleid)
+            SELECT m.roleid, m.admin_option FROM pg_auth_members m JOIN chain c ON m.member = c.roleid)
           SELECT 1 FROM chain JOIN pg_roles parent ON parent.oid = chain.roleid
           WHERE parent.rolname NOT IN ('piggyvest_primary_evidence',
-            'piggyvest_primary_readiness_reader')) THEN
+            'piggyvest_primary_readiness_reader')
+            -- A delegable grant (WITH ADMIN OPTION) lets the login hand the
+            -- evidence or reader role to others, so it is unsafe too.
+            OR chain.admin_option) THEN
         v_missing := array_append(v_missing, 'login_membership_unsafe'::text);
       END IF;
     END IF;

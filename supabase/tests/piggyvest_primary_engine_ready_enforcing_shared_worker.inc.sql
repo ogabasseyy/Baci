@@ -49,4 +49,23 @@ UPDATE piggyvest_primary.bank_inbox_authorities SET business_id = 'engine-ready-
 SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'bank_binding_mismatch',
   'integration B enabled must not make the worker ready while A binding disagrees');
 ROLLBACK TO SAVEPOINT shared_a_mismatch;
+-- Integration B failing while A stays healthy must also be not ready: every
+-- binding of the shared login has to pass.
+SAVEPOINT shared_b_inflow_disabled;
+UPDATE piggyvest_primary.inflow_authorities SET enabled = false WHERE integration_id = pg_temp.id(13);
+SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'inflow_authority_not_enabled',
+  'integration A enabled must not make the worker ready while B has no enabled inflow authority');
+ROLLBACK TO SAVEPOINT shared_b_inflow_disabled;
+
+SAVEPOINT shared_b_authority_disabled;
+UPDATE piggyvest_primary.bank_inbox_authorities SET enabled = false WHERE integration_id = pg_temp.id(13);
+SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'bank_authority_not_enabled',
+  'integration A enabled must not make the worker ready while B bank authority is disabled');
+ROLLBACK TO SAVEPOINT shared_b_authority_disabled;
+
+SAVEPOINT shared_b_integration_disabled;
+UPDATE piggyvest_primary.integrations SET enabled = false WHERE id = pg_temp.id(13);
+SELECT pg_temp.check(pg_temp.gaps('bank_inbox', 'baci_primary_bank_worker') = 'integration_not_enabled',
+  'integration A enabled must not make the worker ready while B is disabled');
+ROLLBACK TO SAVEPOINT shared_b_integration_disabled;
 ROLLBACK TO SAVEPOINT bank_shared_login;

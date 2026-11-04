@@ -86,7 +86,7 @@ drops `--proof p10`). Evidence is written to `docs/piggyvest-contract-evidence`
 
 ### How long a live run waits
 
-Each money movement is polled for up to two minutes (24 polls, 5s apart;
+Each wait for a money movement has a budget of about two minutes (24 polls, 5s apart;
 `LIVE_POLL_INTERVAL_MS` and `LIVE_MAX_POLLS` in constants.ts). The 2026-11-03
 live runs showed the sandbox usually settles in under 20s, but once dropped a
 test funding entirely and once credited a goal an hour late; a movement that

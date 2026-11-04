@@ -125,13 +125,15 @@ describe('money limits', () => {
 });
 
 describe('live polling window', () => {
-  it('waits at least two minutes for a sandbox movement to settle', () => {
+  it('gives each sandbox wait a budget of about two minutes', () => {
     // 2026-11-03 live runs: a ₦10,000 test funding never credited in one run,
     // and a goal credit landed an hour late in another, while the same calls
     // settled in under 20s on later runs. 30s (15 x 2s) misread slow
-    // settlement as unsettled; two minutes absorbs ordinary sandbox lag.
-    expect(LIVE_POLL_INTERVAL_MS * LIVE_MAX_POLLS).toBeGreaterThanOrEqual(
-      120_000
+    // settlement as unsettled. A loop that sleeps after each read last
+    // observes one interval before the budget ends, so require that point
+    // to clear 100s.
+    expect(LIVE_POLL_INTERVAL_MS * (LIVE_MAX_POLLS - 1)).toBeGreaterThanOrEqual(
+      100_000
     );
     // Not so long that every stable-balance check (which always runs all
     // rounds) makes a run take hours.

@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   subtotal: 0,
   isHydrated: true,
   hasPriceNegotiation: true,
+  cartMerchantSlug: 'store',
+  merchantSlug: 'store',
   setIsCartOpen: vi.fn(),
 }));
 
@@ -28,14 +30,14 @@ vi.mock('@/hooks/cart', () => ({
     cart: state.cart,
     subtotal: state.subtotal,
     isHydrated: state.isHydrated,
-    merchantSlug: 'store',
+    merchantSlug: state.cartMerchantSlug,
     setIsCartOpen: state.setIsCartOpen,
   }),
 }));
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({
     merchant: {
-      slug: 'store',
+      slug: state.merchantSlug,
       price_negotiation_enabled: state.hasPriceNegotiation,
     },
   }),
@@ -54,6 +56,8 @@ describe('ChatCartReview', () => {
     state.subtotal = 0;
     state.isHydrated = true;
     state.hasPriceNegotiation = true;
+    state.cartMerchantSlug = 'store';
+    state.merchantSlug = 'store';
     state.setIsCartOpen.mockClear();
   });
 
@@ -90,6 +94,10 @@ describe('ChatCartReview', () => {
   it('shows the empty cart state from the canonical cart', () => {
     render(<ChatCartReview />);
     expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
+    expect(screen.queryByText('Estimated subtotal')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Open cart to edit items' })
+    ).not.toBeInTheDocument();
   });
 
   it('does not report an empty cart or subtotal before hydration completes', () => {
@@ -166,6 +174,31 @@ describe('ChatCartReview', () => {
       screen.getByText(`1 × ₦${expectedPrice.toLocaleString()}`)
     ).toBeInTheDocument();
   });
+
+  it.each([
+    ['negotiation disabled', false, 'store'],
+    ['cart merchant differs from storefront', true, 'another-store'],
+  ] as const)(
+    'uses catalog pricing when %s',
+    (_reason, negotiationEnabled, cartMerchantSlug) => {
+      state.hasPriceNegotiation = negotiationEnabled;
+      state.cartMerchantSlug = cartMerchantSlug;
+      state.cart = [
+        {
+          cartItemId: 'negotiated-phone',
+          name: 'Negotiated phone',
+          quantity: 2,
+          price: 1000,
+          negotiatedPrice: 500,
+          negotiationStatus: 'accepted',
+        },
+      ];
+      render(<ChatCartReview />);
+
+      expect(screen.getByText('2 × ₦1,000')).toBeInTheDocument();
+      expect(screen.getByText('₦2,000')).toBeInTheDocument();
+    }
+  );
 
   it('discloses when the estimated subtotal includes selected protection', () => {
     state.cart = [

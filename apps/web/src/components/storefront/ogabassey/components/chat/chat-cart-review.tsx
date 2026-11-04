@@ -1,3 +1,5 @@
+'use client';
+
 import { ShoppingBag } from 'lucide-react';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
@@ -19,8 +21,7 @@ export function ChatCartReview() {
 
   if (!isHydrated) {
     return (
-      <section
-        aria-label="Cart review"
+      <div
         className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
       >
         <div className="mb-2 flex items-center gap-2 font-semibold">
@@ -34,7 +35,7 @@ export function ChatCartReview() {
         >
           Loading cart…
         </p>
-      </section>
+      </div>
     );
   }
 
@@ -49,8 +50,7 @@ export function ChatCartReview() {
   const includesProtection = displayCart.some((item) => item.hasAssurance);
 
   return (
-    <section
-      aria-label="Cart review"
+    <div
       className="rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
     >
       <div className="mb-2 flex items-center gap-2 font-semibold">
@@ -81,24 +81,28 @@ export function ChatCartReview() {
         </ul>
       )}
 
-      <div className="mt-2 border-t border-store-border pt-2">
-        <div className="flex justify-between gap-3 text-sm font-semibold">
-          <span>Estimated subtotal</span>
-          <span>{formatCurrency(estimatedCartTotal)}</span>
-        </div>
-        <p className="mt-1 text-xs text-store-background-text/60">
-          {includesProtection && 'Includes selected protection. '}
-          Shipping, tax, and final total are determined during checkout.
-        </p>
-      </div>
+      {displayCart.length > 0 && (
+        <>
+          <div className="mt-2 border-t border-store-border pt-2">
+            <div className="flex justify-between gap-3 text-sm font-semibold">
+              <span>Estimated subtotal</span>
+              <span>{formatCurrency(estimatedCartTotal)}</span>
+            </div>
+            <p className="mt-1 text-xs text-store-background-text/60">
+              {includesProtection && 'Includes selected protection. '}
+              Shipping, tax, and final total are determined during checkout.
+            </p>
+          </div>
 
-      <button
-        type="button"
-        onClick={() => setIsCartOpen(true)}
-        className="mt-3 w-full rounded-lg border border-store-primary px-3 py-2 text-sm font-medium text-store-primary hover:bg-store-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary"
-      >
-        Open cart to edit items
-      </button>
-    </section>
+          <button
+            type="button"
+            onClick={() => setIsCartOpen(true)}
+            className="mt-3 w-full rounded-lg border border-store-primary px-3 py-2 text-sm font-medium text-store-primary hover:bg-store-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary"
+          >
+            Open cart to edit items
+          </button>
+        </>
+      )}
+    </div>
   );
 }

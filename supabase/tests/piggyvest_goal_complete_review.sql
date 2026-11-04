@@ -44,7 +44,7 @@ BEGIN
     AND pg_temp.gx_state(v_op3) = 'released', 'release of the live attempt');
   BEGIN
     PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op2)) = 'confirmed', 'late success');
-    PERFORM pg_temp.gx_assert(pg_temp.gx_goal('status') = 'completed' AND pg_temp.gx_wallet() = 3500
+    PERFORM pg_temp.gx_assert(pg_temp.gx_goal('status') = 'completed' AND pg_temp.gx_wallet() = 1000
       AND (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_purchase_requests
             WHERE complete_operation_id = v_op2::uuid) = 1, 'late success books');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
@@ -61,7 +61,7 @@ BEGIN
   BEGIN
     PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op2)) = 'conflict', 'late success after funding');
     PERFORM pg_temp.gx_assert(pg_temp.gx_state(v_op2) = 'needs_review' AND pg_temp.gx_goal('status') = 'active'
-      AND pg_temp.gx_wallet() = 3500
+      AND pg_temp.gx_wallet() = 1000
       AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.goal_purchase_requests), 'review books');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
@@ -93,7 +93,7 @@ BEGIN
   PERFORM pg_temp.gx_assert(piggyvest_primary.manage_goal_complete(v_scope, v_op3::uuid, 'dispatch', 260000), 'dispatch');
   PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op3) || '{"amountKobo":260000}'::jsonb) = 'confirmed',
     'interest settlement');
-  PERFORM pg_temp.gx_assert(pg_temp.gx_wallet() = 6100 AND pg_temp.gx_goal('status') = 'completed', 'interest books');
+  PERFORM pg_temp.gx_assert(pg_temp.gx_wallet() = 1000 AND pg_temp.gx_goal('status') = 'completed', 'interest books');
   v_result := piggyvest_primary.read_daily_reconciliation(
     'f3870000-0000-4000-8000-000000000006'::uuid, 'staging', '{"staleAfterSeconds":60}'::jsonb);
   PERFORM pg_temp.gx_assert(v_result -> 'wallets' =

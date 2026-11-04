@@ -152,4 +152,60 @@ describe('getCommercialSupportSitemapEntries - stock and price parsing', () => {
       )
     ).toBe(true);
   });
+
+  it('omits has_condition_offers key when undefined/null on source rows to maintain availability parity with destination loader', async () => {
+    let capturedProducts: unknown[] = [];
+    mockBuildCommercialSupportDiscoveryLinks.mockImplementation(
+      (args: { products: unknown[] }) => {
+        capturedProducts = args.products;
+        return [];
+      }
+    );
+
+    mockCategoriesQuery([{ slug: 'smartphones', updated_at: null }]);
+    mockGetCachedCategoryPageData.mockResolvedValue({
+      isCollection: false,
+      fallbackName: 'Smartphones',
+      products: [
+        {
+          id: 'p-legacy',
+          slug: 'p-legacy',
+          name: 'Legacy Phone',
+          brand: 'BrandX',
+          price: 150_000,
+          stock: 1,
+          manage_stock: false,
+          // has_condition_offers omitted
+        },
+        {
+          id: 'p-with-offers',
+          slug: 'p-with-offers',
+          name: 'Phone With Offers',
+          brand: 'BrandY',
+          price: 200_000,
+          stock: 0,
+          manage_stock: true,
+          has_condition_offers: true,
+        },
+      ],
+    });
+
+    await getCommercialSupportSitemapEntries({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        is_published: true,
+        payout_currency: 'NGN',
+      },
+      storeUrl: 'https://ogabassey.com',
+      supabase: {
+        from: (table: string) => ({
+          select: () => ({ eq: createEq(table) }),
+        }),
+      },
+    } as unknown as StorefrontSitemapContext);
+
+    expect(capturedProducts[0]).not.toHaveProperty('has_condition_offers');
+    expect(capturedProducts[1]).toHaveProperty('has_condition_offers', true);
+  });
 });

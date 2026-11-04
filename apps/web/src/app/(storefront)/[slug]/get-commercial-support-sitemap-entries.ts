@@ -164,7 +164,10 @@ export async function getCommercialSupportSitemapEntries(
                   ? Number(product.stock_quantity)
                   : null,
             manage_stock: product.manage_stock,
-            has_condition_offers: product.has_condition_offers ?? false,
+            ...(product.has_condition_offers !== undefined &&
+            product.has_condition_offers !== null
+              ? { has_condition_offers: Boolean(product.has_condition_offers) }
+              : {}),
             category_slug: getRawProductCategorySlug(product, categorySlug),
             product_key_specs: normalizeProductKeySpecs(
               product.product_key_specs

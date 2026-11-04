@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { generateMetaTitle } from '@/lib/seo-utils';
+import { stripRedundantPlatformParentheticals } from './seo-meta-title-platform-compaction';
 
 const ELLIPSIS = '...';
 const ELLIPSIS_LENGTH = ELLIPSIS.length;
@@ -71,7 +72,45 @@ export function buildStorefrontMetadataTitle(input: {
     maxLength: Number.POSITIVE_INFINITY,
     suffix: input.suffix,
   });
-  const title = applyWordBoundaryMaxLength(fullTitle, maxLength, input.suffix);
+  let effectiveTitle = fullTitle;
+  if (fullTitle.length > maxLength) {
+    const normalizedSuffix = input.suffix
+      ? generateMetaTitle(input.suffix, { maxLength: Number.POSITIVE_INFINITY })
+      : '';
+    if (normalizedSuffix) {
+      if (fullTitle.toLowerCase() === normalizedSuffix.toLowerCase()) {
+        effectiveTitle = fullTitle;
+      } else {
+        const suffixFragment = ` | ${normalizedSuffix}`;
+        const endsWithSuffix =
+          fullTitle.length >= suffixFragment.length &&
+          fullTitle.toLowerCase().endsWith(suffixFragment.toLowerCase());
+        if (endsWithSuffix) {
+          const baseTitle = fullTitle.slice(
+            0,
+            fullTitle.length - suffixFragment.length
+          );
+          const matchedSuffix = fullTitle.slice(
+            fullTitle.length - suffixFragment.length
+          );
+          const compactBaseTitle =
+            stripRedundantPlatformParentheticals(baseTitle);
+          effectiveTitle = compactBaseTitle
+            ? `${compactBaseTitle}${matchedSuffix}`
+            : normalizedSuffix;
+        } else {
+          effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+        }
+      }
+    } else {
+      effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+    }
+  }
+  const title = applyWordBoundaryMaxLength(
+    effectiveTitle,
+    maxLength,
+    input.suffix
+  );
 
   return {
     metadataTitle: { absolute: title },

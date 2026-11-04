@@ -165,19 +165,29 @@ CREATE TRIGGER products_stale_blog_guide_metadata_trigger
 CREATE OR REPLACE FUNCTION public.categories_stale_blog_guide_metadata()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 BEGIN
-  UPDATE public.blog_posts
-  SET metadata_status = 'stale'
-  WHERE cluster_category_id = OLD.id AND metadata_status = 'verified';
+  UPDATE public.blog_posts SET metadata_status = 'stale' WHERE cluster_category_id = OLD.id AND metadata_status = 'verified';
   RETURN OLD;
 END;
 $$;
-
 ALTER FUNCTION public.categories_stale_blog_guide_metadata() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.categories_stale_blog_guide_metadata() FROM PUBLIC;
-
 DROP TRIGGER IF EXISTS categories_stale_blog_guide_metadata_trigger ON public.categories;
 CREATE TRIGGER categories_stale_blog_guide_metadata_trigger
   BEFORE DELETE ON public.categories FOR EACH ROW EXECUTE FUNCTION public.categories_stale_blog_guide_metadata();
+
+CREATE OR REPLACE FUNCTION public.blog_post_guide_subjects_stale_on_delete()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
+BEGIN
+  UPDATE public.blog_posts SET metadata_status = 'stale'
+  WHERE id = OLD.blog_post_id AND merchant_id = OLD.merchant_id AND metadata_status = 'verified';
+  RETURN OLD;
+END;
+$$;
+ALTER FUNCTION public.blog_post_guide_subjects_stale_on_delete() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.blog_post_guide_subjects_stale_on_delete() FROM PUBLIC;
+DROP TRIGGER IF EXISTS blog_post_guide_subjects_stale_on_delete_trigger ON public.blog_post_guide_subjects;
+CREATE TRIGGER blog_post_guide_subjects_stale_on_delete_trigger
+  AFTER DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
 
 CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
   p_merchant_id uuid, p_page_kind text, p_category_id uuid DEFAULT NULL, p_product_id uuid DEFAULT NULL, p_limit integer DEFAULT 64
@@ -203,15 +213,11 @@ BEGIN
   FROM public.products AS prod WHERE prod.id = p_product_id AND prod.merchant_id = p_merchant_id AND prod.status = 'active';
   IF v_target_product_id IS NULL THEN RETURN; END IF;
 
-  v_target_brand_norm := pg_catalog.btrim(
-    pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(v_target_brand, ''))), '[^a-z0-9]+', '-', 'g'),
-    '-'
-  );
+  v_target_brand_norm := pg_catalog.btrim(pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.btrim(coalesce(v_target_brand, ''))), '[^a-z0-9]+', '-', 'g'), '-');
 
   IF p_category_id IS NOT NULL THEN
-    IF p_category_id = v_target_category_id OR EXISTS (
-      SELECT 1 FROM public.product_categories AS pc WHERE pc.product_id = v_target_product_id AND pc.category_id = p_category_id
-    ) THEN v_category_match_id := p_category_id;
+    IF p_category_id = v_target_category_id OR EXISTS (SELECT 1 FROM public.product_categories AS pc WHERE pc.product_id = v_target_product_id AND pc.category_id = p_category_id)
+    THEN v_category_match_id := p_category_id;
     ELSE v_category_match_id := v_target_category_id; END IF;
   ELSE v_category_match_id := v_target_category_id; END IF;
 
@@ -238,11 +244,13 @@ BEGIN
       ON subj.blog_post_id = post.id AND subj.merchant_id = p_merchant_id AND subj.product_id = v_target_product_id
     LEFT JOIN public.categories AS cat ON cat.id = post.cluster_category_id AND cat.merchant_id = p_merchant_id
     WHERE post.merchant_id = p_merchant_id AND post.status = 'published' AND post.published_at IS NOT NULL
-      AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified'
-      AND post.metadata_contract_version >= 2
+      AND post.published_at <= statement_timestamp() AND post.metadata_status = 'verified' AND post.metadata_contract_version >= 2
       AND (
         (subj.subject_role = 'primary' AND post.guide_scope = 'product_specific' AND post.guide_kind = 'buyer-guide')
-        OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support')
+        OR (subj.subject_role = 'comparison' AND post.guide_scope = 'model_comparison' AND post.guide_kind = 'decision-support'
+          AND (SELECT pg_catalog.count(DISTINCT peer_subj.product_id) FROM public.blog_post_guide_subjects AS peer_subj
+               INNER JOIN public.products AS peer_prod ON peer_prod.id = peer_subj.product_id AND peer_prod.merchant_id = p_merchant_id AND peer_prod.status = 'active'
+               WHERE peer_subj.blog_post_id = post.id AND peer_subj.merchant_id = p_merchant_id AND peer_subj.subject_role = 'comparison') = 2)
         OR (subj.subject_role = 'product_support' AND post.guide_scope = 'troubleshooting' AND post.guide_kind = 'troubleshooting')
       )
     UNION ALL

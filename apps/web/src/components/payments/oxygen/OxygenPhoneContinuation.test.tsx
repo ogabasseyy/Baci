@@ -33,6 +33,23 @@ it('rejects missing tokens locally without requesting a worker or provider', asy
   await screen.findByRole('heading', { name: 'Scan a new QR code' });
   expect(m.fetch).not.toHaveBeenCalled();
 });
+it('sends the rendered page allowlist with the one-time capability', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    `/auth/oxygen-selfie#${'t'.repeat(43)}`
+  );
+  m.fetch.mockResolvedValue(new Response('{}', { status: 410 }));
+  render(
+    <OxygenPhoneContinuation selfieOrigins={['https://selfie.example.test']} />
+  );
+  await screen.findByRole('heading', { name: 'Scan a new QR code' });
+  const [, options] = m.fetch.mock.calls[0];
+  expect(JSON.parse(options.body)).toEqual({
+    token: 't'.repeat(43),
+    selfieOrigins: ['https://selfie.example.test'],
+  });
+});
 it('keeps a request failure recoverable and ignores unsafe returned URLs', async () => {
   window.history.replaceState(
     null,

@@ -120,7 +120,11 @@ it('validates the peeked target before consuming the exact bound row', async () 
   rpc
     .mockResolvedValueOnce({ data: row, error: null })
     .mockResolvedValueOnce({ data: { consumed: true }, error: null });
-  expect(await redeemDurableOxygenHandoff(client, token, config)).toEqual({
+  expect(
+    await redeemDurableOxygenHandoff(client, token, config, [
+      'https://selfie.example.test',
+    ])
+  ).toEqual({
     url: 'https://selfie.example.test/?token=private',
   });
   expect(rpc.mock.calls[0][1]).toMatchObject({
@@ -163,7 +167,9 @@ it('does not consume when the peeked target is untrusted or fails validation', a
     rpc.mockReset();
     rpc.mockResolvedValueOnce({ data: { ...row, ...change }, error: null });
     await expect(
-      redeemDurableOxygenHandoff(client, token, config)
+      redeemDurableOxygenHandoff(client, token, config, [
+        'https://selfie.example.test',
+      ])
     ).rejects.toThrow();
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc.mock.calls[0][1].p_operation).toBe('peek');
@@ -191,17 +197,24 @@ it('can redeem the same capability after an allowed host is restored', async () 
   };
   rpc.mockResolvedValueOnce({ data: row, error: null });
   await expect(
-    redeemDurableOxygenHandoff(client, token, config)
+    redeemDurableOxygenHandoff(client, token, config, [
+      'https://removed.example.test',
+    ])
   ).rejects.toThrow();
   expect(rpc).toHaveBeenCalledTimes(1);
   rpc
     .mockResolvedValueOnce({ data: row, error: null })
     .mockResolvedValueOnce({ data: { consumed: true }, error: null });
   await expect(
-    redeemDurableOxygenHandoff(client, token, {
-      ...config,
-      hosts: new Set(['removed.example.test']),
-    })
+    redeemDurableOxygenHandoff(
+      client,
+      token,
+      {
+        ...config,
+        hosts: new Set(['removed.example.test']),
+      },
+      ['https://removed.example.test']
+    )
   ).resolves.toEqual({ url: 'https://removed.example.test/?token=private' });
 });
 it('never returns the target when the atomic consume loses a race or is replayed', async () => {
@@ -228,16 +241,22 @@ it('never returns the target when the atomic consume loses a race or is replayed
     .mockResolvedValueOnce({ data: row, error: null })
     .mockResolvedValueOnce({ data: null, error: { code: '40001' } });
   await expect(
-    redeemDurableOxygenHandoff(client, token, config)
+    redeemDurableOxygenHandoff(client, token, config, [
+      'https://selfie.example.test',
+    ])
   ).rejects.toThrow();
   rpc.mockResolvedValueOnce({ data: null, error: { code: '40001' } });
   await expect(
-    redeemDurableOxygenHandoff(client, token, config)
+    redeemDurableOxygenHandoff(client, token, config, [
+      'https://selfie.example.test',
+    ])
   ).rejects.toThrow();
 });
 it('rejects invalid capability syntax before database access', async () => {
   await expect(
-    redeemDurableOxygenHandoff(client, 'bad', config)
+    redeemDurableOxygenHandoff(client, 'bad', config, [
+      'https://selfie.example.test',
+    ])
   ).rejects.toThrow();
   expect(rpc).not.toHaveBeenCalled();
 });
@@ -280,7 +299,9 @@ it('issues and redeems v3 after writes are disabled, preserving its exact stored
   rpc.mockResolvedValueOnce({ data: stored, error: null });
   rpc.mockResolvedValueOnce({ data: { consumed: true }, error: null });
   await expect(
-    redeemDurableOxygenHandoff(client, token, config)
+    redeemDurableOxygenHandoff(client, token, config, [
+      'https://selfie.example.test',
+    ])
   ).resolves.toEqual({
     url: 'https://selfie.example.test/?token=private',
   });

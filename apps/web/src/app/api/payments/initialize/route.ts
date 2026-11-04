@@ -53,6 +53,7 @@ import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-re
 import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
+import { rejectOxygenGatewayInitialization } from '@/lib/payments/reject-oxygen-gateway-initialization';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
 import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
 import {
@@ -1153,6 +1154,19 @@ export async function POST(request: NextRequest) {
         'Merchant mismatch for this order',
         'MERCHANT_MISMATCH',
         403
+      );
+    }
+
+    // This snapshot check prevents direct initialization of an Oxygen order.
+    // It does not serialize a concurrent change of the order's payment method.
+    const oxygenRejection = rejectOxygenGatewayInitialization(
+      orderSnapshot.payment_method
+    );
+    if (oxygenRejection) {
+      return createErrorResponse(
+        oxygenRejection.message,
+        oxygenRejection.code,
+        oxygenRejection.status
       );
     }
 

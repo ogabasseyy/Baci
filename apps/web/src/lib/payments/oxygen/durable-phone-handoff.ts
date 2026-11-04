@@ -19,6 +19,7 @@ import {
   oxygenRuntimeRpc,
   readOxygenSnapshot,
 } from './runtime-service';
+import { isTrustedOxygenHostedUrl } from './trusted-hosted-url';
 
 const digest = (token: string) =>
   createHash('sha256')
@@ -118,7 +119,8 @@ export async function issueDurableOxygenHandoff(
 export async function redeemDurableOxygenHandoff(
   worker: OxygenRuntimeRpc,
   token: string,
-  config: OxygenPhoneConfiguration
+  config: OxygenPhoneConfiguration,
+  browserOrigins: readonly string[]
 ) {
   const hash = digest(token);
   const { data, error } = await worker.rpc('oxygen_phone_handoff', {
@@ -139,6 +141,10 @@ export async function redeemDurableOxygenHandoff(
     decryptPhoneTarget(row.ciphertext, config.key, { hash, ...row }),
     config.hosts
   );
+  // The browser can only narrow the server's allowlist. Check both before
+  // consuming so a page from an older deployment cannot burn the QR token.
+  if (!isTrustedOxygenHostedUrl(url, browserOrigins))
+    throw new Error('Phone verification unavailable');
   const result = await worker.rpc('oxygen_phone_handoff', {
     p_operation: 'consume',
     p_workflow_id: null,

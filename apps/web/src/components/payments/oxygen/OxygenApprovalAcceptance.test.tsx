@@ -11,6 +11,11 @@ import { OxygenApprovalCode } from './OxygenApprovalCode';
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
 afterEach(() => {
+  if (vi.isFakeTimers()) {
+    // input-otp schedules selection synchronization at 0, 10 and 50 ms.
+    act(() => vi.advanceTimersByTime(50));
+    vi.useRealTimers();
+  }
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -111,8 +116,11 @@ it('saves the drawing on acceptance, blocks duplicate saves and approves only af
         finishReload = resolve;
       })
   );
-  fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
-  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+  vi.useFakeTimers();
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
+  });
+  expect(mocks.fetch).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('textbox')).toBeDisabled();
   expect(approve).not.toHaveBeenCalled();
   await act(async () =>
@@ -126,20 +134,18 @@ it('saves the drawing on acceptance, blocks duplicate saves and approves only af
       })
     )
   );
-  await waitFor(() => {
-    expect(screen.getByRole('textbox')).toBeEnabled();
-    expect(screen.getByRole('textbox')).not.toHaveAttribute('readonly');
+  expect(screen.getByRole('textbox')).toBeEnabled();
+  expect(screen.getByRole('textbox')).not.toHaveAttribute('readonly');
+  await act(async () => {
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '123456' },
+    });
   });
-  fireEvent.change(screen.getByRole('textbox'), {
-    target: { value: '123456' },
-  });
-  await waitFor(() =>
-    expect(approve).toHaveBeenCalledExactlyOnceWith(
-      ref,
-      '123456',
-      expect.any(File),
-      expect.any(Function)
-    )
+  expect(approve).toHaveBeenCalledExactlyOnceWith(
+    ref,
+    '123456',
+    expect.any(File),
+    expect.any(Function)
   );
   expect(screen.queryByText('Code verified.')).toBeNull();
 });

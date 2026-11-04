@@ -4,7 +4,10 @@ export const oxygenPhoneCapabilitySchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{43}$/);
 export const oxygenPhoneRedemptionSchema = z
-  .object({ token: oxygenPhoneCapabilitySchema })
+  .object({
+    token: oxygenPhoneCapabilitySchema,
+    selfieOrigins: z.array(z.string().url().max(255)).max(100),
+  })
   .strict();
 export const oxygenPhoneStoredSchema = z
   .object({

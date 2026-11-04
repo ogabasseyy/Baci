@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     );
   try {
     const raw = await request.text();
-    if (raw.length > 200) throw new Error('Invalid');
+    if (raw.length > 32768) throw new Error('Invalid');
     const input = oxygenPhoneRedemptionSchema.safeParse(JSON.parse(raw));
     if (!input.success)
       return NextResponse.json(
@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
     const result = await redeemDurableOxygenHandoff(
       await connection.worker(),
       input.data.token,
-      config
+      config,
+      input.data.selfieOrigins
     );
     return NextResponse.json(result, { headers });
   } catch {

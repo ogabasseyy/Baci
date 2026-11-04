@@ -1,22 +1,40 @@
 import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 
+const m = vi.hoisted(() => ({
+  connection: vi.fn(async () => {}),
+  readOrigins: vi.fn(() => ({
+    hosted: ['https://selfie.example.test'],
+    selfie: ['https://selfie.example.test'],
+  })),
+}));
+vi.mock('next/server', () => ({ connection: m.connection }));
 vi.mock('@/components/payments/oxygen/OxygenPhoneContinuation', () => ({
   OxygenPhoneContinuation: ({ selfieOrigins }: { selfieOrigins: string[] }) => (
     <p data-origins={selfieOrigins.join(',')}>Continue verification</p>
   ),
 }));
 vi.mock('@/lib/payments/oxygen/oxygen-hosted-origins', () => ({
-  readOxygenHostedOrigins: () => ({
-    selfie: ['https://selfie.example.test'],
-    hosted: [],
-  }),
+  readOxygenHostedOrigins: m.readOrigins,
 }));
 
 import Page, { metadata } from './page';
 
-it('renders the phone continuation and disallows indexing and referrer disclosure', () => {
-  render(<Page />);
+it('reads the selfie origin configuration at request time', async () => {
+  m.connection.mockClear();
+  m.readOrigins.mockReturnValueOnce({
+    hosted: ['https://first.example.test'],
+    selfie: ['https://first.example.test'],
+  });
+  const first = await Page();
+  const second = await Page();
+  expect(m.connection).toHaveBeenCalledTimes(2);
+  expect(first.props.selfieOrigins).toEqual(['https://first.example.test']);
+  expect(second.props.selfieOrigins).toEqual(['https://selfie.example.test']);
+});
+
+it('renders the phone continuation and disallows indexing and referrer disclosure', async () => {
+  render(await Page());
   expect(screen.getByText('Continue verification')).toHaveAttribute(
     'data-origins',
     'https://selfie.example.test'

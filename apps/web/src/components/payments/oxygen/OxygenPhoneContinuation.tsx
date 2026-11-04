@@ -25,7 +25,7 @@ export function OxygenPhoneContinuation({
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token }),
+            body: JSON.stringify({ token, selfieOrigins }),
             cache: 'no-store',
           }
         );

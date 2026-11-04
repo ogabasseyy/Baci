@@ -30,13 +30,17 @@ const request = (
     {
       method: 'POST',
       headers: { Origin: origin },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({
+        token,
+        selfieOrigins: ['https://selfie.example.test'],
+      }),
     }
   );
 beforeEach(() => {
   vi.resetAllMocks();
   m.csrf.mockResolvedValue({ valid: true });
   m.limit.mockResolvedValue({ allowed: true });
+  m.worker.mockResolvedValue({ rpc: vi.fn() });
   m.connect.mockReturnValue({
     worker: m.worker,
     phoneConfiguration: { origin: 'https://handoff.example.test' },
@@ -65,6 +69,43 @@ it('returns the exact exchanged target without caching it', async () => {
     url: 'https://selfie.example.test/?token=private',
   });
   expect(m.redeem).toHaveBeenCalledTimes(1);
+});
+it('passes the page allowlist to redemption before the token can be consumed', async () => {
+  const response = await POST(
+    new NextRequest(
+      'https://handoff.example.test/api/payments/oxygen/phone-handoff/redeem',
+      {
+        method: 'POST',
+        headers: { Origin: 'https://handoff.example.test' },
+        body: JSON.stringify({
+          token: 't'.repeat(43),
+          selfieOrigins: ['https://selfie.example.test'],
+        }),
+      }
+    )
+  );
+  expect(response.status).toBe(200);
+  expect(m.redeem).toHaveBeenCalledWith(
+    expect.anything(),
+    't'.repeat(43),
+    expect.anything(),
+    ['https://selfie.example.test']
+  );
+});
+it('rejects a request with no browser allowlist before worker access', async () => {
+  const response = await POST(
+    new NextRequest(
+      'https://handoff.example.test/api/payments/oxygen/phone-handoff/redeem',
+      {
+        method: 'POST',
+        headers: { Origin: 'https://handoff.example.test' },
+        body: JSON.stringify({ token: 't'.repeat(43) }),
+      }
+    )
+  );
+  expect(response.status).toBe(400);
+  expect(m.worker).not.toHaveBeenCalled();
+  expect(m.redeem).not.toHaveBeenCalled();
 });
 it('reports an uncertain redemption without claiming the link expired', async () => {
   m.connect.mockReturnValueOnce(null);

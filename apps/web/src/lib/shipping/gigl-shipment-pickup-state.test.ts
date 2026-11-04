@@ -45,6 +45,19 @@ describe('hasUnpickedGiglShipment', () => {
     );
   });
 
+  it('bugfix: fails closed for a known GIG order when the shipment read is empty or errors', async () => {
+    await expect(
+      hasUnpickedGiglShipment(client([]) as never, 'o1', true)
+    ).resolves.toBe(true);
+    await expect(
+      hasUnpickedGiglShipment(
+        client(null, { message: 'x' }) as never,
+        'o1',
+        true
+      )
+    ).resolves.toBe(true);
+  });
+
   it('is false for non-GIG and self-fulfilled orders with no GIG shipment', async () => {
     await expect(
       hasUnpickedGiglShipment(client([]) as never, 'o1')

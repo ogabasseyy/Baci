@@ -313,7 +313,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
         [{ ...notification, recipient_user_ids: null }],
         'worker'
       );
-      expect(summary).toMatchObject({ failed: 1, sent: 0 });
+      expect(summary).toMatchObject({ failed: 0, skipped: 1, sent: 0 });
       expect(notifyMerchant).not.toHaveBeenCalled();
       // The lease is left to expire: no attempt is consumed.
       expect(supabase.rpc).not.toHaveBeenCalled();

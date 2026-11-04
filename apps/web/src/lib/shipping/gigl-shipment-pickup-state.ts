@@ -6,11 +6,15 @@ const UNPICKED_STATUSES = new Set(['pending', 'booked', 'pickup_scheduled']);
  * True while an order's live GIG shipment is booked but the parcel has not
  * been collected. The customer's "shipped" notification waits for GIG's
  * picked_up event, so callers suppress the early one for these orders.
- * Fails open: a lookup error must never swallow a shipped alert.
+ * An unreadable or empty lookup fails open (a shipped alert is never lost)
+ * unless the caller already knows the order is GIG-fulfilled (`knownGig`), in
+ * which case it fails closed so push matches the SQL email trigger even when
+ * row-level security hides the shipment row.
  */
 export async function hasUnpickedGiglShipment(
   supabase: SupabaseClient,
-  orderId: string
+  orderId: string,
+  knownGig = false
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from('shipments')
@@ -18,7 +22,7 @@ export async function hasUnpickedGiglShipment(
     .eq('order_id', orderId)
     .eq('provider', 'GIGL')
     .neq('status', 'cancelled');
-  if (error || !data || data.length === 0) return false;
+  if (error || !data || data.length === 0) return knownGig;
   // Only the latest live shipment holds the notification; an abandoned older
   // booking must not suppress it forever.
   const latest = data.reduce((best, row) =>
@@ -34,10 +38,11 @@ export async function hasUnpickedGiglShipment(
 export async function shouldDeferShippedNotificationToGigPickup(
   supabase: SupabaseClient,
   orderId: string,
-  shippingStatus: string
+  shippingStatus: string,
+  knownGig = false
 ): Promise<boolean> {
   return (
     shippingStatus === 'shipped' &&
-    (await hasUnpickedGiglShipment(supabase, orderId))
+    (await hasUnpickedGiglShipment(supabase, orderId, knownGig))
   );
 }

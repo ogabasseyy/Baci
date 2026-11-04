@@ -659,7 +659,8 @@ export async function PATCH(
       const deferToGigPickup = await shouldDeferShippedNotificationToGigPickup(
         supabase,
         id,
-        shipping_status
+        shipping_status,
+        existingOrder.shipping_provider === 'GIGL'
       );
       if (customer?.user_id && !deferToGigPickup) {
         runAfterResponse(() =>

@@ -120,7 +120,7 @@ async function processNotification(
         message: 'GIGL merchant notification claimed without recipient list',
         notificationId: notification.id,
       });
-      return 'failed' as const;
+      return 'skipped' as const;
     }
     const payload = buildGiglTrackingMerchantPushPayload(notification);
     const result = await notifyMerchant(

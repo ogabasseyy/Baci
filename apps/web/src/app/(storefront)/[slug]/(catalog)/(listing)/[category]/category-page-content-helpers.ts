@@ -96,6 +96,7 @@ export function normalizeCategoryPageProducts(
       condition: CONDITION_MAP[normalized.condition] || 'New',
       stock: normalized.stock,
       manage_stock: normalized.manage_stock,
+      has_condition_offers: Boolean(normalized.has_condition_offers),
       category_slug: normalized.category_slug,
       ...(createdAt !== undefined ? { created_at: createdAt } : {}),
       product_key_specs: normalized.product_key_specs ?? undefined,
@@ -109,6 +110,7 @@ export function buildCategoryPageHubModel(input: {
   categorySlug: string;
   categoryName: string;
   merchantBusinessName: string;
+  merchantCurrency?: string | null;
   storeUrl: string;
   products: StorefrontCategoryProduct[];
   comparisonLinks?: CategoryHubComparisonLink[];
@@ -124,16 +126,21 @@ export function buildCategoryPageHubModel(input: {
     categorySlug: input.categorySlug,
     categoryName: input.categoryName,
     merchantBusinessName: input.merchantBusinessName,
+    merchantCurrency: input.merchantCurrency,
     storeUrl: input.storeUrl,
     guidePosts: input.guidePosts ?? [],
     comparisonLinks: input.comparisonLinks,
     brandAuthorityEntries: input.brandAuthorityEntries,
     products: input.products.map((product) => ({
+      id: product.id != null ? String(product.id) : undefined,
       slug: product.slug || '',
       name: product.name,
       brand: product.brand,
       condition: product.condition,
       price: product.rawPrice,
+      stock: product.stock,
+      manage_stock: product.manage_stock,
+      has_condition_offers: product.has_condition_offers,
       category_slug: product.category_slug,
       product_key_specs: product.product_key_specs,
     })),

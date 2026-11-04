@@ -240,6 +240,7 @@ export function buildProductSemanticCompareSupport(
       currentProductPrice: normalizedInput.currentProduct.price,
       includeBrandCompareLink: false,
       products: supportLinkProducts,
+      merchantCurrency: normalizedInput.merchantCurrency,
     }),
   ];
   const supportLinks = dedupeLinks(rawSupportLinks)

@@ -28,7 +28,7 @@ BEGIN
 END $$;
 
 -- The stub verdict is replaced by the enforcing check
--- (20261104130000); its verdicts are proven in
+-- (20261104130900); its verdicts are proven in
 -- piggyvest_primary_engine_ready_enforcing.sql. Here: whatever the
 -- installed body, an unknown surface and NULL are never ready.
 DO $$

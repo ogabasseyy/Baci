@@ -1,5 +1,5 @@
 -- Contract test: the enforcing piggyvest_primary.engine_ready
--- (20261104130000_piggyvest_primary_engine_ready_enforcing.sql), which
+-- (20261104130900_piggyvest_primary_engine_ready_enforcing.sql), which
 -- replaces the fail-closed stub.
 --
 -- Proves, against live PostgreSQL:

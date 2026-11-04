@@ -74,7 +74,7 @@ production installer or instruction to revoke live grants wholesale.
 After its session check and before any claim, the worker asks
 `piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
 transfer engine fences are in place. The enforcing check
-(`20261104130000`) replaced the always-not-ready stub (`20261102032905`). It
+(`20261104130900`) replaced the always-not-ready stub (`20261102032905`). It
 answers ready only when the worker login is safe and unexpired, its bank
 authority and integration are enabled and agree on merchant, business and
 environment, the integration's inflow authority is enabled, and the inflow

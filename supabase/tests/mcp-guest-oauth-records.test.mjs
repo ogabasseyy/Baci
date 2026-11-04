@@ -69,19 +69,55 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     }
     assert.throws(() => query(worker + "SET request.method='GET'; SET request.path='/rpc/mcp_guest_oauth_read';" + hook), /outside its capability scope/);
     assert.throws(() => query("SET ROLE anon; SET request.jwt.claims='{\"role\":\"anon\"}'; SET request.method='POST'; SET request.path='/rpc/__guest_oauth_hook_reload_canary__';" + hook), /GUEST OAUTH hook reload canary observed/);
-    // Seven-day grants must stop before consuming the entire shared record store.
+    const renewalMigration = readFileSync(new URL('../migrations/20261104031016_mcp_guest_oauth_renewable_connections.sql', import.meta.url), 'utf8');
+    query(`BEGIN; ${renewalMigration} ROLLBACK;`);
+    // Existing incompatible schema must abort before any old protection is dropped.
+    query('ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN renewed_at text;');
+    assert.throws(() => query(`BEGIN; ${renewalMigration} COMMIT;`), /unexpected_oauth_renewed_at_schema/);
+    query('ALTER TABLE public.mcp_guest_oauth_records DROP COLUMN renewed_at;');
+    query('ALTER TABLE public.mcp_guest_oauth_records ADD COLUMN renewed_at timestamptz NOT NULL DEFAULT now();');
+    query(`ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_records_check;
+      ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_records_check CHECK(expires_at <= created_at + interval '8 days');`);
+    assert.throws(() => query(`BEGIN; ${renewalMigration} COMMIT;`), /unexpected_oauth_lifetime_schema/);
+    query(`ALTER TABLE public.mcp_guest_oauth_records DROP CONSTRAINT mcp_guest_oauth_records_check;
+      ALTER TABLE public.mcp_guest_oauth_records ADD CONSTRAINT mcp_guest_oauth_records_check CHECK(expires_at <= created_at + interval '7 days');`);
+    query(renewalMigration);
+
+    assert.equal(query(`SELECT convalidated FROM pg_constraint WHERE conrelid='public.mcp_guest_oauth_records'::regclass AND conname='mcp_guest_oauth_record_lifetime';`), 'f');
+    // NOT VALID still enforces every new write.
+    assert.throws(() => query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at) VALUES('${tenant}','access:invalid',repeat('x',64),1,now()+interval '8 days');`), /check constraint/);
+    query(readFileSync(new URL('../migrations/20261104031017_validate_mcp_guest_oauth_lifetime.sql', import.meta.url), 'utf8'));
+    assert.equal(query(`SELECT convalidated FROM pg_constraint WHERE conrelid='public.mcp_guest_oauth_records'::regclass AND conname='mcp_guest_oauth_record_lifetime';`), 't');
+    // Connection renewal is independent of immutable cart and short-lived record deadlines.
+    assert.equal(query(worker + cas(2, "now()+interval '89 days'")), 't');
+    assert.throws(() => query(worker + cas(3, "now()+interval '91 days'")), /invalid_expiry/);
+    query(`UPDATE public.mcp_guest_oauth_records SET created_at=now()-interval '200 days' WHERE record_key='grant:test';`);
+    assert.equal(query(worker + cas(3, "now()+interval '89 days'")), 't');
+    assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:too-long',0,repeat('x',64),now()+interval '8 days');`), /invalid_expiry/);
+    query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,created_at,renewed_at,expires_at) VALUES('${tenant}','access:old',repeat('x',64),1,now()-interval '6 days',now(),now()+interval '1 hour');`);
+    assert.equal(query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:old',1,repeat('x',64),now()+interval '2 days');`), 'f');
+    query(`DELETE FROM public.mcp_guest_oauth_records WHERE record_key='access:old';`);
+    assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_seed_cart('${tenant}','${'d'.repeat(64)}',now()+interval '8 days');`), /invalid_request/);
+    assert.throws(() => query(worker.replace(tenant, other) + cas(4)), /unauthorized/);
+    assert.equal(query(worker + cas(3)), 'f');
+    // An expired grant cannot be revived by either CAS update or creation replay.
+    query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,created_at,expires_at) VALUES('${tenant}','grant:dead',repeat('x',64),1,now()-interval '2 days',now()-interval '1 day');`);
+    for (const revision of [0,1]) assert.equal(query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','grant:dead',${revision},repeat('x',64),now()+interval '89 days');`), 'f');
+    query(`DELETE FROM public.mcp_guest_oauth_records WHERE record_key='grant:dead';`);
+    // Active grants still stop before consuming the entire shared record store.
+
     query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at)
       SELECT '${tenant}','grant:retained'||g,repeat('x',64),1,now()+interval '6 days'
       FROM generate_series(1,1999) g;`);
     assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','grant:overflow',0,repeat('x',64),now()+interval '6 days');`), /oauth_grant_capacity_exceeded/);
-    assert.equal(query(worker + cas(2)), 't');
+    assert.equal(query(worker + cas(4)), 't');
     assert.equal(query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:existingconnection',0,repeat('x',64),now()+interval '15 minutes');`), 't');
     assert.equal(query(worker.replace(tenant, other) + `SELECT public.mcp_guest_oauth_cas('${other}','grant:independent',0,repeat('x',64),now()+interval '6 days');`), 't');
     query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at)
       SELECT '${tenant}','consent:capacity'||g,repeat('x',64),1,now()+interval '1 day'
       FROM generate_series(1,10000-(SELECT count(*)::int FROM public.mcp_guest_oauth_records WHERE merchant_id='${tenant}')) g;`);
     assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','refresh:excess',0,repeat('x',64),now()+interval '1 day');`), /oauth_capacity_exceeded/);
-    assert.equal(query(worker + cas(3)), 't');
+    assert.equal(query(worker + cas(5)), 't');
     assert.equal(query('SELECT relrowsecurity FROM pg_class WHERE oid=\'public.mcp_guest_oauth_records\'::regclass;'), 't');
   } finally {
     if (started) execFileSync(join(bin, 'pg_ctl'), ['-D', `${dir}/data`, '-m', 'immediate', '-w', 'stop'], { stdio: 'pipe' });

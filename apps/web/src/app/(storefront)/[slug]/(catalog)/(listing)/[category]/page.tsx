@@ -179,6 +179,7 @@ export async function generateMetadata({
     categorySlug: category,
     categoryData: data,
     storeSlug: slug,
+    includeAuthorityContent: false,
   });
   const hubNormalizedProducts = hubProducts
     ? normalizeCategoryPageProducts(hubProducts, category, merchant.country)

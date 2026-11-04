@@ -15,12 +15,15 @@ export async function loadCategoryHubContent(input: {
   categorySlug: string;
   categoryData: CachedCategoryPageData;
   storeSlug?: string;
+  includeAuthorityContent?: boolean;
 }) {
+  const includeAuthority = input.includeAuthorityContent ?? true;
   const supportedCategory =
-    input.categorySlug in CONTENT_CLUSTER_SUPPORT
+    includeAuthority && input.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (input.categorySlug as SupportedClusterCategory)
       : null;
   const canLoadAuthority =
+    includeAuthority &&
     !input.categoryData.isCollection &&
     !input.categoryData.isInactiveCategory &&
     Boolean(input.categoryData.category?.id);
@@ -53,7 +56,14 @@ export async function loadCategoryHubContent(input: {
             input.storeSlug,
             0,
             COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
-          ).catch(() => null)
+          ).catch((error) => {
+            console.warn('Failed to load canonical category hub products', {
+              merchantId: input.merchantId,
+              categorySlug: input.categorySlug,
+              error,
+            });
+            return null;
+          })
         : Promise.resolve(null),
     ]);
 

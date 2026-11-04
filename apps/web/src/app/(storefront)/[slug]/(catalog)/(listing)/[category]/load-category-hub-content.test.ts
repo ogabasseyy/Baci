@@ -165,4 +165,66 @@ describe('loadCategoryHubContent', () => {
       { id: 'prod-legacy', name: 'Legacy Product' },
     ]);
   });
+
+  it('skips authority and guide queries when includeAuthorityContent is false', async () => {
+    mockCategoryPageData.mockResolvedValue({
+      products: [{ id: 'prod-pool', name: 'Pool Product' }],
+      productsQueryFailed: false,
+    });
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 80,
+        products: [{ id: 'p-init' }],
+      },
+      storeSlug: 'ogabassey',
+      includeAuthorityContent: false,
+    } as never);
+    expect(result.guidePosts).toEqual([]);
+    expect(result.brandAuthorityEntries).toEqual([]);
+    expect(mockGuides).not.toHaveBeenCalled();
+    expect(mockAuthority).not.toHaveBeenCalled();
+    expect(result.hubProducts).toEqual([
+      { id: 'prod-pool', name: 'Pool Product' },
+    ]);
+  });
+
+  it('logs warning when hub pool fetch fails and falls back open gracefully', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockCategoryPageData.mockRejectedValue(
+      new Error('DB connection timed out')
+    );
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 80,
+        products: [{ id: 'p-init' }],
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to load canonical category hub products',
+      expect.objectContaining({
+        merchantId: 'merchant-1',
+        categorySlug: 'smartphones',
+        error: expect.any(Error),
+      })
+    );
+    expect(result.hubProducts).toBeUndefined();
+    warnSpy.mockRestore();
+  });
 });

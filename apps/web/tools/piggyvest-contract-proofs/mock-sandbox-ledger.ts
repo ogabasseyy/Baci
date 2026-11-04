@@ -278,7 +278,9 @@ export class MockLedger {
       reference: t.id,
       category: t.category,
       third_party_reference: t.reference,
-      customer_id: this.host.wallet(t.source ?? t.destination)?.customerId,
+      // The live sandbox puts the BUSINESS id here for API-key wallet
+      // transfers (2026-11-04 S12 evidence), not the customer id.
+      customer_id: 'business-00000001',
       source_wallet: t.source,
       destination_wallet: t.destination,
       narration: 'sandbox',

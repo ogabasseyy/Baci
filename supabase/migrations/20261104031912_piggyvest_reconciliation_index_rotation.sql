@@ -10,6 +10,11 @@ BEGIN;
 -- settled goal cancels and completions off the funding, so those two tables
 -- get a matching partial index each (their per-integration index alone would
 -- scan every row the integration ever wrote).
+-- These are plain CREATE INDEX, not CONCURRENTLY: Supabase applies each
+-- migration file in one transaction and CONCURRENTLY cannot run inside one.
+-- The tables are tiny today (PiggyVest is still dark with no live customers),
+-- so the build is near-instant. Once they hold real volume, an index change
+-- would need a separate concurrent step outside the migration transaction.
 CREATE INDEX IF NOT EXISTS primary_savings_operation_recon_stuck_idx
   ON piggyvest_primary.savings_operations(integration_id,state,created_at);
 CREATE INDEX IF NOT EXISTS primary_savings_operation_recon_wallet_idx
@@ -32,7 +37,9 @@ CREATE INDEX IF NOT EXISTS primary_goal_complete_recon_wallet_idx
 -- row is still counted in stuckTotal and any stuck row pages the operator.
 -- The slot only chooses a window; the database trusts nothing else from it.
 -- Rows left out are counted: stuckDeferred and walletsDeferred.
--- Both option keys are required; a missing or malformed one is refused.
+-- staleAfterSeconds is required; rotationSlot is optional (absent means slot
+-- 0, so earlier callers keep working). A malformed value of either, or any
+-- other key, is refused with 22023.
 CREATE OR REPLACE FUNCTION piggyvest_primary.read_daily_reconciliation(integration_id uuid,environment text,options jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE
@@ -46,15 +53,17 @@ DECLARE
   wallets_total integer;
 BEGIN
   IF options IS NULL OR jsonb_typeof(options)<>'object'
-    OR (SELECT count(*) FROM jsonb_object_keys(options))<>2
+    OR EXISTS (SELECT 1 FROM jsonb_object_keys(options) option_key
+      WHERE option_key NOT IN ('staleAfterSeconds','rotationSlot'))
     OR COALESCE(jsonb_typeof(options->'staleAfterSeconds')='number',false) IS NOT TRUE
     OR COALESCE((options->>'staleAfterSeconds') ~ '^[0-9]{2,6}$',false) IS NOT TRUE
-    OR COALESCE(jsonb_typeof(options->'rotationSlot')='number',false) IS NOT TRUE
-    OR COALESCE((options->>'rotationSlot') ~ '^[0-9]{1,9}$',false) IS NOT TRUE THEN
+    OR ((options ? 'rotationSlot') AND (
+      COALESCE(jsonb_typeof(options->'rotationSlot')='number',false) IS NOT TRUE
+      OR COALESCE((options->>'rotationSlot') ~ '^[0-9]{1,9}$',false) IS NOT TRUE)) THEN
     RAISE EXCEPTION 'invalid reconciliation options' USING ERRCODE='22023';
   END IF;
   stale_seconds:=(options->>'staleAfterSeconds')::integer;
-  slot:=(options->>'rotationSlot')::bigint;
+  slot:=COALESCE((options->>'rotationSlot')::bigint,0);
   IF stale_seconds NOT BETWEEN 60 AND 604800 THEN
     RAISE EXCEPTION 'invalid reconciliation options' USING ERRCODE='22023';
   END IF;

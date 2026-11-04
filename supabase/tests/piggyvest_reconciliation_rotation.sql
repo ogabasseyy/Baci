@@ -67,7 +67,7 @@ INSERT INTO public.customer_savings_goals (
   id, merchant_id, customer_id, product_id, title, target_amount, current_amount,
   contribution_amount, contribution_frequency, start_date, maturity_date, source_mode,
   terms_accepted_at, non_withdrawable_accepted_at
-) VALUES ('f3830000-0000-4000-8000-000000000005', 'f3830000-0000-4000-8000-000000000002',
+) VALUES ('f3830000-0000-4000-8000-00000000000a', 'f3830000-0000-4000-8000-000000000002',
    'f3830000-0000-4000-8000-000000000003', 'f3830000-0000-4000-8000-000000000004',
    'Synthetic rotation confirmed goal', 10000, 0, 1000, 'daily', current_date, current_date + 30,
    'manual', now(), now());
@@ -88,7 +88,7 @@ INSERT INTO piggyvest_primary.savings_operations (
 )
 SELECT ('f3830000-0000-4000-8000-' || lpad(to_hex(16384 + n), 12, '0'))::uuid,
   'f3830000-0000-4000-8000-000000000006', 'f3830000-0000-4000-8000-000000000007',
-  'f3830000-0000-4000-8000-000000000005', 100, 'synthetic-main-wallet',
+  'f3830000-0000-4000-8000-00000000000a', 100, 'synthetic-main-wallet',
   'rotation-wallet-' || lpad(n::text, 5, '0'), 'rotation-confirmed-' || n, 'confirmed',
   'f3830000-0000-4000-8000-000000000009', now() - interval '3 days'
 FROM generate_series(1, 1100) AS n;

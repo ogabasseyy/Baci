@@ -120,6 +120,13 @@ BEGIN
     IS DISTINCT FROM ARRAY['recon-redriven-dispatched'] OR (snapshot->>'stuckTotal')::int IS DISTINCT FROM 1 THEN
     RAISE EXCEPTION 'One-day cutoff listed transfers: %', snapshot;
   END IF;
+  -- rotationSlot is optional: the single-key form is valid and reads slot 0.
+  snapshot:=piggyvest_primary.read_daily_reconciliation(integration,'staging','{"staleAfterSeconds":900}');
+  IF (snapshot->>'stuckTotal')::int IS DISTINCT FROM 3
+    OR (SELECT array_agg(item->>'reference') FROM jsonb_array_elements(snapshot->'stuck') item)
+      IS DISTINCT FROM ARRAY['recon-redriven-dispatched','recon-stale-reserved','recon-stale-dispatched'] THEN
+    RAISE EXCEPTION 'Single-key options did not read slot 0: %', snapshot;
+  END IF;
 END;
 $read$;
 
@@ -128,9 +135,9 @@ DECLARE
   integration uuid:='f3820000-0000-4000-8000-000000000006';
   bad jsonb;
 BEGIN
-  FOREACH bad IN ARRAY ARRAY['{}','{"staleAfterSeconds":900,"rotationSlot":0}','{"rotationSlot":0}',
+  FOREACH bad IN ARRAY ARRAY['{}','{"rotationSlot":0}',
     '{"staleAfterSeconds":"900","rotationSlot":0}','{"staleAfterSeconds":900,"rotationSlot":0,"extra":1}',
-    '{"staleAfterSeconds":900,"extra":1}','{"staleAfterSeconds":900,"rotationSlot":"0"}',
+    '{"staleAfterSeconds":900,"extra":1}','{"staleAfterSeconds":900,"rotationSlot":"x"}','{"staleAfterSeconds":900,"rotationSlot":"0"}',
     '{"staleAfterSeconds":900,"rotationSlot":-1}','{"staleAfterSeconds":900,"rotationSlot":1.5}',
     '{"staleAfterSeconds":900,"rotationSlot":null}','{"staleAfterSeconds":900,"rotationSlot":1000000000}',
     '{"staleAfterSeconds":9.5,"rotationSlot":0}','{"staleAfterSeconds":59,"rotationSlot":0}',

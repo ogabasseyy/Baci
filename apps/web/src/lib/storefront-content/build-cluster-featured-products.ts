@@ -16,6 +16,7 @@ export interface ClusterFeaturedInventoryProduct {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 const GENERIC_CLUSTER_TOKENS = new Set([

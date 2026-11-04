@@ -7,6 +7,7 @@ import {
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
 import type { RawDbProduct } from '@/lib/normalize-product';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
   getCanonicalStorefrontFilterSearchParams,
@@ -185,6 +186,7 @@ export async function generateMetadata({
     categorySlug: category,
     categoryName,
     merchantBusinessName: merchant.business_name,
+    merchantCurrency: resolveMerchantCurrencyConfig(merchant).code,
     storeUrl: baseUrl,
     products: normalizedProducts,
   });

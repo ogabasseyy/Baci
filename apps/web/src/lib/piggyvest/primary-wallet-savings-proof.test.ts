@@ -48,7 +48,7 @@ describe('primary wallet savings settlement proof', () => {
     { destination_wallet: 'another-goal' },
     { third_party_reference: 'another-operation' },
     { customer_id: 'another-customer' },
-    { customer_id: 'business' },
+    { customer_id: 'another-business' },
     { fee: 1 },
     { currency: 'USD' },
     { business_id: 'another-business' },
@@ -60,6 +60,28 @@ describe('primary wallet savings settlement proof', () => {
         data: { ...response.data, ...change },
       })
     ).toEqual({ status: 'unverified' });
+  });
+
+  it('accepts the business id in customer_id, as the sandbox reports API-key wallet transfers', () => {
+    // 2026-11-04 live sandbox (S12): the TSQ record of an API-key
+    // wallet-to-wallet transfer carries the BUSINESS id in customer_id, and
+    // no business_id field. The wallets, reference, amount and fee still bind
+    // the transfer to this customer's main and goal wallets.
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        ...response,
+        data: { ...response.data, customer_id: 'business' },
+      })
+    ).toEqual({
+      status: 'verified',
+      providerTransactionId: 'provider-transaction',
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    });
   });
 
   it('authenticates a failed transfer against the same bindings without verifying settlement', () => {

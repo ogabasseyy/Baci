@@ -74,10 +74,10 @@ describe('buildCategoryHubBrandCards fallback and placeholder handling', () => {
     expect(cards[0]?.href).toBe('https://ogabassey.com/smartphones/konami-1');
   });
 
-  it('excludes zero-price products from brand card fallback representatives', () => {
+  it('prefers positive-price products over zero-price products for brand card fallback representatives', () => {
     const products = [
       buildProduct('free-1', 'FreeBrand', 0),
-      buildProduct('free-2', 'FreeBrand', 0),
+      buildProduct('free-paid', 'FreeBrand', 120),
       buildProduct('brand-b-1', 'BrandB', 100),
       buildProduct('brand-c-1', 'BrandC', 100),
     ];
@@ -88,7 +88,12 @@ describe('buildCategoryHubBrandCards fallback and placeholder handling', () => {
       products,
     });
 
-    expect(cards.map((card) => card.title)).toEqual(['BrandB', 'BrandC']);
+    expect(cards.map((card) => card.title)).toEqual([
+      'FreeBrand',
+      'BrandB',
+      'BrandC',
+    ]);
+    expect(cards[0]?.href).toBe('https://ogabassey.com/smartphones/free-paid');
   });
 
   it('excludes out-of-stock products from brand card fallback representatives and selects in-stock alternative', () => {
@@ -103,12 +108,6 @@ describe('buildCategoryHubBrandCards fallback and placeholder handling', () => {
         ...buildProduct('sony-in-stock', 'Sony', 150),
         manage_stock: true,
         stock: 5,
-        has_condition_offers: false,
-      },
-      {
-        ...buildProduct('oos-only', 'BrandOOS', 100),
-        manage_stock: true,
-        stock: 0,
         has_condition_offers: false,
       },
     ];

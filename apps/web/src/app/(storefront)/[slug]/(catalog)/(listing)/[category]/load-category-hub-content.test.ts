@@ -4,6 +4,7 @@ import { loadCategoryHubContent } from './load-category-hub-content';
 const mockAuthority = vi.fn();
 const mockGuides = vi.fn();
 const mockCategoryPageData = vi.fn();
+const mockCompareInventory = vi.fn();
 
 vi.mock('@/lib/storefront-category/get-cached-brand-authority-entries', () => ({
   getCachedBrandAuthorityEntries: (...args: unknown[]) =>
@@ -16,6 +17,10 @@ vi.mock('@/lib/cached-data', () => ({
   getCachedCategoryPageData: (...args: unknown[]) =>
     mockCategoryPageData(...args),
 }));
+vi.mock('@/lib/storefront-compare/load-compare-category-inventory-safely', () => ({
+  loadCompareCategoryInventorySafely: (...args: unknown[]) =>
+    mockCompareInventory(...args),
+}));
 
 describe('loadCategoryHubContent', () => {
   beforeEach(() => {
@@ -23,9 +28,10 @@ describe('loadCategoryHubContent', () => {
     mockAuthority.mockResolvedValue(['authority']);
     mockGuides.mockResolvedValue(['guide']);
     mockCategoryPageData.mockResolvedValue(null);
+    mockCompareInventory.mockResolvedValue(null);
   });
 
-  it('loads supported guides and authority entries for a public category', async () => {
+  it('loads supported guides and authority entries for a public category and fails closed to empty compareProducts when compare inventory is unavailable', async () => {
     await expect(
       loadCategoryHubContent({
         merchantId: 'merchant-1',
@@ -39,6 +45,7 @@ describe('loadCategoryHubContent', () => {
     ).resolves.toEqual({
       guidePosts: ['guide'],
       brandAuthorityEntries: ['authority'],
+      compareProducts: [],
     });
   });
 

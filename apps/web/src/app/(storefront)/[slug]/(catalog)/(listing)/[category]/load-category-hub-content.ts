@@ -85,9 +85,10 @@ export async function loadCategoryHubContent(input: {
         : Promise.resolve(null),
     ]);
 
-  const compareProducts = compareInventory?.products as
-    | CategoryHubProduct[]
-    | undefined;
+  const compareProducts =
+    canLoadAuthority || (hasHubDefaults && canLoadHubPool)
+      ? ((compareInventory?.products ?? []) as CategoryHubProduct[])
+      : undefined;
 
   const hubPoolFetchFailed =
     shouldFetchHubPool &&

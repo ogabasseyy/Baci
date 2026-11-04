@@ -59,10 +59,17 @@ export const ROUTES = [
   route('GET', '/api/v1/transaction/:id', ['wallet_id']),
 ];
 
-function hasUnsafeEncoding(target) {
+function hasUnsafePathEncoding(pathname) {
   // Malformed escapes, encoded dot/slash/backslash/NUL, double-encoding.
-  if (/%(?![0-9A-Fa-f]{2})/.test(target)) return true;
-  return /%(2e|2f|5c|00|25)/i.test(target);
+  if (/%(?![0-9A-Fa-f]{2})/.test(pathname)) return true;
+  return /%(2e|2f|5c|00|25)/i.test(pathname);
+}
+
+function hasUnsafeQueryEncoding(search) {
+  // Opaque values may carry %2F, %25 and %2E (URLSearchParams output); only
+  // malformed escapes, NUL and CR/LF are refused. Bytes are never re-encoded.
+  if (/%(?![0-9A-Fa-f]{2})/.test(search)) return true;
+  return /%(00|0a|0d)/i.test(search);
 }
 
 /**
@@ -75,11 +82,12 @@ export function matchAllowlistedTarget(method, target) {
   if (target.length === 0 || target.length > MAX_TARGET_LENGTH) return null;
   if (target[0] !== '/' || target.startsWith('//')) return null;
   if (!TARGET_CHARACTERS.test(target)) return null; // CRLF, spaces, #, \, non-ASCII
-  if (target.includes('..') || hasUnsafeEncoding(target)) return null;
 
   const queryStart = target.indexOf('?');
   const pathname = queryStart === -1 ? target : target.slice(0, queryStart);
   const search = queryStart === -1 ? '' : target.slice(queryStart + 1);
+  if (pathname.includes('..') || hasUnsafePathEncoding(pathname)) return null;
+  if (hasUnsafeQueryEncoding(search)) return null;
   if (pathname.split('/').some((segment) => segment === '.')) return null;
 
   const matched = ROUTES.find(

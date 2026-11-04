@@ -22,9 +22,23 @@ describe('piggyvest egress relay deployment files', () => {
     assert.match(script, /ConditionPathExists=\$ENV_FILE/);
     assert.match(script, /EnvironmentFile=\$ENV_FILE/);
     assert.match(script, /NoNewPrivileges=true/);
+    assert.match(script, /ProtectSystem=strict/);
+    assert.match(script, /ProtectHome=read-only/);
+    assert.match(script, /PrivateTmp=true/);
+    assert.match(script, /MemoryMax=256M/);
+    assert.match(script, /RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/);
     assert.match(script, /mode 600/);
     assert.match(script, /systemctl --user enable/);
     assert.doesNotMatch(script, /sudo|--now/);
+  });
+
+  it('documents the owner-run linger step for the user service', () => {
+    const runbook = readFileSync(
+      new URL('../../docs/runbooks/piggyvest-egress-relay.md', import.meta.url),
+      'utf8'
+    );
+    assert.match(runbook, /loginctl enable-linger baci-worker/);
+    assert.match(runbook, /ProtectSystem=strict/);
   });
 
   it('proxies only /api/v1/ to loopback, never retries, never logs requests', () => {

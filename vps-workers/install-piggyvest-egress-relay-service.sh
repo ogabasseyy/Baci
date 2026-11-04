@@ -38,6 +38,12 @@ ExecStart=$NODE_BIN $REMOTE_DIR/jobs/piggyvest-egress-relay.mjs
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
+# The relay only reads its code and env file (both under REMOTE_DIR) and
+# writes nothing to disk (journald only).
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+MemoryMax=256M
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]

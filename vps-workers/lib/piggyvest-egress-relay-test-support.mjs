@@ -33,6 +33,7 @@ export async function startRelay({
   secret = SECRET,
   limits,
   upstreamPort,
+  nowMs = NOW_SECONDS * 1000,
 }) {
   const seen = [];
   let port = upstreamPort;
@@ -55,7 +56,7 @@ export async function startRelay({
   const logs = [];
   const relay = createRelayServer({
     secret,
-    now: () => NOW_SECONDS * 1000,
+    now: () => nowMs,
     log: (line) => logs.push(line),
     limits,
     upstream: {

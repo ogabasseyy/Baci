@@ -53,6 +53,8 @@ export function createRelayServer({
 } = {}) {
   const config = { ...DEFAULT_LIMITS, ...limits };
   const replays = createReplayCache({ now });
+  // Replay cache is memory-only: refuse anything signed before this start.
+  const startedAtSeconds = Math.floor(now() / 1000);
   let inFlight = 0;
 
   const handler = async (request, response) => {
@@ -119,6 +121,7 @@ export function createRelayServer({
       target,
       body,
       nowSeconds: Math.floor(now() / 1000),
+      notBeforeSeconds: startedAtSeconds,
     });
     if (!verdict.ok) {
       relayError(401, `auth_${verdict.reason}`, 'not-sent');

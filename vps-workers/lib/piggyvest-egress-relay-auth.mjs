@@ -77,7 +77,7 @@ export function createReplayCache({
 
 /**
  * @returns {{ok: true, signature: string} | {ok: false, reason: string}}
- * Reasons: no_secret, missing, malformed, stale, bad_signature.
+ * Reasons: no_secret, missing, malformed, stale, predates_start, bad_signature.
  * Replay detection is the caller's job (cache after a successful verify).
  */
 export function verifyRelayRequest({
@@ -87,6 +87,7 @@ export function verifyRelayRequest({
   target,
   body,
   nowSeconds,
+  notBeforeSeconds = 0,
 }) {
   if (typeof secret !== 'string' || secret.length < 32) {
     return { ok: false, reason: 'no_secret' };
@@ -100,6 +101,11 @@ export function verifyRelayRequest({
   const timestamp = Number(timestampText);
   if (Math.abs(nowSeconds - timestamp) > MAX_SKEW_SECONDS) {
     return { ok: false, reason: 'stale' };
+  }
+  // The replay cache is in memory: after a restart, anything signed before
+  // this process started could be a captured request, so refuse it.
+  if (timestamp < notBeforeSeconds) {
+    return { ok: false, reason: 'predates_start' };
   }
   const expected = signRelayRequest({
     secret,

@@ -100,7 +100,14 @@ All VPS commands run over `ssh bassey@82.29.190.219`.
    ```
 
    Paste the secret, then press Ctrl-D. The file must be mode 600.
-5. Install and start the service:
+5. Install and start the service. First, once (needs root), let the user
+   service run without a login session and survive reboots:
+   `sudo loginctl enable-linger baci-worker`.
+   The unit is sandboxed (`ProtectSystem=strict`, `ProtectHome=read-only`,
+   `PrivateTmp=true`, `MemoryMax=256M`, `NoNewPrivileges=true`); it only reads
+   the code and env file under `/srv/baci-worker/baci-workers`. If systemd
+   reports a namespace error (status 226/NAMESPACE) for the user unit, report
+   it rather than removing the sandbox lines. Then install:
 
    ```bash
    sudo -u baci-worker -H env XDG_RUNTIME_DIR=/run/user/$(id -u baci-worker) \

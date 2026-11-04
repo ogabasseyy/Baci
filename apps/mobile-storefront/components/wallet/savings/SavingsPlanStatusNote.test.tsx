@@ -3,6 +3,10 @@ import Colors from '@/constants/Colors';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
 
 const mockHook = jest.fn();
+const mockSetup = jest.fn();
+jest.mock('./use-savings-goal-setup', () => ({
+  useSavingsGoalSetup: (...args: unknown[]) => mockSetup(...args),
+}));
 const mockIsPrimary = jest.fn();
 jest.mock('./use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockHook(...args),
@@ -25,6 +29,14 @@ describe('SavingsPlanStatusNote', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsPrimary.mockReturnValue(true);
+    mockSetup.mockReturnValue({
+      choice: null,
+      setChoice: jest.fn(),
+      submitting: false,
+      attempted: false,
+      error: null,
+      submit: jest.fn(),
+    });
     mockHook.mockReturnValue({
       planFundingPhase: 'pending',
       planFundingRequiresBvn: false,
@@ -48,7 +60,7 @@ describe('SavingsPlanStatusNote', () => {
       expect.objectContaining({
         goalId: 'goal-1',
         loadExisting: true,
-        notFoundMeansPending: true,
+        notFoundMeansNotStarted: true,
       })
     );
     const result = mockHook.mock.results[0]?.value as Record<string, unknown>;

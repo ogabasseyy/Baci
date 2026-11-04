@@ -119,11 +119,24 @@ export function useStorefrontCartSessionHandlers({
       JSON.stringify(cartRef.current)
     )
       return;
-    const next = removeOxygenPurchasedLines(cartRef.current, lines);
+    // One replacement identity per purchased line is shared by the ref and
+    // state updates. A later tab cannot subtract this purchase twice.
+    const residualIds = new Map(
+      lines.map((line) => [line.instanceId, globalThis.crypto.randomUUID()])
+    );
+    const next = removeOxygenPurchasedLines(
+      cartRef.current,
+      lines,
+      residualIds
+    );
     if (JSON.stringify(next) === JSON.stringify(cartRef.current)) return;
     cartRef.current = next;
     setCart((previous) => {
-      const remaining = removeOxygenPurchasedLines(previous, lines);
+      const remaining = removeOxygenPurchasedLines(
+        previous,
+        lines,
+        residualIds
+      );
       return cartWideNegotiationActive
         ? remaining.map((item) => ({
             ...item,

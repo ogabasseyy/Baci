@@ -17,7 +17,14 @@ it('shows the full booking activity immediately, sends the selected plan once, a
       })
   );
   render(
-    <OxygenPlanForm busy={false} submit={submit} productAmount={198000} />
+    <OxygenPlanForm
+      busy={false}
+      submit={submit}
+      productAmount={198000}
+      eligibleAmount={198000}
+      minimumAmount={10000}
+      maxTenure={3}
+    />
   );
   expect(submit).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: '35%' }));

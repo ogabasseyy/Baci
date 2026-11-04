@@ -34,9 +34,9 @@
   position: absolute;
   display: block;
   appearance: none;
-  /* Map native 25–90 selection onto the full 0–100 visual rail, including thumb radius. */
-  left: calc(25% - 0.4375rem);
-  right: calc(10% - 0.175rem);
+  /* Keep the allowed range aligned to the full 0–100 rail. */
+  left: var(--slider-start);
+  right: var(--slider-end);
   width: auto;
   height: 100%;
   margin: 0;

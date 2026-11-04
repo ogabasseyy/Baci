@@ -5,17 +5,27 @@ import styles from './OxygenDownPaymentSlider.module.css';
 
 export function OxygenDownPaymentSlider({
   value,
+  min = 25,
+  max = 90,
   onChange,
   onCommit,
 }: {
   value: number;
+  min?: number;
+  max?: number;
   onChange: (value: number) => void;
   onCommit?: (value: number) => void;
 }) {
   return (
     <div
       className={styles.control}
-      style={{ '--slider-progress': `${value}%` } as CSSProperties}
+      style={
+        {
+          '--slider-progress': `${value}%`,
+          '--slider-start': `calc(${min}% - ${(min / 100) * 1.75}rem)`,
+          '--slider-end': `calc(${100 - max}% - ${((100 - max) / 100) * 1.75}rem)`,
+        } as CSSProperties
+      }
     >
       <div className={styles.rail} aria-hidden="true" />
       <div className={styles.marks} aria-hidden="true">
@@ -28,8 +38,8 @@ export function OxygenDownPaymentSlider({
         aria-label="Adjust down payment"
         aria-valuetext={`${value}% down payment`}
         type="range"
-        min="25"
-        max="90"
+        min={min}
+        max={max}
         step="0.01"
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}

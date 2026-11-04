@@ -1,34 +1,66 @@
 'use client';
 
-import { Check, CircleCheck, SlidersHorizontal } from 'lucide-react';
+import { CircleCheck, SlidersHorizontal } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { OxygenBookingActivity } from './OxygenBookingActivity';
 import { OxygenDownPayment } from './OxygenDownPayment';
-import { OxygenDownPaymentSlider } from './OxygenDownPaymentSlider';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
 import styles from './OxygenPlanForm.module.css';
 import { OxygenTenurePicker } from './OxygenTenurePicker';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
+import { oxygenPlanLimits } from './plan-limits';
 
 export function OxygenPlanForm({
   busy,
-  maxTenure = 12,
+  maxTenure,
   productAmount,
+  eligibleAmount,
+  minimumAmount,
   submit,
 }: {
   busy: boolean;
   maxTenure?: number;
   productAmount?: number;
+  eligibleAmount?: number;
+  minimumAmount?: number;
   submit: SubmitOxygenForm;
 }) {
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const bookingLock = useRef(false);
-  const [equity, setEquity] = useState('25');
-  const [tenure, setTenure] = useState(Math.min(3, maxTenure));
+  const limits = oxygenPlanLimits(productAmount, eligibleAmount, minimumAmount);
+  const tenureAvailable = Number.isInteger(maxTenure) && (maxTenure ?? 0) > 0;
+  const [equity, setEquity] = useState(
+    String(limits.kind === 'available' ? limits.min : 25)
+  );
+  const [tenure, setTenure] = useState(Math.min(3, maxTenure ?? 1));
   const percentage = Number(equity);
-  const valid = equity !== '' && percentage >= 25 && percentage <= 90;
+  const valid =
+    limits.kind === 'available' &&
+    equity !== '' &&
+    percentage >= limits.min &&
+    percentage <= limits.max;
   if (booking) return <OxygenBookingActivity />;
+  if (
+    limits.kind === 'unknown' ||
+    !tenureAvailable ||
+    productAmount === undefined ||
+    maxTenure === undefined
+  ) {
+    return (
+      <p role="status">
+        We couldn’t load your payment options. Please check for an update.
+      </p>
+    );
+  }
+  if (limits.kind === 'unavailable') {
+    return (
+      <p role="status">
+        No payment plan is available for this order with your current
+        eligibility.
+      </p>
+    );
+  }
   return (
     <form
       className={styles.form}
@@ -83,62 +115,13 @@ export function OxygenPlanForm({
         </div>
       </header>
       <fieldset disabled={busy} className={styles.controls}>
-        {productAmount !== undefined ? (
-          <OxygenDownPayment
-            productAmount={productAmount}
-            percentage={valid ? percentage : null}
-            onChange={(value) => setEquity(value === null ? '' : String(value))}
-          />
-        ) : (
-          <section className={styles.card} aria-label="Down payment options">
-            <div className={styles.cardHeading}>
-              <label htmlFor="oxygen-equity">Down payment (%)</label>
-              <div className={styles.percentInput}>
-                <input
-                  id="oxygen-equity"
-                  name="equity"
-                  type="number"
-                  inputMode="decimal"
-                  min="25"
-                  max="90"
-                  step="0.01"
-                  value={equity}
-                  required
-                  onChange={(event) => setEquity(event.target.value)}
-                />
-                <span aria-hidden="true">%</span>
-              </div>
-            </div>
-            <p className={styles.hint}>
-              Drag to adjust, tap a choice, or type a percentage.
-            </p>
-            <OxygenDownPaymentSlider
-              value={valid ? percentage : 25}
-              onChange={(value) => setEquity(String(value))}
-            />
-            <div className={styles.bounds}>
-              <span>0%</span>
-              <span>100%</span>
-            </div>
-            <div className={styles.quickChoices}>
-              {Array.from({ length: 14 }, (_, index) => 25 + index * 5).map(
-                (value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={percentage === value}
-                    onClick={() => setEquity(String(value))}
-                  >
-                    {value}%
-                    {percentage === value && (
-                      <Check size={14} aria-hidden="true" />
-                    )}
-                  </button>
-                )
-              )}
-            </div>
-          </section>
-        )}
+        <OxygenDownPayment
+          productAmount={productAmount}
+          percentage={valid ? percentage : null}
+          minPercentage={limits.min}
+          maxPercentage={limits.max}
+          onChange={(value) => setEquity(value === null ? '' : String(value))}
+        />
         <OxygenTenurePicker
           months={Array.from({ length: maxTenure }, (_, i) => i + 1)}
           value={tenure}

@@ -138,9 +138,12 @@ export function OxygenProviderStages({
       />
       {snapshot.stage === 'plan_required' && !activeLoanError && (
         <OxygenPlanForm
+          key={`${productAmount}:${s?.eligibleAmount}:${s?.minimumAmount}:${s?.maxTenure}`}
           busy={disabled}
           maxTenure={s?.maxTenure}
           productAmount={productAmount}
+          eligibleAmount={s?.eligibleAmount}
+          minimumAmount={s?.minimumAmount}
           submit={submit}
         />
       )}

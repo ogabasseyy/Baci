@@ -12,6 +12,8 @@ export function OxygenDownPayment({
   percentage,
   onChange,
   extraPercentages = [],
+  minPercentage = 25,
+  maxPercentage = 90,
   disabled = false,
   onCommit,
 }: {
@@ -19,6 +21,8 @@ export function OxygenDownPayment({
   percentage: number | null;
   onChange: (percentage: number | null) => void;
   extraPercentages?: number[];
+  minPercentage?: number;
+  maxPercentage?: number;
   disabled?: boolean;
   onCommit?: (percentage: number) => void;
 }) {
@@ -58,8 +62,12 @@ export function OxygenDownPayment({
     ...new Set([
       ...Array.from({ length: 14 }, (_, i) => 25 + i * 5),
       ...extraPercentages,
+      minPercentage,
+      maxPercentage,
     ]),
-  ].sort((a, b) => a - b);
+  ]
+    .filter((value) => value >= minPercentage && value <= maxPercentage)
+    .sort((a, b) => a - b);
   return (
     <fieldset
       disabled={disabled}
@@ -91,7 +99,12 @@ export function OxygenDownPayment({
             const next = event.target.value;
             setText(next);
             setAdjusted(false);
-            const value = percentageForAmount(productAmount, next);
+            const value = percentageForAmount(
+              productAmount,
+              next,
+              minPercentage,
+              maxPercentage
+            );
             last.current = value;
             onChange(value);
           }}
@@ -124,11 +137,13 @@ export function OxygenDownPayment({
       </div>
       <p id={`${id}-hint`} className={styles.hint}>
         {percentage === null
-          ? `Enter ₦${format(equityForPercentage(productAmount, 25))}–₦${format(equityForPercentage(productAmount, 90))}.`
-          : 'Choose 25–90% · excludes upfront charges.'}
+          ? `Enter ₦${format(equityForPercentage(productAmount, minPercentage))}–₦${format(equityForPercentage(productAmount, maxPercentage))}.`
+          : `Choose ${minPercentage}–${maxPercentage}% · excludes upfront charges.`}
       </p>
       <OxygenDownPaymentSlider
-        value={percentage ?? 25}
+        value={percentage ?? minPercentage}
+        min={minPercentage}
+        max={maxPercentage}
         onChange={(value) => choose(value, false)}
         onCommit={onCommit}
       />

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const sendEmail = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
 
-import { sendDeliveryExceptionNotification } from './order-fulfillment-exception-sender';
+import { sendDeliveryExceptionNotification } from './order-fulfillment-delivered-sender';
 
 const merchant = {
   business_name: 'Shop',

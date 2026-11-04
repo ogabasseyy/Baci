@@ -69,7 +69,7 @@ BEGIN
   );
 END;
 $fixture$;
--- 1. Policy rows (fixture and this check run as the migration owner)
+-- 1. Policy rows (the whole suite runs as the migration owner with the service-role claim)
 SELECT is(
   (SELECT count(*)::int FROM private.gigl_tracking_notification_policy AS p
    WHERE (p.raw_status IS NOT DISTINCT FROM 'DLP' AND p.audience = 'merchant' AND p.notification_kind = 'pickup_delayed')
@@ -80,8 +80,6 @@ SELECT is(
   5,
   'approved map adds DLP, customer picked_up, merchant out_for_delivery/delivered and customer cancelled'
 );
-SET LOCAL ROLE service_role;
-SELECT set_config('request.jwt.claim.role', 'service_role', true);
 -- 2. Role filter: owner + orders.fulfill staff only --------------------------------
 DO $roles$
 DECLARE

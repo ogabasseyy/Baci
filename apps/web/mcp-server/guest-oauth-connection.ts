@@ -20,7 +20,8 @@ export function createGuestOAuthConnection(
             return { ...current, cartInitialized: true };
           });
         } catch (error) {
-          const latest = await auth.verify(accessToken);
+          // A rotated access token cannot disambiguate the original CAS failure.
+          const latest = await auth.verify(accessToken).catch(() => { throw error; });
           if (!latest.cartInitialized || latest.cartToken !== grant.cartToken) throw error;
         }
       }

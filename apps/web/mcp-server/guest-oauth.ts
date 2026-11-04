@@ -1,4 +1,5 @@
-import { currentGuestCart, GuestOAuthGrantConflict } from './guest-oauth-cart-lifetime';
+import { updateGuestGrant } from './guest-oauth-update-grant';
+import { currentGuestCart } from './guest-oauth-cart-lifetime';
 import { GUEST_CONNECTION_IDLE_TTL, GUEST_CART_TTL, GUEST_CLOCK_MARGIN, GUEST_REFRESH_MAX_GENERATION } from './guest-oauth-lifetime';
 import { refreshReceipt, recoverRefresh } from './guest-oauth-refresh-receipt';
 import { createGuestConsent } from './guest-oauth-consent';
@@ -291,17 +292,6 @@ export class GuestOAuth {
     return currentGuestCart(this, accessToken, this.now());
   }
   async updateGrant(grantId: string, update: (grant: GuestOAuthGrant) => GuestOAuthGrant) {
-    const { row, grant } = await this.grant(grantId);
-    const next = update(grant);
-    if (
-      !(await this.options.store.compareAndSwap(
-        `grant:${grant.id}`,
-        row.revision,
-        next,
-        grant.expiresAt,
-      ))
-    )
-      throw new GuestOAuthGrantConflict();
-    return next;
+    return updateGuestGrant(this.options.store, await this.grant(grantId), update);
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  retryExistingSavingsGoalSetup,
+  retrySavingsGoalSetup,
   setupExistingSavingsGoal,
 } from '@/lib/customer-savings';
 
@@ -69,7 +69,7 @@ export function useSavingsGoalSetup({ goalId, merchantId, onSettled }: Input) {
     );
   };
   const retry = () =>
-    run(() => retryExistingSavingsGoalSetup({ goalId, merchantId }), true);
+    run(() => retrySavingsGoalSetup({ goalId, merchantId }), true);
   return {
     choice,
     setChoice,

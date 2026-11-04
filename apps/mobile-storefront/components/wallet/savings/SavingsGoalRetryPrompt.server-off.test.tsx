@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import {
   fetchExistingSavingsPlanFunding,
-  retryExistingSavingsGoalSetup,
+  retrySavingsGoalSetup,
 } from '@/lib/customer-savings';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import {
@@ -17,7 +17,7 @@ jest.mock('@/lib/customer-savings', () => ({
   fetchExistingSavingsPlanFunding: jest.fn(),
   fetchSavingsPlanFunding: jest.fn(),
   setupExistingSavingsGoal: jest.fn(),
-  retryExistingSavingsGoalSetup: jest.fn(),
+  retrySavingsGoalSetup: jest.fn(),
 }));
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   usePiggyvestPrimaryCapability: jest.fn(),
@@ -55,7 +55,7 @@ describe('server keeps PiggyVest off', () => {
     await Promise.resolve();
     await Promise.resolve();
     expectNoPiggyvestUi();
-    expect(retryExistingSavingsGoalSetup).not.toHaveBeenCalled();
+    expect(retrySavingsGoalSetup).not.toHaveBeenCalled();
   });
 
   it('is inert on its own: rendering it sends nothing', () => {
@@ -70,7 +70,7 @@ describe('server keeps PiggyVest off', () => {
     expect(
       screen.getByRole('button', { name: 'Try setup again' })
     ).toBeTruthy();
-    expect(retryExistingSavingsGoalSetup).not.toHaveBeenCalled();
+    expect(retrySavingsGoalSetup).not.toHaveBeenCalled();
     expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   });
 });

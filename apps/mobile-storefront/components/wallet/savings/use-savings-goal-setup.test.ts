@@ -1,17 +1,17 @@
 import { act, renderHook } from '@testing-library/react-native';
 import {
-  retryExistingSavingsGoalSetup,
+  retrySavingsGoalSetup,
   setupExistingSavingsGoal,
 } from '@/lib/customer-savings';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 
 jest.mock('@/lib/customer-savings', () => ({
   setupExistingSavingsGoal: jest.fn(),
-  retryExistingSavingsGoalSetup: jest.fn(),
+  retrySavingsGoalSetup: jest.fn(),
 }));
 
 const setup = jest.mocked(setupExistingSavingsGoal);
-const retry = jest.mocked(retryExistingSavingsGoalSetup);
+const retry = jest.mocked(retrySavingsGoalSetup);
 const render = (onSettled = jest.fn()) => ({
   onSettled,
   ...renderHook(() =>

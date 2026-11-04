@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import {
-  retryExistingSavingsGoalSetup,
+  retrySavingsGoalSetup,
   setupExistingSavingsGoal,
 } from '@/lib/customer-savings';
 import {
@@ -11,7 +11,7 @@ import { useSavingsGoalSetup } from './use-savings-goal-setup';
 
 jest.mock('@/lib/customer-savings', () => ({
   setupExistingSavingsGoal: jest.fn(),
-  retryExistingSavingsGoalSetup: jest.fn(),
+  retrySavingsGoalSetup: jest.fn(),
 }));
 
 // The hook is only mounted behind a primary verdict, but even mounted on its
@@ -30,7 +30,7 @@ describe('server keeps PiggyVest off', () => {
       await result.current.submit();
     });
     expect(setupExistingSavingsGoal).not.toHaveBeenCalled();
-    expect(retryExistingSavingsGoalSetup).not.toHaveBeenCalled();
+    expect(retrySavingsGoalSetup).not.toHaveBeenCalled();
     expect(onSettled).not.toHaveBeenCalled();
   });
 });

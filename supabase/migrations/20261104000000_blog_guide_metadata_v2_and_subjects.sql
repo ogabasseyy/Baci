@@ -100,20 +100,21 @@ GRANT ALL ON public.blog_post_guide_subjects TO service_role;
 CREATE OR REPLACE FUNCTION public.blog_posts_stale_on_content_change_trigger()
 RETURNS trigger LANGUAGE plpgsql SET search_path TO '' AS $$
 BEGIN
-  IF (SELECT auth.role()) = 'authenticated' AND (OLD.metadata_verified_at IS DISTINCT FROM NEW.metadata_verified_at OR OLD.metadata_verified_by IS DISTINCT FROM NEW.metadata_verified_by OR OLD.metadata_source_revision IS DISTINCT FROM NEW.metadata_source_revision OR (OLD.metadata_status IS DISTINCT FROM 'verified' AND NEW.metadata_status = 'verified'))
-  THEN RAISE EXCEPTION 'Verification metadata fields are restricted' USING ERRCODE = '42501'; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF (SELECT auth.role()) = 'authenticated' AND (NEW.metadata_verified_at IS NOT NULL OR NEW.metadata_verified_by IS NOT NULL OR NEW.metadata_source_revision IS NOT NULL OR NEW.metadata_status = 'verified') THEN RAISE EXCEPTION 'Verification metadata fields are restricted' USING ERRCODE = '42501'; END IF;
+    RETURN NEW;
+  END IF;
+  IF (SELECT auth.role()) = 'authenticated' AND (OLD.metadata_verified_at IS DISTINCT FROM NEW.metadata_verified_at OR OLD.metadata_verified_by IS DISTINCT FROM NEW.metadata_verified_by OR OLD.metadata_source_revision IS DISTINCT FROM NEW.metadata_source_revision OR (OLD.metadata_status IS DISTINCT FROM 'verified' AND NEW.metadata_status = 'verified')) THEN RAISE EXCEPTION 'Verification metadata fields are restricted' USING ERRCODE = '42501'; END IF;
   IF OLD.metadata_status = 'verified' AND NEW.metadata_status = 'verified'
      AND (OLD.title IS DISTINCT FROM NEW.title OR OLD.content IS DISTINCT FROM NEW.content OR OLD.excerpt IS DISTINCT FROM NEW.excerpt OR OLD.category IS DISTINCT FROM NEW.category OR OLD.tags IS DISTINCT FROM NEW.tags OR OLD.keywords IS DISTINCT FROM NEW.keywords OR OLD.cluster_category_id IS DISTINCT FROM NEW.cluster_category_id OR OLD.guide_scope IS DISTINCT FROM NEW.guide_scope OR OLD.guide_kind IS DISTINCT FROM NEW.guide_kind OR OLD.applicable_brands IS DISTINCT FROM NEW.applicable_brands)
-     AND OLD.metadata_verified_at IS NOT DISTINCT FROM NEW.metadata_verified_at
-     AND OLD.metadata_source_revision IS NOT DISTINCT FROM NEW.metadata_source_revision
+     AND OLD.metadata_verified_at IS NOT DISTINCT FROM NEW.metadata_verified_at AND OLD.metadata_source_revision IS NOT DISTINCT FROM NEW.metadata_source_revision
   THEN NEW.metadata_status := 'stale'; END IF;
   RETURN NEW;
 END;
 $$;
 DROP TRIGGER IF EXISTS blog_posts_stale_on_content_change ON public.blog_posts;
 CREATE TRIGGER blog_posts_stale_on_content_change
-  BEFORE UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION public.blog_posts_stale_on_content_change_trigger();
-
+  BEFORE INSERT OR UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION public.blog_posts_stale_on_content_change_trigger();
 CREATE OR REPLACE FUNCTION public.products_stale_blog_guide_metadata()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 DECLARE
@@ -184,7 +185,6 @@ REVOKE ALL ON FUNCTION public.blog_post_guide_subjects_stale_on_delete() FROM PU
 DROP TRIGGER IF EXISTS blog_post_guide_subjects_stale_on_delete_trigger ON public.blog_post_guide_subjects;
 CREATE TRIGGER blog_post_guide_subjects_stale_on_delete_trigger
   AFTER INSERT OR UPDATE OR DELETE ON public.blog_post_guide_subjects FOR EACH ROW EXECUTE FUNCTION public.blog_post_guide_subjects_stale_on_delete();
-
 CREATE OR REPLACE FUNCTION public.get_storefront_cluster_guide_candidates_v2(
   p_merchant_id uuid, p_page_kind text, p_category_id uuid DEFAULT NULL, p_product_id uuid DEFAULT NULL, p_limit integer DEFAULT 64
 )

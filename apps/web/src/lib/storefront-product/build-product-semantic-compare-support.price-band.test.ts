@@ -43,6 +43,7 @@ describe('buildProductSemanticCompareSupport price-band destination parity', () 
       makeInput({
         currentProduct,
         inventory,
+        priceBandInventory: inventory,
       })
     );
 
@@ -94,6 +95,7 @@ describe('buildProductSemanticCompareSupport price-band destination parity', () 
       makeInput({
         currentProduct,
         inventory,
+        priceBandInventory: inventory,
       })
     );
 
@@ -175,6 +177,7 @@ describe('buildProductSemanticCompareSupport price-band destination parity', () 
       makeInput({
         currentProduct,
         inventory,
+        priceBandInventory: inventory,
       })
     );
 

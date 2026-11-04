@@ -5,9 +5,8 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 SELECT plan(5);
 GRANT USAGE ON SCHEMA extensions TO service_role;
-
-SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
 
 CREATE TEMP TABLE gigl_map_fixture (
   merchant_id uuid, order_id uuid, shipment_id uuid, epoch_id uuid,
@@ -70,8 +69,7 @@ BEGIN
   );
 END;
 $fixture$;
--- 1. Policy rows (read as the migration owner: the private schema is closed)
-RESET ROLE;
+-- 1. Policy rows (fixture and this check run as the migration owner)
 SELECT is(
   (SELECT count(*)::int FROM private.gigl_tracking_notification_policy AS p
    WHERE (p.raw_status IS NOT DISTINCT FROM 'DLP' AND p.audience = 'merchant' AND p.notification_kind = 'pickup_delayed')
@@ -83,6 +81,7 @@ SELECT is(
   'approved map adds DLP, customer picked_up, merchant out_for_delivery/delivered and customer cancelled'
 );
 SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 -- 2. Role filter: owner + orders.fulfill staff only --------------------------------
 DO $roles$
 DECLARE

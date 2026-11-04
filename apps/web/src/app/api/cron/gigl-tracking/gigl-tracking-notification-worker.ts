@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import {
   type NotificationSendResult,
   notifyCustomer,
@@ -9,27 +8,14 @@ import { maybeNotifyActivateProtection } from '@/lib/insurance/notify-activate-p
 import { logger } from '@/lib/logger';
 import type { Database } from '@/types/supabase';
 import { buildGiglTrackingMerchantPushPayload } from './build-gigl-tracking-merchant-push-payload';
+import {
+  type ClaimedGiglTrackingNotification,
+  claimedGiglTrackingNotificationsSchema,
+} from './gigl-tracking-notification-claim-schema';
 import { copyFor } from './gigl-tracking-notification-copy';
 
-const claimedNotificationSchema = z.object({
-  audience: z.enum(['merchant', 'customer']),
-  id: z.uuid(),
-  merchant_id: z.uuid(),
-  notification_kind: z.string().min(1),
-  // Repair-pickup outbox rows may be orderless; shipment_id is the durable key.
-  order_id: z.uuid().nullable(),
-  // Projected by claim_shipment_tracking_notifications for orderless pickups.
-  repair_id: z.uuid().nullable().optional(),
-  shipment_id: z.uuid(),
-  tracking_event_id: z.uuid(),
-});
-
-export const claimedGiglTrackingNotificationsSchema = z.array(
-  claimedNotificationSchema
-);
-export type ClaimedGiglTrackingNotification = z.infer<
-  typeof claimedNotificationSchema
->;
+export type { ClaimedGiglTrackingNotification };
+export { claimedGiglTrackingNotificationsSchema };
 
 type WorkerSupabase = SupabaseClient<Database>;
 type NotificationProcessingState = { rejectionCompleted: boolean };
@@ -70,8 +56,16 @@ async function processNotification(
   if (eventError || !event)
     throw eventError ?? new Error('Tracking event missing');
 
-  const copy = copyFor(notification.notification_kind, event.description);
-  if (notification.notification_kind === 'delivered' && notification.order_id) {
+  const copy = copyFor(
+    notification.notification_kind,
+    event.description,
+    notification.audience
+  );
+  if (
+    notification.notification_kind === 'delivered' &&
+    notification.audience === 'customer' &&
+    notification.order_id
+  ) {
     await notifyDeliveredProtectionActivation(
       notification.order_id,
       notification.merchant_id
@@ -101,6 +95,16 @@ async function processNotification(
     );
   };
   if (notification.audience === 'merchant') {
+    if (!notification.recipient_user_ids) {
+      // The claim RPC predates the recipient column (rollout window). Leave the
+      // lease untouched, without begin/complete, so the row is re-claimed after
+      // it expires and no delivery attempt is consumed. Never broadcast.
+      logger.warn({
+        message: 'GIGL merchant notification claimed without recipient list',
+        notificationId: notification.id,
+      });
+      return 'skipped' as const;
+    }
     const payload = buildGiglTrackingMerchantPushPayload(notification);
     const result = await notifyMerchant(
       notification.merchant_id,
@@ -112,6 +116,7 @@ async function processNotification(
         onDeliveryStart,
         onDeliveryRejected,
         requiredShipmentUpdateCapability: SHIPMENT_UPDATE_CAPABILITY,
+        recipientUserIds: notification.recipient_user_ids,
       }
     );
     return completeNotificationResult(
@@ -169,6 +174,7 @@ async function processNotification(
   const payload = {
     orderId: notification.order_id,
     type: 'shipment_tracking',
+    event: notification.notification_kind,
   };
   const result = await notifyCustomer(
     customer.user_id,

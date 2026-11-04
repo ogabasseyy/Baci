@@ -38,6 +38,7 @@ function toProductIndexCardModel(
     compare_at_price: null,
     condition: product.condition,
     stock: product.stock,
+    manage_stock: product.manage_stock,
     rating: 0,
     availability: product.availability,
     product_key_specs: product.product_key_specs ?? null,

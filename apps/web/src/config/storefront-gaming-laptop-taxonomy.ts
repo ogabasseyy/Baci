@@ -36,7 +36,27 @@ export const NON_EXEMPT_GPU_PHRASES = [
   'gaming laptop gpus',
   'gaming laptop graphics card',
   'gaming laptop graphics cards',
+  'gpu for gaming laptop',
+  'gpu for gaming laptops',
+  'gpus for gaming laptop',
+  'gpus for gaming laptops',
+  'graphics card for gaming laptop',
+  'graphics card for gaming laptops',
+  'graphics cards for gaming laptop',
+  'graphics cards for gaming laptops',
 ] as const;
+
+export const AMBIGUOUS_FAMILY_ALIAS_PARENT: Readonly<Record<string, string>> = {
+  blade: 'razer',
+  predator: 'acer',
+  nitro: 'acer',
+  katana: 'msi',
+  stealth: 'msi',
+  titan: 'msi',
+  raider: 'msi',
+  vector: 'msi',
+  crosshair: 'msi',
+};
 
 export const NON_EXEMPT_MONITOR_PHRASES = [
   'monitor for',

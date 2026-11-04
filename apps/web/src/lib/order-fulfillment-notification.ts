@@ -55,6 +55,16 @@ function isOrderInRequiredShippingStatus(
     );
   }
 
+  if (eventType === 'order_delivery_failed' || eventType === 'order_returned') {
+    // The GIG sync moves the order to 'failed' / 'returned' with the parcel, so
+    // those are the event's own states. A failed-delivery email is stale once
+    // the parcel is returned; anything never shipped, delivered or cancelled
+    // would contradict the order's real state.
+    const allowed = ['shipped', 'out_for_delivery', 'failed'];
+    if (eventType === 'order_returned') allowed.push('returned');
+    return allowed.includes(shippingStatus);
+  }
+
   return shippingStatus === 'delivered' || shippingStatus === 'completed';
 }
 
@@ -228,6 +238,18 @@ export async function sendOrderFulfillmentNotification({
       };
     }
 
+    return { status: 'skipped', reason: 'order_not_in_required_status' };
+  }
+
+  if (
+    (eventType === 'order_delivery_failed' || eventType === 'order_returned') &&
+    trackingNumber &&
+    (!order.tracking_number ||
+      trackingNumber.trim().toUpperCase() !==
+        order.tracking_number.trim().toUpperCase())
+  ) {
+    // The order moved on to a replacement shipment since this event was
+    // queued: the previous parcel's failure/return is no longer the news.
     return { status: 'skipped', reason: 'order_not_in_required_status' };
   }
 

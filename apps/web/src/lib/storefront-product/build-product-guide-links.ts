@@ -175,7 +175,14 @@ export function buildProductGuideLinks(
 
   if (hasSupportedLegacyCluster) {
     const legacyPosts = posts.filter(
-      (p) => !hasV2Metadata(p) && p.merchant_intent !== 'news'
+      (p) =>
+        !hasV2Metadata(p) &&
+        !(
+          p.merchant_intent === 'news' &&
+          (p.merchant_intent_source === 'merchant_declared' ||
+            p.merchant_intent_source === 'verified_receipt' ||
+            p.merchant_intent_source === 'reviewed')
+        )
     );
     const legacyPriorityPosts = legacyPosts.filter(
       (p) =>

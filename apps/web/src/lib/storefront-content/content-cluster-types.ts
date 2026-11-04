@@ -83,6 +83,15 @@ export interface InferContentClusterContextInput
   merchant_intent_source?: unknown;
 }
 
+export interface InferContentClusterContextInput
+  extends Pick<
+    PublishedClusterPost,
+    'category' | 'excerpt' | 'keywords' | 'tags' | 'title'
+  > {
+  merchant_intent?: unknown;
+  merchant_intent_source?: unknown;
+}
+
 export interface InferredContentClusterContext {
   categorySlug: SupportedClusterCategory | null;
   kind: ContentClusterKind | null;

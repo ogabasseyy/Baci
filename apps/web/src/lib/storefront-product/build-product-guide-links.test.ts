@@ -290,4 +290,39 @@ describe('buildProductGuideLinks', () => {
       'https://ogabassey.com/blog/best-phones-in-nigeria'
     );
   });
+
+  it('excludes family-only priority gaming-laptop guides (e.g. Predator without Acer) on a Dell Alienware PDP', () => {
+    const predatorGuide = {
+      slug: 'predator-helios-16-gaming-laptop-buyer-guide',
+      title: 'Predator Helios 16 Gaming Laptop Buyer Guide',
+      excerpt: 'High-refresh gaming performance.',
+      category: 'Gaming Laptops',
+      tags: ['predator', 'gaming laptop'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-01T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+
+    const links = buildProductGuideLinks(
+      makeInput({
+        categorySlug: 'gaming-laptops',
+        categoryName: 'Gaming Laptops',
+        currentProduct: {
+          slug: 'dell-alienware-m16-r2',
+          name: 'Dell Alienware m16 R2',
+          price: 2_200_000,
+          brand: 'Dell',
+          condition: 'new',
+          stock: 3,
+          category_slug: 'gaming-laptops',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [predatorGuide.slug],
+        guidePosts: [predatorGuide],
+      })
+    );
+
+    expect(links).toEqual([]);
+  });
 });

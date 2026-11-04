@@ -248,7 +248,8 @@ function inferBrands(
           a.some((alias) =>
             AMBIGUOUS_FAMILY_ALIAS_PARENT[alias]
               ? hasPhrase(haystack, alias) &&
-                hasPhrase(haystack, AMBIGUOUS_FAMILY_ALIAS_PARENT[alias])
+                (hasPhrase(haystack, AMBIGUOUS_FAMILY_ALIAS_PARENT[alias]) ||
+                  categorySlug === 'gaming-laptops')
               : hasPhrase(haystack, alias)
           )
         )

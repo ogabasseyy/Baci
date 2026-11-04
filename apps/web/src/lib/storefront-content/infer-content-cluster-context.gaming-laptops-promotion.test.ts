@@ -145,6 +145,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Best Gaming-Laptop Deals in Nigeria',
         excerpt: null,
         category: 'Gaming',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('gaming-laptops');
 
@@ -153,6 +155,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Best Monitor Pairings for Gaming Laptops',
         excerpt: 'External displays.',
         category: 'Gaming',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).not.toBe('gaming-laptops');
 
@@ -161,6 +165,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Best GPUs for Gaming Laptops',
         excerpt: 'Mobile graphics.',
         category: 'Gaming',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('gaming');
 
@@ -169,6 +175,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Gaming-Laptop GPU Upgrade Buyer Guide',
         excerpt: 'Mobile graphics.',
         category: 'Gaming',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('gaming');
 
@@ -177,6 +185,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Stealth Travel Laptop Review',
         excerpt: 'Ultrabook for flights.',
         category: 'Laptops',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('laptops');
 
@@ -185,6 +195,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Titan Workstation Laptop Review',
         excerpt: 'CAD workstation.',
         category: 'Laptops',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('laptops');
 
@@ -193,6 +205,8 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         title: 'Top Picks for Your Setup',
         excerpt: 'Mechanical switches.',
         category: 'Gaming Laptop Keyboard',
+        tags: [],
+        keywords: [],
       }).categorySlug
     ).toBe('accessories');
 
@@ -202,6 +216,7 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
         excerpt: 'Playable on laptops.',
         category: 'Hardware Reviews',
         tags: ['blade', 'predator'],
+        keywords: [],
       }).categorySlug
     ).not.toBe('gaming-laptops');
   });

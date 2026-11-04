@@ -41,7 +41,7 @@ describe('buildStorefrontClusterGuideRequest', () => {
     });
   });
 
-  it('clears explicit category_names on gaming and laptops when requesting gaming-laptops so SQL pre-filtering allows cross-category promotion', () => {
+  it('clears category_names and article_tokens on gaming and laptops when requesting gaming-laptops so SQL pre-filtering allows cross-category promotion', () => {
     const request = buildStorefrontClusterGuideRequest({
       pageKind: 'product',
       categorySlug: 'gaming-laptops',
@@ -54,6 +54,8 @@ describe('buildStorefrontClusterGuideRequest', () => {
       (r) => r.category_slug === 'laptops'
     );
     expect(gamingRule?.category_names).toEqual([]);
+    expect(gamingRule?.article_tokens).toEqual([]);
     expect(laptopsRule?.category_names).toEqual([]);
+    expect(laptopsRule?.article_tokens).toEqual([]);
   });
 });

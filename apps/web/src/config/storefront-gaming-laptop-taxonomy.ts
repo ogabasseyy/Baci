@@ -50,6 +50,7 @@ export const AMBIGUOUS_FAMILY_ALIAS_PARENT: Readonly<Record<string, string>> = {
   blade: 'razer',
   predator: 'acer',
   nitro: 'acer',
+  katana: 'msi',
   stealth: 'msi',
   titan: 'msi',
   raider: 'msi',

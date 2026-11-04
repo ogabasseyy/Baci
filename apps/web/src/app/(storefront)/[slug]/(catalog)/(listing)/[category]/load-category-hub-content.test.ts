@@ -227,4 +227,57 @@ describe('loadCategoryHubContent', () => {
     expect(result.hubProducts).toBeUndefined();
     warnSpy.mockRestore();
   });
+
+  it('does not treat prototype properties as hub default categories', async () => {
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'constructor',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-proto' },
+        productCount: 10,
+        products: [{ id: 'p1' }],
+      },
+      storeSlug: 'ogabassey',
+    } as never);
+    expect(mockCategoryPageData).not.toHaveBeenCalled();
+    expect(result.hubProducts).toBeUndefined();
+  });
+
+  it('fetches 150-product canonical pool when page is filtered even if page productCount is covered', async () => {
+    mockCategoryPageData.mockResolvedValue({
+      products: [{ id: 'canonical-pool-product', name: 'Canonical' }],
+      productsQueryFailed: false,
+    });
+    const { loadCategoryHubContent } = await import(
+      './load-category-hub-content'
+    );
+    const result = await loadCategoryHubContent({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      categoryData: {
+        isCollection: false,
+        isInactiveCategory: false,
+        category: { id: 'cat-1' },
+        productCount: 2,
+        products: [{ id: 'filtered-1' }, { id: 'filtered-2' }],
+      },
+      storeSlug: 'ogabassey',
+      isFiltered: true,
+    } as never);
+    expect(mockCategoryPageData).toHaveBeenCalledWith(
+      'merchant-1',
+      'smartphones',
+      'ogabassey',
+      0,
+      150
+    );
+    expect(result.hubProducts).toEqual([
+      { id: 'canonical-pool-product', name: 'Canonical' },
+    ]);
+  });
 });

@@ -18,9 +18,26 @@ describe('getProductSeoSelect', () => {
     expect(getProductSeoSelect(false)).toContain('manage_stock');
     expect(getProductSeoSelect(true)).toContain('manage_stock');
   });
+
+  it('includes has_condition_offers in category-scoped and unscoped select strings', () => {
+    expect(getProductSeoSelect(false)).toContain('has_condition_offers');
+    expect(getProductSeoSelect(true)).toContain('has_condition_offers');
+  });
 });
 
 describe('toProductSemanticCandidate', () => {
+  it('preserves has_condition_offers when present on product row', () => {
+    const candidate = toProductSemanticCandidate(
+      {
+        slug: 'macbook-pro',
+        name: 'MacBook Pro',
+        price: 1500,
+        has_condition_offers: true,
+      },
+      'fallback'
+    );
+    expect(candidate?.has_condition_offers).toBe(true);
+  });
   it('normalizes numeric string prices and prefers the direct category slug', () => {
     const candidate = toProductSemanticCandidate(
       {

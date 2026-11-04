@@ -36,7 +36,6 @@ import {
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
 } from './category-page-content-helpers';
-import { loadCategoryHubContent } from './load-category-hub-content';
 import { loadFilteredCategoryPageData } from './load-filtered-category-page-data';
 
 interface PageProps {
@@ -174,16 +173,6 @@ export async function generateMetadata({
     getCanonicalStorefrontFilterSearchParams(resolvedSearchParams);
   const canonicalFilterQuery = canonicalFilterParams.toString();
   const categoryUrl = `${baseUrl}/${category}${canonicalFilterQuery ? `?${canonicalFilterQuery}` : ''}`;
-  const { hubProducts } = await loadCategoryHubContent({
-    merchantId: merchant.id,
-    categorySlug: category,
-    categoryData: data,
-    storeSlug: slug,
-    includeAuthorityContent: false,
-  });
-  const hubNormalizedProducts = hubProducts
-    ? normalizeCategoryPageProducts(hubProducts, category, merchant.country)
-    : normalizedProducts;
   const hubContent = buildCategoryPageHubModel({
     data,
     categorySlug: category,
@@ -191,7 +180,7 @@ export async function generateMetadata({
     merchantBusinessName: merchant.business_name,
     merchantCurrency: resolveMerchantCurrencyConfig(merchant).code,
     storeUrl: baseUrl,
-    products: hubNormalizedProducts,
+    products: normalizedProducts,
   });
   const paginatedCategoryUrl = buildStorefrontPageHref(
     categoryUrl,

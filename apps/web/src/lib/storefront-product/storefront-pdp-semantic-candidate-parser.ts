@@ -61,6 +61,19 @@ export function toProductSemanticCandidateFromJson(
     manageStock = rawManageStock;
   }
 
+  let hasConditionOffers: boolean | null | undefined;
+  if ('has_condition_offers' in value) {
+    const rawOffers = value.has_condition_offers;
+    if (
+      rawOffers !== null &&
+      rawOffers !== undefined &&
+      typeof rawOffers !== 'boolean'
+    ) {
+      return null;
+    }
+    hasConditionOffers = rawOffers;
+  }
+
   return toProductSemanticCandidate(
     {
       brand: typeof value.brand === 'string' ? value.brand : null,
@@ -74,6 +87,7 @@ export function toProductSemanticCandidateFromJson(
       stock,
       stock_quantity: stockQuantity,
       manage_stock: manageStock,
+      has_condition_offers: hasConditionOffers,
     },
     categorySlug
   );

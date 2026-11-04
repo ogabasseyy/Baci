@@ -125,6 +125,7 @@ export async function CategoryPageContent({
       categorySlug: category,
       categoryData: data,
       storeSlug: slug,
+      isFiltered: selectedGraphics.length > 0,
     });
 
   const productSlots = getCategoryPageProductSlots(data);

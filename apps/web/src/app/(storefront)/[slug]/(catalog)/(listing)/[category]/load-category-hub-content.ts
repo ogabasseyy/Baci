@@ -16,10 +16,12 @@ export async function loadCategoryHubContent(input: {
   categoryData: CachedCategoryPageData;
   storeSlug?: string;
   includeAuthorityContent?: boolean;
+  isFiltered?: boolean;
 }) {
   const includeAuthority = input.includeAuthorityContent ?? true;
   const supportedCategory =
-    includeAuthority && input.categorySlug in CONTENT_CLUSTER_SUPPORT
+    includeAuthority &&
+    Object.hasOwn(CONTENT_CLUSTER_SUPPORT, input.categorySlug)
       ? (input.categorySlug as SupportedClusterCategory)
       : null;
   const canLoadAuthority =
@@ -31,8 +33,12 @@ export async function loadCategoryHubContent(input: {
     !input.categoryData.isCollection &&
     !input.categoryData.isInactiveCategory &&
     Boolean(input.storeSlug);
-  const hasHubDefaults = input.categorySlug in CATEGORY_HUB_DEFAULTS;
+  const hasHubDefaults = Object.hasOwn(
+    CATEGORY_HUB_DEFAULTS,
+    input.categorySlug
+  );
   const isPageDataSufficient =
+    !input.isFiltered &&
     input.categoryData.productCount !== undefined &&
     input.categoryData.products.length >= input.categoryData.productCount;
   const shouldFetchHubPool =

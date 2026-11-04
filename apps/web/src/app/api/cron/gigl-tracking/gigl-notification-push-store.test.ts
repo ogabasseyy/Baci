@@ -124,4 +124,13 @@ describe('createGiglNotificationPushStore', () => {
       { p_attempt: { title: 't' }, p_id: 'n-1', p_worker_id: 'w-1' }
     );
   });
+
+  it('reports a lost lease as a store error instead of a silent no-op', async () => {
+    const c = client({ data: false });
+    const store = createGiglNotificationPushStore(c, lease);
+
+    await expect(store.insertAttempt({} as never)).resolves.toEqual({
+      error: { message: 'Notification lease is no longer active' },
+    });
+  });
 });

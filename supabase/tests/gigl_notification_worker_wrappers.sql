@@ -65,6 +65,8 @@ SELECT ok(
 SELECT ok(
   NOT has_function_privilege('gigl_tracking_worker',
     'private.gigl_worker_leased_notification(uuid,text)'::regprocedure, 'EXECUTE')
+  AND NOT has_function_privilege('gigl_tracking_worker',
+    'private.gigl_worker_notification_recipient_users(uuid,text,uuid)'::regprocedure, 'EXECUTE')
   AND NOT has_schema_privilege('gigl_tracking_worker', 'private', 'USAGE'),
   'the worker has no access to the private lease helpers or schema'
 );
@@ -187,6 +189,8 @@ BEGIN
     ('ExponentPushToken[gnw-owner-a]', v_owner_a, v_a, 'ios', 'admin', true, 1),
     ('ExponentPushToken[gnw-staff-a]', v_staff, v_a, 'ios', 'admin', true, 1),
     ('ExponentPushToken[gnw-owner-b]', v_owner_b, v_b, 'ios', 'admin', true, 1),
+    ('ExponentPushToken[gnw-other-a]', v_owner_b, v_a, 'android', 'storefront', true, 1),
+    ('ExponentPushToken[gnw-outsider-a]', v_owner_b, v_a, 'ios', 'admin', true, 1),
     ('ExponentPushToken[gnw-buyer-a]', v_buyer, v_a, 'android', 'storefront', true, 1),
     ('ExponentPushToken[gnw-buyer-b]', v_buyer, v_b, 'android', 'storefront', true, 1);
   INSERT INTO gnw_fixture VALUES (
@@ -267,8 +271,8 @@ SELECT is(
     (SELECT id FROM gnw_claimed WHERE audience = 'customer'), 'gnw-worker',
     'DeviceNotRegistered',
     ARRAY['ExponentPushToken[gnw-buyer-a]', 'ExponentPushToken[gnw-buyer-b]',
-          'ExponentPushToken[gnw-owner-a]']),
-  1, 'deactivation touches only the leased tenant''s storefront tokens'
+          'ExponentPushToken[gnw-owner-a]', 'ExponentPushToken[gnw-other-a]']),
+  1, 'deactivation touches only the leased recipient''s tokens in the leased tenant'
 );
 SELECT is(
   public.gigl_worker_store_notification_push_tickets(
@@ -277,8 +281,10 @@ SELECT is(
       jsonb_build_object('ticket_id', 't-own', 'push_token', 'ExponentPushToken[gnw-owner-a]',
         'channel', 'orders', 'notification_type', 'shipment_tracking'),
       jsonb_build_object('ticket_id', 't-foreign', 'push_token', 'ExponentPushToken[gnw-owner-b]',
+        'channel', 'orders', 'notification_type', 'shipment_tracking'),
+      jsonb_build_object('ticket_id', 't-other-user', 'push_token', 'ExponentPushToken[gnw-outsider-a]',
         'channel', 'orders', 'notification_type', 'shipment_tracking'))),
-  1, 'tickets for another tenant''s token are dropped'
+  1, 'tickets for another tenant''s or another recipient''s token are dropped'
 );
 SELECT is(
   public.gigl_worker_record_notification_push_attempt(

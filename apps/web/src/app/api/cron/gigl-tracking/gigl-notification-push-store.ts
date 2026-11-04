@@ -22,12 +22,18 @@ export function createGiglNotificationPushStore(
     if (error) return { data: null, error: { message: error.message } };
     return { data: (data ?? []) as TokenRows, error: null };
   };
+  // The wrappers answer false/0 when the lease is gone; surface that as an
+  // error so the attempt retry loop and ticket logging see the lost write.
   const write = async (
     name: Parameters<GiglNotificationRpcClient['rpc']>[0],
     args: Record<string, unknown>
   ) => {
-    const { error } = await client.rpc(name, { ...base, ...args });
-    return { error: error ? { message: error.message } : null };
+    const { data, error } = await client.rpc(name, { ...base, ...args });
+    if (error) return { error: { message: error.message } };
+    if (data === false) {
+      return { error: { message: 'Notification lease is no longer active' } };
+    }
+    return { error: null };
   };
   return {
     getExpo: getExpoClient,

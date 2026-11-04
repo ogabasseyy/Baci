@@ -66,8 +66,60 @@ AS $$
   WHERE o.id = p_order_id;
 $$;
 
+-- The users whose devices a leased notification may touch: the order's
+-- customer for customer rows; the owner plus active orders.fulfill staff for
+-- merchant rows. check_staff_permission only answers for the service role or
+-- the staff member, and SECURITY DEFINER keeps the caller's JWT claims, so
+-- the claim is elevated for exactly this recompute and restored right after.
+CREATE OR REPLACE FUNCTION private.gigl_worker_notification_recipient_users(
+  p_merchant_id uuid,
+  p_audience text,
+  p_order_id uuid
+)
+RETURNS uuid[]
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  previous_role text;
+  users uuid[];
+BEGIN
+  IF p_audience = 'customer' THEN
+    RETURN array_remove(
+      ARRAY[private.gigl_worker_notification_customer_user(p_order_id)],
+      NULL
+    );
+  END IF;
+  previous_role := current_setting('request.jwt.claim.role', true);
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  SELECT coalesce(array_agg(member.user_id), '{}'::uuid[])
+  INTO users
+  FROM (
+    SELECT merchant.user_id FROM public.merchants AS merchant
+    WHERE merchant.id = p_merchant_id
+    UNION
+    SELECT staff.user_id FROM public.staff_members AS staff
+    WHERE staff.merchant_id = p_merchant_id
+      AND staff.status = 'active'
+      AND public.check_staff_permission(
+        staff.user_id, staff.merchant_id, 'orders', 'fulfill'
+      )
+  ) AS member
+  WHERE member.user_id IS NOT NULL;
+  PERFORM set_config(
+    'request.jwt.claim.role', coalesce(previous_role, ''), true
+  );
+  RETURN users;
+END;
+$$;
+
 ALTER FUNCTION private.gigl_worker_leased_notification(uuid, text)
   OWNER TO postgres;
+ALTER FUNCTION private.gigl_worker_notification_recipient_users(uuid, text, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.gigl_worker_notification_recipient_users(uuid, text, uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
 ALTER FUNCTION private.gigl_worker_notification_customer_user(uuid)
   OWNER TO postgres;
 REVOKE ALL ON FUNCTION private.gigl_worker_leased_notification(uuid, text)
@@ -221,7 +273,6 @@ AS $$
 DECLARE
   lease record;
   customer_user uuid;
-  previous_role text;
   eligible_users uuid[];
 BEGIN
   SELECT * INTO lease
@@ -230,28 +281,8 @@ BEGIN
     RETURN;
   END IF;
   IF lease.audience = 'merchant' THEN
-    -- check_staff_permission only answers for the service role or the staff
-    -- member themselves, and SECURITY DEFINER keeps the caller's JWT claims.
-    -- Elevate the claim for exactly the recipient recompute (as the claim
-    -- delegate does) and restore it before anything else runs.
-    previous_role := current_setting('request.jwt.claim.role', true);
-    PERFORM set_config('request.jwt.claim.role', 'service_role', true);
-    SELECT coalesce(array_agg(member.user_id), '{}'::uuid[])
-    INTO eligible_users
-    FROM (
-      SELECT merchant.user_id FROM public.merchants AS merchant
-      WHERE merchant.id = lease.merchant_id
-      UNION
-      SELECT staff.user_id FROM public.staff_members AS staff
-      WHERE staff.merchant_id = lease.merchant_id
-        AND staff.status = 'active'
-        AND public.check_staff_permission(
-          staff.user_id, staff.merchant_id, 'orders', 'fulfill'
-        )
-    ) AS member
-    WHERE member.user_id IS NOT NULL;
-    PERFORM set_config(
-      'request.jwt.claim.role', coalesce(previous_role, ''), true
+    eligible_users := private.gigl_worker_notification_recipient_users(
+      lease.merchant_id, lease.audience, lease.order_id
     );
     RETURN QUERY
     SELECT pt.token, pt.platform
@@ -350,12 +381,16 @@ AS $$
 DECLARE
   lease record;
   stored integer;
+  recipients uuid[];
 BEGIN
   SELECT * INTO lease
   FROM private.gigl_worker_leased_notification(p_id, p_worker_id);
   IF lease.id IS NULL THEN
     RETURN 0;
   END IF;
+  recipients := private.gigl_worker_notification_recipient_users(
+    lease.merchant_id, lease.audience, lease.order_id
+  );
   IF p_tickets IS NULL OR jsonb_typeof(p_tickets) IS DISTINCT FROM 'array'
     OR jsonb_array_length(p_tickets) > 1000 THEN
     RAISE EXCEPTION 'GIGL push tickets are invalid' USING ERRCODE = '22023';
@@ -381,6 +416,7 @@ BEGIN
         AND pt.merchant_id = lease.merchant_id
         AND pt.app_type = CASE WHEN lease.audience = 'merchant'
           THEN 'admin' ELSE 'storefront' END
+        AND pt.user_id = ANY (recipients)
     );
   GET DIAGNOSTICS stored = ROW_COUNT;
   RETURN stored;
@@ -403,6 +439,7 @@ AS $$
 DECLARE
   lease record;
   deactivated integer;
+  recipients uuid[];
 BEGIN
   SELECT * INTO lease
   FROM private.gigl_worker_leased_notification(p_id, p_worker_id);
@@ -414,10 +451,14 @@ BEGIN
     RAISE EXCEPTION 'GIGL push token deactivation is invalid'
       USING ERRCODE = '22023';
   END IF;
+  recipients := private.gigl_worker_notification_recipient_users(
+    lease.merchant_id, lease.audience, lease.order_id
+  );
   UPDATE public.push_tokens AS pt
   SET is_active = false, deactivation_reason = p_reason,
     deactivated_at = now()
   WHERE pt.token = ANY (p_tokens)
+    AND pt.user_id = ANY (recipients)
     AND pt.merchant_id = lease.merchant_id
     AND pt.app_type = CASE WHEN lease.audience = 'merchant'
       THEN 'admin' ELSE 'storefront' END;

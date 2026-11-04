@@ -95,7 +95,6 @@ function getDestinationPriceBandInventory(
   const seenSlugs = new Set<string>();
 
   return input.inventory
-    .filter((product) => product.category_slug === input.categorySlug)
     .filter((product) => {
       if (seenSlugs.has(product.slug)) return false;
       seenSlugs.add(product.slug);

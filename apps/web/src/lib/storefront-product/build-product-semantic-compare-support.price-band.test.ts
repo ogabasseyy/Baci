@@ -183,4 +183,74 @@ describe('buildProductSemanticCompareSupport price-band destination parity', () 
     );
     expect(priceBandLink).toBeDefined();
   });
+
+  it('bounds category-and-children inventory before filtering so child products displace older qualifying products', () => {
+    const currentProduct = makeCandidate({
+      slug: 'phone-current',
+      name: 'Phone Current',
+      brand: 'Apple',
+      price: 300_000,
+    });
+
+    const childProducts = Array.from({ length: 150 }, (_, i) =>
+      makeCandidate({
+        slug: `child-${i}`,
+        name: `Child ${i}`,
+        brand: 'Apple',
+        category_slug: 'child-category',
+        price: 900_000,
+      })
+    );
+
+    const qualifyingOlderProducts = [
+      makeCandidate({
+        slug: 'old-1',
+        name: 'Old 1',
+        brand: 'Apple',
+        price: 250_000,
+      }),
+      makeCandidate({
+        slug: 'old-2',
+        name: 'Old 2',
+        brand: 'Apple',
+        price: 350_000,
+      }),
+      makeCandidate({
+        slug: 'old-3',
+        name: 'Old 3',
+        brand: 'Samsung',
+        price: 200_000,
+      }),
+      makeCandidate({
+        slug: 'old-4',
+        name: 'Old 4',
+        brand: 'Samsung',
+        price: 400_000,
+      }),
+      makeCandidate({
+        slug: 'old-5',
+        name: 'Old 5',
+        brand: 'Google',
+        price: 300_000,
+      }),
+      makeCandidate({
+        slug: 'old-6',
+        name: 'Old 6',
+        brand: 'Google',
+        price: 450_000,
+      }),
+    ];
+
+    const support = buildProductSemanticCompareSupport(
+      makeInput({
+        currentProduct,
+        inventory: [...childProducts, ...qualifyingOlderProducts],
+      })
+    );
+
+    const priceBandLink = support.supportLinks.find((link) =>
+      link.href.includes('/best-under/under-500k')
+    );
+    expect(priceBandLink).toBeUndefined();
+  });
 });

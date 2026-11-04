@@ -1,5 +1,6 @@
 import { generateSlug } from '../seo-utils';
 import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
+import { isNonBrandPlaceholderKey } from '../storefront-category/category-hub-brand-placeholder';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
@@ -34,13 +35,13 @@ const NON_SPEC_METADATA_KEYS = new Set(['created_at', 'updated_at']);
 function normalizeBrand(brand?: string | null): NormalizedBrand | null {
   const label = brand?.trim();
 
-  if (!label) {
+  if (!label || isNonBrandPlaceholderKey(label)) {
     return null;
   }
 
   const key = generateSlug(label);
 
-  if (!key) {
+  if (!key || isNonBrandPlaceholderKey(key)) {
     return null;
   }
 
@@ -164,6 +165,11 @@ export function buildBrandCompareCandidate(input: {
     const canonicalKey =
       resolveCanonicalBrandKey(input.categorySlug, normalizedBrand.label) ||
       normalizedBrand.key;
+
+    if (isNonBrandPlaceholderKey(canonicalKey)) {
+      continue;
+    }
+
     const canonicalEntry = brandAuthorityTaxonomy.getEntry(
       input.categorySlug,
       canonicalKey
@@ -252,11 +258,14 @@ export function buildPriceBandCandidate(input: {
   const differentiatingSpecCount = Math.min(
     new Set(
       bandProducts
-        .map((product) =>
-          product.brand
-            ? resolveCanonicalBrandKey(input.categorySlug, product.brand)
-            : null
-        )
+        .map((product) => {
+          const brand = normalizeBrand(product.brand);
+          if (!brand) return null;
+          const canonical =
+            resolveCanonicalBrandKey(input.categorySlug, brand.label) ||
+            brand.key;
+          return isNonBrandPlaceholderKey(canonical) ? null : canonical;
+        })
         .filter((brandKey): brandKey is string => Boolean(brandKey))
     ).size,
     4

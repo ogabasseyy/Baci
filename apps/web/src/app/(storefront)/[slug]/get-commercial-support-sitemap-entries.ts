@@ -6,6 +6,7 @@ import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildCommercialSupportDiscoveryLinks } from '@/lib/storefront-compare/build-compare-discovery-links';
 import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 import { isStorefrontSitemapPublished } from '@/lib/storefront-seo/is-storefront-sitemap-published';
+import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { getGamingGraphicsHubSitemapEntries } from './gaming-graphics-hub-sitemap';
 import { getCommercialSupportCategorySitemapEntries } from './get-commercial-support-category-sitemap-entries';
 import type { StorefrontSitemapContext } from './sitemap-data';
@@ -130,7 +131,11 @@ export async function getCommercialSupportSitemapEntries(
     );
     const batchEntries = await Promise.all(
       categoryBatch.map(async (entry) => {
-        const categorySlug = entry.url.replace(`${context.storeUrl}/`, '');
+        const categorySlug =
+          entry.categorySlug ?? entry.url.replace(`${context.storeUrl}/`, '');
+        if (!categorySlug || !evaluateStorefrontSlugSafety(categorySlug).safe) {
+          return [];
+        }
         const categoryData = await getCachedCategoryPageData(
           context.merchant.id,
           categorySlug,

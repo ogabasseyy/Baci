@@ -7,6 +7,7 @@ describe('getCommercialSupportCategorySitemapEntries', () => {
       data: [
         { slug: 'laptops', updated_at: '2026-08-02T12:00:00.000Z' },
         { slug: ' ', updated_at: '2026-08-03T12:00:00.000Z' },
+        { slug: '../escape', updated_at: '2026-08-04T12:00:00.000Z' },
       ],
       error: null,
     }));
@@ -21,6 +22,7 @@ describe('getCommercialSupportCategorySitemapEntries', () => {
       })
     ).resolves.toEqual([
       {
+        categorySlug: 'laptops',
         changeFrequency: 'daily',
         lastModified: new Date('2026-08-02T12:00:00.000Z'),
         priority: 0.7,

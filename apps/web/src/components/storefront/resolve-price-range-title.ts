@@ -24,7 +24,9 @@ export function resolvePriceRangeTitle(
     }).find(
       (band) =>
         params.rawPrice <= band.ceiling &&
-        (band.floor === undefined || params.rawPrice > band.floor)
+        (band.floor === undefined || params.rawPrice > band.floor) &&
+        params.maxPrice <= band.ceiling &&
+        (band.floor === undefined || params.minPrice > band.floor)
     ) ?? null;
 
   if (curatedPriceBand?.label) {

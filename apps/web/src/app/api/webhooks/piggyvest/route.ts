@@ -99,13 +99,26 @@ export async function POST(request: NextRequest): Promise<Response> {
   const rawBody: Buffer = bounded.body;
 
   // One intake client per request, created only once a delivery needs it
-  // (a rejected request never opens a database connection).
+  // (a rejected request never opens a database connection). It owns a single
+  // connection shared by every operation of the delivery and is always
+  // disposed, on every return path.
   let intakeClient: ReturnType<typeof createPiggyvestIntakeClient> | undefined;
   const createClient = () => {
     intakeClient ??= createPiggyvestIntakeClient();
     return intakeClient;
   };
+  try {
+    return await handleVerifiedBody(request, rawBody, createClient);
+  } finally {
+    await Promise.resolve(intakeClient?.dispose?.()).catch(() => undefined);
+  }
+}
 
+async function handleVerifiedBody(
+  request: NextRequest,
+  rawBody: Buffer,
+  createClient: () => ReturnType<typeof createPiggyvestIntakeClient>
+): Promise<Response> {
   const admission = await admitPiggyvestDelivery({
     request,
     rawBody,

@@ -20,6 +20,9 @@ import { readPiggyvestWebhookIntakeRuntime } from './webhook-intake-runtime';
  * inbox lease, inflow/interest ledgers, plan-wallet mapping, transfer outbox,
  * and restriction flips). Those entry points accept only this brand, so no
  * other edge can drive the money graph with a generic client.
+ *
+ * One client = one database connection (opened lazily, verified once, reused
+ * by every operation of the delivery). The caller disposes it in a `finally`.
  */
 export function createPiggyvestIntakeClient(): PiggyvestIntakeClient {
   return createPiggyvestIntakeClientFromExecutor(

@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   clients: [] as Array<{ user: unknown }>,
+  ended: 0,
   calls: [] as Array<{ fn: string; payload: unknown }>,
   script: {} as Record<string, () => unknown>,
 }));
@@ -28,7 +29,10 @@ vi.mock('pg', () => ({
       mocks.clients.push({ user: options.user });
     }
     connect = vi.fn(async () => undefined);
-    end = vi.fn(async () => undefined);
+    on = vi.fn();
+    end = vi.fn(async () => {
+      mocks.ended += 1;
+    });
     query = vi.fn(async (sql: string, params?: string[]) => {
       if (sql.includes('current_database()')) {
         return {
@@ -89,6 +93,7 @@ function stubDatabaseSettings() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.clients.length = 0;
+  mocks.ended = 0;
   mocks.calls.length = 0;
   secret = freshKey();
   vi.stubEnv('PIGGYVEST_SECRET_KEY', secret);
@@ -144,7 +149,9 @@ describe('PiggyVest webhook least privilege', () => {
       'resolve_capture',
     ]);
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
-    expect(mocks.clients.length).toBeGreaterThan(0);
+    // one connection for the whole delivery, closed when it ends
+    expect(mocks.clients).toHaveLength(1);
+    expect(mocks.ended).toBe(1);
     expect(
       mocks.clients.every((c) => c.user === 'baci_piggyvest_webhook_intake')
     ).toBe(true);
@@ -190,6 +197,19 @@ describe('PiggyVest webhook least privilege', () => {
     expect(response.status).toBe(503);
     expect(mocks.calls.map((call) => call.fn)).toEqual(['capture_delivery']);
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.clients).toHaveLength(1);
+    expect(mocks.ended).toBe(1);
+  });
+
+  it('closes the single connection when processing throws', async () => {
+    mocks.script.claim_event = () => {
+      throw new Error('lease store down');
+    };
+
+    await post(body, sign(secret, body));
+
+    expect(mocks.clients).toHaveLength(1);
+    expect(mocks.ended).toBe(1);
   });
 
   it('rejects a bad signature with 401 before any database connection exists', async () => {

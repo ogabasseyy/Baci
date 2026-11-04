@@ -227,9 +227,12 @@ class IntakeQuery implements PromiseLike<Result> {
 }
 
 export function createPiggyvestIntakeClientFromExecutor(
-  execute: PiggyvestWebhookIntakeExecute
+  execute: PiggyvestWebhookIntakeExecute & { close?: () => Promise<void> }
 ): PiggyvestIntakeClient {
   const facade = {
+    dispose: async (): Promise<void> => {
+      await execute.close?.();
+    },
     from: (table: string) => new IntakeQuery(table, execute),
     async rpc(name: string, args: Row = {}): Promise<Result> {
       const route = Object.hasOwn(rpcRoutes, name) ? rpcRoutes[name] : null;

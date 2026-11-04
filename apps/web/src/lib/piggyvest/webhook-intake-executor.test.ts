@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   end: vi.fn(),
   options: vi.fn(),
+  on: vi.fn(),
 }));
 vi.mock('pg', () => ({
   Client: class {
@@ -21,6 +22,7 @@ vi.mock('pg', () => ({
     connect = mocks.connect;
     query = mocks.query;
     end = mocks.end;
+    on = mocks.on;
   },
 }));
 
@@ -74,7 +76,62 @@ describe('createPiggyvestWebhookIntakeExecutor', () => {
         options: '-c search_path=pg_catalog',
       })
     );
+    await execute.close();
     expect(mocks.end).toHaveBeenCalledOnce();
+  });
+
+  it('runs N operations over exactly one connection and one session verification', async () => {
+    for (let i = 0; i < 5; i += 1)
+      mocks.query.mockResolvedValueOnce({ rows: [{ result: { i } }] });
+    const execute = createPiggyvestWebhookIntakeExecutor(config);
+    for (let i = 0; i < 5; i += 1)
+      expect(await execute('inbox_read', { event_id: `e${i}` })).toEqual({ i });
+    expect(mocks.options).toHaveBeenCalledTimes(1);
+    expect(mocks.connect).toHaveBeenCalledTimes(1);
+    // one verification + five statements
+    expect(mocks.query).toHaveBeenCalledTimes(6);
+    expect(mocks.end).not.toHaveBeenCalled();
+    await execute.close();
+    expect(mocks.end).toHaveBeenCalledOnce();
+  });
+
+  it('shares one connection between concurrent operations', async () => {
+    mocks.query.mockResolvedValue({ rows: [{ result: 1 }] });
+    mocks.query.mockResolvedValueOnce(safeSession);
+    const execute = createPiggyvestWebhookIntakeExecutor(config);
+    await Promise.all([
+      execute('inbox_read', {}),
+      execute('claim_event', {}),
+      execute('plan_wallet_read', {}),
+    ]);
+    expect(mocks.connect).toHaveBeenCalledTimes(1);
+    await execute.close();
+  });
+
+  it('closes the connection after a statement error and still maps only the SQLSTATE', async () => {
+    mocks.query.mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { code: '23505' })
+    );
+    mocks.query.mockResolvedValueOnce({ rows: [{ result: 'ok' }] });
+    const execute = createPiggyvestWebhookIntakeExecutor(config);
+    await expect(execute('inbox_insert', {})).rejects.toMatchObject({
+      code: '23505',
+    });
+    // the connection survives a statement failure: later operations reuse it
+    expect(await execute('inbox_read', {})).toBe('ok');
+    expect(mocks.connect).toHaveBeenCalledTimes(1);
+    await execute.close();
+    expect(mocks.end).toHaveBeenCalledOnce();
+  });
+
+  it('refuses work after close and never reconnects', async () => {
+    const execute = createPiggyvestWebhookIntakeExecutor(config);
+    await execute.close();
+    await expect(execute('claim_event', {})).rejects.toBeInstanceOf(
+      PiggyvestIntakeDbError
+    );
+    expect(mocks.connect).not.toHaveBeenCalled();
+    expect(mocks.end).not.toHaveBeenCalled();
   });
 
   it('exposes only the reviewed function names', () => {
@@ -132,6 +189,14 @@ describe('createPiggyvestWebhookIntakeExecutor', () => {
         'PiggyVest intake database unavailable'
       );
       expect(mocks.query).toHaveBeenCalledTimes(1);
+      // fail closed: the unverified connection is closed and not reused
+      expect(mocks.end).toHaveBeenCalledOnce();
+      await expect(execute('claim_event', {})).rejects.toThrow();
+      expect(mocks.query).toHaveBeenCalledTimes(1);
+      expect(mocks.connect).toHaveBeenCalledOnce();
+      mocks.connect.mockClear();
+      mocks.end.mockClear();
+      mocks.query.mockClear();
     }
   });
 
@@ -146,6 +211,7 @@ describe('createPiggyvestWebhookIntakeExecutor', () => {
     expect(failure).toBeInstanceOf(PiggyvestIntakeDbError);
     expect((failure as PiggyvestIntakeDbError).code).toBe('P0001');
     expect((failure as Error).message).not.toContain('secret');
+    await execute.close();
     expect(mocks.end).toHaveBeenCalledOnce();
   });
 
@@ -156,6 +222,7 @@ describe('createPiggyvestWebhookIntakeExecutor', () => {
     const execute = createPiggyvestWebhookIntakeExecutor(config);
     const failure = await execute('claim_event', {}).catch((e: unknown) => e);
     expect((failure as PiggyvestIntakeDbError).code).toBeUndefined();
+    expect(mocks.end).toHaveBeenCalledOnce();
   });
 
   it('rejects a configuration with another login', () => {

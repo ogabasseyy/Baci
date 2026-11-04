@@ -70,22 +70,26 @@ const verifySession = `SELECT current_database() AS database_name, SESSION_USER 
   EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl) AS tls
   FROM pg_roles role WHERE role.rolname=SESSION_USER`;
 
+/**
+ * An executor bound to ONE database connection. The connection opens lazily
+ * on the first operation, is verified once, and is reused by every later
+ * operation of the same delivery. The caller must `close()` it (route
+ * `finally`). A failed setup is remembered, so a delivery never retries on a
+ * fresh connection (fail closed), and a closed executor refuses new work.
+ */
+export type PiggyvestWebhookIntakeSession = PiggyvestWebhookIntakeExecute & {
+  close: () => Promise<void>;
+};
+
 export function createPiggyvestWebhookIntakeExecutor(
   configuration: unknown
-): PiggyvestWebhookIntakeExecute {
+): PiggyvestWebhookIntakeSession {
   const { database } = piggyvestWebhookIntakeRuntimeSchema.parse(configuration);
-  return async (fn, payload) => {
-    if (
-      !allowed.has(fn) ||
-      typeof payload !== 'object' ||
-      payload === null ||
-      Array.isArray(payload)
-    )
-      throw new PiggyvestIntakeDbError();
-    const serialized = JSON.stringify(payload);
-    if (Buffer.byteLength(serialized, 'utf8') > MAX_PAYLOAD_BYTES)
-      throw new PiggyvestIntakeDbError();
-    const statement = `SELECT piggyvest_webhook_intake.${fn}($1::jsonb) AS result`;
+  let connection: Promise<Client> | undefined;
+  let rawClient: Client | undefined;
+  let closed = false;
+
+  const open = async (): Promise<Client> => {
     const client = new Client({
       host: database.host,
       port: database.port,
@@ -100,35 +104,71 @@ export function createPiggyvestWebhookIntakeExecutor(
       options: '-c search_path=pg_catalog',
       application_name: 'baci-piggyvest-webhook-intake',
     });
+    rawClient = client;
+    // A dropped idle connection must not become an unhandled 'error' event;
+    // the next statement on it fails and maps to a code-less error.
+    client.on('error', () => undefined);
+    await client.connect();
+    const verified = await client.query(verifySession);
+    const session = verified.rows[0];
+    if (
+      verified.rows.length !== 1 ||
+      session?.database_name !== database.name ||
+      session.login_name !== database.login ||
+      session.role_name !== database.login ||
+      session.safe !== true ||
+      session.tls !== true
+    )
+      throw new PiggyvestIntakeDbError();
+    return client;
+  };
+
+  const execute: PiggyvestWebhookIntakeExecute = async (fn, payload) => {
+    if (
+      closed ||
+      !allowed.has(fn) ||
+      typeof payload !== 'object' ||
+      payload === null ||
+      Array.isArray(payload)
+    )
+      throw new PiggyvestIntakeDbError();
+    const serialized = JSON.stringify(payload);
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_PAYLOAD_BYTES)
+      throw new PiggyvestIntakeDbError();
+    const statement = `SELECT piggyvest_webhook_intake.${fn}($1::jsonb) AS result`;
+    let client: Client;
     try {
-      await client.connect();
-      const verified = await client.query(verifySession);
-      const session = verified.rows[0];
-      if (
-        verified.rows.length !== 1 ||
-        session?.database_name !== database.name ||
-        session.login_name !== database.login ||
-        session.role_name !== database.login ||
-        session.safe !== true ||
-        session.tls !== true
-      )
-        throw new PiggyvestIntakeDbError();
-      let response: { rows: Array<{ result?: unknown }> };
-      try {
-        response = await client.query(statement, [serialized]);
-      } catch (error) {
-        const code = (error as { code?: unknown } | null)?.code;
-        throw new PiggyvestIntakeDbError(
-          typeof code === 'string' && SQLSTATE.test(code) ? code : undefined
-        );
-      }
-      return response.rows[0]?.result ?? null;
+      connection ??= open();
+      client = await connection;
     } catch (error) {
+      await closeRaw();
       throw error instanceof PiggyvestIntakeDbError
         ? error
         : new PiggyvestIntakeDbError();
-    } finally {
-      await client.end().catch(() => undefined);
+    }
+    try {
+      const response: { rows: Array<{ result?: unknown }> } =
+        await client.query(statement, [serialized]);
+      return response.rows[0]?.result ?? null;
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      throw new PiggyvestIntakeDbError(
+        typeof code === 'string' && SQLSTATE.test(code) ? code : undefined
+      );
     }
   };
+
+  const closeRaw = async (): Promise<void> => {
+    const client = rawClient;
+    rawClient = undefined;
+    if (client) await client.end().catch(() => undefined);
+  };
+
+  return Object.assign(execute, {
+    close: async (): Promise<void> => {
+      closed = true;
+      await connection?.catch(() => undefined);
+      await closeRaw();
+    },
+  });
 }

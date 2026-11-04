@@ -83,6 +83,32 @@ BEGIN
   END IF;
 END $$;
 
+-- Every existing RPC the wrappers delegate to pins its own search_path, so
+-- the wrappers' pg_catalog-only path cannot break relation resolution.
+DO $$
+DECLARE
+  target text;
+BEGIN
+  FOREACH target IN ARRAY ARRAY[
+    'capture_piggyvest_webhook_delivery', 'resolve_piggyvest_webhook_capture',
+    'claim_piggyvest_webhook_event', 'resolve_piggyvest_webhook_event',
+    'allocate_plan_transfer_contribution', 'apply_staging_wallet_restriction',
+    'resolve_staging_wallet_owner'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = target
+         AND EXISTS (SELECT 1 FROM unnest(COALESCE(p.proconfig, ARRAY[]::text[])) c
+                      WHERE c LIKE 'search_path=%')) THEN
+      RAISE EXCEPTION 'public.% must pin its own search_path', target;
+    END IF;
+  END LOOP;
+END $$;
+
+-- The migration owner is not a member of the NOLOGIN group, so it may not
+-- SET ROLE to it (42501); transaction-local membership lets the test act as
+-- the restricted role. Rolled back with the rest of the fixture.
+GRANT piggyvest_webhook_intake TO CURRENT_USER;
+
 -- Behaviour as the restricted role.
 SET LOCAL ROLE piggyvest_webhook_intake;
 

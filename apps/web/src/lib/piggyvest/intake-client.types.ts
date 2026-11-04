@@ -9,7 +9,11 @@ declare const piggyvestIntakeClientBrand: unique symbol;
  * only a fixed allowlist of queries through the restricted database login
  * (see webhook-intake-client.ts). The brand keeps any other client from
  * being passed into the receiver's call graph.
+ *
+ * All queries of one delivery share one database connection; the receiver
+ * calls `dispose()` in a `finally` to close it.
  */
 export type PiggyvestIntakeClient = SupabaseClient & {
   readonly [piggyvestIntakeClientBrand]: true;
+  readonly dispose?: () => Promise<void>;
 };

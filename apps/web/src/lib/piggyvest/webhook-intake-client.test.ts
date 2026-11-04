@@ -289,3 +289,21 @@ describe('intake client: failures', () => {
     expect(out.error?.message).not.toContain('secret');
   });
 });
+
+describe('intake client: connection lifecycle', () => {
+  it('dispose closes the executor session', async () => {
+    const close = vi.fn(async () => undefined);
+    const execute = Object.assign(
+      vi.fn(async () => []),
+      { close }
+    );
+    const client = createPiggyvestIntakeClientFromExecutor(execute);
+    await client.dispose?.();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('dispose is a no-op for an executor without a session', async () => {
+    const { client } = setup();
+    await expect(client.dispose?.()).resolves.toBeUndefined();
+  });
+});

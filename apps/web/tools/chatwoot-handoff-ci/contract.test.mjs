@@ -26,6 +26,10 @@ test('pins service images and keeps the Compose network unpublished and internal
     compose,
     /redis:7\.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f/
   );
+  assert.match(
+    compose,
+    /node:22-alpine@sha256:025b8e975a61d94e33abeafaad1255ef44e4898cf1a1b6446860009c72e6d284/
+  );
   assert.match(compose, /internal: true/);
   assert.match(compose, /SAFE_FETCH_ALLOW_PRIVATE_NETWORK: "true"/);
   assert.doesNotMatch(compose, /^\s+ports:/m);
@@ -50,4 +54,5 @@ test('harness covers bot handoff, human attribution and resumed bot reply throug
   assert.match(harness, /senderKind\(item\.sender\) === 'agentbot'/);
   assert.match(harness, /message_type !== 'incoming'/);
   assert.match(harness, /harness-ready-for-followup/);
+  assert.match(harness, /handedBack\.status !== 'pending'/);
 });

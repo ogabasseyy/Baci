@@ -161,6 +161,12 @@ try {
       body: { status: 'pending' },
     }
   );
+  const handedBack = await api(
+    `/api/v1/accounts/${seed.account_id}/conversations/${id}`,
+    seed.human_token
+  );
+  if (handedBack.status !== 'pending')
+    throw new Error(`Expected pending handback, received ${handedBack.status}`);
   await writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready');
   await waitForBotReply(id, 'Synthetic bot: I can help with that.');
   if (!events.some((event) => event.event === 'message_created'))

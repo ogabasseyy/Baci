@@ -32,9 +32,17 @@ jobs:
         run: |
           set -euo pipefail
           compose=(docker compose -f apps/web/tools/chatwoot-handoff-ci/compose.yml -p chatwoot-handoff-ci)
-          cleanup() { "${compose[@]}" down --volumes --remove-orphans; }
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo 'Synthetic Chatwoot startup diagnostics (service status and bounded logs):'
+              "${compose[@]}" ps --all
+              "${compose[@]}" logs --no-color --tail=120 rails sidekiq || true
+            fi
+            "${compose[@]}" down --volumes --remove-orphans
+          }
           trap cleanup EXIT
-          "${compose[@]}" up -d postgres redis rails sidekiq
+          "${compose[@]}" up -d --wait --wait-timeout 600 postgres redis rails sidekiq
           "${compose[@]}" exec -T rails bundle exec rails runner /harness/seed.rb
           "${compose[@]}" up -d harness
           wait_for_file() {

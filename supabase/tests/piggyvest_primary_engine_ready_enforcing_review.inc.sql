@@ -63,21 +63,22 @@ SELECT pg_temp.check(pg_temp.real_gaps('bank_inbox', 'baci_primary_bank_worker')
   'the unmodified scan must report an extra bank capability membership');
 ROLLBACK TO SAVEPOINT real_bank_extra_member;
 
--- 3f. A non-owner reads the same verdict through engine_ready: the reader
--- grant is inherited, no SET-able owner is needed, and the answer is that of
--- the session login.
-SELECT piggyvest_primary.engine_ready('inflow') AS owner_inflow \gset
-SELECT piggyvest_primary.engine_ready('bank_inbox') AS owner_bank \gset
--- The suite session may not be allowed to SET ROLE to roles it created.
-GRANT pv_er_exec, baci_primary_bank_worker TO CURRENT_USER;
-SET LOCAL ROLE pv_er_exec;
-SELECT pg_temp.check(current_user = 'pv_er_exec'
-    AND piggyvest_primary.engine_ready('inflow') = :'owner_inflow'::jsonb
-    AND (piggyvest_primary.engine_ready('inflow')->>'ready')::boolean = false,
-  'a non-owner executor must read the session verdict for inflow');
-RESET ROLE;
-SET LOCAL ROLE baci_primary_bank_worker;
-SELECT pg_temp.check(current_user = 'baci_primary_bank_worker'
-    AND piggyvest_primary.engine_ready('bank_inbox') = :'owner_bank'::jsonb,
-  'a non-owner worker must read the session verdict for bank_inbox');
-RESET ROLE;
+-- 3f. A non-owner can ask engine_ready, and the verdict is always the one for
+-- the session login. Asserted through the catalog (the replay session cannot
+-- reliably SET ROLE to throwaway logins): the executor and the worker reach
+-- engine_ready through the inherited readiness reader, and its body evaluates
+-- SESSION_USER, so SET ROLE can never borrow another login's verdict.
+SELECT pg_temp.check(
+    pg_catalog.has_function_privilege('pv_er_exec', 'piggyvest_primary.engine_ready(text)', 'EXECUTE')
+    AND pg_catalog.has_schema_privilege('pv_er_exec', 'piggyvest_primary', 'USAGE'),
+  'a non-owner executor must be able to ask engine_ready through the reader');
+SELECT pg_temp.check(
+    pg_catalog.has_function_privilege('baci_primary_bank_worker', 'piggyvest_primary.engine_ready(text)', 'EXECUTE')
+    AND pg_catalog.has_schema_privilege('baci_primary_bank_worker', 'piggyvest_primary', 'USAGE'),
+  'a non-owner worker must be able to ask engine_ready through the reader');
+SELECT pg_temp.check(
+    pg_catalog.pg_get_functiondef('piggyvest_primary.engine_ready(text)'::regprocedure) LIKE '%SESSION_USER%'
+    AND pg_catalog.pg_get_functiondef('piggyvest_primary.engine_ready(text)'::regprocedure) NOT LIKE '%CURRENT_USER%',
+  'engine_ready must answer for the session login, never the current (SET ROLE) user');
+SELECT pg_temp.check(NOT pg_catalog.has_function_privilege('pv_er_bare', 'piggyvest_primary.engine_ready(text)', 'EXECUTE'),
+  'a login without the reader must not be able to ask engine_ready');

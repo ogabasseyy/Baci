@@ -13,6 +13,7 @@ export interface ProductSemanticCandidate {
   brand?: string | null;
   condition?: string | null;
   stock?: number | null;
+  stock_quantity?: number | null;
   category_slug?: string | null;
   category_slugs?: string[] | null;
   product_key_specs?: Record<string, unknown> | null;
@@ -53,6 +54,7 @@ export interface BuildProductSemanticModelInput {
   categoryName: string;
   currentProduct: ProductSemanticCandidate;
   inventory: ProductSemanticCandidate[];
+  priceBandInventory?: ProductSemanticCandidate[];
   hubEligibilityInventory?: EligibleHubProductInput[];
   guidePosts?: PublishedClusterPost[];
   priorityGuidePostSlugs?: string[];

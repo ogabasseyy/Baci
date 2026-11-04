@@ -93,13 +93,17 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
 function getDestinationPriceBandInventory(
   input: BuildProductSemanticModelInput
 ) {
+  const sourceInventory = input.priceBandInventory ?? [
+    ...input.inventory,
+    input.currentProduct,
+  ];
   const seenSlugs = new Set<string>();
-  const hasJunctionCandidates = input.inventory.some(
+  const hasJunctionCandidates = sourceInventory.some(
     (product) =>
       product.category_slugs !== null && product.category_slugs !== undefined
   );
 
-  return input.inventory
+  return sourceInventory
     .filter((product) => {
       if (hasJunctionCandidates && product.category_slugs === null) {
         return false;

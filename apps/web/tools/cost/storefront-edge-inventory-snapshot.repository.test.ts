@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'c34ce0765ce39c66e39e0845cf88be69c9c65d1eb00d676b25bd59b6a45a7169',
+      '76dbd0437de18d6d3d02b39d9697c7e2c8c386fe6ca86b88e66750f5592d4a35',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 592,
+    rowCount: 614,
   });
 });
 
@@ -46,4 +46,70 @@ it('keeps every private cart endpoint on the dynamic origin', async () => {
     ])
   );
   for (const row of cartRows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps every Oxygen API route on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
+  );
+  expect(rows).toHaveLength(22);
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps wallet PIN routes on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/customer/wallet-pin/'
+    )
+  );
+  expect(rows).toHaveLength(4);
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps the savings PIN verification endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  expect(inventory.rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
+});
+
+it('keeps the savings goal completion endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  expect(inventory.rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
 });

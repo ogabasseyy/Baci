@@ -47,6 +47,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       {
         onDeliveryStart: expect.any(Function),
         onDeliveryRejected: expect.any(Function),
+        recipientUserIds: ['00000000-0000-4000-8000-0000000000a1'],
         requiredShipmentUpdateCapability: 1,
       }
     );

@@ -157,6 +157,7 @@ export function useStartSavingsController() {
     isAuthorizingCard,
     isSubmitting,
     openWalletFundingScreen,
+    pinSheetProps,
     submitBankTransferContribution,
     submitSavingsGoal,
   } = useStartSavingsSubmit({
@@ -245,6 +246,7 @@ export function useStartSavingsController() {
     maturityDate,
     openWalletFundingScreen,
     paymentMethodsError,
+    pinSheetProps,
     planFundingError,
     planFundingPhase,
     planFundingStatusCode,

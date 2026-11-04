@@ -30,6 +30,8 @@ export const claimedOrderNotificationOutboxRowSchema = z.object({
   event_type: z.enum([
     'order_shipped',
     'order_delivered',
+    'order_delivery_failed',
+    'order_returned',
     'manual_order_receipt',
     'manual_order_invoice',
   ]),

@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { NormalizedProduct } from '@/lib/normalize-product';
 import { ProductIndexCard } from './product-index-card';
+import { makeProduct } from './product-index-card.test-fixtures';
 
 vi.mock('next/image', () => ({
   default: ({
@@ -36,32 +36,6 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-
-function makeProduct(
-  overrides: Partial<NormalizedProduct> = {}
-): NormalizedProduct {
-  return {
-    id: 'product-1',
-    name: 'iPhone 13 Pro',
-    slug: 'iphone-13-pro',
-    description: 'Phone',
-    image: 'https://example.com/iphone.jpg',
-    imageLarge: 'https://example.com/iphone.jpg',
-    images: ['https://example.com/iphone.jpg'],
-    category: 'Phones',
-    category_slug: 'phones',
-    brand: 'Apple',
-    price: 550000,
-    compare_at_price: null,
-    condition: 'new',
-    stock: 10,
-    rating: 4.5,
-    availability: 'InStock',
-    available_conditions: [],
-    variant_model: 'legacy',
-    ...overrides,
-  };
-}
 
 describe('ProductIndexCard imagePriority', () => {
   it('does not defer the explicitly selected first-screen image', () => {

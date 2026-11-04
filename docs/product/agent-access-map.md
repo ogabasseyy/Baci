@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 4 November 2026 against source revision
-`19157edc4f8dee460b187cc4d4515f8dd5bac3b4`. Full-code storefront MCP build/private-preview source now exists,
+`baed1d1a7ff89359fa2d0eec810722237cfad091`. Full-code storefront MCP build/private-preview source now exists,
 but its production composition remains explicitly uninstalled/disabled. The
 map-cited agentic test-source inventory change does not change payment/provider
 runtime authorization. Other capability limitations remain. This navigation map

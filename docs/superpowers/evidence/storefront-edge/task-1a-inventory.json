@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "315f40b72aca7ed1f855b0ac6e6540c79491271e",
+  "originMainSha": "cf00fbb6be756ede9f8e5243a7ae6a4a1227c280",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "f760514642f71a6017c94a44f042e88710c4c3e9074d25294da8dd9972718804",
-  "routingProxyInputSha256": "9c0153453e990c791642b2336d49a3414d3315370468434b0dcce2b1fae1c379",
+  "routingProxyInputSha256": "9331ad67cbf4d1d5ca2e7a1757592e30ad2bf746164955d59a751526fc9a1dba",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1282,6 +1282,18 @@
       "routePattern": "/api/storefront/customer/savings/primary-provisioning",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/primary-provisioning/setup/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/primary-provisioning/setup",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/primary-provisioning/setup/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8735,5 +8747,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "8698225ca165b81032c37ba292b9fc85ae8657755dbb614dd154ee9c79effff3"
+  "inventorySha256": "89bd51a807528a6085badb63a7b103127f413c79b173b32eb72840068d876fdb"
 }

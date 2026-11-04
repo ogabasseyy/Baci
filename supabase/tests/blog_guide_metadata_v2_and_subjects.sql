@@ -28,6 +28,10 @@ BEGIN
   INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
   VALUES (v_merchant, v_owner, 'blog-guide-v2@example.com', 'Blog Guide V2 Store', 'blog-guide-v2-store', true);
 
+  INSERT INTO public.merchant_feature_settings (merchant_id, blog_enabled)
+  VALUES (v_merchant, true)
+  ON CONFLICT (merchant_id) DO UPDATE SET blog_enabled = EXCLUDED.blog_enabled;
+
   INSERT INTO public.categories (id, merchant_id, name, slug, is_active) VALUES
     (v_cat_phones, v_merchant, 'Smartphones', 'smartphones', true),
     (v_cat_laptops, v_merchant, 'Laptops', 'laptops', true);
@@ -193,7 +197,7 @@ BEGIN
   SELECT array_agg(c.slug ORDER BY c.ordinality)
     INTO v_slugs
     FROM public.get_storefront_cluster_guide_candidates_v2(
-      v_merchant, 'smartphones', v_cat_phones, v_prod_primary, 4
+      v_merchant, 'product', v_cat_phones, v_prod_primary, 4
     ) WITH ORDINALITY AS c;
 
   IF v_slugs IS DISTINCT FROM ARRAY['iphone-16-pro-max-buyer-guide', 'best-apple-phones-nigeria'] THEN
@@ -202,7 +206,7 @@ BEGIN
 
   SELECT c.subjects INTO v_first_subjects
     FROM public.get_storefront_cluster_guide_candidates_v2(
-      v_merchant, 'smartphones', v_cat_phones, v_prod_primary, 4
+      v_merchant, 'product', v_cat_phones, v_prod_primary, 4
     ) AS c
    WHERE c.slug = 'iphone-16-pro-max-buyer-guide';
 

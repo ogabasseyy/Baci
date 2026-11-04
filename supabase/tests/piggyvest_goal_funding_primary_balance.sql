@@ -26,8 +26,7 @@
 -- does. Failures are never swallowed: the one exception block re-raises every
 -- error that is not the exact legacy refusal under test.
 --
--- Registered in the replay registry folder
--- 20261104130800_piggyvest_goal_funding_reserve.
+-- Registered in replay registry folder 20261104130800_piggyvest_goal_funding_reserve.
 
 BEGIN;
 
@@ -91,9 +90,7 @@ VALUES ('f3880000-0000-4000-8000-000000000006', 'f3880000-0000-4000-8000-0000000
 INSERT INTO public.customer_wallets (id, customer_id, merchant_id, available_balance) VALUES
   ('f3880000-0000-4000-8000-000000000008', 'f3880000-0000-4000-8000-000000000003',
    'f3880000-0000-4000-8000-000000000002', 0);
--- No inflow receipt is recorded: the customer's PiggyVest money is not a
--- recorded deposit as far as this database knows.
--- The legacy customer has a wallet row with no money and no PiggyVest binding.
+-- No inflow receipt is recorded. The legacy customer has an empty wallet, no PiggyVest binding.
 INSERT INTO public.customer_wallets (id, customer_id, merchant_id, available_balance) VALUES
   ('f3880000-0000-4000-8000-000000000018', 'f3880000-0000-4000-8000-000000000012',
    'f3880000-0000-4000-8000-000000000002', 0);
@@ -268,12 +265,14 @@ BEGIN
      ~ 'customer_wallets|inflow_receipts' THEN
     RAISE EXCEPTION 'the funding reservation still uses the legacy wallet or the local receipt ledger';
   END IF;
-  -- The login reaches the inner reservation only via the reserve_savings wrapper.
+  -- The login reaches reservation only via the PIN wrapper (20261103044600 revoked reserve_savings).
   IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
        'piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure, 'EXECUTE')
+     OR pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.reserve_savings(jsonb,jsonb)'::regprocedure, 'EXECUTE')
      OR NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
-       'piggyvest_primary.reserve_savings(jsonb,jsonb)'::regprocedure, 'EXECUTE') THEN
-    RAISE EXCEPTION 'authorizer must hold the wrapper, not the inner reservation';
+       'piggyvest_primary.reserve_savings_with_pin(jsonb,jsonb,text)'::regprocedure, 'EXECUTE') THEN
+    RAISE EXCEPTION 'authorizer must hold only the PIN-gated wrapper, not the inner reservations';
   END IF;
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)',

@@ -186,8 +186,26 @@ describe('buildCategoryHubBrandCards', () => {
     expect(cards).toEqual([]);
   });
 
+  it('honors explicitly supplied empty brand authority entries without falling back to unverified product eligibility', () => {
+    const products = Array.from({ length: 5 }, (_, i) => ({
+      slug: `ipad-${i}`,
+      brand: 'Apple',
+      name: `iPad ${i}`,
+      price: 200_000,
+      category_slug: 'tablets',
+    }));
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'tablets',
+      storeUrl: 'https://ogabassey.com',
+      products,
+      brandAuthorityEntries: [],
+    });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.href).toBe('https://ogabassey.com/tablets/ipad-0');
+    expect(cards[0]?.title).toBe('Apple');
+  });
+
   it('excludes non-brand placeholders (gaming, generic, unbranded, other) from countBrandsByActiveProduct and brandCards', () => {
-    // Arrange
     const products = [
       buildProduct('game-1', 'Gaming', 100),
       buildProduct('gen-1', 'generic', 100),
@@ -202,16 +220,12 @@ describe('buildCategoryHubBrandCards', () => {
       buildProduct('tecno-1', 'Tecno', 200),
       buildProduct('apple-1', 'Apple', 300),
     ];
-
-    // Act
     const brandCounts = countBrandsByActiveProduct(products);
     const cards = buildCategoryHubBrandCards({
       categorySlug: 'smartphones',
       storeUrl: 'https://ogabassey.com',
       products,
     });
-
-    // Assert
     expect(brandCounts).toEqual([
       { key: 'apple', label: 'Apple', count: 1 },
       { key: 'tecno', label: 'Tecno', count: 1 },
@@ -225,18 +239,13 @@ describe('buildCategoryHubBrandCards', () => {
   });
 
   it('resolves representative product card for fallback brands with leading/trailing whitespace via normalized brand key matching', () => {
-    // Arrange
     const products = [buildProduct('konami-1', ' Konami ', 250)];
-
-    // Act
     const brandCounts = countBrandsByActiveProduct(products);
     const cards = buildCategoryHubBrandCards({
       categorySlug: 'smartphones',
       storeUrl: 'https://ogabassey.com',
       products,
     });
-
-    // Assert
     expect(brandCounts).toEqual([{ key: 'konami', label: 'Konami', count: 1 }]);
     expect(cards).toHaveLength(1);
     expect(cards[0]?.title).toBe('Konami');
@@ -244,7 +253,6 @@ describe('buildCategoryHubBrandCards', () => {
   });
 
   it('does not drop or displace fallback brands with all zero-price products', () => {
-    // Arrange: 4 brands where FreeBrand has 2 zero-price products, followed by BrandB, BrandC, and BrandD
     const products = [
       buildProduct('free-1', 'FreeBrand', 0),
       buildProduct('free-2', 'FreeBrand', 0),
@@ -252,15 +260,11 @@ describe('buildCategoryHubBrandCards', () => {
       buildProduct('brand-c-1', 'BrandC', 100),
       buildProduct('brand-d-1', 'BrandD', 100),
     ];
-
-    // Act
     const cards = buildCategoryHubBrandCards({
       categorySlug: 'smartphones',
       storeUrl: 'https://ogabassey.com',
       products,
     });
-
-    // Assert: FreeBrand should retain its representative card and not displace/reduce card count
     expect(cards).toHaveLength(3);
     expect(cards.map((card) => card.title)).toEqual([
       'FreeBrand',
@@ -272,7 +276,6 @@ describe('buildCategoryHubBrandCards', () => {
   });
 
   it('does not generate a secondary compare link to placeholder brands', () => {
-    // Arrange: 3 products each for Apple and Gaming (a placeholder brand)
     const products = [
       ...Array.from({ length: 3 }, (_, index) =>
         buildProduct(`apple-${index}`, 'Apple', 100 + index)
@@ -281,15 +284,11 @@ describe('buildCategoryHubBrandCards', () => {
         buildProduct(`gaming-${index}`, 'Gaming', 200 + index)
       ),
     ];
-
-    // Act
     const cards = buildCategoryHubBrandCards({
       categorySlug: 'smartphones',
       storeUrl: 'https://ogabassey.com',
       products,
     });
-
-    // Assert: Apple card is present, Gaming is excluded, and Apple has no compare link with Gaming
     expect(cards).toHaveLength(1);
     expect(cards[0]?.title).toBe('Apple');
     expect(cards[0]?.secondaryHref).toBeUndefined();

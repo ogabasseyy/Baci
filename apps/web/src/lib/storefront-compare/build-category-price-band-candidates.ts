@@ -1,3 +1,4 @@
+import { isAvailableProduct } from '@/lib/storefront-content/is-available-product';
 import type { CommercialSupportProduct } from './build-commercial-support-links';
 import { buildPriceBandCandidate } from './compare-eligibility';
 import {

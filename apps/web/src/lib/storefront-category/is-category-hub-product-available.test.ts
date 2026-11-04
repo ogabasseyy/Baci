@@ -32,6 +32,19 @@ describe('isCategoryHubProductAvailable', () => {
     );
   });
 
+  it('accepts valid numeric string prices', () => {
+    expect(
+      isCategoryHubProductAvailable(
+        makeProduct('str-price', '300000' as unknown as number)
+      )
+    ).toBe(true);
+    expect(
+      isCategoryHubProductAvailable(
+        makeProduct('comma-price', '1,500' as unknown as number)
+      )
+    ).toBe(true);
+  });
+
   it('treats products with unmanaged stock as available regardless of stock count', () => {
     expect(
       isCategoryHubProductAvailable(

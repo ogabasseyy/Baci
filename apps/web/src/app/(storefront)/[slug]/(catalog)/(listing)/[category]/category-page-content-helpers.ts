@@ -15,6 +15,7 @@ import type {
   BrandAuthorityEntry,
   CategoryHubComparisonLink,
 } from '@/lib/storefront-category/category-hub-types';
+import { parseCandidatePrice } from '@/lib/storefront-compare/is-price-band-candidate-available';
 import type { getPublishedClusterPosts } from '@/lib/storefront-content/get-published-cluster-posts';
 
 type CategoryPageData = Awaited<ReturnType<typeof getCachedCategoryPageData>>;
@@ -137,7 +138,7 @@ export function buildCategoryPageHubModel(input: {
       name: product.name,
       brand: product.brand,
       condition: product.condition,
-      price: product.rawPrice,
+      price: parseCandidatePrice(product.rawPrice),
       stock: product.stock,
       manage_stock: product.manage_stock,
       has_condition_offers: product.has_condition_offers,

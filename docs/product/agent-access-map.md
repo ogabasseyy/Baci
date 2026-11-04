@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 4 November 2026 against source revision
-`53c1bc80d66ab497342da10a19e3e3c044276a6f`. Guest OAuth consent and renewable authorization were
+`eafeaf6120b3d5602c18e1a208443d043be0df9c`. Guest OAuth consent and renewable authorization were
 re-reviewed and tested; all register-cited capability sources remain unchanged
 since the prior review. This is a navigation map, not authorization or proof of
 current deployment. Check the current implementation, live tool discovery and

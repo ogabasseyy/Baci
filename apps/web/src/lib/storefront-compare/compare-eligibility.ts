@@ -3,6 +3,7 @@ import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-t
 import { isNonBrandPlaceholderKey } from '../storefront-category/category-hub-brand-placeholder';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
+import { isPriceBandCandidateAvailable } from './is-price-band-candidate-available';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 const MIN_BRAND_COMPARE_PRODUCTS = 3;
@@ -16,11 +17,16 @@ interface CompareProductInput {
   product_key_specs?: Record<string, unknown> | null;
 }
 
-interface BrandCompareProductInput {
+export interface BrandCompareProductInput {
+  id?: string | null;
   slug: string;
   name: string;
   brand?: string | null;
   price: number;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
   product_key_specs?: Record<string, unknown> | null;
 }
 
@@ -34,17 +40,9 @@ const NON_SPEC_METADATA_KEYS = new Set(['created_at', 'updated_at']);
 
 function normalizeBrand(brand?: string | null): NormalizedBrand | null {
   const label = brand?.trim();
-
-  if (!label || isNonBrandPlaceholderKey(label)) {
-    return null;
-  }
-
+  if (!label || isNonBrandPlaceholderKey(label)) return null;
   const key = generateSlug(label);
-
-  if (!key || isNonBrandPlaceholderKey(key)) {
-    return null;
-  }
-
+  if (!key || isNonBrandPlaceholderKey(key)) return null;
   return { key, label };
 }
 
@@ -250,11 +248,24 @@ export function buildPriceBandCandidate(input: {
   band: PriceBandDefinition;
   products: BrandCompareProductInput[];
 }) {
-  const bandProducts = input.products.filter(
-    (product) =>
+  const seenIdentities = new Set<string>();
+  const bandProducts: BrandCompareProductInput[] = [];
+
+  for (const product of input.products) {
+    if (!Number.isFinite(product.price) || product.price <= 0) continue;
+    const inRange =
       product.price <= input.band.ceiling &&
-      (input.band.floor ? product.price > input.band.floor : true)
-  );
+      (input.band.floor ? product.price > input.band.floor : true);
+    if (!inRange || !isPriceBandCandidateAvailable(product)) continue;
+
+    const key = product.id?.trim() || product.slug?.trim();
+    if (key) {
+      if (seenIdentities.has(key)) continue;
+      seenIdentities.add(key);
+    }
+    bandProducts.push(product);
+  }
+
   const differentiatingSpecCount = Math.min(
     new Set(
       bandProducts

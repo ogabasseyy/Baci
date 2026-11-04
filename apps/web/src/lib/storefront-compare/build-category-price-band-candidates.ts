@@ -1,6 +1,6 @@
-import { isAvailableProduct } from '@/lib/storefront-content/is-available-product';
 import type { CommercialSupportProduct } from './build-commercial-support-links';
 import { buildPriceBandCandidate } from './compare-eligibility';
+import { isPriceBandCandidateAvailable } from './is-price-band-candidate-available';
 import { getCuratedPriceBands } from './price-band-taxonomy';
 
 /**
@@ -16,8 +16,7 @@ function isProductEligibleForPriceBand(
   product: CommercialSupportProduct
 ): boolean {
   if (!Number.isFinite(product.price) || product.price <= 0) return false;
-  if (product.has_condition_offers) return true;
-  return isAvailableProduct(product);
+  return isPriceBandCandidateAvailable(product);
 }
 
 export function buildCategoryPriceBandCandidates(

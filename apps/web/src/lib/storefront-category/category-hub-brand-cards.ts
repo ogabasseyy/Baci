@@ -7,6 +7,7 @@ import type {
   CategoryHubCard,
   CategoryHubProduct,
 } from '@/lib/storefront-category/category-hub-types';
+import { isCategoryHubProductAvailable } from '@/lib/storefront-category/is-category-hub-product-available';
 import { buildBrandCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 
 const BRAND_CARD_FALLBACK_LIMIT = 5;
@@ -16,7 +17,13 @@ function pickFirstBrandProduct(
   brandKey: string
 ): CategoryHubProduct | null {
   const brandProducts = products
-    .filter((product) => generateSlug(product.brand?.trim() ?? '') === brandKey)
+    .filter(
+      (product) =>
+        generateSlug(product.brand?.trim() ?? '') === brandKey &&
+        isCategoryHubProductAvailable(product) &&
+        Number.isFinite(product.price) &&
+        product.price > 0
+    )
     .sort(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)

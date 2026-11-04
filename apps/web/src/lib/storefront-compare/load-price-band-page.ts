@@ -23,7 +23,10 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { buildPriceBandCandidate } from './compare-eligibility';
-import { getCuratedPriceBands } from './price-band-taxonomy';
+import {
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+  getCuratedPriceBands,
+} from './price-band-taxonomy';
 
 interface PriceBandPageProduct {
   id: string;
@@ -101,6 +104,11 @@ function getPriceBandFormatter(
   return formatter;
 }
 
+export {
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT as SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT,
+};
+
 export async function loadPriceBandPage(
   args: {
     merchantSlug: string;
@@ -143,7 +151,9 @@ export async function loadPriceBandPage(
   const categoryData = await getCachedCategoryPageData(
     merchant.id,
     args.categorySlug,
-    args.merchantSlug
+    args.merchantSlug,
+    0,
+    COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
   );
 
   if (!categoryData || categoryData.isCollection) {
@@ -169,16 +179,41 @@ export async function loadPriceBandPage(
     categorySlug: args.categorySlug,
     band,
     products: normalizedProducts.map((product) => ({
+      id: product.id,
       slug: product.slug,
       name: product.name,
       brand: product.brand,
       price: product.price,
+      stock: product.stock,
+      manage_stock: product.manage_stock,
+      has_condition_offers: product.has_condition_offers,
     })),
   });
 
-  const products: PriceBandPageProduct[] = normalizedProducts
-    .filter((product) => isWithinBand(product.price, band.floor, band.ceiling))
-    .map((product) => ({
+  const seenProductIdentities = new Set<string>();
+  const products: PriceBandPageProduct[] = [];
+  for (const product of normalizedProducts) {
+    if (
+      !Number.isFinite(product.price) ||
+      product.price <= 0 ||
+      !isWithinBand(product.price, band.floor, band.ceiling)
+    ) {
+      continue;
+    }
+    const isAvailable =
+      product.availability === 'InStock' ||
+      Boolean(product.has_condition_offers);
+    if (!isAvailable) {
+      continue;
+    }
+    const key = product.id?.trim() || product.slug?.trim();
+    if (key) {
+      if (seenProductIdentities.has(key)) {
+        continue;
+      }
+      seenProductIdentities.add(key);
+    }
+    products.push({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -194,7 +229,8 @@ export async function loadPriceBandPage(
       product_key_specs: product.product_key_specs,
       image: product.image,
       description: product.description,
-    }));
+    });
+  }
 
   const storeUrl = buildStoreUrl(merchant);
   const supportedClusterCategory = getSupportedClusterCategory(

@@ -18,14 +18,15 @@ export interface CommercialSupportLink {
 }
 
 export interface CommercialSupportProduct {
+  id?: string | null;
   slug: string;
   name: string;
   brand?: string | null;
   price: number;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
-  stock?: number | null;
-  stock_quantity?: number | null;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
   manage_stock?: boolean | null;
   has_condition_offers?: boolean | null;
 }
@@ -44,6 +45,8 @@ export function buildCategorySupportLinks(input: {
   compareProducts?: CommercialSupportProduct[];
   /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
   requireInferredBrandRelevance?: boolean;
+  /** When true, emits all indexable price-band links (e.g. for discovery/sitemap parity) instead of stopping at the first match. */
+  allPriceBands?: boolean;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
   const normalizedInferred = normalizeInferredBrands(
@@ -109,8 +112,7 @@ export function buildCategorySupportLinks(input: {
   // Destination eligibility uses the full pool; relevance only requires
   // the chosen band to contain inferred-brand products.
   const fullPool = input.compareProducts ?? input.products;
-  const priceBandLink = (() => {
-    if (brandRelevanceRequired && !hasInferredBrand) return null;
+  if (!brandRelevanceRequired || hasInferredBrand) {
     const candidates = buildCategoryPriceBandCandidates(
       input.categorySlug,
       fullPool,
@@ -126,24 +128,33 @@ export function buildCategorySupportLinks(input: {
       );
       return bandProducts.length > 0;
     };
-    const preferredSlugs = new Set(input.preferredPriceBandSlugs ?? []);
-    const chosen =
-      (preferredSlugs.size > 0
-        ? candidates.find(
-            (candidate) =>
-              preferredSlugs.has(candidate.band.slug) &&
-              isEligibleCandidate(candidate)
-          )
-        : undefined) ?? candidates.find(isEligibleCandidate);
-    if (!chosen) return null;
-    return {
-      href: `${input.storeUrl}/${input.categorySlug}/best-under/${chosen.band.slug}`,
-      label: chosen.band.label,
-    };
-  })();
 
-  if (priceBandLink) {
-    links.push(priceBandLink);
+    if (input.allPriceBands) {
+      for (const candidate of candidates) {
+        if (isEligibleCandidate(candidate)) {
+          links.push({
+            href: `${input.storeUrl}/${input.categorySlug}/best-under/${candidate.band.slug}`,
+            label: candidate.band.label,
+          });
+        }
+      }
+    } else {
+      const preferredSlugs = new Set(input.preferredPriceBandSlugs ?? []);
+      const chosen =
+        (preferredSlugs.size > 0
+          ? candidates.find(
+              (candidate) =>
+                preferredSlugs.has(candidate.band.slug) &&
+                isEligibleCandidate(candidate)
+            )
+          : undefined) ?? candidates.find(isEligibleCandidate);
+      if (chosen) {
+        links.push({
+          href: `${input.storeUrl}/${input.categorySlug}/best-under/${chosen.band.slug}`,
+          label: chosen.band.label,
+        });
+      }
+    }
   }
 
   return links;

@@ -4,13 +4,15 @@ import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
 import type { RawDbProduct } from '@/lib/raw-db-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildCommercialSupportDiscoveryLinks } from '@/lib/storefront-compare/build-compare-discovery-links';
+import { COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT } from '@/lib/storefront-compare/price-band-taxonomy';
 import { isStorefrontSitemapPublished } from '@/lib/storefront-seo/is-storefront-sitemap-published';
 import { getGamingGraphicsHubSitemapEntries } from './gaming-graphics-hub-sitemap';
 import { getCommercialSupportCategorySitemapEntries } from './get-commercial-support-category-sitemap-entries';
 import type { StorefrontSitemapContext } from './sitemap-data';
 
 export const SITEMAP_MAX_COMMERCIAL_SUPPORT_URLS = 45_000;
-const SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT = 150;
+const SITEMAP_COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT =
+  COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT;
 export const SITEMAP_COMMERCIAL_SUPPORT_CATEGORY_CONCURRENCY = 4;
 
 function isCategoryWithSlug(category: unknown): category is { slug: string } {
@@ -144,6 +146,7 @@ export async function getCommercialSupportSitemapEntries(
         const products = (categoryData.products ?? [])
           .filter(isSitemapProductRecord)
           .map((product) => ({
+            id: product.id,
             slug: product.slug || product.id,
             name: product.name,
             brand: product.brand ?? null,

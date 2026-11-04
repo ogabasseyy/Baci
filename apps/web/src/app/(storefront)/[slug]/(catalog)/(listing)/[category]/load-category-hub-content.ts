@@ -91,7 +91,8 @@ export async function loadCategoryHubContent(input: {
             0,
             COMMERCIAL_SUPPORT_PRODUCTS_PER_CATEGORY_LIMIT
           ) as RawDbProduct[])
-        : hubPoolFetchFailed || input.isFiltered
+        : hubPoolFetchFailed ||
+            (input.isFiltered && hasHubDefaults && canLoadHubPool)
           ? []
           : undefined;
 

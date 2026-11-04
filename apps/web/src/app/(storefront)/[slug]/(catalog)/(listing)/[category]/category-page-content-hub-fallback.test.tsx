@@ -109,4 +109,49 @@ describe('CategoryPageContent hub product fallback parity', () => {
       })
     );
   });
+
+  it('preserves filtered page products for non-hub categories', async () => {
+    mockGetCachedCategoryPageData.mockResolvedValueOnce({
+      isCollection: false,
+      isInactiveCategory: false,
+      category: {
+        id: 'cat-non-hub',
+        name: 'Accessories',
+        slug: 'accessories',
+        is_active: true,
+      },
+      productCount: 1,
+      products: [
+        {
+          id: 'acc-1',
+          name: 'Case',
+          price: 5000,
+          stock: 10,
+        },
+      ],
+      productSlots: [{ id: 'acc-1' }],
+      productIdsQueryFailed: false,
+      productsQueryFailed: false,
+      categoryQueryFailed: false,
+    });
+
+    await CategoryPageContent({
+      params: Promise.resolve({
+        slug: 'demo-store',
+        category: 'accessories',
+      }),
+      searchParams: Promise.resolve({
+        graphics: 'rtx-4090',
+        page: '1',
+      }),
+    });
+
+    expect(mockBuildCategoryPageHubModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        products: expect.arrayContaining([
+          expect.objectContaining({ id: 'product-1' }),
+        ]),
+      })
+    );
+  });
 });

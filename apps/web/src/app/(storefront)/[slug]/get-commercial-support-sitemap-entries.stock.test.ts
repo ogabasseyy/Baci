@@ -245,4 +245,41 @@ describe('getCommercialSupportSitemapEntries - stock and price parsing', () => {
     const priceBandUrls = entries.filter((e) => e.url.includes('/best-under/'));
     expect(priceBandUrls).toEqual([]);
   });
+
+  it('fails closed to empty sitemap entries when category query failure flags are set', async () => {
+    mockCategoriesQuery([{ slug: 'smartphones', updated_at: null }]);
+    mockGetCachedCategoryPageData.mockResolvedValue({
+      isCollection: false,
+      isInactiveCategory: false,
+      productsQueryFailed: true,
+      fallbackName: 'Smartphones',
+      products: [
+        {
+          id: 'p-1',
+          slug: 'p-1',
+          name: 'Phone 1',
+          brand: 'BrandX',
+          price: 150_000,
+          stock: 5,
+        },
+      ],
+    });
+
+    const entries = await getCommercialSupportSitemapEntries({
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        is_published: true,
+        payout_currency: 'NGN',
+      },
+      storeUrl: 'https://ogabassey.com',
+      supabase: {
+        from: (table: string) => ({
+          select: () => ({ eq: createEq(table) }),
+        }),
+      },
+    } as unknown as StorefrontSitemapContext);
+
+    expect(entries).toEqual([]);
+  });
 });

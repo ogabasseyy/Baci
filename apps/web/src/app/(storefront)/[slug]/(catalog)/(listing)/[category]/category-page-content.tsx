@@ -157,7 +157,7 @@ export async function CategoryPageContent({
   );
   const hubNormalizedProducts = hubProducts
     ? normalizeCategoryPageProducts(hubProducts, category, merchant.country)
-    : selectedGraphics.length > 0 || data.productsQueryFailed
+    : data.productsQueryFailed
       ? []
       : normalizedProducts;
   const paginatedNormalizedProducts = normalizeCategoryPageProducts(

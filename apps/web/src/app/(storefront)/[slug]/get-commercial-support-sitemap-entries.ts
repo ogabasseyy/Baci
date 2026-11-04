@@ -147,7 +147,10 @@ export async function getCommercialSupportSitemapEntries(
         if (
           !categoryData ||
           categoryData.isCollection ||
-          categoryData.isInactiveCategory
+          categoryData.isInactiveCategory ||
+          categoryData.categoryQueryFailed ||
+          categoryData.productsQueryFailed ||
+          categoryData.productIdsQueryFailed
         ) {
           return [];
         }

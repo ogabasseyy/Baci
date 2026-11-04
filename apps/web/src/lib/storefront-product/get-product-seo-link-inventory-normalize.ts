@@ -74,7 +74,7 @@ export function toProductSemanticCandidate(
   }
 
   return {
-    id: product.id ? String(product.id) : undefined,
+    ...(product.id ? { id: String(product.id) } : {}),
     slug,
     name,
     brand: product.brand,
@@ -86,7 +86,7 @@ export function toProductSemanticCandidate(
       fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(product.product_key_specs),
     manage_stock: product.manage_stock,
-    has_explicit_slug: hasExplicitSlug,
+    ...(!hasExplicitSlug ? { has_explicit_slug: false } : {}),
     ...(product.has_condition_offers !== undefined
       ? { has_condition_offers: product.has_condition_offers }
       : {}),

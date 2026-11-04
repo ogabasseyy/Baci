@@ -17,19 +17,19 @@ function pickFirstBrandProduct(
   brandKey: string
 ): CategoryHubProduct | null {
   const brandProducts = products
-    .filter(
-      (product) =>
-        generateSlug(product.brand?.trim() ?? '') === brandKey &&
-        isCategoryHubProductAvailable(product) &&
-        Number.isFinite(product.price) &&
-        product.price > 0
-    )
+    .filter((product) => generateSlug(product.brand?.trim() ?? '') === brandKey)
     .sort(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)
     );
+  const pricedAvailableProducts = brandProducts.filter(
+    (product) =>
+      isCategoryHubProductAvailable(product) &&
+      Number.isFinite(product.price) &&
+      product.price > 0
+  );
 
-  return brandProducts[0] ?? null;
+  return pricedAvailableProducts[0] ?? brandProducts[0] ?? null;
 }
 
 export function buildCategoryHubBrandCards(input: {

@@ -1,5 +1,4 @@
--- Replay test: GIG notification map (policy rows, merchant role filter,
--- per-merchant toggles, superseded customer cancellation, shipped-at-pickup).
+-- Replay test: GIG notification map (policy rows, recipients, toggles, cancellation, shipped emails).
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 \ir pgtap_public_execute.sql
@@ -10,7 +9,6 @@ GRANT USAGE ON SCHEMA extensions TO service_role;
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
--- Fixture ---------------------------------------------------------------------
 CREATE TEMP TABLE gigl_map_fixture (
   merchant_id uuid, order_id uuid, shipment_id uuid, epoch_id uuid,
   event_id uuid, owner_id uuid, fulfil_id uuid, viewer_id uuid
@@ -72,7 +70,8 @@ BEGIN
   );
 END;
 $fixture$;
--- 1. Policy rows ---------------------------------------------------------------
+-- 1. Policy rows (read as the migration owner: the private schema is closed)
+RESET ROLE;
 SELECT is(
   (SELECT count(*)::int FROM private.gigl_tracking_notification_policy AS p
    WHERE (p.raw_status IS NOT DISTINCT FROM 'DLP' AND p.audience = 'merchant' AND p.notification_kind = 'pickup_delayed')
@@ -83,6 +82,7 @@ SELECT is(
   5,
   'approved map adds DLP, customer picked_up, merchant out_for_delivery/delivered and customer cancelled'
 );
+SET LOCAL ROLE service_role;
 -- 2. Role filter: owner + orders.fulfill staff only --------------------------------
 DO $roles$
 DECLARE

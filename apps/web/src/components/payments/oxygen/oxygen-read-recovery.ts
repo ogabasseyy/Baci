@@ -71,7 +71,6 @@ export function pendingReadRecovery(
     return 'validate_nin';
   if (
     pending.action === 'refresh_eligibility' &&
-    pending.status === 'queued' &&
     ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&
     snapshot.state.applicationReference &&
     snapshot.state.eligible === undefined &&

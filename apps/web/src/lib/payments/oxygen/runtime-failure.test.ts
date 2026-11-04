@@ -52,14 +52,14 @@ it('preserves a successful mutation when a subsequent read fails', async () => {
 it.each([
   'indeterminate',
   'rejected',
-] as const)('retains eligibility uncertainty after a %s provider response', async (outcome) => {
+] as const)('keeps eligibility status retrieval retryable after a %s response', async (outcome) => {
   const tracked = trackOxygenExecution({
     call: async () => {
       throw new OxygenProviderFailure(outcome);
     },
   });
   await expect(tracked.provider.call('eligibility', {})).rejects.toThrow();
-  expect(tracked.uncertain()).toBe(true);
+  expect(tracked.uncertain()).toBe(false);
 });
 it('allows an eligibility failure known to occur before dispatch', async () => {
   const tracked = trackOxygenExecution({
@@ -70,10 +70,10 @@ it('allows an eligibility failure known to occur before dispatch', async () => {
   await expect(tracked.provider.call('eligibility', {})).rejects.toThrow();
   expect(tracked.uncertain()).toBe(false);
 });
-it('retains eligibility uncertainty when a successful response cannot be persisted', async () => {
+it('keeps a successful eligibility status retrieval retryable before persistence', async () => {
   const tracked = trackOxygenExecution({
     call: async () => ({ status: 'COMPLETED' }),
   });
   await tracked.provider.call('eligibility', {});
-  expect(tracked.uncertain()).toBe(true);
+  expect(tracked.uncertain()).toBe(false);
 });

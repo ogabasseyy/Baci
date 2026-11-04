@@ -10,8 +10,9 @@ import {
 export function trackOxygenExecution(provider: OxygenProvider) {
   let uncertain = false;
   let operation: OxygenProviderOperation | null = null;
-  // Eligibility may initiate underwriting; Oxygen has not confirmed repeat safety.
-  const reads = new Set(['kyc', 'details', 'payment']);
+  // Oxygen documents /loan-request/get as eligibility status retrieval for an
+  // existing application. Repeating this read cannot authorize a booking.
+  const reads = new Set(['kyc', 'details', 'payment', 'eligibility']);
   return {
     uncertain: () => uncertain,
     operation: () => operation,
@@ -29,8 +30,7 @@ export function trackOxygenExecution(provider: OxygenProvider) {
           if (
             mutation &&
             error instanceof OxygenProviderFailure &&
-            (error.outcome === 'not_sent' ||
-              (operation !== 'eligibility' && error.outcome === 'rejected'))
+            (error.outcome === 'not_sent' || error.outcome === 'rejected')
           )
             uncertain = before;
           throw error;

@@ -15,7 +15,7 @@ import { OxygenProviderFlow } from './OxygenProviderFlow';
 it.each([
   'queued',
   'executing',
-] as const)('handles a %s eligibility command without replaying an executing request', async (status) => {
+] as const)('handles a %s eligibility command with a fresh key only for interrupted status reads', async (status) => {
   const workflowId = '60000000-0000-4000-8000-000000000001';
   const key = '70000000-0000-4000-8000-000000000001';
   const pending = {
@@ -62,24 +62,11 @@ it.each([
   const button = await screen.findByRole('button', {
     name: 'Check for an update',
   });
-  const statusReadsBeforeClick = fetcher.mock.calls.filter(([url]) =>
-    String(url).includes('/workflows/actions?')
-  ).length;
   fireEvent.click(button);
-  if (status === 'queued') {
-    await waitFor(() => expect(commands).toHaveLength(1));
-    expect(commands[0]).toMatchObject({
-      idempotencyKey: key,
-      command: { action: 'refresh_eligibility' },
-    });
-  } else {
-    await waitFor(() =>
-      expect(
-        fetcher.mock.calls.filter(([url]) =>
-          String(url).includes('/workflows/actions?')
-        ).length
-      ).toBeGreaterThan(statusReadsBeforeClick)
-    );
-    expect(commands).toHaveLength(0);
-  }
+  await waitFor(() => expect(commands).toHaveLength(1));
+  expect(commands[0]).toMatchObject({
+    command: { action: 'refresh_eligibility' },
+  });
+  if (status === 'queued') expect(commands[0].idempotencyKey).toBe(key);
+  else expect(commands[0].idempotencyKey).not.toBe(key);
 });

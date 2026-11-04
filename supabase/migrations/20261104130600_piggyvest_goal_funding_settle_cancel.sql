@@ -88,7 +88,7 @@ CREATE OR REPLACE FUNCTION piggyvest_primary.settle_goal_cancel(
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog
+SET search_path = ''
 AS $$
 DECLARE
   v_binding piggyvest_primary.integrations%ROWTYPE;

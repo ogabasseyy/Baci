@@ -13,6 +13,8 @@ describe('evaluateV2GuideCandidate - rejection and edge cases', () => {
     guide_scope: 'category_guide',
     guide_kind: 'buyer-guide',
     metadata_status: 'verified',
+    metadata_source_revision: 'rev-base-1',
+    metadata_contract_version: 2,
     applicable_brands: [],
   };
 
@@ -43,10 +45,47 @@ describe('evaluateV2GuideCandidate - rejection and edge cases', () => {
     ).toBe(false);
   });
 
-  it('rejects metadata_contract_version below 2', () => {
+  it('rejects metadata_contract_version below 2 or missing', () => {
     expect(
       evaluateV2GuideCandidate(
         { ...baseGuide, metadata_contract_version: 1 },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_contract_version: undefined },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_contract_version: null },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+  });
+
+  it('rejects missing or whitespace metadata_source_revision', () => {
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_source_revision: undefined },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_source_revision: null },
+        { categorySlug: 'smartphones', brandKey: 'Samsung' }
+      ).eligible
+    ).toBe(false);
+
+    expect(
+      evaluateV2GuideCandidate(
+        { ...baseGuide, metadata_source_revision: '   ' },
         { categorySlug: 'smartphones', brandKey: 'Samsung' }
       ).eligible
     ).toBe(false);

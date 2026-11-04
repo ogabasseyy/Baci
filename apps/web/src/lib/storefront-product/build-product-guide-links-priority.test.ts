@@ -14,7 +14,7 @@ function makeInput(
       id: 'prod-iphone-16',
       slug: 'iphone-16',
       name: 'iPhone 16',
-      price: 800_000,
+      price: 1_200_000,
       brand: 'Apple',
       condition: 'new',
       stock: 5,
@@ -25,26 +25,39 @@ function makeInput(
   };
 }
 
+function makeV2Post(overrides: Record<string, unknown> = {}) {
+  return {
+    slug: 'v2-guide',
+    title: 'V2 Guide',
+    excerpt: null,
+    category: 'Smartphones',
+    tags: [] as string[],
+    keywords: [] as string[],
+    featured_image_url: null,
+    published_at: '2026-03-01T00:00:00Z',
+    reading_time_minutes: 5,
+    metadata_status: 'verified' as const,
+    metadata_contract_version: 2,
+    metadata_source_revision: 'rev-v2-1',
+    cluster_category_slug: 'smartphones',
+    applicable_brands: [] as string[],
+    ...overrides,
+  };
+}
+
 describe('buildProductGuideLinks priority ordering and mixed-mode ranking (§2.5)', () => {
   it('ranks eligible v2 posts ahead of legacy fallback posts in mixed mode', () => {
-    const v2SubjectPost = {
+    const v2SubjectPost = makeV2Post({
       slug: 'iphone-16-v2-guide',
       title: 'iPhone 16 Official V2 Guide',
-      excerpt: null,
-      category: 'Smartphones',
       tags: ['apple'],
       keywords: ['buyer-guide'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 5,
-      guide_scope: 'product_specific' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'smartphones',
+      guide_scope: 'product_specific',
+      guide_kind: 'buyer-guide',
       subjects: [
         { productId: 'prod-iphone-16', subjectRole: 'primary' as const },
       ],
-    };
+    });
 
     const legacyInferredPost = {
       slug: 'legacy-iphone-buying-guide',
@@ -73,58 +86,35 @@ describe('buildProductGuideLinks priority ordering and mixed-mode ranking (§2.5
   });
 
   it('orders v2 candidates by priority slug first, then matchPriority (subject > brand > category)', () => {
-    const categoryGuide = {
+    const categoryGuide = makeV2Post({
       slug: 'smartphones-category-guide',
       title: 'All Smartphones Guide',
-      excerpt: null,
-      category: 'Smartphones',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
       published_at: '2026-03-10T00:00:00Z',
       reading_time_minutes: 4,
-      guide_scope: 'category_guide' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'smartphones',
-      applicable_brands: [],
-    };
+      guide_scope: 'category_guide',
+      guide_kind: 'buyer-guide',
+    });
 
-    const brandGuide = {
+    const brandGuide = makeV2Post({
       slug: 'apple-brand-guide',
       title: 'Apple Brand Guide',
-      excerpt: null,
-      category: 'Smartphones',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
       published_at: '2026-03-05T00:00:00Z',
-      reading_time_minutes: 5,
-      guide_scope: 'brand_family_guide' as const,
-      guide_kind: 'best-in-nigeria' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'smartphones',
+      guide_scope: 'brand_family_guide',
+      guide_kind: 'best-in-nigeria',
       applicable_brands: ['apple'],
-    };
+    });
 
-    const subjectGuide = {
+    const subjectGuide = makeV2Post({
       slug: 'iphone-16-subject-guide',
       title: 'iPhone 16 Subject Guide',
-      excerpt: null,
-      category: 'Smartphones',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
       published_at: '2026-03-01T00:00:00Z',
       reading_time_minutes: 6,
-      guide_scope: 'product_specific' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'smartphones',
+      guide_scope: 'product_specific',
+      guide_kind: 'buyer-guide',
       subjects: [
         { productId: 'prod-iphone-16', subjectRole: 'primary' as const },
       ],
-    };
+    });
 
     // 1. Without priorityGuidePostSlugs: matchPriority rules (subject = 1, brand = 2, category = 3)
     const linksNaturalOrder = buildProductGuideLinks(
@@ -138,10 +128,10 @@ describe('buildProductGuideLinks priority ordering and mixed-mode ranking (§2.5
       'https://ogabassey.com/blog/smartphones-category-guide',
     ]);
 
-    // 2. With priorityGuidePostSlugs: priority slug comes first, remaining by matchPriority
+    // 2. With priorityGuidePostSlugs pointing to categoryGuide: priority slug wins
     const linksWithPriority = buildProductGuideLinks(
       makeInput({
-        priorityGuidePostSlugs: ['smartphones-category-guide'],
+        priorityGuidePostSlugs: [categoryGuide.slug],
         guidePosts: [categoryGuide, brandGuide, subjectGuide],
       })
     );
@@ -153,24 +143,17 @@ describe('buildProductGuideLinks priority ordering and mixed-mode ranking (§2.5
   });
 
   it('exercises transitional branch with verified V2 post, priority metadata-free post, and non-priority legacy post', () => {
-    const verifiedV2Post = {
+    const verifiedV2Post = makeV2Post({
       slug: 'iphone-16-v2-verified',
       title: 'iPhone 16 Verified Guide',
-      excerpt: null,
-      category: 'Smartphones',
       tags: ['apple'],
       keywords: ['buyer-guide'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 5,
-      guide_scope: 'product_specific' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'smartphones',
+      guide_scope: 'product_specific',
+      guide_kind: 'buyer-guide',
       subjects: [
         { productId: 'prod-iphone-16', subjectRole: 'primary' as const },
       ],
-    };
+    });
 
     const priorityMetadataFreePost = {
       slug: 'iphone-16-priority-product-link',

@@ -87,15 +87,26 @@ export function evaluateV2GuideCandidate(
     };
   }
 
-  // 2. Reject metadata contract version below 2
+  // 2. Reject missing or under-versioned metadata contract version (requires >= 2)
   if (
-    candidate.metadata_contract_version !== undefined &&
-    candidate.metadata_contract_version !== null &&
+    typeof candidate.metadata_contract_version !== 'number' ||
     candidate.metadata_contract_version < 2
   ) {
     return {
       eligible: false,
-      exclusionReason: `metadata_contract_version "${candidate.metadata_contract_version}" is below required contract version 2`,
+      exclusionReason: `metadata_contract_version "${candidate.metadata_contract_version ?? 'missing'}" is below required contract version 2`,
+    };
+  }
+
+  // 3. Require non-empty metadata_source_revision for verified candidates
+  if (
+    typeof candidate.metadata_source_revision !== 'string' ||
+    !candidate.metadata_source_revision.trim()
+  ) {
+    return {
+      eligible: false,
+      exclusionReason:
+        'metadata_source_revision is required for verified guides',
     };
   }
 

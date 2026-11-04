@@ -98,6 +98,8 @@ describe('first-release-guide-cohort acceptance gate (§2.4 & §2.7)', () => {
           guide_scope: post.scope,
           guide_kind: post.kind,
           metadata_status: 'verified',
+          metadata_source_revision: post.revision,
+          metadata_contract_version: 2,
           applicable_brands: post.applicableBrands,
           subjects: post.subjects?.map((s) => ({
             productId: s.productId,
@@ -122,6 +124,8 @@ describe('first-release-guide-cohort acceptance gate (§2.4 & §2.7)', () => {
           guide_scope: post.scope,
           guide_kind: post.kind,
           metadata_status: 'verified',
+          metadata_source_revision: post.revision,
+          metadata_contract_version: 2,
           applicable_brands: post.applicableBrands,
           subjects: post.subjects?.map((s) => ({
             productId: s.productId,

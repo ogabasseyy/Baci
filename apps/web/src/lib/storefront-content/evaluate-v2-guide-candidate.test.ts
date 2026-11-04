@@ -27,6 +27,7 @@ describe('evaluateV2GuideCandidate', () => {
       guide_kind: 'buyer-guide',
       metadata_status: 'verified',
       metadata_source_revision: 'rev-hp-1',
+      metadata_contract_version: 2,
       applicable_brands: ['hp'],
       subjects: [{ productId: hpOmenProductId, subjectRole: 'primary' }],
     };
@@ -64,6 +65,7 @@ describe('evaluateV2GuideCandidate', () => {
       guide_kind: 'decision-support',
       metadata_status: 'verified',
       metadata_source_revision: 'rev-comp-1',
+      metadata_contract_version: 2,
       applicable_brands: ['dell', 'asus'],
       subjects: [
         { productId: alienwareProductId, subjectRole: 'comparison' },
@@ -112,6 +114,7 @@ describe('evaluateV2GuideCandidate', () => {
       guide_kind: 'buyer-guide',
       metadata_status: 'verified',
       metadata_source_revision: 'rev-a15',
+      metadata_contract_version: 2,
       applicable_brands: ['samsung'],
       subjects: [{ productId: galaxyA15ProductId, subjectRole: 'primary' }],
     };
@@ -137,6 +140,8 @@ describe('evaluateV2GuideCandidate', () => {
       guide_scope: 'model_comparison',
       guide_kind: 'decision-support',
       metadata_status: 'verified',
+      metadata_source_revision: 'rev-multi-1',
+      metadata_contract_version: 2,
       subjects: [
         { productId: 'prod-target', subjectRole: 'primary' },
         { productId: 'prod-target', subjectRole: 'comparison' },
@@ -161,6 +166,7 @@ describe('evaluateV2GuideCandidate', () => {
       guide_kind: 'buyer-guide',
       metadata_status: 'verified',
       metadata_source_revision: 'rev-ps5',
+      metadata_contract_version: 2,
       applicable_brands: [], // brand-neutral
     };
 
@@ -181,6 +187,7 @@ describe('evaluateV2GuideCandidate', () => {
       guide_kind: 'best-in-nigeria',
       metadata_status: 'verified',
       metadata_source_revision: 'rev-nokia',
+      metadata_contract_version: 2,
       applicable_brands: ['nokia'],
     };
 

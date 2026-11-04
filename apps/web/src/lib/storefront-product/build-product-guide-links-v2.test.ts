@@ -26,6 +26,25 @@ function makeInput(
   };
 }
 
+function makeV2Post(overrides: Record<string, unknown> = {}) {
+  return {
+    slug: 'v2-guide',
+    title: 'V2 Guide',
+    excerpt: 'Comprehensive guide.',
+    category: 'Guide',
+    tags: [] as string[],
+    keywords: [] as string[],
+    featured_image_url: null,
+    published_at: '2026-03-01T00:00:00Z',
+    reading_time_minutes: 5,
+    metadata_status: 'verified' as const,
+    metadata_contract_version: 2,
+    metadata_source_revision: 'rev-v2-1',
+    applicable_brands: [] as string[],
+    ...overrides,
+  };
+}
+
 describe('buildProductGuideLinks v2 metadata-first integration', () => {
   const hpOmenProductId = '11111111-1111-4111-8111-111111111111';
   const eaSportsProductId = '22222222-2222-4222-8222-222222222222';
@@ -33,25 +52,19 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
   const s25UltraProductId = '44444444-4444-4444-8444-444444444444';
 
   it('accepts HP Omen review on HP Omen PDP and rejects on EA Sports FC 27 even in prioritySlugs', () => {
-    const hpOmenPost = {
+    const hpOmenPost = makeV2Post({
       slug: 'hp-omen-16-review',
       title: 'HP Omen 16 (2026): Full Review & Guide',
-      excerpt: 'Comprehensive gaming laptop guide.',
       category: 'Gaming',
       tags: ['gaming', 'hp omen'],
-      keywords: ['buyer guide'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 6,
-      guide_scope: 'product_specific' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
+      guide_scope: 'product_specific',
+      guide_kind: 'buyer-guide',
       cluster_category_slug: 'gaming-laptops',
       applicable_brands: ['hp'],
       subjects: [
         { productId: hpOmenProductId, subjectRole: 'primary' as const },
       ],
-    };
+    });
 
     // On HP Omen PDP -> ACCEPTED
     const hpLinks = buildProductGuideLinks(
@@ -61,8 +74,8 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
         currentProduct: {
           id: hpOmenProductId,
           slug: 'hp-omen-16',
-          name: 'HP Omen 16',
-          price: 1_200_000,
+          name: 'HP Omen 16 Gaming Laptop',
+          price: 2_500_000,
           brand: 'HP',
           category_slug: 'gaming-laptops',
         },
@@ -74,17 +87,18 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
     expect(hpLinks[0].href).toBe(
       'https://ogabassey.com/blog/hp-omen-16-review'
     );
+    expect(hpLinks[0].title).toBe(hpOmenPost.title);
 
-    // On EA Sports FC 27 PDP -> REJECTED even with priorityGuidePostSlugs
+    // On EA Sports FC 27 PDP (even though legacy category is Gaming) -> REJECTED
     const eaLinks = buildProductGuideLinks(
       makeInput({
         categorySlug: 'playstation-5',
         categoryName: 'PlayStation 5',
         currentProduct: {
           id: eaSportsProductId,
-          slug: 'ea-sports-fc-27',
-          name: 'EA Sports FC 27',
-          price: 90_000,
+          slug: 'ea-sports-fc-27-ps5',
+          name: 'EA Sports FC 27 (PS5)',
+          price: 95_000,
           brand: 'EA Sports',
           category_slug: 'playstation-5',
         },
@@ -92,27 +106,20 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
         guidePosts: [hpOmenPost],
       })
     );
-    expect(eaLinks).toHaveLength(0);
+    expect(eaLinks).toEqual([]);
   });
 
-  it('rejects Galaxy A15 article on Galaxy S25 Ultra PDP even in prioritySlugs', () => {
-    const a15Post = {
+  it('rejects Samsung Galaxy A15 article on Galaxy S25 Ultra PDP even in prioritySlugs', () => {
+    const a15Post = makeV2Post({
       slug: 'samsung-galaxy-a15-guide',
       title: 'Samsung Galaxy A15 Buying Guide',
-      excerpt: null,
       category: 'Smartphones',
-      tags: ['samsung'],
-      keywords: ['buyer guide'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 5,
-      guide_scope: 'product_specific' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
+      guide_scope: 'product_specific',
+      guide_kind: 'buyer-guide',
       cluster_category_slug: 'smartphones',
       applicable_brands: ['samsung'],
       subjects: [{ productId: a15ProductId, subjectRole: 'primary' as const }],
-    };
+    });
 
     const s25Links = buildProductGuideLinks(
       makeInput({
@@ -132,22 +139,14 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
   });
 
   it('accepts playstation-5 category_guide and nokia brand_family_guide directly', () => {
-    const ps5Guide = {
+    const ps5Guide = makeV2Post({
       slug: 'playstation-5-console-buyer-guide',
       title: 'PlayStation 5 Console Buyer Guide',
-      excerpt: 'Everything to know before buying a PS5.',
       category: 'PlayStation 5',
-      tags: ['ps5'],
-      keywords: ['buyer guide'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 7,
-      guide_scope: 'category_guide' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
+      guide_scope: 'category_guide',
+      guide_kind: 'buyer-guide',
       cluster_category_slug: 'playstation-5',
-      applicable_brands: [],
-    };
+    });
 
     const ps5Links = buildProductGuideLinks(
       makeInput({
@@ -169,22 +168,15 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
       'https://ogabassey.com/blog/playstation-5-console-buyer-guide'
     );
 
-    const nokiaGuide = {
+    const nokiaGuide = makeV2Post({
       slug: 'best-nokia-smartphones-nigeria',
       title: 'Best Nokia Smartphones in Nigeria (2026)',
-      excerpt: 'Top Nokia phones compared.',
       category: 'Smartphones',
-      tags: ['nokia'],
-      keywords: ['best in nigeria'],
-      featured_image_url: null,
-      published_at: '2026-03-01T00:00:00Z',
-      reading_time_minutes: 5,
-      guide_scope: 'brand_family_guide' as const,
-      guide_kind: 'best-in-nigeria' as const,
-      metadata_status: 'verified' as const,
+      guide_scope: 'brand_family_guide',
+      guide_kind: 'best-in-nigeria',
       cluster_category_slug: 'smartphones',
       applicable_brands: ['nokia'],
-    };
+    });
 
     const nokiaLinks = buildProductGuideLinks(
       makeInput({
@@ -208,21 +200,14 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
   });
 
   it('rejects stale or unverified or general_news posts even if in priorityGuidePostSlugs', () => {
-    const stalePost = {
+    const stalePost = makeV2Post({
       slug: 'stale-guide',
       title: 'Stale Guide',
-      excerpt: null,
-      category: 'Smartphones',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
-      published_at: null,
-      reading_time_minutes: 3,
-      guide_scope: 'category_guide' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'stale' as const,
+      guide_scope: 'category_guide',
+      guide_kind: 'buyer-guide',
+      metadata_status: 'stale',
       cluster_category_slug: 'smartphones',
-    };
+    });
 
     const links = buildProductGuideLinks(
       makeInput({
@@ -234,21 +219,14 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
   });
 
   it('rejects V2 post with category mismatch or invalid guide_kind and caps results at 3', () => {
-    const wrongCategoryPost = {
+    const wrongCategoryPost = makeV2Post({
       slug: 'wrong-cat-guide',
       title: 'Wrong Category Guide',
-      excerpt: null,
       category: 'Laptops',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
-      published_at: null,
-      reading_time_minutes: 3,
-      guide_scope: 'category_guide' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
+      guide_scope: 'category_guide',
+      guide_kind: 'buyer-guide',
       cluster_category_slug: 'laptops',
-    };
+    });
 
     expect(
       buildProductGuideLinks(
@@ -259,21 +237,17 @@ describe('buildProductGuideLinks v2 metadata-first integration', () => {
       )
     ).toEqual([]);
 
-    const guides = [1, 2, 3, 4].map((i) => ({
-      slug: `ps5-guide-${i}`,
-      title: `PS5 Guide ${i}`,
-      excerpt: null,
-      category: 'PlayStation 5',
-      tags: [],
-      keywords: [],
-      featured_image_url: null,
-      published_at: `2026-03-0${i}T00:00:00Z`,
-      reading_time_minutes: 4,
-      guide_scope: 'category_guide' as const,
-      guide_kind: 'buyer-guide' as const,
-      metadata_status: 'verified' as const,
-      cluster_category_slug: 'playstation-5',
-    }));
+    const guides = [1, 2, 3, 4].map((i) =>
+      makeV2Post({
+        slug: `ps5-guide-${i}`,
+        title: `PS5 Guide ${i}`,
+        category: 'PlayStation 5',
+        published_at: `2026-03-0${i}T00:00:00Z`,
+        guide_scope: 'category_guide',
+        guide_kind: 'buyer-guide',
+        cluster_category_slug: 'playstation-5',
+      })
+    );
 
     const result = buildProductGuideLinks(
       makeInput({

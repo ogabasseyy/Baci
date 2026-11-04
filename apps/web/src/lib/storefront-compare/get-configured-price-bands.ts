@@ -119,6 +119,9 @@ export type CuratedPriceBandCategorySlug = keyof typeof CURATED_PRICE_BANDS;
 export function getConfiguredPriceBands(
   categorySlug: string
 ): PriceBandDefinition[] {
+  if (!Object.hasOwn(CURATED_PRICE_BANDS, categorySlug)) {
+    return [];
+  }
   return (
     CURATED_PRICE_BANDS[categorySlug as CuratedPriceBandCategorySlug] ?? []
   );

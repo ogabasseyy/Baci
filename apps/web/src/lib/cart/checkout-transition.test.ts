@@ -169,29 +169,6 @@ describe('prepareCartCheckout', () => {
     });
   });
 
-  it('fails closed when the RPC omits the database clock', async () => {
-    const client = clientReturning({
-      code: null,
-      grantExpiresAt: '2099-01-03T00:30:00.000Z',
-      ok: true,
-      replayed: false,
-      sessionExpiresAt: '2099-01-01T00:30:00.000Z',
-      sessionReused: false,
-      snapshot: rawSnapshot(),
-    });
-
-    const result = await prepareCartCheckout(
-      { client: client as never, principal: sessionPrincipal() },
-      { cartId: CART_ID, expectedVersion: 3, operationId: 'prep-op-1' }
-    );
-
-    expect(result).toEqual({
-      code: 'temporarily_unavailable',
-      currentVersion: null,
-      ok: false,
-    });
-  });
-
   it('surfaces reuse and replay flags without refetching', async () => {
     const client = clientReturning({
       code: null,

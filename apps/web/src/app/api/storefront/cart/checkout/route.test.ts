@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
 import { issueCartSessionProof } from '@/lib/cart/session-proof';
+import { successfulCheckoutPayload } from './checkout-route.test-support';
 import { POST } from './route';
 
 const MERCHANT = {
@@ -218,18 +219,14 @@ describe('POST /api/storefront/cart/checkout', () => {
   it('returns the authoritative snapshot with the session reference', async () => {
     const sessionExpiresAt = new Date(Date.now() + 25 * 60 * 1000);
     const databaseNow = new Date().toISOString();
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
+    mocks.cartPayload = successfulCheckoutPayload({
       grantExpiresAt: new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
-      replayed: false,
-      databaseNow,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
-      sessionReused: false,
       snapshot: rawSnapshot(),
-    };
+      databaseNow,
+    });
 
     const incoming = sessionProof();
     const response = await postPrepare({
@@ -254,18 +251,13 @@ describe('POST /api/storefront/cart/checkout', () => {
   });
 
   it('fails retryably when the renewed proof cannot be minted', async () => {
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
+    mocks.cartPayload = successfulCheckoutPayload({
       // A grant expiry in the past makes proof issuance throw after the
       // idempotent preparation has already committed.
       grantExpiresAt: new Date(Date.now() - 60_000).toISOString(),
-      replayed: false,
-      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 25 * 60 * 1000).toISOString(),
-      sessionReused: false,
       snapshot: rawSnapshot(),
-    };
+    });
 
     const response = await postPrepare({
       body: prepareBody(),
@@ -281,18 +273,14 @@ describe('POST /api/storefront/cart/checkout', () => {
 
   it('extends a short-lived proof to the prepared session expiry', async () => {
     const sessionExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
+    mocks.cartPayload = successfulCheckoutPayload({
       grantExpiresAt: new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
-      replayed: false,
-      databaseNow: new Date().toISOString(),
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
-    };
+    });
     const incoming = sessionProofExpiringAt(
       new Date(Date.now() + 10 * 60 * 1000).toISOString()
     );
@@ -314,16 +302,12 @@ describe('POST /api/storefront/cart/checkout', () => {
 
   it('caps the renewed proof at the grant expiry', async () => {
     const grantExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    mocks.cartPayload = {
-      code: null,
+    mocks.cartPayload = successfulCheckoutPayload({
       grantExpiresAt: grantExpiresAt.toISOString(),
-      ok: true,
-      replayed: false,
-      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
-    };
+    });
     const incoming = sessionProofExpiringAt(
       new Date(Date.now() + 10 * 60 * 1000).toISOString()
     );
@@ -343,18 +327,14 @@ describe('POST /api/storefront/cart/checkout', () => {
   });
 
   it('surfaces reuse on a repeated preparation', async () => {
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
+    mocks.cartPayload = successfulCheckoutPayload({
       grantExpiresAt: new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
-      replayed: false,
-      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
-    };
+    });
 
     const response = await postPrepare({
       body: prepareBody({ operationId: 'prep-op-2' }),

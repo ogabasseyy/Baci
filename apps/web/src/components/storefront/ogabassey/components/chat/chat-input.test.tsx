@@ -9,9 +9,7 @@ describe('ChatInput', () => {
     setInput: vi.fn(),
     isLoading: false,
     isSanta: false,
-    showSuggestions: false,
     onSubmit: vi.fn(),
-    onSuggestionClick: vi.fn(),
   };
 
   beforeEach(() => {
@@ -66,15 +64,8 @@ describe('ChatInput', () => {
     expect(input.disabled).toBe(true);
   });
 
-  it('shows suggestion chips when showSuggestions is true', () => {
-    render(<ChatInput {...defaultProps} showSuggestions={true} />);
-    // SUGGESTIONS contains "Track my order" as one of the labels
-    expect(screen.getByText('Track my order')).toBeDefined();
-    expect(screen.getByText('Contact support')).toBeDefined();
-  });
-
-  it('hides suggestion chips when showSuggestions is false', () => {
-    render(<ChatInput {...defaultProps} showSuggestions={false} />);
+  it('keeps suggested actions out of the composer', () => {
+    render(<ChatInput {...defaultProps} />);
     expect(screen.queryByText('Track my order')).toBeNull();
     expect(screen.queryByText('Contact support')).toBeNull();
   });
@@ -116,36 +107,6 @@ describe('ChatInput', () => {
     const input = screen.getByRole('textbox');
     await user.type(input, 'a');
     expect(setInput).toHaveBeenCalledWith('a');
-  });
-
-  it('calls onSuggestionClick with the suggestion label when clicked', async () => {
-    const onSuggestionClick = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <ChatInput
-        {...defaultProps}
-        showSuggestions={true}
-        onSuggestionClick={onSuggestionClick}
-      />
-    );
-    const chip = screen.getByText('Track my order');
-    await user.click(chip);
-    expect(onSuggestionClick).toHaveBeenCalledWith('Track my order');
-  });
-
-  it('calls onSuggestionClick with the correct label for each chip', async () => {
-    const onSuggestionClick = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <ChatInput
-        {...defaultProps}
-        showSuggestions={true}
-        onSuggestionClick={onSuggestionClick}
-      />
-    );
-    const chip = screen.getByText('Contact support');
-    await user.click(chip);
-    expect(onSuggestionClick).toHaveBeenCalledWith('Contact support');
   });
 
   it('reflects the current input value in the text field', () => {

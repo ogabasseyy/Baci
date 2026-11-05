@@ -4,7 +4,7 @@ import type { ProductVariant } from './products';
 
 describe('getVariantSchemaVariesBy', () => {
   it('ignores unsupported and inherited attribute keys', () => {
-    const variants = [
+    const variants: ProductVariant[] = [
       {
         id: '1',
         product_id: 'p',
@@ -16,7 +16,7 @@ describe('getVariantSchemaVariesBy', () => {
     expect(getVariantSchemaVariesBy(variants)).toEqual([]);
   });
   it('omits dimensions missing from a variant', () => {
-    const variants = [
+    const variants: ProductVariant[] = [
       {
         id: '1',
         product_id: 'p',
@@ -31,11 +31,11 @@ describe('getVariantSchemaVariesBy', () => {
         stock_quantity: 1,
         attributes: {},
       },
-    ] satisfies ProductVariant[];
+    ];
     expect(getVariantSchemaVariesBy(variants)).toEqual([]);
   });
   it('deduplicates supported dimensions present on every variant', () => {
-    const variants = [
+    const variants: ProductVariant[] = [
       {
         id: '1',
         product_id: 'p',
@@ -50,7 +50,7 @@ describe('getVariantSchemaVariesBy', () => {
         stock_quantity: 1,
         attributes: { color: 'Black', size: '256GB' },
       },
-    ] satisfies ProductVariant[];
+    ];
     expect(getVariantSchemaVariesBy(variants)).toEqual([
       'https://schema.org/color',
       'https://schema.org/size',

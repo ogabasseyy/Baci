@@ -3,6 +3,8 @@ import { getVariantSchemaSize } from './product-schema-size';
 import type { ProductVariant } from './products';
 
 function schemaPropertyForAttribute(key: string): string | undefined {
+  // Only declare dimensions that the variant serializer actually emits.
+  // Material, pattern, age and gender need matching variant fields first.
   const map: Record<string, string> = {
     color: 'https://schema.org/color',
     colour: 'https://schema.org/color',

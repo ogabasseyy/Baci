@@ -110,7 +110,16 @@ export function useWalletPinSettings() {
   const onSuccess = () => {
     setNotice(SUCCESS[mode]);
     setOverride({ mode: 'change', status: gate.status });
-    gate.refresh();
+    // Refresh only after the user has seen the notice: a failed refresh can
+    // turn the gate off and redirect away from this screen.
+    Alert.alert(
+      SUCCESS[mode],
+      undefined,
+      [{ text: 'OK', onPress: gate.refresh }],
+      {
+        cancelable: false,
+      }
+    );
   };
 
   const onFailure = (failure: unknown) => {

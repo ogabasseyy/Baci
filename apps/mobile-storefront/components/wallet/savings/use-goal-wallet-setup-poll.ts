@@ -55,4 +55,13 @@ export function useGoalWalletSetupPoll({
       clearTimeout(timer);
     };
   }, [phase, count, scopeKey]);
+
+  // After every attempt has come back still pending the poll stops; the
+  // customer can start it again by hand, which also reads once right away.
+  const exhausted = phase === 'pending' && count >= MAX_ATTEMPTS;
+  const checkAgain = () => {
+    setAttempt({ scopeKey, count: 0 });
+    void Promise.resolve(reread({ silent: true })).catch(() => undefined);
+  };
+  return { exhausted, checkAgain };
 }

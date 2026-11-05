@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
@@ -19,18 +19,24 @@ const mockPlanFunding = jest.fn();
 jest.mock('./savings/use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockPlanFunding(...args),
 }));
-const mockPoll = jest.fn();
+const mockPoll = jest.fn(() => ({ exhausted: false, checkAgain: jest.fn() }));
 jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
   useGoalWalletSetupPoll: (...args: unknown[]) => mockPoll(...args),
 }));
 jest.mock('./savings/SavingsPlanStatusNote', () => ({
   SavingsPlanStatusNote: ({
     funding,
+    onCheckAgain,
   }: {
     funding?: { planFundingPhase: string };
+    onCheckAgain?: () => void;
   }) => {
     const { Text } = require('react-native');
-    return <Text>{`status-note:${funding?.planFundingPhase ?? 'own'}`}</Text>;
+    return (
+      <Text onPress={onCheckAgain}>
+        {`status-note:${funding?.planFundingPhase ?? 'own'}${onCheckAgain ? ':can-check-again' : ''}`}
+      </Text>
+    );
   },
 }));
 jest.mock('./WalletSavingsPlanFunding', () => ({
@@ -145,6 +151,19 @@ describe('manual goal on a ready primary wallet (plan funding off)', () => {
     renderManual();
     expect(screen.getByText(`status-note:${phase}`)).toBeOnTheScreen();
     expect(screen.queryByText('wallet-contribution')).toBeNull();
+  });
+
+  it('gives the note a Check again only once the poll is exhausted', () => {
+    mockGate.mockReturnValue('ready');
+    const checkAgain = jest.fn();
+    mockPlanFunding.mockReturnValue({
+      planFundingPhase: 'pending',
+      fetchExistingPlanFunding: jest.fn(),
+    });
+    mockPoll.mockReturnValueOnce({ exhausted: true, checkAgain });
+    renderManual();
+    fireEvent.press(screen.getByText('status-note:pending:can-check-again'));
+    expect(checkAgain).toHaveBeenCalledTimes(1);
   });
 
   it('reads one shared status: the hook, the note and the poll use the same instance', () => {

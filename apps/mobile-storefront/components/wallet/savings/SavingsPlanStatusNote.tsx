@@ -18,6 +18,8 @@ type Props = {
    * read one status). Without it the note reads its own.
    */
   funding?: PlanFunding;
+  /** Set once automatic checks have run out while setup is still pending. */
+  onCheckAgain?: () => void;
 };
 
 /**
@@ -55,6 +57,7 @@ function StatusNoteView({
   merchantId,
   funding,
   bvnGate = false,
+  onCheckAgain,
 }: Props & { funding: PlanFunding; bvnGate?: boolean }) {
   const primary = isPiggyvestPrimaryMerchant(merchantId);
   const setup = useSavingsGoalSetup({
@@ -103,6 +106,25 @@ function StatusNoteView({
         >
           <Text style={[styles.action, { color: colors.primary }]}>
             Try again
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (phase === 'pending' && onCheckAgain) {
+    return (
+      <View style={styles.section}>
+        <Text style={[styles.body, { color: colors.textSecondary }]}>
+          Still setting up your goal.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Check again"
+          onPress={onCheckAgain}
+          style={styles.retry}
+        >
+          <Text style={[styles.action, { color: colors.primary }]}>
+            Check again
           </Text>
         </Pressable>
       </View>

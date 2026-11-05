@@ -1,6 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SavingsPlanStatusNote } from './SavingsPlanStatusNote';
+import type { useSavingsPlanFunding } from './use-savings-plan-funding';
+
+type PlanFunding = ReturnType<typeof useSavingsPlanFunding>;
+// A complete status object; each test overrides only the fields it cares about.
+const fundingFixture = (over: Partial<PlanFunding> = {}): PlanFunding => ({
+  failExistingPlanFunding: jest.fn(),
+  fetchExistingPlanFunding: jest.fn(),
+  fetchPlanFunding: jest.fn(),
+  fundingError: null,
+  planFundingPhase: 'pending',
+  planFundingRequiresBvn: false,
+  planFundingStatusCode: null,
+  ...over,
+});
 
 const mockHook = jest.fn();
 const mockSetup = jest.fn();
@@ -152,12 +166,7 @@ describe('SavingsPlanStatusNote', () => {
         goalId="goal-1"
         identityKey="user-1"
         merchantId="merchant-1"
-        funding={
-          {
-            planFundingPhase: 'pending',
-            planFundingRequiresBvn: true,
-          } as never
-        }
+        funding={fundingFixture({ planFundingRequiresBvn: true })}
       />
     );
     expect(
@@ -165,5 +174,24 @@ describe('SavingsPlanStatusNote', () => {
         'This goal is still being set up. Please check back shortly.'
       )
     ).toBeOnTheScreen();
+  });
+});
+
+describe('exhausted pending setup', () => {
+  it('offers Check again, and pressing it runs the supplied check', () => {
+    const onCheckAgain = jest.fn();
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={fundingFixture()}
+        onCheckAgain={onCheckAgain}
+      />
+    );
+    expect(screen.getByText('Still setting up your goal.')).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('button', { name: 'Check again' }));
+    expect(onCheckAgain).toHaveBeenCalledTimes(1);
   });
 });

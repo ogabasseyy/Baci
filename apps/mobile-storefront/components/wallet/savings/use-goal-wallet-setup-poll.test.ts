@@ -34,6 +34,20 @@ beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
 describe('useGoalWalletSetupPoll', () => {
+  it('reports exhausted after 12 pending reads, and Check again reads now and polls afresh', async () => {
+    const { result, reread } = setup({ phase: 'pending' });
+    expect(result.current.exhausted).toBe(false);
+    await ticks(14);
+    expect(reread).toHaveBeenCalledTimes(12);
+    expect(result.current.exhausted).toBe(true);
+    await act(async () => result.current.checkAgain());
+    expect(reread).toHaveBeenCalledTimes(13);
+    expect(reread).toHaveBeenLastCalledWith({ silent: true });
+    expect(result.current.exhausted).toBe(false);
+    await ticks(1);
+    expect(reread).toHaveBeenCalledTimes(14);
+  });
+
   it('re-reads a pending goal every 5 seconds, at most 12 times', async () => {
     const { reread } = setup({ phase: 'pending' });
     await advance(4999);

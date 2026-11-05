@@ -49,7 +49,7 @@ function ManualPrimaryGoalSection(props: ManualPrimaryGoalProps) {
     loadExisting: true,
     notFoundMeansNotStarted: true,
   });
-  useGoalWalletSetupPoll({
+  const poll = useGoalWalletSetupPoll({
     phase: funding.planFundingPhase,
     scopeKey: JSON.stringify([userId, merchantId, goal.id]),
     reread: funding.fetchExistingPlanFunding,
@@ -63,6 +63,7 @@ function ManualPrimaryGoalSection(props: ManualPrimaryGoalProps) {
         identityKey={userId}
         merchantId={merchantId}
         funding={funding}
+        onCheckAgain={poll.exhausted ? poll.checkAgain : undefined}
       />
       {funding.planFundingPhase === 'ready' ? (
         <WalletSavingsContributionFlow

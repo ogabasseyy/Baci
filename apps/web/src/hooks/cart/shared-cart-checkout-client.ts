@@ -82,8 +82,7 @@ export type PrepareSharedCartCheckoutResult =
   | {
       ok: true;
       review: SharedCartCheckoutReview;
-      /** Present on responses from the prepare endpoint; optional for caller compatibility. */
-      sessionExpiresAt?: string;
+      sessionExpiresAtMonotonicMs: number;
       replayed: boolean;
       sessionReused: boolean;
     }
@@ -153,6 +152,7 @@ async function requestSharedCartCheckout(
       ok: false,
       retryable: true,
     };
+  const requestStartedAt = performance.now();
   let response: Response;
   try {
     response = await fetchWithCsrf(
@@ -177,6 +177,7 @@ async function requestSharedCartCheckout(
       retryable: true,
     };
   }
+  const responseReceivedAt = performance.now();
   const body = await readBody(response);
   if (response.ok && body) {
     const review = reviewOf(body.snapshot);
@@ -193,10 +194,26 @@ async function requestSharedCartCheckout(
     }
     if (review) {
       const sessionExpiresAt = body.sessionExpiresAt;
+      const serverDate = response.headers.get('date');
+      const serverDateMs = serverDate ? Date.parse(serverDate) : Number.NaN;
+      const requestElapsedMs = responseReceivedAt - requestStartedAt;
+      // HTTP Date has one-second precision. Subtract a full extra second and
+      // the complete request duration so clock skew and transit time cannot
+      // extend the client-side display past the server's session expiry.
+      const sessionExpiresInMs =
+        typeof sessionExpiresAt === 'string' &&
+        Number.isFinite(Date.parse(sessionExpiresAt)) &&
+        Number.isFinite(serverDateMs) &&
+        Number.isFinite(requestElapsedMs)
+          ? Date.parse(sessionExpiresAt) -
+            serverDateMs -
+            requestElapsedMs -
+            1000
+          : Number.NaN;
       if (
-        typeof sessionExpiresAt !== 'string' ||
-        !Number.isFinite(Date.parse(sessionExpiresAt)) ||
-        Date.parse(sessionExpiresAt) <= Date.now()
+        !Number.isFinite(sessionExpiresInMs) ||
+        sessionExpiresInMs <= 0 ||
+        responseReceivedAt + sessionExpiresInMs <= performance.now()
       ) {
         return {
           code: 'temporarily_unavailable',
@@ -209,7 +226,7 @@ async function requestSharedCartCheckout(
         ok: true,
         replayed: body.replayed === true,
         review,
-        sessionExpiresAt,
+        sessionExpiresAtMonotonicMs: responseReceivedAt + sessionExpiresInMs,
         sessionReused: body.sessionReused === true,
       };
     }

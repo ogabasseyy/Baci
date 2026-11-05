@@ -37,7 +37,7 @@ export function ChatCartCheckoutReview({
   const [prepared, setPrepared] = useState<{
     items: CartItem[];
     review: SharedCartCheckoutReview;
-    sessionExpiresAt: string;
+    expiresAtMonotonicMs: number;
   } | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const operationRef = useRef<{
@@ -47,7 +47,7 @@ export function ChatCartCheckoutReview({
 
   useEffect(() => {
     if (!prepared) return;
-    const remainingMs = Date.parse(prepared.sessionExpiresAt) - Date.now();
+    const remainingMs = prepared.expiresAtMonotonicMs - performance.now();
     if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
       setSessionExpired(true);
       return;
@@ -65,7 +65,7 @@ export function ChatCartCheckoutReview({
       sharedCartRef.version === prepared.review.cartVersion &&
       merchantId === prepared.review.merchantId &&
       currencyCode.toUpperCase() === prepared.review.currency.toUpperCase() &&
-      Date.parse(prepared.sessionExpiresAt) > Date.now() &&
+      prepared.expiresAtMonotonicMs > performance.now() &&
       !sessionExpired &&
       syncStatus === 'synced'
   );
@@ -116,9 +116,8 @@ export function ChatCartCheckoutReview({
       }
       operationRef.current = null;
       if (
-        !result.sessionExpiresAt ||
-        !Number.isFinite(Date.parse(result.sessionExpiresAt)) ||
-        Date.parse(result.sessionExpiresAt) <= Date.now()
+        !Number.isFinite(result.sessionExpiresAtMonotonicMs) ||
+        result.sessionExpiresAtMonotonicMs <= performance.now()
       ) {
         setError('This checkout review has expired. Please review it again.');
         return;
@@ -159,7 +158,7 @@ export function ChatCartCheckoutReview({
       setPrepared({
         items: reviewedItems,
         review: result.review,
-        sessionExpiresAt: result.sessionExpiresAt,
+        expiresAtMonotonicMs: result.sessionExpiresAtMonotonicMs,
       });
     } catch {
       setError('We could not review your cart. Please try again.');

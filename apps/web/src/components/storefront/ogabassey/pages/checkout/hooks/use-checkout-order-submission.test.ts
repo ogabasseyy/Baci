@@ -333,6 +333,7 @@ describe('useCheckoutOrderSubmission', () => {
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
+        sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
         review: REVIEW,
         sessionReused: false,
       });
@@ -464,6 +465,7 @@ describe('useCheckoutOrderSubmission', () => {
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
+        sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
         review: {
           ...REVIEW,
           lines: [
@@ -490,6 +492,7 @@ describe('useCheckoutOrderSubmission', () => {
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
+        sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
         review: {
           ...REVIEW,
           lines: [{ ...REVIEW.lines[0], available: false }],
@@ -517,6 +520,7 @@ describe('useCheckoutOrderSubmission', () => {
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
+        sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
         review: { ...REVIEW, subtotalMinor: 24000 },
         sessionReused: false,
       });
@@ -646,6 +650,7 @@ describe('useCheckoutOrderSubmission', () => {
       vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
         ok: true,
         replayed: false,
+        sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
         review: REVIEW,
         sessionReused: false,
       });

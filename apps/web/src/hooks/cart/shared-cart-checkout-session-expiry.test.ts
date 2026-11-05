@@ -12,7 +12,10 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 function jsonResponse(payload: unknown) {
-  return new Response(JSON.stringify(payload), { status: 200 });
+  return new Response(JSON.stringify(payload), {
+    headers: { date: new Date().toUTCString() },
+    status: 200,
+  });
 }
 
 describe('shared-cart-client checkout session expiry', () => {
@@ -60,5 +63,78 @@ describe('shared-cart-client checkout session expiry', () => {
       ok: false,
       retryable: true,
     });
+  });
+
+  it('uses the response server clock and subtracts full request transit time', async () => {
+    const serverNow = '2026-11-05T20:00:00.000Z';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-05T21:00:00.000Z'));
+    const response = new Response(
+      JSON.stringify({
+        replayed: false,
+        sessionExpiresAt: '2026-11-05T20:01:00.000Z',
+        sessionReused: false,
+        snapshot: reviewSnapshot,
+      }),
+      {
+        headers: { date: new Date(serverNow).toUTCString() },
+        status: 200,
+      }
+    );
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(response);
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValueOnce(10).mockReturnValueOnce(20_010);
+
+    try {
+      const result = await prepareSharedCartCheckout({
+        cartId: '22222222-2222-4222-8222-222222222222',
+        expectedVersion: 3,
+        operationId: 'prep-op-clock-skew',
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        sessionExpiresAtMonotonicMs: 59_010,
+      });
+    } finally {
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a session whose TTL elapsed while the response body was parsed', async () => {
+    const response = new Response(
+      JSON.stringify({
+        replayed: false,
+        sessionExpiresAt: '2026-11-05T20:01:00.000Z',
+        sessionReused: false,
+        snapshot: reviewSnapshot,
+      }),
+      {
+        headers: { date: new Date('2026-11-05T20:00:00.000Z').toUTCString() },
+        status: 200,
+      }
+    );
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(response);
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(20_010)
+      .mockReturnValue(80_000);
+
+    try {
+      await expect(
+        prepareSharedCartCheckout({
+          cartId: '22222222-2222-4222-8222-222222222222',
+          expectedVersion: 3,
+          operationId: 'prep-op-body-delay',
+        })
+      ).resolves.toMatchObject({
+        code: 'temporarily_unavailable',
+        ok: false,
+        retryable: true,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

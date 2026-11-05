@@ -29,7 +29,7 @@ function successfulReview(overrides: Record<string, unknown> = {}) {
   return {
     ok: true,
     replayed: false,
-    sessionExpiresAt: new Date(Date.now() + 30_000).toISOString(),
+    sessionExpiresAtMonotonicMs: performance.now() + 30_000,
     sessionReused: false,
     review: {
       cartId: 'cart-1',
@@ -150,7 +150,7 @@ describe('ChatCartCheckoutReview', () => {
     try {
       state.prepare.mockResolvedValue({
         ...successfulReview(),
-        sessionExpiresAt: new Date(Date.now() + 5_000).toISOString(),
+        sessionExpiresAtMonotonicMs: performance.now() + 5_000,
       });
       render(<ChatCartCheckoutReview {...props()} />);
 

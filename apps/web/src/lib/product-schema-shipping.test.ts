@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildMerchantReturnPolicyFromTrustProfile,
-  buildOfferShippingDetails,
-} from './product-schema-policy';
+import { buildOfferShippingDetails } from './product-schema-shipping';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
 
 const profile = {
@@ -18,7 +15,8 @@ const profile = {
     transitDaysMax: 7,
   },
 } satisfies MerchantTrustProfile;
-describe('product schema policies', () => {
+
+describe('shipping', () => {
   it('publishes an explicitly configured free country-wide rate and delivery times', () => {
     expect(buildOfferShippingDetails('NG', 'NGN', profile)).toMatchObject({
       shippingRate: { value: 0, currency: 'NGN' },
@@ -42,15 +40,5 @@ describe('product schema policies', () => {
       })
     ).toBeUndefined();
     expect(buildOfferShippingDetails('NG', 'NGN')).toBeUndefined();
-  });
-  it('does not invent return fees or methods when only a window is known', () => {
-    const policy = buildMerchantReturnPolicyFromTrustProfile('NG', {
-      ...profile,
-      returnPolicy: { localRoute: '/returns', windowDays: 7 },
-    });
-    expect(policy?.merchantReturnDays).toBe(7);
-    expect(policy).not.toHaveProperty('returnFees');
-    expect(policy).not.toHaveProperty('returnMethod');
-    expect(buildMerchantReturnPolicyFromTrustProfile('NG')).toBeUndefined();
   });
 });

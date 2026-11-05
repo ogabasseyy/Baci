@@ -23,20 +23,16 @@ import {
 } from './image-utils';
 import { generateMetaDescription } from './meta-description';
 import { normalizeOgabasseyCdnImageUrl } from './ogabassey-cdn-image-url';
-import {
-  buildMerchantReturnPolicyFromTrustProfile,
-  buildOfferShippingDetails,
-} from './product-schema-policy';
+import { getVariantSchemaColor } from './product-schema-color';
+import { isValidMerchantIdentifier } from './product-schema-identifier';
+import { buildVariantSchemaName } from './product-schema-name';
+import { buildMerchantReturnPolicyFromTrustProfile } from './product-schema-returns';
 import { buildSharedOfferPolicies } from './product-schema-shared-offer-policies';
+import { buildOfferShippingDetails } from './product-schema-shipping';
+import { getVariantSchemaSize } from './product-schema-size';
 import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
 import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
-import {
-  buildVariantSchemaName,
-  getVariantSchemaColor,
-  getVariantSchemaSize,
-  getVariantSchemaVariesBy,
-  isValidMerchantIdentifier,
-} from './product-schema-variant-details';
+import { getVariantSchemaVariesBy } from './product-schema-varies-by';
 import type {
   Product,
   ProductSchemaMarkup,

@@ -17,6 +17,7 @@
     "tools/events/**/*.ts",
     "tools/db/**/*.ts",
     "tools/cost/**/*.ts",
+    "tools/messaging/**/*.ts",
     "src/scripts/process-domain-events.ts",
     "src/scripts/process-merchant-onboarding-emails.ts",
     "src/scripts/process-merchant-onboarding-emails.test.ts",

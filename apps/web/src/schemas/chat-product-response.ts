@@ -9,12 +9,15 @@ const currency = z
     symbol: z.string().max(32),
   })
   .strict();
+const variantAttributes = z
+  .record(z.string().max(100), z.string().max(200))
+  .refine((attributes) => Object.keys(attributes).length <= 10);
 const variant = z
   .object({
     id: boundedString,
     product_id: boundedString,
     merchant_id: boundedString,
-    attributes: z.record(z.string().max(100), z.string().max(200)),
+    attributes: variantAttributes,
     condition: condition.optional(),
     price_override: z.number().finite().nonnegative().optional(),
     stock_quantity: z.number().finite(),

@@ -3,15 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
-  product: vi.fn(),
+  uncachedProduct: vi.fn(),
   map: vi.fn(),
 }));
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/storefront-merchant', () => ({
   resolveStorefrontMerchantFromRequest: mocks.resolve,
 }));
-vi.mock('@/lib/cached-data', () => ({
-  getCachedProductWithDetails: mocks.product,
+vi.mock('@/lib/uncached-storefront-product', () => ({
+  getUncachedProductWithDetails: mocks.uncachedProduct,
 }));
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 vi.mock(
@@ -35,7 +35,7 @@ beforeEach(() => {
     success: true,
     merchant: { id: 'trusted-merchant', payout_currency: 'NGN' },
   });
-  mocks.product.mockResolvedValue({ id: 'p' });
+  mocks.uncachedProduct.mockResolvedValue({ id: 'p' });
   mocks.map.mockReturnValue({
     id: 'p',
     name: 'Phone',
@@ -68,7 +68,10 @@ describe('public chat product detail', () => {
   it('resolves the trusted merchant and excludes non-public variant data', async () => {
     const response = await GET(req(), params());
     expect(response.status).toBe(200);
-    expect(mocks.product).toHaveBeenCalledWith('trusted-merchant', 'phone');
+    expect(mocks.uncachedProduct).toHaveBeenCalledWith(
+      'trusted-merchant',
+      'phone'
+    );
     const body = await response.json();
     expect(chatProductResponseSchema.safeParse(body).success).toBe(true);
     expect(body.product.variants[0]).toMatchObject({
@@ -123,7 +126,7 @@ describe('public chat product detail', () => {
     });
     const response = await GET(req(), params());
     expect(response.status).toBe(503);
-    expect(mocks.product).not.toHaveBeenCalled();
+    expect(mocks.uncachedProduct).not.toHaveBeenCalled();
     expect(response.headers.get('cache-control')).toContain('no-store');
   });
   it('uses the checkout NGN fallback when payout currency is blank', async () => {
@@ -148,7 +151,10 @@ describe('public chat product detail', () => {
   it('accepts generated product slugs containing underscores', async () => {
     const response = await GET(req(), params('store', 'iphone_13'));
     expect(response.status).toBe(200);
-    expect(mocks.product).toHaveBeenCalledWith('trusted-merchant', 'iphone_13');
+    expect(mocks.uncachedProduct).toHaveBeenCalledWith(
+      'trusted-merchant',
+      'iphone_13'
+    );
   });
   it('fails closed when projected product data exceeds response bounds', async () => {
     mocks.map.mockReturnValue({
@@ -179,8 +185,41 @@ describe('public chat product detail', () => {
     expect(await response.json()).toEqual({ error: 'Product unavailable' });
     expect(response.headers.get('cache-control')).toContain('no-store');
   });
+  it('fails closed when variant attributes exceed the entry limit', async () => {
+    mocks.map.mockReturnValue({
+      id: 'p',
+      name: 'Phone',
+      status: 'active',
+      price: 100,
+      image: '',
+      imageLarge: '',
+      imageHint: '',
+      brand: '',
+      gtin: '',
+      mpn: '',
+      stock: 1,
+      manage_stock: true,
+      variants: [
+        {
+          id: 'v',
+          product_id: 'p',
+          merchant_id: 'trusted-merchant',
+          attributes: Object.fromEntries(
+            Array.from({ length: 11 }, (_, index) => [
+              `attribute-${index}`,
+              `value-${index}`,
+            ])
+          ),
+          stock_quantity: 1,
+        },
+      ],
+    });
+    const response = await GET(req(), params());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'Product unavailable' });
+  });
   it('returns 404 when a tenant-bound product is missing', async () => {
-    mocks.product.mockResolvedValue(null);
+    mocks.uncachedProduct.mockResolvedValue(null);
     expect((await GET(req(), params())).status).toBe(404);
   });
   it('returns 404 and no-store when the mapped product is not active', async () => {
@@ -190,7 +229,7 @@ describe('public chat product detail', () => {
     expect(response.headers.get('cache-control')).toContain('no-store');
   });
   it('returns a generic no-store 503 when the product lookup throws', async () => {
-    mocks.product.mockRejectedValue(new Error('database details'));
+    mocks.uncachedProduct.mockRejectedValue(new Error('database details'));
     const response = await GET(req(), params());
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: 'Product unavailable' });
@@ -213,7 +252,7 @@ describe('public chat product detail', () => {
     });
     const response = await GET(req(), params());
     expect(response.status).toBe(503);
-    expect(mocks.product).not.toHaveBeenCalled();
+    expect(mocks.uncachedProduct).not.toHaveBeenCalled();
     expect(response.headers.get('cache-control')).toContain('no-store');
   });
 });

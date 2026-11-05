@@ -62,4 +62,28 @@ describe('chatProductResponseSchema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects variants with more than ten attribute entries', () => {
+    expect(
+      chatProductResponseSchema.safeParse({
+        product: {
+          ...validResponse.product,
+          variants: [
+            {
+              id: 'variant-1',
+              product_id: 'product-1',
+              merchant_id: 'merchant-1',
+              attributes: Object.fromEntries(
+                Array.from({ length: 11 }, (_, index) => [
+                  `attribute-${index}`,
+                  `value-${index}`,
+                ])
+              ),
+              stock_quantity: 1,
+            },
+          ],
+        },
+      }).success
+    ).toBe(false);
+  });
 });

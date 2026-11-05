@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { mapDetailedCachedProductToProduct } from '@/app/(storefront)/[slug]/(catalog)/(pdp)/products/[productSlug]/detailed-product-mapper';
 import { getRootDomain } from '@/env';
-import { getCachedProductWithDetails } from '@/lib/cached-data';
 import { CURRENCY_SYMBOLS } from '@/lib/currency-meta';
 import { logger } from '@/lib/logger';
 import { resolvePayoutOnlyCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
+import { getUncachedProductWithDetails } from '@/lib/uncached-storefront-product';
 import { chatProductResponseSchema } from '@/schemas/chat-product-response';
 import { chatProductRouteParamsSchema } from '@/schemas/chat-product-route-params';
 import { projectChatProduct } from './safe-product-projection';
@@ -33,7 +33,7 @@ export async function GET(
       { status: 503 }
     );
   try {
-    const raw = await getCachedProductWithDetails(
+    const raw = await getUncachedProductWithDetails(
       merchant.merchant.id,
       parsed.data.productSlug
     );

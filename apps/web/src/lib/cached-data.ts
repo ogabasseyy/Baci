@@ -1038,7 +1038,7 @@ type CachedStorefrontProductImage =
   | string
   | { alt?: string; order?: number; url: string };
 
-type CachedStorefrontPdpCore = Omit<
+export type CachedStorefrontPdpCore = Omit<
   CachedProductLcpHint,
   | 'brand'
   | 'category'
@@ -1084,7 +1084,7 @@ type CachedStorefrontPdpSnapshot =
   | { kind: 'product'; product: CachedStorefrontPdpCore }
   | { kind: 'redirect'; target: CachedLegacyProductRedirectTarget };
 
-function normalizeCachedStorefrontPdpCore(
+export function normalizeCachedStorefrontPdpCore(
   product: Record<string, unknown>
 ): CachedStorefrontPdpCore | null {
   const id = typeof product.id === 'string' ? product.id : null;

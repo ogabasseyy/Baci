@@ -80,6 +80,7 @@ export function createDbForwarder({
   const counters = { accepted: 0, forwarded: 0, active: 0 };
   const rejected = {};
   let active = 0;
+  const sockets = new Set();
 
   const hashSource = (address) =>
     createHash('sha256').update(salt).update(address).digest('hex').slice(0, 8);
@@ -92,6 +93,8 @@ export function createDbForwarder({
     const address = sourceKey(normalizeAddress(client.remoteAddress));
     const source = hashSource(address);
     client.on('error', noop);
+    sockets.add(client);
+    client.once('close', () => sockets.delete(client));
 
     if (active >= config.maxConnections) {
       reject('global_cap', source);
@@ -160,6 +163,8 @@ export function createDbForwarder({
         // Tests only: injected through the factory, never from env.
         ...(upstream.lookup ? { lookup: upstream.lookup } : {}),
       });
+      sockets.add(upstreamSocket);
+      upstreamSocket.once('close', () => sockets.delete(upstreamSocket));
       let connected = false;
       upstreamSocket.on('error', () => {
         if (connected) {
@@ -252,8 +257,9 @@ export function createDbForwarder({
       }),
     close: () =>
       new Promise((resolve) => {
+        // Do not wait for active clients: destroy every tracked socket.
         server.close(() => resolve());
-        server.closeAllConnections?.();
+        for (const socket of sockets) socket.destroy();
       }),
   };
 }

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T20:32:04+00:00",
-  "source_revision": "6ae86ee01c8582f21e63770bf29fb9ae11ea31c3",
-  "evidence_digest": "918bbfd2a407a2f3557b1290d08134e9218e4d0d6e574a6fdfc3eb4f6dcde52b",
-  "claims_digest": "159d40abc3bc476921f9e3c1006f7089f7208465854f0ca29df1e63efeb9d845",
-  "review_scope": "Source-only experience re-review after main 6e359d04f8. Covered gateway admission tests, native repair/auth/compare ownership, consumed preview limits, capture-to-build attestation binding under owner RLS, committed publication reconciliation without a new performance gate, and public-RPC variants without private metadata joins. Corrected RSC JSX composition, shipping/CSP fixtures and repository contracts. Serialized/unlimited public variant policy is preserved by the existing commerce RPC. Settled legacy execution now waits for acknowledgement before edit finalization. Local synthetic proofs passed; no hosted state or payment/provider behavior was activated. Existing payment/rollout limitations remain; no capability is promoted to production_verified. Experience production composition stays uninstalled/disabled. Current-head CI/review, host qualification and separate rollout authorization remain required. Benchmarks stay parked.",
+  "reviewed_at": "2026-11-05T04:31:04+00:00",
+  "source_revision": "4af8927598598c4305f6eab54f27751c20428f18",
+  "evidence_digest": "26f2db7972b595dcfab34677b50c6682b54b58bc1290c5ee0596fe8a3a7110af",
+  "claims_digest": "09a6984d35e40dd14da1929dcc1b0d9dc3aefdd403f82f281a708892801c7763",
+  "review_scope": "Source-only experience re-review: mode-exit authorization and RPC failures, source-patch schema placement, bounded long MCP build finalization with cancellation, matching backend duration, typed owner approval request, and CI page/shipping/apply fixtures. Focused synthetic tests passed. Production composition remains uninstalled/disabled; no hosted migration, provider, payment or publication activation. Existing capability limitations remain. Current-head CI/review, host qualification and separate rollout authorization remain required; benchmarks parked.",
   "capabilities": [
     {
       "id": "payments",

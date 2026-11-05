@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T04:48:10+00:00",
-  "source_revision": "73c0e82513a5af133d8f65d657d62ff4aec362e4",
-  "evidence_digest": "b51c4e5e27680575c44d77d336625fc470866e755d352572407faf02769cce38",
-  "claims_digest": "df7f994c0a1673ff49cf497878454e4c1e8b88ef7926a3d797b566dd6c410f20",
-  "review_scope": "Source-only follow-up: new-context navigation resolves fetched categorized products via the same trusted public catalog as same-tab navigation, without navigating the current page. Direct owner-request tests cover session, ownership, merchant binding and downstream denial. Installed Zod 4.6.6 JSON Schema conversion verified by MCP experience-contract initialization test; the unavailable-method review claim does not apply. Existing disabled production composition and capability limitations remain. Current-head CI/review and hosted qualification are separate gates; benchmarks remain parked. No hosted state, provider, payment or publication activation.",
+  "reviewed_at": "2026-11-05T05:05:15+00:00",
+  "source_revision": "200cd9f607840019383848b03326666c0f1bfef8",
+  "evidence_digest": "11d01598e5b613c790ff719cbf7ee04aa1e610c532aa85bbee86e8e5a27ca7a0",
+  "claims_digest": "bf40243c39e925afd9e8f3d35124b82b9dee84b7b6b781788e5f4d7cbd86f9cd",
+  "review_scope": "Source-only follow-up: source pagination now budgets the complete MCP success envelope, including escaped controls and multibyte UTF8 continuation cursors. Direct runtime-profile tests cover local versus production activation, loopback-only local origins, isolated HTTPS production sites and every required lifecycle/build/preview port. Prior installed-Zod and related-link fixes retained. Production composition remains disabled; hosted qualification, current-head CI/review and separate rollout authorization remain required. Benchmarks parked; no hosted state, provider, payment or publication activation.",
   "capabilities": [
     {
       "id": "payments",

@@ -41,8 +41,16 @@ DO $$ BEGIN
  IF public.oxygen_queued_booking_terms('efae0000-0000-4000-8000-000000000041',0,'efae0000-0000-4000-8000-000000000082') IS NOT NULL THEN RAISE EXCEPTION 'Wrong action read terms'; END IF;
 END $$;
 RESET ROLE;
-UPDATE oxygen_private.commands SET command='{"action":"book","equityPercentage":35,"tenure":6}' WHERE id='efae0000-0000-4000-8000-000000000081';
-UPDATE public.oxygen_workflows SET version=1 WHERE id='efae0000-0000-4000-8000-000000000041';
+DO $$ BEGIN
+ UPDATE oxygen_private.commands SET command='{"action":"book","equityPercentage":35,"tenure":6}' WHERE id='efae0000-0000-4000-8000-000000000081';
+EXCEPTION WHEN OTHERS THEN
+ RAISE EXCEPTION 'Queued booking command fixture update failed' USING ERRCODE='P0005';
+END $$;
+DO $$ BEGIN
+ UPDATE public.oxygen_workflows SET version=1 WHERE id='efae0000-0000-4000-8000-000000000041';
+EXCEPTION WHEN OTHERS THEN
+ RAISE EXCEPTION 'Oxygen workflow version fixture update failed' USING ERRCODE='P0006';
+END $$;
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
  IF public.oxygen_queued_booking_terms('efae0000-0000-4000-8000-000000000041',0,'efae0000-0000-4000-8000-000000000082') IS NOT NULL THEN RAISE EXCEPTION 'Advanced workflow read old terms' USING ERRCODE='P0002'; END IF;

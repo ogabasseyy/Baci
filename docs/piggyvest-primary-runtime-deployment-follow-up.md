@@ -76,6 +76,29 @@ Primary onboarding requires all of these server-only settings:
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`
 
+### Vercel connectivity: Supavisor session-mode pooler
+
+The direct host `db.<ref>.supabase.co` is IPv6-only and Vercel functions
+cannot reach IPv6. On Vercel, point the executors at the Supabase pooler:
+
+- `PIGGYVEST_PRIMARY_DB_HOST` = the pooler host
+  (`aws-0-<region>.pooler.supabase.com`; copy it from the Supabase Connect
+  dialog), `PIGGYVEST_PRIMARY_DB_PORT` = `5432` (session mode). Never `6543`:
+  transaction mode would break session verification and the per-delivery
+  connection reuse.
+- `PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF` = the 20-character project ref.
+  When set, every PiggyVest restricted-login executor connects as
+  `<login>.<ref>` (Supavisor requirement). The database session user is still
+  the bare role, so session verification is unchanged. A malformed ref is
+  refused (fail closed). When unset, behaviour is the direct-host default.
+- Supavisor is not documented to forward startup `options`, so in pooler mode
+  the executors send no startup options and instead run
+  `SET search_path TO pg_catalog; SET statement_timeout = 2500; SET lock_timeout = 1500`
+  right after connecting, before session verification.
+- TLS stays verify-full with `PIGGYVEST_PRIMARY_DB_CA`. The CA bundle must
+  cover the pooler host's certificate chain (use the Supabase CA bundle that
+  validates the pooler host).
+
 `VERCEL_ENV=production` requires primary environment `production`; all other
 deployment values permit only `staging`. The database host must satisfy the
 runtime DNS-host schema. The CA must verify the actual endpoint; executors

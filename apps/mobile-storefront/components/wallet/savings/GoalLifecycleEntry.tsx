@@ -14,10 +14,9 @@ type Props = {
   onBeforeNavigate?: () => void;
 };
 
-function localToday() {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+// The database compares maturity against the UTC date, so the button must too.
+function utcToday() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // Only an eligible-looking goal gets the button; the server and database make
@@ -26,7 +25,7 @@ function looksCompletable(goal: WalletActiveSavingsGoal) {
   if (goal.status === 'completed') return true;
   if (goal.current_amount >= goal.target_amount) return true;
   const day = /^\d{4}-\d{2}-\d{2}/.exec(goal.maturity_date ?? '')?.[0];
-  return day !== undefined && day <= localToday();
+  return day !== undefined && day <= utcToday();
 }
 
 /**

@@ -146,8 +146,12 @@ describe('a sign-in refusal', () => {
     );
     expect(screen.queryByRole('button', { name: 'Start again' })).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
-    expect(router.replace).toHaveBeenCalledWith(
-      expect.stringContaining('/auth/login?returnTo=')
+    const target = jest.mocked(router.replace).mock.calls[0][0] as string;
+    const returnTo = decodeURIComponent(target.split('returnTo=')[1]);
+    expect(target.startsWith('/auth/login?returnTo=')).toBe(true);
+    // The way back keeps the goal and action so the route does not bounce to /wallet.
+    expect(returnTo).toBe(
+      `/wallet/savings/goal-actions?goalId=${GOAL}&kind=cancel`
     );
   });
 

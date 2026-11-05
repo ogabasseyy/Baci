@@ -72,7 +72,7 @@ describe('GoalLifecycleEntry', () => {
 
   describe('maturity date', () => {
     beforeEach(() => {
-      jest.useFakeTimers({ now: new Date(2026, 10, 5, 15, 0, 0) });
+      jest.useFakeTimers({ now: new Date('2026-11-05T15:00:00Z') });
     });
     afterEach(() => jest.useRealTimers());
 
@@ -85,6 +85,31 @@ describe('GoalLifecycleEntry', () => {
     ])('maturity %s -> Complete shown: %s', (_name, maturity_date, shown) => {
       renderEntry(makeGoal({ maturity_date }));
       expect(complete() !== null).toBe(shown);
+    });
+  });
+
+  describe('maturity compares the UTC date, whatever the device timezone', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ now: new Date('2026-11-06T01:00:00Z') });
+      // Simulate a device in Los Angeles, where this instant is still 5 Nov:
+      // local getters report the 5th while the UTC date is the 6th.
+      jest.spyOn(Date.prototype, 'getFullYear').mockReturnValue(2026);
+      jest.spyOn(Date.prototype, 'getMonth').mockReturnValue(10);
+      jest.spyOn(Date.prototype, 'getDate').mockReturnValue(5);
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+      jest.useRealTimers();
+    });
+
+    it('shows Complete for a goal maturing on the UTC today', () => {
+      renderEntry(makeGoal({ maturity_date: '2026-11-06' }));
+      expect(complete()).toBeOnTheScreen();
+    });
+
+    it('hides Complete for a goal maturing on the next UTC day', () => {
+      renderEntry(makeGoal({ maturity_date: '2026-11-07' }));
+      expect(complete()).toBeNull();
     });
   });
 

@@ -108,7 +108,11 @@ export function GoalLifecycleScreen({
   };
   const leave = () => router.replace('/wallet');
   const signIn = () =>
-    router.replace(`/auth/login?returnTo=${encodeURIComponent(pathname)}`);
+    router.replace(
+      `/auth/login?returnTo=${encodeURIComponent(
+        `${pathname}?goalId=${encodeURIComponent(goalId)}&kind=${encodeURIComponent(kind)}`
+      )}`
+    );
   const checking = gate === 'checking';
   const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
 

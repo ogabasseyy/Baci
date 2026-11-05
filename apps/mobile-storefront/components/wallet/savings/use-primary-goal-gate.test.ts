@@ -101,4 +101,83 @@ describe('usePrimaryGoalGate', () => {
     expect(result.current).toBe('off');
     expect(read).toHaveBeenLastCalledWith(MERCHANT, 'user-b');
   });
+
+  describe('refresh signal', () => {
+    const pending = {
+      account: null,
+      requiresConsent: true,
+      provisioningStatus: 'pending',
+    } as never;
+    const ready = {
+      account,
+      requiresConsent: false,
+      provisioningStatus: 'ready',
+    } as never;
+
+    it('re-reads on a refresh and turns ready after an initial pending', async () => {
+      read.mockResolvedValueOnce(pending).mockResolvedValueOnce(ready);
+      const { result, rerender } = renderHook(
+        ({ key }: { key: number }) => usePrimaryGoalGate(key),
+        { initialProps: { key: 1 } }
+      );
+      await waitFor(() => expect(result.current).toBe('off'));
+      rerender({ key: 2 });
+      await waitFor(() => expect(result.current).toBe('ready'));
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps a ready verdict through a transient failure', async () => {
+      read
+        .mockResolvedValueOnce(ready)
+        .mockRejectedValueOnce(new Error('network'));
+      const { result, rerender } = renderHook(
+        ({ key }: { key: number }) => usePrimaryGoalGate(key),
+        { initialProps: { key: 1 } }
+      );
+      await waitFor(() => expect(result.current).toBe('ready'));
+      rerender({ key: 2 });
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+      expect(result.current).toBe('ready');
+    });
+
+    it.each([
+      ['a not-ready snapshot', () => read.mockResolvedValueOnce(pending)],
+      [
+        'PIGGYVEST_NOT_READY',
+        () =>
+          read.mockRejectedValueOnce(
+            Object.assign(new Error('off'), { code: 'PIGGYVEST_NOT_READY' })
+          ),
+      ],
+    ])('goes off on an authoritative answer (%s)', async (_name, arrange) => {
+      read.mockResolvedValueOnce(ready);
+      const { result, rerender } = renderHook(
+        ({ key }: { key: number }) => usePrimaryGoalGate(key),
+        { initialProps: { key: 1 } }
+      );
+      await waitFor(() => expect(result.current).toBe('ready'));
+      arrange();
+      rerender({ key: 2 });
+      await waitFor(() => expect(result.current).toBe('off'));
+    });
+
+    it('drops a superseded read that resolves after a newer one', async () => {
+      let first: (value: never) => void = () => undefined;
+      read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            first = resolve as never;
+          })
+      );
+      read.mockResolvedValueOnce(ready);
+      const { result, rerender } = renderHook(
+        ({ key }: { key: number }) => usePrimaryGoalGate(key),
+        { initialProps: { key: 1 } }
+      );
+      rerender({ key: 2 });
+      await waitFor(() => expect(result.current).toBe('ready'));
+      await act(async () => first(pending));
+      expect(result.current).toBe('ready');
+    });
+  });
 });

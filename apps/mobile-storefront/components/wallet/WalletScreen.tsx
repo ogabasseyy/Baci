@@ -60,9 +60,10 @@ export function WalletScreen({
       user: state.user,
     }))
   );
-  const { data, isError, isLoading, refetch, isRefetching } = useWallet({
-    cachePolicy: 'display',
-  });
+  const { data, dataUpdatedAt, isError, isLoading, refetch, isRefetching } =
+    useWallet({
+      cachePolicy: 'display',
+    });
   const {
     data: paymentSettings,
     isError: isPaymentSettingsError,
@@ -167,6 +168,7 @@ export function WalletScreen({
     pinSheetProps,
   } = useWalletSavingsController({
     userId: user?.id,
+    walletUpdatedAt: dataUpdatedAt,
     activeMerchantId,
     activeMerchantSlug,
     goal: display?.activeSavingsGoal ?? null,

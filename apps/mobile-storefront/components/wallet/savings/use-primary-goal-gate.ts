@@ -14,8 +14,14 @@ export type PrimaryGoalGate = 'checking' | 'ready' | 'off';
  * other failure, another merchant) is 'off' and the screens stay as they
  * were. The answer is pinned to the signed-in user: one that arrives after an
  * account or merchant switch is dropped.
+ *
+ * `refreshKey` is any value that changes when the wallet refreshes (for
+ * example the wallet query's `dataUpdatedAt`); each change re-reads the
+ * verdict, so a first pending or failed read does not stick. A transient
+ * failure never demotes an already-ready verdict; only an authoritative
+ * not-ready answer (a non-ready snapshot or PIGGYVEST_NOT_READY) does.
  */
-export function usePrimaryGoalGate(): PrimaryGoalGate {
+export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);
@@ -28,6 +34,7 @@ export function usePrimaryGoalGate(): PrimaryGoalGate {
     ready: boolean;
   } | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a deliberate re-read trigger, not read inside the effect.
   useEffect(() => {
     if (!scope || !userId || !merchantId) return;
     let current = true;
@@ -42,13 +49,23 @@ export function usePrimaryGoalGate(): PrimaryGoalGate {
               snapshot.account !== null,
           });
       })
-      .catch(() => {
-        if (current) setAnswer({ scope, ready: false });
+      .catch((error: unknown) => {
+        if (!current) return;
+        const authoritative =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 'PIGGYVEST_NOT_READY';
+        setAnswer((previous) =>
+          !authoritative && previous?.scope === scope && previous.ready
+            ? previous
+            : { scope, ready: false }
+        );
       });
     return () => {
       current = false;
     };
-  }, [scope, userId, merchantId]);
+  }, [scope, userId, merchantId, refreshKey]);
 
   if (!scope) return 'off';
   if (answer?.scope !== scope) return 'checking';

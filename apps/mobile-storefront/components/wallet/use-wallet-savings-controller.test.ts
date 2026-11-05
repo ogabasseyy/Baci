@@ -11,7 +11,7 @@ jest.mock('./use-primary-savings-recovery', () => ({
 }));
 const mockGate = jest.fn();
 jest.mock('./savings/use-primary-goal-gate', () => ({
-  usePrimaryGoalGate: () => mockGate(),
+  usePrimaryGoalGate: (key?: number) => mockGate(key),
 }));
 const mockCreateActions = jest.fn();
 jest.mock('./use-wallet-savings-actions', () => ({
@@ -101,5 +101,25 @@ describe('goalAwaitingSettlement', () => {
     expect(mockCreateActions).toHaveBeenLastCalledWith(
       expect.objectContaining({ goalAwaitingSettlement: expected })
     );
+  });
+
+  it('re-reads the gate on a wallet refresh so a stale pending verdict resolves', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockImplementation((key?: number) =>
+      key === 2 ? 'ready' : 'off'
+    );
+    const { result, rerender } = renderHook(
+      ({ at }: { at: number }) =>
+        useWalletSavingsController({
+          ...input,
+          goal,
+          walletUpdatedAt: at,
+        } as never),
+      { initialProps: { at: 1 } }
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(false);
+    rerender({ at: 2 });
+    expect(mockGate).toHaveBeenLastCalledWith(2);
+    expect(result.current.goalAwaitingSettlement).toBe(true);
   });
 });

@@ -7,7 +7,10 @@ import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 
 export function useWalletSavingsController(
-  input: Parameters<typeof createWalletSavingsActions>[0] & { userId?: string }
+  input: Parameters<typeof createWalletSavingsActions>[0] & {
+    userId?: string;
+    walletUpdatedAt?: number;
+  }
 ) {
   // The pending key belongs to the (user, merchant, goal) scope that
   // created it: the server answers not_found for any other scope (its
@@ -37,7 +40,7 @@ export function useWalletSavingsController(
     setAmount: input.setSavingsContributionAmount,
   });
   const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
-  const gate = usePrimaryGoalGate();
+  const gate = usePrimaryGoalGate(input.walletUpdatedAt);
   const goalAwaitingSettlement =
     gate === 'ready' && isFundedUnsettledGoal(input.goal);
   const actions = createWalletSavingsActions({

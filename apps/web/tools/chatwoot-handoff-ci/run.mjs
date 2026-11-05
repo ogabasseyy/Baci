@@ -41,6 +41,33 @@ export function createAgentBotWebhookServer({
   return { server, events };
 }
 
+export function createSyntheticAgentBotHandler({ seed, apiCall }) {
+  return async (event) => {
+    if (event.event !== 'message_created' || event.message_type !== 'incoming')
+      return;
+    const id = event.conversation?.id;
+    if (!id) return;
+    const conversationPath = `/api/v1/accounts/${seed.account_id}/conversations/${id}`;
+    const conversation = await apiCall(conversationPath, seed.agent_token);
+    if (conversation.status !== 'pending') return;
+
+    const wantsHuman = event.content?.toLowerCase().includes('human');
+    const content = wantsHuman
+      ? 'Synthetic bot: handing this to a human operator.'
+      : 'Synthetic bot: I can help with that.';
+    await apiCall(`${conversationPath}/messages`, seed.agent_token, {
+      method: 'POST',
+      body: { content, message_type: 'outgoing', private: false },
+    });
+    if (wantsHuman) {
+      await apiCall(`${conversationPath}/toggle_status`, seed.agent_token, {
+        method: 'POST',
+        body: { status: 'open' },
+      });
+    }
+  };
+}
+
 async function api(base, path, token, options = {}) {
   const response = await fetch(base + path, {
     method: options.method ?? 'GET',
@@ -65,34 +92,7 @@ async function main() {
   const apiCall = (path, token, options = {}) =>
     api(base, path, token, options);
   const { server, events } = createAgentBotWebhookServer({
-    onEvent: async (event) => {
-      if (
-        event.event !== 'message_created' ||
-        event.message_type !== 'incoming'
-      )
-        return;
-      const id = event.conversation?.id;
-      if (!id) return;
-      const wantsHuman = event.content?.toLowerCase().includes('human');
-      const content = wantsHuman
-        ? 'Synthetic bot: handing this to a human operator.'
-        : 'Synthetic bot: I can help with that.';
-      await apiCall(
-        `/api/v1/accounts/${seed.account_id}/conversations/${id}/messages`,
-        seed.agent_token,
-        {
-          method: 'POST',
-          body: { content, message_type: 'outgoing', private: false },
-        }
-      );
-      if (wantsHuman) {
-        await apiCall(
-          `/api/v1/accounts/${seed.account_id}/conversations/${id}/toggle_status`,
-          seed.agent_token,
-          { method: 'POST', body: { status: 'open' } }
-        );
-      }
-    },
+    onEvent: createSyntheticAgentBotHandler({ seed, apiCall }),
     onError: (error) => {
       callbackError = error;
     },
@@ -116,12 +116,14 @@ async function main() {
       waitFor,
       publishTriggerMarker: () =>
         writeFile('/run/chatwoot-test/harness-ready-for-trigger', 'ready'),
+      publishTakeoverMarker: () =>
+        writeFile('/run/chatwoot-test/harness-ready-for-takeover', 'ready'),
       publishFollowupMarker: () =>
         writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready'),
       events,
     });
     console.log(
-      'PASS: incoming event → AgentBot API reply → bot_handoff → human API reply → pending handback → AgentBot API reply'
+      'PASS: incoming event → AgentBot API reply → bot_handoff → silent human takeover → human API reply → pending handback → AgentBot API reply'
     );
   } finally {
     server.close();

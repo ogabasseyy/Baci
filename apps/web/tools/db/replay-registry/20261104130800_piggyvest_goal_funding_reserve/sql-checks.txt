@@ -1,0 +1,3 @@
+supabase/tests/piggyvest_goal_funding_primary_balance.sql
+supabase/tests/piggyvest_goal_cancel_no_legacy_credit.sql
+supabase/tests/piggyvest_goal_complete_no_legacy_credit.sql

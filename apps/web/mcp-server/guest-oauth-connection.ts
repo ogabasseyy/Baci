@@ -8,16 +8,20 @@ export function createGuestOAuthConnection(
 ) {
   return {
     async resolveToken() {
-      const grant = await auth.verify(accessToken);
+      const grant = await auth.currentCart(accessToken);
       if (!grant.cartInitialized) {
         await store.initializeConnectionCart(
           grant.cartToken,
-          new Date(grant.expiresAt).toISOString(),
+          new Date(grant.cartExpiresAt ?? grant.expiresAt).toISOString(),
         );
         try {
-          await auth.updateGrant(grant.id, (current) => ({ ...current, cartInitialized: true }));
+          await auth.updateGrant(grant.id, (current) => {
+            if (current.cartToken !== grant.cartToken) throw new Error('temporarily_unavailable');
+            return { ...current, cartInitialized: true };
+          });
         } catch (error) {
-          const latest = await auth.verify(accessToken);
+          // A rotated access token cannot disambiguate the original CAS failure.
+          const latest = await auth.verify(accessToken).catch(() => { throw error; });
           if (!latest.cartInitialized || latest.cartToken !== grant.cartToken) throw error;
         }
       }

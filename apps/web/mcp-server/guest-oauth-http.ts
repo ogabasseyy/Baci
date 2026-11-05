@@ -127,7 +127,7 @@ export async function handleGuestOAuthHttp(
       );
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect your Ogabassey guest cart</title><main><h1>Connect a guest cart</h1><p>Let this ChatGPT connection add, change and remove items in its Ogabassey guest cart. No Ogabassey account is required. This does not place orders or authorize payments. Your guest connection lasts up to seven days.</p><form method="post" action="/oauth/consent"><input type="hidden" name="consent" value="${consent.id}"><button name="allow" value="yes">Connect guest cart</button><button name="allow" value="no">Cancel</button></form></main></html>`,
+        `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect your Ogabassey guest cart</title><main><h1>Connect a guest cart</h1><p>Let this ChatGPT connection add, change and remove items in its Ogabassey guest cart. No Ogabassey account is required. This does not place orders or authorize payments. Your connection stays active while used and expires after 90 days without renewal. Disconnect to revoke access. Each cart lasts up to seven days; after it expires, you start with an empty cart.</p><form method="post" action="/oauth/consent"><input type="hidden" name="consent" value="${consent.id}"><button name="allow" value="yes">Connect guest cart</button><button name="allow" value="no">Cancel</button></form></main></html>`,
       );
     } else if (req.method === 'POST' && url.pathname === '/oauth/consent') {
       if (req.headers.origin !== auth.issuer) throw new Error('invalid_request');

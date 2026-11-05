@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import { createCaptureQueue } from './webhook-capture-queue';
 
 const claimRow = {
@@ -20,7 +20,7 @@ const claimRow = {
 function clientWith(result: { data: unknown; error: unknown }) {
   const rpc = vi.fn(async () => result);
   return {
-    client: { rpc } as unknown as PiggyvestIntakeServiceClient,
+    client: { rpc } as unknown as PiggyvestIntakeClient,
     rpc,
   };
 }

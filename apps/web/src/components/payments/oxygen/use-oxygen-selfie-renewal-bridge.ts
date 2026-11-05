@@ -64,7 +64,10 @@ export function useOxygenSelfieRenewalBridge(
       !s ||
       !workflowId ||
       s.workflowId !== workflowId ||
-      s.state.selfieUrl !== url ||
+      (s.state.selfieUrl !== url &&
+        (automatic ||
+          !s.state.selfieUrl ||
+          !selfieLinkExpired(s.state.selfieUrl))) ||
       latest.current.busy ||
       locked.current ||
       signal?.aborted ||
@@ -75,6 +78,7 @@ export function useOxygenSelfieRenewalBridge(
       s.stage === 'reconciliation_required'
     )
       throw new Error('Verification unavailable');
+    const recoveryUrl = s.state.selfieUrl ?? url;
     const count = attempts.current.get(workflowId) ?? {
       total: 0,
       automatic: false,
@@ -103,13 +107,13 @@ export function useOxygenSelfieRenewalBridge(
         !alive.current ||
         signal?.aborted ||
         latest.current.snapshot?.workflowId !== workflowId ||
-        latest.current.snapshot.state.selfieUrl !== url ||
+        latest.current.snapshot.state.selfieUrl !== recoveryUrl ||
         latest.current.busy ||
         latest.current.snapshot.pending
       )
         throw new Error('Verification unavailable');
       if (result.confirmed) return 'confirmed';
-      pending.current = { url, workflowId, signal };
+      pending.current = { url: recoveryUrl, workflowId, signal };
       dispatched = true;
       if (!(await latest.current.submit({ action: 'selfie_link' }))) {
         throw new Error('Renewal unavailable');

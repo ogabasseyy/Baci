@@ -172,3 +172,24 @@ it('adopts a recovered replacement snapshot after a lost submission response', a
     'same-workflow'
   );
 });
+it('explicitly recovers an expired canonical replacement without reopening it', async () => {
+  m.fetch.mockResolvedValue(
+    Response.json({ confirmed: false, checkedAt: '2026-11-05T16:00:00Z' })
+  );
+  const submit = vi.fn().mockResolvedValue(true);
+  const open = vi.fn();
+  const expired =
+    'https://selfie.example/?securityToken=e30.eyJleHAiOjF9.signature';
+  const { result } = renderHook(() =>
+    useOxygenSelfieRenewalBridge(
+      { ...snapshot, state: { ...snapshot.state, selfieUrl: expired } },
+      false,
+      submit,
+      open,
+      true
+    )
+  );
+  await result.current('https://selfie.example/old', 'same-workflow', false);
+  expect(submit).toHaveBeenCalledWith({ action: 'selfie_link' });
+  expect(open).not.toHaveBeenCalled();
+});

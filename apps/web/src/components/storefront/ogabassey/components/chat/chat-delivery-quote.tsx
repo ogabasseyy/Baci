@@ -23,7 +23,7 @@ function normalizeWords(value: string): string[] {
 
 export function parseDestinationState(value: string):
   | { kind: 'matched'; stateName: string }
-  | { kind: 'missing' | 'ambiguous' } {
+  | { kind: 'missing' | 'negated-state' | 'multiple-states' | 'ambiguous-niger' } {
   const words = normalizeWords(value);
   const subdivisions = getSubdivisions('NG');
   const matches: string[] = [];
@@ -54,9 +54,9 @@ export function parseDestinationState(value: string):
     }
   }
   const uniqueMatches = [...new Set(matches)];
-  if (hasNegatedState || ambiguousNiger || uniqueMatches.length > 1) {
-    return { kind: 'ambiguous' };
-  }
+  if (hasNegatedState) return { kind: 'negated-state' };
+  if (uniqueMatches.length > 1) return { kind: 'multiple-states' };
+  if (ambiguousNiger) return { kind: 'ambiguous-niger' };
   if (uniqueMatches.length === 0) return { kind: 'missing' };
   return { kind: 'matched', stateName: uniqueMatches[0] };
 }
@@ -67,7 +67,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
   const [loading, setLoading] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
   const [error, setError] = useState('');
-  const [parseIssue, setParseIssue] = useState<'ambiguous' | 'missing' | null>(null);
+  const [parseIssue, setParseIssue] = useState<'missing' | 'negated-state' | 'multiple-states' | 'ambiguous-niger' | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
@@ -192,8 +192,10 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
         >
           <p className="block text-sm font-medium">Destination</p>
           <p className="text-xs text-store-background-text/70">Type your destination in the private composer below. Include the Nigerian state or FCT area.</p>
-          {parseIssue === 'ambiguous' ? <p role="alert" className="text-sm">I couldn’t confidently identify one intended state. Your destination may mention conflicting states, negate a state, or use “Niger” without specifying Niger State. Please clarify the intended state.</p> : null}
-          {parseIssue === 'missing' ? <p role="alert" className="text-sm">I couldn’t identify a Nigerian state. Please revise the destination to include its state or FCT.</p> : null}
+          {parseIssue === 'negated-state' ? <p role="alert" className="text-sm">A state was mentioned as excluded or not the destination. Please enter the state you want delivery to.</p> : null}
+          {parseIssue === 'multiple-states' ? <p role="alert" className="text-sm">I found more than one Nigerian destination area. Please enter just the intended state or FCT.</p> : null}
+          {parseIssue === 'ambiguous-niger' ? <p role="alert" className="text-sm">“Niger” could mean Niger State or the country. Please say “Niger State” if that is your destination.</p> : null}
+          {parseIssue === 'missing' ? <p role="alert" className="text-sm">I couldn’t identify a Nigerian state. Please add the state or FCT area to your destination.</p> : null}
           <div className="flex gap-2">
             <button type="submit" disabled={!input.trim()} className="flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60">Check state</button>
             <button type="button" onClick={() => { reset(); onClose(); }} className="rounded-lg border border-store-border px-3 py-2 text-sm">Cancel</button>

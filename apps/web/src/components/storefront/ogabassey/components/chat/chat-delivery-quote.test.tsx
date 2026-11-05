@@ -21,12 +21,12 @@ beforeEach(() => {
 describe('ChatDeliveryQuote', () => {
   it('fails closed for negated, corrected, or country-ambiguous state mentions', () => {
     expect(parseDestinationState('Please deliver to Lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
-    expect(parseDestinationState('Not Lagos')).toEqual({ kind: 'ambiguous' });
-    expect(parseDestinationState('Lagos is not my destination')).toEqual({ kind: 'ambiguous' });
+    expect(parseDestinationState('Not Lagos')).toEqual({ kind: 'negated-state' });
+    expect(parseDestinationState('Lagos is not my destination')).toEqual({ kind: 'negated-state' });
     expect(parseDestinationState('No. 12 Long Street, Lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
     expect(parseDestinationState('No. 12 Long Street, lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
-    expect(parseDestinationState('Not Lagos, I mean Ogun')).toEqual({ kind: 'ambiguous' });
-    expect(parseDestinationState('I am moving to Niger Republic')).toEqual({ kind: 'ambiguous' });
+    expect(parseDestinationState('Not Lagos, I mean Ogun')).toEqual({ kind: 'negated-state' });
+    expect(parseDestinationState('I am moving to Niger Republic')).toEqual({ kind: 'ambiguous-niger' });
     expect(parseDestinationState('I live in Niger State')).toEqual({ kind: 'matched', stateName: 'Niger' });
   });
 
@@ -53,15 +53,19 @@ describe('ChatDeliveryQuote', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('surfaces ambiguity without sending any destination text', async () => {
+  it.each([
+    ['multiple states', 'I live between Lagos and Abuja', /more than one Nigerian destination area/i],
+    ['a negated state', 'Lagos is not my destination', /state was mentioned as excluded/i],
+    ['unqualified Niger', 'I am moving to Niger Republic', /could mean Niger State or the country/i],
+  ])('explains %s without sending destination text', async (_label, destination, expectedPrompt) => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="I live between Lagos and Abuja" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote cartKey="cart-v1" input={destination} setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });
-    expect(screen.getByRole('alert')).toHaveTextContent(/conflicting states/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(expectedPrompt);
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Lagos and Abuja/)).not.toBeInTheDocument();
+    expect(screen.queryByText(destination)).not.toBeInTheDocument();
   });
 
   it('requires confirmation and sends only the state, never the full private destination', async () => {
@@ -88,7 +92,7 @@ describe('ChatDeliveryQuote', () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('12 Long Street');
   });
 
-  it('explains missing state and avoids claiming there are multiple states', async () => {
+  it('explains that the state is missing', async () => {
     const submitRef = { current: null as (() => void) | null };
     render(<ChatDeliveryQuote cartKey="cart-v1" input="I live in Ikeja" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });

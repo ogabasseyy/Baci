@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { isValidElement, Suspense } from 'react';
 import { expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
@@ -18,7 +19,18 @@ vi.mock('@/lib/payments/oxygen/oxygen-hosted-origins', () => ({
   readOxygenHostedOrigins: m.readOrigins,
 }));
 
-import Page, { metadata } from './page';
+import Page, { metadata, SelfieContinuation } from './page';
+
+// Regression: awaiting connection() at the top of the page, outside any
+// Suspense boundary, made `next build` fail to prerender this route, which
+// broke every production deploy.
+it('keeps request-time work inside a Suspense boundary', () => {
+  m.connection.mockClear();
+  const page = Page();
+  expect(page).not.toBeInstanceOf(Promise);
+  expect(isValidElement(page) && page.type).toBe(Suspense);
+  expect(m.connection).not.toHaveBeenCalled();
+});
 
 it('reads the selfie origin configuration at request time', async () => {
   m.connection.mockClear();
@@ -26,15 +38,15 @@ it('reads the selfie origin configuration at request time', async () => {
     hosted: ['https://first.example.test'],
     selfie: ['https://first.example.test'],
   });
-  const first = await Page();
-  const second = await Page();
+  const first = await SelfieContinuation();
+  const second = await SelfieContinuation();
   expect(m.connection).toHaveBeenCalledTimes(2);
   expect(first.props.selfieOrigins).toEqual(['https://first.example.test']);
   expect(second.props.selfieOrigins).toEqual(['https://selfie.example.test']);
 });
 
 it('renders the phone continuation and disallows indexing and referrer disclosure', async () => {
-  render(await Page());
+  render(await SelfieContinuation());
   expect(screen.getByText('Continue verification')).toHaveAttribute(
     'data-origins',
     'https://selfie.example.test'

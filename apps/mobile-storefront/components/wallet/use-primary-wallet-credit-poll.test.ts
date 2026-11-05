@@ -31,6 +31,15 @@ function setup(initial: Props) {
   return { refetch, ...hook };
 }
 
+// Each refresh settles between ticks, as a real wallet load does.
+async function tick(times: number) {
+  for (let i = 0; i < times; i += 1) {
+    await act(async () => {
+      jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS);
+    });
+  }
+}
+
 const open: Props = { balanceKobo: 5000, enabled: true, scopeKey: 'user-a' };
 
 describe('usePrimaryWalletCreditPoll', () => {
@@ -42,20 +51,20 @@ describe('usePrimaryWalletCreditPoll', () => {
     jest.useRealTimers();
   });
 
-  it('refetches every 10 seconds while the fund panel is open', () => {
+  it('refetches every 10 seconds while the fund panel is open', async () => {
     const { refetch } = setup(open);
     expect(refetch).not.toHaveBeenCalled();
-    act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS * 3));
+    await tick(3);
     expect(refetch).toHaveBeenCalledTimes(3);
   });
 
-  it('stops after five minutes', () => {
+  it('stops after five minutes', async () => {
     const { refetch } = setup(open);
-    act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_MAX_MS));
+    await tick(PRIMARY_CREDIT_POLL_MAX_MS / PRIMARY_CREDIT_POLL_INTERVAL_MS);
     const callsAtLimit = refetch.mock.calls.length;
     expect(callsAtLimit).toBeGreaterThanOrEqual(29);
     expect(callsAtLimit).toBeLessThanOrEqual(30);
-    act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_MAX_MS));
+    await tick(PRIMARY_CREDIT_POLL_MAX_MS / PRIMARY_CREDIT_POLL_INTERVAL_MS);
     expect(refetch).toHaveBeenCalledTimes(callsAtLimit);
     expect(alertSpy).not.toHaveBeenCalled();
   });
@@ -106,12 +115,12 @@ describe('usePrimaryWalletCreditPoll', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  it('keeps polling through a failed refetch', () => {
+  it('keeps polling through a failed refetch', async () => {
     const refetch = jest.fn(async () => {
       throw new Error('offline');
     });
     renderHook(() => usePrimaryWalletCreditPoll({ ...open, refetch }));
-    act(() => jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS * 2));
+    await tick(2);
     expect(refetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import type { WalletData } from '@/hooks/wallet-query';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
 
@@ -25,21 +25,23 @@ export function usePrimaryWalletWatch({
   scopeKey,
   refetch,
 }: PrimaryWalletWatchInput): WalletData | undefined {
-  const retained = useRef<{ scopeKey: string; kobo: number | null }>({
-    scopeKey,
-    kobo: null,
-  });
-  if (retained.current.scopeKey !== scopeKey) {
-    retained.current = { scopeKey, kobo: null };
-  }
+  // State, not a ref: adjusted during render behind a guard that converges
+  // (React's "adjust state when props change" pattern, compiler-safe).
+  const [retained, setRetained] = useState<{
+    scopeKey: string;
+    kobo: number | null;
+  }>({ scopeKey, kobo: null });
+  let kobo = retained.scopeKey === scopeKey ? retained.kobo : null;
   if (wallet) {
     if (typeof wallet.primary_balance_kobo === 'number') {
-      retained.current.kobo = wallet.primary_balance_kobo;
+      kobo = wallet.primary_balance_kobo;
     } else if (!wallet.primary_unavailable) {
-      retained.current.kobo = null;
+      kobo = null;
     }
   }
-  const kobo = retained.current.kobo;
+  if (retained.scopeKey !== scopeKey || retained.kobo !== kobo) {
+    setRetained({ scopeKey, kobo });
+  }
   const effective =
     wallet && kobo !== null && typeof wallet.primary_balance_kobo !== 'number'
       ? { ...wallet, primary_balance_kobo: kobo }

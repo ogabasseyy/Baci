@@ -480,6 +480,7 @@ describe('wallet funding account api client', () => {
       })
     ).resolves.toEqual({
       account: null,
+      balanceKobo: null,
       requiresConsent: true,
       provisioningStatus: 'pending',
     });

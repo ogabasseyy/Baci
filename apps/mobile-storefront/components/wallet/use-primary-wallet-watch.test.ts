@@ -46,13 +46,15 @@ describe('usePrimaryWalletWatch', () => {
     jest.useRealTimers();
   });
 
-  it('keeps the last ready balance and the poll through a transient failure', () => {
+  it('keeps the last ready balance and the poll through a transient failure', async () => {
     const { result, rerender, refetch } = setup({ wallet: ready });
     rerender({ wallet: unavailable });
     expect(result.current?.primary_balance_kobo).toBe(500000);
-    act(() => {
-      jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS * 2);
-    });
+    for (let i = 0; i < 2; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS);
+      });
+    }
     expect(refetch).toHaveBeenCalledTimes(2);
   });
 

@@ -31,6 +31,7 @@ export function usePrimaryWalletCreditPoll({
   const baselineRef = useRef<number | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const announcedRef = useRef(false);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     balanceRef.current = balanceKobo;
@@ -43,9 +44,18 @@ export function usePrimaryWalletCreditPoll({
     baselineRef.current =
       typeof balanceRef.current === 'number' ? balanceRef.current : null;
     announcedRef.current = false;
+    inFlightRef.current = false;
     const interval = setInterval(() => {
+      // A refresh still running is left alone: restarting it every tick would
+      // cancel a slow but successful load before it can publish.
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
       // Refetch failures are transient; the next tick tries again.
-      Promise.resolve(refetchRef.current()).catch(() => undefined);
+      Promise.resolve(refetchRef.current())
+        .catch(() => undefined)
+        .finally(() => {
+          inFlightRef.current = false;
+        });
     }, PRIMARY_CREDIT_POLL_INTERVAL_MS);
     const deadline = setTimeout(
       () => clearInterval(interval),

@@ -32,18 +32,21 @@ async function read(
     path: `${PATH}?merchantId=${encodeURIComponent(merchantId)}`,
     expectedUserId: userId,
   });
+  // The schema is the only gate: anything it rejects (including a negative or
+  // fractional balance) is treated like the server being off, so no primary
+  // balance or account is ever surfaced from an unrecognised answer.
   const snapshot = schemas.snapshot.safeParse(data);
   if (!snapshot.success)
     throw new Error(
       'Could not confirm your PiggyVest account. Please refresh later.'
     );
+  const parsed = snapshot.data;
   return {
-    account: snapshot.data.account,
-    // Kobo, straight from the server; null until the account is ready.
-    balanceKobo:
-      snapshot.data.status === 'ready' ? snapshot.data.balanceKobo : null,
-    requiresConsent: snapshot.data.status !== 'ready',
-    provisioningStatus: snapshot.data.status,
+    account: parsed.account,
+    // Kobo, straight from the schema; null until the account is ready.
+    balanceKobo: parsed.status === 'ready' ? parsed.balanceKobo : null,
+    requiresConsent: parsed.status !== 'ready',
+    provisioningStatus: parsed.status,
   };
 }
 

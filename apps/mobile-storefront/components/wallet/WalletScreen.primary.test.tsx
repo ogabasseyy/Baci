@@ -193,13 +193,17 @@ describe('WalletScreen PiggyVest main wallet', () => {
     expect(contentProps()?.showSavingsProgress).toBe(false);
   });
 
-  it('polls the balance every 10 seconds while the fund panel is open', () => {
+  it('polls the balance every 10 seconds while the fund panel is open', async () => {
     const { controller, refetch } = mountWith(true);
     act(() => jest.advanceTimersByTime(30_000));
     expect(refetch).not.toHaveBeenCalled();
 
     act(() => controller()?.onAddMoney?.());
-    act(() => jest.advanceTimersByTime(30_000));
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(10_000);
+      });
+    }
 
     expect(refetch).toHaveBeenCalledTimes(3);
   });

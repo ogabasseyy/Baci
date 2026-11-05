@@ -35,6 +35,25 @@ describe('PiggyVest primary wallet client with the server off', () => {
     );
   });
 
+  it('rejects a ready answer with an invalid balance, surfacing no balance', async () => {
+    const account = {
+      accountName: 'A',
+      accountNumber: '0987654321',
+      bankName: 'B',
+      provider: 'piggyvest',
+    };
+    for (const balanceKobo of [-1, 10.5, '100']) {
+      mockFetchJson.mockResolvedValue({
+        status: 'ready',
+        account,
+        balanceKobo,
+      });
+      await expect(piggyvestPrimaryWalletApi.read(MERCHANT)).rejects.toThrow(
+        'Could not confirm your PiggyVest account'
+      );
+    }
+  });
+
   it('never sends a create request for invalid details', async () => {
     await expect(
       piggyvestPrimaryWalletApi.create({

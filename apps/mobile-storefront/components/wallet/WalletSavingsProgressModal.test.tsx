@@ -186,7 +186,7 @@ describe('WalletSavingsProgressModal', () => {
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
     ).toBeNull();
     expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
+      screen.getByText('Add money to your wallet to save this amount.')
     ).toBeOnTheScreen();
   });
 
@@ -209,7 +209,7 @@ describe('WalletSavingsProgressModal', () => {
     );
 
     expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
+      screen.getByText('Add money to your wallet to save this amount.')
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })

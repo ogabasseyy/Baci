@@ -58,10 +58,10 @@ export function WalletSavingsContributionFlow({
       ? primaryReady
         ? 'Add money to your wallet to save this amount.'
         : usesPlanFunding
-          ? 'Fund your wallet to add this amount to savings. This is a staging preview, so do not send real money.'
+          ? 'Add money to your wallet to save this amount. This is a staging preview, so do not send real money.'
           : topUpBlocked
             ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
-            : 'Fund your wallet to add this amount to savings.'
+            : 'Add money to your wallet to save this amount.'
       : validAmount
         ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
         : 'Enter an amount to move from your wallet into this plan.';
@@ -114,7 +114,7 @@ export function WalletSavingsContributionFlow({
               primaryReady
                 ? 'Add money to wallet'
                 : usesPlanFunding
-                  ? 'Fund wallet for savings'
+                  ? 'Add money for savings'
                   : 'Continue to payment'
             }
             accessibilityState={{

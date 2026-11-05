@@ -47,7 +47,7 @@ describe('WalletSavingsContributionFlow', () => {
 
     expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
@@ -69,7 +69,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', {
@@ -135,7 +135,7 @@ describe('WalletSavingsContributionFlow', () => {
 
       expect(screen.getByText(/do not send real money/i)).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Fund wallet for savings',
+        name: 'Add money for savings',
       });
       expect(payment).toHaveAccessibilityState({ disabled: false });
       expect(payment).toHaveTextContent('Fund wallet');
@@ -162,7 +162,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })

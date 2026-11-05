@@ -27,7 +27,7 @@ describe('server keeps PiggyVest off', () => {
     );
     expect(screen.queryByText(/staging preview/)).toBeNull();
     expect(
-      screen.queryByRole('button', { name: 'Fund wallet for savings' })
+      screen.queryByRole('button', { name: 'Add money for savings' })
     ).toBeNull();
     fireEvent.press(
       screen.getByRole('button', { name: 'Continue to payment' })

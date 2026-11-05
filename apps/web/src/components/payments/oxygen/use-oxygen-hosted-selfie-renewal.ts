@@ -40,6 +40,17 @@ export function useOxygenHostedSelfieRenewal(
     []
   );
   useEffect(() => {
+    void url; // A different link starts a new capture/loading session.
+    controller.current?.abort();
+    controller.current = null;
+    clearTimeout(replacementTimer.current);
+    automatic.current = false;
+    attempts.current = 0;
+    locked.current = false;
+    setRenewing(false);
+    setError('');
+  }, [url]);
+  useEffect(() => {
     if (!enabled) {
       controller.current?.abort();
       clearTimeout(replacementTimer.current);
@@ -102,7 +113,7 @@ export function useOxygenHostedSelfieRenewal(
         );
       }
     } finally {
-      locked.current = false;
+      if (controller.current === abort) locked.current = false;
     }
   }
   const retry = useRef(renew);

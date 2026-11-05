@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
@@ -29,7 +29,13 @@ beforeAll(() => {
     }
   );
 });
-afterAll(() => vi.unstubAllGlobals());
+afterAll(async () => {
+  cleanup();
+  // input-otp schedules selection updates up to 50ms after render, even after
+  // unmount. Drain those callbacks before Vitest destroys this file's window.
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  vi.unstubAllGlobals();
+});
 
 it('resumes a saved workflow and stops after prerequisites without offering activation', async () => {
   const id = '60000000-0000-4000-8000-000000000001';

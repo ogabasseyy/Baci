@@ -3,6 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import {
   OxygenSelfieConfirmedContext,
+  OxygenSelfieOpenContext,
   OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
 } from './OxygenPaymentSurfaceContext';
@@ -20,7 +21,14 @@ export function useOxygenSelfieHandoff(
   const open = useContext(OxygenSelfieSurfaceContext);
   const confirmed = useContext(OxygenSelfieConfirmedContext);
   const register = useContext(OxygenSelfieRenewalContext);
-  const renew = useOxygenSelfieRenewalBridge(snapshot, busy, submit, open);
+  const hostedOpen = useContext(OxygenSelfieOpenContext);
+  const renew = useOxygenSelfieRenewalBridge(
+    snapshot,
+    busy,
+    submit,
+    open,
+    hostedOpen
+  );
   useEffect(() => register?.(renew), [register, renew]);
   const opened = useRef('');
   const synced = useRef('');

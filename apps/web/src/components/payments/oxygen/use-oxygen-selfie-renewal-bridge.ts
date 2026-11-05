@@ -18,7 +18,8 @@ export function useOxygenSelfieRenewalBridge(
   snapshot: OxygenRuntimeSnapshot | null,
   busy: boolean,
   submit: SubmitOxygenForm,
-  open: ((url: string, workflowId?: string) => void) | null
+  open: ((url: string, workflowId?: string) => void) | null,
+  hostedOpen = false
 ): OxygenSelfieRenewHandler {
   const latest = useRef({ snapshot, busy, submit, open });
   latest.current = { snapshot, busy, submit, open };
@@ -43,7 +44,7 @@ export function useOxygenSelfieRenewalBridge(
     const request = pending.current;
     if (!request || busy) return;
     if (
-      request.signal?.aborted ||
+      (request.signal?.aborted && !hostedOpen) ||
       snapshot?.workflowId !== request.workflowId
     ) {
       pending.current = null;
@@ -54,7 +55,7 @@ export function useOxygenSelfieRenewalBridge(
       pending.current = null;
       open?.(url, snapshot.workflowId);
     }
-  }, [snapshot, busy, open]);
+  }, [snapshot, busy, open, hostedOpen]);
   return async (url, workflowId, automatic, signal) => {
     const s = latest.current.snapshot;
     if (

@@ -26,3 +26,5 @@ export const OxygenOrderConfirmationContext = createContext<
 export const OxygenSelfieRenewalContext = createContext<
   ((handler: OxygenSelfieRenewHandler) => () => void) | null
 >(null);
+
+export const OxygenSelfieOpenContext = createContext(false);

@@ -16,6 +16,7 @@ import {
   OxygenPaymentOpenContext,
   OxygenPaymentSurfaceContext,
   OxygenSelfieConfirmedContext,
+  OxygenSelfieOpenContext,
   OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
 } from './OxygenPaymentSurfaceContext';
@@ -147,43 +148,45 @@ export function OxygenApplicationDialog({
             }
           }}
         >
-          <OxygenSelfieRenewalContext.Provider
-            value={(handler) => {
-              selfieRenew.current = handler;
-              return () => {
-                if (selfieRenew.current === handler) selfieRenew.current = null;
-              };
-            }}
-          >
-            <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
-              <OxygenCheckoutCloseContext.Provider value={close}>
-                <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
-                  <OxygenHostedOriginsContext.Provider value={hostedOrigins}>
-                    <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
-                      <div className={styles.body} hidden={hostedOpen}>
-                        <OxygenProviderFlow
-                          active={open && !selfieUrl}
-                          orderId={orderId}
-                          merchantSlug={merchantSlug}
-                          prefill={prefill}
-                          productAmount={productAmount}
-                          products={products}
-                          currency={currency}
-                          onProgress={(value) => {
-                            stage.current = value;
-                          }}
-                        />
-                      </div>
-                    </OxygenPaymentOpenContext.Provider>
-                  </OxygenHostedOriginsContext.Provider>
-                </OxygenPaymentSurfaceContext.Provider>
-              </OxygenCheckoutCloseContext.Provider>
-            </OxygenSelfieConfirmedContext.Provider>
-          </OxygenSelfieRenewalContext.Provider>
+          <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
+            <OxygenSelfieRenewalContext.Provider
+              value={(handler) => {
+                selfieRenew.current = handler;
+                return () => {
+                  if (selfieRenew.current === handler)
+                    selfieRenew.current = null;
+                };
+              }}
+            >
+              <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
+                <OxygenCheckoutCloseContext.Provider value={close}>
+                  <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
+                    <OxygenHostedOriginsContext.Provider value={hostedOrigins}>
+                      <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
+                        <div className={styles.body} hidden={hostedOpen}>
+                          <OxygenProviderFlow
+                            active={open && !selfieUrl}
+                            orderId={orderId}
+                            merchantSlug={merchantSlug}
+                            prefill={prefill}
+                            productAmount={productAmount}
+                            products={products}
+                            currency={currency}
+                            onProgress={(value) => {
+                              stage.current = value;
+                            }}
+                          />
+                        </div>
+                      </OxygenPaymentOpenContext.Provider>
+                    </OxygenHostedOriginsContext.Provider>
+                  </OxygenPaymentSurfaceContext.Provider>
+                </OxygenCheckoutCloseContext.Provider>
+              </OxygenSelfieConfirmedContext.Provider>
+            </OxygenSelfieRenewalContext.Provider>
+          </OxygenSelfieOpenContext.Provider>
         </OxygenSelfieSurfaceContext.Provider>
         {selfieUrl && (
           <OxygenHostedSelfie
-            key={selfieUrl}
             url={selfieUrl}
             selfieOrigins={selfieOrigins}
             workflowId={selfieWorkflowId}

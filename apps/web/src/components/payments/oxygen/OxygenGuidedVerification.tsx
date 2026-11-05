@@ -8,6 +8,7 @@ import { OxygenEligibilityUnavailable } from './OxygenEligibilityUnavailable';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
 import {
   OxygenSelfieConfirmedContext,
+  OxygenSelfieOpenContext,
   OxygenSelfieRenewalContext,
 } from './OxygenPaymentSurfaceContext';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
@@ -41,6 +42,7 @@ export function OxygenGuidedVerification({
   const retryLock = useRef(false);
   const state = snapshot.state;
   const hostedRenewal = useContext(OxygenSelfieRenewalContext);
+  const hostedOpen = useContext(OxygenSelfieOpenContext);
   const selfieConfirmed =
     useContext(OxygenSelfieConfirmedContext) === snapshot.workflowId;
   const eligibilityFailed = state.eligibilityStatus === 'failed';
@@ -110,7 +112,7 @@ export function OxygenGuidedVerification({
       action = 'refresh_kyc';
     } else if (
       selfieRequired &&
-      (!state.selfieUrl || (expiredSelfie && !hostedRenewal)) &&
+      (!state.selfieUrl || (expiredSelfie && !(hostedRenewal && hostedOpen))) &&
       !count(selfieAttempt)
     ) {
       action = 'selfie_link';
@@ -161,6 +163,7 @@ export function OxygenGuidedVerification({
     snapshot.ninAttemptStatus,
     submit,
     hostedRenewal,
+    hostedOpen,
     lastUsableSelfie,
   ]);
 

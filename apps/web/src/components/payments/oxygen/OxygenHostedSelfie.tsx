@@ -49,6 +49,11 @@ export function OxygenHostedSelfie({
   const [phone, setPhone] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    void url; // A different link starts a new capture/loading session.
+    setLoaded(false);
+    setConfirming(false);
+  }, [url]);
   const trustedOrigin = isOxygenSelfieUrl(url, selfieOrigins)
     ? new URL(url).origin
     : null;

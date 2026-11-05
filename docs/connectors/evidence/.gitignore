@@ -1,0 +1,8 @@
+# Generated evidence belongs in the operator's private artifact archive.
+# Keep source, digest-bound receipts and manifests in git.
+*.js
+*.css
+*.png
+*.jpg
+*.ndjson
+*.log

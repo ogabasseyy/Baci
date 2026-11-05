@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T13:18:39.324399+00:00",
-  "source_revision": "f4495ce51d3d41069eba4b57c5c08110de1bf82b",
-  "evidence_digest": "bb7221d6334d4c29f3edc7cf26d4907d126214c4ab696d47512159ca233b90fc",
-  "claims_digest": "518d0ba89eb4f13c77f4cafcd5ef696da39c93941b9abdd19e0226fa531767af",
-  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen remains local-staging QA only. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-05T16:41:57+00:00",
+  "source_revision": "7732185e16f512d6a7c35124f606555638f35b10",
+  "evidence_digest": "32ec5165497705e35955bdfc3e5805e2278e421bd00bf20dd7ac5e2f8a4d9191",
+  "claims_digest": "0f20ba3cc2a2e425cb6032b5a4aa1e2ea635a9f6d51c0882122a28fe9d2f8bf6",
+  "review_scope": "Source-only follow-up: prerender accepts React responsive-image preload links only when every candidate URL is a trusted offline asset; public-output file and binding schemas extracted with direct tests; requested private preview route is preserved through the capture URL, sign-in return, page props and launch request. Prior auth/RLS/recovery contracts retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",
@@ -17,8 +17,7 @@
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
-        "apps/web/src/config/oxygen-storefront-staging.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
       ]
     },
     {
@@ -198,6 +197,20 @@
         "apps/web/src/app/api/agentic/carts/route.ts",
         "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
         "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+      ]
+    },
+    {
+      "id": "custom-storefront-mcp",
+      "title": "Full-code storefront MCP foundations",
+      "status": "code_evidenced",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "source_refs": [
+        "apps/web/builder-mcp-server/registry.ts",
+        "apps/web/src/lib/experience/production-integration.ts",
+        "apps/web/tools/experience-runner/linux-runner.ts",
+        "apps/web/tools/experience-runner/preview-delivery.ts",
+        "docs/connectors/experience-runner-delivery-qualification.md"
       ]
     },
     {

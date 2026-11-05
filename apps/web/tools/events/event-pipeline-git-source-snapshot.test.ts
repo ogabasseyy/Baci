@@ -145,3 +145,32 @@ describe('readGitSourceSnapshot', () => {
     expect(snapshot.missingStagedPaths).toEqual(['authority.ts']);
   });
 });
+
+it('does not replace an unresolved staged import with clean filesystem bytes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'event-unmerged-source-'));
+  roots.push(root);
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  git('init', '--quiet');
+  git('config', 'user.email', 'tests@example.com');
+  git('config', 'user.name', 'Tests');
+  writeFileSync(join(root, 'authority.ts'), 'export const clean = true;');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'baseline');
+  const hash = git('rev-parse', 'HEAD:authority.ts').trim();
+  git('update-index', '--force-remove', '--', 'authority.ts');
+  execFileSync('git', ['update-index', '--index-info'], {
+    cwd: root,
+    input: [1, 2, 3]
+      .map((stage) => `100644 ${hash} ${stage}\tauthority.ts\n`)
+      .join(''),
+  });
+  const lazy = readGitSourceSnapshot.forImportClosure(root);
+  expect(lazy.has('authority.ts')).toBe(false);
+  expect(lazy.get('authority.ts')).toBeUndefined();
+  const full = readGitSourceSnapshot(root);
+  expect(full.missingStagedPaths).toContain('authority.ts');
+  expect(full.filesystemSources.get('authority.ts')).toBe(
+    'export const clean = true;'
+  );
+});

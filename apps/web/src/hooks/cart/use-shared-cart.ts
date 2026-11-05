@@ -2,6 +2,7 @@
 
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { createCartActions } from './shared-cart-actions';
+import { createExperiencePortForCart } from './shared-cart-experience-runtime';
 import {
   noop,
   type UseSharedCartOptions,
@@ -128,6 +129,7 @@ export function useSharedCart(
   }
 
   return {
+    experienceCommandPort: createExperiencePortForCart(runtime),
     addToCart,
     cart: state.display,
     cartCount,

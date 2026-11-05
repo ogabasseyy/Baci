@@ -1,0 +1,46 @@
+{
+  "syntheticOnly": true,
+  "bag": {
+    "images": [
+      {
+        "complete": true,
+        "width": 240
+      }
+    ],
+    "text": "Your bag 1\n×\n\nGOOD CHOICES LOOK GOOD ON YOU.\n\nSynthetic QA Device\n\nQuantity 1 · synthetic product\n\n₦250\nSubtotal\n₦250\n\nShipping is calculated in Baci checkout. Local preview only; do not place an order.\n\nReview checkout\n↗\nRefresh bag\n\nAdded to your bag"
+  },
+  "quoteLabels": [
+    "Synthetic local delivery\nStore"
+  ],
+  "review": {
+    "excerpt": "Skip to main content\nReturn to Cart\nSecure Checkout\nEncrypted\nSecure Checkout\nSSL Encrypted\nApply\nContact Information\nSynthetic Buyer · +2348000000000\nEdit\nDelivery Method\nBy Road · Ikeja\nEdit\n3\nPayment Method\nPay in Full\nGet a Proforma Invoice\n\nChoose how you'd like to pay:\n\nPay on Delivery\nPay when you receive your items\nOrder Summary\n\nSynthetic QA Device\n\nQty: 1\n₦250\nSubtotal\n₦250\nVAT (7.5%)\n₦0\nDelivery\n₦1,500\nTotal\n₦1,750\nEmail me with exclusive offers and new product drops.\nPlace Order\nSecure Encrypted Payment",
+    "hasOrderSummary": true,
+    "hasPlaceOrder": true,
+    "images": [
+      {
+        "complete": false,
+        "width": 0
+      },
+      {
+        "complete": true,
+        "width": 240
+      },
+      {
+        "complete": false,
+        "width": 0
+      },
+      {
+        "complete": false,
+        "width": 0
+      }
+    ],
+    "path": "/qa1/checkout",
+    "title": "Checkout | Baci",
+    "viewport": {
+      "height": 900,
+      "width": 1440
+    }
+  },
+  "placeOrderClicked": false,
+  "paymentSubmitted": false
+}

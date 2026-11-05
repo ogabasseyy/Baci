@@ -182,7 +182,7 @@ export function ChatCartCheckoutReview({
       )}
       {error && (
         <p
-          className="mt-2 text-xs text-red-600"
+          className="mt-2 text-xs text-store-background-text"
           role="status"
           aria-live="polite"
         >

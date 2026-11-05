@@ -11,6 +11,7 @@ import { WalletPinSettingsScreen } from './WalletPinSettingsScreen';
 const mockRefresh = jest.fn();
 const mockSignOut = jest.fn();
 let mockGate: { state: string; status: unknown; refresh: () => void };
+let mockAuth: { isLoading: boolean; redirectTo: string | null };
 
 jest.mock('./use-wallet-pin-settings-gate', () => ({
   useWalletPinSettingsGate: () => mockGate,
@@ -28,7 +29,7 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@/hooks/use-auth-guard', () => ({
-  useRequireAuth: () => ({ isLoading: false, redirectTo: null }),
+  useRequireAuth: () => mockAuth,
 }));
 jest.mock('@/hooks/use-storefront-insets', () => ({
   useStorefrontInsets: () => ({ getScrollContentStyle: () => ({}) }),
@@ -67,6 +68,7 @@ const press = (name: string) =>
 describe('WalletPinSettingsScreen', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockAuth = { isLoading: false, redirectTo: null };
     ready();
   });
 
@@ -75,6 +77,20 @@ describe('WalletPinSettingsScreen', () => {
     render(<WalletPinSettingsScreen />);
     expect(screen.getByLabelText('Checking your wallet PIN')).toBeTruthy();
     expect(screen.queryByText('Set a wallet PIN')).toBeNull();
+  });
+
+  it('shows the spinner, not a redirect, while auth is not initialized', () => {
+    mockAuth = { isLoading: true, redirectTo: null };
+    mockGate = { state: 'off', status: null, refresh: mockRefresh };
+    render(<WalletPinSettingsScreen />);
+    expect(screen.getByLabelText('Checking your wallet PIN')).toBeTruthy();
+    expect(screen.queryByText('redirect:/settings')).toBeNull();
+  });
+
+  it('redirects to settings when auth is initialized and the gate is off', () => {
+    mockGate = { state: 'off', status: null, refresh: mockRefresh };
+    render(<WalletPinSettingsScreen />);
+    expect(screen.getByText('redirect:/settings')).toBeTruthy();
   });
 
   it('set mode: heading, fields and button', () => {

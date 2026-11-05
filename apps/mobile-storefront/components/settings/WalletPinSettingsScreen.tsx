@@ -34,10 +34,9 @@ export function WalletPinSettingsScreen() {
   const copy = COPY[pin.mode];
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
-  if (pin.gateState === 'off') return <Redirect href="/settings" />;
 
   const title = <Stack.Screen options={{ title: 'Wallet PIN' }} />;
-  if (pin.gateState === 'checking' || auth.isLoading) {
+  if (auth.isLoading || pin.gateState === 'checking') {
     return (
       <StorefrontScreenShell
         style={[
@@ -55,6 +54,8 @@ export function WalletPinSettingsScreen() {
       </StorefrontScreenShell>
     );
   }
+
+  if (pin.gateState === 'off') return <Redirect href="/settings" />;
 
   const confirmLabel =
     pin.mode === 'change' ? 'Confirm new PIN' : 'Confirm PIN';

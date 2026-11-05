@@ -1,10 +1,11 @@
+import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { ChatwootProbeInput } from './chatwoot-compatibility-probe';
 import { runChatwootIsolationProbe } from './chatwoot-compatibility-probe';
 
@@ -16,6 +17,30 @@ const input: ChatwootProbeInput = {
   accountBToken: 'TOKEN-B-SENTINEL',
   conversationId: '123',
 };
+
+let activeProbeChild: ChildProcess | undefined;
+const activeServers = new Set<Server>();
+
+afterEach(async () => {
+  const child = activeProbeChild;
+  activeProbeChild = undefined;
+  if (child && child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGKILL');
+    await once(child, 'close');
+  }
+
+  await Promise.all(
+    [...activeServers]
+      .filter((server) => server.listening)
+      .map(
+        (server) =>
+          new Promise<void>((resolve) => {
+            server.close(() => resolve());
+          })
+      )
+  );
+  activeServers.clear();
+});
 
 it.each([
   'token\rvalue',
@@ -54,6 +79,8 @@ it('sends loopback probe requests directly when Node environment proxy mode is e
     response.writeHead(200).end();
   });
 
+  activeServers.add(api);
+  activeServers.add(proxy);
   api.listen(0, '127.0.0.1');
   proxy.listen(0, '127.0.0.1');
   await Promise.all([once(api, 'listening'), once(proxy, 'listening')]);
@@ -115,6 +142,7 @@ it('sends loopback probe requests directly when Node environment proxy mode is e
           stdio: ['ignore', 'pipe', 'pipe'],
         }
       );
+      activeProbeChild = child;
       let stdout = '';
       let stderr = '';
       child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
@@ -129,9 +157,9 @@ it('sends loopback probe requests directly when Node environment proxy mode is e
       child.on('close', (status: number | null) =>
         resolve({ status, stderr, stdout })
       );
-      const killTimer = setTimeout(() => child.kill('SIGKILL'), 10_000);
-      killTimer.unref();
-      child.once('close', () => clearTimeout(killTimer));
+      child.once('close', () => {
+        if (activeProbeChild === child) activeProbeChild = undefined;
+      });
     });
 
     expect(result.error).toBeUndefined();

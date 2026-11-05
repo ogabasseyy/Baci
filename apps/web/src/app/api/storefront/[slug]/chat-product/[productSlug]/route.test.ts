@@ -97,6 +97,21 @@ describe('public chat product detail', () => {
     expect(body.product.currency).toMatchObject({ code: 'GHS', symbol: 'GH₵' });
     expect(chatProductResponseSchema.safeParse(body).success).toBe(true);
   });
+  it('accepts a platform currency missing from the runtime currency list', async () => {
+    const original = Object.getOwnPropertyDescriptor(Intl, 'supportedValuesOf');
+    Object.defineProperty(Intl, 'supportedValuesOf', {
+      configurable: true,
+      value: () => [],
+    });
+    try {
+      const response = await GET(req(), params());
+      expect(response.status).toBe(200);
+      expect((await response.json()).product.currency.code).toBe('NGN');
+    } finally {
+      if (original) Object.defineProperty(Intl, 'supportedValuesOf', original);
+      else Reflect.deleteProperty(Intl, 'supportedValuesOf');
+    }
+  });
   it('fails closed when payout currency is unsupported even if country currency is known', async () => {
     mocks.resolve.mockResolvedValue({
       success: true,

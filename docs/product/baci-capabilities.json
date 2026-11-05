@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T05:05:39+00:00",
-  "source_revision": "729fcadeec6616bb9ae8475e7e199788a2c7d2e0",
-  "evidence_digest": "851873e02f0da44edd377accb31380e9f9beeaee7b2c2fd12f23dfddbe1509c9",
-  "claims_digest": "4f5d0b9f37c12b49253096b23c74dfbb3db3f203c095d9422a5e59c9c7adc4b4",
-  "review_scope": "Source-only follow-up: source pagination now budgets the complete MCP success envelope, including escaped controls and multibyte UTF8 continuation cursors. Direct runtime-profile tests cover local versus production activation, loopback-only local origins, isolated HTTPS production sites and every required lifecycle/build/preview port. Prior installed-Zod and related-link fixes retained. Production composition remains disabled; hosted qualification, current-head CI/review and separate rollout authorization remain required. Benchmarks parked; no hosted state, provider, payment or publication activation.",
+  "reviewed_at": "2026-11-05T05:20:36+00:00",
+  "source_revision": "b4e2c285f40d59a5c59b89fec5cc364053b7fd8b",
+  "evidence_digest": "9cfcc23fad16508394070218c0ed362e0676a441069ae61accadb719ed61bd94",
+  "claims_digest": "51dcc2164f945fd9511a0dde11771dcb4726a2032c4d7ffe20dbcb7d0d5ebf46",
+  "review_scope": "Source-only follow-up: catalog canonical paths use the established live-identity PDP helper, ignoring stale stored canonical URLs and applying the same category-alias normalization as proxy preflights. Colocated experience-tool schema tests cover read/patch/adopt inputs, chunk encoding/size and lifecycle version boundaries. Prior authorization, pagination, Zod and related-link checks retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",

@@ -11,7 +11,12 @@ type PrimarySnapshot = Awaited<
   ReturnType<typeof piggyvestPrimaryWalletApi.read>
 >;
 export type SettledPrimaryFundingAccount =
-  | { status: 'ready'; account: PrimarySnapshot['account'] }
+  | {
+      status: 'ready';
+      account: PrimarySnapshot['account'];
+      // Kobo; null when the snapshot is not ready (no account yet).
+      balanceKobo: number | null;
+    }
   // Primary definitively has no account for this customer (server
   // unconfigured, or enabled but never provisioned): the legacy
   // projection is authoritative, not stale.
@@ -31,7 +36,8 @@ function readActiveAuthUserId(): string | undefined {
 
 function settleBoundAccount(
   expectedUserId: string,
-  account: PrimarySnapshot['account'] | undefined
+  account: PrimarySnapshot['account'] | undefined,
+  balanceKobo: number | null = null
 ): SettledPrimaryFundingAccount {
   // Post-fetch bind: reject a snapshot that landed after an account
   // switch, even when the session matched at fetch start. Unknown is
@@ -41,7 +47,7 @@ function settleBoundAccount(
   // Enabled but never provisioned: the legacy projection is the
   // customer's actual funding path, not a stale fallback.
   if (account === undefined) return { status: 'not_ready' };
-  return { status: 'ready', account };
+  return { status: 'ready', account, balanceKobo };
 }
 
 /**
@@ -77,17 +83,21 @@ export async function readPrimaryFundingAccount(
       // explicit not-ready signal; anything else rejects.
       if (!snapshot.available) return { status: 'not_ready' };
       if (snapshot.account !== undefined)
-        return settleBoundAccount(userId, snapshot.account);
+        return settleBoundAccount(
+          userId,
+          snapshot.account,
+          snapshot.balanceKobo ?? null
+        );
     } catch {
       return { status: 'unavailable' };
     }
   }
   try {
-    const { account } = await piggyvestPrimaryWalletApi.read(
+    const { account, balanceKobo } = await piggyvestPrimaryWalletApi.read(
       merchantId,
       userId
     );
-    return settleBoundAccount(userId, account);
+    return settleBoundAccount(userId, account, balanceKobo ?? null);
   } catch (error) {
     // Only an authoritative not-ready keeps the legacy projection;
     // transient failures surface unavailable instead of a DVA the

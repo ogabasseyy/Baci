@@ -73,9 +73,14 @@ production installer or instruction to revoke live grants wholesale.
 
 After its session check and before any claim, the worker asks
 `piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
-transfer engine fences are in place. Until the enforcing readiness check
-replaces the stub (`20261102032905`), the answer is always not ready, so the
-worker claims nothing: stored receipts stay pending exactly as captured, with no
+transfer engine fences are in place. The enforcing check
+(`20261104130900`) replaced the always-not-ready stub (`20261102032905`). It
+answers ready only when the worker login is safe and unexpired, its bank
+authority and integration are enabled and agree on merchant, business and
+environment, the integration's inflow authority is enabled, and the inflow
+ledger objects exist; each gap is listed by a stable code (see the migration
+header). The master kill switch is a web runtime setting and is not part of the
+database check. While any fence is missing the worker claims nothing: stored receipts stay pending exactly as captured, with no
 attempt spent and no lease taken, and credit once after readiness passes. A
 failed or malformed answer counts as not ready. A gated drain returns zero
 counters plus `engineNotReady` (the missing marker ids, never customer data),

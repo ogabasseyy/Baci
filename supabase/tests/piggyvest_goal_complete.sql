@@ -163,12 +163,13 @@ BEGIN
     RAISE EXCEPTION 'a goal complete fence trigger is missing';
   END IF;
 
-  -- Funding availability and the daily reconciliation count settled completions.
+  -- The daily reconciliation counts settled completions. Funding reservation no
+  -- longer gates on a local balance, so it carries no completion accounting.
   IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
-     NOT LIKE '%goal_complete_operations%'
+     LIKE '%goal_complete_operations%'
      OR pg_catalog.pg_get_functiondef('piggyvest_primary.read_daily_reconciliation(uuid,text,jsonb)'::regprocedure)
      NOT LIKE '%goal_complete_operations%' THEN
-    RAISE EXCEPTION 'funding availability or reconciliation does not count settled completions';
+    RAISE EXCEPTION 'funding still counts completions, or reconciliation does not count settled completions';
   END IF;
 END
 $catalog$;

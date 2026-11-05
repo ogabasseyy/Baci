@@ -190,3 +190,16 @@ describe('payment schedule selection', () => {
     expect(setPaymentMethod).toHaveBeenCalledWith('');
   });
 });
+
+it('shows Oxygen for the explicit isolated local checkout only', () => {
+  vi.stubEnv('NODE_ENV', 'development');
+  vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:3451');
+  const props = { paymentTab: 'installments' as const, setPaymentTab: vi.fn(), paymentMethod: '' as const, setPaymentMethod: vi.fn(), paystackCheckoutAvailable: false, korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false, klumpEligible: false, oxygenEligible: true, redvaultAvailable: false, redvaultStatus: 'idle' as const, redvaultSummary: null, hasInstallmentOptions: true, currency: 'NGN' };
+  const view = render(<PaymentOptionsPanel {...props} />);
+  expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
+  vi.stubEnv('NODE_ENV', 'production');
+  view.rerender(<PaymentOptionsPanel {...props} />);
+  expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
+  vi.unstubAllEnvs();
+});

@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "45ef7d954981dfe53f654aac21088a9a747503c0",
+  "originMainSha": "ed4004407145d2d7cb288106baf15ff12d263751",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "7314ff4864443a1e762341bb0a44c429c38975614b380223e098d2069766bbb1",
-  "routingProxyInputSha256": "9331ad67cbf4d1d5ca2e7a1757592e30ad2bf746164955d59a751526fc9a1dba",
+  "routeTreeSha256": "3a4f7d30c8097cfd56fbe9e5f9c1e70fc2477dd3e1e32ce35e177540e89aa9ce",
+  "routingProxyInputSha256": "dfe86998b66a749b210a0650a05d0d99280b11f74272ea327bb7a6d074996ae8",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -528,6 +528,285 @@
       "routePattern": "/api/payments/klump/record",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/payments/klump/record/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/activation-trial/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/activation-trial",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/activation-trial/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/approval-code/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/approval-code",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/approval-code/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/attempts/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/attempts",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/attempts/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/availability/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/availability",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/availability/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/bank-details/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/bank-details",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/bank-details/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/chat/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/chat",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/chat/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/draft/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "PUT"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/draft",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/draft/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/order-plan/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/order-plan",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/order-plan/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/phone-handoff/redeem/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/phone-handoff/redeem",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/phone-handoff/redeem/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/accept/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans/accept",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/accept/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/plans/quote/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/plans/quote",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/plans/quote/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/reconcile/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/reconcile",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/reconcile/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/recovery/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/residential-context/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/residential-context",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/residential-context/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/webhook/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/webhook",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/webhook/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/actions/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/actions",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/actions/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/address-recovery/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/address-recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/address-recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/phone-handoff/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/phone-handoff",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/phone-handoff/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/phone-recovery/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/phone-recovery",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/phone-recovery/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/workflows/selfie-status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/workflows/selfie-status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/workflows/selfie-status/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8747,5 +9026,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "4b6bf6fc3f3c9a70521c8125250f7e82df1932f6eddabd08e3c105e624572d03"
+  "inventorySha256": "6de4f99f7918a670a6c3ab411d4e7016b36a0d073b418426f58a31d94e5ae2e3"
 }

@@ -25,7 +25,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) => mocks.process(...args),
 }));
 
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   isAuthorizationQuarantine,
   processVerifiedDelivery,
@@ -33,7 +33,7 @@ import {
 
 const client = {
   name: 'intake-client',
-} as unknown as PiggyvestIntakeServiceClient;
+} as unknown as PiggyvestIntakeClient;
 const config = { baseUrl: 'https://provider.example', token: 'synthetic' };
 const signature = 'ab'.repeat(64);
 

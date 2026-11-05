@@ -18,6 +18,7 @@ const ADDRESS_FIELDS = [
 
 interface LegacyAddressComponent {
   long_name?: string;
+  short_name?: string;
   types?: string[];
 }
 
@@ -191,6 +192,15 @@ export async function GET(request: NextRequest) {
       route: getComponent('route'),
       city:
         getComponent('locality') || getComponent('administrative_area_level_2'),
+      // Nigerian LGAs are supplied as a second-level administrative area when
+      // Google has one. Never substitute locality/city or a foreign county.
+      lga: components.some(
+        (component) =>
+          component.types?.includes('country') &&
+          (component.short_name === 'NG' || component.long_name === 'Nigeria')
+      )
+        ? getComponent('administrative_area_level_2')
+        : '',
       state: getComponent('administrative_area_level_1'),
       country: getComponent('country'),
       postalCode: getComponent('postal_code'),

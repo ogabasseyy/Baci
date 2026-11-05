@@ -63,7 +63,7 @@ BEGIN
       AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active'
       AND (SELECT current_amount FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 0
       AND (SELECT available_balance FROM public.customer_wallets
-            WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
+            WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000
       AND EXISTS (SELECT 1 FROM public.customer_savings_events
                    WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancel_needs_review'),
       'a residual balance did not keep the goal open for review');
@@ -81,11 +81,10 @@ BEGIN
     'settlement did not confirm the attempt and cancel the goal together');
   PERFORM pg_temp.gc_assert(
     (SELECT available_balance FROM public.customer_wallets
-      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
-    AND (SELECT pg_catalog.count(*) FROM public.customer_wallet_transactions
-          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid
-            AND type = 'refund' AND status = 'completed' AND amount = 2500 AND balance_after = 3500) = 1,
-    'settlement did not credit the main-wallet ledger once');
+      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000
+    AND NOT EXISTS (SELECT 1 FROM public.customer_wallet_transactions
+          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid),
+    'settlement credited the legacy wallet: the refund returns to the PiggyVest main wallet');
   -- A confirmed refund lowers the expected provider balance: a fully
   -- cancelled goal expects 0, so a legitimate cancel never reads as a shortfall.
   v_result := piggyvest_primary.read_daily_reconciliation(
@@ -105,10 +104,10 @@ BEGIN
     'a replay wrote a second event');
   PERFORM pg_temp.gc_assert(
     (SELECT available_balance FROM public.customer_wallets
-      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
-    AND (SELECT pg_catalog.count(*) FROM public.customer_wallet_transactions
-          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid) = 1,
-    'a replayed settlement credited the wallet again');
+      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000
+    AND NOT EXISTS (SELECT 1 FROM public.customer_wallet_transactions
+          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid),
+    'a replayed settlement credited the legacy wallet');
 
   -- 15. After a confirmed cancel: the same id reads confirmed, a new cancel
   -- is refused, and funding stays fenced off.

@@ -71,3 +71,13 @@ describe.each([
     );
   });
 });
+
+describe('server keeps PiggyVest off (silent re-read)', () => {
+  it('a hook that never asked for a status read stays idle', async () => {
+    jest.mocked(usePiggyvestPrimaryCapability).mockReturnValue(false as never);
+    const { result } = renderHook(() => useSavingsPlanFunding(input));
+    await act(async () => {});
+    expect(result.current.planFundingPhase).toBe('idle');
+    expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
+  });
+});

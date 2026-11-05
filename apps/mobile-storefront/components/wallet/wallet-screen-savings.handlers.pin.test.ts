@@ -72,4 +72,19 @@ describe('failed wallet contributions', () => {
     expect(Alert.alert).not.toHaveBeenCalled();
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
+
+  it('tells the customer to add money, and keeps the stored id, when PiggyVest reports insufficient funds', async () => {
+    const { clearIdempotencyKey } = await fail(
+      Object.assign(new Error('Insufficient funds'), {
+        code: 'INSUFFICIENT_FUNDS',
+      })
+    );
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Not enough money in your wallet',
+      'Add money to your wallet, then try again.'
+    );
+    // Nothing moved, so the same operation id stays valid for the retry.
+    expect(clearIdempotencyKey).not.toHaveBeenCalled();
+  });
 });

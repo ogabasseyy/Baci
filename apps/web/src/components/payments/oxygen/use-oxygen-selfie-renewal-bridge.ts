@@ -84,6 +84,7 @@ export function useOxygenSelfieRenewalBridge(
       automatic: count.automatic || automatic,
     });
     locked.current = true;
+    let dispatched = false;
     try {
       const response = await fetchWithCsrf(
         `/api/payments/oxygen/workflows/selfie-status?workflowId=${encodeURIComponent(workflowId)}`,
@@ -107,13 +108,15 @@ export function useOxygenSelfieRenewalBridge(
         throw new Error('Verification unavailable');
       if (result.confirmed) return 'confirmed';
       pending.current = { url, workflowId, signal };
+      dispatched = true;
       if (!(await latest.current.submit({ action: 'selfie_link' }))) {
-        pending.current = null;
         throw new Error('Renewal unavailable');
       }
       return 'renewed';
     } catch (error) {
-      pending.current = null;
+      // A lost command response can still recover a fresh canonical snapshot.
+      // Keep its adoption fence; the effect checks closure and workflow identity.
+      if (!dispatched) pending.current = null;
       throw error;
     } finally {
       locked.current = false;

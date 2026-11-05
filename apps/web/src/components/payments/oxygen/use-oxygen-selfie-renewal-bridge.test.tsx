@@ -149,3 +149,26 @@ it('does not replace a newer session if the old completion read finishes late', 
   await rejected;
   expect(submit).not.toHaveBeenCalled();
 });
+
+it('adopts a recovered replacement snapshot after a lost submission response', async () => {
+  m.fetch.mockResolvedValue(
+    Response.json({ confirmed: false, checkedAt: '2026-11-05T16:00:00Z' })
+  );
+  const submit = vi.fn().mockResolvedValue(false);
+  const open = vi.fn();
+  const { result, rerender } = renderHook(
+    (p) => useOxygenSelfieRenewalBridge(p, false, submit, open, true),
+    { initialProps: snapshot }
+  );
+  await expect(
+    result.current(snapshot.state.selfieUrl ?? '', 'same-workflow', true)
+  ).rejects.toThrow();
+  rerender({
+    ...snapshot,
+    state: { ...snapshot.state, selfieUrl: 'https://selfie.example/recovered' },
+  });
+  expect(open).toHaveBeenCalledWith(
+    'https://selfie.example/recovered',
+    'same-workflow'
+  );
+});

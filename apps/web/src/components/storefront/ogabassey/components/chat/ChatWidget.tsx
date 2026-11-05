@@ -11,6 +11,7 @@ import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatCartReview } from './chat-cart-review';
+import { getPrivateDeliveryEstimateUrl } from './chat-delivery-estimate-url';
 import { ChatDeliveryQuote } from './chat-delivery-quote';
 import { ChatMessageBubble } from './chat-message';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
@@ -34,6 +35,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
     subtotal = 0,
     isHydrated = false,
     sharedCartRef,
+    merchantSlug: cartMerchantSlug,
   } = useCart();
   const { theme } = useV2Theme();
   const pathname = usePathname();
@@ -41,15 +43,11 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
   const isFooterVisible = useOgabasseyScrollVisibility();
   const isSanta = theme === 'santa';
   const privateDelivery = usePrivateDeliveryMode();
+  const deliveryEstimateUrl = getPrivateDeliveryEstimateUrl(merchant?.routingMode, merchant?.merchant?.slug);
   const [cartPanelOpen, setCartPanelOpen] = useState(false);
-  const cartKey = JSON.stringify({
-    lines: cart.map((item) => [item.cartItemId, item.quantity, item.price, item.negotiatedPrice]),
-    subtotal,
-    sharedVersion: sharedCartRef?.version,
-    merchantId: merchant?.merchant?.id,
-    merchantSlug: merchant?.merchant?.slug,
-    merchantCountry: merchant?.merchant?.country,
-  });
+  const cartKey = JSON.stringify([cart.map((item) => [item.cartItemId, item.quantity, item.price, item.negotiatedPrice]), subtotal, sharedCartRef?.version, merchant?.merchant?.id, merchant?.merchant?.slug, merchant?.merchant?.country, merchant?.merchant?.payout_currency, merchant?.routingMode, cartMerchantSlug]);
+  const canOfferDeliveryEstimate = canOfferPrivateDeliveryEstimate({ hydrated: isHydrated, hasItems: cart.length > 0, routingMode: merchant?.routingMode, merchantSlug: merchant?.merchant?.slug, cartMerchantSlug, country: merchant?.merchant?.country, payoutCurrency: merchant?.merchant?.payout_currency });
+
   const cartItemCount = cart.reduce((count, item) => count + item.quantity, 0);
 
   const {
@@ -69,6 +67,8 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
     isSanta,
     storefrontSlug: merchant?.merchant?.slug,
   });
+
+  useEffect(() => { if (privateDelivery.active && (!deliveryEstimateUrl || !canOfferDeliveryEstimate)) privateDelivery.close(() => setInput('')); }, [canOfferDeliveryEstimate, deliveryEstimateUrl, privateDelivery, setInput]);
 
   useEffect(() => {
     if (cartPanelOpen || privateDelivery.active) {
@@ -243,13 +243,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
               <div id="chat-cart-panel" hidden={!cartPanelOpen}>
                 {cartPanelOpen ? (
                   <ChatCartReview onRequestDeliveryQuote={
-                    canOfferPrivateDeliveryEstimate({
-                      hydrated: isHydrated,
-                      hasItems: cart.length > 0,
-                      routingMode: merchant?.routingMode,
-                      country: merchant?.merchant?.country,
-                      payoutCurrency: merchant?.merchant?.payout_currency,
-                    })
+                    canOfferDeliveryEstimate
                       ? () => {
                           setInput('');
                           setCartPanelOpen(false);
@@ -260,8 +254,9 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
                 ) : null}
               </div>
 
-              {privateDelivery.active ? (
+              {privateDelivery.active && deliveryEstimateUrl && canOfferDeliveryEstimate ? (
                 <ChatDeliveryQuote
+                  estimateUrl={deliveryEstimateUrl}
                   cartKey={cartKey}
                   input={input}
                   setInput={setInput}

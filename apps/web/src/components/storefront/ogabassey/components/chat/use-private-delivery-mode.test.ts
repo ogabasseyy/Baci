@@ -9,12 +9,16 @@ describe('usePrivateDeliveryMode', () => {
     );
   });
 
-  it('offers estimates only for hydrated NGN stores on domain routing', () => {
-    const base = { hydrated: true, hasItems: true, routingMode: 'domain', country: 'NG', payoutCurrency: 'NGN' };
+  it('offers estimates for hydrated NGN domain stores or path stores with a valid context slug', () => {
+    const base = { hydrated: true, hasItems: true, routingMode: 'domain', merchantSlug: 'ogabassey', cartMerchantSlug: 'ogabassey', country: 'NG', payoutCurrency: 'NGN' };
     expect(canOfferPrivateDeliveryEstimate(base)).toBe(true);
     expect(canOfferPrivateDeliveryEstimate({ ...base, payoutCurrency: undefined })).toBe(true);
     expect(canOfferPrivateDeliveryEstimate({ ...base, country: 'Nigeria' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path' })).toBe(false);
+    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: 'store-name', cartMerchantSlug: 'store-name' })).toBe(true);
+    expect(canOfferPrivateDeliveryEstimate({ ...base, cartMerchantSlug: 'another-store' })).toBe(false);
+    expect(canOfferPrivateDeliveryEstimate({ ...base, cartMerchantSlug: undefined })).toBe(false);
+    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: undefined })).toBe(false);
+    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: 'api' })).toBe(false);
     expect(canOfferPrivateDeliveryEstimate({ ...base, payoutCurrency: 'USD' })).toBe(false);
     expect(canOfferPrivateDeliveryEstimate({ ...base, country: 'GH' })).toBe(false);
     expect(canOfferPrivateDeliveryEstimate({ ...base, hydrated: false })).toBe(false);

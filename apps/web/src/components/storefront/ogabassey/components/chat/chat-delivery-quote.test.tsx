@@ -38,7 +38,7 @@ describe('ChatDeliveryQuote', () => {
     vi.stubGlobal('fetch', fetchMock);
     const setInput = vi.fn();
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="I live in Ikeja, Lagos" setInput={setInput} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input="I live in Ikeja, Lagos" setInput={setInput} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     const privateCard = screen.getByRole('region', { name: 'Private delivery estimate' });
     expect(screen.getByText('Destination')).toBeInTheDocument();
     expect(screen.queryByLabelText('Destination')).not.toBeInTheDocument();
@@ -61,7 +61,7 @@ describe('ChatDeliveryQuote', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input={destination} setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input={destination} setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });
     expect(screen.getByRole('alert')).toHaveTextContent(expectedPrompt);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe('ChatDeliveryQuote', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="I live at 12 Long Street in Ikeja, Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input="I live at 12 Long Street in Ikeja, Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });
     expect(screen.getByText(/Use this state for a store-rate estimate/i)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -92,9 +92,43 @@ describe('ChatDeliveryQuote', () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('12 Long Street');
   });
 
+  it('uses the supplied path-storefront endpoint for a confirmed state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ quotes: { all: [], featured: [] } }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const submitRef = { current: null as (() => void) | null };
+    render(<ChatDeliveryQuote estimateUrl="/api/storefront/winter-store/delivery-estimate" cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    await act(async () => { submitRef.current?.(); });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Yes, check estimate' }));
+    await screen.findByText(/No store-configured rate matched this state/i);
+    expect(fetchWithCsrf).toHaveBeenCalledWith('/api/storefront/winter-store/delivery-estimate', expect.any(Object));
+  });
+
+  it('aborts and discards a pending response when the estimate endpoint changes', async () => {
+    let resolveFetch: ((response: { ok: boolean; json: () => Promise<unknown> }) => void) | undefined;
+    const fetchMock = vi.fn((_url: string | URL | Request, options?: RequestInit) => new Promise((resolve) => {
+      resolveFetch = resolve as typeof resolveFetch;
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const submitRef = { current: null as (() => void) | null };
+    const props = { estimateUrl: '/api/storefront/first-store/delivery-estimate', cartKey: 'cart-v1', input: 'Delivery to Lagos', setInput: vi.fn(), submitRef, onComposerLockChange: vi.fn(), onClose: vi.fn() };
+    const view = render(<ChatDeliveryQuote {...props} />);
+    await act(async () => { submitRef.current?.(); });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Yes, check estimate' }));
+    const signal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+
+    view.rerender(<ChatDeliveryQuote {...props} estimateUrl="/api/storefront/second-store/delivery-estimate" />);
+    expect(signal.aborted).toBe(true);
+    await act(async () => {
+      resolveFetch?.({ ok: true, json: async () => ({ quotes: { all: [quote], featured: [quote] } }) });
+    });
+    expect(screen.queryByText('Standard delivery')).not.toBeInTheDocument();
+  });
+
   it('explains that the state is missing', async () => {
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="I live in Ikeja" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input="I live in Ikeja" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });
     expect(screen.getByRole('alert')).toHaveTextContent(/couldn’t identify a Nigerian state/i);
   });
@@ -106,7 +140,7 @@ describe('ChatDeliveryQuote', () => {
       json: async () => ({ sessionId: 's1', quotes: { all: [noEtaQuote], featured: [noEtaQuote] } }),
     }));
     const submitRef = { current: null as (() => void) | null };
-    render(<ChatDeliveryQuote cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    render(<ChatDeliveryQuote estimateUrl="/api/chat/delivery-estimate" cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
     await act(async () => { submitRef.current?.(); });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Yes, check estimate' }));
     expect(await screen.findByText('Standard delivery')).toBeInTheDocument();
@@ -120,7 +154,7 @@ describe('ChatDeliveryQuote', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const submitRef = { current: null as (() => void) | null };
-    const props = { cartKey: 'cart-v1', input: 'Delivery to Lagos', setInput: vi.fn(), submitRef, onComposerLockChange: vi.fn(), onClose: vi.fn() };
+    const props = { estimateUrl: '/api/chat/delivery-estimate', cartKey: 'cart-v1', input: 'Delivery to Lagos', setInput: vi.fn(), submitRef, onComposerLockChange: vi.fn(), onClose: vi.fn() };
     const view = render(<ChatDeliveryQuote {...props} />);
     await act(async () => { submitRef.current?.(); });
     await userEvent.setup().click(screen.getByRole('button', { name: 'Yes, check estimate' }));

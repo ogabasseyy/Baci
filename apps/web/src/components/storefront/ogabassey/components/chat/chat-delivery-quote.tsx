@@ -7,6 +7,7 @@ import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
 import type { ShippingQuote } from '@/types/shipping-quote';
 
 interface ChatDeliveryQuoteProps {
+  estimateUrl: string;
   cartKey: string;
   input: string;
   setInput: (value: string) => void;
@@ -61,7 +62,7 @@ export function parseDestinationState(value: string):
   return { kind: 'matched', stateName: uniqueMatches[0] };
 }
 
-export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onComposerLockChange, onClose }: ChatDeliveryQuoteProps) {
+export function ChatDeliveryQuote({ estimateUrl, cartKey, input, setInput, submitRef, onComposerLockChange, onClose }: ChatDeliveryQuoteProps) {
   const [confirmedState, setConfirmedState] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<ShippingQuote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,7 +88,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
       requestIdRef.current += 1;
       controllerRef.current?.abort();
     };
-  }, [cartKey, setInput]);
+  }, [cartKey, estimateUrl, setInput]);
 
   function submitAddress() {
     controllerRef.current?.abort();
@@ -130,7 +131,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
     setInput('');
     const state = confirmedState;
     try {
-      const response = await fetchWithCsrf('/api/chat/delivery-estimate', {
+      const response = await fetchWithCsrf(estimateUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-baci-client': 'web-storefront' },
         signal: controller.signal,

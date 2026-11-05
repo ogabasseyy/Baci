@@ -21,6 +21,7 @@ vi.mock('@/hooks/cart', () => ({
     isCartOpen: false,
     addToCart: vi.fn(),
     setIsCartOpen: vi.fn(),
+    merchantSlug: 'ogabassey',
   })),
 }));
 
@@ -87,6 +88,7 @@ describe('ChatWidget - toggle button', () => {
       isCartOpen: false,
       addToCart: vi.fn(),
       setIsCartOpen: vi.fn(),
+      merchantSlug: 'ogabassey',
     } as unknown as ReturnType<typeof useCart>);
     vi.mocked(useMerchantSafe).mockReturnValue({
       basePath: '/ogabassey',
@@ -217,6 +219,7 @@ describe('ChatWidget - chat window when open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: false,
       cart: [{ cartItemId: 'line-1', quantity: 2, price: 100, name: 'Phone' }],
+      merchantSlug: 'ogabassey',
       subtotal: 200,
       isHydrated: true,
       addToCart: vi.fn(),
@@ -264,6 +267,7 @@ describe('ChatWidget - chat window when open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: false,
       cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      merchantSlug: 'ogabassey',
       subtotal: 100,
       isHydrated: true,
       addToCart: vi.fn(),
@@ -320,6 +324,7 @@ describe('ChatWidget - chat window when open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: false,
       cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      merchantSlug: 'ogabassey',
       subtotal: 100,
       isHydrated: true,
       addToCart: vi.fn(),
@@ -354,21 +359,24 @@ describe('ChatWidget - chat window when open', () => {
   });
 
   it.each([
-    ['path routing', { routingMode: 'path', merchant: { country: 'NG', payout_currency: 'NGN' } }],
-    ['non-NGN payout currency', { routingMode: 'domain', merchant: { country: 'NG', payout_currency: 'USD' } }],
-  ])('hides delivery estimates for %s', async (_label, merchantContext) => {
+    ['path routing without resolved slug', { routingMode: 'path', merchant: { country: 'NG', payout_currency: 'NGN', slug: undefined }, expected: false }],
+    ['path routing with invalid slug', { routingMode: 'path', merchant: { country: 'NG', payout_currency: 'NGN', slug: 'api' }, expected: false }],
+    ['non-NGN payout currency', { routingMode: 'domain', merchant: { country: 'NG', payout_currency: 'USD' }, expected: false }],
+    ['valid path routing', { routingMode: 'path', merchant: { country: 'NG', payout_currency: 'NGN' }, expected: true }],
+  ])('gates delivery estimates for %s', async (_label, merchantContext) => {
     vi.mocked(useMerchantSafe).mockReturnValue({
       basePath: '/ogabassey',
       routingMode: merchantContext.routingMode as 'path' | 'domain',
       merchant: {
         id: 'merchant-1',
-        slug: 'ogabassey',
+        slug: 'merchant' in merchantContext.merchant ? merchantContext.merchant.slug : 'ogabassey',
         ...merchantContext.merchant,
       },
     } as unknown as ReturnType<typeof useMerchantSafe>);
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: false,
       cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      merchantSlug: 'ogabassey',
       subtotal: 100,
       isHydrated: true,
       addToCart: vi.fn(),
@@ -392,7 +400,51 @@ describe('ChatWidget - chat window when open', () => {
     const user = userEvent.setup();
     render(<ChatWidget />);
     await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
-    expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
+    if (merchantContext.expected) {
+      expect(screen.getByRole('button', { name: 'Get delivery estimate' })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
+    }
+  });
+
+  it('closes private delivery and clears input when storefront changes away from the cart merchant', async () => {
+    const setInput = vi.fn();
+    vi.mocked(useCart).mockReturnValue({
+      isCartOpen: false,
+      cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      subtotal: 100,
+      isHydrated: true,
+      merchantSlug: 'ogabassey',
+      addToCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/ogabassey',
+      routingMode: 'path',
+      merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG', payout_currency: 'NGN' },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(useOgabasseyChat).mockReturnValue({
+      isOpen: true, setIsOpen: vi.fn(), messages: [], input: '', setInput, isLoading: false,
+      proactiveMsg: null, setProactiveMsg: vi.fn(), messagesEndRef: { current: null },
+      handleSend: vi.fn(), handleSubmit: vi.fn(), handleAddSantaWishToCart: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    const view = render(<ChatWidget />);
+    await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
+    await user.click(screen.getByRole('button', { name: 'Get delivery estimate' }));
+    expect(screen.getByRole('region', { name: 'Private delivery estimate' })).toBeInTheDocument();
+
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/winter-store',
+      routingMode: 'path',
+      merchant: { id: 'merchant-2', slug: 'winter-store', country: 'NG', payout_currency: 'NGN' },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    view.rerender(<ChatWidget />);
+
+    expect(screen.queryByRole('region', { name: 'Private delivery estimate' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Type your message' })).toBeInTheDocument();
+    expect(setInput).toHaveBeenCalledWith('');
   });
 
   it('renders "Ogabassey AI" header when chat is open in standard mode', () => {

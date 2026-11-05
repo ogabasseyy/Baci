@@ -2,16 +2,22 @@
 
 import { useRef, useState, type FormEvent } from 'react';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { isValidMerchantSlug } from '@/lib/validation';
 
 export function canOfferPrivateDeliveryEstimate(input: {
   hydrated: boolean;
   hasItems: boolean;
   routingMode?: string;
+  merchantSlug?: string;
+  cartMerchantSlug?: string;
   country?: string;
   payoutCurrency?: string | null;
 }): boolean {
   const country = input.country?.trim().toUpperCase() ?? '';
-  return input.hydrated && input.hasItems && input.routingMode === 'domain' &&
+  const hasValidPathSlug = !!input.merchantSlug && isValidMerchantSlug(input.merchantSlug);
+  return input.hydrated && input.hasItems &&
+    !!input.merchantSlug && input.cartMerchantSlug === input.merchantSlug &&
+    (input.routingMode === 'domain' || (input.routingMode === 'path' && hasValidPathSlug)) &&
     country === 'NG' &&
     resolveMerchantCurrencyConfig({
       country,

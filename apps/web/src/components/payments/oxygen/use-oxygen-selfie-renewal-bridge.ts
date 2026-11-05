@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { oxygenSelfieStatusSchema } from '@/schemas/oxygen-selfie-status';
@@ -22,7 +22,9 @@ export function useOxygenSelfieRenewalBridge(
   hostedOpen = false
 ): OxygenSelfieRenewHandler {
   const latest = useRef({ snapshot, busy, submit, open });
-  latest.current = { snapshot, busy, submit, open };
+  useLayoutEffect(() => {
+    latest.current = { snapshot, busy, submit, open };
+  });
   const attempts = useRef(
     new Map<string, { total: number; automatic: boolean }>()
   );

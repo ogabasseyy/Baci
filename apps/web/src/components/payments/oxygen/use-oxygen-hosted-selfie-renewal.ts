@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { selfieLinkExpiration } from './selfie-link-expired';
 
 type Renewal = (
@@ -24,7 +24,9 @@ export function useOxygenHostedSelfieRenewal(
   const expired =
     expiration !== null && expiration <= Math.max(now, Date.now());
   const latest = useRef({ onRenew, onConfirmed, enabled });
-  latest.current = { onRenew, onConfirmed, enabled };
+  useLayoutEffect(() => {
+    latest.current = { onRenew, onConfirmed, enabled };
+  });
   const attempts = useRef(0);
   const automatic = useRef(false);
   const locked = useRef(false);
@@ -117,7 +119,9 @@ export function useOxygenHostedSelfieRenewal(
     }
   }
   const retry = useRef(renew);
-  retry.current = renew;
+  useLayoutEffect(() => {
+    retry.current = renew;
+  });
   useEffect(() => {
     if (
       expired &&

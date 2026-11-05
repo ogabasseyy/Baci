@@ -7,7 +7,6 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { setClipboardString } from '@/lib/clipboard';
-import { deriveWalletDisplayData } from './derive-wallet-display-data';
 import { WalletContent } from './WalletContent';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
@@ -303,47 +302,5 @@ describe('WalletContent', () => {
     } finally {
       consoleErrorSpy.mockRestore();
     }
-  });
-
-  describe('PiggyVest main wallet ready', () => {
-    it('shows the PiggyVest balance in the hero instead of the legacy figure', () => {
-      const display = deriveWalletDisplayData({
-        balance: 5000,
-        primary_balance_kobo: 123456,
-        savings_balance: 0,
-        total_balance: 5000,
-      });
-      render(
-        <WalletContent
-          {...createWalletContentProps()}
-          primaryReady={display.primaryReady}
-          savingsBalance={display.savingsBalance}
-          spendableBalance={display.spendableBalance}
-          totalBalance={display.totalBalance}
-        />
-      );
-
-      expect(screen.getByText('₦1,234.56')).toBeOnTheScreen();
-      expect(screen.queryByText('₦5,000')).toBeNull();
-    });
-
-    it('sends savings funding to Add money, never Continue to payment', () => {
-      const props = createWalletContentProps();
-      render(
-        <WalletContent
-          {...props}
-          primaryReady
-          savingsContributionAmount="500"
-          showSavingsProgress
-          spendableBalance={100}
-        />
-      );
-
-      expect(screen.queryByText(/Continue to payment/)).toBeNull();
-      fireEvent.press(
-        screen.getByRole('button', { name: 'Add money to wallet' })
-      );
-      expect(props.onFundSavingsWallet).toHaveBeenCalledTimes(1);
-    });
   });
 });

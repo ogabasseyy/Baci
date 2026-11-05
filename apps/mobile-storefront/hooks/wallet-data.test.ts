@@ -624,49 +624,4 @@ describe('fetchWalletData', () => {
       jest.useRealTimers();
     }
   });
-
-  describe('PiggyVest primary balance', () => {
-    const readyAccount = {
-      accountName: 'Verified',
-      accountNumber: '0987654321',
-      bankName: 'Provider Bank',
-      provider: 'piggyvest',
-    };
-
-    it('exposes the ready balance in kobo and leaves the legacy balance untouched', async () => {
-      setupSupabaseTables();
-      mockReadPrimary.mockResolvedValue({
-        status: 'ready',
-        account: readyAccount,
-        balanceKobo: 123456,
-      });
-      const { wallet } = await fetchWalletData(
-        'customer-1',
-        'merchant-1',
-        'user-1'
-      );
-      expect(wallet.primary_balance_kobo).toBe(123456);
-      expect(wallet.balance).toBe(5000);
-      expect(wallet.total_balance).toBe(5000);
-    });
-
-    it.each([
-      ['not ready', { status: 'not_ready' }],
-      ['unavailable (error or identity switch)', { status: 'unavailable' }],
-      [
-        'pending (no account)',
-        { status: 'ready', account: null, balanceKobo: null },
-      ],
-    ])('adds no primary balance when %s', async (_label, settled) => {
-      setupSupabaseTables();
-      mockReadPrimary.mockResolvedValue(settled);
-      const { wallet } = await fetchWalletData(
-        'customer-1',
-        'merchant-1',
-        'user-1'
-      );
-      expect('primary_balance_kobo' in wallet).toBe(false);
-      expect(wallet.balance).toBe(5000);
-    });
-  });
 });

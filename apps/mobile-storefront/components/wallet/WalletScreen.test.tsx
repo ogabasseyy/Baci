@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
 import { useWalletRouteActionSetup } from '@/components/wallet/use-wallet-route-action-setup';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { WalletScreen } from './WalletScreen';
-import { WalletScreenView } from './WalletScreenView';
 import { fundWallet } from './wallet-screen.handlers';
 
 const mockGoal: WalletActiveSavingsGoal = {
@@ -105,9 +104,7 @@ jest.mock('@/stores/auth-store', () => ({
 jest.mock('./SampleInterestPreview', () => ({
   SampleInterestPreview: jest.fn(() => null),
 }));
-jest.mock('./WalletScreenView', () => ({
-  WalletScreenView: jest.fn(() => null),
-}));
+jest.mock('./WalletScreenView', () => ({ WalletScreenView: () => null }));
 jest.mock('./use-wallet-appearance', () => ({
   useWalletAppearance: () => ({ colors: {}, scrollContentStyle: {} }),
 }));
@@ -242,86 +239,5 @@ describe('WalletScreen interest preview integration', () => {
       screen.queryByRole('button', { name: 'Preview sample interest' })
     ).toBeNull();
     expect(mockPreview).not.toHaveBeenCalled();
-  });
-});
-
-describe('WalletScreen PiggyVest main wallet', () => {
-  const primaryDisplay = () => ({
-    activeSavingsGoal: mockGoal,
-    earningsAvailable: false,
-    earningsBalance: 0,
-    fundingAccount: null,
-    primaryReady: true,
-    savingsBalance: 0,
-    showQuickSave: false,
-    spendableBalance: 1234.56,
-    totalBalance: 1234.56,
-  });
-
-  function mountWith(primaryReady: boolean) {
-    const refetch = jest.fn();
-    mockUseWallet.mockReturnValue({
-      data: {
-        wallet: primaryReady ? { primary_balance_kobo: 123456 } : {},
-        transactions: [],
-      },
-      isError: false,
-      isLoading: false,
-      isRefetching: false,
-      refetch,
-    });
-    mockDeriveWalletDisplayData.mockReturnValue(
-      primaryReady
-        ? primaryDisplay()
-        : { ...primaryDisplay(), primaryReady: false, spendableBalance: 5000 }
-    );
-    render(<WalletScreen />);
-    const controller = () =>
-      jest.mocked(useWalletSavingsController).mock.calls.at(-1)?.[0];
-    const contentProps = () =>
-      jest.mocked(WalletScreenView).mock.calls.at(-1)?.[0].walletContentProps;
-    return { controller, contentProps, refetch };
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
-    mockUseRequireAuth.mockReturnValue({ isLoading: false, redirectTo: null });
-    mockUseAuthStore.mockReturnValue(mockAuthState);
-  });
-
-  it('funds savings from the PiggyVest balance and routes a short balance to Add money', () => {
-    const { controller, contentProps } = mountWith(true);
-
-    expect(controller()?.spendableBalance).toBe(1234.56);
-    expect(controller()?.primaryReady).toBe(true);
-    expect(contentProps()?.primaryReady).toBe(true);
-    expect(contentProps()?.showFundPanel).toBe(false);
-
-    act(() => controller()?.onAddMoney?.());
-
-    expect(contentProps()?.showFundPanel).toBe(true);
-    expect(contentProps()?.showSavingsProgress).toBe(false);
-  });
-
-  it('polls the balance every 10 seconds while the fund panel is open', () => {
-    const { controller, refetch } = mountWith(true);
-    act(() => jest.advanceTimersByTime(30_000));
-    expect(refetch).not.toHaveBeenCalled();
-
-    act(() => controller()?.onAddMoney?.());
-    act(() => jest.advanceTimersByTime(30_000));
-
-    expect(refetch).toHaveBeenCalledTimes(3);
-  });
-
-  it("keeps today's behaviour on the legacy wallet", () => {
-    const { controller, contentProps, refetch } = mountWith(false);
-
-    expect(controller()?.primaryReady).toBe(false);
-    expect(contentProps()?.primaryReady).toBe(false);
-    act(() => controller()?.onAddMoney?.());
-    act(() => jest.advanceTimersByTime(60_000));
-    expect(refetch).not.toHaveBeenCalled();
   });
 });

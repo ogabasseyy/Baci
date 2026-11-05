@@ -44,6 +44,7 @@ const EXPLICIT_STATIC_ROUTES = new Set([
   'repairs/status.tsx',
   'savings/funding.tsx',
   'search.tsx',
+  'settings/wallet-pin.tsx',
   'utilities/history.tsx',
   'wallet/manage-cards.tsx',
   'wallet/savings/start.tsx',

@@ -69,7 +69,10 @@ export function sourcePage(
       low = Math.max(low + 1, Math.floor((low + high) / 2) + 1);
       continue;
     }
-    if (Buffer.byteLength(JSON.stringify(make(mid))) < 98304) {
+    if (
+      Buffer.byteLength(JSON.stringify({ status: 'ok', value: make(mid) })) <=
+      98304
+    ) {
       best = mid;
       low = mid + 1;
     } else high = mid - 1;

@@ -162,3 +162,25 @@ it.each([
     expect.objectContaining({ p_merchant: 'merchant' })
   );
 });
+
+it('round trips escaped source within the complete MCP result envelope budget', () => {
+  const source = `/*${'\0'.repeat(32768)}*/\n${'🌍'.repeat(9000)}`;
+  let offset = 0;
+  let recovered = '';
+  while (offset < Buffer.byteLength(source)) {
+    const page = sourcePage(source, offset, 32768);
+    expect(
+      Buffer.byteLength(JSON.stringify({ status: 'ok', value: page }))
+    ).toBeLessThanOrEqual(98304);
+    recovered += page.content;
+    const next = page.nextCursor ?? Buffer.byteLength(source);
+    expect(next).toBeGreaterThan(offset);
+    offset = next;
+  }
+  expect(recovered).toBe(source);
+  expect(sourcePage(source, offset, 32768)).toEqual({
+    content: '',
+    byteOffset: offset,
+    nextCursor: null,
+  });
+});

@@ -3,6 +3,7 @@ import {
   fetchWalletPinStatus,
   submitWalletPin,
   verifyFundPin,
+  verifyGoalActionPin,
 } from './wallet-pin-api';
 
 const mockFetchJson = jest.fn();
@@ -129,5 +130,52 @@ describe('pinned to the account that opened the sheet', () => {
     expect(mockFetchJson).toHaveBeenCalledWith(
       expect.objectContaining({ expectedUserId: 'user-opened' })
     );
+  });
+});
+
+describe('verifyGoalActionPin', () => {
+  it.each([
+    'cancel',
+    'complete',
+  ] as const)('verifies the %s action with no amount', async (action) => {
+    mockFetchJson.mockResolvedValue({
+      proof,
+      expiresAt: '2026-11-05T10:00:00Z',
+    });
+    await expect(
+      verifyGoalActionPin({ ...ids, pin: '4821', action }, 'user-opened')
+    ).resolves.toBe(proof);
+    expect(mockFetchJson).toHaveBeenCalledWith({
+      path: '/api/storefront/customer/savings/goal-pin/verify',
+      method: 'POST',
+      includeCsrf: true,
+      expectedUserId: 'user-opened',
+      body: { ...ids, pin: '4821', action },
+    });
+    expect(mockFetchJson.mock.calls[0]?.[0].body).not.toHaveProperty(
+      'amountKobo'
+    );
+  });
+
+  it('rejects a fund action and an unreadable answer before trusting it', async () => {
+    await expect(
+      verifyGoalActionPin({ ...ids, pin: '4821', action: 'fund' as never })
+    ).rejects.toBeDefined();
+    expect(mockFetchJson).not.toHaveBeenCalled();
+    mockFetchJson.mockResolvedValue({ proof: 'short' });
+    await expect(
+      verifyGoalActionPin({ ...ids, pin: '4821', action: 'cancel' })
+    ).rejects.toThrow('unavailable');
+  });
+
+  it('keeps the server code for a wrong PIN', async () => {
+    mockFetchJson.mockRejectedValue(
+      Object.assign(new Error('That PIN is not right.'), {
+        code: 'PIN_INCORRECT',
+      })
+    );
+    await expect(
+      verifyGoalActionPin({ ...ids, pin: '0000', action: 'complete' })
+    ).rejects.toMatchObject({ code: 'PIN_INCORRECT' });
   });
 });

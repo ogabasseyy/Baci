@@ -34,6 +34,8 @@ export interface WalletActiveSavingsGoal {
   current_amount: number;
   id: string;
   maturity_date: string;
+  /** Stored balance before projected interest; absent when no interest applies. */
+  principal_amount?: number;
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;

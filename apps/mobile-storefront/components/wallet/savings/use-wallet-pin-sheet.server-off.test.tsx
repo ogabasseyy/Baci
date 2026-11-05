@@ -39,4 +39,25 @@ describe('server keeps PiggyVest off', () => {
     );
     await waitFor(() => expect(result.current.step).toBe('unavailable'));
   });
+
+  it('reports a goal-action request unavailable when the server says not primary', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue({
+      primary: false,
+      hasPin: false,
+      resetRequired: false,
+      available: false,
+    });
+    const { result } = renderHook(() =>
+      useWalletPinSheet({
+        request: {
+          action: 'cancel',
+          merchantId: 'm',
+          goalId: 'g',
+          operationId: 'o',
+        },
+        onProof: jest.fn(),
+      })
+    );
+    await waitFor(() => expect(result.current.step).toBe('unavailable'));
+  });
 });

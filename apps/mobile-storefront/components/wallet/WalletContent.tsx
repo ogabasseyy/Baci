@@ -1,14 +1,14 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Alert, RefreshControl } from 'react-native';
+import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
-import { useProductSearch } from '@/hooks/use-product-search';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -47,6 +47,9 @@ export interface WalletContentProps {
   fundReturnTo?: WalletReturnHref;
   isAddingSavingsContribution: boolean;
   hasPendingSavingsContribution?: boolean;
+  goalAwaitingSettlement?: boolean;
+  /** The wallet query's last-updated time: re-reads the goal readiness gate. */
+  walletUpdatedAt?: number;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   isRedeemPending: boolean;
@@ -146,37 +149,19 @@ export function WalletContent(props: WalletContentProps) {
     returnTo: fundReturnTo,
     transactions,
   });
-  const [showSavingsDeviceSwap, setShowSavingsDeviceSwap] = useState(false);
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =
     useState(false);
-  const [savingsDeviceSearch, setSavingsDeviceSearch] = useState('');
-  const [isChangingSavingsDevice, setIsChangingSavingsDevice] = useState(false);
-  const trimmedSavingsDeviceSearch = savingsDeviceSearch.trim();
   const {
-    products: savingsDeviceProducts,
-    isLoading: isSavingsDeviceLoading,
+    isChangingSavingsDevice,
+    isSavingsDeviceLoading,
     resolveProduct,
-  } = useProductSearch({
-    enabled: showSavingsDeviceSwap,
-    limit: 8,
-    search: trimmedSavingsDeviceSearch || undefined,
-  });
-  const handleSelectSavingsDevice = async (
-    product: Product,
-    variantId?: string | null
-  ) => {
-    setIsChangingSavingsDevice(true);
-    try {
-      const didChange = await onChangeSavingsDevice(product, variantId);
-      if (didChange) {
-        setShowSavingsDeviceSwap(false);
-        setSavingsDeviceSearch('');
-      }
-    } catch {
-      Alert.alert('Unable to change device', 'Please try again in a moment.');
-    }
-    setIsChangingSavingsDevice(false);
-  };
+    savingsDeviceProducts,
+    savingsDeviceSearch,
+    setSavingsDeviceSearch,
+    setShowSavingsDeviceSwap,
+    showSavingsDeviceSwap,
+    handleSelectSavingsDevice,
+  } = useSavingsDeviceSwap(onChangeSavingsDevice);
 
   return (
     <WalletPrimaryContext.Provider value={props.primaryReady === true}>
@@ -217,6 +202,7 @@ export function WalletContent(props: WalletContentProps) {
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}
+            awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
           />
@@ -258,6 +244,7 @@ export function WalletContent(props: WalletContentProps) {
         goal={activeSavingsGoal}
         isAdding={isAddingSavingsContribution}
         hasPendingContribution={props.hasPendingSavingsContribution}
+        walletUpdatedAt={props.walletUpdatedAt}
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
         onAddSavings={onAddSavingsContribution}

@@ -27,6 +27,23 @@ jest.mock('expo-image', () => {
   };
 });
 
+jest.mock('./savings/GoalLifecycleEntry', () => ({
+  GoalLifecycleEntry: ({
+    goal,
+    hasPendingContribution,
+  }: {
+    goal: { id: string };
+    hasPendingContribution: boolean;
+  }) => {
+    const { Text } = jest.requireActual(
+      'react-native'
+    ) as typeof import('react-native');
+    return (
+      <Text>{`lifecycle:${goal.id}:${hasPendingContribution ? 'pending' : 'clear'}`}</Text>
+    );
+  },
+}));
+
 const goal = {
   contribution_amount: 500,
   contribution_frequency: 'weekly' as const,
@@ -308,5 +325,28 @@ describe('WalletSavingsProgressModal', () => {
     expect(
       screen.queryByRole('button', { name: 'Change savings device' })
     ).toBeNull();
+  });
+
+  it.each([
+    [false, 'clear'],
+    [true, 'pending'],
+  ])('hands the goal and the pending state to the goal lifecycle entry (pending %s)', (hasPendingContribution, label) => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount=""
+        colors={Colors.light}
+        goal={goal}
+        isAdding={false}
+        hasPendingContribution={hasPendingContribution}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={0}
+      />
+    );
+    expect(screen.getByText(`lifecycle:goal-1:${label}`)).toBeOnTheScreen();
   });
 });

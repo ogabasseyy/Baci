@@ -6,11 +6,20 @@ import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
+type PlanFunding = ReturnType<typeof useSavingsPlanFunding>;
+
 type Props = {
   colors: (typeof Colors)['light'];
   goalId: string;
   identityKey: string;
   merchantId: string;
+  /**
+   * A status hook the parent already runs (so the note and a gate beside it
+   * read one status). Without it the note reads its own.
+   */
+  funding?: PlanFunding;
+  /** Set once automatic checks have run out while setup is still pending. */
+  onCheckAgain?: () => void;
 };
 
 /**
@@ -23,26 +32,42 @@ type Props = {
  * earlier claim expired: it gets a retry action that reuses the stored
  * interest answer.
  */
-export function SavingsPlanStatusNote({
-  colors,
-  goalId,
-  identityKey,
-  merchantId,
-}: Props) {
-  const primary = isPiggyvestPrimaryMerchant(merchantId);
+export function SavingsPlanStatusNote(props: Props) {
+  return props.funding ? (
+    <StatusNoteView {...props} funding={props.funding} />
+  ) : (
+    <OwnStatusNote {...props} />
+  );
+}
+
+function OwnStatusNote(props: Props) {
   const funding = useSavingsPlanFunding({
-    activeMerchantId: merchantId,
-    goalId,
-    identityKey,
-    loadExisting: primary,
+    activeMerchantId: props.merchantId,
+    goalId: props.goalId,
+    identityKey: props.identityKey,
+    loadExisting: isPiggyvestPrimaryMerchant(props.merchantId),
     notFoundMeansNotStarted: true,
   });
+  return <StatusNoteView {...props} funding={funding} bvnGate />;
+}
+
+function StatusNoteView({
+  colors,
+  goalId,
+  merchantId,
+  funding,
+  bvnGate = false,
+  onCheckAgain,
+}: Props & { funding: PlanFunding; bvnGate?: boolean }) {
+  const primary = isPiggyvestPrimaryMerchant(merchantId);
   const setup = useSavingsGoalSetup({
     goalId,
     merchantId,
     onSettled: () => void funding.fetchExistingPlanFunding(),
   });
-  if (!primary || funding.planFundingRequiresBvn) return null;
+  // The note reads its own status only where a BVN field may be on screen; a
+  // parent that supplies the status (no BVN field) controls visibility itself.
+  if (!primary || (bvnGate && funding.planFundingRequiresBvn)) return null;
   const phase = funding.planFundingPhase;
   const rereadingAfterSetup = phase === 'loading' && setup.attempted;
   if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))
@@ -81,6 +106,25 @@ export function SavingsPlanStatusNote({
         >
           <Text style={[styles.action, { color: colors.primary }]}>
             Try again
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (phase === 'pending' && onCheckAgain) {
+    return (
+      <View style={styles.section}>
+        <Text style={[styles.body, { color: colors.textSecondary }]}>
+          Still setting up your goal.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Check again"
+          onPress={onCheckAgain}
+          style={styles.retry}
+        >
+          <Text style={[styles.action, { color: colors.primary }]}>
+            Check again
           </Text>
         </Pressable>
       </View>

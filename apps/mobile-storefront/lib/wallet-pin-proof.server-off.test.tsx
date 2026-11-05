@@ -28,4 +28,19 @@ describe('server keeps PiggyVest off', () => {
     });
     expect(run).toHaveBeenCalledWith(undefined);
   });
+
+  it('rethrows a not-ready refusal for a goal-action request without prompting', async () => {
+    const notReady = Object.assign(new Error('not ready'), {
+      code: 'PIGGYVEST_NOT_READY',
+    });
+    const ask = jest.fn();
+    await expect(
+      runWithPinProof(
+        jest.fn().mockRejectedValue(notReady),
+        { action: 'complete', merchantId: 'm', goalId: 'g', operationId: 'o' },
+        ask
+      )
+    ).rejects.toBe(notReady);
+    expect(ask).not.toHaveBeenCalled();
+  });
 });

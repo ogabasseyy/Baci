@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import type { WalletData } from './wallet-query';
+import type { WalletActiveSavingsGoal, WalletData } from './wallet-query';
 import { walletKeys } from './wallet-query';
 
 // The wallet query contract stays additive: a wallet the server keeps off
@@ -22,5 +22,21 @@ describe('wallet query contract with the server off', () => {
     expect(() => walletKeys.data({ merchantId: '', ownerId: 'o1' })).toThrow();
     expect(() => walletKeys.data({ merchantId: 'm1', ownerId: '' })).toThrow();
     expect(() => walletKeys.transactions('')).toThrow();
+  });
+
+  it('a goal without principal_amount (no PiggyVest data) is a valid goal shape', () => {
+    const goal: WalletActiveSavingsGoal = {
+      contribution_amount: 1,
+      contribution_frequency: 'weekly',
+      current_amount: 10,
+      id: 'g',
+      maturity_date: '2026-12-01',
+      source_mode: 'manual',
+      status: 'active',
+      target_amount: 100,
+      title: 'Plan',
+    };
+    expect(goal.principal_amount).toBeUndefined();
+    expect(walletKeys.all).toBeDefined();
   });
 });

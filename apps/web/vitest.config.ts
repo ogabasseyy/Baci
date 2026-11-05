@@ -124,6 +124,8 @@ export default defineConfig({
       'tests/experience-commerce/**/*.integration.test.ts',
       'tests/builder-chatgpt/experience-upload.test.ts',
       'tests/experience-browser/**/*.test.ts',
+      // These node:test suites run in the dedicated synthetic handoff workflow.
+      'tools/chatwoot-handoff-ci/*.test.mjs',
     ],
     environment: 'jsdom',
     globals: true,

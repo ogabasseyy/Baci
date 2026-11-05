@@ -19,7 +19,10 @@ const mockPlanFunding = jest.fn();
 jest.mock('./savings/use-savings-plan-funding', () => ({
   useSavingsPlanFunding: (...args: unknown[]) => mockPlanFunding(...args),
 }));
-const mockPoll = jest.fn(() => ({ exhausted: false, checkAgain: jest.fn() }));
+const mockPoll = jest.fn((..._args: unknown[]) => ({
+  exhausted: false,
+  checkAgain: jest.fn(),
+}));
 jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
   useGoalWalletSetupPoll: (...args: unknown[]) => mockPoll(...args),
 }));

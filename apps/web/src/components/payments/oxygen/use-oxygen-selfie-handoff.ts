@@ -3,10 +3,12 @@ import { useContext, useEffect, useRef } from 'react';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import {
   OxygenSelfieConfirmedContext,
+  OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
 } from './OxygenPaymentSurfaceContext';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { selfieLinkExpired } from './selfie-link-expired';
+import { useOxygenSelfieRenewalBridge } from './use-oxygen-selfie-renewal-bridge';
 
 export function useOxygenSelfieHandoff(
   snapshot: OxygenRuntimeSnapshot | null,
@@ -17,6 +19,9 @@ export function useOxygenSelfieHandoff(
 ) {
   const open = useContext(OxygenSelfieSurfaceContext);
   const confirmed = useContext(OxygenSelfieConfirmedContext);
+  const register = useContext(OxygenSelfieRenewalContext);
+  const renew = useOxygenSelfieRenewalBridge(snapshot, busy, submit, open);
+  useEffect(() => register?.(renew), [register, renew]);
   const opened = useRef('');
   const synced = useRef('');
   useEffect(() => {
@@ -36,7 +41,7 @@ export function useOxygenSelfieHandoff(
       !snapshot.executionEnabled ||
       !state.validated ||
       !url ||
-      selfieLinkExpired(url) ||
+      (selfieLinkExpired(url) && !register) ||
       state.bookingReference ||
       state.kyc?.selfie_status === 'DONE' ||
       opened.current === url ||
@@ -46,6 +51,6 @@ export function useOxygenSelfieHandoff(
     if (snapshot.pending && snapshot.pending.action !== 'validate_nin') return;
     opened.current = url;
     open(url, workflowId);
-  }, [snapshot, active, busy, open, confirmed, submit, refresh]);
+  }, [snapshot, active, busy, open, confirmed, submit, refresh, register]);
   return Boolean(snapshot && confirmed === snapshot.workflowId);
 }

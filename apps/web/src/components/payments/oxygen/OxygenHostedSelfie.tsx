@@ -3,6 +3,8 @@ import { ArrowLeft, Smartphone } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { OxygenPhoneHandoff } from './OxygenPhoneHandoff';
 import { OxygenSelfieLoading } from './OxygenSelfieLoading';
+import { OxygenSelfieSessionRecovery } from './OxygenSelfieSessionRecovery';
+import { useOxygenHostedSelfieRenewal } from './use-oxygen-hosted-selfie-renewal';
 import { useOxygenSelfieStatus } from './use-oxygen-selfie-status';
 
 export function isOxygenSelfieUrl(
@@ -27,6 +29,7 @@ export function OxygenHostedSelfie({
   selfieOrigins = [],
   onClose,
   workflowId,
+  onRenew,
   onConfirmed = () => {
     /* Optional outside checkout. */
   },
@@ -36,6 +39,10 @@ export function OxygenHostedSelfie({
   onClose(): void;
   workflowId?: string;
   onConfirmed?(): void;
+  onRenew?(
+    automatic: boolean,
+    signal: AbortSignal
+  ): Promise<'confirmed' | 'renewed'>;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const lastHint = useRef(0);
@@ -45,8 +52,16 @@ export function OxygenHostedSelfie({
   const trustedOrigin = isOxygenSelfieUrl(url, selfieOrigins)
     ? new URL(url).origin
     : null;
+  const renewal = useOxygenHostedSelfieRenewal(
+    url,
+    Boolean(trustedOrigin) && !phone,
+    onRenew,
+    onConfirmed
+  );
   const status = useOxygenSelfieStatus(
-    trustedOrigin ? workflowId : undefined,
+    trustedOrigin && (!renewal.expired || phone) && !renewal.renewing
+      ? workflowId
+      : undefined,
     onConfirmed
   );
   const retryFromHint = useEffectEvent(() => status.retry());
@@ -90,6 +105,12 @@ export function OxygenHostedSelfie({
           workflowId={workflowId}
           onPrepared={status.retry}
           onBack={() => setPhone(false)}
+        />
+      ) : trustedOrigin && (renewal.expired || renewal.renewing) ? (
+        <OxygenSelfieSessionRecovery
+          renewing={renewal.renewing}
+          error={renewal.error}
+          onRetry={renewal.retry}
         />
       ) : trustedOrigin ? (
         <div className="relative min-h-0 flex-1 bg-white">

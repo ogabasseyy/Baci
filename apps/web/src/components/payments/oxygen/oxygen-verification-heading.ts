@@ -3,6 +3,7 @@ export function oxygenVerificationHeading(input: {
   selfie: boolean;
   selfieConfirmed?: boolean;
   ninPending: boolean;
+  retryStatus?: boolean;
   bankPending: boolean;
   review: boolean;
   checking: boolean;
@@ -11,6 +12,10 @@ export function oxygenVerificationHeading(input: {
   eligibilityFailed: boolean;
 }): string {
   if (input.selfie) return 'Opening face verification';
+  if (input.retryStatus)
+    return input.checking
+      ? 'Checking verification status'
+      : 'We couldn’t start your identity check';
   if (input.ninPending)
     return input.review
       ? 'NIN confirmation is still pending'

@@ -1,5 +1,6 @@
 'use client';
 import { createContext, type Dispatch, type SetStateAction } from 'react';
+import type { OxygenSelfieRenewHandler } from './use-oxygen-selfie-renewal-bridge';
 export const OxygenPaymentSurfaceContext = createContext<Dispatch<
   SetStateAction<string | null>
 > | null>(null);
@@ -21,3 +22,7 @@ export const OxygenSelfieConfirmedContext = createContext<string | null>(null);
 export const OxygenOrderConfirmationContext = createContext<
   (() => void) | undefined
 >(undefined);
+
+export const OxygenSelfieRenewalContext = createContext<
+  ((handler: OxygenSelfieRenewHandler) => () => void) | null
+>(null);

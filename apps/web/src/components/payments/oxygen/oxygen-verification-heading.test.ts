@@ -42,3 +42,23 @@ it('keeps the confirmed selfie return in identity loading until the saved checks
     })
   ).toBe('Checking your payment options');
 });
+
+it('does not claim NIN validation while attempt status is unavailable', () => {
+  const state = {
+    selfie: false,
+    ninPending: true,
+    retryStatus: true,
+    bankPending: false,
+    review: false,
+    checking: false,
+    identityComplete: true,
+    bvnDone: true,
+    eligibilityFailed: false,
+  };
+  expect(oxygenVerificationHeading(state)).toBe(
+    'We couldn’t start your identity check'
+  );
+  expect(oxygenVerificationHeading({ ...state, checking: true })).toBe(
+    'Checking verification status'
+  );
+});

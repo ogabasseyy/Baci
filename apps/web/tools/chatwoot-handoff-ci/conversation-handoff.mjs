@@ -1,5 +1,7 @@
 const HANDOFF_REPLY = 'Synthetic bot: handing this to a human operator.';
 const FOLLOWUP_REPLY = 'Synthetic bot: I can help with that.';
+const HUMAN_TAKEOVER_MESSAGE =
+  'Synthetic customer: I have another question for the human operator.';
 
 function conversationPath(accountId, id) {
   return `/api/v1/accounts/${accountId}/conversations/${id}`;
@@ -45,13 +47,83 @@ async function waitForBotReply({
   );
 }
 
+async function assertNoBotReplyDuringHumanTakeover({
+  api,
+  waitFor,
+  accountId,
+  id,
+  token,
+  events,
+  publishTakeoverMarker,
+  silenceWindowMs = 5000,
+  pollIntervalMs = 500,
+}) {
+  const path = messagesPath(accountId, id);
+  const before = await api(path, token);
+  const priorMessageIds = new Set(
+    (before.payload ?? []).map((message) => message.id)
+  );
+  const eventBaseline = events.length;
+  await publishTakeoverMarker();
+
+  await waitFor(
+    async () =>
+      events
+        .slice(eventBaseline)
+        .some(
+          (event) =>
+            event.event === 'message_created' &&
+            event.message_type === 'incoming' &&
+            event.content === HUMAN_TAKEOVER_MESSAGE &&
+            String(event.conversation?.id) === String(id)
+        ),
+    'takeover customer message webhook'
+  );
+
+  const end = Date.now() + silenceWindowMs;
+  do {
+    const conversation = await api(conversationPath(accountId, id), token);
+    if (conversation.status !== 'open')
+      throw new Error(
+        `Expected conversation to remain open during human takeover, received ${conversation.status}`
+      );
+    const messages = (await api(path, token)).payload ?? [];
+    const unexpectedReply = messages.find(
+      (message) =>
+        !priorMessageIds.has(message.id) &&
+        senderKind(message.sender) === 'agentbot'
+    );
+    if (unexpectedReply)
+      throw new Error('AgentBot replied while a human had taken over');
+    if (Date.now() >= end) break;
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  } while (Date.now() <= end);
+
+  const conversation = await api(conversationPath(accountId, id), token);
+  if (conversation.status !== 'open')
+    throw new Error(
+      `Expected conversation to remain open during human takeover, received ${conversation.status}`
+    );
+  const finalMessages = (await api(path, token)).payload ?? [];
+  const lateReply = finalMessages.find(
+    (message) =>
+      !priorMessageIds.has(message.id) &&
+      senderKind(message.sender) === 'agentbot'
+  );
+  if (lateReply)
+    throw new Error('AgentBot replied while a human had taken over');
+}
+
 export async function verifyConversationHandoff({
   seed,
   api,
   waitFor,
   publishTriggerMarker,
   publishFollowupMarker,
+  publishTakeoverMarker,
   events,
+  silenceWindowMs,
+  silencePollIntervalMs,
 }) {
   const { account_id: accountId, conversation_id: id } = seed;
   const humanToken = seed.human_token;
@@ -75,6 +147,18 @@ export async function verifyConversationHandoff({
     const conversation = await api(conversationPath(accountId, id), humanToken);
     return conversation.status === 'open' && !conversation.meta?.assignee;
   }, 'AgentBot handoff to the open queue');
+
+  await assertNoBotReplyDuringHumanTakeover({
+    api,
+    waitFor,
+    accountId,
+    id,
+    token: humanToken,
+    events,
+    publishTakeoverMarker,
+    silenceWindowMs,
+    pollIntervalMs: silencePollIntervalMs,
+  });
 
   const human = await api(messagesPath(accountId, id), humanToken, {
     method: 'POST',

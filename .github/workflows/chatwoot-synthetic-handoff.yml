@@ -60,6 +60,8 @@ jobs:
           }
           wait_for_file harness-ready-for-trigger
           "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Please connect me to a human operator.'
+          wait_for_file harness-ready-for-takeover
+          "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Synthetic customer: I have another question for the human operator.'
           wait_for_file harness-ready-for-followup
           "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Synthetic follow-up after handback.'
           "${compose[@]}" wait harness || true

@@ -11,12 +11,13 @@ import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatCartReview } from './chat-cart-review';
-import { getPrivateDeliveryEstimateUrl } from './chat-delivery-estimate-url';
 import { ChatDeliveryQuote } from './chat-delivery-quote';
 import { ChatMessageBubble } from './chat-message';
+import { getChatDeliveryContext } from './get-chat-delivery-context';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
-import { canOfferPrivateDeliveryEstimate, getChatPanelMobileHeightCap, usePrivateDeliveryMode } from './use-private-delivery-mode';
+import { getChatPanelMobileHeightCap } from './chat-panel-mobile-height-cap';
+import { usePrivateDeliveryMode } from './use-private-delivery-mode';
 export interface ChatWidgetProps {
   openOnMount?: boolean;
 }
@@ -42,14 +43,20 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
   const merchant = useMerchantSafe();
   const isFooterVisible = useOgabasseyScrollVisibility();
   const isSanta = theme === 'santa';
-  const privateDelivery = usePrivateDeliveryMode();
-  const deliveryEstimateUrl = getPrivateDeliveryEstimateUrl(merchant?.routingMode, merchant?.merchant?.slug);
   const [cartPanelOpen, setCartPanelOpen] = useState(false);
-  const cartKey = JSON.stringify([cart.map((item) => [item.cartItemId, item.quantity, item.price, item.negotiatedPrice]), subtotal, sharedCartRef?.version, merchant?.merchant?.id, merchant?.merchant?.slug, merchant?.merchant?.country, merchant?.merchant?.payout_currency, merchant?.routingMode, cartMerchantSlug]);
-  const canOfferDeliveryEstimate = canOfferPrivateDeliveryEstimate({ hydrated: isHydrated, hasItems: cart.length > 0, routingMode: merchant?.routingMode, merchantSlug: merchant?.merchant?.slug, cartMerchantSlug, country: merchant?.merchant?.country, payoutCurrency: merchant?.merchant?.payout_currency });
-
+  const deliveryContext = getChatDeliveryContext({
+    lines: cart,
+    subtotal,
+    sharedVersion: sharedCartRef?.version,
+    hydrated: isHydrated,
+    routingMode: merchant?.routingMode,
+    merchantId: merchant?.merchant?.id,
+    merchantSlug: merchant?.merchant?.slug,
+    cartMerchantSlug,
+    country: merchant?.merchant?.country,
+    payoutCurrency: merchant?.merchant?.payout_currency,
+  });
   const cartItemCount = cart.reduce((count, item) => count + item.quantity, 0);
-
   const {
     isOpen,
     setIsOpen,
@@ -68,8 +75,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
     storefrontSlug: merchant?.merchant?.slug,
   });
 
-  useEffect(() => { if (privateDelivery.active && (!deliveryEstimateUrl || !canOfferDeliveryEstimate)) privateDelivery.close(() => setInput('')); }, [canOfferDeliveryEstimate, deliveryEstimateUrl, privateDelivery, setInput]);
-
+  const privateDelivery = usePrivateDeliveryMode(deliveryContext.eligible, setInput);
   useEffect(() => {
     if (cartPanelOpen || privateDelivery.active) {
       messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
@@ -77,7 +83,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
   }, [cartPanelOpen, privateDelivery.active, messagesEndRef]);
   const closeChat = () => {
     setCartPanelOpen(false);
-    if (privateDelivery.active) privateDelivery.close(() => setInput(''));
+    if (privateDelivery.active) privateDelivery.close();
     setIsOpen(false);
   };
 
@@ -243,7 +249,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
               <div id="chat-cart-panel" hidden={!cartPanelOpen}>
                 {cartPanelOpen ? (
                   <ChatCartReview onRequestDeliveryQuote={
-                    canOfferDeliveryEstimate
+                    deliveryContext.eligible
                       ? () => {
                           setInput('');
                           setCartPanelOpen(false);
@@ -254,15 +260,15 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
                 ) : null}
               </div>
 
-              {privateDelivery.active && deliveryEstimateUrl && canOfferDeliveryEstimate ? (
+              {privateDelivery.active && deliveryContext.eligible && deliveryContext.estimateUrl ? (
                 <ChatDeliveryQuote
-                  estimateUrl={deliveryEstimateUrl}
-                  cartKey={cartKey}
+                  estimateUrl={deliveryContext.estimateUrl}
+                  cartKey={deliveryContext.cartKey}
                   input={input}
                   setInput={setInput}
                   submitRef={privateDelivery.submitRef}
                   onComposerLockChange={privateDelivery.setComposerLocked}
-                  onClose={() => privateDelivery.close(() => setInput(''))}
+                  onClose={privateDelivery.close}
                 />
               ) : null}
 

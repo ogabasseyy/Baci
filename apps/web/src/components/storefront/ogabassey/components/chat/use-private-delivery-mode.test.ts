@@ -1,31 +1,11 @@
-import { renderHook, act } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { canOfferPrivateDeliveryEstimate, getChatPanelMobileHeightCap, usePrivateDeliveryMode } from './use-private-delivery-mode';
+import { getChatDeliveryContext } from './get-chat-delivery-context';
+import { usePrivateDeliveryMode } from './use-private-delivery-mode';
 
 describe('usePrivateDeliveryMode', () => {
-  it('clamps both mobile panel height bounds to the space above the anchored launcher', () => {
-    expect(getChatPanelMobileHeightCap('6.75rem')).toBe(
-      'max(0px, calc(100dvh - env(safe-area-inset-bottom, 0px) - 6.75rem - 5.5rem))',
-    );
-  });
-
-  it('offers estimates for hydrated NGN domain stores or path stores with a valid context slug', () => {
-    const base = { hydrated: true, hasItems: true, routingMode: 'domain', merchantSlug: 'ogabassey', cartMerchantSlug: 'ogabassey', country: 'NG', payoutCurrency: 'NGN' };
-    expect(canOfferPrivateDeliveryEstimate(base)).toBe(true);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, payoutCurrency: undefined })).toBe(true);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, country: 'Nigeria' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: 'store-name', cartMerchantSlug: 'store-name' })).toBe(true);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, cartMerchantSlug: 'another-store' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, cartMerchantSlug: undefined })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: undefined })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, routingMode: 'path', merchantSlug: 'api' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, payoutCurrency: 'USD' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, country: 'GH' })).toBe(false);
-    expect(canOfferPrivateDeliveryEstimate({ ...base, hydrated: false })).toBe(false);
-  });
-
   it('routes submit to the private handler without forwarding transcript text', () => {
-    const { result } = renderHook(() => usePrivateDeliveryMode());
+    const { result } = renderHook(() => usePrivateDeliveryMode(true, vi.fn()));
     const privateSubmit = vi.fn();
     const normalSubmit = vi.fn();
     const event = { preventDefault: vi.fn() } as unknown as React.FormEvent;
@@ -40,11 +20,44 @@ describe('usePrivateDeliveryMode', () => {
   });
 
   it('uses normal chat submit when private mode is inactive', () => {
-    const { result } = renderHook(() => usePrivateDeliveryMode());
+    const { result } = renderHook(() => usePrivateDeliveryMode(true, vi.fn()));
     const normalSubmit = vi.fn();
     const event = { preventDefault: vi.fn() } as unknown as React.FormEvent;
     act(() => result.current.handleComposerSubmit(event, normalSubmit));
     expect(normalSubmit).toHaveBeenCalledWith(event);
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('closes private mode, unlocks the composer, and clears input when eligibility is lost', () => {
+    const setInput = vi.fn();
+    const initial = {
+      lines: [{ cartItemId: 'line-1', quantity: 1, price: 100 }],
+      subtotal: 100,
+      hydrated: true,
+      routingMode: 'domain',
+      merchantSlug: 'shop',
+      cartMerchantSlug: 'shop',
+      country: 'NG',
+      payoutCurrency: 'NGN',
+    };
+    const { result, rerender } = renderHook(
+      ({ cartMerchantSlug }: { cartMerchantSlug: string }) => usePrivateDeliveryMode(
+        getChatDeliveryContext({ ...initial, cartMerchantSlug }).eligible,
+        setInput,
+      ),
+      { initialProps: { cartMerchantSlug: 'shop' } },
+    );
+    act(() => {
+      result.current.start();
+      result.current.setComposerLocked(true);
+    });
+    expect(result.current.active).toBe(true);
+    expect(result.current.composerLocked).toBe(true);
+
+    rerender({ cartMerchantSlug: 'another-shop' });
+
+    expect(result.current.active).toBe(false);
+    expect(result.current.composerLocked).toBe(false);
+    expect(setInput).toHaveBeenCalledWith('');
   });
 });

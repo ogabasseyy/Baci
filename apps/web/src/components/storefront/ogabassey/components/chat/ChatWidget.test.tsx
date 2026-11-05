@@ -270,6 +270,7 @@ describe('ChatWidget - chat window when open', () => {
       merchantSlug: 'ogabassey',
       subtotal: 100,
       isHydrated: true,
+      merchantSlug: 'ogabassey',
       addToCart: vi.fn(),
       setIsCartOpen: vi.fn(),
     } as unknown as ReturnType<typeof useCart>);
@@ -318,6 +319,98 @@ describe('ChatWidget - chat window when open', () => {
     expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('No. 12 Example Road');
   });
 
+  it('clears an active private address when the cart switches to another merchant', async () => {
+    const handleSend = vi.fn();
+    const handleSubmit = vi.fn();
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/ogabassey',
+      routingMode: 'domain',
+      merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG', payout_currency: 'NGN' },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    const makeCart = (merchantSlug: string) => ({
+      isCartOpen: false,
+      cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      subtotal: 100,
+      isHydrated: true,
+      merchantSlug,
+      addToCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+    });
+    vi.mocked(useCart).mockReturnValue(makeCart('ogabassey') as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useOgabasseyChat).mockImplementation(() => {
+      const [input, setInput] = useState('');
+      return {
+        isOpen: true,
+        setIsOpen: vi.fn(),
+        messages: [],
+        input,
+        setInput,
+        isLoading: false,
+        proactiveMsg: null,
+        setProactiveMsg: vi.fn(),
+        messagesEndRef: { current: null },
+        handleSend,
+        handleSubmit,
+        handleAddSantaWishToCart: vi.fn(),
+      };
+    });
+
+    const user = userEvent.setup();
+    const view = render(<ChatWidget />);
+    await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
+    await user.click(screen.getByRole('button', { name: 'Get delivery estimate' }));
+    const privateComposer = screen.getByRole('textbox', { name: 'Private delivery destination' });
+    await user.type(privateComposer, 'No. 12 Private Road, Lagos');
+    expect(privateComposer).toHaveValue('No. 12 Private Road, Lagos');
+
+    vi.mocked(useCart).mockReturnValue(makeCart('another-store') as unknown as ReturnType<typeof useCart>);
+    view.rerender(<ChatWidget />);
+
+    expect(screen.queryByRole('region', { name: 'Private delivery estimate' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Type your message' })).toHaveValue('');
+    expect(handleSend).not.toHaveBeenCalled();
+    expect(handleSubmit).not.toHaveBeenCalled();
+    expect(screen.queryByText('No. 12 Private Road, Lagos')).not.toBeInTheDocument();
+  });
+
+  it('does not enter private delivery mode when the cart belongs to another merchant', async () => {
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/ogabassey',
+      routingMode: 'domain',
+      merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG', payout_currency: 'NGN' },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(useCart).mockReturnValue({
+      isCartOpen: false,
+      cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      subtotal: 100,
+      isHydrated: true,
+      merchantSlug: 'another-store',
+      addToCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useOgabasseyChat).mockReturnValue({
+      isOpen: true,
+      setIsOpen: vi.fn(),
+      messages: [],
+      input: '',
+      setInput: vi.fn(),
+      isLoading: false,
+      proactiveMsg: null,
+      setProactiveMsg: vi.fn(),
+      messagesEndRef: { current: null },
+      handleSend: vi.fn(),
+      handleSubmit: vi.fn(),
+      handleAddSantaWishToCart: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(<ChatWidget />);
+    await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
+
+    expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Private delivery estimate' })).not.toBeInTheDocument();
+  });
+
   it('clears private delivery mode when the floating close button is used', async () => {
     const setInput = vi.fn();
     const setIsOpen = vi.fn();
@@ -327,6 +420,7 @@ describe('ChatWidget - chat window when open', () => {
       merchantSlug: 'ogabassey',
       subtotal: 100,
       isHydrated: true,
+      merchantSlug: 'ogabassey',
       addToCart: vi.fn(),
       setIsCartOpen: vi.fn(),
     } as unknown as ReturnType<typeof useCart>);

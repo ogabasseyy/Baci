@@ -290,6 +290,8 @@ const serverSchema = z
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
     PIGGYVEST_SECRET_KEY: z.string().optional(),
+    // Supavisor session-pooler project ref; format checked in primary-db-link.
+    PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -777,6 +779,8 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
         PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
+        PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF:
+          process.env.PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,

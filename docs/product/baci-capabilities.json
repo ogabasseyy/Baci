@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T09:37:14+00:00",
-  "source_revision": "a8a78a78c7f8620380507099d110b4680c2c9591",
-  "evidence_digest": "256ae7037edbffe1aaf967457eafedd5b47c6f185a933745fbe340d64722a929",
-  "claims_digest": "33c5aa9b5064d16fdac664431f82c0f6c407f25628f6f7f6a5c4b37b1973c4fe",
-  "review_scope": "Source-only recovery follow-up: verifier evidence schema extracted with direct validation tests; committed publication receipts expose verification-only retry; mode-exit schema boundaries covered; SDK cart.reconcile preserves the original operation ID through timeout and bound host receipt reconciliation; merchantless domestic quotes bypass tenant storage while tenant quotes keep attested persistence. Local mocked tests passed. Production composition remains disabled; hosted qualification, current-head CI/review and separate rollout authorization remain required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
+  "reviewed_at": "2026-11-05T10:08:34+00:00",
+  "source_revision": "51d3887f919fa000cf9d29b06a8ffe7d26ef2cdf",
+  "evidence_digest": "5a556dd1b63602a28ad6a20eed91d170f569b2d39926c2e6377bd835152efb79",
+  "claims_digest": "79d91cf270a4eb827494594bf7646156d04f539597eeb9849a3f72d1c8c72904",
+  "review_scope": "Source-only follow-up: UTF8 upload assembly preserves BOM bytes after digest verification and still rejects malformed UTF8; canonical finalization tests include BOM-prefixed multipart source. Direct publication/approval schema coverage includes strict requests, identifiers, integer version boundaries, approval actions/references and lifecycle status defaults. Prior recovery/auth/RLS behavior retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization remain required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",

@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 5 November 2026 against source revision
-`a8a78a78c7f8620380507099d110b4680c2c9591`. Full-code storefront MCP build/private-preview source now exists,
+`51d3887f919fa000cf9d29b06a8ffe7d26ef2cdf`. Full-code storefront MCP build/private-preview source now exists,
 but its production composition remains explicitly uninstalled/disabled. The
 map-cited agentic test-source inventory change does not change payment/provider
 runtime authorization. Guest OAuth renewal now preserves the separate seven-day cart lifetime; activation remains unverified. Other capability limitations remain. This navigation map

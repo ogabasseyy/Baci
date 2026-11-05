@@ -84,6 +84,7 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       ssl: {
         rejectUnauthorized: true,
         ca: config.database.certificateAuthority,
+        ...link.tls,
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,

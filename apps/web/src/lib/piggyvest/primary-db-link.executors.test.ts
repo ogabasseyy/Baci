@@ -107,6 +107,27 @@ describe('pooler mode through real executors', () => {
   });
 });
 
+describe('server-name (forwarder) mode through a real executor', () => {
+  it('passes ssl.checkServerIdentity to the pg Client', async () => {
+    vi.stubEnv('PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF', '');
+    vi.stubEnv('PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME', `db.${REF}.supabase.co`);
+    mocks.query
+      .mockResolvedValueOnce(safeRow(database.login))
+      .mockResolvedValueOnce({ rows: [{ result: null }] });
+    const execute = createPrimaryWalletEvidenceExecutor(evidenceConfig);
+    await execute(statement, [
+      evidenceConfig.integrationId,
+      'staging',
+      '22222222-2222-4222-8222-222222222222',
+    ]);
+    const client = mocks.options.mock.calls[0]?.[0];
+    expect(client.user).toBe(database.login);
+    expect(client.ssl.rejectUnauthorized).toBe(true);
+    expect(client.ssl.ca).toBe('test-ca');
+    expect(typeof client.ssl.checkServerIdentity).toBe('function');
+  });
+});
+
 const EXECUTORS = [
   'primary-savings-provisioning-executor',
   'primary-wallet-bank-inbox-store',
@@ -127,6 +148,7 @@ describe('every restricted-login executor uses the shared helper', () => {
     expect(source).toContain("from './primary-db-link'");
     expect(source).toMatch(/user: link\.user,/);
     expect(source).toContain('...link.startup,');
+    expect(source).toMatch(/ssl: \{[^}]*\.\.\.link\.tls[^}]*\}/);
     const afterConnect = source.indexOf('await link.afterConnect(client);');
     expect(afterConnect).toBeGreaterThan(-1);
     expect(afterConnect).toBeLessThan(source.indexOf('client.query('));

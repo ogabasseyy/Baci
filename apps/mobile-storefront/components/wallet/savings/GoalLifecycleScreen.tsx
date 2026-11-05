@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Redirect, router, Stack, usePathname } from 'expo-router';
-import { useRef } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -69,9 +69,16 @@ function useFindGoal(goalId: string) {
       : undefined);
   // A finished action makes the goal vanish from the wallet data; keep what
   // was last seen so the screen does not lose its subject mid-flow.
-  const seen = useRef<WalletActiveSavingsGoal | undefined>(undefined);
-  if (found) seen.current = found;
-  return { goal: found ?? seen.current, isLoading: isLoading || !data };
+  // Stored in state (adjusted during render, guarded by a comparison) rather
+  // than a ref, so render stays pure.
+  const [seen, setSeen] = useState<WalletActiveSavingsGoal | undefined>(
+    undefined
+  );
+  if (found && found !== seen) setSeen(found);
+  return {
+    goal: found ?? (seen?.id === goalId ? seen : undefined),
+    isLoading: isLoading || !data,
+  };
 }
 
 export function GoalLifecycleScreen({

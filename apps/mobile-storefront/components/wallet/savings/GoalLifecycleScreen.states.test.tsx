@@ -163,3 +163,35 @@ describe('a sign-in refusal', () => {
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
   });
 });
+
+describe('a goal that vanishes from a later wallet refresh', () => {
+  it('keeps showing the last seen goal instead of redirecting', () => {
+    const { ui } = wrap(<GoalLifecycleScreen kind="cancel" goalId={GOAL} />);
+    const view = render(ui);
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    jest.mocked(useWallet).mockReturnValue({
+      data: { wallet: { savings_goals: [] }, transactions: [] },
+      isLoading: false,
+    } as never);
+    view.rerender(ui);
+    expect(screen.queryByText('Redirect:/wallet')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('does not show a retained goal for a different goal id', () => {
+    const { ui } = wrap(<GoalLifecycleScreen kind="cancel" goalId={GOAL} />);
+    const view = render(ui);
+    jest.mocked(useWallet).mockReturnValue({
+      data: { wallet: { savings_goals: [] }, transactions: [] },
+      isLoading: false,
+    } as never);
+    const other = wrap(
+      <GoalLifecycleScreen
+        kind="cancel"
+        goalId="33333333-3333-4333-8333-333333333333"
+      />
+    );
+    view.rerender(other.ui);
+    expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
+  });
+});

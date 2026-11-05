@@ -72,4 +72,9 @@ transfer. Set values by REST upsert, not a pipe.
 
 Route: `GET /api/cron/piggyvest-daily-reconciliation` with the cron secret.
 The runner `vps-workers/jobs/run-web-cron.mjs` accepts this path. The VPS
-crontab entry itself is an owner step and is deliberately not added by this change. Until then nothing calls it.
+crontab block in `vps-workers/deploy.sh` (installed by the isolated worker
+release) calls it daily at 23:00 UTC (midnight Lagos time) with the cron secret, under its own
+`flock` and log. The call is harmless while `PIGGYVEST_RECONCILIATION_ENABLED`
+is unset: the route answers `{"status":"disabled"}` with HTTP 200, touches no
+dependency, sends no email and raises no page. The runner's 6-minute client
+timeout sits above the route's 300-second limit.

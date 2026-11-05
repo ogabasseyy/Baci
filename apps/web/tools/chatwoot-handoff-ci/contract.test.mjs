@@ -12,6 +12,7 @@ const workflow = await readFile(
   'utf8'
 );
 const seed = await readFile(new URL('seed.rb', directory), 'utf8');
+const trigger = await readFile(new URL('trigger.rb', directory), 'utf8');
 
 test('pins service images and keeps the Compose network unpublished and internal', () => {
   assert.match(
@@ -44,6 +45,12 @@ test('workflow uses read-only permissions, bounded runs, pull-first and uncondit
   );
   assert.match(workflow, /trap cleanup EXIT/);
   assert.match(workflow, /down --volumes --remove-orphans/);
+  assert.match(
+    workflow,
+    /wait_for_file harness-ready-for-takeover[\s\S]*?trigger\.rb 'Synthetic customer: I have another question for the human operator\.'/
+  );
+  assert.match(trigger, /conversation\.messages\.create!/);
+  assert.match(trigger, /message_type: :incoming/);
 });
 
 test('seed uses a disposable account password accepted by Chatwoot', () => {

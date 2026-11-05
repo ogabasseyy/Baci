@@ -31,6 +31,7 @@ export interface PublishedExperienceFrameHost {
     | import('@baci/shared/experience').BridgeResult<unknown>
     | import('@baci/shared/experience').CartBridgeResult
   >;
+  resolveNavigation(path: string): Promise<string>;
   navigate(path: string): Promise<import('@baci/shared/experience').RouteState>;
   subscribe(
     listener: (route: import('@baci/shared/experience').RouteState) => void

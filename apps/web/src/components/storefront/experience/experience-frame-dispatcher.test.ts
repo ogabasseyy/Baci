@@ -9,7 +9,10 @@ it('delegates published commerce only to its trusted host and presents navigatio
   }));
   const setLink = vi.fn();
   const run = createFrameDispatcher({
-    host: { dispatch } as never,
+    host: {
+      dispatch,
+      resolveNavigation: vi.fn(async (path: string) => path),
+    } as never,
     launch: {} as never,
     nav: { presentCanonicalLink } as never,
     setLink,
@@ -72,4 +75,44 @@ it.each([
       params: { handle: view === 'product' ? 'device' : 'devices' },
     },
   });
+});
+
+it('presents a fetched categorized product using trusted resolution without same-tab navigation', async () => {
+  const { createNavigationPresentation } = await import(
+    './experience-navigation-open'
+  );
+  const setLink = vi.fn();
+  const navigate = vi.fn();
+  const resolveNavigation = vi.fn(async () => '/phones/related');
+  const nav = createNavigationPresentation({
+    base: 'https://shop.test/qa1',
+    routes: ['/products/[handle]', '/phones/current'],
+    state: () => ({
+      epoch: 1,
+      instanceId: 'one',
+      shopperPartition: 'guest',
+      transition: false,
+      active: true,
+    }),
+    now: () => 1000,
+  });
+  const run = createFrameDispatcher({
+    host: { resolveNavigation, navigate } as never,
+    launch: {} as never,
+    nav,
+    setLink,
+    routes: {} as never,
+  });
+  await expect(
+    run({
+      method: 'navigation.open',
+      requestId: 'related',
+      args: { path: '/phones/related' },
+    } as never)
+  ).resolves.toMatchObject({ status: 'ok' });
+  expect(resolveNavigation).toHaveBeenCalledWith('/phones/related');
+  expect(setLink).toHaveBeenCalledWith(
+    expect.objectContaining({ href: 'https://shop.test/qa1/phones/related' })
+  );
+  expect(navigate).not.toHaveBeenCalled();
 });

@@ -1,9 +1,5 @@
 import '@/app/(storefront)/storefront-pdp-critical.css';
 import '@/app/(storefront)/storefront-pdp-critical-summary.css';
-import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
-import { experienceOwnsProductRoute } from '@/lib/experience/product-route-ownership';
-import { loadPublishedExperience } from '@/lib/experience/published-manifest';
-import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import '@/app/(storefront)/storefront-pdp-description-critical.css';
 import '@/app/(storefront)/storefront-pdp-semantic.css';
 import type { Metadata } from 'next';
@@ -14,6 +10,7 @@ import { getStorefrontShellSnapshotBase } from '@/app/(storefront)/[slug]/storef
 import { OgabasseyPdpProductLcpSkeleton } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-lcp-skeleton';
 import { preloadOgabasseyPdpProductResources } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-resource-hints';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { OgabasseyPdpBelowFoldIsland } from '@/components/storefront/ogabassey/pdp/client-islands';
 import { createCriticalCartProduct } from '@/components/storefront/ogabassey/pdp/critical-cart-product';
 import { OgabasseyPdpCriticalCommerce } from '@/components/storefront/ogabassey/pdp/critical-commerce';
@@ -40,6 +37,9 @@ import {
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
 import type { CurrencyConfig } from '@/lib/currency';
+import { experienceOwnsProductRoute } from '@/lib/experience/product-route-ownership';
+import { loadPublishedExperience } from '@/lib/experience/published-manifest';
+import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { getKnownOgaBasseyMerchantId } from '@/lib/ogabassey-route-identity';

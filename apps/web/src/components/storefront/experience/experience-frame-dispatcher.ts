@@ -27,10 +27,14 @@ export function createFrameDispatcher({
   return host
     ? async (request: import('@baci/shared/experience').BridgeRequest) => {
         if (request.method === 'navigation.open') {
-          const presented = nav.presentCanonicalLink({
-            requestId: request.requestId,
-            path: String(request.args.path),
-          });
+          const path = await host.resolveNavigation(String(request.args.path));
+          const presented = nav.presentCanonicalLink(
+            {
+              requestId: request.requestId,
+              path,
+            },
+            path
+          );
           setLink(presented);
           return { status: 'ok' as const, value: { presented: true } };
         }

@@ -82,11 +82,19 @@ export function createNavigationPresentation(deps: {
     return active?.link ?? null;
   };
   return {
-    presentCanonicalLink(input: { requestId: string; path: string }) {
+    // resolvedPath is supplied only by the trusted host catalog resolver.
+    presentCanonicalLink(
+      input: { requestId: string; path: string },
+      resolvedPath?: string
+    ) {
       const s = deps.state();
       if (s.transition) throw Error('ROUTE_TRANSITION');
       if (!s.active) throw Error('LAUNCH_EXPIRED');
-      const href = canonicalExperiencePath(deps.base, deps.routes, input.path);
+      const href = canonicalExperiencePath(
+        deps.base,
+        resolvedPath ? [resolvedPath] : deps.routes,
+        input.path
+      );
       const old = replay.get(input.requestId);
       if (old) {
         if (old.path !== input.path) throw Error('IDEMPOTENCY_CONFLICT');

@@ -1,38 +1,25 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
-import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
-export function canOfferPrivateDeliveryEstimate(input: {
-  hydrated: boolean;
-  hasItems: boolean;
-  routingMode?: string;
-  country?: string;
-  payoutCurrency?: string | null;
-}): boolean {
-  const country = input.country?.trim().toUpperCase() ?? '';
-  return input.hydrated && input.hasItems && input.routingMode === 'domain' &&
-    country === 'NG' &&
-    resolveMerchantCurrencyConfig({
-      country,
-      payout_currency: input.payoutCurrency ?? null,
-    }).code === 'NGN';
-}
-
-export function getChatPanelMobileHeightCap(bottomOffset: string): string {
-  return `max(0px, calc(100dvh - env(safe-area-inset-bottom, 0px) - ${bottomOffset} - 5.5rem))`;
-}
-
-export function usePrivateDeliveryMode() {
+export function usePrivateDeliveryMode(eligible: boolean, setInput: (value: string) => void) {
   const [active, setActive] = useState(false);
   const [composerLocked, setComposerLocked] = useState(false);
   const submitRef = useRef<(() => void) | null>(null);
 
+  useEffect(() => {
+    if (eligible || !active) return;
+    setInput('');
+    setActive(false);
+    setComposerLocked(false);
+    submitRef.current = null;
+  }, [active, eligible, setInput]);
+
   return {
     active,
     start: () => setActive(true),
-    close: (clearInput: () => void) => {
-      clearInput();
+    close: () => {
+      setInput('');
       setActive(false);
       setComposerLocked(false);
     },

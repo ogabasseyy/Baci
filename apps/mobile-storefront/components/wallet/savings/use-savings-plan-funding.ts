@@ -141,9 +141,17 @@ export function useSavingsPlanFunding({
         setPhase(notFoundMeansNotStarted ? 'not_started' : 'pending');
         return;
       }
+      // A silent read belongs to the bounded setup poll: a transient failure
+      // leaves the phase pending and is reported to the poll, which retries
+      // and only calls failExistingPlanFunding once its attempts run out.
+      if (options?.silent) throw error;
       setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
+  };
+  const failExistingPlanFunding = (error: unknown) => {
+    setFundingError(planFundingErrorMessage(error));
+    setPhase('error');
   };
   const fetchExistingPlanFundingRef = useRef(fetchExistingPlanFunding);
   fetchExistingPlanFundingRef.current = fetchExistingPlanFunding;
@@ -201,6 +209,7 @@ export function useSavingsPlanFunding({
   }, [automaticLookupKey]);
 
   return {
+    failExistingPlanFunding,
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError,

@@ -52,6 +52,7 @@ function ManualPrimaryGoalSection(props: ManualPrimaryGoalProps) {
     phase: funding.planFundingPhase,
     scopeKey: JSON.stringify([userId, merchantId, goal.id]),
     reread: funding.fetchExistingPlanFunding,
+    onExhausted: funding.failExistingPlanFunding,
   });
   return (
     <>

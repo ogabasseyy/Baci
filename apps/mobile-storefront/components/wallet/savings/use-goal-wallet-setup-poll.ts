@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SavingsPlanFundingPhase } from './use-savings-plan-funding';
 
 const POLL_MS = 5000;
@@ -9,17 +9,22 @@ const MAX_ATTEMPTS = 12;
  * most 12 times (a minute), then leaves the "check back shortly" text in
  * place. Reads are silent so the screen does not flicker, stop the moment the
  * goal is ready, and start over for another account or goal. Only reads
- * status; it never re-sends setup.
+ * status; it never re-sends setup. A read that fails is retried on the next
+ * tick; only when the last attempt also fails is `onExhausted` called with
+ * that error, so one network blip never ends the automatic checks.
  */
 export function useGoalWalletSetupPoll({
   phase,
   scopeKey,
   reread,
+  onExhausted,
 }: {
   phase: SavingsPlanFundingPhase;
   scopeKey: string;
   reread: (options: { silent: true }) => Promise<unknown>;
+  onExhausted?: (error: unknown) => void;
 }) {
+  const lastFailure = useRef<{ error: unknown } | null>(null);
   const [attempt, setAttempt] = useState({ scopeKey, count: 0 });
   const count = attempt.scopeKey === scopeKey ? attempt.count : 0;
 
@@ -30,15 +35,20 @@ export function useGoalWalletSetupPoll({
       return;
     }
     if (count >= MAX_ATTEMPTS) return;
+    if (count === 0) lastFailure.current = null;
     let current = true;
     const timer = setTimeout(async () => {
       try {
         await reread({ silent: true });
-      } catch {
-        // A failed read (e.g. network loss) is retried on the next tick,
-        // within the same attempt limit.
+        lastFailure.current = null;
+      } catch (error) {
+        lastFailure.current = { error };
       }
-      if (current) setAttempt({ scopeKey, count: count + 1 });
+      if (!current) return;
+      if (count + 1 >= MAX_ATTEMPTS && lastFailure.current) {
+        onExhausted?.(lastFailure.current.error);
+      }
+      setAttempt({ scopeKey, count: count + 1 });
     }, POLL_MS);
     return () => {
       current = false;

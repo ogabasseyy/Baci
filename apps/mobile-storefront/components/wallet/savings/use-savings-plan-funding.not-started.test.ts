@@ -147,14 +147,28 @@ describe('silent status re-read', () => {
     expect(result.current.planFundingPhase).toBe('ready');
   });
 
-  it('still reports a failed silent read as an error', async () => {
+  it('rejects a failed silent read without flipping the phase to error', async () => {
     jest
       .mocked(fetchExistingSavingsPlanFunding)
-      .mockRejectedValue(new Error('network down'));
+      .mockResolvedValueOnce({ status: 'pending' } as never);
     const { result } = renderHook(() => useSavingsPlanFunding(input));
     await act(async () => {
-      await result.current.fetchExistingPlanFunding({ silent: true });
+      await result.current.fetchExistingPlanFunding();
     });
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockRejectedValueOnce(new Error('network down'));
+    await act(async () => {
+      await expect(
+        result.current.fetchExistingPlanFunding({ silent: true })
+      ).rejects.toThrow('network down');
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    expect(result.current.fundingError).toBeNull();
+    act(() =>
+      result.current.failExistingPlanFunding(new Error('network down'))
+    );
     expect(result.current.planFundingPhase).toBe('error');
+    expect(result.current.fundingError).toBe('network down');
   });
 });

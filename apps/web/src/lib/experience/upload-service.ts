@@ -31,7 +31,9 @@ export function assembleSource(
   const bytes = Buffer.concat(ordered.map((c) => Buffer.from(c.bytes)));
   if (digestBytes(bytes) !== file.digest) throw Error('INVALID_REQUEST');
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+      bytes
+    );
   } catch {
     throw Error('INVALID_REQUEST');
   }

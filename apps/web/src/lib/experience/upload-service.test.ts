@@ -84,12 +84,19 @@ it('a finalized upload replay returns the same source digest and artifact refere
 it.each([
   129, 256,
 ])('finalizes accepted uploads containing %i immutable chunks', async (count) => {
-  const content = 'a'.repeat(count * 1024);
-  const chunks = Array.from({ length: count }, (_, i) => ({
-    byte_offset: i * 1024,
-    bytes: `\\x${Buffer.from('a'.repeat(1024)).toString('hex')}`,
-    digest: hash('a'.repeat(1024)),
-  }));
+  const content =
+    count === 256
+      ? `\uFEFF${'a'.repeat(count * 1024 - 3)}`
+      : 'a'.repeat(count * 1024);
+  const bytes = Buffer.from(content);
+  const chunks = Array.from({ length: count }, (_, i) => {
+    const chunk = bytes.subarray(i * 1024, (i + 1) * 1024);
+    return {
+      byte_offset: i * 1024,
+      bytes: `\\x${chunk.toString('hex')}`,
+      digest: createHash('sha256').update(chunk).digest('hex'),
+    };
+  });
   const manifest = {
     format: 'baci.experience/v2',
     runtime: 'react-browser-sandbox/v1',
@@ -130,7 +137,7 @@ it.each([
                 files: [
                   {
                     path: 'app.tsx',
-                    bytes: content.length,
+                    bytes: Buffer.byteLength(content),
                     digest: hash(content),
                   },
                 ],
@@ -159,7 +166,10 @@ it.each([
   expect(reads.length).toBeGreaterThan(1);
   expect(rpc).toHaveBeenCalledWith(
     'experience_finalize_upload',
-    expect.objectContaining({ p_merchant: 'merchant' })
+    expect.objectContaining({
+      p_merchant: 'merchant',
+      p_canonical: expect.stringContaining(JSON.stringify(content)),
+    })
   );
 });
 
@@ -183,4 +193,24 @@ it('round trips escaped source within the complete MCP result envelope budget', 
     byteOffset: offset,
     nextCursor: null,
   });
+});
+
+it('preserves a UTF8 BOM and rejects malformed UTF8 without changing verified bytes', () => {
+  const content = '\uFEFFexport default function App() { return null; }';
+  const bytes = Buffer.from(content);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const decoded = assembleSource([{ offset: 0, bytes, digest }], {
+    bytes: bytes.length,
+    digest,
+  });
+  expect(decoded).toBe(content);
+  expect(Buffer.from(decoded)).toEqual(bytes);
+  const invalid = Buffer.from([0xff]);
+  const invalidDigest = createHash('sha256').update(invalid).digest('hex');
+  expect(() =>
+    assembleSource([{ offset: 0, bytes: invalid, digest: invalidDigest }], {
+      bytes: invalid.length,
+      digest: invalidDigest,
+    })
+  ).toThrow('INVALID_REQUEST');
 });

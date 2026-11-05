@@ -33,6 +33,10 @@ back to a broader credential.
 - Already used by the primary-wallet logins and reused here:
   `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_CA`.
+  On Vercel use the Supavisor session-mode pooler: host = pooler host, port
+  `5432` (never `6543`), plus `PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF` = the
+  project ref (login becomes `<login>.<ref>`). See
+  `piggyvest-primary-runtime-deployment-follow-up.md`.
 - New: `PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD`. The login name is fixed in code.
 - Database: create the LOGIN role `baci_piggyvest_webhook_intake` with that
   password, then run `GRANT piggyvest_webhook_intake TO

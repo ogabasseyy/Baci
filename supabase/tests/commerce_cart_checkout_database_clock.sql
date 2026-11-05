@@ -22,8 +22,16 @@ BEGIN
 
   r := public.commerce_cart_prepare_checkout(c, 1, 'prepare-db-clock');
   PERFORM pg_temp.check_checkout_clock(
-    r->>'ok' = 'true' AND (r->>'databaseNow')::timestamptz BETWEEN now() - interval '1 second' AND now(),
-    'fresh prepare did not return a PostgreSQL databaseNow'
+    r->>'ok' = 'true',
+    'fresh prepare was rejected'
+  );
+  PERFORM pg_temp.check_checkout_clock(
+    r ? 'databaseNow',
+    'fresh prepare did not return databaseNow'
+  );
+  PERFORM pg_temp.check_checkout_clock(
+    (r->>'databaseNow')::timestamptz BETWEEN now() - interval '1 second' AND now(),
+    'fresh prepare databaseNow was outside the database clock window'
   );
   SELECT result INTO stored FROM public.commerce_cart_operations
     WHERE merchant_id=m AND cart_id=c AND principal_id='database-clock' AND operation_id='prepare-db-clock';
@@ -41,8 +49,12 @@ DO $$ DECLARE failures text; BEGIN
   SELECT string_agg(message, E'\n') INTO failures FROM checkout_clock_failures;
   IF failures IS NOT NULL THEN
     RAISE NOTICE 'Checkout database clock regressions: %', failures;
-    IF failures LIKE '%fresh prepare did not return a PostgreSQL databaseNow%' THEN
+    IF failures LIKE '%fresh prepare was rejected%' THEN
+      RAISE EXCEPTION 'Checkout clock fresh prepare was rejected' USING ERRCODE = 'P0005';
+    ELSIF failures LIKE '%fresh prepare did not return databaseNow%' THEN
       RAISE EXCEPTION 'Checkout clock fresh prepare assertion failed' USING ERRCODE = 'P0002';
+    ELSIF failures LIKE '%fresh prepare databaseNow was outside the database clock window%' THEN
+      RAISE EXCEPTION 'Checkout clock fresh value assertion failed' USING ERRCODE = 'P0006';
     ELSIF failures LIKE '%databaseNow was persisted in the idempotency receipt%' THEN
       RAISE EXCEPTION 'Checkout clock receipt persistence assertion failed' USING ERRCODE = 'P0003';
     ELSIF failures LIKE '%replay did not replace a stale persisted databaseNow with PostgreSQL time%' THEN

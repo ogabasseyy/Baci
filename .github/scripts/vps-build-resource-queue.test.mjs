@@ -10,7 +10,7 @@ import YAML from 'yaml';
 const workflow = name => YAML.parse(readFileSync(new URL(`../workflows/${name}`, import.meta.url), 'utf8'));
 const deployment = workflow('deploy.yml');
 const android = ['android-release.yml', 'android-storefront-release.yml'].map(workflow);
-const queue = { group: 'production-prebuilt-deploy', 'cancel-in-progress': false, queue: 'max' };
+const shared = { group: 'production-prebuilt-deploy', 'cancel-in-progress': false };
 
 for (const [index, release] of android.entries()) {
   test(`Android release ${index} refuses stale main builds before resource-heavy setup`, () => {
@@ -47,43 +47,31 @@ for (const [index, release] of android.entries()) {
   });
 }
 
-test('production and both Android builds share a non-cancelling VPS resource queue', () => {
-  assert.deepEqual(deployment.jobs['deploy-production'].concurrency, queue);
+test('production and both Android builds share a non-cancelling VPS build group', () => {
+  assert.deepEqual(deployment.jobs['deploy-production'].concurrency, shared);
   for (const release of android) {
-    assert.deepEqual(release.jobs['build-and-deploy'].concurrency, queue);
+    assert.deepEqual(release.jobs['build-and-deploy'].concurrency, shared);
     assert.equal(release.jobs['build-and-deploy']['runs-on'], 'baci-android');
   }
   assert.equal(deployment.jobs['deploy-production']['runs-on'], 'baci-deploy');
 });
 
-test('web deploy keeps replace-pending semantics so stale runs never sync workers or migrate', () => {
-  assert.equal(deployment.concurrency['cancel-in-progress'], false);
-  assert.equal(deployment.concurrency.queue, undefined);
-});
-
-test('outer Android release queues preserve pending runs instead of replacing them', () => {
-  for (const release of android) {
+test('no workflow uses concurrency.queue, which the pinned actionlint and CWV authority reject', () => {
+  for (const release of [deployment, ...android]) {
+    assert.equal(release.concurrency.queue, undefined);
     assert.equal(release.concurrency['cancel-in-progress'], false);
-    assert.equal(release.concurrency.queue, 'max');
-    assert.notEqual(release.concurrency.group, queue.group);
+    assert.notEqual(release.concurrency.group, shared.group);
+    for (const job of Object.values(release.jobs)) assert.equal(job.concurrency?.queue, undefined);
   }
-});
-
-test('the actionlint compatibility exception covers exactly the validated queue locations', () => {
-  // The CWV runner authority pins actionlint.yaml, so the ignore is a CLI flag.
   const lintConfig = readFileSync(new URL('../actionlint.yaml', import.meta.url), 'utf8');
   assert.doesNotMatch(lintConfig, /queue|ignore/);
-  for (const release of [deployment, ...android]) {
-    const queuedJobs = Object.entries(release.jobs).filter(([, job]) => job.concurrency?.queue !== undefined);
-    assert.equal(queuedJobs.length, 1);
-    assert.deepEqual(queuedJobs[0][1].concurrency, queue);
-  }
+});
+
+test('the shared-group validator runs before actionlint and its triggers are covered', () => {
   const lintWorkflow = workflow('actionlint.yml');
   const steps = lintWorkflow.jobs.actionlint.steps;
   const validatorIndex = steps.findIndex(step => step.run === 'node --test .github/scripts/vps-build-resource-queue.test.mjs .github/scripts/production-typecheck-scope.test.mjs');
   const lintIndex = steps.findIndex(step => step.name === 'Run actionlint');
-  assert.match(steps[lintIndex].run, /rhysd\/actionlint@sha256:[0-9a-f]{64}/);
-  assert.match(steps[lintIndex].run, /-ignore '\^unexpected key "queue" for "concurrency" section/);
   assert.ok(validatorIndex >= 0 && validatorIndex < lintIndex);
   assert.equal(steps[validatorIndex]['continue-on-error'], undefined);
   for (const event of ['push', 'pull_request']) {

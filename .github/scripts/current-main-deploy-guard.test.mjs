@@ -279,7 +279,7 @@ test('production deploy is staged and binds the exact-main guard', () => {
   for (const p of [/permissions:[\s\S]*?actions: read/, /permissions:[\s\S]*?contents: read/, /- name: Deploy to Vercel \(with retry\)/, /^\s*deploy-production:\s*$/m]) assert.match(deployJob, p);
   const jobCfg = YAML.parse(workflow).jobs['deploy-production'];
   assert.equal(jobCfg.name, undefined);
-  assert.deepEqual(jobCfg.concurrency, { 'cancel-in-progress': false, group: 'production-prebuilt-deploy', queue: 'max' });
+  assert.deepEqual(jobCfg.concurrency, { 'cancel-in-progress': false, group: 'production-prebuilt-deploy' });
   const prebuild = deployJob.indexOf('- name: Verify exact-main deployment authority before build');
   const nodeSetup = deployJob.indexOf('- name: Setup Node.js for deployment authority guard');
   assert.ok(prebuild > 0 && nodeSetup > 0 && nodeSetup < prebuild, 'exact-main guard ordering');

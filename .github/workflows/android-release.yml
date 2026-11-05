@@ -28,10 +28,9 @@ on:
         type: boolean
 
 concurrency:
-  # Preserve each queued release; shared VPS resource ownership is job-scoped.
+  # Per-ref serialization only; VPS resource ownership is job-scoped below.
   group: android-admin-release-${{ github.ref }}
   cancel-in-progress: false
-  queue: max
 
 permissions:
   contents: read
@@ -59,12 +58,12 @@ jobs:
     name: Build AAB & Upload to Play Store
     runs-on: baci-android
     # Both Android releases and production share one four-core VPS.
-    # queue:max preserves pending releases instead of replacing another app.
+    # A shared group is the only mutual exclusion GitHub offers; a waiting run
+    # replaces an older pending one, and refuse-superseded guards stale builds.
     concurrency:
       group: production-prebuilt-deploy
       cancel-in-progress: false
-      queue: max
-    # Patched React Native and Hermes compile from source for four ABIs.
+        # Patched React Native and Hermes compile from source for four ABIs.
     # Allow the cold build and subsequent upload to finish on the Android runner.
     timeout-minutes: 600
 

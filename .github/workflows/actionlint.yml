@@ -106,18 +106,10 @@ jobs:
             exit 1
           fi
 
-      - name: Setup workspace tooling for queue validation
+      - name: Setup workspace tooling for build group validation
         uses: ./.github/actions/pnpm-install-cached
-      - name: Validate queued VPS build contracts
+      - name: Validate shared VPS build group contracts
         run: node --test .github/scripts/vps-build-resource-queue.test.mjs .github/scripts/production-typecheck-scope.test.mjs
 
-      # actionlint 1.7.12 predates GitHub's concurrency.queue support (upstream
-      # #657). The ignore lives here, not in .github/actionlint.yaml, because the
-      # CWV runner authority pins that file byte-for-byte. The queue test above
-      # validates every queue location, value, grouping and cancellation policy.
       - name: Run actionlint
-        run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
-            -color \
-            -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12

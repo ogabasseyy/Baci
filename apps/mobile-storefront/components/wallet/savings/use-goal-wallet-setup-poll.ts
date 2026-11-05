@@ -32,7 +32,12 @@ export function useGoalWalletSetupPoll({
     if (count >= MAX_ATTEMPTS) return;
     let current = true;
     const timer = setTimeout(async () => {
-      await reread({ silent: true });
+      try {
+        await reread({ silent: true });
+      } catch {
+        // A failed read (e.g. network loss) is retried on the next tick,
+        // within the same attempt limit.
+      }
       if (current) setAttempt({ scopeKey, count: count + 1 });
     }, POLL_MS);
     return () => {

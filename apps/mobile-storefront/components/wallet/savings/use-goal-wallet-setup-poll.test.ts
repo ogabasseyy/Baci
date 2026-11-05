@@ -45,6 +45,18 @@ describe('useGoalWalletSetupPoll', () => {
     expect(reread).toHaveBeenCalledTimes(12);
   });
 
+  it('keeps polling, without throwing, when a read rejects', async () => {
+    const reread = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(undefined);
+    setup({ phase: 'pending' }, reread);
+    await ticks(3);
+    expect(reread).toHaveBeenCalledTimes(3);
+    await ticks(30);
+    expect(reread).toHaveBeenCalledTimes(12);
+  });
+
   it.each([
     'idle',
     'loading',

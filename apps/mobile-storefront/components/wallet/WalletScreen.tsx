@@ -1,5 +1,5 @@
 import { Redirect, router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWalletBalanceContractWarning } from '@/components/wallet/use-wallet-balance-contract-warning';
 import { useWalletFundingAccountController } from '@/components/wallet/use-wallet-funding-account-controller';
@@ -18,13 +18,13 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
-import type { ContributionRail } from './savings/stored-contribution-operation';
 import { WalletPinSheet } from './savings/WalletPinSheet';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
+import { useWalletSavingsRefs } from './use-wallet-savings-refs';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -108,8 +108,7 @@ export function WalletScreen({
   );
   const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
     useState(false);
-  const savingsContributionIdempotencyKeyRef = useRef<string | null>(null);
-  const savingsContributionRailRef = useRef<ContributionRail | null>(null);
+  const savingsRefs = useWalletSavingsRefs();
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
   const hasMerchantContext = Boolean(activeMerchantId || activeMerchantSlug);
@@ -172,8 +171,7 @@ export function WalletScreen({
     activeMerchantId,
     activeMerchantSlug,
     goal: display?.activeSavingsGoal ?? null,
-    idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
-    operationRailRef: savingsContributionRailRef,
+    ...savingsRefs,
     refetchWallet: refetch,
     savingsContributionAmount,
     spendableBalance: display?.spendableBalance ?? 0,

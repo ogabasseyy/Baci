@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T05:20:36+00:00",
-  "source_revision": "b4e2c285f40d59a5c59b89fec5cc364053b7fd8b",
-  "evidence_digest": "9cfcc23fad16508394070218c0ed362e0676a441069ae61accadb719ed61bd94",
-  "claims_digest": "51dcc2164f945fd9511a0dde11771dcb4726a2032c4d7ffe20dbcb7d0d5ebf46",
-  "review_scope": "Source-only follow-up: catalog canonical paths use the established live-identity PDP helper, ignoring stale stored canonical URLs and applying the same category-alias normalization as proxy preflights. Colocated experience-tool schema tests cover read/patch/adopt inputs, chunk encoding/size and lifecycle version boundaries. Prior authorization, pagination, Zod and related-link checks retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
+  "reviewed_at": "2026-11-05T07:37:56+00:00",
+  "source_revision": "6b1f8316ca5f8d37ad66ad03f343ff179be08648",
+  "evidence_digest": "420a1083b94685646233e4523c3063c52dcb7136ba113ca117793f20ae667077",
+  "claims_digest": "b9bf40c0dae60b178bcc2ddaafd4b4f785337d4f18df4554cb980e6fe2e46d38",
+  "review_scope": "Source-only follow-up after current-main reconciliation: direct experience tool-result schema tests cover JSON success envelopes, every ordinary failure code, fixed safe error text, unexpected fields, and required resource/reason fields for performance failures. Existing runtime fixes retained; no new capability promoted. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",

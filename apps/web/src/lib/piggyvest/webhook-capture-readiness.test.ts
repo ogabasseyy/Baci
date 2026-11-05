@@ -12,7 +12,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
 }));
 
 import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   collectPiggyvestWebhookCaptureEvidence,
   inspectPiggyvestWebhookCaptureReadiness,
@@ -218,7 +218,7 @@ describe('collectPiggyvestWebhookCaptureEvidence', () => {
   };
   const collect = (rpc: () => Promise<{ data: unknown; error: unknown }>) =>
     collectPiggyvestWebhookCaptureEvidence({
-      client: { rpc: vi.fn(rpc) } as unknown as PiggyvestIntakeServiceClient,
+      client: { rpc: vi.fn(rpc) } as unknown as PiggyvestIntakeClient,
       env: { NODE_ENV: 'test' },
       now: NOW,
     });

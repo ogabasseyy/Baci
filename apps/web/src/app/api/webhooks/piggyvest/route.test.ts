@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   processPiggyvestEvent: vi.fn(),
 }));
 
@@ -14,8 +14,8 @@ vi.mock('@/env', () => ({
     process.env.PVB_SECRET_KEY?.trim() || undefined,
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.createIntakeClient()),
 }));
 
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
@@ -112,7 +112,7 @@ describe('GET reachability probe', () => {
 describe('POST event intake', () => {
   it('acknowledges deferred processing as durable backlog', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     mocks.processPiggyvestEvent.mockResolvedValue('deferred');
@@ -137,7 +137,7 @@ describe('POST event intake', () => {
       error: 'Integration unavailable',
       code: 'PIGGYVEST_NOT_READY',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
   });
 
   it('records an authentic inflow and acks received', async () => {
@@ -146,7 +146,7 @@ describe('POST event intake', () => {
       data: [{ event_id: inflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -171,7 +171,7 @@ describe('POST event intake', () => {
 
   it('acks duplicate deliveries and re-drives processing to recover crashed credits', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -192,7 +192,7 @@ describe('POST event intake', () => {
       error: null,
     });
     const from = vi.fn(() => query);
-    mocks.createServiceClient.mockReturnValue({ from });
+    mocks.createIntakeClient.mockReturnValue({ from });
     const rawBody = JSON.stringify({
       ...inflowEvent,
       eventType: 'wallet.transfer.success',
@@ -226,7 +226,7 @@ describe('POST event intake', () => {
     // Stored envelope keeps the original amount while the redelivery
     // claims amount 1: same identity, different content.
     const { query } = chainable({ data: [], error: null }, MATCHING_ENVELOPE);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -246,7 +246,7 @@ describe('POST event intake', () => {
 
   it('processes duplicate deliveries so crashed credits still land', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
     });
     const rawBody = JSON.stringify(inflowEvent);
@@ -263,7 +263,7 @@ describe('POST event intake', () => {
       data: [{ event_id: restrictionEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(restrictionEvent);
@@ -287,7 +287,7 @@ describe('POST event intake', () => {
       data: [{ event_id: interestEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(interestEvent);
@@ -318,7 +318,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({
@@ -342,7 +342,7 @@ describe('POST event intake', () => {
       data: [{ event_id: outflowEvent.eventId }],
       error: null,
     });
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify(outflowEvent);
@@ -379,7 +379,7 @@ describe('POST event intake', () => {
         amount_kobo: null,
       }
     );
-    mocks.createServiceClient.mockReturnValue({
+    mocks.createIntakeClient.mockReturnValue({
       from: vi.fn(() => query),
     });
     const rawBody = JSON.stringify({

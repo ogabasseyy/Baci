@@ -22,6 +22,7 @@ jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn() },
   useNavigation: () => ({ addListener: () => () => undefined }),
 }));
 jest.mock('@/stores/auth-store', () => ({
@@ -83,7 +84,6 @@ describe('useWalletPinSettings', () => {
     await act(async () => result.current.submit());
     expect(submitWalletPin).toHaveBeenCalledWith('set', '1234', 'user-1');
     expect(result.current.newPin).toBe('');
-    expect(result.current.notice).toBe('Your wallet PIN has been saved.');
     expect(result.current.busy).toBe(false);
   });
 });

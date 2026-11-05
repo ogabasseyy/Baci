@@ -1,4 +1,4 @@
-import { useNavigation } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
@@ -17,7 +17,7 @@ const MISMATCH_ERROR = 'The two PINs do not match.';
 const SAME_PIN_ERROR = 'Choose a different PIN from your current one.';
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 const SUCCESS: Record<WalletPinMode, string> = {
-  set: 'Your wallet PIN has been saved.',
+  set: 'Your wallet PIN has been set.',
   change: 'Your wallet PIN has been changed.',
   reset: 'Your wallet PIN has been reset.',
 };
@@ -70,7 +70,6 @@ export function useWalletPinSettings() {
   const [confirmPin, setConfirmPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [reauthRequired, setReauthRequired] = useState(false);
   // A mode picked by the user or by an outcome only holds for the status it
   // was chosen against; a fresh status read decides again.
@@ -107,15 +106,19 @@ export function useWalletPinSettings() {
     setOverride({ mode: next, status: gate.status });
   };
 
+  const leaveScreen = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/settings');
+    // Refresh in the background; navigation never waits for it.
+    gate.refresh();
+  };
+
   const onSuccess = () => {
-    setNotice(SUCCESS[mode]);
     setOverride({ mode: 'change', status: gate.status });
-    // Refresh only after the user has seen the notice: a failed refresh can
-    // turn the gate off and redirect away from this screen.
     Alert.alert(
       SUCCESS[mode],
       undefined,
-      [{ text: 'OK', onPress: gate.refresh }],
+      [{ text: 'Done', onPress: leaveScreen }],
       {
         cancelable: false,
       }
@@ -148,7 +151,6 @@ export function useWalletPinSettings() {
     inFlight.current = true;
     setBusy(true);
     setError(null);
-    setNotice(null);
     setReauthRequired(false);
     const request =
       mode === 'change'
@@ -182,7 +184,6 @@ export function useWalletPinSettings() {
     setConfirmPin,
     busy,
     error,
-    notice,
     reauthRequired,
     submit,
     forgotPin: () => switchMode('reset'),

@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   type PiggyvestCaptureStatus,
   piggyvestCaptureStatusSchema,
@@ -153,7 +153,7 @@ export function inspectPiggyvestWebhookCaptureReadiness(
 
 /** Reads the counters through the status function (metadata only). */
 export async function collectPiggyvestWebhookCaptureEvidence(input: {
-  client: PiggyvestIntakeServiceClient;
+  client: PiggyvestIntakeClient;
   env?: NodeJS.ProcessEnv;
   now?: Date;
 }): Promise<WebhookCaptureEvidence> {

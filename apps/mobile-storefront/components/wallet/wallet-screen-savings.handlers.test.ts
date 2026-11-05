@@ -293,7 +293,7 @@ describe('wallet-screen-savings.handlers', () => {
     expect(addSavingsContribution).not.toHaveBeenCalled();
     expect(setIsAddingSavingsContribution).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Fund wallet first',
+      'Add money first',
       'Your wallet has ₦100 available. Fund it before adding ₦500 to savings.'
     );
   });

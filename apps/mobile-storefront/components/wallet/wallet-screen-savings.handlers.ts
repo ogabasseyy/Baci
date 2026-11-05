@@ -108,7 +108,7 @@ export async function addSavingsContributionToGoal({
 
   if (amount > walletBalance) {
     Alert.alert(
-      'Fund wallet first',
+      'Add money first',
       `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`
     );
     return;

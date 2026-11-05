@@ -152,7 +152,7 @@ export function WalletSavingsContributionFlow({
                     ? 'Opening wallet funding...'
                     : 'Opening payment...'
                   : usesPlanFunding
-                    ? 'Fund wallet'
+                    ? 'Add money'
                     : 'Continue to payment'}
             </Text>
           </Pressable>

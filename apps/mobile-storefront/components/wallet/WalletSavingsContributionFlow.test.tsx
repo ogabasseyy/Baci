@@ -138,7 +138,7 @@ describe('WalletSavingsContributionFlow', () => {
         name: 'Add money for savings',
       });
       expect(payment).toHaveAccessibilityState({ disabled: false });
-      expect(payment).toHaveTextContent('Fund wallet');
+      expect(payment).toHaveTextContent('Add money');
       expect(screen.queryByText(/bank transfer/i)).toBeNull();
       fireEvent.press(payment);
       expect(props.onFundWallet).toHaveBeenCalledTimes(1);
@@ -189,7 +189,7 @@ describe('WalletSavingsContributionFlow', () => {
       fireEvent.press(contribute);
       expect(props.onAddSavings).toHaveBeenCalledTimes(1);
       expect(props.onFundWallet).not.toHaveBeenCalled();
-      expect(screen.queryByText('Fund wallet')).toBeNull();
+      expect(screen.queryByText('Add money')).toBeNull();
     } finally {
       if (previousMode === undefined)
         delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;

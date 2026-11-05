@@ -61,6 +61,7 @@ describe('shared-cart-client checkout prepare', () => {
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
       jsonResponse({
         replayed: false,
+        sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         sessionReused: false,
         snapshot: REVIEW_SNAPSHOT,
       })
@@ -88,6 +89,7 @@ describe('shared-cart-client checkout prepare', () => {
     expect(result).toEqual({
       ok: true,
       replayed: false,
+      sessionExpiresAt: expect.any(String),
       review: {
         cartId: '22222222-2222-4222-8222-222222222222',
         cartVersion: 3,
@@ -310,5 +312,49 @@ describe('shared-cart-client checkout cart pin', () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('refresh_required');
+  });
+});
+
+describe('shared-cart-client checkout session expiry', () => {
+  const reviewSnapshot = {
+    cartId: '22222222-2222-4222-8222-222222222222',
+    cartVersion: 3,
+    checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+    estimates: {
+      currency: 'NGN',
+      lineCount: 1,
+      subtotalMinor: 25000,
+      unavailableCount: 0,
+    },
+    generation: 1,
+    lines: [],
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  };
+
+  it.each([
+    undefined,
+    'not-a-date',
+    new Date(Date.now() - 1000).toISOString(),
+  ])('fails closed when the prepare response has invalid or expired session expiry %s', async (sessionExpiresAt) => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({
+        replayed: false,
+        sessionExpiresAt,
+        sessionReused: false,
+        snapshot: reviewSnapshot,
+      })
+    );
+
+    await expect(
+      prepareSharedCartCheckout({
+        cartId: '22222222-2222-4222-8222-222222222222',
+        expectedVersion: 3,
+        operationId: 'prep-op-expiry',
+      })
+    ).resolves.toMatchObject({
+      code: 'temporarily_unavailable',
+      ok: false,
+      retryable: true,
+    });
   });
 });

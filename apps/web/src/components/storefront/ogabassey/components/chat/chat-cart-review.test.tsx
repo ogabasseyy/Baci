@@ -44,6 +44,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 vi.mock('@/hooks/use-currency', () => ({
   useCurrency: () => ({
+    currencyCode: 'NGN',
     formatCurrency: (amount: number) => `₦${amount.toLocaleString()}`,
   }),
 }));
@@ -92,7 +93,7 @@ describe('ChatCartReview', () => {
   });
 
   it('shows the empty cart state from the canonical cart', () => {
-    render(<ChatCartReview />);
+    const view = render(<ChatCartReview />);
     expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
     expect(screen.queryByText('Estimated subtotal')).not.toBeInTheDocument();
     expect(

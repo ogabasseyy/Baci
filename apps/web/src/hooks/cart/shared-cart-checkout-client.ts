@@ -82,6 +82,8 @@ export type PrepareSharedCartCheckoutResult =
   | {
       ok: true;
       review: SharedCartCheckoutReview;
+      /** Present on responses from the prepare endpoint; optional for caller compatibility. */
+      sessionExpiresAt?: string;
       replayed: boolean;
       sessionReused: boolean;
     }
@@ -190,10 +192,24 @@ async function requestSharedCartCheckout(
       };
     }
     if (review) {
+      const sessionExpiresAt = body.sessionExpiresAt;
+      if (
+        typeof sessionExpiresAt !== 'string' ||
+        !Number.isFinite(Date.parse(sessionExpiresAt)) ||
+        Date.parse(sessionExpiresAt) <= Date.now()
+      ) {
+        return {
+          code: 'temporarily_unavailable',
+          currentVersion: null,
+          ok: false,
+          retryable: true,
+        };
+      }
       return {
         ok: true,
         replayed: body.replayed === true,
         review,
+        sessionExpiresAt,
         sessionReused: body.sessionReused === true,
       };
     }

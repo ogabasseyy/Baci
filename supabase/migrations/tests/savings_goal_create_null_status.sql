@@ -8,7 +8,7 @@
 --   without any key also yields 'active'.
 --
 -- USAGE:
---   psql $DATABASE_URL -f supabase/migrations/tests/savings_goal_create_null_status.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/tests/savings_goal_create_null_status.sql
 -- =============================================
 
 BEGIN;

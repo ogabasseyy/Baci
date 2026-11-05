@@ -5,6 +5,7 @@ import { buildMerchantOnlyQuoteResponse } from '@/app/api/shipping/quotes/quote-
 import { getRootDomain } from '@/env';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantByIdentifierOrAlias } from '@/lib/get-merchant-by-identifier-or-alias';
+import { isPlatformHost, normalizeHostname } from '@/lib/proxy/host';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
@@ -49,25 +50,31 @@ export async function POST(
     return errorResponse('A Nigerian state is required', 400);
   }
 
-  const merchant = await resolveStorefrontMerchantFromRequest({
-    fallbackIdentifier: slug,
-    request,
-    rootDomain: getRootDomain() || 'usebaci.com',
-    notFoundError: 'Store delivery rates are unavailable',
-    lookupError: 'Store delivery rates could not be loaded',
-  });
-  if (!merchant.success) {
-    const safeStatus = merchant.status === 500 ? 503 : merchant.status;
-    return errorResponse(
-      safeStatus === 503
-        ? 'Store delivery rates could not be loaded'
-        : 'Store delivery rates are unavailable',
-      safeStatus
-    );
+  // Platform hosts route stores by path; merchant domains must resolve from
+  // the trusted host and match the path slug before rates are returned.
+  const platformHost = isPlatformHost(
+    normalizeHostname(request.headers.get('host') || new URL(request.url).host)
+  );
+  let hostMerchantId: string | null = null;
+  if (!platformHost) {
+    const hostMerchant = await resolveStorefrontMerchantFromRequest({
+      request,
+      rootDomain: getRootDomain() || 'usebaci.com',
+      notFoundError: 'Store delivery rates are unavailable',
+      lookupError: 'Store delivery rates could not be loaded',
+    });
+    if (!hostMerchant.success) {
+      const safeStatus = hostMerchant.status === 500 ? 503 : hostMerchant.status;
+      return errorResponse(
+        safeStatus === 503
+          ? 'Store delivery rates could not be loaded'
+          : 'Store delivery rates are unavailable',
+        safeStatus
+      );
+    }
+    hostMerchantId = String(hostMerchant.merchant.id);
   }
 
-  // A host-resolved storefront is authoritative, but the path still names a
-  // merchant. Require both identifiers to resolve to the same merchant.
   let pathMerchant: Awaited<ReturnType<typeof getMerchantByIdentifierOrAlias>>;
   try {
     pathMerchant = await getMerchantByIdentifierOrAlias(slug);
@@ -76,13 +83,13 @@ export async function POST(
   }
   if (
     !pathMerchant ||
-    String(pathMerchant.id) !== String(merchant.merchant.id)
+    (hostMerchantId !== null && String(pathMerchant.id) !== hostMerchantId)
   ) {
     return errorResponse('Store delivery rates are unavailable', 404);
   }
 
-  const currency = resolveMerchantCurrencyConfig(merchant.merchant).code;
-  const country = merchant.merchant.country?.trim().toUpperCase();
+  const currency = resolveMerchantCurrencyConfig(pathMerchant).code;
+  const country = pathMerchant.country?.trim().toUpperCase();
   if (country !== 'NG' || currency.trim().toUpperCase() !== 'NGN') {
     return errorResponse(
       'Delivery estimates are available only for Nigerian stores',
@@ -90,7 +97,7 @@ export async function POST(
     );
   }
 
-  const rates = await loadPublicMerchantRates(String(merchant.merchant.id), {
+  const rates = await loadPublicMerchantRates(String(pathMerchant.id), {
     receiverCountryCode: 'NG',
     receiverState: subdivision.name,
     merchantCurrency: currency,

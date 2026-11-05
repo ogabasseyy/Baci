@@ -57,7 +57,11 @@ beforeEach(() => {
     identifier: 'acme',
     merchant: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' },
   });
-  mocks.pathMerchant.mockResolvedValue({ id: 'merchant-1' });
+  mocks.pathMerchant.mockResolvedValue({
+    id: 'merchant-1',
+    country: 'NG',
+    payout_currency: 'NGN',
+  });
   mocks.loadRates.mockResolvedValue({ quotes: [{ id: 'rate-1' }] });
   mocks.buildResponse.mockReturnValue({ quotes: { all: [{ id: 'rate-1' }] } });
   mocks.publicResponse.mockImplementation((response) => response);
@@ -68,14 +72,26 @@ describe('POST /api/storefront/[slug]/delivery-estimate', () => {
     const response = await POST(request({ state: 'Lagos' }), context());
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(mocks.resolveMerchant).toHaveBeenCalledWith(
-      expect.objectContaining({ fallbackIdentifier: 'acme' })
-    );
+    expect(mocks.resolveMerchant).not.toHaveBeenCalled();
     expect(mocks.loadRates).toHaveBeenCalledWith('merchant-1', {
       receiverCountryCode: 'NG',
       receiverState: 'Lagos',
       merchantCurrency: 'NGN',
     });
+  });
+
+  it('uses the path slug on Vercel preview hosts', async () => {
+    const response = await POST(
+      request({ state: 'Lagos' }, 'baci-preview.vercel.app'),
+      context()
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.resolveMerchant).not.toHaveBeenCalled();
+    expect(mocks.pathMerchant).toHaveBeenCalledWith('acme');
+    expect(mocks.loadRates).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ receiverState: 'Lagos' })
+    );
   });
 
   it('rejects a host/path merchant mismatch before loading rates', async () => {
@@ -136,10 +152,10 @@ describe('POST /api/storefront/[slug]/delivery-estimate', () => {
   });
 
   it('blocks stores outside NGN and hides public rate load failures', async () => {
-    mocks.resolveMerchant.mockResolvedValueOnce({
-      success: true,
-      identifier: 'acme',
-      merchant: { id: 'merchant-1', country: 'GH', payout_currency: 'GHS' },
+    mocks.pathMerchant.mockResolvedValueOnce({
+      id: 'merchant-1',
+      country: 'GH',
+      payout_currency: 'GHS',
     });
     expect((await POST(request({ state: 'Lagos' }), context())).status).toBe(
       400

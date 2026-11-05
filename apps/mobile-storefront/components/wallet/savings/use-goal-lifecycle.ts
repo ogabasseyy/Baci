@@ -189,6 +189,11 @@ export function useGoalLifecycle({
     try {
       const reply = await runWithPinProof(
         (proof) => {
+          // A superseded attempt must never send (or re-send) anything.
+          if (!isCurrent())
+            throw Object.assign(new Error('Attempt superseded'), {
+              code: 'ATTEMPT_SUPERSEDED',
+            });
           const pinProof = proof ?? seed;
           seed = undefined;
           if (!pinProof)
@@ -203,6 +208,8 @@ export function useGoalLifecycle({
         },
         request,
         async (again) => {
+          // Never reopen a sheet for a goal or action no longer on screen.
+          if (!isCurrent()) return null;
           show('pin');
           const proof = await requestProof(again);
           if (proof) show('submitting');

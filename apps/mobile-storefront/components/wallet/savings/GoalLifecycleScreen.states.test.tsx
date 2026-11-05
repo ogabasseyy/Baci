@@ -274,3 +274,34 @@ describe('before the session is restored (cold-start deep link)', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
   });
 });
+
+describe('the wallet failed to load', () => {
+  it('says so, keeps Continue disabled, and Try again re-fetches', () => {
+    const refetch = jest.fn();
+    jest.mocked(useWallet).mockReturnValue({
+      data: undefined,
+      isError: true,
+      isLoading: false,
+      refetch,
+    } as never);
+    renderScreen();
+    expect(
+      screen.getByText("We couldn't load your wallet. Please try again.")
+    ).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Checking…' })).toBeDisabled();
+    expect(issueGoalAction).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no error while the wallet is merely loading', () => {
+    jest.mocked(useWallet).mockReturnValue({
+      data: undefined,
+      isError: false,
+      isLoading: true,
+    } as never);
+    renderScreen();
+    expect(screen.queryByText(/couldn't load your wallet/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+});

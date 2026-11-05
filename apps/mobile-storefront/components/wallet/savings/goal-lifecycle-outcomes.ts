@@ -40,6 +40,7 @@ export const GOAL_LIFECYCLE_COPY = {
   pinCancelled: 'PIN cancelled. Nothing was changed.',
   nothingChanged: 'Nothing was changed.',
   generic: 'Something went wrong. Please try again.',
+  walletLoadFailed: "We couldn't load your wallet. Please try again.",
   signIn: 'Sign in',
   checking: 'Checking…',
   tryAgain: 'Try again',

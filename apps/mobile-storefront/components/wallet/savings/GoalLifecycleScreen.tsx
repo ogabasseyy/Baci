@@ -67,7 +67,9 @@ function loginHref(pathname: string, goalId: string, kind: GoalActionKind) {
 }
 
 function useFindGoal(goalId: string) {
-  const { data, isLoading } = useWallet({ cachePolicy: 'display' });
+  const { data, isError, isLoading, refetch } = useWallet({
+    cachePolicy: 'display',
+  });
   const wallet = data?.wallet;
   const found =
     wallet?.savings_goals?.find((item) => item.id === goalId) ??
@@ -93,6 +95,9 @@ function useFindGoal(goalId: string) {
   return {
     goal: found ?? retained,
     isLoading: isLoading || !data,
+    // The wallet finished with an error and nothing is cached to show.
+    loadFailed: isError && !data,
+    reload: () => void refetch(),
   };
 }
 
@@ -108,7 +113,7 @@ export function GoalLifecycleScreen({
   const queryClient = useQueryClient();
   const auth = useRequireAuth();
   const gate = usePrimaryGoalGate();
-  const { goal, isLoading } = useFindGoal(goalId);
+  const { goal, isLoading, loadFailed, reload } = useFindGoal(goalId);
   const flow = useGoalLifecycle({ kind, goalId });
   const pathname = usePathname();
 
@@ -133,7 +138,9 @@ export function GoalLifecycleScreen({
 
   let title: string =
     flow.step === 'review' ? copy.reviewTitle : copy.screenTitle;
-  let body: string | null = copy.reviewBody;
+  let body: string | null = loadFailed
+    ? COPY.walletLoadFailed
+    : copy.reviewBody;
   let actions = (
     <>
       <Action
@@ -143,6 +150,9 @@ export function GoalLifecycleScreen({
         primary
         busy={waiting}
       />
+      {loadFailed ? (
+        <Action colors={colors} label={COPY.tryAgain} onPress={reload} />
+      ) : null}
       <Action colors={colors} label={copy.secondary} onPress={leave} />
     </>
   );

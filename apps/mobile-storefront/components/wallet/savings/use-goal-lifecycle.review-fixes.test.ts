@@ -67,3 +67,39 @@ describe('a goal or action change while a PIN sheet is open', () => {
     expect(cancelPrompt).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a refused proof arriving after the goal changed', () => {
+  it('opens no sheet, sends no retry and leaves the new goal untouched', async () => {
+    const GOAL_B = '44444444-4444-4444-8444-444444444444';
+    issue.mockResolvedValue({ status: 'issued', operationId: OP });
+    requestProof.mockResolvedValue(PROOF);
+    let refuse: (error: Error) => void = () => undefined;
+    submit.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        })
+    );
+    const { result, rerender } = renderHook(
+      ({ goalId }: { goalId: string }) =>
+        useGoalLifecycle({ kind: 'cancel', goalId }),
+      { initialProps: { goalId: GOAL } }
+    );
+    await act(async () => {
+      void result.current.begin();
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(requestProof).toHaveBeenCalledTimes(1);
+
+    rerender({ goalId: GOAL_B });
+    await act(async () => {
+      refuse(fail('PIN_PROOF_REFUSED'));
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(requestProof).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(status).not.toHaveBeenCalled();
+    expect(result.current.step).toBe('review');
+  });
+});

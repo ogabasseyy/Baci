@@ -96,7 +96,7 @@ describe('TrustPolicyPageClient', () => {
     expect(screen.getByText('Transit time')).toBeInTheDocument();
     expect(screen.getByText('1-5 business days')).toBeInTheDocument();
     expect(screen.getByText('Shipping fees')).toBeInTheDocument();
-    expect(screen.getByText('Calculated')).toBeInTheDocument();
+    expect(screen.getByText('Calculated at checkout')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'How delivery works' })
     ).toBeInTheDocument();

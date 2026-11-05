@@ -11,6 +11,15 @@ import {
 const BASE_URL = 'https://ogabassey.com/smartphones/compare/a-vs-b';
 
 describe('compare schema product helpers', () => {
+  it('retains the known brand for comparison structured data', () => {
+    expect(
+      toProductCompareSchemaProduct(
+        { id: 'a', name: 'Phone', image: '/phone.jpg', brand: ' Google ' },
+        BASE_URL
+      )
+    ).toMatchObject({ brand: 'Google' });
+  });
+
   it('reads plain records and rejects arrays or nullish values', () => {
     expect(getRecord({ id: 'product-1' })).toEqual({ id: 'product-1' });
     expect(getRecord([])).toBeNull();

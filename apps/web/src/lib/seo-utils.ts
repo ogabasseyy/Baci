@@ -4,15 +4,7 @@ import {
   getProductStockBucket,
 } from '@baci/shared/lib/product-inventory';
 import type { Metadata, Route } from 'next';
-import type {
-  BreadcrumbList,
-  CollectionPage,
-  MerchantReturnPolicy,
-  OfferShippingDetails,
-  ReturnFeesEnumeration,
-  ReturnMethodEnumeration,
-  WithContext,
-} from 'schema-dts';
+import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
@@ -31,9 +23,16 @@ import {
 } from './image-utils';
 import { generateMetaDescription } from './meta-description';
 import { normalizeOgabasseyCdnImageUrl } from './ogabassey-cdn-image-url';
+import { getVariantSchemaColor } from './product-schema-color';
+import { isValidMerchantIdentifier } from './product-schema-identifier';
+import { buildVariantSchemaName } from './product-schema-name';
+import { buildMerchantReturnPolicyFromTrustProfile } from './product-schema-returns';
 import { buildSharedOfferPolicies } from './product-schema-shared-offer-policies';
+import { buildOfferShippingDetails } from './product-schema-shipping';
+import { getVariantSchemaSize } from './product-schema-size';
 import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
 import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
+import { getVariantSchemaVariesBy } from './product-schema-varies-by';
 import type {
   Product,
   ProductSchemaMarkup,
@@ -47,11 +46,7 @@ import { normalizeSocialUrl } from './social';
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
 import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
-import type {
-  MerchantTrustProfile,
-  MerchantTrustProfileReturnFee,
-  MerchantTrustProfileReturnMethod,
-} from './storefront-trust/merchant-trust-profile-types';
+import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
 import { productManufacturerIdentifiers } from './variant-product-identifiers';
 
 const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
@@ -167,117 +162,6 @@ const DIMENSION_UNIT_CODES: Record<string, string> = {
   cm: 'CMT',
 };
 
-/**
- * Number of milliseconds in a day
- */
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * Number of milliseconds in 30 days
- */
-const THIRTY_DAYS_MS = 30 * MILLISECONDS_PER_DAY;
-
-/**
- * Maps common variant attribute keys to Google-supported variesBy property URLs.
- * Google only recognizes 6 specific values for variesBy:
- * color, size, suggestedAge, suggestedGender, material, pattern
- * Unsupported attributes return undefined and are excluded from variesBy.
- * @see https://developers.google.com/search/docs/appearance/structured-data/product#product-variants
- */
-function schemaPropertyForAttribute(key: string): string | undefined {
-  const map: Record<string, string> = {
-    color: 'https://schema.org/color',
-    colour: 'https://schema.org/color',
-    size: 'https://schema.org/size',
-    storage: 'https://schema.org/size',
-    ram: 'https://schema.org/size',
-    material: 'https://schema.org/material',
-    pattern: 'https://schema.org/pattern',
-    age: 'https://schema.org/suggestedAge',
-    gender: 'https://schema.org/suggestedGender',
-  };
-  return map[key.toLowerCase()];
-}
-
-function getNormalizedVariantAttribute(
-  attributes: Record<string, string> | null | undefined,
-  keys: string[]
-): string | undefined {
-  if (!attributes) {
-    return undefined;
-  }
-
-  for (const key of keys) {
-    const matchedKey =
-      key in attributes
-        ? key
-        : Object.keys(attributes).find(
-            (attributeKey) => attributeKey.toLowerCase() === key.toLowerCase()
-          );
-    const value = matchedKey ? attributes[matchedKey] : undefined;
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  return undefined;
-}
-
-function getVariantSchemaColor(
-  attributes: Record<string, string> | null | undefined
-): string | undefined {
-  return getNormalizedVariantAttribute(attributes, ['color', 'colour']);
-}
-
-function getVariantSchemaSize(
-  attributes: Record<string, string> | null | undefined
-): string | undefined {
-  const explicitSize = getNormalizedVariantAttribute(attributes, ['size']);
-  if (explicitSize) {
-    return explicitSize;
-  }
-
-  const inferredParts = [
-    getNormalizedVariantAttribute(attributes, ['storage']),
-    getNormalizedVariantAttribute(attributes, ['ram']),
-  ].filter((value): value is string => Boolean(value));
-
-  if (inferredParts.length === 0) {
-    return undefined;
-  }
-
-  return Array.from(new Set(inferredParts)).join(' / ');
-}
-
-function mapReturnMethodToSchemaUrl(
-  returnMethod: MerchantTrustProfileReturnMethod | undefined
-): ReturnMethodEnumeration | undefined {
-  switch (returnMethod) {
-    case 'mail':
-    case 'carrier_dropoff':
-      return 'https://schema.org/ReturnByMail';
-    case 'in_store':
-      return 'https://schema.org/ReturnInStore';
-    default:
-      return undefined;
-  }
-}
-
-function mapReturnFeeToSchemaUrl(
-  returnFees: MerchantTrustProfileReturnFee | undefined
-): ReturnFeesEnumeration | undefined {
-  switch (returnFees) {
-    case 'free':
-      return 'https://schema.org/FreeReturn';
-    case 'customer_pays':
-      return 'https://schema.org/ReturnShippingFees';
-    case 'original_shipping_deducted':
-      return 'https://schema.org/OriginalShippingFees';
-    default:
-      return undefined;
-  }
-}
-
 function buildSameAsUrls(
   data: OrganizationData,
   trustProfile?: MerchantTrustProfile
@@ -330,88 +214,6 @@ function buildContactPoint(
     ...(email && { email: escapeHtml(email) }),
     ...(telephone && { telephone: escapeHtml(telephone) }),
     availableLanguage: 'English',
-  };
-}
-
-function buildMerchantReturnPolicy(
-  country: string,
-  trustProfile?: MerchantTrustProfile,
-  fallbackDays = 7
-): MerchantReturnPolicy {
-  const returnPolicy = trustProfile?.returnPolicy;
-
-  return {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? fallbackDays,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
-  };
-}
-
-function buildOfferShippingDetails(
-  country: string,
-  currency: string,
-  trustProfile?: MerchantTrustProfile
-): OfferShippingDetails {
-  const shippingPolicy = trustProfile?.shippingPolicy;
-  const handlingMin = shippingPolicy?.handlingDaysMin ?? 0;
-  const handlingMax = shippingPolicy?.handlingDaysMax ?? 1;
-  const transitMin = shippingPolicy?.transitDaysMin ?? 1;
-  const transitMax = shippingPolicy?.transitDaysMax ?? 5;
-
-  return {
-    '@type': 'OfferShippingDetails',
-    shippingRate: {
-      '@type': 'MonetaryAmount',
-      value: 0,
-      currency,
-    },
-    shippingDestination: {
-      '@type': 'DefinedRegion',
-      addressCountry: country,
-    },
-    deliveryTime: {
-      '@type': 'ShippingDeliveryTime',
-      handlingTime: {
-        '@type': 'QuantitativeValue',
-        minValue: handlingMin,
-        maxValue: handlingMax,
-        unitCode: 'DAY',
-      },
-      transitTime: {
-        '@type': 'QuantitativeValue',
-        minValue: transitMin,
-        maxValue: transitMax,
-        unitCode: 'DAY',
-      },
-    },
-  };
-}
-
-function buildMerchantReturnPolicyFromTrustProfile(
-  country: string,
-  trustProfile?: MerchantTrustProfile
-): MerchantReturnPolicy {
-  const returnPolicy = trustProfile?.returnPolicy;
-  return {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? 7,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
   };
 }
 
@@ -732,11 +534,8 @@ export function generateProductSchema(
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
-              .toISOString()
-              .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           }))
         : {
             '@type': 'Offer',
@@ -752,17 +551,16 @@ export function generateProductSchema(
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
-              .toISOString()
-              .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           },
   };
 
   // Product identifiers are important for Google Merchant Center.
-  if (product.sku) {
+  if (isValidMerchantIdentifier(product.sku)) {
     schema.sku = product.sku;
+  } else if (product.sku && isValidMerchantIdentifier(product.id)) {
+    schema.sku = product.id;
   }
 
   // Group-level identifiers describe the parent product listing itself and are
@@ -977,29 +775,12 @@ export function generateProductSchema(
   // @see https://schema.org/ProductGroup
   if (product.variants && product.variants.length > 0) {
     schema['@type'] = 'ProductGroup';
-    schema.productGroupID = product.slug || product.id;
+    schema.productGroupID = isValidMerchantIdentifier(product.slug)
+      ? product.slug
+      : product.id;
 
-    // Compute variesBy from unique attribute keys across all variants
-    const allAttributeKeys = new Set<string>();
-    for (const variant of product.variants) {
-      if (variant.attributes) {
-        for (const key of Object.keys(variant.attributes)) {
-          allAttributeKeys.add(key);
-        }
-      }
-    }
-
-    if (allAttributeKeys.size > 0) {
-      // Only include Google-supported variesBy values, deduplicated
-      const variesBySet = new Set<string>();
-      for (const key of allAttributeKeys) {
-        const url = schemaPropertyForAttribute(key);
-        if (url) variesBySet.add(url);
-      }
-      if (variesBySet.size > 0) {
-        schema.variesBy = Array.from(variesBySet);
-      }
-    }
+    const variesBy = getVariantSchemaVariesBy(product.variants);
+    if (variesBy.length > 0) schema.variesBy = variesBy;
 
     // Shared shipping + return policy for all variant Offers, defined once and
     // referenced by @id (2026 best practice)
@@ -1010,13 +791,8 @@ export function generateProductSchema(
       buildMerchantReturnPolicyFromTrustProfile(country, trustProfile)
     );
 
-    const variantPriceValidUntil = new Date(Date.now() + THIRTY_DAYS_MS)
-      .toISOString()
-      .substring(0, 10);
-
     // Build hasVariant array — each variant becomes a @type Product
-    // Brand and the shared description live on the ProductGroup only; Google
-    // does not need them repeated on every variant.
+    // Include variant descriptions alongside the shared ProductGroup description.
     schema.hasVariant = product.variants.map((variant, variantIndex) => {
       const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
@@ -1029,10 +805,7 @@ export function generateProductSchema(
       );
       const variantColor = getVariantSchemaColor(variant.attributes);
       const variantSize = getVariantSchemaSize(variant.attributes);
-      const attrValues = variant.attributes
-        ? Object.values(variant.attributes).join(' / ')
-        : '';
-      const variantName = attrValues ? `${safeName} - ${attrValues}` : safeName;
+      const variantName = buildVariantSchemaName(safeName, variant.attributes);
 
       // Variant images: use variant-specific images if available, fall back to parent images
       let variantImages: string[] | undefined;
@@ -1048,12 +821,19 @@ export function generateProductSchema(
       return {
         '@type': 'Product',
         name: variantName,
+        description: [variantColor, variantSize, safeDescription]
+          .filter(Boolean)
+          .join(' - '),
         ...(variantUrl && { url: variantUrl }),
         ...(variantImages && { image: variantImages }),
         inProductGroupWithID: schema.productGroupID,
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
-        sku: variant.sku || variant.id,
+        ...(isValidMerchantIdentifier(variant.sku)
+          ? { sku: variant.sku }
+          : isValidMerchantIdentifier(variant.id)
+            ? { sku: variant.id }
+            : {}),
         ...(identifiers.gtin && { gtin: identifiers.gtin }),
         ...(identifiers.mpn && { mpn: identifiers.mpn }),
         offers: {
@@ -1066,7 +846,6 @@ export function generateProductSchema(
             stock_quantity: variant.stock_quantity,
           }),
           itemCondition: variantCondition,
-          priceValidUntil: variantPriceValidUntil,
           seller: {
             '@type': 'Organization',
             name: safeMerchantName,
@@ -1894,9 +1673,10 @@ export function generateOrganizationSchema(
     schema.contactPoint = contactPoint;
   }
 
-  const hasMerchantReturnPolicy = data.trustProfile?.returnPolicy
-    ? buildMerchantReturnPolicy(data.country ?? 'NG', data.trustProfile)
-    : undefined;
+  const hasMerchantReturnPolicy = buildMerchantReturnPolicyFromTrustProfile(
+    data.country ?? 'NG',
+    data.trustProfile
+  );
 
   if (hasMerchantReturnPolicy) {
     schema.hasMerchantReturnPolicy = hasMerchantReturnPolicy;

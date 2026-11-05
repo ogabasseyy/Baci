@@ -39,5 +39,8 @@ BEGIN
 END $$;
 DO $$ DECLARE failures text; BEGIN
   SELECT string_agg(message, E'\n') INTO failures FROM checkout_clock_failures;
-  IF failures IS NOT NULL THEN RAISE EXCEPTION E'Checkout database clock regressions:\n%', failures; END IF;
+  IF failures IS NOT NULL THEN
+    RAISE NOTICE 'Checkout database clock regressions: %', failures;
+    RAISE EXCEPTION 'Checkout database clock regressions';
+  END IF;
 END $$;

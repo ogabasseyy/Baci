@@ -10,6 +10,7 @@ import { asRoute } from '@/lib/routes';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
+import { ChatCartReview } from './chat-cart-review';
 import { ChatMessageBubble } from './chat-message';
 import { resolveSuggestionNavigationPath, SUGGESTIONS } from './types';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
@@ -32,7 +33,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const router = useRouter();
   const merchant = useMerchantSafe();
   const isFooterVisible = useOgabasseyScrollVisibility();
-
   const isSanta = theme === 'santa';
 
   const {
@@ -52,7 +52,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     isSanta,
     storefrontSlug: merchant?.merchant?.slug,
   });
-
   const handleSuggestionClick = (label: string) => {
     const suggestion = SUGGESTIONS.find((entry) => entry.label === label);
     const navigationPath = suggestion
@@ -73,7 +72,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     !pathname?.includes('/cart') &&
     !pathname?.includes('/checkout');
   const isCartPage = pathname?.includes('/cart');
-
   const footerOffset = isProductPage
     ? 'product'
     : isCartPage
@@ -174,6 +172,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   Today
                 </span>
               </div>
+
+              <ChatCartReview />
 
               {messages.map((msg, idx) => (
                 <ChatMessageBubble

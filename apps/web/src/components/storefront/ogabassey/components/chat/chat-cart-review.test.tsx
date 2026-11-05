@@ -8,6 +8,9 @@ const state = vi.hoisted(() => ({
     name: string;
     quantity: number;
     price: number;
+    minimum_order_quantity?: number | null;
+    stock?: number | null;
+    offerId?: string;
     negotiatedPrice?: number;
     negotiationStatus?: 'pending' | 'accepted' | 'rejected';
     hasAssurance?: boolean;
@@ -23,6 +26,8 @@ const state = vi.hoisted(() => ({
   cartMerchantSlug: 'store',
   merchantSlug: 'store',
   setIsCartOpen: vi.fn(),
+  updateQuantity: vi.fn(),
+  removeFromCart: vi.fn(),
 }));
 
 vi.mock('@/hooks/cart', () => ({
@@ -32,6 +37,8 @@ vi.mock('@/hooks/cart', () => ({
     isHydrated: state.isHydrated,
     merchantSlug: state.cartMerchantSlug,
     setIsCartOpen: state.setIsCartOpen,
+    updateQuantity: state.updateQuantity,
+    removeFromCart: state.removeFromCart,
   }),
 }));
 vi.mock('@/hooks/use-merchant-client', () => ({
@@ -59,6 +66,8 @@ describe('ChatCartReview', () => {
     state.cartMerchantSlug = 'store';
     state.merchantSlug = 'store';
     state.setIsCartOpen.mockClear();
+    state.updateQuantity.mockClear();
+    state.removeFromCart.mockClear();
   });
 
   it('shows canonical cart contents and opens existing cart controls only when requested', async () => {
@@ -73,6 +82,11 @@ describe('ChatCartReview', () => {
     expect(screen.getByText('2 × ₦500')).toBeInTheDocument();
     expect(screen.getByText('Estimated subtotal')).toBeInTheDocument();
     expect(screen.getByText('₦1,000')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decrease Phone quantity' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Increase Phone quantity' }));
+    expect(state.updateQuantity).toHaveBeenCalledWith('line-1', 3);
+    await user.click(screen.getByRole('button', { name: 'Remove Phone from cart' }));
+    expect(state.removeFromCart).toHaveBeenCalledWith('line-1');
     expect(
       screen.getByText(/Shipping, tax, and final total/)
     ).toBeInTheDocument();
@@ -151,6 +165,49 @@ describe('ChatCartReview', () => {
     expect(screen.getByText('256GB')).toBeInTheDocument();
     expect(screen.getByText('Silver')).toBeInTheDocument();
     expect(screen.getByText('Used')).toBeInTheDocument();
+  });
+
+  it('edits the exact variant cart line and respects its minimum order quantity', async () => {
+    const user = userEvent.setup();
+    state.cart = [
+      {
+        cartItemId: 'blue-128',
+        name: 'Phone',
+        quantity: 2,
+        price: 1000,
+        selectedColor: 'Blue',
+        minimum_order_quantity: 2,
+      },
+    ];
+    const view = render(<ChatCartReview />);
+
+    expect(
+      screen.getByRole('button', { name: 'Decrease Phone quantity' })
+    ).toBeDisabled();
+    state.cart = state.cart.map((line) => ({ ...line, quantity: 3 }));
+    view.rerender(<ChatCartReview />);
+
+    await user.click(screen.getByRole('button', { name: 'Decrease Phone quantity' }));
+    expect(state.updateQuantity).toHaveBeenCalledWith('blue-128', 2);
+    expect(screen.getByRole('button', { name: 'Decrease Phone quantity' })).toBeEnabled();
+  });
+
+  it('disables increase when the canonical offer allocation is already reached', () => {
+    state.cart = [
+      {
+        cartItemId: 'allocated-line',
+        name: 'Limited offer phone',
+        quantity: 1,
+        price: 1000,
+        offerId: 'offer-1',
+        stock: 1,
+      },
+    ];
+    render(<ChatCartReview />);
+
+    expect(
+      screen.getByRole('button', { name: 'Increase Limited offer phone quantity' })
+    ).toBeDisabled();
   });
 
   it.each([

@@ -24,6 +24,27 @@ describe('cart-quantity-edit', () => {
     expect(findQuantityEditTargetIndex(cart, 'missing')).toBe(-1);
   });
 
+  it('prefers an exact base cart line ID over an earlier offer with the same product ID', () => {
+    const offerLine = {
+      ...line,
+      cartItemId: 'prod-1::offer=deal-1',
+      offerId: 'deal-1',
+      quantity: 2,
+    } as CartItem;
+    const baseLine = { ...line, cartItemId: 'prod-1', quantity: 1 };
+    const cart = [offerLine, baseLine];
+
+    expect(findQuantityEditTargetIndex(cart, 'prod-1')).toBe(1);
+    expect(
+      applyStorefrontCartQuantityEdit({
+        previousCart: cart,
+        cartItemIdOrProductId: 'prod-1',
+        quantity: 3,
+        wasGroupActive: false,
+      })
+    ).toEqual([offerLine, { ...baseLine, quantity: 3 }]);
+  });
+
   it('probes removals and missing targets without consulting caps', () => {
     expect(
       probeQuantityEditApplied({

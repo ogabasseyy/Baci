@@ -12,15 +12,21 @@ export function findQuantityEditTargetIndex(
   cartItemIdOrProductId: string,
   variantId?: string
 ): number {
-  return cart.findIndex((item) => {
-    if (variantId) {
-      return item.id === cartItemIdOrProductId && item.variantId === variantId;
-    }
-    return (
-      item.cartItemId === cartItemIdOrProductId ||
-      (item.id === cartItemIdOrProductId && !item.variantId)
+  if (variantId) {
+    return cart.findIndex(
+      (item) =>
+        item.id === cartItemIdOrProductId && item.variantId === variantId
     );
-  });
+  }
+
+  const exactLineIndex = cart.findIndex(
+    (item) => item.cartItemId === cartItemIdOrProductId
+  );
+  if (exactLineIndex >= 0) return exactLineIndex;
+
+  return cart.findIndex(
+    (item) => item.id === cartItemIdOrProductId && !item.variantId
+  );
 }
 
 /**

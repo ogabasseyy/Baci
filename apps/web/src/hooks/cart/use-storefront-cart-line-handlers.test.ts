@@ -77,4 +77,25 @@ describe('useStorefrontCartLineHandlers', () => {
     const prev = [{ id: 'prod-1', quantity: 1 }] as CartItem[];
     expect(updater(prev)).toEqual([]);
   });
+
+  it('removes an exact base cart line without removing its offer sibling', () => {
+    const { result, setCart } = setup();
+    result.current.removeFromCart('prod-1');
+    const updater = setCart.mock.calls[0][0] as (
+      prev: CartItem[]
+    ) => CartItem[];
+    const offerLine = {
+      id: 'prod-1',
+      cartItemId: 'prod-1::offer=deal-1',
+      offerId: 'deal-1',
+      quantity: 1,
+    } as CartItem;
+    const baseLine = {
+      id: 'prod-1',
+      cartItemId: 'prod-1',
+      quantity: 1,
+    } as CartItem;
+
+    expect(updater([offerLine, baseLine])).toEqual([offerLine]);
+  });
 });

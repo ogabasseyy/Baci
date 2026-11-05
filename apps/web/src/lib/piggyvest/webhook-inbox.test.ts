@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   claimPiggyvestEvent,
   recordPiggyvestEvent,
@@ -46,7 +46,7 @@ function mockClient(
     client: {
       from: () => query,
       rpc,
-    } as unknown as PiggyvestIntakeServiceClient,
+    } as unknown as PiggyvestIntakeClient,
     rpc,
     query,
   };

@@ -43,10 +43,6 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/lib/loyalty/server-resolver-client.ts',
       ],
       [
-        'apps/web/src/app/api/webhooks/piggyvest/route.ts',
-        'apps/web/src/lib/piggyvest/server-intake-client.ts',
-      ],
-      [
         'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
         'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       ],

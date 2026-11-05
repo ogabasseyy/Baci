@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import z from 'zod';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 
 /**
  * Durable inbox for PiggyVest webhooks (Task 3).
@@ -48,7 +48,7 @@ const storedEnvelopeSchema = z.object({
 });
 
 export async function recordPiggyvestEvent(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   input: RecordPiggyvestEventInput
 ): Promise<RecordPiggyvestEventOutcome> {
   // Brand is enforced at the boundary (only the intake edge constructs this

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T10:08:34+00:00",
-  "source_revision": "51d3887f919fa000cf9d29b06a8ffe7d26ef2cdf",
-  "evidence_digest": "5a556dd1b63602a28ad6a20eed91d170f569b2d39926c2e6377bd835152efb79",
-  "claims_digest": "79d91cf270a4eb827494594bf7646156d04f539597eeb9849a3f72d1c8c72904",
-  "review_scope": "Source-only follow-up: UTF8 upload assembly preserves BOM bytes after digest verification and still rejects malformed UTF8; canonical finalization tests include BOM-prefixed multipart source. Direct publication/approval schema coverage includes strict requests, identifiers, integer version boundaries, approval actions/references and lifecycle status defaults. Prior recovery/auth/RLS behavior retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization remain required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
+  "reviewed_at": "2026-11-05T16:41:57+00:00",
+  "source_revision": "7732185e16f512d6a7c35124f606555638f35b10",
+  "evidence_digest": "32ec5165497705e35955bdfc3e5805e2278e421bd00bf20dd7ac5e2f8a4d9191",
+  "claims_digest": "0f20ba3cc2a2e425cb6032b5a4aa1e2ea635a9f6d51c0882122a28fe9d2f8bf6",
+  "review_scope": "Source-only follow-up: prerender accepts React responsive-image preload links only when every candidate URL is a trusted offline asset; public-output file and binding schemas extracted with direct tests; requested private preview route is preserved through the capture URL, sign-in return, page props and launch request. Prior auth/RLS/recovery contracts retained. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",

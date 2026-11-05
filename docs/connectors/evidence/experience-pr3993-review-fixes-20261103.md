@@ -124,3 +124,10 @@ The prior merchantless quote and approval-reload regressions fail against the pr
 ## 5 November: BOM preservation and publication-schema review
 
 Source `51d3887f919fa000cf9d29b06a8ffe7d26ef2cdf` preserves the UTF8 BOM during fatal decoding of verified upload bytes. The byte-preservation regression failed before the change; final tests also verify the BOM is retained in the canonical manifest sent by `finalizeUpload`, while malformed UTF8 still fails. Added colocated publication/approval schema tests for identifier/action/version boundaries, strict requests, approval references and lifecycle status defaults. Five focused suites / 30 tests passed. The two blocking review conversations are to be resolved only after pushing these fixes; fresh CI/review and normal pre-push typechecks are separate gates. Benchmarks parked, CodeRabbit skipped; no deployment, hosted migration, publishing, orders, payments or provider calls.
+
+
+## 5 November: responsive preloads and route-bound owner preview
+
+Source `7732185e16f512d6a7c35124f606555638f35b10` validates href-less React responsive image preloads against trusted asset candidate URLs and valid width/density descriptors. Untrusted or malformed candidates fail closed. Extracted public-output file and prerender-binding schemas into the schemas directory with direct tests. Private capture links now carry the requested route through the page, sign-in return and interactive launch request; omitted routes keep the existing default.
+
+The responsive React SSR, non-default capture URL and launch-body regressions each fail against the previous implementation and pass after the fix. Eight focused suites / 38 tests passed, including existing public-output reader binding checks. Current main through `b042dfbc6d` merged cleanly; its provider infrastructure is not activated. Normal pre-push typechecks and fresh exact-head CI/review remain separate gates. Benchmarks parked, CodeRabbit skipped; no deployment, hosted migration, publishing, orders, payments or extra provider calls.

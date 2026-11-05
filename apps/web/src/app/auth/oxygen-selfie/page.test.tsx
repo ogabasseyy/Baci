@@ -19,7 +19,8 @@ vi.mock('@/lib/payments/oxygen/oxygen-hosted-origins', () => ({
   readOxygenHostedOrigins: m.readOrigins,
 }));
 
-import Page, { metadata, SelfieContinuation } from './page';
+import Page, { metadata } from './page';
+import { SelfieContinuation } from './SelfieContinuation';
 
 // Regression: awaiting connection() at the top of the page, outside any
 // Suspense boundary, made `next build` fail to prerender this route, which

@@ -20,6 +20,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: () => null },
   router: { replace: jest.fn() },
+  usePathname: () => '/wallet/savings/goal-actions',
 }));
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: jest.fn(),

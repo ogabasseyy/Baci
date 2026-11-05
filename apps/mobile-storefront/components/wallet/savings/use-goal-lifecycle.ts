@@ -9,49 +9,15 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { isPinCancelled, runWithPinProof } from '@/lib/wallet-pin-proof';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
+import {
+  codeOf,
+  GOAL_LIFECYCLE_COPY,
+  messageOf,
+  NOT_STARTABLE_CODES,
+} from './goal-lifecycle-outcomes';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 
-/**
- * Every sentence the goal cancel / complete flow shows that is not a server
- * message. All of it awaits the owner's written approval.
- */
-export const GOAL_LIFECYCLE_COPY = {
-  cancel: {
-    screenTitle: 'Cancel goal',
-    entryButton: 'Cancel goal',
-    entryLabel: 'Cancel savings goal',
-    reviewTitle: 'Cancel this goal?',
-    reviewBody:
-      'Your whole goal balance, including any interest, goes back to your main wallet. This goal will be closed.',
-    primary: 'Continue',
-    secondary: 'Keep goal',
-    successTitle: 'Goal cancelled',
-    successBody: 'Your money is back in your main wallet.',
-  },
-  complete: {
-    screenTitle: 'Complete goal',
-    entryButton: 'Complete goal',
-    entryLabel: 'Complete savings goal',
-    reviewTitle: 'Complete this goal',
-    reviewBody:
-      'Your whole goal balance, including any interest, moves to your main wallet and we send your purchase request to the store team. They will contact you to finish your purchase. Nothing is spent or paid out automatically.',
-    primary: 'Continue',
-    secondary: 'Not now',
-    successTitle: 'Goal completed',
-    successBody:
-      'Your money is in your main wallet and your purchase request has been sent.',
-  },
-  savedSoFar: 'Saved so far',
-  backToWallet: 'Back to wallet',
-  pending: 'We are still processing this. You can safely leave this screen.',
-  stillProcessing: 'Still processing',
-  checkAgain: 'Check again',
-  pinCancelled: 'PIN cancelled. Nothing was changed.',
-  nothingChanged: 'Nothing was changed.',
-  tryAgain: 'Try again',
-  startAgain: 'Start again',
-  needsReview: 'Your savings are safe. Please do not try again.',
-} as const;
+export { GOAL_LIFECYCLE_COPY };
 
 export type GoalLifecycleStep =
   | 'review'
@@ -69,20 +35,18 @@ type Outcome = {
   step: GoalLifecycleStep;
   message: string | null;
   canStartAgain: boolean;
+  needsSignIn: boolean;
 };
 
 const POLL_MS = 5000;
 const MAX_WAITS = 24; // 24 x 5 s = the two minutes we poll for
-const REVIEW: Outcome = { step: 'review', message: null, canStartAgain: false };
+const REVIEW: Outcome = {
+  step: 'review',
+  message: null,
+  canStartAgain: false,
+  needsSignIn: false,
+};
 
-const codeOf = (error: unknown) =>
-  typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code)
-    : undefined;
-const messageOf = (error: unknown) =>
-  error instanceof Error && error.message
-    ? error.message
-    : GOAL_LIFECYCLE_COPY.nothingChanged;
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -94,6 +58,7 @@ function submitFailure(kind: GoalActionKind, error: unknown): Outcome | null {
       step: 'needs_review',
       message: messageOf(error),
       canStartAgain: false,
+      needsSignIn: false,
     };
   const again = [`${K}_EXPIRED`, `${K}_OPERATION_INVALID`, `${K}_BUSY`];
   const final = [
@@ -104,13 +69,14 @@ function submitFailure(kind: GoalActionKind, error: unknown): Outcome | null {
     'NOTHING_TO_MOVE',
     'AMOUNT_TOO_LARGE',
     'WALLET_UNAVAILABLE',
-    'GOAL_NOT_FOUND',
+    ...NOT_STARTABLE_CODES,
   ];
   if (code && (again.includes(code) || final.includes(code)))
     return {
       step: 'failed',
       message: messageOf(error),
       canStartAgain: again.includes(code),
+      needsSignIn: code === 'UNAUTHORIZED',
     };
   // Anything else (a 503 unavailable, a timeout, an unreadable reply) may
   // have moved money: the caller must read status, never resubmit.
@@ -155,8 +121,9 @@ export function useGoalLifecycle({
   const show = (
     step: GoalLifecycleStep,
     message: string | null = null,
-    canStartAgain = false
-  ) => setOutcome({ step, message, canStartAgain });
+    canStartAgain = false,
+    needsSignIn = false
+  ) => setOutcome({ step, message, canStartAgain, needsSignIn });
 
   const poll = async (operationId: string, isCurrent: () => boolean) => {
     if (!merchantId) return;
@@ -178,8 +145,13 @@ export function useGoalLifecycle({
           return show('failed', GOAL_LIFECYCLE_COPY.nothingChanged, true);
       } catch (error) {
         if (!isCurrent()) return;
-        if (codeOf(error) === `${kind.toUpperCase()}_NOT_FOUND`)
+        const code = codeOf(error);
+        if (code === `${kind.toUpperCase()}_NOT_FOUND`)
           return show('failed', messageOf(error), true);
+        // The server's final word: nothing moved. Anything else (a network
+        // error, a timeout, another refusal) stays indeterminate.
+        if (code === `${kind.toUpperCase()}_REJECTED`)
+          return show('failed', GOAL_LIFECYCLE_COPY[kind].rejected);
       }
     }
     show('timed_out');
@@ -274,11 +246,15 @@ export function useGoalLifecycle({
         if (code === 'GOAL_NEEDS_REVIEW')
           return show('needs_review', messageOf(error));
         const final = [
-          'GOAL_NOT_FOUND',
-          'PIGGYVEST_NOT_READY',
+          ...NOT_STARTABLE_CODES,
           `${kind.toUpperCase()}_NOT_ELIGIBLE`,
         ];
-        show('failed', messageOf(error), !(code && final.includes(code)));
+        show(
+          'failed',
+          messageOf(error),
+          !(code && final.includes(code)),
+          code === 'UNAUTHORIZED'
+        );
       }
     });
 

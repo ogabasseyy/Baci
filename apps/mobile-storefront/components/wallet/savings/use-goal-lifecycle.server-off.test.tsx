@@ -30,7 +30,9 @@ describe('server keeps PiggyVest off', () => {
   });
 
   it('a not-ready refusal shows its server text with no retry and no PIN', async () => {
-    jest.mocked(issueGoalAction).mockRejectedValue(serverOffError());
+    jest
+      .mocked(issueGoalAction)
+      .mockRejectedValue(serverOffError('SAVINGS_NOT_READY'));
     const { result } = renderHook(() =>
       useGoalLifecycle({ kind: 'cancel', goalId: SERVER_OFF_GOAL_ID })
     );

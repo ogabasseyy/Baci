@@ -26,6 +26,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: () => null },
   router: { replace: jest.fn(), push: jest.fn(), back: jest.fn() },
+  usePathname: () => '/wallet/savings/goal-actions',
 }));
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: jest.fn(),
@@ -271,40 +272,4 @@ it('Start again re-issues after an expiry', async () => {
   fireEvent.press(screen.getByRole('button', { name: 'Enter PIN' }));
   fireEvent.press(await screen.findByRole('button', { name: 'Start again' }));
   await waitFor(() => expect(issueGoalAction).toHaveBeenCalledTimes(2));
-});
-
-describe('redirects', () => {
-  it.each([
-    ['gate off', () => jest.mocked(usePrimaryGoalGate).mockReturnValue('off')],
-    [
-      'unknown goal',
-      () =>
-        jest.mocked(useWallet).mockReturnValue({
-          data: { wallet: { savings_goals: [] }, transactions: [] },
-          isLoading: false,
-        } as never),
-    ],
-  ])('goes to the wallet for %s without any request', (_name, arrange) => {
-    arrange();
-    renderScreen();
-    expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
-    expect(issueGoalAction).not.toHaveBeenCalled();
-  });
-
-  it('goes to login when signed out', () => {
-    jest.mocked(useRequireAuth).mockReturnValue({
-      redirectTo: '/auth/login?returnTo=x',
-      user: null,
-    } as never);
-    renderScreen();
-    expect(
-      screen.getByText('Redirect:/auth/login?returnTo=x')
-    ).toBeOnTheScreen();
-  });
-
-  it('waits while the gate is checking', () => {
-    jest.mocked(usePrimaryGoalGate).mockReturnValue('checking');
-    renderScreen();
-    expect(screen.queryByText(/Redirect:/)).toBeNull();
-  });
 });

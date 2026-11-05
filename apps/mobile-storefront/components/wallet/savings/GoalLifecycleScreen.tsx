@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Redirect, router, Stack } from 'expo-router';
+import { Redirect, router, Stack, usePathname } from 'expo-router';
 import { useRef } from 'react';
 import {
   ActivityIndicator,
@@ -30,12 +30,15 @@ function Action(props: {
   label: string;
   onPress: () => void;
   primary?: boolean;
+  busy?: boolean;
 }) {
-  const { colors, label, onPress, primary = false } = props;
+  const { colors, label, onPress, primary = false, busy = false } = props;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: busy, busy }}
+      disabled={busy}
       onPress={onPress}
       style={[
         styles.button,
@@ -85,6 +88,7 @@ export function GoalLifecycleScreen({
   const gate = usePrimaryGoalGate();
   const { goal, isLoading } = useFindGoal(goalId);
   const flow = useGoalLifecycle({ kind, goalId });
+  const pathname = usePathname();
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
   if (gate === 'off') return <Redirect href="/wallet" />;
@@ -96,6 +100,9 @@ export function GoalLifecycleScreen({
     router.replace('/wallet');
   };
   const leave = () => router.replace('/wallet');
+  const signIn = () =>
+    router.replace(`/auth/login?returnTo=${encodeURIComponent(pathname)}`);
+  const checking = gate === 'checking';
   const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
 
   let title: string =
@@ -105,9 +112,10 @@ export function GoalLifecycleScreen({
     <>
       <Action
         colors={colors}
-        label={copy.primary}
+        label={checking ? COPY.checking : copy.primary}
         onPress={() => void flow.begin()}
         primary
+        busy={checking}
       />
       <Action colors={colors} label={copy.secondary} onPress={leave} />
     </>
@@ -157,6 +165,14 @@ export function GoalLifecycleScreen({
     body = null;
     actions = (
       <>
+        {flow.needsSignIn ? (
+          <Action
+            colors={colors}
+            label={COPY.signIn}
+            onPress={signIn}
+            primary
+          />
+        ) : null}
         {flow.canStartAgain ? (
           <Action
             colors={colors}

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN,
+  PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME_PATTERN,
   readPiggyvestPrimaryDbPoolerProjectRef,
+  readPiggyvestPrimaryDbTlsServerName,
 } from './piggyvest-env';
 
 describe('readPiggyvestPrimaryDbPoolerProjectRef', () => {
@@ -47,5 +49,51 @@ describe('PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN', () => {
         false
       );
     }
+  });
+});
+
+describe('readPiggyvestPrimaryDbTlsServerName', () => {
+  const NAME = 'db.abcdefghijklmnopqrst.supabase.co';
+
+  it('returns the configured server name', () => {
+    expect(
+      readPiggyvestPrimaryDbTlsServerName({
+        PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME: NAME,
+      })
+    ).toBe(NAME);
+  });
+
+  it('treats an absent or blank value as unset', () => {
+    expect(readPiggyvestPrimaryDbTlsServerName({})).toBeUndefined();
+    expect(
+      readPiggyvestPrimaryDbTlsServerName({
+        PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME: '',
+      })
+    ).toBeUndefined();
+  });
+
+  it('returns a malformed value unchanged so the executors fail closed', () => {
+    expect(
+      readPiggyvestPrimaryDbTlsServerName({
+        PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME: 'pg-relay.usebaci.com',
+      })
+    ).toBe('pg-relay.usebaci.com');
+  });
+
+  it.each([
+    NAME,
+    'db.zzzzzzzzzzzzzzzzzzzz.supabase.co',
+  ])('pattern accepts %s', (v) => {
+    expect(PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME_PATTERN.test(v)).toBe(true);
+  });
+
+  it.each([
+    'pg-relay.usebaci.com',
+    'db.short.supabase.co',
+    `${NAME}.evil.com`,
+    `x${NAME}`,
+    'db.ABCDEFGHIJKLMNOPQRST.supabase.co',
+  ])('pattern rejects %s', (v) => {
+    expect(PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME_PATTERN.test(v)).toBe(false);
   });
 });

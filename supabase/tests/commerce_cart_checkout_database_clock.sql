@@ -41,6 +41,13 @@ DO $$ DECLARE failures text; BEGIN
   SELECT string_agg(message, E'\n') INTO failures FROM checkout_clock_failures;
   IF failures IS NOT NULL THEN
     RAISE NOTICE 'Checkout database clock regressions: %', failures;
-    RAISE EXCEPTION 'Checkout database clock regressions';
+    IF failures LIKE '%fresh prepare did not return a PostgreSQL databaseNow%' THEN
+      RAISE EXCEPTION 'Checkout clock fresh prepare assertion failed' USING ERRCODE = 'P0002';
+    ELSIF failures LIKE '%databaseNow was persisted in the idempotency receipt%' THEN
+      RAISE EXCEPTION 'Checkout clock receipt persistence assertion failed' USING ERRCODE = 'P0003';
+    ELSIF failures LIKE '%replay did not replace a stale persisted databaseNow with PostgreSQL time%' THEN
+      RAISE EXCEPTION 'Checkout clock replay assertion failed' USING ERRCODE = 'P0004';
+    END IF;
+    RAISE EXCEPTION 'Unclassified checkout database clock regression: %', failures;
   END IF;
 END $$;

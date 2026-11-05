@@ -122,8 +122,8 @@ test('preview helpers execute from trusted checkouts only', () => {
     /trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh/g
   );
   assert.ok(
-    trustedRuns && trustedRuns.length === 3,
-    'build, pull, and deploy must invoke the trusted runner'
+    trustedRuns && trustedRuns.length === 4,
+    'build, pull, deploy, and the smoke gate must use the trusted runner'
   );
 });
 
@@ -139,6 +139,7 @@ test('deployment secrets stay off job-level environments', () => {
       'VERCEL_ORG_ID',
       'VERCEL_PROJECT_ID',
       'VERCEL_TOKEN',
+      'VERCEL_AUTOMATION_BYPASS_SECRET',
       'QUIZ_RPC_SERVER_SECRET',
     ]) {
       assert.doesNotMatch(
@@ -150,17 +151,20 @@ test('deployment secrets stay off job-level environments', () => {
   }
 });
 
-test('deployment token reaches only the trusted pull and deploy steps', () => {
+test('deployment token reaches only trusted pull, deploy and smoke steps', () => {
   const count = (name) =>
     executable.match(new RegExp(`^\\s*${name}:`, 'gm'))?.length ?? 0;
-  assert.equal(count('VERCEL_TOKEN'), 3);
-  assert.equal(count('VERCEL_ORG_ID'), 3);
-  assert.equal(count('VERCEL_PROJECT_ID'), 3);
+  assert.equal(count('VERCEL_TOKEN'), 4);
+  assert.equal(count('VERCEL_ORG_ID'), 4);
+  assert.equal(count('VERCEL_PROJECT_ID'), 4);
+  assert.equal(count('VERCEL_AUTOMATION_BYPASS_SECRET'), 1);
   assert.equal(count('TURBO_TOKEN'), 1);
   assert.equal(count('TURBO_TEAM'), 1);
   assert.doesNotMatch(jobBlock('build'), /VERCEL_TOKEN/);
   assert.doesNotMatch(jobBlock('build'), /VERCEL_ORG_ID/);
   assert.doesNotMatch(jobBlock('build'), /VERCEL_PROJECT_ID/);
+  const deploy = jobBlock('deploy');
+  assert.match(deploy, /run: node trusted-ops\/\.github\/scripts\/preview-gate-cli\.mjs/);
 });
 
 test('preview verifies sensitive markings before injecting stand-ins', () => {
@@ -208,6 +212,7 @@ test('only the known deployment secrets are bound', () => {
     [
       'TURBO_TEAM',
       'TURBO_TOKEN',
+      'VERCEL_AUTOMATION_BYPASS_SECRET',
       'VERCEL_ORG_ID',
       'VERCEL_PROJECT_ID',
       'VERCEL_TOKEN',

@@ -60,6 +60,9 @@ it('performs browser consent, code exchange, bearer verification and revocation 
   );
   const cookie = consent.headers.get('set-cookie')?.split(';')[0] ?? '';
   const html = await consent.text();
+  expect(html).toContain('90 days without renewal');
+  expect(html).toContain('Each cart lasts up to seven days');
+  expect(html).toContain('Disconnect to revoke access');
   const id = html.match(/name="consent" value="([a-f0-9]+)"/)?.[1];
   const submission = {
     method: 'POST',

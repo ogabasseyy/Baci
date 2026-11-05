@@ -33,10 +33,10 @@ BEGIN
     AND pg_temp.gc_goal('status') = 'active' AND pg_temp.gc_goal('current_amount')::numeric = 0
     AND pg_temp.gc_goal('cancelled_at') IS NULL AND pg_temp.gc_goal('future_debits_cancelled_at') IS NULL,
     'review did not keep the goal open and unfenced');
-  PERFORM pg_temp.gc_assert(pg_temp.gc_wallet() = 3500
-    AND (SELECT pg_catalog.count(*) FROM public.customer_wallet_transactions
-          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid AND amount = 2500) = 1,
-    'review did not credit exactly the refund''s own amount once');
+  PERFORM pg_temp.gc_assert(pg_temp.gc_wallet() = 1000
+    AND NOT EXISTS (SELECT 1 FROM public.customer_wallet_transactions
+          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid),
+    'review credited the legacy wallet');
   PERFORM pg_temp.gc_assert(
     EXISTS (SELECT 1 FROM public.customer_savings_events WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancel_needs_review')
     AND NOT EXISTS (SELECT 1 FROM public.customer_savings_events WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancelled_refunded'),
@@ -54,7 +54,7 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"providerTransactionId":"another-transaction"}'::jsonb) = 'conflict',
     'another provider transaction settled a review attempt');
-  PERFORM pg_temp.gc_assert(pg_temp.gc_wallet() = 3500, 'a replay credited the wallet again');
+  PERFORM pg_temp.gc_assert(pg_temp.gc_wallet() = 1000, 'a replay changed the legacy wallet');
   v_result := pg_temp.gc_reserve(v_op, NULL);
   PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'needs_review', 'reserve on a review attempt: ' || v_result::text);
 
@@ -124,8 +124,8 @@ BEGIN
     = 'pvb-cancel-' || c_goal || '-1', 'the re-cancel did not take the next suffix');
   PERFORM pg_temp.gc_assert(pg_temp.gc_settle(pg_temp.gc_proof(v_op2)) = 'confirmed',
     'the re-cancel did not settle cleanly');
-  PERFORM pg_temp.gc_assert(pg_temp.gc_goal('status') = 'cancelled' AND pg_temp.gc_wallet() = 6000,
-    'the re-cancel did not cancel the goal and credit its own amount');
+  PERFORM pg_temp.gc_assert(pg_temp.gc_goal('status') = 'cancelled' AND pg_temp.gc_wallet() = 1000,
+    'the re-cancel did not cancel the goal, or changed the legacy wallet');
   -- Refunds above the funding (interest) never make the expectation negative.
   v_result := piggyvest_primary.read_daily_reconciliation(
     'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', '{"staleAfterSeconds":60}'::jsonb);

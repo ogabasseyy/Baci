@@ -159,8 +159,7 @@ export function WalletScreen({
   const display =
     data && deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
   const {
-    hasPendingSavingsContribution,
-    goalAwaitingSettlement,
+    walletContentSavingsProps,
     handleAddSavingsContribution,
     handleFundSavingsWallet,
     handleOpenSavings,
@@ -233,8 +232,7 @@ export function WalletScreen({
           fundReturnTo,
           fundingAccount,
           isAddingSavingsContribution,
-          hasPendingSavingsContribution,
-          goalAwaitingSettlement,
+          ...walletContentSavingsProps,
           isCreatingFundingAccount: createFundingAccountMutation.isPending,
           isFundPending,
           isRedeemPending: redeemMutation.isPending,

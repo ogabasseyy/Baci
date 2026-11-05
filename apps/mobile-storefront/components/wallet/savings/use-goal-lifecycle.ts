@@ -100,10 +100,14 @@ export function useGoalLifecycle({
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);
-  const { requestProof, sheetProps, takeInvalid } = useWalletPinPrompt();
+  const { requestProof, sheetProps, takeInvalid, cancel } =
+    useWalletPinPrompt();
   const [outcome, setOutcome] = useState<Outcome>(REVIEW);
   const operationRef = useRef<string | null>(null);
   const busy = useRef(false);
+  // Whether a submit has been sent for the current operation: a status read
+  // that says "not started" after one cannot prove nothing will happen.
+  const submitted = useRef(false);
   const generation = useRef(0);
 
   // A different account, goal or kind never inherits an attempt in flight.
@@ -111,7 +115,10 @@ export function useGoalLifecycle({
   useEffect(() => {
     generation.current += 1;
     operationRef.current = null;
+    submitted.current = false;
     busy.current = false;
+    // A sheet left open for the previous goal or action must not linger.
+    cancel();
     setOutcome(REVIEW);
     return () => {
       generation.current += 1;
@@ -141,11 +148,17 @@ export function useGoalLifecycle({
         if (reply.status === 'confirmed') return show('done');
         if (reply.status === 'needs_review')
           return show('needs_review', GOAL_LIFECYCLE_COPY.needsReview);
-        if (reply.status === 'not_started')
+        // After a submit went out, the server may still be about to claim
+        // it: keep reading rather than claim nothing changed.
+        if (reply.status === 'not_started' && !submitted.current)
           return show('failed', GOAL_LIFECYCLE_COPY.nothingChanged, true);
       } catch (error) {
         if (!isCurrent()) return;
         const code = codeOf(error);
+        // A status read cannot confirm the outcome: offer sign-in without
+        // saying nothing changed.
+        if (code === 'UNAUTHORIZED')
+          return show('timed_out', null, false, true);
         if (code === `${kind.toUpperCase()}_NOT_FOUND`)
           return show('failed', messageOf(error), true);
         // The server's final word: nothing moved. Anything else (a network
@@ -171,6 +184,7 @@ export function useGoalLifecycle({
       return invalid ? show('failed', invalid, true) : show('pin_cancelled');
     }
     show('submitting');
+    submitted.current = true;
     let seed: string | undefined = first;
     try {
       const reply = await runWithPinProof(
@@ -227,6 +241,7 @@ export function useGoalLifecycle({
     guarded(async (isCurrent) => {
       if (!merchantId) return;
       operationRef.current = null;
+      submitted.current = false;
       show('issuing');
       try {
         const issued = await issueGoalAction(

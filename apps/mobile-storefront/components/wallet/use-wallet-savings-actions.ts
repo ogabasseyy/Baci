@@ -24,6 +24,7 @@ export function createWalletSavingsActions({
   activeMerchantSlug,
   goal,
   goalAwaitingSettlement = false,
+  goalSettlementChecking = false,
   idempotencyKeyRef,
   operationRailRef,
   refetchWallet,
@@ -41,6 +42,8 @@ export function createWalletSavingsActions({
   goal: WalletActiveSavingsGoal | null;
   /** Funded goal the database already marked completed; still completable. */
   goalAwaitingSettlement?: boolean;
+  /** A funded completed goal whose readiness verdict is still being read. */
+  goalSettlementChecking?: boolean;
   idempotencyKeyRef: { current: string | null };
   // Rail of the attempt that minted the stored id: same scope as the id,
   // written before each request and cleared together with it.
@@ -60,6 +63,8 @@ export function createWalletSavingsActions({
   setSavingsContributionAmount: (value: string) => void;
 }) {
   const handleOpenSavings = () => {
+    // Neither settle nor start a new plan until the verdict is in.
+    if (goalSettlementChecking) return;
     if (
       goal &&
       (goal.status !== 'completed' ||

@@ -122,4 +122,36 @@ describe('goalAwaitingSettlement', () => {
     expect(mockGate).toHaveBeenLastCalledWith(2);
     expect(result.current.goalAwaitingSettlement).toBe(true);
   });
+
+  it('marks a funded completed goal as settlement-checking only while the gate is checking', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockReturnValue('checking');
+    renderHook(() => useWalletSavingsController({ ...input, goal } as never));
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalSettlementChecking: true })
+    );
+    mockGate.mockReturnValue('off');
+    renderHook(() => useWalletSavingsController({ ...input, goal } as never));
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalSettlementChecking: false })
+    );
+  });
+
+  it('hands the wallet content its savings props, including the refresh time', () => {
+    mockGate.mockReturnValue('ready');
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    const { result } = renderHook(() =>
+      useWalletSavingsController({
+        ...input,
+        goal,
+        walletUpdatedAt: 42,
+      } as never)
+    );
+    expect(result.current.walletContentSavingsProps).toEqual({
+      hasPendingSavingsContribution:
+        result.current.hasPendingSavingsContribution,
+      goalAwaitingSettlement: true,
+      walletUpdatedAt: 42,
+    });
+  });
 });

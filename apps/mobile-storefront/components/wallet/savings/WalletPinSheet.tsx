@@ -130,7 +130,11 @@ export function WalletPinSheet({
             {copy.title}
           </Text>
           <Text style={[styles.body, { color: colors.textSecondary }]}>
-            {sheet.notice ?? copy.body}
+            {sheet.notice
+              ? request?.action && request.action !== 'fund'
+                ? `${sheet.notice} ${copy.body}`
+                : sheet.notice
+              : copy.body}
           </Text>
           {sheet.step === 'loading' ? (
             <ActivityIndicator color={colors.primary} />

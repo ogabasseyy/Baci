@@ -144,4 +144,26 @@ describe('SavingsPlanStatusNote', () => {
     expect(screen.getByText(/still being set up/)).toBeTruthy();
     expect(screen.queryByText('Try again')).toBeNull();
   });
+
+  it('shows the status when the parent supplies it, even while the capability probe leaves BVN required', () => {
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={
+          {
+            planFundingPhase: 'pending',
+            planFundingRequiresBvn: true,
+          } as never
+        }
+      />
+    );
+    expect(
+      screen.getByText(
+        'This goal is still being set up. Please check back shortly.'
+      )
+    ).toBeOnTheScreen();
+  });
 });

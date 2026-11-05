@@ -46,7 +46,7 @@ function OwnStatusNote(props: Props) {
     loadExisting: isPiggyvestPrimaryMerchant(props.merchantId),
     notFoundMeansNotStarted: true,
   });
-  return <StatusNoteView {...props} funding={funding} />;
+  return <StatusNoteView {...props} funding={funding} bvnGate />;
 }
 
 function StatusNoteView({
@@ -54,14 +54,17 @@ function StatusNoteView({
   goalId,
   merchantId,
   funding,
-}: Props & { funding: PlanFunding }) {
+  bvnGate = false,
+}: Props & { funding: PlanFunding; bvnGate?: boolean }) {
   const primary = isPiggyvestPrimaryMerchant(merchantId);
   const setup = useSavingsGoalSetup({
     goalId,
     merchantId,
     onSettled: () => void funding.fetchExistingPlanFunding(),
   });
-  if (!primary || funding.planFundingRequiresBvn) return null;
+  // The note reads its own status only where a BVN field may be on screen; a
+  // parent that supplies the status (no BVN field) controls visibility itself.
+  if (!primary || (bvnGate && funding.planFundingRequiresBvn)) return null;
   const phase = funding.planFundingPhase;
   const rereadingAfterSetup = phase === 'loading' && setup.attempted;
   if (phase === 'setup_retryable' || (rereadingAfterSetup && setup.retried))

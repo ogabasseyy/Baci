@@ -11,9 +11,9 @@ jest.mock('./WalletSavingsContributionFlow', () => ({
     return <Text>wallet-contribution</Text>;
   },
 }));
-const mockGate = jest.fn(() => 'off');
+const mockGate = jest.fn((_key?: number) => 'off');
 jest.mock('./savings/use-primary-goal-gate', () => ({
-  usePrimaryGoalGate: () => mockGate(),
+  usePrimaryGoalGate: (key?: number) => mockGate(key),
 }));
 const mockPlanFunding = jest.fn();
 jest.mock('./savings/use-savings-plan-funding', () => ({
@@ -62,6 +62,15 @@ function props(sourceMode: string, over = {}) {
 }
 
 describe('WalletSavingsFundingSection', () => {
+  it('passes the wallet refresh time to the readiness gate', () => {
+    render(
+      <WalletSavingsFundingSection
+        {...props('manual', { walletUpdatedAt: 1234 })}
+      />
+    );
+    expect(mockGate).toHaveBeenCalledWith(1234);
+  });
+
   it('shows wallet contribution and plan funding for manual plans', () => {
     render(<WalletSavingsFundingSection {...props('manual')} />);
     expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();

@@ -32,6 +32,7 @@ type WalletSavingsProgressModalProps = {
   onResolveVariant?: () => void;
   visible: boolean;
   walletBalance: number;
+  walletUpdatedAt?: number;
 };
 
 export function WalletSavingsProgressModal({
@@ -50,6 +51,7 @@ export function WalletSavingsProgressModal({
   onResolveVariant,
   visible,
   walletBalance,
+  walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
   if (!goal) {
     return null;
@@ -254,6 +256,7 @@ export function WalletSavingsProgressModal({
             usesPlanFunding={usesPlanFunding}
             visible={visible}
             walletBalance={walletBalance}
+            walletUpdatedAt={walletUpdatedAt}
           />
         ) : (
           <Text style={[styles.autoDebitHint, { color: colors.textSecondary }]}>
@@ -287,6 +290,7 @@ export function WalletSavingsProgressModal({
           goal={goal}
           hasPendingContribution={hasPendingContribution}
           onBeforeNavigate={onClose}
+          walletUpdatedAt={walletUpdatedAt}
         />
       </ScrollView>
     </ModalSheet>

@@ -16,6 +16,7 @@ import { useWallet, walletKeys } from '@/hooks/use-wallet';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   GOAL_LIFECYCLE_COPY as COPY,
   useGoalLifecycle,
@@ -71,12 +72,20 @@ function useFindGoal(goalId: string) {
   // was last seen so the screen does not lose its subject mid-flow.
   // Stored in state (adjusted during render, guarded by a comparison) rather
   // than a ref, so render stays pure.
-  const [seen, setSeen] = useState<WalletActiveSavingsGoal | undefined>(
-    undefined
-  );
-  if (found && found !== seen) setSeen(found);
+  // The retained goal is also pinned to the signed-in user and merchant, so
+  // it is never shown to another account.
+  const userId = useAuthStore((state) => state.user?.id);
+  const merchantId = useAuthStore((state) => state.merchantId);
+  const scope = `${userId}:${merchantId}`;
+  const [seen, setSeen] = useState<
+    { goal: WalletActiveSavingsGoal; scope: string } | undefined
+  >(undefined);
+  if (found && (found !== seen?.goal || scope !== seen.scope))
+    setSeen({ goal: found, scope });
+  const retained =
+    seen?.scope === scope && seen.goal.id === goalId ? seen.goal : undefined;
   return {
-    goal: found ?? (seen?.id === goalId ? seen : undefined),
+    goal: found ?? retained,
     isLoading: isLoading || !data,
   };
 }
@@ -114,6 +123,8 @@ export function GoalLifecycleScreen({
       )}`
     );
   const checking = gate === 'checking';
+  // Continue stays off until the goal it would act on is on screen.
+  const waiting = checking || !goal;
   const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
 
   let title: string =
@@ -123,10 +134,10 @@ export function GoalLifecycleScreen({
     <>
       <Action
         colors={colors}
-        label={checking ? COPY.checking : copy.primary}
+        label={waiting ? COPY.checking : copy.primary}
         onPress={() => void flow.begin()}
         primary
-        busy={checking}
+        busy={waiting}
       />
       <Action colors={colors} label={copy.secondary} onPress={leave} />
     </>
@@ -148,6 +159,14 @@ export function GoalLifecycleScreen({
     actions =
       flow.step === 'timed_out' ? (
         <>
+          {flow.needsSignIn ? (
+            <Action
+              colors={colors}
+              label={COPY.signIn}
+              onPress={signIn}
+              primary
+            />
+          ) : null}
           <Action
             colors={colors}
             label={COPY.checkAgain}

@@ -12,6 +12,8 @@ type Props = {
   hasPendingContribution: boolean;
   /** Runs before navigating, e.g. to close the sheet this entry sits in. */
   onBeforeNavigate?: () => void;
+  /** The wallet's last-updated time: re-reads the readiness gate. */
+  walletUpdatedAt?: number;
 };
 
 // The database compares maturity against the UTC date, so the button must too.
@@ -38,8 +40,9 @@ export function GoalLifecycleEntry({
   goal,
   hasPendingContribution,
   onBeforeNavigate,
+  walletUpdatedAt,
 }: Props) {
-  const gate = usePrimaryGoalGate();
+  const gate = usePrimaryGoalGate(walletUpdatedAt);
   if (gate !== 'ready' || hasPendingContribution) return null;
   const kinds: GoalActionKind[] = [];
   if (goal.status === 'active' || goal.status === 'paused')

@@ -192,6 +192,17 @@ describe('createWalletSavingsActions', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('does nothing while the readiness verdict for a funded completed goal is still being read', () => {
+    const input = {
+      ...createInput({ ...settledGoal, current_amount: 5000 }),
+      goalAwaitingSettlement: false,
+      goalSettlementChecking: true,
+    };
+    createWalletSavingsActions(input).handleOpenSavings();
+    expect(input.setShowSavingsProgressModal).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
   it('starts another plan once a completed goal is settled', () => {
     const input = {
       ...createInput(settledGoal),

@@ -6,6 +6,7 @@ import {
   verifyGoalActionPin,
 } from '@/lib/wallet-pin-api';
 import { WalletPinSchemas } from '@/schemas/wallet-pin';
+import { messageOf as goalMessageOf } from './goal-lifecycle-outcomes';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
 
 export type WalletPinStep =
@@ -19,12 +20,32 @@ export const WALLET_PIN_UNAVAILABLE = 'Wallet PIN is unavailable right now';
 const PIN_FORMAT = 'Enter 4 to 6 digits.';
 const PIN_MISMATCH = 'The two PINs do not match.';
 const PIN_SAVED = 'PIN saved. Enter it again to confirm this contribution.';
+const PIN_SAVED_SHORT = 'PIN saved.';
+// Codes the PIN service sends with copy written for the customer.
+const SAFE_PIN_CODES: ReadonlySet<string> = new Set([
+  'PIN_ALREADY_SET',
+  'PIN_BUSY',
+  'PIN_INCORRECT',
+  'PIN_LOCKED',
+  'PIN_NOT_SET',
+  'PIN_RESET_REQUIRED',
+  'PIN_UNAVAILABLE',
+]);
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 
 function messageOf(error: unknown) {
   return error instanceof Error && error.message
     ? error.message
     : FALLBACK_ERROR;
+}
+
+// Goal cancel / complete never shows raw network, parse or server text: only
+// PIN-service copy and the goal flow's own safe codes get through.
+function goalActionMessageOf(error: unknown) {
+  const code = codeOf(error);
+  return code && SAFE_PIN_CODES.has(code) && error instanceof Error
+    ? messageOf(error)
+    : goalMessageOf(error);
 }
 
 function codeOf(error: unknown) {
@@ -118,12 +139,19 @@ export function useWalletPinSheet({
       try {
         await submitWalletPin(kind, pin, expectedUserId);
         if (!isCurrent()) return;
-        setNotice(PIN_SAVED);
+        setNotice(
+          request && 'amountKobo' in request ? PIN_SAVED : PIN_SAVED_SHORT
+        );
         setStep('enter');
       } catch (failure) {
         if (!isCurrent()) return;
         if (codeOf(failure) === 'PIN_ALREADY_SET') setStep('enter');
-        else setError(messageOf(failure));
+        else
+          setError(
+            request && !('amountKobo' in request)
+              ? goalActionMessageOf(failure)
+              : messageOf(failure)
+          );
       } finally {
         if (isCurrent()) {
           setPin('');
@@ -180,7 +208,11 @@ export function useWalletPinSheet({
         }
         if (code === 'PIN_NOT_SET') setStep('set');
         else if (code === 'PIN_RESET_REQUIRED') setStep('reset');
-        setError(messageOf(failure));
+        setError(
+          'amountKobo' in request
+            ? messageOf(failure)
+            : goalActionMessageOf(failure)
+        );
       }
     });
 

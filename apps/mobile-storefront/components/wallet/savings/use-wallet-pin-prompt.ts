@@ -72,5 +72,7 @@ export function useWalletPinPrompt() {
     invalid.current = null;
     return message;
   };
-  return { requestProof, sheetProps, takeInvalid };
+  /** Closes the sheet and resolves the waiter with no proof. */
+  const cancel = () => settle(null);
+  return { requestProof, sheetProps, takeInvalid, cancel };
 }

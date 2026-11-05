@@ -199,3 +199,33 @@ describe('a goal that vanishes from a later wallet refresh', () => {
     expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
   });
 });
+
+describe('the goal is not on screen yet', () => {
+  it('keeps Continue disabled and sends nothing while the wallet has not loaded', () => {
+    jest
+      .mocked(useWallet)
+      .mockReturnValue({ data: undefined, isLoading: true } as never);
+    renderScreen();
+    const button = screen.getByRole('button', { name: 'Checking…' });
+    expect(button).toBeDisabled();
+    fireEvent.press(button);
+    expect(issueGoalAction).not.toHaveBeenCalled();
+  });
+});
+
+describe('a retained goal after an account switch', () => {
+  it('is dropped for another user instead of showing the last customer goal', () => {
+    const { ui } = wrap(<GoalLifecycleScreen kind="cancel" goalId={GOAL} />);
+    const view = render(ui);
+    expect(screen.getByText('iPhone 15')).toBeOnTheScreen();
+    jest.mocked(useWallet).mockReturnValue({
+      data: { wallet: { savings_goals: [] }, transactions: [] },
+      isLoading: false,
+    } as never);
+    act(() => {
+      useAuthStore.setState({ user: { id: 'user-b' } as never });
+    });
+    view.rerender(ui);
+    expect(screen.queryByText('iPhone 15')).toBeNull();
+  });
+});

@@ -26,6 +26,7 @@ type WalletSavingsFundingSectionProps = {
   usesPlanFunding: boolean;
   visible: boolean;
   walletBalance: number;
+  walletUpdatedAt?: number;
 };
 
 type ManualPrimaryGoalProps = WalletSavingsFundingSectionProps & {
@@ -94,8 +95,9 @@ export function WalletSavingsFundingSection({
   usesPlanFunding,
   visible,
   walletBalance,
+  walletUpdatedAt,
 }: WalletSavingsFundingSectionProps) {
-  const gate = usePrimaryGoalGate();
+  const gate = usePrimaryGoalGate(walletUpdatedAt);
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);

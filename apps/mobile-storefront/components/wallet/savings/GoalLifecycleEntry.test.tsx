@@ -113,6 +113,18 @@ describe('GoalLifecycleEntry', () => {
     });
   });
 
+  it('passes the wallet refresh time to the readiness gate', () => {
+    render(
+      <GoalLifecycleEntry
+        colors={Colors.light}
+        goal={makeGoal()}
+        hasPendingContribution={false}
+        walletUpdatedAt={99}
+      />
+    );
+    expect(usePrimaryGoalGate).toHaveBeenCalledWith(99);
+  });
+
   it('navigates to the goal actions screen with the goal and kind', () => {
     renderEntry(makeGoal({ current_amount: 5000 }));
     fireEvent.press(

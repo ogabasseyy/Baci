@@ -19,6 +19,7 @@ export const fail = (
 
 export const requestProof = jest.fn();
 export const takeInvalid = jest.fn();
+export const cancelPrompt = jest.fn();
 export const issue = jest.mocked(issueGoalAction);
 export const submit = jest.mocked(submitGoalAction);
 export const status = jest.mocked(checkGoalActionStatus);
@@ -49,6 +50,7 @@ export function installLifecycleHarness() {
     jest.mocked(useWalletPinPrompt).mockReturnValue({
       requestProof,
       takeInvalid,
+      cancel: cancelPrompt,
       sheetProps: { request: null, onProof: jest.fn(), onCancel: jest.fn() },
     });
     act(() => {

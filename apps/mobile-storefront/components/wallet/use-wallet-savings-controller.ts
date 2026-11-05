@@ -46,6 +46,8 @@ export function useWalletSavingsController(
   const actions = createWalletSavingsActions({
     ...input,
     goalAwaitingSettlement,
+    goalSettlementChecking:
+      gate === 'checking' && isFundedUnsettledGoal(input.goal),
     requestPinProof: requestProof,
   });
   const retryRecovery = () => {
@@ -55,12 +57,19 @@ export function useWalletSavingsController(
       'We need to check for an existing transfer before starting another payment. Please try again after this check.'
     );
   };
+  const hasPendingSavingsContribution =
+    recovery.ready && actions.hasPendingSavingsContribution;
   return {
     ...actions,
     goalAwaitingSettlement,
     pinSheetProps,
-    hasPendingSavingsContribution:
-      recovery.ready && actions.hasPendingSavingsContribution,
+    hasPendingSavingsContribution,
+    /** What the wallet content needs to show the savings sheet correctly. */
+    walletContentSavingsProps: {
+      hasPendingSavingsContribution,
+      goalAwaitingSettlement,
+      walletUpdatedAt: input.walletUpdatedAt,
+    },
     handleAddSavingsContribution: recovery.ready
       ? actions.handleAddSavingsContribution
       : retryRecovery,

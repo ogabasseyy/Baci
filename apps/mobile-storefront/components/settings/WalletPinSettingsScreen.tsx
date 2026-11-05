@@ -1,12 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
+import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
@@ -69,8 +64,8 @@ export function WalletPinSettingsScreen() {
       edges={['bottom']}
     >
       {title}
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
+      <AppKeyboardAwareScrollView
+        keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.scroll,
           getScrollContentStyle({ includeBottomInset: false }),
@@ -180,7 +175,7 @@ export function WalletPinSettingsScreen() {
             </Text>
           </Pressable>
         ) : null}
-      </ScrollView>
+      </AppKeyboardAwareScrollView>
     </StorefrontScreenShell>
   );
 }

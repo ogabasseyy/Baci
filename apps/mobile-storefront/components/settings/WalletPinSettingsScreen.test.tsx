@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
@@ -96,6 +102,17 @@ describe('WalletPinSettingsScreen', () => {
     expect(
       screen.getByRole('button', { name: 'Forgot your PIN?' })
     ).toBeTruthy();
+  });
+
+  it('keeps the PIN fields in a keyboard-aware scroll area', () => {
+    ready({ hasPin: true });
+    render(<WalletPinSettingsScreen />);
+    const { KeyboardAwareScrollView } = jest.requireMock(
+      'react-native-keyboard-controller'
+    );
+    const scroll = screen.UNSAFE_getByType(KeyboardAwareScrollView);
+    expect(scroll.props.keyboardDismissMode).toBe('on-drag');
+    expect(within(scroll).getByLabelText('Confirm new PIN')).toBeTruthy();
   });
 
   it('reset mode when the server requires it', () => {

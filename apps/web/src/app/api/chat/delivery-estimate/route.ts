@@ -7,27 +7,10 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { createClient } from '@/lib/supabase/server';
+import { hasTrustedStorefrontHeaders } from '@/lib/trusted-storefront-headers';
 import { chatDeliveryEstimateRequestSchema } from '@/schemas/chat-delivery-estimate';
 
 const noStoreHeaders = { 'Cache-Control': 'no-store' };
-
-function hasTrustedStorefrontHeaders(request: NextRequest): boolean {
-  const host =
-    (request.headers.get('host') ?? '').split(':')[0]?.trim().toLowerCase() ??
-    '';
-  const slug = request.headers.get('x-merchant-slug')?.trim().toLowerCase();
-  const domain = request.headers.get('x-merchant-domain')?.trim().toLowerCase();
-  const rootDomain = (
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com'
-  ).toLowerCase();
-  if (domain && (host === domain || host === `www.${domain}`)) return true;
-  if (!slug) return false;
-  return (
-    host === `${slug}.${rootDomain}` ||
-    host === `${slug}.localhost` ||
-    host.startsWith(`${slug}.localhost:`)
-  );
-}
 
 export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);

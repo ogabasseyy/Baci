@@ -18,3 +18,20 @@ export function readPiggyvestPrimaryDbPoolerProjectRef(
   const ref = source.PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF;
   return ref === '' ? undefined : ref;
 }
+
+// Forwarder mode: the DB host is a TCP passthrough relay, and the client must
+// verify the Postgres certificate against the real Supabase direct host.
+export const PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME_PATTERN =
+  /^db\.[a-z0-9]{20}\.supabase\.co$/;
+
+/**
+ * Raw TLS server name, or undefined when forwarder mode is off (absent or
+ * blank). A malformed value is returned unchanged so the PiggyVest database
+ * executors fail closed; it never fails boot.
+ */
+export function readPiggyvestPrimaryDbTlsServerName(
+  source: Record<string, string | undefined> = process.env
+): string | undefined {
+  const name = source.PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME;
+  return name === '' ? undefined : name;
+}

@@ -64,7 +64,11 @@ export function createPrimaryWalletExecutor(
       database: config.name,
       user: link.user,
       password: config.password,
-      ssl: { rejectUnauthorized: true, ca: config.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: config.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
       ...link.startup,

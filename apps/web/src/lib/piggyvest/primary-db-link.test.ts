@@ -4,8 +4,73 @@ import { primaryDbLink } from './primary-db-link';
 const REF = 'abcdefghijklmnopqrst';
 const ENV = 'PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF';
 
+const NAME_ENV = 'PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME';
+const SERVER_NAME = `db.${REF}.supabase.co`;
+
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+const certFor = (san: string) =>
+  ({ subject: { CN: 'x' }, subjectaltname: san }) as never;
+
+describe('primaryDbLink forwarder (server-name) mode', () => {
+  it('has an empty tls object when the server name is unset', () => {
+    vi.stubEnv(ENV, '');
+    vi.stubEnv(NAME_ENV, '');
+    expect(primaryDbLink('baci_x', 5432).tls).toEqual({});
+  });
+
+  it('keeps the bare login and direct startup settings when set', () => {
+    vi.stubEnv(ENV, '');
+    vi.stubEnv(NAME_ENV, SERVER_NAME);
+    const link = primaryDbLink('baci_x', 15432);
+    expect(link.user).toBe('baci_x');
+    expect(link.startup).toEqual({
+      options: '-c search_path=pg_catalog',
+      statement_timeout: 2500,
+      lock_timeout: 1500,
+    });
+    expect(typeof link.tls.checkServerIdentity).toBe('function');
+  });
+
+  it('verifies the certificate against the configured server name', () => {
+    vi.stubEnv(ENV, '');
+    vi.stubEnv(NAME_ENV, SERVER_NAME);
+    const check = primaryDbLink('baci_x', 15432).tls.checkServerIdentity;
+    expect(check?.('pg-relay.usebaci.com', certFor(`DNS:${SERVER_NAME}`))).toBe(
+      undefined
+    );
+    expect(
+      check?.('pg-relay.usebaci.com', certFor('DNS:pg-relay.usebaci.com'))
+    ).toBeInstanceOf(Error);
+  });
+
+  it.each([
+    'pg-relay.usebaci.com',
+    `${SERVER_NAME}.evil.com`,
+    ` ${SERVER_NAME}`,
+  ])('refuses a malformed server name %j', (name) => {
+    vi.stubEnv(ENV, '');
+    vi.stubEnv(NAME_ENV, name);
+    expect(() => primaryDbLink('baci_x', 15432)).toThrow(
+      'PiggyVest database pooler configuration invalid'
+    );
+  });
+
+  it('refuses pooler ref and server name set together', () => {
+    vi.stubEnv(ENV, REF);
+    vi.stubEnv(NAME_ENV, SERVER_NAME);
+    expect(() => primaryDbLink('baci_x', 5432)).toThrow(
+      'PiggyVest database pooler configuration invalid'
+    );
+  });
+
+  it('has an empty tls object in pooler mode', () => {
+    vi.stubEnv(ENV, REF);
+    vi.stubEnv(NAME_ENV, '');
+    expect(primaryDbLink('baci_x', 5432).tls).toEqual({});
+  });
 });
 
 describe('primaryDbLink', () => {

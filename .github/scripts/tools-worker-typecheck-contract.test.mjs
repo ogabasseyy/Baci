@@ -98,6 +98,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'src/scripts/process-petrock-reconciliation.test.ts',
     'src/scripts/process-gigl-tracking.ts',
     'src/scripts/process-gigl-tracking.test.ts',
+    'src/scripts/process-gigl-tracking-cache.test.ts',
     'src/scripts/verify-gigl-tracking-worker-capability.ts',
     'src/scripts/verify-gigl-tracking-worker-capability.test.ts',
     'src/scripts/process-quiz-finalization.ts',

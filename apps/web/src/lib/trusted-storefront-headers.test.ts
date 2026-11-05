@@ -1,23 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import {
-  hasTrustedStorefrontHeaders,
-  normalizeStorefrontHeader,
-} from './trusted-storefront-headers';
+import { hasTrustedStorefrontHeaders } from './trusted-storefront-headers';
 
 function request(headers: Record<string, string>) {
   const normalizedHeaders = new Headers(headers);
   return { headers: normalizedHeaders };
 }
-
-describe('normalizeStorefrontHeader', () => {
-  it('trims and lowercases values and treats blank values as absent', () => {
-    expect(normalizeStorefrontHeader('  Shop.Example.COM  ')).toBe(
-      'shop.example.com'
-    );
-    expect(normalizeStorefrontHeader('  ')).toBeUndefined();
-    expect(normalizeStorefrontHeader(null)).toBeUndefined();
-  });
-});
 
 describe('hasTrustedStorefrontHeaders', () => {
   it('accepts a matching custom domain and its www host', () => {

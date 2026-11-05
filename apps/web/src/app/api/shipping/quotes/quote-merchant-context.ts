@@ -4,13 +4,11 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { normalizeStorefrontHeader } from '@/lib/normalize-storefront-header';
 import { buildMerchantSenderInfo } from '@/lib/shipping/merchant-sender-location';
 import type { ShippingAddress } from '@/lib/shipping/types';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
-import {
-  hasTrustedStorefrontHeaders,
-  normalizeStorefrontHeader,
-} from '@/lib/trusted-storefront-headers';
+import { hasTrustedStorefrontHeaders } from '@/lib/trusted-storefront-headers';
 import { resolveBodyOnlyMerchantSender } from './resolve-body-only-merchant-sender';
 import { resolveMerchantDetails } from './resolve-quote-merchant-details';
 import { resolveQuoteMerchantLookupClient } from './resolve-quote-merchant-lookup-client';

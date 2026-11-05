@@ -1,14 +1,10 @@
+import { normalizeStorefrontHeader } from '@/lib/normalize-storefront-header';
+
 type StorefrontHeaderReader = {
   headers: {
     get(name: string): string | null;
   };
 };
-
-export function normalizeStorefrontHeader(
-  value: string | null
-): string | undefined {
-  return value?.trim().toLowerCase() || undefined;
-}
 
 function normalizeStorefrontHost(value: string | null): string {
   return (value ?? '').split(':')[0]?.trim().toLowerCase() ?? '';

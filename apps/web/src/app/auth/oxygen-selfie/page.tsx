@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
-import { connection } from 'next/server';
-import { OxygenPhoneContinuation } from '@/components/payments/oxygen/OxygenPhoneContinuation';
-import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { Suspense } from 'react';
+import { SelfieContinuation } from './SelfieContinuation';
 export const metadata: Metadata = {
   title: 'Continue selfie verification',
   robots: { index: false, follow: false },
   referrer: 'no-referrer',
 };
-export default async function Page() {
-  await connection();
+
+export default function Page() {
   return (
-    <OxygenPhoneContinuation selfieOrigins={readOxygenHostedOrigins().selfie} />
+    <Suspense fallback={null}>
+      <SelfieContinuation />
+    </Suspense>
   );
 }

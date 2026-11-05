@@ -48,6 +48,17 @@ describe('wallet savings data helpers', () => {
     ).toEqual({ ...activeGoal, id: 'goal-paused', status: 'paused' });
   });
 
+  it('carries the stored balance as principal_amount only when present', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, current_amount: 100, principal_amount: '0' },
+      })
+    ).toMatchObject({ current_amount: 100, principal_amount: 0 });
+    expect(toActiveSavingsGoal({ goal: activeGoal })).not.toHaveProperty(
+      'principal_amount'
+    );
+  });
+
   it('hydrates active savings goal display metadata from product data', () => {
     expect(
       toActiveSavingsGoal({

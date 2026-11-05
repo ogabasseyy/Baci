@@ -12,7 +12,7 @@ export function OxygenSelfieButton({
   workflowId?: string;
 }) {
   const open = useContext(OxygenSelfieSurfaceContext);
-  if (selfieLinkExpired(url)) return null;
+  if (selfieLinkExpired(url) && !open) return null;
   if (!open)
     return (
       <a

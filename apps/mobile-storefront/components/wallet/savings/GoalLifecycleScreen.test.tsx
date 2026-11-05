@@ -244,14 +244,16 @@ it('needs-review shows the server message with no way to retry', async () => {
     .mocked(issueGoalAction)
     .mockRejectedValue(
       Object.assign(
-        new Error('Your savings are safe. Please do not try again.'),
+        new Error(
+          "Your savings are safe. Please don't try again while we check."
+        ),
         { code: 'GOAL_NEEDS_REVIEW' }
       )
     );
   renderScreen();
   fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Your savings are safe. Please do not try again.'
+    "Your savings are safe. Please don't try again while we check."
   );
   expect(screen.queryByRole('button', { name: 'Start again' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();

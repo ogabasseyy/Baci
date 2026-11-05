@@ -9,7 +9,7 @@ export const GOAL_LIFECYCLE_COPY = {
     entryLabel: 'Cancel savings goal',
     reviewTitle: 'Cancel this goal?',
     reviewBody:
-      'Your whole goal balance, including any interest, goes back to your main wallet. This goal will be closed.',
+      'Your whole goal balance, including interest already paid into it, goes back to your main wallet. This goal will be closed.',
     primary: 'Continue',
     secondary: 'Keep goal',
     successTitle: 'Goal cancelled',
@@ -23,7 +23,7 @@ export const GOAL_LIFECYCLE_COPY = {
     entryLabel: 'Complete savings goal',
     reviewTitle: 'Complete this goal',
     reviewBody:
-      'Your whole goal balance, including any interest, moves to your main wallet and we send your purchase request to the store team. They will contact you to finish your purchase. Nothing is spent or paid out automatically.',
+      'Your whole goal balance, including interest already paid into it, moves to your main wallet and we send your purchase request to the store team. They will contact you to finish your purchase. Nothing is spent or paid out automatically.',
     primary: 'Continue',
     secondary: 'Not now',
     successTitle: 'Goal completed',
@@ -44,7 +44,7 @@ export const GOAL_LIFECYCLE_COPY = {
   checking: 'Checking…',
   tryAgain: 'Try again',
   startAgain: 'Start again',
-  needsReview: 'Your savings are safe. Please do not try again.',
+  needsReview: "Your savings are safe. Please don't try again while we check.",
 } as const;
 
 export const codeOf = (error: unknown) =>

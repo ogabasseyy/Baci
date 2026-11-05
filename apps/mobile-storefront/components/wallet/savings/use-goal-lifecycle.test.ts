@@ -124,14 +124,14 @@ describe('issue answers', () => {
     issue.mockRejectedValue(
       fail(
         'GOAL_NEEDS_REVIEW',
-        'Your savings are safe. Please do not try again.'
+        "Your savings are safe. Please don't try again while we check."
       )
     );
     const { result } = setup();
     await start(result);
     expect(result.current.step).toBe('needs_review');
     expect(result.current.message).toBe(
-      'Your savings are safe. Please do not try again.'
+      "Your savings are safe. Please don't try again while we check."
     );
     expect(result.current.canStartAgain).toBe(false);
   });

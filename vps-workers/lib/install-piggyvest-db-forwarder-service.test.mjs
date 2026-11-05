@@ -32,6 +32,7 @@ describe('piggyvest db forwarder deployment files', () => {
     assert.match(script, /MemoryMax=256M/);
     assert.match(script, /RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6/);
     assert.match(script, /systemctl --user enable/);
+    assert.doesNotMatch(script, /network-online|^Wants=|^After=/m);
     assert.doesNotMatch(
       script,
       /EnvironmentFile|PrivateNetwork|IPAddressDeny|sudo|--now/
@@ -70,5 +71,9 @@ describe('piggyvest db forwarder deployment files', () => {
     assert.match(runbook, /15432/);
     assert.match(runbook, /pg-relay\.usebaci\.com/);
     assert.match(runbook, /DNS only/i);
+    assert.match(runbook, /systemctl --user show -p MemoryMax/);
+    assert.match(runbook, /Client requirements/);
+    assert.match(runbook, /rejectUnauthorized/);
+    assert.match(runbook, /PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME/);
   });
 });

@@ -26,7 +26,7 @@ async function startFakeUpstream() {
     socket.on('error', noop);
     socket.on('data', (chunk) => {
       received.push(chunk);
-      socket.write(Buffer.concat([Buffer.from('echo:'), chunk]));
+      socket.write(Buffer.concat([Buffer.from('Secho:'), chunk]));
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -131,14 +131,14 @@ describe('piggyvest db forwarder', () => {
     c.socket.write(SSL_REQUEST.subarray(3));
     await until(() =>
       Buffer.concat(c.chunks).equals(
-        Buffer.concat([Buffer.from('echo:'), SSL_REQUEST])
+        Buffer.concat([Buffer.from('Secho:'), SSL_REQUEST])
       )
     );
     assert.deepEqual(Buffer.concat(upstream.received), SSL_REQUEST);
     const hello = Buffer.from([0x16, 0x03, 0x01, 0xde, 0xad, 0xbe, 0xef]);
     c.socket.write(hello);
     await until(
-      () => Buffer.concat(c.chunks).length === 5 + 8 + 5 + hello.length
+      () => Buffer.concat(c.chunks).length === 6 + 8 + 6 + hello.length
     );
     assert.deepEqual(
       Buffer.concat(upstream.received),
@@ -265,6 +265,143 @@ describe('piggyvest db forwarder', () => {
     c.socket.write(SSL_REQUEST);
     await c.closed;
     assert.equal(forwarder.stats().rejected.connect_timeout, 1);
+  });
+
+  describe('handshake', () => {
+    async function startScripted(onConnection) {
+      const connections = [];
+      const server = createServer((socket) => {
+        connections.push(socket);
+        socket.on('error', noop);
+        onConnection(socket);
+      });
+      await new Promise((r) => server.listen(0, '127.0.0.1', r));
+      cleanups.push(
+        () =>
+          new Promise((r) => {
+            for (const s of connections) s.destroy();
+            server.close(() => r());
+          })
+      );
+      return { port: server.address().port, connections };
+    }
+
+    it('destroys both sides when upstream never replies within the handshake deadline', async () => {
+      const upstream = await startScripted((s) => s.resume());
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+        limits: { handshakeTimeoutMs: 100 },
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await c.closed;
+      await until(() => upstream.connections[0].destroyed);
+      assert.equal(forwarder.stats().rejected.handshake_timeout, 1);
+    });
+
+    it('times out when upstream sends only the S byte and no TLS bytes', async () => {
+      const upstream = await startScripted((s) => {
+        s.once('data', () => s.write('S'));
+      });
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+        limits: { handshakeTimeoutMs: 100 },
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await c.closed;
+      await until(() => upstream.connections[0].destroyed);
+      assert.equal(forwarder.stats().rejected.handshake_timeout, 1);
+    });
+
+    it('clears the deadline once S plus TLS bytes have arrived', async () => {
+      const upstream = await startScripted((s) => {
+        s.once('data', () => s.write(Buffer.from([0x53, 0x16, 0x03])));
+      });
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+        limits: { handshakeTimeoutMs: 100 },
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await until(() => Buffer.concat(c.chunks).length === 3);
+      await pause(250);
+      assert.equal(c.socket.destroyed, false);
+      assert.equal(forwarder.stats().rejected.handshake_timeout, undefined);
+    });
+
+    it('clears the deadline when S and TLS bytes arrive in separate segments', async () => {
+      const upstream = await startScripted((s) => {
+        s.once('data', async () => {
+          s.write('S');
+          await pause(30);
+          s.write(Buffer.from([0x16]));
+        });
+      });
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+        limits: { handshakeTimeoutMs: 200 },
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await until(() => Buffer.concat(c.chunks).length === 2);
+      await pause(350);
+      assert.equal(c.socket.destroyed, false);
+      assert.equal(forwarder.stats().rejected.handshake_timeout, undefined);
+    });
+
+    it('destroys both sides immediately when upstream refuses SSL with N', async () => {
+      const upstream = await startScripted((s) => {
+        s.once('data', () => s.write('N'));
+      });
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await c.closed;
+      await until(() => upstream.connections[0].destroyed);
+      assert.equal(forwarder.stats().rejected.upstream_refused_ssl, 1);
+      assert.equal(c.text().includes('N'), false);
+    });
+
+    it('destroys the connection when client data arrives in a later segment before the upstream reply', async () => {
+      const upstream = await startScripted((s) => s.resume());
+      const { port, forwarder } = await startForwarder({
+        upstreamPort: upstream.port,
+      });
+      const c = client(port);
+      c.socket.write(SSL_REQUEST);
+      await until(() => upstream.connections.length === 1);
+      await pause(30);
+      c.socket.write(Buffer.from('plaintext-startup'));
+      await c.closed;
+      await until(() => upstream.connections[0].destroyed);
+      assert.equal(forwarder.stats().rejected.data_before_ssl_reply, 1);
+    });
+  });
+
+  it('survives server-level errors such as EMFILE and logs only the code', async () => {
+    const upstream = await startFakeUpstream();
+    const logs = [];
+    const { forwarder, port } = await startForwarder({
+      upstreamPort: upstream.port,
+      logs,
+    });
+    assert.doesNotThrow(() =>
+      forwarder.server.emit(
+        'error',
+        Object.assign(new Error('accept failed for 203.0.113.9'), {
+          code: 'EMFILE',
+        })
+      )
+    );
+    const joined = logs.join('\n');
+    assert.match(joined, /EMFILE/);
+    assert.doesNotMatch(joined, /203\.0\.113\.9|accept failed/);
+    const c = client(port);
+    c.socket.write(SSL_REQUEST);
+    await until(() => upstream.connections.length === 1);
   });
 
   it('closes idle forwarded connections', async () => {

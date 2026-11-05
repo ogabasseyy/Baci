@@ -22,7 +22,6 @@ mkdir -p "$SYSTEMD_DIR"
 cat > "$SYSTEMD_DIR/$UNIT" <<UNIT_EOF
 [Unit]
 Description=Baci PiggyVest DB forwarder (TCP passthrough to Supabase direct host)
-After=network-online.target
 
 [Service]
 Type=simple

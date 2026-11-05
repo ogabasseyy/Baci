@@ -29,9 +29,18 @@ IPv6 to the database, so it can carry the connection.
 - The database still requires its password and least-privilege logins. The
   forwarder adds no authentication; it only moves bytes. Anyone on the
   internet can reach the port, exactly as with the direct host itself.
+- After the `SSLRequest` is forwarded, the client must stay silent until the
+  database answers (data before the reply closes the connection, reason
+  `data_before_ssl_reply`). The database must answer `S` and begin TLS within
+  15 s, otherwise both sides are closed (`handshake_timeout`). An `N` reply
+  (SSL refused) closes both sides at once (`upstream_refused_ssl`), so a
+  plaintext session is never possible.
 - Limits: 60 concurrent connections overall (more are refused), 20 per source
   address (IPv6 sources are grouped by their /64), 5 s to send the first bytes, 5 s to connect upstream, 10 minutes
-  idle. These cap the load an abusive client can put on the VPS.
+  idle. These cap the load an abusive client can put on the VPS. The real DoS bound
+  is the app's own 60/20 connection caps. `MemoryMax` and `TasksMax` in the
+  unit may not be enforced for systemd user units (cgroup delegation), so do
+  not rely on them.
 - Logs contain only aggregate counts and reject reasons, plus a salted
   truncated hash of the source address. No addresses, no payload.
 - The client MUST verify the certificate against the real database host name,
@@ -39,6 +48,18 @@ IPv6 to the database, so it can carry the connection.
   node-postgres, set `ssl.checkServerIdentity` to check against
   `db.aivqthbxdshhltbwipbr.supabase.co`. A custom `ssl.servername` is lost
   (pg overwrites it with the host), so use `checkServerIdentity`.
+
+## Client requirements
+
+Any client pointed at `pg-relay.usebaci.com` MUST:
+
+- keep `rejectUnauthorized: true` (never disable certificate verification),
+- pin the Supabase Root 2021 CA as the trust anchor, and
+- verify the certificate name against
+  `db.aivqthbxdshhltbwipbr.supabase.co`, not the relay name.
+
+The web app does this through `PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME` (PR #4027).
+Without these, the relay would be an unauthenticated man-in-the-middle position.
 
 ## Status: ships dark
 
@@ -60,7 +81,9 @@ All VPS commands run over `ssh bassey@82.29.190.219`.
    `MemoryMax=256M`, `NoNewPrivileges=true`). It binds port 15432 (an
    unprivileged port, no root needed) and keeps outbound IPv6 allowed. If
    systemd reports a namespace error (226/NAMESPACE), report it rather than
-   removing the sandbox lines.
+   removing the sandbox lines. After install, check whether the limits are
+   enforced: `systemctl --user show -p MemoryMax baci-piggyvest-db-forwarder`
+   (as `baci-worker`). `infinity` means the cap is not applied.
 
    ```bash
    sudo -u baci-worker -H env XDG_RUNTIME_DIR=/run/user/$(id -u baci-worker) \

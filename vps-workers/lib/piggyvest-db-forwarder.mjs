@@ -7,7 +7,9 @@
  * the first 8 bytes, which must be exactly a Postgres SSLRequest; anything else
  * is closed without contacting upstream. After that both directions are piped
  * untouched, so the client's TLS session is end to end with Postgres and the
- * forwarder only ever sees ciphertext. See docs/runbooks/piggyvest-db-forwarder.md.
+ * forwarder only ever sees ciphertext. Upstream must answer 'S' (never 'N', so
+ * no plaintext session) and start TLS within a deadline; the client may not
+ * send anything until that reply. See docs/runbooks/piggyvest-db-forwarder.md.
  *
  * Logs carry only aggregate counts and reasons, plus a salted, truncated hash
  * of the source address (never the address, never any payload).
@@ -32,6 +34,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   maxPerSource: 20,
   connectTimeoutMs: 5_000,
   firstBytesTimeoutMs: 5_000,
+  handshakeTimeoutMs: 15_000,
   idleTimeoutMs: 10 * 60_000,
 });
 
@@ -186,10 +189,37 @@ export function createDbForwarder({
           reject('idle_timeout', source);
           client.destroy();
         });
+        awaitUpstreamReply();
         upstreamSocket.write(received);
-        client.pipe(upstreamSocket);
-        upstreamSocket.pipe(client);
         client.resume();
+      });
+    };
+
+    // After the SSLRequest is forwarded: the client must stay silent, and
+    // upstream must reply 'S' and then start TLS (>= 2 bytes) in time.
+    const awaitUpstreamReply = () => {
+      const onClientData = () => fail('data_before_ssl_reply');
+      client.on('data', onClientData);
+      timer = setTimeout(
+        () => fail('handshake_timeout'),
+        config.handshakeTimeoutMs
+      );
+      let total = 0;
+      let piped = false;
+      upstreamSocket.on('data', (chunk) => {
+        if (!piped) {
+          if (chunk[0] !== 0x53) {
+            fail('upstream_refused_ssl');
+            return;
+          }
+          piped = true;
+          client.off('data', onClientData);
+          client.write(chunk);
+          client.pipe(upstreamSocket);
+          upstreamSocket.pipe(client);
+        }
+        total += chunk.length;
+        if (total >= 2) clear();
       });
     };
 
@@ -199,6 +229,11 @@ export function createDbForwarder({
     );
     client.on('data', onData);
     client.resume();
+  });
+
+  // Accept-time failures (EMFILE/ENFILE) must not crash the process.
+  server.on('error', (error) => {
+    log(`server_error code=${error?.code ?? 'unknown'}`);
   });
 
   return {

@@ -107,8 +107,10 @@ export function GoalLifecycleScreen({
   const pathname = usePathname();
 
   if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
-  if (gate === 'off') return <Redirect href="/wallet" />;
-  if (!isLoading && !goal && flow.step === 'review')
+  // Until the session is restored (a cold-start deep link) the gate reads
+  // 'off' only because nobody is signed in yet: wait, do not redirect.
+  if (gate === 'off' && !auth.isLoading) return <Redirect href="/wallet" />;
+  if (!auth.isLoading && !isLoading && !goal && flow.step === 'review')
     return <Redirect href="/wallet" />;
 
   const backToWallet = () => {
@@ -124,7 +126,7 @@ export function GoalLifecycleScreen({
     );
   const checking = gate === 'checking';
   // Continue stays off until the goal it would act on is on screen.
-  const waiting = checking || !goal;
+  const waiting = checking || !goal || auth.isLoading;
   const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
 
   let title: string =

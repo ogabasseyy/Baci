@@ -229,3 +229,45 @@ describe('a retained goal after an account switch', () => {
     expect(screen.queryByText('iPhone 15')).toBeNull();
   });
 });
+
+describe('before the session is restored (cold-start deep link)', () => {
+  const notInitialized = () =>
+    jest.mocked(useRequireAuth).mockReturnValue({
+      isAuthenticated: false,
+      isLoading: true,
+      redirectTo: null,
+      user: null,
+    } as never);
+
+  it('shows the checking state and does not redirect, even though the gate reads off', () => {
+    notInitialized();
+    jest.mocked(usePrimaryGoalGate).mockReturnValue('off');
+    renderScreen();
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    const button = screen.getByRole('button', { name: 'Checking…' });
+    expect(button).toBeDisabled();
+    fireEvent.press(button);
+    expect(issueGoalAction).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect for a missing goal before auth is ready either', () => {
+    notInitialized();
+    jest.mocked(useWallet).mockReturnValue({
+      data: { wallet: { savings_goals: [] }, transactions: [] },
+      isLoading: false,
+    } as never);
+    renderScreen();
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+  });
+
+  it('redirects to the wallet once initialized and the gate is off', () => {
+    jest.mocked(usePrimaryGoalGate).mockReturnValue('off');
+    renderScreen();
+    expect(screen.getByText('Redirect:/wallet')).toBeOnTheScreen();
+  });
+
+  it('shows the screen once initialized and the gate is ready', () => {
+    renderScreen();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+});

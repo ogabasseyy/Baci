@@ -24,7 +24,9 @@ export function createWalletSavingsActions({
   activeMerchantSlug,
   goal,
   idempotencyKeyRef,
+  onAddMoney,
   operationRailRef,
+  primaryReady = false,
   refetchWallet,
   requestPinProof,
   savingsContributionAmount,
@@ -39,6 +41,10 @@ export function createWalletSavingsActions({
   activeMerchantSlug?: string;
   goal: WalletActiveSavingsGoal | null;
   idempotencyKeyRef: { current: string | null };
+  /** PiggyVest main wallet ready: opens Add money in place of a card top-up. */
+  onAddMoney?: () => void;
+  /** True only on an explicit server 'ready' verdict for the main wallet. */
+  primaryReady?: boolean;
   // Rail of the attempt that minted the stored id: same scope as the id,
   // written before each request and cleared together with it.
   operationRailRef: { current: ContributionRail | null };
@@ -83,6 +89,11 @@ export function createWalletSavingsActions({
       return;
     }
     if (requestedAmount <= spendableBalance) {
+      return;
+    }
+    if (primaryReady) {
+      // Money comes from the PiggyVest main wallet: never a card payment.
+      onAddMoney?.();
       return;
     }
     if (startWalletTopUp) startWalletTopUp();

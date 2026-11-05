@@ -9,12 +9,16 @@ let mockReady = false;
 jest.mock('./use-primary-savings-recovery', () => ({
   usePrimarySavingsRecovery: () => ({ ready: mockReady, retry: mockRetry }),
 }));
+const mockCreateActions = jest.fn();
 jest.mock('./use-wallet-savings-actions', () => ({
-  createWalletSavingsActions: () => ({
-    hasPendingSavingsContribution: true,
-    handleAddSavingsContribution: mockSubmit,
-    handleFundSavingsWallet: mockFund,
-  }),
+  createWalletSavingsActions: (...args: unknown[]) => {
+    mockCreateActions(...args);
+    return {
+      hasPendingSavingsContribution: true,
+      handleAddSavingsContribution: mockSubmit,
+      handleFundSavingsWallet: mockFund,
+    };
+  },
 }));
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 const input = {
@@ -73,4 +77,14 @@ it('drops the pending key when the scope changes so no foreign operation is quer
   rerender({ userId: 'user-b' });
   expect(idempotencyKeyRef.current).toBeNull();
   expect(operationRailRef.current).toBeNull();
+});
+it('hands the PiggyVest verdict and Add money callback to the savings actions', () => {
+  mockReady = true;
+  const onAddMoney = jest.fn();
+  renderHook(() =>
+    useWalletSavingsController({ ...input, onAddMoney, primaryReady: true })
+  );
+  expect(mockCreateActions).toHaveBeenCalledWith(
+    expect.objectContaining({ onAddMoney, primaryReady: true })
+  );
 });

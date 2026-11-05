@@ -2,11 +2,12 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
-import {
-  readPrimaryFundingAccount,
-  resolveWalletFundingAccount,
-} from './resolve-wallet-funding-account';
+import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
+import {
+  primaryBalanceField,
+  readPrimaryFundingAccountSoon,
+} from './wallet-primary-balance';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -27,31 +28,6 @@ import {
   coerceDatabaseNumber,
   normalizeWalletTransaction,
 } from './wallet-transaction-normalize';
-
-// The primary provider probe may take up to its 30s network timeout;
-// the wallet load must never wait that long for one funding rail. A
-// stalled probe settles as unknown (surfaced as no account, never a
-// possibly superseded legacy DVA) while the rest of the load
-// proceeds; the next load refetches.
-const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
-
-function readPrimaryFundingAccountSoon(merchantId: string, userId: string) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<
-    Awaited<ReturnType<typeof readPrimaryFundingAccount>>
-  >((resolve) => {
-    timer = setTimeout(
-      () => resolve({ status: 'unavailable' }),
-      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
-    );
-  });
-  return Promise.race([
-    readPrimaryFundingAccount(merchantId, userId).finally(() => {
-      if (timer !== undefined) clearTimeout(timer);
-    }),
-    timeout,
-  ]);
-}
 
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
@@ -289,6 +265,7 @@ export async function fetchWalletDataUnbounded(
       ...toWalletSavingsInterestEarnings(savingsInterest),
       funding_account: fundingAccountData,
       loyalty_points: safeLoyaltyPoints,
+      ...primaryBalanceField(primaryFunding),
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
       savings_goals: savingsGoals,

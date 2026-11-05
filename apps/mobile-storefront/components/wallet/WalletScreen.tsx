@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { WalletPinSheet } from './savings/WalletPinSheet';
+import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
@@ -31,10 +32,7 @@ import {
   sanitizeWalletFundAmount,
 } from './wallet-screen.helpers';
 import type { WalletScreenProps } from './wallet-screen.types';
-import {
-  changeSavingsGoalDevice,
-  createSavingsVariantResolutionHandler,
-} from './wallet-screen-savings.handlers';
+import { createSavingsGoalContentHandlers } from './wallet-screen-savings-goal-handlers';
 export function WalletScreen({
   action,
   intent,
@@ -158,6 +156,13 @@ export function WalletScreen({
   });
   const display =
     data && deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
+  const primaryReady = display?.primaryReady ?? false;
+  usePrimaryWalletCreditPoll({
+    balanceKobo: data?.wallet?.primary_balance_kobo,
+    enabled: showFundPanel && primaryReady,
+    scopeKey: `${user?.id ?? ''}:${activeMerchantId ?? ''}`,
+    refetch,
+  });
   const {
     hasPendingSavingsContribution,
     handleAddSavingsContribution,
@@ -170,7 +175,12 @@ export function WalletScreen({
     activeMerchantSlug,
     goal: display?.activeSavingsGoal ?? null,
     idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
+    onAddMoney: () => {
+      setShowSavingsProgressModal(false);
+      setShowFundPanel(true);
+    },
     operationRailRef: savingsContributionRailRef,
+    primaryReady,
     refetchWallet: refetch,
     savingsContributionAmount,
     spendableBalance: display?.spendableBalance ?? 0,
@@ -239,24 +249,16 @@ export function WalletScreen({
           isRefetching,
           loyaltyPoints: walletData.loyalty_points,
           needsPhone,
+          primaryReady,
           onAddSavingsContribution: handleAddSavingsContribution,
-          onChangeSavingsDevice: (product, variantId) =>
-            changeSavingsGoalDevice({
-              activeMerchantId,
-              activeMerchantSlug,
-              goal: activeSavingsGoal,
-              product,
-              refetchWallet: refetch,
-              variantId,
-            }),
-          onChangeSavingsContributionAmount: (value) =>
-            setSavingsContributionAmount(sanitizeWalletFundAmount(value)),
-          onResolveSavingsVariant: createSavingsVariantResolutionHandler({
+          ...createSavingsGoalContentHandlers({
             activeMerchantId,
             activeMerchantSlug,
             goal: activeSavingsGoal,
             refetchWallet: refetch,
           }),
+          onChangeSavingsContributionAmount: (value) =>
+            setSavingsContributionAmount(sanitizeWalletFundAmount(value)),
           onChangeFundAmount: (value) =>
             setFundAmount(sanitizeWalletFundAmount(value)),
           onCreateFundingAccount: handleCreateFundingAccount,

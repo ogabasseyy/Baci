@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { deriveWalletDisplayData } from './derive-wallet-display-data';
 import { WalletContent } from './WalletContent';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
@@ -42,5 +43,29 @@ describe('server keeps PiggyVest off', () => {
       screen.getByRole('button', { name: 'Continue to payment' })
     );
     expect(props.onFundSavingsWallet).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the legacy balance and Paystack path when the primary balance is absent', () => {
+    const props = createWalletContentProps();
+    const display = deriveWalletDisplayData({
+      balance: 5000,
+      savings_balance: 0,
+      total_balance: 5000,
+    });
+    render(
+      <WalletContent
+        {...props}
+        primaryReady={display.primaryReady}
+        savingsContributionAmount="500"
+        showSavingsProgress
+        spendableBalance={0}
+        totalBalance={display.totalBalance}
+      />
+    );
+    expect(screen.getByText('₦5,000')).toBeOnTheScreen();
+    expect(screen.queryByText('Add money')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Continue to payment' })
+    ).toBeOnTheScreen();
   });
 });

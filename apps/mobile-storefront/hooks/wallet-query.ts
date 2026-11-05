@@ -5,6 +5,12 @@ export interface WalletData {
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccount | null;
   loyalty_points: number;
+  /**
+   * PiggyVest main-wallet balance in KOBO. Present only when the server
+   * says the primary wallet is ready. Additive: `balance` and
+   * `total_balance` stay the legacy figures that checkout still spends.
+   */
+  primary_balance_kobo?: number | null;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];

@@ -163,10 +163,10 @@ describe('getPiggyvestPrimaryCapability', () => {
       bankName: 'Provider Bank',
       provider: 'piggyvest',
     };
-    read.mockResolvedValue({ account });
+    read.mockResolvedValue({ account, balanceKobo: 5000 });
     await expect(
       getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT, 'user-a')
-    ).resolves.toEqual({ available: true, account });
+    ).resolves.toEqual({ available: true, account, balanceKobo: 5000 });
     // Cached verdicts carry no snapshot: nothing was fetched.
     await expect(
       getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT, 'user-a')

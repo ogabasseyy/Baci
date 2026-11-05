@@ -242,4 +242,44 @@ describe('createWalletSavingsActions', () => {
       expect(input.operationRailRef.current).toBeNull();
     });
   });
+
+  describe('PiggyVest main wallet ready', () => {
+    it('sends the customer to Add money instead of Paystack when the balance is too low', () => {
+      const input = {
+        ...createInput(),
+        onAddMoney: jest.fn(),
+        primaryReady: true,
+        walletTopUp: {
+          customer: null,
+          user: null,
+          setIsFundPending: jest.fn(),
+        },
+      };
+      createWalletSavingsActions(input).handleFundSavingsWallet();
+
+      expect(input.onAddMoney).toHaveBeenCalledTimes(1);
+      expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the PiggyVest balance already covers the amount', () => {
+      const input = {
+        ...createInput(),
+        onAddMoney: jest.fn(),
+        primaryReady: true,
+        spendableBalance: 5000,
+      };
+      createWalletSavingsActions(input).handleFundSavingsWallet();
+
+      expect(input.onAddMoney).not.toHaveBeenCalled();
+      expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    });
+
+    it('keeps the Paystack top-up for legacy wallets', () => {
+      const input = { ...createInput(), onAddMoney: jest.fn() };
+      createWalletSavingsActions(input).handleFundSavingsWallet();
+
+      expect(input.startWalletTopUp).toHaveBeenCalledTimes(1);
+      expect(input.onAddMoney).not.toHaveBeenCalled();
+    });
+  });
 });

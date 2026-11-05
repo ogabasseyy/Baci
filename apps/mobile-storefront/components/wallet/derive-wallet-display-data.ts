@@ -14,6 +14,7 @@ interface WalletDataLike {
   earnings_available?: boolean | null;
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccountLike | null;
+  primary_balance_kobo?: number | null;
   savings_balance?: number | null;
   savings_goals?: WalletActiveSavingsGoal[] | null;
   total_balance?: number | null;
@@ -30,11 +31,23 @@ export function normalizeRequiredFundingAccountValue(
   return trimmedValue.length > 0 ? trimmedValue : null;
 }
 
+// The only kobo -> naira conversion for the PiggyVest balance: every other
+// app money value (wallet.balance, goal amounts) is already naira.
+export function koboToNaira(kobo: number): number {
+  return kobo / 100;
+}
+
 export function deriveWalletDisplayData(
   walletData: WalletDataLike,
   selectedSavingsGoalId?: string | null
 ) {
-  const spendableBalance = walletData.balance ?? 0;
+  // PiggyVest main wallet is the spendable balance only when the server
+  // reported it; otherwise this is exactly the legacy computation.
+  const primaryReady = typeof walletData.primary_balance_kobo === 'number';
+  const spendableBalance =
+    typeof walletData.primary_balance_kobo === 'number'
+      ? koboToNaira(walletData.primary_balance_kobo)
+      : (walletData.balance ?? 0);
   const earningsAvailable =
     walletData.earnings_available === true &&
     typeof walletData.earnings_balance === 'number';
@@ -42,8 +55,9 @@ export function deriveWalletDisplayData(
     ? (walletData.earnings_balance ?? null)
     : null;
   const savingsBalance = walletData.savings_balance ?? 0;
-  const totalBalance =
-    walletData.total_balance ?? spendableBalance + savingsBalance;
+  const totalBalance = primaryReady
+    ? spendableBalance + savingsBalance
+    : (walletData.total_balance ?? spendableBalance + savingsBalance);
   const rawFundingAccount = walletData.funding_account;
   const accountName = normalizeRequiredFundingAccountValue(
     rawFundingAccount?.account_name
@@ -79,6 +93,8 @@ export function deriveWalletDisplayData(
     earningsAvailable,
     activeSavingsGoal,
     fundingAccount,
+    // Only present on the PiggyVest path, so the legacy output is unchanged.
+    ...(primaryReady ? { primaryReady: true as const } : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
     spendableBalance,

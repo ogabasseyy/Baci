@@ -6,6 +6,7 @@ import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
@@ -32,6 +33,7 @@ export function WalletSavingsContributionFlow({
   remainingAmount,
   walletBalance,
 }: WalletSavingsContributionFlowProps) {
+  const primaryReady = useWalletPrimaryReady();
   const [isFundFocused, setIsFundFocused] = useState(false);
   const amount = Number(addAmount);
   const hasAmount = addAmount.trim().length > 0;
@@ -42,18 +44,24 @@ export function WalletSavingsContributionFlow({
   const needsFunding =
     walletBalance <= 0 || (validAmount && amount > walletBalance);
   const isBusy = isAdding || isFundPending;
-  const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
-  const topUpBlocked = !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
+  // PiggyVest main wallet: money arrives by bank transfer into the wallet,
+  // never through a card payment, so the staging card-top-up switches
+  // do not apply.
+  const usesPlanFunding = !primaryReady && isHostedStagingTestPaymentsEnabled();
+  const topUpBlocked =
+    !primaryReady && !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
   const guidance = invalidAmount
     ? amount > remainingAmount
       ? `This plan only needs ${formatNgnCurrency(remainingAmount)} more. Enter a smaller amount.`
       : 'Enter an amount greater than zero.'
     : needsFunding
-      ? usesPlanFunding
-        ? 'Fund your wallet to add this amount to savings. This is a staging preview, so do not send real money.'
-        : topUpBlocked
-          ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
-          : 'Fund your wallet to add this amount to savings.'
+      ? primaryReady
+        ? 'Add money to your wallet to save this amount.'
+        : usesPlanFunding
+          ? 'Fund your wallet to add this amount to savings. This is a staging preview, so do not send real money.'
+          : topUpBlocked
+            ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
+            : 'Fund your wallet to add this amount to savings.'
       : validAmount
         ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
         : 'Enter an amount to move from your wallet into this plan.';
@@ -103,9 +111,11 @@ export function WalletSavingsContributionFlow({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              usesPlanFunding
-                ? 'Fund wallet for savings'
-                : 'Continue to payment'
+              primaryReady
+                ? 'Add money to wallet'
+                : usesPlanFunding
+                  ? 'Fund wallet for savings'
+                  : 'Continue to payment'
             }
             accessibilityState={{
               disabled: !validAmount || isBusy || topUpBlocked,
@@ -135,13 +145,15 @@ export function WalletSavingsContributionFlow({
                 },
               ]}
             >
-              {isFundPending
-                ? usesPlanFunding
-                  ? 'Opening wallet funding...'
-                  : 'Opening payment...'
-                : usesPlanFunding
-                  ? 'Fund wallet'
-                  : 'Continue to payment'}
+              {primaryReady
+                ? 'Add money'
+                : isFundPending
+                  ? usesPlanFunding
+                    ? 'Opening wallet funding...'
+                    : 'Opening payment...'
+                  : usesPlanFunding
+                    ? 'Fund wallet'
+                    : 'Continue to payment'}
             </Text>
           </Pressable>
         ) : (

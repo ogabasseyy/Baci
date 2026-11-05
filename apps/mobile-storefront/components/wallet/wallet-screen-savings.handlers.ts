@@ -7,6 +7,7 @@ import {
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
+import { getErrorCode } from './savings/stored-contribution-operation';
 import { shouldReportContributionFailure } from './wallet-contribution-failure';
 
 interface AddSavingsContributionParams {
@@ -180,6 +181,14 @@ export async function addSavingsContributionToGoal({
       `Added ${formatNgnCurrency(amount)} to your savings goal.`
     );
   } catch (error) {
+    if (getErrorCode(error) === 'INSUFFICIENT_FUNDS') {
+      // Nothing moved: the stored operation id stays valid.
+      Alert.alert(
+        'Not enough money in your wallet',
+        'Add money to your wallet, then try again.'
+      );
+      return;
+    }
     if (!shouldReportContributionFailure(error, clearIdempotencyKey)) return;
     Alert.alert(
       'Unable to add savings',

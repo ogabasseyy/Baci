@@ -13,6 +13,7 @@ import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
+import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
@@ -53,6 +54,7 @@ export interface WalletContentProps {
   loyaltyPoints: number;
   loyaltyTier?: string | null;
   needsPhone: boolean;
+  primaryReady?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
   onChangeRedeemPoints: (value: string) => void;
@@ -177,7 +179,7 @@ export function WalletContent(props: WalletContentProps) {
   };
 
   return (
-    <>
+    <WalletPrimaryContext.Provider value={props.primaryReady === true}>
       <AppKeyboardAwareScrollView
         testID="wallet-scroll"
         contentContainerStyle={contentContainerStyle}
@@ -292,6 +294,6 @@ export function WalletContent(props: WalletContentProps) {
         }
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
-    </>
+    </WalletPrimaryContext.Provider>
   );
 }

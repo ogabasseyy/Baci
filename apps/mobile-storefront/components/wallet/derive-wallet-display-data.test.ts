@@ -111,4 +111,46 @@ describe('deriveWalletDisplayData', () => {
 
     expect(result.activeSavingsGoal).toEqual({ id: 'goal-1' });
   });
+
+  describe('PiggyVest primary balance', () => {
+    it('shows the PiggyVest balance in naira, converted once from kobo', () => {
+      const result = deriveWalletDisplayData({
+        balance: 5000,
+        primary_balance_kobo: 123456,
+        savings_balance: 2000,
+        total_balance: 7000,
+      });
+
+      expect(result.spendableBalance).toBe(1234.56);
+      expect(result.totalBalance).toBe(3234.56);
+      expect(result.savingsBalance).toBe(2000);
+      expect(result.primaryReady).toBe(true);
+    });
+
+    it('treats a zero PiggyVest balance as ready, not as legacy', () => {
+      const result = deriveWalletDisplayData({
+        balance: 5000,
+        primary_balance_kobo: 0,
+      });
+
+      expect(result.spendableBalance).toBe(0);
+      expect(result.primaryReady).toBe(true);
+    });
+
+    it("keeps today's legacy output when there is no primary balance", () => {
+      const legacy = {
+        balance: 5000,
+        savings_balance: 2000,
+        total_balance: 7000,
+      };
+      const result = deriveWalletDisplayData(legacy);
+
+      expect(result.spendableBalance).toBe(5000);
+      expect(result.totalBalance).toBe(7000);
+      expect('primaryReady' in result).toBe(false);
+      expect(
+        deriveWalletDisplayData({ ...legacy, primary_balance_kobo: null })
+      ).toEqual(result);
+    });
+  });
 });

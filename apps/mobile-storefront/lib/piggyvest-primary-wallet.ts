@@ -1,5 +1,11 @@
+import type { z } from 'zod';
 import { PiggyvestPrimaryWalletSchemas as schemas } from '@/schemas/piggyvest-primary-wallet';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
+
+type PrimaryAccount = Extract<
+  z.infer<typeof schemas.snapshot>,
+  { status: 'ready' }
+>['account'];
 
 const PATH = '/api/storefront/customer/wallet/piggyvest-primary';
 
@@ -9,7 +15,18 @@ const PATH = '/api/storefront/customer/wallet/piggyvest-primary';
 // inside the client's own session read, so a switch between the caller's
 // check and this send still authenticates as the expected user or throws
 // before any bytes leave the device.
-async function read(merchantId: string, userId?: string) {
+export interface PiggyvestPrimarySnapshot {
+  account: PrimaryAccount | null;
+  /** Kobo; null until the account is ready. */
+  balanceKobo?: number | null;
+  requiresConsent: boolean;
+  provisioningStatus: 'pending' | 'ready';
+}
+
+async function read(
+  merchantId: string,
+  userId?: string
+): Promise<PiggyvestPrimarySnapshot> {
   const client = createStorefrontCustomerApiClient();
   const data = await client.fetchJson({
     path: `${PATH}?merchantId=${encodeURIComponent(merchantId)}`,
@@ -22,6 +39,9 @@ async function read(merchantId: string, userId?: string) {
     );
   return {
     account: snapshot.data.account,
+    // Kobo, straight from the server; null until the account is ready.
+    balanceKobo:
+      snapshot.data.status === 'ready' ? snapshot.data.balanceKobo : null,
     requiresConsent: snapshot.data.status !== 'ready',
     provisioningStatus: snapshot.data.status,
   };

@@ -9,12 +9,20 @@ let mockReady = false;
 jest.mock('./use-primary-savings-recovery', () => ({
   usePrimarySavingsRecovery: () => ({ ready: mockReady, retry: mockRetry }),
 }));
+const mockGate = jest.fn();
+jest.mock('./savings/use-primary-goal-gate', () => ({
+  usePrimaryGoalGate: () => mockGate(),
+}));
+const mockCreateActions = jest.fn();
 jest.mock('./use-wallet-savings-actions', () => ({
-  createWalletSavingsActions: () => ({
-    hasPendingSavingsContribution: true,
-    handleAddSavingsContribution: mockSubmit,
-    handleFundSavingsWallet: mockFund,
-  }),
+  createWalletSavingsActions: (args: unknown) => {
+    mockCreateActions(args);
+    return {
+      hasPendingSavingsContribution: true,
+      handleAddSavingsContribution: mockSubmit,
+      handleFundSavingsWallet: mockFund,
+    };
+  },
 }));
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 const input = {
@@ -31,6 +39,7 @@ const input = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockReady = false;
+  mockGate.mockReturnValue('off');
 });
 it('blocks funding and submission until pending recovery is confirmed', () => {
   const { result } = renderHook(() => useWalletSavingsController(input));
@@ -73,4 +82,24 @@ it('drops the pending key when the scope changes so no foreign operation is quer
   rerender({ userId: 'user-b' });
   expect(idempotencyKeyRef.current).toBeNull();
   expect(operationRailRef.current).toBeNull();
+});
+
+describe('goalAwaitingSettlement', () => {
+  const funded = { id: 'g', status: 'completed', current_amount: 5000 };
+  it.each([
+    ['ready', funded, true],
+    ['off', funded, false],
+    ['checking', funded, false],
+    ['ready', { ...funded, current_amount: 0 }, false],
+    ['ready', { ...funded, status: 'active' }, false],
+  ])('gate %s with %j -> %s', (gate, goal, expected) => {
+    mockGate.mockReturnValue(gate);
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal } as never)
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(expected);
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalAwaitingSettlement: expected })
+    );
+  });
 });

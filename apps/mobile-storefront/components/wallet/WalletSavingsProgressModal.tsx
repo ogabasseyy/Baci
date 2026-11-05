@@ -286,6 +286,7 @@ export function WalletSavingsProgressModal({
           colors={colors}
           goal={goal}
           hasPendingContribution={hasPendingContribution}
+          onBeforeNavigate={onClose}
         />
       </ScrollView>
     </ModalSheet>

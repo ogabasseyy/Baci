@@ -175,6 +175,39 @@ describe('createWalletSavingsActions', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  const settledGoal: WalletActiveSavingsGoal = {
+    ...activeGoal,
+    status: 'completed',
+    current_amount: 0,
+    target_amount: 5000,
+  };
+
+  it('opens the progress sheet for a funded goal awaiting settlement', () => {
+    const input = {
+      ...createInput({ ...settledGoal, current_amount: 5000 }),
+      goalAwaitingSettlement: true,
+    };
+    createWalletSavingsActions(input).handleOpenSavings();
+    expect(input.setShowSavingsProgressModal).toHaveBeenCalledWith(true);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('starts another plan once a completed goal is settled', () => {
+    const input = {
+      ...createInput(settledGoal),
+      goalAwaitingSettlement: false,
+    };
+    createWalletSavingsActions(input).handleOpenSavings();
+    expect(router.push).toHaveBeenCalledWith('/wallet/savings/start');
+    expect(input.setShowSavingsProgressModal).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy completed goals on start another plan', () => {
+    const input = createInput({ ...settledGoal, current_amount: 5000 });
+    createWalletSavingsActions(input).handleOpenSavings();
+    expect(router.push).toHaveBeenCalledWith('/wallet/savings/start');
+  });
+
   it('retains a retry key until confirmed success clears it', () => {
     const input = createInput();
     input.idempotencyKeyRef.current = 'existing-attempt';

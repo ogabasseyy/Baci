@@ -24,13 +24,15 @@ function makeGoal(over: Partial<WalletActiveSavingsGoal> = {}) {
 }
 function renderEntry(
   goal: WalletActiveSavingsGoal,
-  hasPendingContribution = false
+  hasPendingContribution = false,
+  onBeforeNavigate?: () => void
 ) {
   render(
     <GoalLifecycleEntry
       colors={Colors.light}
       goal={goal}
       hasPendingContribution={hasPendingContribution}
+      onBeforeNavigate={onBeforeNavigate}
     />
   );
 }
@@ -102,6 +104,19 @@ describe('GoalLifecycleEntry', () => {
       pathname: '/wallet/savings/goal-actions',
       params: { goalId: 'goal-1', kind: 'complete' },
     });
+  });
+
+  it('closes the sheet before pushing the goal actions route', () => {
+    const order: string[] = [];
+    const dismiss = jest.fn(() => order.push('dismiss'));
+    jest.mocked(router.push).mockImplementation(() => {
+      order.push('push');
+    });
+    renderEntry(makeGoal(), false, dismiss);
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Cancel savings goal' })
+    );
+    expect(order).toEqual(['dismiss', 'push']);
   });
 
   it.each([

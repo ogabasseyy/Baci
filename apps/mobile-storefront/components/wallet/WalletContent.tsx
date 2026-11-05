@@ -46,6 +46,7 @@ export interface WalletContentProps {
   fundReturnTo?: WalletReturnHref;
   isAddingSavingsContribution: boolean;
   hasPendingSavingsContribution?: boolean;
+  goalAwaitingSettlement?: boolean;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   isRedeemPending: boolean;
@@ -215,6 +216,7 @@ export function WalletContent(props: WalletContentProps) {
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}
+            awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
           />

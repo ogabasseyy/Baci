@@ -10,6 +10,8 @@ type Props = {
   colors: (typeof Colors)['light'];
   goal: WalletActiveSavingsGoal;
   hasPendingContribution: boolean;
+  /** Runs before navigating, e.g. to close the sheet this entry sits in. */
+  onBeforeNavigate?: () => void;
 };
 
 function localToday() {
@@ -36,6 +38,7 @@ export function GoalLifecycleEntry({
   colors,
   goal,
   hasPendingContribution,
+  onBeforeNavigate,
 }: Props) {
   const gate = usePrimaryGoalGate();
   if (gate !== 'ready' || hasPendingContribution) return null;
@@ -50,12 +53,13 @@ export function GoalLifecycleEntry({
           key={kind}
           accessibilityRole="button"
           accessibilityLabel={GOAL_LIFECYCLE_COPY[kind].entryLabel}
-          onPress={() =>
+          onPress={() => {
+            onBeforeNavigate?.();
             router.push({
               pathname: '/wallet/savings/goal-actions',
               params: { goalId: goal.id, kind },
-            })
-          }
+            });
+          }}
           style={[styles.button, { borderColor: colors.border }]}
         >
           <Text style={[styles.text, { color: colors.text }]}>

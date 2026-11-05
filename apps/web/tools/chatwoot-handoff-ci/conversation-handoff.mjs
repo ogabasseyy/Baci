@@ -1,5 +1,3 @@
-import { publishFollowupAfterPending } from './handback.mjs';
-
 const HANDOFF_REPLY = 'Synthetic bot: handing this to a human operator.';
 const FOLLOWUP_REPLY = 'Synthetic bot: I can help with that.';
 
@@ -17,7 +15,26 @@ function senderKind(sender) {
     .toLowerCase();
 }
 
-async function waitForBotReply({ api, waitFor, accountId, id, token, content }) {
+async function publishFollowupAfterPending({
+  readConversation,
+  publishFollowup,
+}) {
+  const conversation = await readConversation();
+  if (conversation.status !== 'pending')
+    throw new Error(
+      `Expected pending handback, received ${conversation.status}`
+    );
+  await publishFollowup();
+}
+
+async function waitForBotReply({
+  api,
+  waitFor,
+  accountId,
+  id,
+  token,
+  content,
+}) {
   await waitFor(
     async () =>
       (await api(messagesPath(accountId, id), token)).payload?.some(

@@ -24,7 +24,7 @@ export function createPrimaryWalletPaidInterestStore(configuration: unknown) {
     const value = JSON.stringify(selection);
     if (value.length > 8192)
       throw new Error('Primary interest selection unavailable');
-    const link = primaryDbLink(config.database.login);
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,

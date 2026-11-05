@@ -46,7 +46,7 @@ export function createPrimaryWalletBankInboxStore(configuration: unknown) {
         : action === 'enqueue'
     )
       throw new Error('Primary bank inbox capability unavailable');
-    const link = primaryDbLink(config.database.login);
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,

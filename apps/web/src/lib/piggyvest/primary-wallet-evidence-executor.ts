@@ -74,7 +74,7 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
         parameters[2]
       );
     else JSON.parse(parameters[2]);
-    const link = primaryDbLink(config.database.login);
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,

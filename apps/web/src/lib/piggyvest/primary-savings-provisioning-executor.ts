@@ -41,7 +41,7 @@ export function createPrimarySavingsProvisioningExecutor(
       )
     )
       throw new Error('Savings provisioning database unavailable');
-    const link = primaryDbLink(config.login);
+    const link = primaryDbLink(config.login, config.port);
     const client = new Client({
       host: config.host,
       port: config.port,

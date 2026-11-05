@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * One rule for how PiggyVest restricted-login executors reach Postgres.
  *
@@ -7,8 +9,10 @@
  * `<login>.<project_ref>`. Supavisor does not document forwarding startup
  * `options`, so the same settings are applied with SET on the session right
  * after connect. The database session user stays the bare role, so session
- * verification keeps comparing against the bare login. Never use port 6543.
+ * verification keeps comparing against the bare login. Port 6543 (transaction
+ * mode) is rejected: it does not keep session SET values.
  */
+const TRANSACTION_POOLER_PORT = 6543;
 const PROJECT_REF = /^[a-z0-9]{20}$/;
 const SESSION_SETTINGS =
   'SET search_path TO pg_catalog; SET statement_timeout = 2500; SET lock_timeout = 1500';
@@ -28,7 +32,7 @@ export type PrimaryDbLink = {
   }) => Promise<void>;
 };
 
-export function primaryDbLink(login: string): PrimaryDbLink {
+export function primaryDbLink(login: string, port: number): PrimaryDbLink {
   const ref = process.env.PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF;
   if (ref === undefined || ref === '') {
     return {
@@ -41,7 +45,7 @@ export function primaryDbLink(login: string): PrimaryDbLink {
       afterConnect: async () => undefined,
     };
   }
-  if (!PROJECT_REF.test(ref))
+  if (!PROJECT_REF.test(ref) || port === TRANSACTION_POOLER_PORT)
     throw new Error('PiggyVest database pooler configuration invalid');
   return {
     user: `${login}.${ref}`,

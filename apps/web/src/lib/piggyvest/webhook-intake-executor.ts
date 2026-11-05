@@ -91,7 +91,7 @@ export function createPiggyvestWebhookIntakeExecutor(
   let closed = false;
 
   const open = async (): Promise<Client> => {
-    const link = primaryDbLink(database.login);
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,

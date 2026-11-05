@@ -24,7 +24,7 @@ export function createPrimaryWalletPaidInterestInboxStore(
       | 'paid_interest_inbox_readiness',
     command: unknown
   ) {
-    const link = primaryDbLink(config.database.login);
+    const link = primaryDbLink(config.database.login, config.database.port);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,

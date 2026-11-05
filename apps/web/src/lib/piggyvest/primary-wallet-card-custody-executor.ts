@@ -122,7 +122,7 @@ export function createPrimaryCardCustodyExecutor(configuration: unknown) {
           ? config.transfer
           : null;
     if (!database) throw new Error('Custody storage unavailable');
-    const link = primaryDbLink(database.login);
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,

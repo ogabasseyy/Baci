@@ -57,7 +57,7 @@ export function createPrimaryWalletExecutor(
     ) {
       throw new Error('Primary wallet database unavailable');
     }
-    const link = primaryDbLink(config.login);
+    const link = primaryDbLink(config.login, config.port);
     const client = new Client({
       host: config.host,
       port: config.port,

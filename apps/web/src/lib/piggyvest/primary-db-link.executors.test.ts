@@ -127,7 +127,9 @@ describe('every restricted-login executor uses the shared helper', () => {
     expect(source).toContain("from './primary-db-link'");
     expect(source).toMatch(/user: link\.user,/);
     expect(source).toContain('...link.startup,');
-    expect(source).toContain('await link.afterConnect(client);');
+    const afterConnect = source.indexOf('await link.afterConnect(client);');
+    expect(afterConnect).toBeGreaterThan(-1);
+    expect(afterConnect).toBeLessThan(source.indexOf('client.query('));
     expect(source).not.toMatch(/user: [\w.]*login,/);
     expect(source).not.toContain("options: '-c search_path=pg_catalog'");
   });

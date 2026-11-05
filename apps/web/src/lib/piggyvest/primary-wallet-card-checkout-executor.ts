@@ -74,7 +74,7 @@ export function createPrimaryWalletCardCheckoutExecutor(
     )
       throw new Error('Primary card storage unavailable');
     const database = config[statement.role];
-    const link = primaryDbLink(database.login);
+    const link = primaryDbLink(database.login, database.port);
     const client = new Client({
       host: database.host,
       port: database.port,

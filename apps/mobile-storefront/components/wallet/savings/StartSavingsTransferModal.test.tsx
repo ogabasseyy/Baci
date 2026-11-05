@@ -46,7 +46,7 @@ describe('StartSavingsTransferModal', () => {
       />
     );
 
-    expect(screen.getByText('Fund wallet to continue')).toBeOnTheScreen();
+    expect(screen.getByText('Add money to continue')).toBeOnTheScreen();
     expect(screen.getByText('₦50,000')).toBeOnTheScreen();
     expect(screen.getByText('0123456789')).toBeOnTheScreen();
     expect(screen.getByText('Titan Paystack')).toBeOnTheScreen();

@@ -83,6 +83,16 @@ it('drops the pending key when the scope changes so no foreign operation is quer
   expect(idempotencyKeyRef.current).toBeNull();
   expect(operationRailRef.current).toBeNull();
 });
+it('hands the PiggyVest verdict and Add money callback to the savings actions', () => {
+  mockReady = true;
+  const onAddMoney = jest.fn();
+  renderHook(() =>
+    useWalletSavingsController({ ...input, onAddMoney, primaryReady: true })
+  );
+  expect(mockCreateActions).toHaveBeenCalledWith(
+    expect.objectContaining({ onAddMoney, primaryReady: true })
+  );
+});
 
 describe('goalAwaitingSettlement', () => {
   const funded = { id: 'g', status: 'completed', current_amount: 5000 };

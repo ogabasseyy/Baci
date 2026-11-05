@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { Agent } from 'undici';
 
 /** Narrow, read-only Chatwoot cross-token conversation-detail status probe.
  * It makes no isolation or overall provider qualification claim. See the pinned Swagger contract
@@ -29,10 +30,29 @@ export type IsolationProbeReport = {
     | 'invalid-configuration';
 };
 
-type Fetcher = (input: URL, init: RequestInit) => Promise<Response>;
+type ProbeRequestInit = {
+  method: 'GET';
+  headers: Record<string, string>;
+  redirect: 'manual';
+  signal: AbortSignal;
+};
+
+type StatusResponse = Pick<Response, 'status'> & {
+  body?: { cancel: () => Promise<void> } | null;
+};
+
+type Fetcher = (input: URL, init: ProbeRequestInit) => Promise<StatusResponse>;
 
 function isNumericId(value: string): boolean {
   return /^[1-9][0-9]{0,17}$/.test(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
 }
 
 function validateInput(input: ChatwootProbeInput): URL | undefined {
@@ -40,6 +60,8 @@ function validateInput(input: ChatwootProbeInput): URL | undefined {
     !input.baseUrl ||
     !input.accountAToken.trim() ||
     !input.accountBToken.trim() ||
+    hasControlCharacters(input.accountAToken) ||
+    hasControlCharacters(input.accountBToken) ||
     input.accountAToken !== input.accountAToken.trim() ||
     input.accountBToken !== input.accountBToken.trim() ||
     !isNumericId(input.accountAId) ||
@@ -83,7 +105,7 @@ async function readStatus(
       signal: AbortSignal.timeout(10_000),
     });
     // The check needs only the HTTP status; discard the body without parsing or logging it.
-    void response.body?.cancel().catch(() => undefined);
+    await response.body?.cancel().catch(() => undefined);
     return response.status;
   } catch {
     return undefined;
@@ -95,7 +117,7 @@ async function readStatus(
  */
 export async function runChatwootIsolationProbe(
   input: ChatwootProbeInput,
-  fetcher: Fetcher = fetch
+  fetcher?: Fetcher
 ): Promise<IsolationProbeReport> {
   const baseUrl = validateInput(input);
   if (!baseUrl) {
@@ -106,6 +128,24 @@ export async function runChatwootIsolationProbe(
     };
   }
 
+  const dispatcher = fetcher ? undefined : new Agent();
+  const request =
+    fetcher ??
+    ((url: URL, init: ProbeRequestInit) =>
+      fetch(url, { ...init, dispatcher } as Parameters<typeof fetch>[1]));
+
+  try {
+    return await runValidatedProbe(input, baseUrl, request);
+  } finally {
+    await dispatcher?.close();
+  }
+}
+
+async function runValidatedProbe(
+  input: ChatwootProbeInput,
+  baseUrl: URL,
+  fetcher: Fetcher
+): Promise<IsolationProbeReport> {
   const bListUrl = new URL(
     `/api/v1/accounts/${input.accountBId}/conversations`,
     baseUrl

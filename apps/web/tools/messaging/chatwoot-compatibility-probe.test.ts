@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -72,6 +72,14 @@ describe('runChatwootIsolationProbe', () => {
     );
     const tsxCli = join(dirname(tsxPackage), 'dist', 'cli.mjs');
     try {
+      await symlink(
+        join(process.cwd(), '../../node_modules'),
+        join(temporaryDirectory, 'node_modules')
+      );
+      await writeFile(
+        join(temporaryDirectory, 'package.json'),
+        JSON.stringify({ type: 'module' })
+      );
       await copyFile(sourcePath, copiedScript);
       const environment = { ...process.env };
       for (const key of Object.keys(environment)) {
@@ -86,12 +94,12 @@ describe('runChatwootIsolationProbe', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.status).toBe(1);
+      expect(result.stderr).toBe('');
       expect(JSON.parse(result.stdout)).toEqual({
         decision: 'unqualified',
         check: 'unknown',
         outcome: 'invalid-configuration',
       });
-      expect(result.stderr).toBe('');
 
       await writeFile(
         importWrapper,

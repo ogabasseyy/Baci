@@ -22,8 +22,8 @@ vi.mock('@/lib/piggyvest/primary-wallet-inflow-dispatch', () => ({
   dispatchPrimaryWalletInflow: vi.fn(async () => 'ignored'),
 }));
 
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   isAuthorizationQuarantine,
   isContentQuarantine,
@@ -39,7 +39,7 @@ import {
  * - a conflicting redelivery stays terminal (no fix changes it).
  */
 
-const client = {} as unknown as PiggyvestIntakeServiceClient;
+const client = {} as unknown as PiggyvestIntakeClient;
 
 function run(body: string, families: PiggyvestWebhookKeyFamily[] = ['legacy']) {
   return processVerifiedDelivery(

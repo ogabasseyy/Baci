@@ -41,7 +41,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
   dispatchPrimaryWalletPaidInterestInbox: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () => withCaptureRpc(mocks.legacy()),
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.legacy()),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>

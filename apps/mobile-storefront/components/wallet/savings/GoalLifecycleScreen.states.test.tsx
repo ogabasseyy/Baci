@@ -92,15 +92,18 @@ describe('redirects', () => {
     expect(issueGoalAction).not.toHaveBeenCalled();
   });
 
-  it('goes to login when signed out', () => {
+  it('goes to login when signed out, keeping the goal and action in the way back', () => {
     jest.mocked(useRequireAuth).mockReturnValue({
-      redirectTo: '/auth/login?returnTo=x',
+      redirectTo: '/auth/login?returnTo=%2Fwallet%2Fsavings%2Fgoal-actions',
       user: null,
     } as never);
-    renderScreen();
-    expect(
-      screen.getByText('Redirect:/auth/login?returnTo=x')
-    ).toBeOnTheScreen();
+    renderScreen('complete');
+    const text = screen.getByText(/^Redirect:/).props.children as string;
+    const href = text.replace('Redirect:', '');
+    expect(href.startsWith('/auth/login?returnTo=')).toBe(true);
+    expect(decodeURIComponent(href.split('returnTo=')[1])).toBe(
+      `/wallet/savings/goal-actions?goalId=${GOAL}&kind=complete`
+    );
   });
 
   it('waits while the gate is checking', () => {

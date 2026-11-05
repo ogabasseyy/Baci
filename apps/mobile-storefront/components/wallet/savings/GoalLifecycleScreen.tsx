@@ -60,6 +60,12 @@ function Action(props: {
   );
 }
 
+/** Login URL whose way back keeps the goal and action (the route reads both). */
+function loginHref(pathname: string, goalId: string, kind: GoalActionKind) {
+  const back = `${pathname}?goalId=${encodeURIComponent(goalId)}&kind=${encodeURIComponent(kind)}`;
+  return `/auth/login?returnTo=${encodeURIComponent(back)}` as const;
+}
+
 function useFindGoal(goalId: string) {
   const { data, isLoading } = useWallet({ cachePolicy: 'display' });
   const wallet = data?.wallet;
@@ -106,7 +112,8 @@ export function GoalLifecycleScreen({
   const flow = useGoalLifecycle({ kind, goalId });
   const pathname = usePathname();
 
-  if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
+  if (auth.redirectTo)
+    return <Redirect href={loginHref(pathname, goalId, kind)} />;
   // Until the session is restored (a cold-start deep link) the gate reads
   // 'off' only because nobody is signed in yet: wait, do not redirect.
   if (gate === 'off' && !auth.isLoading) return <Redirect href="/wallet" />;
@@ -118,12 +125,7 @@ export function GoalLifecycleScreen({
     router.replace('/wallet');
   };
   const leave = () => router.replace('/wallet');
-  const signIn = () =>
-    router.replace(
-      `/auth/login?returnTo=${encodeURIComponent(
-        `${pathname}?goalId=${encodeURIComponent(goalId)}&kind=${encodeURIComponent(kind)}`
-      )}`
-    );
+  const signIn = () => router.replace(loginHref(pathname, goalId, kind));
   const checking = gate === 'checking';
   // Continue stays off until the goal it would act on is on screen.
   const waiting = checking || !goal || auth.isLoading;

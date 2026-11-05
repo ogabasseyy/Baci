@@ -111,8 +111,10 @@ export function OxygenApplicationDialog({
         className={`${styles.dialog} ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''}`}
         onCancel={(event) => {
           event.preventDefault();
-          if (selfieUrl) setSelfieUrl(null);
-          else if (paymentUrl) setPaymentUrl(null);
+          if (selfieUrl) {
+            setSelfieDismissed(true);
+            setSelfieUrl(null);
+          } else if (paymentUrl) setPaymentUrl(null);
           else close();
         }}
         onClose={() => {

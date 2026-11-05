@@ -178,7 +178,10 @@ it('can resume expired verification after leaving a failed camera session', asyn
     m.submit.mock.calls.filter(([c]) => c.action === 'selfie_link')
   ).toHaveLength(2);
 });
-it('holds a late replacement after Back until the customer continues', async () => {
+it.each([
+  'Back',
+  'Escape',
+])('holds a late replacement after %s until the customer continues', async (exit) => {
   m.delayed = true;
   render(
     <OxygenApplicationDialog
@@ -187,7 +190,15 @@ it('holds a late replacement after Back until the customer continues', async () 
     />
   );
   await act(() => vi.advanceTimersByTimeAsync(0));
-  fireEvent.click(screen.getByRole('button', { name: 'Back to application' }));
+  if (exit === 'Escape')
+    fireEvent(
+      screen.getByRole('dialog'),
+      new Event('cancel', { bubbles: false, cancelable: true })
+    );
+  else
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to application' })
+    );
   await act(async () => {
     m.finish();
   });

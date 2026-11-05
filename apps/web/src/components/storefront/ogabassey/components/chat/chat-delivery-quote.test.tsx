@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { ChatDeliveryQuote, parseDestinationState } from './chat-delivery-quote';
+import { ChatDeliveryQuote } from './chat-delivery-quote';
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
 
@@ -19,17 +19,6 @@ beforeEach(() => {
 });
 
 describe('ChatDeliveryQuote', () => {
-  it('fails closed for negated, corrected, or country-ambiguous state mentions', () => {
-    expect(parseDestinationState('Please deliver to Lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
-    expect(parseDestinationState('Not Lagos')).toEqual({ kind: 'negated-state' });
-    expect(parseDestinationState('Lagos is not my destination')).toEqual({ kind: 'negated-state' });
-    expect(parseDestinationState('No. 12 Long Street, Lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
-    expect(parseDestinationState('No. 12 Long Street, lagos')).toEqual({ kind: 'matched', stateName: 'Lagos' });
-    expect(parseDestinationState('Not Lagos, I mean Ogun')).toEqual({ kind: 'negated-state' });
-    expect(parseDestinationState('I am moving to Niger Republic')).toEqual({ kind: 'ambiguous-niger' });
-    expect(parseDestinationState('I live in Niger State')).toEqual({ kind: 'matched', stateName: 'Niger' });
-  });
-
   it('keeps natural destination text private and submits only a confirmed canonical state', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

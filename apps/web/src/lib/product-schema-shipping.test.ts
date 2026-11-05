@@ -17,6 +17,34 @@ const profile = {
 } satisfies MerchantTrustProfile;
 
 describe('shipping', () => {
+  it('recognizes country names and rejects inverted delivery ranges', () => {
+    expect(
+      buildOfferShippingDetails('NG', 'NGN', {
+        ...profile,
+        shippingPolicy: { ...profile.shippingPolicy, regions: ['Nigeria'] },
+      })
+    ).toBeDefined();
+    expect(
+      buildOfferShippingDetails('NG', 'NGN', {
+        ...profile,
+        shippingPolicy: {
+          ...profile.shippingPolicy,
+          handlingDaysMin: 3,
+          handlingDaysMax: 1,
+        },
+      })
+    ).toBeUndefined();
+    expect(
+      buildOfferShippingDetails('NG', 'NGN', {
+        ...profile,
+        shippingPolicy: {
+          ...profile.shippingPolicy,
+          transitDaysMin: 8,
+          transitDaysMax: 2,
+        },
+      })
+    ).toBeUndefined();
+  });
   it('publishes an explicitly configured free country-wide rate and delivery times', () => {
     expect(buildOfferShippingDetails('NG', 'NGN', profile)).toMatchObject({
       shippingRate: { value: 0, currency: 'NGN' },

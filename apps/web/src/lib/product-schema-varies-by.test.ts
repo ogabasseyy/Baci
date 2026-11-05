@@ -3,18 +3,54 @@ import { getVariantSchemaVariesBy } from './product-schema-varies-by';
 import type { ProductVariant } from './products';
 
 describe('getVariantSchemaVariesBy', () => {
+  it('ignores unsupported and inherited attribute keys', () => {
+    const variants = [
+      {
+        id: '1',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: { constructor: 'x', material: 'leather', pattern: 'plain' },
+      },
+    ];
+    expect(getVariantSchemaVariesBy(variants)).toEqual([]);
+  });
   it('omits dimensions missing from a variant', () => {
     const variants = [
-      { attributes: { color: 'Silver', storage: '512GB' } },
-      { attributes: {} },
-    ] as ProductVariant[];
+      {
+        id: '1',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: { color: 'Silver', storage: '512GB' },
+      },
+      {
+        id: '2',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: {},
+      },
+    ] satisfies ProductVariant[];
     expect(getVariantSchemaVariesBy(variants)).toEqual([]);
   });
   it('deduplicates supported dimensions present on every variant', () => {
     const variants = [
-      { attributes: { colour: 'Silver', storage: '512GB', ram: '16GB' } },
-      { attributes: { color: 'Black', size: '256GB' } },
-    ] as ProductVariant[];
+      {
+        id: '1',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: { colour: 'Silver', storage: '512GB', ram: '16GB' },
+      },
+      {
+        id: '2',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: { color: 'Black', size: '256GB' },
+      },
+    ] satisfies ProductVariant[];
     expect(getVariantSchemaVariesBy(variants)).toEqual([
       'https://schema.org/color',
       'https://schema.org/size',

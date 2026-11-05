@@ -9,12 +9,9 @@ function schemaPropertyForAttribute(key: string): string | undefined {
     size: 'https://schema.org/size',
     storage: 'https://schema.org/size',
     ram: 'https://schema.org/size',
-    material: 'https://schema.org/material',
-    pattern: 'https://schema.org/pattern',
-    age: 'https://schema.org/suggestedAge',
-    gender: 'https://schema.org/suggestedGender',
   };
-  return map[key.toLowerCase()];
+  const normalizedKey = key.toLowerCase();
+  return Object.hasOwn(map, normalizedKey) ? map[normalizedKey] : undefined;
 }
 
 export function getVariantSchemaVariesBy(variants: ProductVariant[]): string[] {

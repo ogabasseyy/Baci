@@ -7,15 +7,20 @@ export function getNormalizedVariantAttribute(
   }
 
   for (const key of keys) {
-    const matchedKey =
-      key in attributes
-        ? key
-        : Object.keys(attributes).find(
-            (attributeKey) => attributeKey.toLowerCase() === key.toLowerCase()
-          );
-    const value = matchedKey ? attributes[matchedKey] : undefined;
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
+    const matchedKeys = [
+      key,
+      ...Object.keys(attributes).filter(
+        (attributeKey) =>
+          attributeKey !== key &&
+          attributeKey.toLowerCase() === key.toLowerCase()
+      ),
+    ];
+    for (const matchedKey of matchedKeys) {
+      const value = Object.hasOwn(attributes, matchedKey)
+        ? attributes[matchedKey]
+        : undefined;
+      if (typeof value === 'string' && value.trim().length > 0)
+        return value.trim();
     }
   }
 

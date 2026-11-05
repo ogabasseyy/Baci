@@ -118,6 +118,8 @@ export interface PiggyvestPrimaryCapabilitySnapshot {
   account?: Awaited<
     ReturnType<typeof piggyvestPrimaryWalletApi.read>
   >['account'];
+  /** PiggyVest main-wallet balance in kobo, alongside `account`. */
+  balanceKobo?: number | null;
 }
 
 const inflight = new Map<string, Promise<PiggyvestPrimaryCapabilitySnapshot>>();
@@ -199,7 +201,11 @@ async function sharedProbe(
       // boolean escapes, so there is nothing to leak across users.
       const snapshot = await piggyvestPrimaryWalletApi.read(merchantId, userId);
       observePiggyvestPrimaryCapability(merchantId, true);
-      return { available: true, account: snapshot.account };
+      return {
+        available: true,
+        account: snapshot.account,
+        balanceKobo: snapshot.balanceKobo,
+      };
     } catch (error) {
       if (isPrimaryWalletReviewRequired(error)) {
         // Review codes prove this merchant is primary-enabled, but the

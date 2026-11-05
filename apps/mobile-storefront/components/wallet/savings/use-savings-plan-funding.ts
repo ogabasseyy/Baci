@@ -115,11 +115,13 @@ export function useSavingsPlanFunding({
     }
   };
 
-  const fetchExistingPlanFunding = async () => {
+  // A silent read (used while polling a pending setup) keeps the current
+  // phase on screen instead of flashing 'loading'.
+  const fetchExistingPlanFunding = async (options?: { silent?: boolean }) => {
     if (!goalId) return;
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
-    setPhase('loading');
+    if (!options?.silent) setPhase('loading');
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({
@@ -139,9 +141,17 @@ export function useSavingsPlanFunding({
         setPhase(notFoundMeansNotStarted ? 'not_started' : 'pending');
         return;
       }
+      // A silent read belongs to the bounded setup poll: a transient failure
+      // leaves the phase pending and is reported to the poll, which retries
+      // and only calls failExistingPlanFunding once its attempts run out.
+      if (options?.silent) throw error;
       setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
+  };
+  const failExistingPlanFunding = (error: unknown) => {
+    setFundingError(planFundingErrorMessage(error));
+    setPhase('error');
   };
   const fetchExistingPlanFundingRef = useRef(fetchExistingPlanFunding);
   fetchExistingPlanFundingRef.current = fetchExistingPlanFunding;
@@ -199,6 +209,7 @@ export function useSavingsPlanFunding({
   }, [automaticLookupKey]);
 
   return {
+    failExistingPlanFunding,
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError,

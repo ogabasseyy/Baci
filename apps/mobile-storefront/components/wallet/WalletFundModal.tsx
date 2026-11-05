@@ -7,6 +7,7 @@ import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 
 type WalletFundModalProps = Pick<
   WalletContentProps,
@@ -50,6 +51,12 @@ export function WalletFundModal({
   showFundPanel,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  // Card top-ups credit the legacy wallet, so only primary-funded flows (a
+  // savings shortfall or a plain top-up) lose the card option; any other
+  // return flow (e.g. IMEI check) still spends the legacy balance.
+  const hideCardFunding =
+    useWalletPrimaryReady() &&
+    (!fundReturnTo || isWalletSavingsReturnHref(fundReturnTo));
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
@@ -100,6 +107,7 @@ export function WalletFundModal({
               creditWatch={creditWatch}
               fundAmount={fundAmount}
               fundingAccount={fundingAccount}
+              hideCardFunding={hideCardFunding}
               isCreatingFundingAccount={isCreatingFundingAccount}
               isFundPending={isFundPending}
               needsPhone={needsPhone}

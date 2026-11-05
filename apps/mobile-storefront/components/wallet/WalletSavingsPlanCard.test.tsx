@@ -77,6 +77,23 @@ describe('WalletSavingsPlanCard', () => {
     ).toBeOnTheScreen();
   });
 
+  it('offers moving the savings for a funded goal awaiting settlement', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 100000, status: 'completed' }}
+        awaitingSettlement
+        onOpen={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByRole('button', {
+        name: 'Move your savings for iPhone 15 Pro',
+      })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Start another plan')).toBeNull();
+  });
+
   it('opens auto-debit plan details without offering a manual savings transfer', () => {
     const { UNSAFE_queryByType } = render(
       <WalletSavingsPlanCard

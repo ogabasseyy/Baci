@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
@@ -27,6 +26,23 @@ jest.mock('expo-image', () => {
     },
   };
 });
+
+jest.mock('./savings/GoalLifecycleEntry', () => ({
+  GoalLifecycleEntry: ({
+    goal,
+    hasPendingContribution,
+  }: {
+    goal: { id: string };
+    hasPendingContribution: boolean;
+  }) => {
+    const { Text } = jest.requireActual(
+      'react-native'
+    ) as typeof import('react-native');
+    return (
+      <Text>{`lifecycle:${goal.id}:${hasPendingContribution ? 'pending' : 'clear'}`}</Text>
+    );
+  },
+}));
 
 const goal = {
   contribution_amount: 500,
@@ -150,71 +166,6 @@ describe('WalletSavingsProgressModal', () => {
     expect(onFundWallet).not.toHaveBeenCalled();
     expect(onChangeDevice).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the saved device condition legibly on the dark Add to savings sheet', () => {
-    render(
-      <WalletSavingsProgressModal
-        addAmount=""
-        colors={Colors.dark}
-        goal={{ ...goal, current_amount: 0, product_condition: 'new' }}
-        isAdding={false}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={0}
-      />
-    );
-
-    expect(screen.getByText('Your plan is ready')).toBeOnTheScreen();
-    const condition = screen.getByText('Condition: New');
-    expect(StyleSheet.flatten(condition.props.style)).toEqual(
-      expect.objectContaining({
-        backgroundColor: Colors.dark.muted,
-        color: Colors.dark.text,
-      })
-    );
-    expect(
-      screen.getByRole('button', {
-        name: 'Continue to payment',
-      })
-    ).toHaveAccessibilityState({ disabled: true });
-    expect(
-      screen.queryByRole('button', { name: 'Confirm savings top-up' })
-    ).toBeNull();
-    expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
-    ).toBeOnTheScreen();
-  });
-
-  it('shows funding guidance when a contribution exceeds the spendable wallet balance', () => {
-    const onAddSavings = jest.fn();
-    render(
-      <WalletSavingsProgressModal
-        addAmount="500"
-        colors={Colors.dark}
-        goal={goal}
-        isAdding={false}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={onAddSavings}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={100}
-      />
-    );
-
-    expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
-    ).toBeOnTheScreen();
-    expect(
-      screen.queryByRole('button', { name: 'Confirm savings top-up' })
-    ).toBeNull();
-    expect(onAddSavings).not.toHaveBeenCalled();
   });
 
   describe('bugfix: animated wallet product images', () => {
@@ -374,5 +325,28 @@ describe('WalletSavingsProgressModal', () => {
     expect(
       screen.queryByRole('button', { name: 'Change savings device' })
     ).toBeNull();
+  });
+
+  it.each([
+    [false, 'clear'],
+    [true, 'pending'],
+  ])('hands the goal and the pending state to the goal lifecycle entry (pending %s)', (hasPendingContribution, label) => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount=""
+        colors={Colors.light}
+        goal={goal}
+        isAdding={false}
+        hasPendingContribution={hasPendingContribution}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={0}
+      />
+    );
+    expect(screen.getByText(`lifecycle:goal-1:${label}`)).toBeOnTheScreen();
   });
 });

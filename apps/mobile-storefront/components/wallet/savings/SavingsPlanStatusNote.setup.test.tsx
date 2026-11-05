@@ -199,3 +199,47 @@ describe('retry of an expired claim', () => {
     expect(screen.queryByText('Try setup again')).toBeNull();
   });
 });
+
+describe('shared status', () => {
+  const sharedFunding = (planFundingPhase: string) =>
+    ({
+      planFundingPhase,
+      planFundingRequiresBvn: false,
+      fetchExistingPlanFunding: refresh,
+    }) as never;
+  const renderShared = (phase: string) =>
+    render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId="goal-1"
+        identityKey="user-1"
+        merchantId="merchant-1"
+        funding={sharedFunding(phase)}
+      />
+    );
+
+  it('reads the status it is given and starts no status hook of its own', () => {
+    renderShared('pending');
+    expect(mockFunding).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'This goal is still being set up. Please check back shortly.'
+      )
+    ).toBeTruthy();
+  });
+
+  it('asks the interest question for a shared not-started status and re-reads it after setup', () => {
+    renderShared('not_started');
+    expect(screen.getByText('Earn interest on this goal?')).toBeTruthy();
+    expect(mockSetupHook).toHaveBeenCalledWith(
+      expect.objectContaining({ goalId: 'goal-1', merchantId: 'merchant-1' })
+    );
+    mockSetupHook.mock.calls[0][0].onSettled();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows nothing for a shared ready status', () => {
+    renderShared('ready');
+    expect(screen.toJSON()).toBeNull();
+  });
+});

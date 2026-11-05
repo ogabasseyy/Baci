@@ -204,6 +204,8 @@ export function toProductCompareSchemaProduct(
   return {
     id,
     name,
+    ...(typeof record.brand === 'string' &&
+      record.brand.trim() && { brand: record.brand.trim() }),
     image,
     availability: getStructuredDataAvailability(record),
     category: typeof record.category === 'string' ? record.category : null,

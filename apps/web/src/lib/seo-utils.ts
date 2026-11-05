@@ -168,16 +168,6 @@ const DIMENSION_UNIT_CODES: Record<string, string> = {
 };
 
 /**
- * Number of milliseconds in a day
- */
-const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * Number of milliseconds in 30 days
- */
-const THIRTY_DAYS_MS = 30 * MILLISECONDS_PER_DAY;
-
-/**
  * Maps common variant attribute keys to Google-supported variesBy property URLs.
  * Google only recognizes 6 specific values for variesBy:
  * color, size, suggestedAge, suggestedGender, material, pattern
@@ -197,6 +187,14 @@ function schemaPropertyForAttribute(key: string): string | undefined {
     gender: 'https://schema.org/suggestedGender',
   };
   return map[key.toLowerCase()];
+}
+
+function isValidMerchantIdentifier(
+  value: string | null | undefined
+): value is string {
+  return Boolean(
+    value && Array.from(value).length <= 50 && !/[\s\p{C}]/u.test(value)
+  );
 }
 
 function getNormalizedVariantAttribute(
@@ -233,20 +231,24 @@ function getVariantSchemaSize(
   attributes: Record<string, string> | null | undefined
 ): string | undefined {
   const explicitSize = getNormalizedVariantAttribute(attributes, ['size']);
-  if (explicitSize) {
+  if (explicitSize && Array.from(explicitSize).length <= 100) {
     return explicitSize;
   }
 
   const inferredParts = [
     getNormalizedVariantAttribute(attributes, ['storage']),
     getNormalizedVariantAttribute(attributes, ['ram']),
-  ].filter((value): value is string => Boolean(value));
+  ].filter(
+    (value): value is string =>
+      Boolean(value) && Array.from(value as string).length <= 100
+  );
 
   if (inferredParts.length === 0) {
     return undefined;
   }
 
-  return Array.from(new Set(inferredParts)).join(' / ');
+  const size = Array.from(new Set(inferredParts)).join(' / ');
+  return Array.from(size).length <= 100 ? size : undefined;
 }
 
 function mapReturnMethodToSchemaUrl(
@@ -333,38 +335,27 @@ function buildContactPoint(
   };
 }
 
-function buildMerchantReturnPolicy(
-  country: string,
-  trustProfile?: MerchantTrustProfile,
-  fallbackDays = 7
-): MerchantReturnPolicy {
-  const returnPolicy = trustProfile?.returnPolicy;
-
-  return {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? fallbackDays,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
-  };
-}
-
 function buildOfferShippingDetails(
   country: string,
   currency: string,
   trustProfile?: MerchantTrustProfile
-): OfferShippingDetails {
+): OfferShippingDetails | undefined {
   const shippingPolicy = trustProfile?.shippingPolicy;
-  const handlingMin = shippingPolicy?.handlingDaysMin ?? 0;
-  const handlingMax = shippingPolicy?.handlingDaysMax ?? 1;
-  const transitMin = shippingPolicy?.transitDaysMin ?? 1;
-  const transitMax = shippingPolicy?.transitDaysMax ?? 5;
+  if (
+    shippingPolicy?.shippingFeeType !== 'free' ||
+    !shippingPolicy.regions.some(
+      (region) => region.trim().toUpperCase() === country.toUpperCase()
+    ) ||
+    shippingPolicy.handlingDaysMin == null ||
+    shippingPolicy.handlingDaysMax == null ||
+    shippingPolicy.transitDaysMin == null ||
+    shippingPolicy.transitDaysMax == null
+  )
+    return undefined;
+  const handlingMin = shippingPolicy.handlingDaysMin;
+  const handlingMax = shippingPolicy.handlingDaysMax;
+  const transitMin = shippingPolicy.transitDaysMin;
+  const transitMax = shippingPolicy.transitDaysMax;
 
   return {
     '@type': 'OfferShippingDetails',
@@ -398,20 +389,19 @@ function buildOfferShippingDetails(
 function buildMerchantReturnPolicyFromTrustProfile(
   country: string,
   trustProfile?: MerchantTrustProfile
-): MerchantReturnPolicy {
-  const returnPolicy = trustProfile?.returnPolicy;
+): MerchantReturnPolicy | undefined {
+  const policy = trustProfile?.returnPolicy;
+  if (policy?.windowDays == null) return undefined;
+  const returnMethod = mapReturnMethodToSchemaUrl(policy.returnMethod);
+  const returnFees = mapReturnFeeToSchemaUrl(policy.returnFees);
   return {
     '@type': 'MerchantReturnPolicy',
     applicableCountry: country,
     returnPolicyCountry: country,
     returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? 7,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
+    merchantReturnDays: policy.windowDays,
+    ...(returnMethod && { returnMethod }),
+    ...(returnFees && { returnFees }),
   };
 }
 
@@ -732,11 +722,8 @@ export function generateProductSchema(
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
-              .toISOString()
-              .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           }))
         : {
             '@type': 'Offer',
@@ -752,17 +739,16 @@ export function generateProductSchema(
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
-              .toISOString()
-              .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           },
   };
 
   // Product identifiers are important for Google Merchant Center.
-  if (product.sku) {
+  if (isValidMerchantIdentifier(product.sku)) {
     schema.sku = product.sku;
+  } else if (product.sku && isValidMerchantIdentifier(product.id)) {
+    schema.sku = product.id;
   }
 
   // Group-level identifiers describe the parent product listing itself and are
@@ -977,7 +963,9 @@ export function generateProductSchema(
   // @see https://schema.org/ProductGroup
   if (product.variants && product.variants.length > 0) {
     schema['@type'] = 'ProductGroup';
-    schema.productGroupID = product.slug || product.id;
+    schema.productGroupID = isValidMerchantIdentifier(product.slug)
+      ? product.slug
+      : product.id;
 
     // Compute variesBy from unique attribute keys across all variants
     const allAttributeKeys = new Set<string>();
@@ -994,7 +982,19 @@ export function generateProductSchema(
       const variesBySet = new Set<string>();
       for (const key of allAttributeKeys) {
         const url = schemaPropertyForAttribute(key);
-        if (url) variesBySet.add(url);
+        if (
+          url &&
+          (url !== 'https://schema.org/color' ||
+            product.variants.every((variant) =>
+              getVariantSchemaColor(variant.attributes)
+            )) &&
+          (url !== 'https://schema.org/size' ||
+            product.variants.every((variant) =>
+              getVariantSchemaSize(variant.attributes)
+            ))
+        ) {
+          variesBySet.add(url);
+        }
       }
       if (variesBySet.size > 0) {
         schema.variesBy = Array.from(variesBySet);
@@ -1010,13 +1010,8 @@ export function generateProductSchema(
       buildMerchantReturnPolicyFromTrustProfile(country, trustProfile)
     );
 
-    const variantPriceValidUntil = new Date(Date.now() + THIRTY_DAYS_MS)
-      .toISOString()
-      .substring(0, 10);
-
     // Build hasVariant array — each variant becomes a @type Product
-    // Brand and the shared description live on the ProductGroup only; Google
-    // does not need them repeated on every variant.
+    // Include variant descriptions alongside the shared ProductGroup description.
     schema.hasVariant = product.variants.map((variant, variantIndex) => {
       const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
@@ -1029,10 +1024,14 @@ export function generateProductSchema(
       );
       const variantColor = getVariantSchemaColor(variant.attributes);
       const variantSize = getVariantSchemaSize(variant.attributes);
-      const attrValues = variant.attributes
-        ? Object.values(variant.attributes).join(' / ')
-        : '';
-      const variantName = attrValues ? `${safeName} - ${attrValues}` : safeName;
+      // Keep the product title and as many complete option values as fit.
+      // Some catalog records contain full specification paragraphs as attributes.
+      let variantName = Array.from(safeName).slice(0, 150).join('');
+      for (const value of Object.values(variant.attributes ?? {})) {
+        if (typeof value !== 'string' || !value.trim()) continue;
+        const candidate = `${variantName}${variantName === safeName ? ' - ' : ' / '}${value.trim()}`;
+        if (Array.from(candidate).length <= 150) variantName = candidate;
+      }
 
       // Variant images: use variant-specific images if available, fall back to parent images
       let variantImages: string[] | undefined;
@@ -1048,12 +1047,19 @@ export function generateProductSchema(
       return {
         '@type': 'Product',
         name: variantName,
+        description: [variantColor, variantSize, safeDescription]
+          .filter(Boolean)
+          .join(' - '),
         ...(variantUrl && { url: variantUrl }),
         ...(variantImages && { image: variantImages }),
         inProductGroupWithID: schema.productGroupID,
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
-        sku: variant.sku || variant.id,
+        ...(isValidMerchantIdentifier(variant.sku)
+          ? { sku: variant.sku }
+          : isValidMerchantIdentifier(variant.id)
+            ? { sku: variant.id }
+            : {}),
         ...(identifiers.gtin && { gtin: identifiers.gtin }),
         ...(identifiers.mpn && { mpn: identifiers.mpn }),
         offers: {
@@ -1066,7 +1072,6 @@ export function generateProductSchema(
             stock_quantity: variant.stock_quantity,
           }),
           itemCondition: variantCondition,
-          priceValidUntil: variantPriceValidUntil,
           seller: {
             '@type': 'Organization',
             name: safeMerchantName,
@@ -1894,9 +1899,10 @@ export function generateOrganizationSchema(
     schema.contactPoint = contactPoint;
   }
 
-  const hasMerchantReturnPolicy = data.trustProfile?.returnPolicy
-    ? buildMerchantReturnPolicy(data.country ?? 'NG', data.trustProfile)
-    : undefined;
+  const hasMerchantReturnPolicy = buildMerchantReturnPolicyFromTrustProfile(
+    data.country ?? 'NG',
+    data.trustProfile
+  );
 
   if (hasMerchantReturnPolicy) {
     schema.hasMerchantReturnPolicy = hasMerchantReturnPolicy;

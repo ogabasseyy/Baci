@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T09:35:26+00:00",
-  "source_revision": "f1566a2a55b698de53ccd674b9c4979209941b43",
-  "evidence_digest": "cc47f89fcdf8ff67e64feb83da4f71c768bfa28d25a98902032f5dd9d249544f",
-  "claims_digest": "4c4c88ab1f77a544cc1a0a9d5e9cfb3c304f36c90ad381f72efad5080c420df5",
+  "reviewed_at": "2026-11-05T09:37:14+00:00",
+  "source_revision": "a8a78a78c7f8620380507099d110b4680c2c9591",
+  "evidence_digest": "256ae7037edbffe1aaf967457eafedd5b47c6f185a933745fbe340d64722a929",
+  "claims_digest": "33c5aa9b5064d16fdac664431f82c0f6c407f25628f6f7f6a5c4b37b1973c4fe",
   "review_scope": "Source-only recovery follow-up: verifier evidence schema extracted with direct validation tests; committed publication receipts expose verification-only retry; mode-exit schema boundaries covered; SDK cart.reconcile preserves the original operation ID through timeout and bound host receipt reconciliation; merchantless domestic quotes bypass tenant storage while tenant quotes keep attested persistence. Local mocked tests passed. Production composition remains disabled; hosted qualification, current-head CI/review and separate rollout authorization remain required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {

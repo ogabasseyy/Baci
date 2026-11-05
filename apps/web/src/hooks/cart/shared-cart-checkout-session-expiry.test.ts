@@ -46,6 +46,7 @@ describe('shared-cart-client checkout session expiry', () => {
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
       jsonResponse({
         replayed: false,
+        databaseNow: new Date().toISOString(),
         sessionExpiresAt,
         sessionReused: false,
         snapshot: reviewSnapshot,
@@ -65,19 +66,19 @@ describe('shared-cart-client checkout session expiry', () => {
     });
   });
 
-  it('uses the response server clock and subtracts full request transit time', async () => {
-    const serverNow = '2026-11-05T20:00:00.000Z';
+  it('uses the database clock despite browser clock skew and subtracts full request transit time', async () => {
+    const databaseNow = '2026-11-05T20:00:00.000Z';
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-05T21:00:00.000Z'));
     const response = new Response(
       JSON.stringify({
+        databaseNow,
         replayed: false,
         sessionExpiresAt: '2026-11-05T20:01:00.000Z',
         sessionReused: false,
         snapshot: reviewSnapshot,
       }),
       {
-        headers: { date: new Date(serverNow).toUTCString() },
         status: 200,
       }
     );
@@ -104,13 +105,13 @@ describe('shared-cart-client checkout session expiry', () => {
   it('rejects a session whose TTL elapsed while the response body was parsed', async () => {
     const response = new Response(
       JSON.stringify({
+        databaseNow: '2026-11-05T20:00:00.000Z',
         replayed: false,
         sessionExpiresAt: '2026-11-05T20:01:00.000Z',
         sessionReused: false,
         snapshot: reviewSnapshot,
       }),
       {
-        headers: { date: new Date('2026-11-05T20:00:00.000Z').toUTCString() },
         status: 200,
       }
     );

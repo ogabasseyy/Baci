@@ -64,6 +64,7 @@ describe('shared-cart-client checkout prepare', () => {
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
       jsonResponse({
         replayed: false,
+        databaseNow: new Date().toISOString(),
         sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         sessionReused: false,
         snapshot: REVIEW_SNAPSHOT,

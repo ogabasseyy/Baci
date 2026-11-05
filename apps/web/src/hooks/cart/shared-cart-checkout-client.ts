@@ -194,19 +194,19 @@ async function requestSharedCartCheckout(
     }
     if (review) {
       const sessionExpiresAt = body.sessionExpiresAt;
-      const serverDate = response.headers.get('date');
-      const serverDateMs = serverDate ? Date.parse(serverDate) : Number.NaN;
+      const databaseNow = body.databaseNow;
       const requestElapsedMs = responseReceivedAt - requestStartedAt;
-      // HTTP Date has one-second precision. Subtract a full extra second and
-      // the complete request duration so clock skew and transit time cannot
-      // extend the client-side display past the server's session expiry.
+      // Both timestamps come from PostgreSQL, so the browser wall clock and
+      // app-server clock cannot extend the DB-authoritative expiry. Subtract
+      // the full request duration and a conservative one-second margin.
       const sessionExpiresInMs =
         typeof sessionExpiresAt === 'string' &&
         Number.isFinite(Date.parse(sessionExpiresAt)) &&
-        Number.isFinite(serverDateMs) &&
+        typeof databaseNow === 'string' &&
+        Number.isFinite(Date.parse(databaseNow)) &&
         Number.isFinite(requestElapsedMs)
           ? Date.parse(sessionExpiresAt) -
-            serverDateMs -
+            Date.parse(databaseNow) -
             requestElapsedMs -
             1000
           : Number.NaN;

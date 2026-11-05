@@ -217,6 +217,7 @@ function sessionProofExpiringAt(iso: string): string {
 describe('POST /api/storefront/cart/checkout', () => {
   it('returns the authoritative snapshot with the session reference', async () => {
     const sessionExpiresAt = new Date(Date.now() + 25 * 60 * 1000);
+    const databaseNow = new Date().toISOString();
     mocks.cartPayload = {
       code: null,
       ok: true,
@@ -224,6 +225,7 @@ describe('POST /api/storefront/cart/checkout', () => {
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
       replayed: false,
+      databaseNow,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: false,
       snapshot: rawSnapshot(),
@@ -244,6 +246,7 @@ describe('POST /api/storefront/cart/checkout', () => {
     expect(payload.replayed).toBe(false);
     expect(payload.sessionReused).toBe(false);
     expect(payload.sessionExpiresAt).toBe(sessionExpiresAt.toISOString());
+    expect(payload.databaseNow).toBe(databaseNow);
     expect(payload.snapshot.checkoutSessionId).toBe(SESSION_ID);
     expect(payload.snapshot.generation).toBe(1);
     expect(payload.snapshot.lines).toHaveLength(1);
@@ -258,6 +261,7 @@ describe('POST /api/storefront/cart/checkout', () => {
       // idempotent preparation has already committed.
       grantExpiresAt: new Date(Date.now() - 60_000).toISOString(),
       replayed: false,
+      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 25 * 60 * 1000).toISOString(),
       sessionReused: false,
       snapshot: rawSnapshot(),
@@ -284,6 +288,7 @@ describe('POST /api/storefront/cart/checkout', () => {
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
       replayed: false,
+      databaseNow: new Date().toISOString(),
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
@@ -314,6 +319,7 @@ describe('POST /api/storefront/cart/checkout', () => {
       grantExpiresAt: grantExpiresAt.toISOString(),
       ok: true,
       replayed: false,
+      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
@@ -344,6 +350,7 @@ describe('POST /api/storefront/cart/checkout', () => {
         Date.now() + 2 * 24 * 60 * 60 * 1000
       ).toISOString(),
       replayed: false,
+      databaseNow: new Date().toISOString(),
       sessionExpiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),

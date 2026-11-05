@@ -127,6 +127,7 @@ test('shared cart checkout submits the prepared binding', async ({ page }) => {
       headers: { date: new Date().toUTCString() },
       json: {
         replayed: false,
+        databaseNow: new Date().toISOString(),
         sessionExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         sessionReused: false,
         snapshot: prepareSnapshot,

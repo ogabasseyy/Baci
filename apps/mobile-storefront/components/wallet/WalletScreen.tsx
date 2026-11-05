@@ -17,6 +17,7 @@ import { normalizeWalletFundAmountParam } from '@/lib/normalize-wallet-fund-amou
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
+import { createOpenSavingsShortfallFunding } from './open-savings-shortfall-funding';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { WalletPinSheet } from './savings/WalletPinSheet';
@@ -161,7 +162,6 @@ export function WalletScreen({
     refetch,
   });
   const display = wallet && deriveWalletDisplayData(wallet, routeSavingsGoalId);
-  const primaryReady = display?.primaryReady ?? false;
   const {
     hasPendingSavingsContribution,
     handleAddSavingsContribution,
@@ -174,12 +174,13 @@ export function WalletScreen({
     activeMerchantSlug,
     goal: display?.activeSavingsGoal ?? null,
     idempotencyKeyRef: savingsContributionIdempotencyKeyRef,
-    onAddMoney: () => {
-      setShowSavingsProgressModal(false);
-      setShowFundPanel(true);
-    },
+    onAddMoney: createOpenSavingsShortfallFunding({
+      setFundReturnTo,
+      setShowFundPanel,
+      setShowSavingsProgressModal,
+    }),
     operationRailRef: savingsContributionRailRef,
-    primaryReady,
+    primaryReady: display?.primaryReady ?? false,
     refetchWallet: refetch,
     savingsContributionAmount,
     legacyBalance: display?.legacyBalance,
@@ -211,7 +212,6 @@ export function WalletScreen({
       />
     );
   }
-  const { wallet: walletData, transactions } = data;
   const {
     activeSavingsGoal,
     earningsAvailable,
@@ -221,7 +221,7 @@ export function WalletScreen({
     showQuickSave,
     spendableBalance,
     totalBalance,
-  } = display ?? deriveWalletDisplayData(walletData, routeSavingsGoalId);
+  } = display ?? deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
   return (
     <>
       <WalletScreenView
@@ -247,9 +247,9 @@ export function WalletScreen({
           isFundPending,
           isRedeemPending: redeemMutation.isPending,
           isRefetching,
-          loyaltyPoints: walletData.loyalty_points,
+          loyaltyPoints: data.wallet.loyalty_points,
           needsPhone,
-          primaryReady,
+          primaryReady: display?.primaryReady ?? false,
           onAddSavingsContribution: handleAddSavingsContribution,
           ...createSavingsGoalContentHandlers({
             activeMerchantId,
@@ -285,7 +285,7 @@ export function WalletScreen({
           showFundPanel,
           showRedeemPanel,
           totalBalance,
-          transactions,
+          transactions: data.transactions,
         }}
       />
       <SampleInterestPreview

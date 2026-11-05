@@ -12,6 +12,7 @@ export const EXPERIENCE_METHOD_CAPABILITY = {
   'catalog.product': 'catalog.read',
   'catalog.variants': 'catalog.read',
   'cart.readPublic': 'cart.read-public',
+  'cart.reconcile': 'cart.mutate',
   'cart.add': 'cart.mutate',
   'cart.remove': 'cart.mutate',
   'cart.set_quantity': 'cart.mutate',

@@ -27,6 +27,8 @@ export function createCommerceClient(
         call<PublicProduct['variants']>('catalog.variants', { productId }),
     },
     cart: {
+      reconcile: (operationId) =>
+        send('cart.reconcile', { operationId }) as Promise<CartBridgeResult>,
       readPublic: () => call<PublicCart>('cart.readPublic', {}),
       add: (input) => send('cart.add', input) as Promise<CartBridgeResult>,
       remove: (lineId) =>

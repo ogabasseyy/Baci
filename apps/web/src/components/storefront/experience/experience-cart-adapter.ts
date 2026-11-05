@@ -55,6 +55,19 @@ export function createExperienceCartAdapter(input: {
     );
   };
   return {
+    reconcile: (operationId) => {
+      if (!input.commandPort)
+        return Promise.resolve(error('CART_ENROLLMENT_REQUIRED'));
+      if (!input.capabilities.includes('cart.mutate'))
+        return Promise.resolve(error('INSUFFICIENT_SCOPE'));
+      if (
+        typeof operationId !== 'string' ||
+        !operationId.length ||
+        operationId.length > 100
+      )
+        return Promise.resolve(error('INVALID_REQUEST'));
+      return input.commandPort.reconcile(operationId);
+    },
     readPublic: () =>
       input.capabilities.includes('cart.read-public')
         ? input.readPublicCart()

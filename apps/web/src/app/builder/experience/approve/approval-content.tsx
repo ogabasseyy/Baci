@@ -7,6 +7,7 @@ import {
   ExperienceApprovalClient,
   type ExperienceApprovalView,
 } from './approval-client';
+import { ExperienceVerificationRetry } from './verification-retry';
 export async function ExperienceApprovalContent({
   searchParams,
 }: {
@@ -36,6 +37,11 @@ export async function ExperienceApprovalContent({
         <main>
           <h1>Experience receipt</h1>
           <pre>{JSON.stringify(data, null, 2)}</pre>
+          {p.data.kind === 'lifecycle' &&
+          data.status === 'verifying' &&
+          getExperienceOwnerRuntime()?.approval ? (
+            <ExperienceVerificationRetry approvalId={p.data.approval} />
+          ) : null}
         </main>
       );
     const view: ExperienceApprovalView = {

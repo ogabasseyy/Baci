@@ -1,19 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import {
+  experienceCapturedEvidence,
+  experienceVerifierDigest,
+} from '@/schemas/experience-captured-evidence';
 import { loadDraftApproval } from './approval-service';
 import { digestBytes } from './manifest-digest';
 import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
 import { loadLifecycleApproval } from './publication-service';
 
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const captured = z.strictObject({
-  buildId: z.uuid().optional(),
-  buildDigest: digest.optional(),
-  effectDigest: digest,
-  artifactReceipt: digest,
-  evidenceDigest: digest,
-  routes: z.array(z.string().min(1).max(240)).min(1).max(128),
-});
 export interface IndependentApprovalDependencies {
   capture(
     client: SupabaseClient,
@@ -46,10 +40,12 @@ export function createIndependentApprovalVerifier(
           ? await loadDraftApproval(client, approvalId)
           : await loadLifecycleApproval(client, approvalId);
       if (approval.status !== 'confirmation-required') return;
-      const effectDigest = digest.parse(approval.effectDigest);
+      const effectDigest = experienceVerifierDigest.parse(
+        approval.effectDigest
+      );
       const buildId =
         typeof approval.buildId === 'string' ? approval.buildId : undefined;
-      const evidence = captured.parse(
+      const evidence = experienceCapturedEvidence.parse(
         await deps.capture(client, { approvalId, kind, buildId, effectDigest })
       );
       if (

@@ -72,3 +72,24 @@ describe('experience bridge input', () => {
       ).toThrow();
   });
 });
+
+it('admits only bound cart reconciliation IDs under mutate capability', () => {
+  const valid = {
+    ...request(),
+    method: 'cart.reconcile',
+    args: { operationId: 'original-operation' },
+  };
+  expect(parseBridgeRequest(valid).args).toEqual({
+    operationId: 'original-operation',
+  });
+  for (const invalid of [
+    { ...valid, capability: 'cart.read-public' },
+    { ...valid, args: { operationId: '' } },
+    { ...valid, args: { operationId: 'x'.repeat(101) } },
+    {
+      ...valid,
+      args: { operationId: 'original-operation', merchantId: 'other' },
+    },
+  ])
+    expect(() => parseBridgeRequest(invalid)).toThrow();
+});

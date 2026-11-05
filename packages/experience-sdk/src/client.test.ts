@@ -45,3 +45,18 @@ it('uses typed bridge methods; mock commerce never fetches or creates transactio
   expect(network).not.toHaveBeenCalled();
   network.mockRestore();
 });
+
+it('reconciles the original cart operation ID without submitting a new mutation', async () => {
+  const send = vi.fn(async () => ({
+    status: 'indeterminate' as const,
+    operationId: 'original',
+  }));
+  const client = createCommerceClient(send);
+  expect(await client.cart.reconcile('original')).toEqual({
+    status: 'indeterminate',
+    operationId: 'original',
+  });
+  expect(send).toHaveBeenCalledExactlyOnceWith('cart.reconcile', {
+    operationId: 'original',
+  });
+});

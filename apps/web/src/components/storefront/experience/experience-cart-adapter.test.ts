@@ -84,3 +84,34 @@ it('admits a fresh trusted product outside the initial catalog and fails closed 
   });
   expect(submit).toHaveBeenCalledOnce();
 });
+
+it('reconciles only through the existing bound port under mutate capability', async () => {
+  const submit = vi.fn();
+  const reconcile = vi.fn(async (operationId: string) => ({
+    status: 'indeterminate' as const,
+    operationId,
+  }));
+  const input = {
+    commandPort: { submit, reconcile },
+    capabilities: [
+      'cart.mutate',
+    ] as import('@baci/shared/experience').ExperienceCapability[],
+    catalog: () => ({ products: [], revision: 'r' }),
+    readPublicCart: vi.fn(),
+  };
+  expect(
+    await createExperienceCartAdapter(input).reconcile('original')
+  ).toEqual({ status: 'indeterminate', operationId: 'original' });
+  expect(reconcile).toHaveBeenCalledExactlyOnceWith('original');
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    await createExperienceCartAdapter({ ...input, capabilities: [] }).reconcile(
+      'original'
+    )
+  ).toMatchObject({ status: 'error', code: 'INSUFFICIENT_SCOPE' });
+  expect(await createExperienceCartAdapter(input).reconcile('')).toMatchObject({
+    status: 'error',
+    code: 'INVALID_REQUEST',
+  });
+  expect(reconcile).toHaveBeenCalledTimes(1);
+});

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { connectExperience } from './channel';
 
 it('accepts only the parent from the canonical or one exact HTTPS preview origin, then pins the first port', () => {
@@ -375,4 +375,69 @@ it('keeps a dispatched cart write indeterminate when its port is retired', async
     status: 'indeterminate',
     operationId: request?.requestId,
   });
+});
+
+it('exposes reconciliation after mutation timeout and retains the original ID on reconciliation timeout', async () => {
+  vi.useFakeTimers();
+  const sent: Record<string, unknown>[] = [];
+  const port = {
+    onmessage: null as ((e: { data: unknown }) => void) | null,
+    start() {},
+    close() {},
+    postMessage(data: Record<string, unknown>) {
+      sent.push(data);
+    },
+  };
+  const bridge = connectExperience('https://shop.test');
+  try {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        origin: 'https://shop.test',
+        ports: [port as unknown as MessagePort],
+        data: {
+          type: 'baci-experience-connect',
+          instanceId: 'i',
+          buildDigest: 'a'.repeat(64),
+          nonce: 'n',
+        },
+      })
+    );
+    const add = bridge.commerce.cart.add({ productId: 'p', quantity: 1 });
+    const original = sent.find((m) => m.method === 'cart.add')?.requestId;
+    expect(typeof original).toBe('string');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(await add).toEqual({
+      status: 'indeterminate',
+      operationId: original,
+    });
+    const pending = bridge.commerce.cart.reconcile(String(original));
+    expect(sent.find((m) => m.method === 'cart.reconcile')?.args).toEqual({
+      operationId: original,
+    });
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(await pending).toEqual({
+      status: 'indeterminate',
+      operationId: original,
+    });
+    const retry = bridge.commerce.cart.reconcile(String(original));
+    const reconciliation = sent
+      .filter((m) => m.method === 'cart.reconcile')
+      .at(-1);
+    port.onmessage?.({
+      data: {
+        type: 'result',
+        requestId: reconciliation?.requestId,
+        result: {
+          status: 'ok',
+          value: { lines: [], version: 1, currency: 'NGN', total: 0 },
+        },
+      },
+    });
+    expect(await retry).toMatchObject({ status: 'ok' });
+    expect(sent.filter((m) => m.method === 'cart.add')).toHaveLength(1);
+  } finally {
+    bridge.destroy();
+    vi.useRealTimers();
+  }
 });

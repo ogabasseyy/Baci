@@ -138,6 +138,7 @@ export interface ExperienceCommerce {
   };
   cart: {
     readPublic(): Promise<BridgeResult<PublicCart>>;
+    reconcile(operationId: string): Promise<CartBridgeResult>;
     add(
       input: Omit<Extract<PublicCartCommand, { kind: 'add' }>, 'kind'>
     ): Promise<CartBridgeResult>;

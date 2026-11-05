@@ -49,6 +49,8 @@ export function createMockCommerce(
       },
     },
     cart: {
+      reconcile: (operationId) =>
+        Promise.resolve({ status: 'indeterminate' as const, operationId }),
       readPublic: () => ok(cart),
       add: (input) => {
         const p = product(input.productId);

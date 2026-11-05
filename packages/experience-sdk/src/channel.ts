@@ -41,6 +41,7 @@ export function connectExperience(
       resolve: (v: BridgeResult<unknown> | CartBridgeResult) => void;
       timer: ReturnType<typeof setTimeout>;
       method: ExperienceMethod;
+      operationId: string;
     }
   >();
   const listeners = new Set<(route: RouteState) => void>();
@@ -58,6 +59,8 @@ export function connectExperience(
         message: 'Preview unavailable.',
       };
     const requestId = crypto.randomUUID();
+    const operationId =
+      method === 'cart.reconcile' ? String(args.operationId) : requestId;
     if (pending.size >= 128)
       return {
         status: 'error',
@@ -67,8 +70,15 @@ export function connectExperience(
     return await new Promise((resolve) => {
       const timer = setTimeout(() => {
         pending.delete(requestId);
-        if (['cart.add', 'cart.remove', 'cart.set_quantity'].includes(method)) {
-          resolve({ status: 'indeterminate', operationId: requestId });
+        if (
+          [
+            'cart.add',
+            'cart.remove',
+            'cart.set_quantity',
+            'cart.reconcile',
+          ].includes(method)
+        ) {
+          resolve({ status: 'indeterminate', operationId });
           return;
         }
         resolve({
@@ -77,7 +87,7 @@ export function connectExperience(
           message: 'Request timed out. Check operation status before retrying.',
         });
       }, 10000);
-      pending.set(requestId, { resolve, timer, method });
+      pending.set(requestId, { resolve, timer, method, operationId });
       port?.postMessage({
         protocol: 'baci-commerce/1',
         instanceId,
@@ -203,12 +213,17 @@ export function connectExperience(
       closed = true;
       window.removeEventListener('message', connect);
       port?.close();
-      for (const [requestId, p] of pending) {
+      for (const p of pending.values()) {
         clearTimeout(p.timer);
         if (
-          ['cart.add', 'cart.remove', 'cart.set_quantity'].includes(p.method)
+          [
+            'cart.add',
+            'cart.remove',
+            'cart.set_quantity',
+            'cart.reconcile',
+          ].includes(p.method)
         ) {
-          p.resolve({ status: 'indeterminate', operationId: requestId });
+          p.resolve({ status: 'indeterminate', operationId: p.operationId });
           continue;
         }
         p.resolve({

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { apiPost } from '@/lib/api-client';
 import { PreviewClient } from '../preview/preview-client';
+import { ExperienceVerificationRetry } from './verification-retry';
 export interface ExperienceApprovalView {
   approvalId: string;
   merchantId: string;
@@ -151,7 +152,12 @@ export function ExperienceApprovalClient({
             ? 'Confirming…'
             : (confirmation?.buttonLabel ?? 'Confirmation unavailable')}
         </button>
-        {result ? <p role="status">{result}</p> : null}
+        {result === 'verifying' &&
+        confirmation?.requestAction === 'confirm-publication' ? (
+          <ExperienceVerificationRetry approvalId={view.approvalId} />
+        ) : result ? (
+          <p role="status">{result}</p>
+        ) : null}
       </section>
     </main>
   );

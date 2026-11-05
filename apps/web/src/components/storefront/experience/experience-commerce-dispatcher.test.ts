@@ -70,3 +70,44 @@ it.each([
   expect(result.status).toBe(revoked ? 'error' : 'ok');
   expect(submit).toHaveBeenCalledTimes(revoked ? 0 : 1);
 });
+
+it('routes SDK reconciliation to the bound existing cart port using the original operation ID', async () => {
+  const reconcile = vi.fn(async (operationId: string) => ({
+    status: 'indeterminate' as const,
+    operationId,
+  }));
+  const submit = vi.fn();
+  const withAdmission = vi.fn(() => ({ reconcile, submit }));
+  const result = await dispatchExperienceCommerceRequest(
+    {
+      method: 'cart.reconcile',
+      requestId: 'new-envelope',
+      args: { operationId: 'original-operation' },
+    } as never,
+    {
+      state: {
+        data: {
+          bootstrap: {
+            capabilities: ['cart.mutate'],
+            catalog: { products: [], revision: 'r' },
+          },
+        },
+      } as never,
+      live: {
+        current: { cart: { experienceCommandPort: { withAdmission } } },
+      } as never,
+      merchantSlug: 'qa1',
+      present: vi.fn(),
+      admit: () => ({ allowed: true }),
+      rebind: vi.fn(),
+      isActive: async () => true,
+      identityMatches: () => true,
+    }
+  );
+  expect(result).toEqual({
+    status: 'indeterminate',
+    operationId: 'original-operation',
+  });
+  expect(reconcile).toHaveBeenCalledExactlyOnceWith('original-operation');
+  expect(submit).not.toHaveBeenCalled();
+});

@@ -27,6 +27,7 @@ const args = {
   }),
   'catalog.product': z.strictObject({ handle: id }),
   'catalog.variants': z.strictObject({ productId: id }),
+  'cart.reconcile': z.strictObject({ operationId: id }),
   'cart.readPublic': z.strictObject({}),
   'cart.add': z.strictObject({
     productId: id,

@@ -26,6 +26,10 @@ export function createPreviewDispatcher(
         return mock.catalog.product(String(args.handle));
       case 'catalog.variants':
         return mock.catalog.variants(String(args.productId));
+      case 'cart.reconcile':
+        return mock.cart.reconcile(String(args.operationId)) as Promise<
+          BridgeResult<unknown>
+        >;
       case 'cart.readPublic':
         return mock.cart.readPublic();
       case 'cart.add':

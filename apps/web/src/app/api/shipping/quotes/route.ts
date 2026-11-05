@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
       includeMerchantRateQuotes,
       sessionId: quoteSession,
       getCarrierQuotes: async (request, allowedProviderCodes) => {
-        if (allowedProviderCodes?.length !== 0)
+        if (quoteRequest.merchantId && allowedProviderCodes?.length !== 0)
           await assertStorefrontQuoteStorage(supabase, quoteRequest.merchantId);
         return shippingService.getQuotes(request, allowedProviderCodes);
       },
@@ -208,7 +208,11 @@ export async function POST(request: NextRequest) {
 
     const persistenceResults = await Promise.all(
       response.quotes.all
-        .filter((quote) => quote.provider !== MERCHANT_PROVIDER_CODE)
+        .filter(
+          (quote) =>
+            !!quoteRequest.merchantId &&
+            quote.provider !== MERCHANT_PROVIDER_CODE
+        )
         .map((quote) =>
           persistStorefrontShippingQuote(
             supabase,

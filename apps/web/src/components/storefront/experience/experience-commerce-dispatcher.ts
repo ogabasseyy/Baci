@@ -117,6 +117,8 @@ export function dispatchExperienceCommerceRequest(
   });
 
   switch (request.method) {
+    case 'cart.reconcile':
+      return adapter.reconcile(String(request.args.operationId));
     case 'cart.readPublic':
       return adapter.readPublic();
     case 'cart.add':

@@ -52,10 +52,10 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
   return (
     <form
       onSubmit={submit}
-      className="space-y-4"
+      className="space-y-4 text-store-background-text"
       aria-label="Sign in with email code"
     >
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-store-background-text/70">
         {sent
           ? `Enter the code sent to ${email}.`
           : 'Sign in securely with a code sent to your email. No password needed.'}
@@ -78,7 +78,7 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
             required
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            className="w-full rounded-xl border border-gray-200 p-3"
+            className="w-full rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
           />
         ) : (
           <input
@@ -89,7 +89,7 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 p-3"
+            className="w-full rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
           />
         )}
       </label>

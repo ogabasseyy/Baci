@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   type PiggyvestClaimedCapture,
   piggyvestClaimedCapturesSchema,
@@ -39,7 +39,7 @@ export interface CaptureQueue {
 }
 
 export function createCaptureQueue(
-  supabase: PiggyvestIntakeServiceClient
+  supabase: PiggyvestIntakeClient
 ): CaptureQueue {
   const db: SupabaseClient = supabase;
   return {

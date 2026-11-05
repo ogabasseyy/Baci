@@ -1,6 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 import type { PiggyvestClientConfig } from './client';
 import { recordQuarantineEvent } from './event-quarantine';
@@ -193,7 +193,7 @@ function failureReason(eventType: HandledEvent['eventType']): string {
 }
 
 export async function processPiggyvestEvent(
-  supabase: PiggyvestIntakeServiceClient,
+  supabase: PiggyvestIntakeClient,
   event: PiggyvestWebhookEvent,
   deps: ProcessPiggyvestEventDeps = {}
 ): Promise<ProcessPiggyvestEventOutcome> {

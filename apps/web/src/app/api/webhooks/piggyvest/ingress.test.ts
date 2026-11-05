@@ -14,12 +14,12 @@ vi.mock('@/lib/piggyvest/webhook-capture', () => ({
 }));
 
 import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import { admitPiggyvestDelivery } from './ingress';
 
 const signature = deterministicTestSignature('ingress');
 const rawBody = Buffer.from(' {"eventId":"evt-1"}\n');
-const client = {} as PiggyvestIntakeServiceClient;
+const client = {} as PiggyvestIntakeClient;
 const receipt = {
   outcome: 'captured',
   id: '4204dc18-efb3-44d0-b9a2-1362448d4f21',

@@ -17,13 +17,13 @@ vi.mock('@/lib/piggyvest/primary-wallet-inflow-dispatch', () => ({
   dispatchPrimaryWalletInflow: vi.fn(async () => 'ignored'),
 }));
 
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   type DrainDeps,
   drainPiggyvestWebhookCaptures,
   MAX_DRAIN_ATTEMPTS,
 } from '@/lib/piggyvest/webhook-capture-drain';
 import { row } from '@/lib/piggyvest/webhook-capture-drain.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 import {
   isAuthorizationQuarantine,
@@ -42,7 +42,7 @@ const inflow = JSON.stringify(inflowEvent);
  * passes run, and credit exactly once after the switch is lifted.
  */
 
-const client = {} as unknown as PiggyvestIntakeServiceClient;
+const client = {} as unknown as PiggyvestIntakeClient;
 
 // In-memory queue with the database's attempt semantics: a claim spends an
 // attempt, 'deferred' refunds it, 'needs_review' and 'processed' are terminal.

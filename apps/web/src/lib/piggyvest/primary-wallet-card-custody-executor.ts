@@ -129,7 +129,11 @@ export function createPrimaryCardCustodyExecutor(configuration: unknown) {
       database: database.name,
       user: link.user,
       password: database.password,
-      ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
+      ssl: {
+        rejectUnauthorized: true,
+        ca: database.certificateAuthority,
+        ...link.tls,
+      },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
       ...link.startup,

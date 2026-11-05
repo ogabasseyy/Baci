@@ -56,7 +56,7 @@ it('does not claim NIN validation while attempt status is unavailable', () => {
     eligibilityFailed: false,
   };
   expect(oxygenVerificationHeading(state)).toBe(
-    'We couldn’t start your identity check'
+    'We couldn’t confirm your identity check'
   );
   expect(oxygenVerificationHeading({ ...state, checking: true })).toBe(
     'Checking verification status'

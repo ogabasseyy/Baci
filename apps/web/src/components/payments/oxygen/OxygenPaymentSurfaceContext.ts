@@ -28,3 +28,5 @@ export const OxygenSelfieRenewalContext = createContext<
 >(null);
 
 export const OxygenSelfieOpenContext = createContext(false);
+
+export const OxygenSelfieDismissedContext = createContext(false);

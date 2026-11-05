@@ -64,9 +64,7 @@ export function OxygenHostedSelfie({
     onConfirmed
   );
   const status = useOxygenSelfieStatus(
-    trustedOrigin && (!renewal.expired || phone) && !renewal.renewing
-      ? workflowId
-      : undefined,
+    trustedOrigin && !renewal.renewing ? workflowId : undefined,
     onConfirmed
   );
   const retryFromHint = useEffectEvent(() => status.retry());
@@ -115,7 +113,7 @@ export function OxygenHostedSelfie({
         <OxygenSelfieSessionRecovery
           renewing={renewal.renewing}
           error={renewal.error}
-          onRetry={renewal.retry}
+          onRetry={onRenew ? renewal.retry : undefined}
         />
       ) : trustedOrigin ? (
         <div className="relative min-h-0 flex-1 bg-white">

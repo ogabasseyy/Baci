@@ -165,8 +165,36 @@ it('can resume expired verification after leaving a failed camera session', asyn
   m.fail = false;
   fireEvent.click(screen.getByRole('button', { name: 'Back to application' }));
   await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(screen.queryByTitle('Oxygen selfie verification')).toBeNull();
+  expect(m.submit).toHaveBeenCalledTimes(1);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to selfie verification' })
+  );
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  await act(() => vi.advanceTimersByTimeAsync(1));
   expect(screen.getByTitle('Oxygen selfie verification')).toBeInTheDocument();
   expect(
     m.submit.mock.calls.filter(([c]) => c.action === 'selfie_link')
   ).toHaveLength(2);
+});
+it('holds a late replacement after Back until the customer continues', async () => {
+  m.delayed = true;
+  render(
+    <OxygenApplicationDialog
+      orderId="same-order"
+      selfieOrigins={['https://selfie.example']}
+    />
+  );
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(screen.getByRole('button', { name: 'Back to application' }));
+  await act(async () => {
+    m.finish();
+  });
+  expect(screen.queryByTitle('Oxygen selfie verification')).toBeNull();
+  expect(m.submit).toHaveBeenCalledTimes(1);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to selfie verification' })
+  );
+  expect(screen.getByTitle('Oxygen selfie verification')).toBeInTheDocument();
 });

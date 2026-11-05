@@ -16,6 +16,7 @@ import {
   OxygenPaymentOpenContext,
   OxygenPaymentSurfaceContext,
   OxygenSelfieConfirmedContext,
+  OxygenSelfieDismissedContext,
   OxygenSelfieOpenContext,
   OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
@@ -48,6 +49,7 @@ export function OxygenApplicationDialog({
   const stage = useRef<OxygenJourneyStage>('loading');
   const [open, setOpen] = useState(true);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [selfieDismissed, setSelfieDismissed] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [selfieWorkflowId, setSelfieWorkflowId] = useState<string>();
   const [selfieConfirmed, setSelfieConfirmed] = useState<string | null>(null);
@@ -143,47 +145,52 @@ export function OxygenApplicationDialog({
         <OxygenSelfieSurfaceContext.Provider
           value={(url, workflowId) => {
             if (isOxygenSelfieUrl(url, selfieOrigins)) {
+              setSelfieDismissed(false);
               setSelfieWorkflowId(workflowId);
               setSelfieUrl(url);
             }
           }}
         >
-          <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
-            <OxygenSelfieRenewalContext.Provider
-              value={(handler) => {
-                selfieRenew.current = handler;
-                return () => {
-                  if (selfieRenew.current === handler)
-                    selfieRenew.current = null;
-                };
-              }}
-            >
-              <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
-                <OxygenCheckoutCloseContext.Provider value={close}>
-                  <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
-                    <OxygenHostedOriginsContext.Provider value={hostedOrigins}>
-                      <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
-                        <div className={styles.body} hidden={hostedOpen}>
-                          <OxygenProviderFlow
-                            active={open && !selfieUrl}
-                            orderId={orderId}
-                            merchantSlug={merchantSlug}
-                            prefill={prefill}
-                            productAmount={productAmount}
-                            products={products}
-                            currency={currency}
-                            onProgress={(value) => {
-                              stage.current = value;
-                            }}
-                          />
-                        </div>
-                      </OxygenPaymentOpenContext.Provider>
-                    </OxygenHostedOriginsContext.Provider>
-                  </OxygenPaymentSurfaceContext.Provider>
-                </OxygenCheckoutCloseContext.Provider>
-              </OxygenSelfieConfirmedContext.Provider>
-            </OxygenSelfieRenewalContext.Provider>
-          </OxygenSelfieOpenContext.Provider>
+          <OxygenSelfieDismissedContext.Provider value={selfieDismissed}>
+            <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
+              <OxygenSelfieRenewalContext.Provider
+                value={(handler) => {
+                  selfieRenew.current = handler;
+                  return () => {
+                    if (selfieRenew.current === handler)
+                      selfieRenew.current = null;
+                  };
+                }}
+              >
+                <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
+                  <OxygenCheckoutCloseContext.Provider value={close}>
+                    <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
+                      <OxygenHostedOriginsContext.Provider
+                        value={hostedOrigins}
+                      >
+                        <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
+                          <div className={styles.body} hidden={hostedOpen}>
+                            <OxygenProviderFlow
+                              active={open && !selfieUrl}
+                              orderId={orderId}
+                              merchantSlug={merchantSlug}
+                              prefill={prefill}
+                              productAmount={productAmount}
+                              products={products}
+                              currency={currency}
+                              onProgress={(value) => {
+                                stage.current = value;
+                              }}
+                            />
+                          </div>
+                        </OxygenPaymentOpenContext.Provider>
+                      </OxygenHostedOriginsContext.Provider>
+                    </OxygenPaymentSurfaceContext.Provider>
+                  </OxygenCheckoutCloseContext.Provider>
+                </OxygenSelfieConfirmedContext.Provider>
+              </OxygenSelfieRenewalContext.Provider>
+            </OxygenSelfieOpenContext.Provider>
+          </OxygenSelfieDismissedContext.Provider>
         </OxygenSelfieSurfaceContext.Provider>
         {selfieUrl && (
           <OxygenHostedSelfie
@@ -207,7 +214,10 @@ export function OxygenApplicationDialog({
                 signal
               );
             }}
-            onClose={() => setSelfieUrl(null)}
+            onClose={() => {
+              setSelfieDismissed(true);
+              setSelfieUrl(null);
+            }}
           />
         )}
         {paymentUrl && (

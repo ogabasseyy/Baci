@@ -3,6 +3,7 @@ import { useContext, useEffect, useRef } from 'react';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import {
   OxygenSelfieConfirmedContext,
+  OxygenSelfieDismissedContext,
   OxygenSelfieOpenContext,
   OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
@@ -21,6 +22,7 @@ export function useOxygenSelfieHandoff(
   const open = useContext(OxygenSelfieSurfaceContext);
   const confirmed = useContext(OxygenSelfieConfirmedContext);
   const register = useContext(OxygenSelfieRenewalContext);
+  const dismissed = useContext(OxygenSelfieDismissedContext);
   const hostedOpen = useContext(OxygenSelfieOpenContext);
   const renew = useOxygenSelfieRenewalBridge(
     snapshot,
@@ -46,6 +48,7 @@ export function useOxygenSelfieHandoff(
     }
     const url = state.selfieUrl;
     if (
+      dismissed ||
       !snapshot.executionEnabled ||
       !state.validated ||
       !url ||
@@ -59,6 +62,16 @@ export function useOxygenSelfieHandoff(
     if (snapshot.pending && snapshot.pending.action !== 'validate_nin') return;
     opened.current = url;
     open(url, workflowId);
-  }, [snapshot, active, busy, open, confirmed, submit, refresh, register]);
+  }, [
+    snapshot,
+    active,
+    busy,
+    open,
+    confirmed,
+    submit,
+    refresh,
+    register,
+    dismissed,
+  ]);
   return Boolean(snapshot && confirmed === snapshot.workflowId);
 }

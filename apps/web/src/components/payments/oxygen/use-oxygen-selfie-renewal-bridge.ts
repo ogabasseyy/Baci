@@ -73,9 +73,7 @@ export function useOxygenSelfieRenewalBridge(
       signal?.aborted ||
       !s.executionEnabled ||
       !s.state.validated ||
-      s.pending ||
-      s.state.bookingReference ||
-      s.stage === 'reconciliation_required'
+      s.state.bookingReference
     )
       throw new Error('Verification unavailable');
     const recoveryUrl = s.state.selfieUrl ?? url;
@@ -91,6 +89,7 @@ export function useOxygenSelfieRenewalBridge(
     });
     locked.current = true;
     let dispatched = false;
+    let inFlight = false;
     try {
       const response = await fetchWithCsrf(
         `/api/payments/oxygen/workflows/selfie-status?workflowId=${encodeURIComponent(workflowId)}`,
@@ -108,14 +107,36 @@ export function useOxygenSelfieRenewalBridge(
         signal?.aborted ||
         latest.current.snapshot?.workflowId !== workflowId ||
         latest.current.snapshot.state.selfieUrl !== recoveryUrl ||
-        latest.current.busy ||
-        latest.current.snapshot.pending
+        latest.current.busy
       )
         throw new Error('Verification unavailable');
       if (result.confirmed) return 'confirmed';
+      if (
+        latest.current.snapshot?.pending ||
+        latest.current.snapshot?.stage === 'reconciliation_required'
+      )
+        throw new Error('Reconciliation required before renewal');
       pending.current = { url: recoveryUrl, workflowId, signal };
       dispatched = true;
-      if (!(await latest.current.submit({ action: 'selfie_link' }))) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      inFlight = true;
+      const submission = latest.current
+        .submit({ action: 'selfie_link' })
+        .finally(() => {
+          inFlight = false;
+          locked.current = false;
+          clearTimeout(timer);
+        });
+      const outcome = await Promise.race([
+        submission,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Renewal outcome unknown')),
+            20_000
+          );
+        }),
+      ]);
+      if (!outcome) {
         throw new Error('Renewal unavailable');
       }
       return 'renewed';
@@ -125,7 +146,8 @@ export function useOxygenSelfieRenewalBridge(
       if (!dispatched) pending.current = null;
       throw error;
     } finally {
-      locked.current = false;
+      // A timed-out POST may still commit; never overlap it with another mutation.
+      if (!inFlight) locked.current = false;
     }
   };
 }

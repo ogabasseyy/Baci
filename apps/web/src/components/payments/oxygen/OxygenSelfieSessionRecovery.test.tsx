@@ -20,3 +20,7 @@ it('shows errors and permits explicit retry, disabling it while renewing', () =>
   expect(screen.getByRole('heading')).toHaveTextContent('Refreshing');
   expect(screen.getByRole('button')).toBeDisabled();
 });
+it('does not offer a nonfunctional retry when renewal is unavailable', () => {
+  render(<OxygenSelfieSessionRecovery renewing={false} error="" />);
+  expect(screen.queryByRole('button')).toBeNull();
+});

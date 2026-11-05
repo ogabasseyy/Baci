@@ -15,7 +15,7 @@ export function oxygenVerificationHeading(input: {
   if (input.retryStatus)
     return input.checking
       ? 'Checking verification status'
-      : 'We couldn’t start your identity check';
+      : 'We couldn’t confirm your identity check';
   if (input.ninPending)
     return input.review
       ? 'NIN confirmation is still pending'

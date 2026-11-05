@@ -193,3 +193,53 @@ it('explicitly recovers an expired canonical replacement without reopening it', 
   expect(submit).toHaveBeenCalledWith({ action: 'selfie_link' });
   expect(open).not.toHaveBeenCalled();
 });
+it('allows authoritative completion reads during reconciliation but never renews', async () => {
+  const submit = vi.fn();
+  const { result } = renderHook(() =>
+    useOxygenSelfieRenewalBridge(
+      { ...snapshot, stage: 'reconciliation_required' },
+      false,
+      submit,
+      vi.fn()
+    )
+  );
+  m.fetch.mockResolvedValue(
+    Response.json({ confirmed: true, checkedAt: '2026-11-05T16:00:00Z' })
+  );
+  await expect(
+    result.current(snapshot.state.selfieUrl ?? '', 'same-workflow', true)
+  ).resolves.toBe('confirmed');
+  m.fetch.mockResolvedValue(
+    Response.json({ confirmed: false, checkedAt: '2026-11-05T16:00:00Z' })
+  );
+  await expect(
+    result.current(snapshot.state.selfieUrl ?? '', 'same-workflow', false)
+  ).rejects.toThrow();
+  expect(submit).not.toHaveBeenCalled();
+});
+it('bounds a stalled submission without permitting an overlapping renewal', async () => {
+  vi.useFakeTimers();
+  try {
+    m.fetch.mockResolvedValue(
+      Response.json({ confirmed: false, checkedAt: '2026-11-05T16:00:00Z' })
+    );
+    const submit = vi.fn().mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() =>
+      useOxygenSelfieRenewalBridge(snapshot, false, submit, vi.fn())
+    );
+    const request = result.current(
+      snapshot.state.selfieUrl ?? '',
+      'same-workflow',
+      true
+    );
+    const rejected = expect(request).rejects.toThrow('outcome unknown');
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    await rejected;
+    await expect(
+      result.current(snapshot.state.selfieUrl ?? '', 'same-workflow', false)
+    ).rejects.toThrow();
+    expect(submit).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});

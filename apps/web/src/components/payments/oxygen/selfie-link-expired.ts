@@ -12,9 +12,8 @@ export function selfieLinkExpiration(url: string): number | null {
       data !== null &&
       'exp' in data &&
       typeof data.exp === 'number' &&
-      Number.isSafeInteger(data.exp) &&
-      data.exp > 0 &&
-      Number.isSafeInteger(data.exp * 1000)
+      Number.isFinite(data.exp) &&
+      Math.abs(data.exp * 1000) <= Number.MAX_SAFE_INTEGER
     )
       return data.exp * 1000;
     return null;

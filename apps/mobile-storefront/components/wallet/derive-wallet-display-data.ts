@@ -94,10 +94,12 @@ export function deriveWalletDisplayData(
     activeSavingsGoal,
     fundingAccount,
     // Only present on the PiggyVest path, so the legacy output is unchanged.
-    ...(primaryReady ? { primaryReady: true as const } : {}),
-    // Legacy rail balance: a contribution already bound to legacy validates
-    // against this, never the primary-derived spendable balance.
-    legacyBalance: walletData.balance ?? 0,
+    // Legacy rail balance rides along only with the primary fields: a
+    // contribution already bound to legacy validates against it, never the
+    // primary-derived spendable balance.
+    ...(primaryReady
+      ? { primaryReady: true as const, legacyBalance: walletData.balance ?? 0 }
+      : {}),
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
     spendableBalance,

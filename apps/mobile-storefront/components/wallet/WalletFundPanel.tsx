@@ -13,7 +13,6 @@ import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
 } from './WalletFundPhonePrompt';
-import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletProviderAttribution } from './WalletProviderAttribution';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 import { styles } from './wallet-fund-panel.styles';
@@ -35,6 +34,8 @@ interface WalletFundPanelProps {
   creditWatch: WalletCreditWatch;
   fundAmount: string;
   fundingAccount: WalletDisplayFundingAccount | null;
+  /** A card top-up credits the legacy wallet: hidden for primary-funded flows. */
+  hideCardFunding?: boolean;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   needsPhone: boolean;
@@ -55,6 +56,7 @@ export function WalletFundPanel({
   creditWatch,
   fundAmount,
   fundingAccount,
+  hideCardFunding = false,
   isCreatingFundingAccount,
   isFundPending,
   needsPhone,
@@ -66,9 +68,6 @@ export function WalletFundPanel({
   returnToSavings = false,
 }: WalletFundPanelProps) {
   const insets = useSafeAreaInsets();
-  // A card top-up credits the legacy wallet, so a PiggyVest-ready customer
-  // funds only through the PiggyVest account number.
-  const primaryReady = useWalletPrimaryReady();
   // Tracks the "Fund with card instead" toggle. Card entry is ALSO shown
   // whenever a prefilled amount is present (see cardEntryVisible), which
   // covers a route change that prefills the amount while the panel is open.
@@ -226,7 +225,7 @@ export function WalletFundPanel({
         </Text>
       ) : null}
 
-      {primaryReady ? null : cardEntryVisible ? (
+      {hideCardFunding ? null : cardEntryVisible ? (
         <WalletCardTopUpForm
           colors={colors}
           fundAmount={fundAmount}

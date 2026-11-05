@@ -43,8 +43,8 @@ async function read(
   const parsed = snapshot.data;
   return {
     account: parsed.account,
-    // Kobo, straight from the schema; null until the account is ready.
-    balanceKobo: parsed.status === 'ready' ? parsed.balanceKobo : null,
+    // Kobo, straight from the schema; absent until the account is ready.
+    ...(parsed.status === 'ready' ? { balanceKobo: parsed.balanceKobo } : {}),
     requiresConsent: parsed.status !== 'ready',
     provisioningStatus: parsed.status,
   };

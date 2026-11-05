@@ -153,6 +153,8 @@ export function createWalletSavingsActions({
                 (pinProof) =>
                   addPiggyvestPrimarySavingsContribution({
                     ...input,
+                    // The screen showed the PiggyVest balance: never fall back to legacy funds.
+                    primaryAdvertised: primaryReady,
                     ...(pinProof ? { pinProof } : {}),
                     // A fallback sends the id on legacy, so retries must follow it.
                     onRail: (sentOn) => {

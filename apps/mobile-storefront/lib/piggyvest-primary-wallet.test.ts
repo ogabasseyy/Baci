@@ -43,7 +43,6 @@ describe('primary PiggyVest wallet API client', () => {
     });
     expect(await piggyvestPrimaryWalletApi.read(merchantId)).toEqual({
       account: null,
-      balanceKobo: null,
       requiresConsent: true,
       provisioningStatus: 'pending',
     });

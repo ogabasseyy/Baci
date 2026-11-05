@@ -31,7 +31,7 @@ export function ChatLauncher({ isOpen, isSanta, proactiveMsg, buttonClasses, onT
           </button>
         </div>
       ) : null}
-      <button type="button" onClick={onToggle} className={buttonClasses} aria-label="Toggle chat">
+      <button type="button" onClick={onToggle} className={buttonClasses} aria-label="Toggle chat" aria-expanded={isOpen}>
         {isOpen ? <X size={28} /> : isSanta ? (
           <div className="relative w-full h-full">
             <Image src="/african-santa-head.svg" alt="Santa" fill sizes="64px" className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter" />

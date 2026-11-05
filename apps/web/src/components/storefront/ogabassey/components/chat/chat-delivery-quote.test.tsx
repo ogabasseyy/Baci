@@ -57,6 +57,20 @@ describe('ChatDeliveryQuote', () => {
     expect(screen.queryByText(destination)).not.toBeInTheDocument();
   });
 
+  it('shows visible keyboard focus styling on private delivery actions', async () => {
+    const submitRef = { current: null as (() => void) | null };
+    render(<ChatDeliveryQuote cartKey="cart-v1" input="Delivery to Lagos" setInput={vi.fn()} submitRef={submitRef} onComposerLockChange={vi.fn()} onClose={vi.fn()} />);
+    const checkState = screen.getByRole('button', { name: 'Check state' });
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(checkState).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-store-primary');
+    expect(cancel).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-store-primary');
+
+    await act(async () => { submitRef.current?.(); });
+    for (const name of ['Yes, check estimate', 'Change', 'Close private estimate']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-store-primary');
+    }
+  });
+
   it('requires confirmation and sends only the state, never the full private destination', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

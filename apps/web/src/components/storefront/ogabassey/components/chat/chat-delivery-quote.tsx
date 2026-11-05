@@ -16,6 +16,7 @@ interface ChatDeliveryQuoteProps {
 }
 
 const GENERIC_ERROR = 'Delivery estimate unavailable. Please try again or continue to checkout.';
+const ACTION_FOCUS_CLASSES = 'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2';
 
 export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onComposerLockChange, onClose }: ChatDeliveryQuoteProps) {
   const [confirmedState, setConfirmedState] = useState<string | null>(null);
@@ -153,16 +154,16 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
           {parseIssue === 'ambiguous-niger' ? <p role="alert" className="text-sm">“Niger” could mean Niger State or the country. Please say “Niger State” if that is your destination.</p> : null}
           {parseIssue === 'missing' ? <p role="alert" className="text-sm">I couldn’t identify a Nigerian state. Please add the state or FCT area to your destination.</p> : null}
           <div className="flex gap-2">
-            <button type="submit" disabled={!input.trim()} className="flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60">Check state</button>
-            <button type="button" onClick={() => { reset(); onClose(); }} className="rounded-lg border border-store-border px-3 py-2 text-sm">Cancel</button>
+            <button type="submit" disabled={!input.trim()} className={`flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60 ${ACTION_FOCUS_CLASSES}`}>Check state</button>
+            <button type="button" onClick={() => { reset(); onClose(); }} className={`rounded-lg border border-store-border px-3 py-2 text-sm ${ACTION_FOCUS_CLASSES}`}>Cancel</button>
           </div>
         </form>
       ) : (
         <div className="mt-3 space-y-2">
           <p className="text-sm">I recognized <strong>{confirmedState}</strong> as your state. Use this state for a store-rate estimate?</p>
           <div className="flex gap-2">
-            <button type="button" onClick={() => void requestEstimate()} disabled={loading} className="flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60">{loading ? 'Checking…' : 'Yes, check estimate'}</button>
-            <button type="button" onClick={() => { setConfirmedState(null); setQuotes([]); setError(''); onComposerLockChange(false); }} disabled={loading} className="rounded-lg border border-store-border px-3 py-2 text-sm">Change</button>
+            <button type="button" onClick={() => void requestEstimate()} disabled={loading} className={`flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60 ${ACTION_FOCUS_CLASSES}`}>{loading ? 'Checking…' : 'Yes, check estimate'}</button>
+            <button type="button" onClick={() => { setConfirmedState(null); setQuotes([]); setError(''); onComposerLockChange(false); }} disabled={loading} className={`rounded-lg border border-store-border px-3 py-2 text-sm ${ACTION_FOCUS_CLASSES}`}>Change</button>
           </div>
           {quotes.length ? (
             <div className="space-y-2" aria-label="Store rate estimates">
@@ -178,7 +179,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
           {hasRequested && !loading && !error && quotes.length === 0 ? (
             <p className="text-sm">No store-configured rate matched this state. Checkout may show other eligible delivery options.</p>
           ) : null}
-          <button type="button" onClick={() => { reset(); onClose(); }} className="w-full rounded-lg border border-store-border px-3 py-2 text-sm">Close private estimate</button>
+          <button type="button" onClick={() => { reset(); onClose(); }} className={`w-full rounded-lg border border-store-border px-3 py-2 text-sm ${ACTION_FOCUS_CLASSES}`}>Close private estimate</button>
         </div>
       )}
       {error ? <p role="alert" className="mt-2 text-sm">{error}</p> : null}

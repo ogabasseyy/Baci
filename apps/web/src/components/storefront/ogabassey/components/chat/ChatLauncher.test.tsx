@@ -16,7 +16,9 @@ describe('ChatLauncher', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle chat' }));
+    const toggle = screen.getByRole('button', { name: 'Toggle chat' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
 
     expect(onToggle).toHaveBeenCalledOnce();
   });
@@ -34,7 +36,9 @@ describe('ChatLauncher', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle chat' }));
+    const toggle = screen.getByRole('button', { name: 'Toggle chat' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
 
     expect(onToggle).toHaveBeenCalledOnce();
   });

@@ -1,4 +1,5 @@
 import 'server-only';
+import { PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN as PROJECT_REF } from '@/schemas/piggyvest-env';
 
 /**
  * One rule for how PiggyVest restricted-login executors reach Postgres.
@@ -13,7 +14,6 @@ import 'server-only';
  * mode) is rejected: it does not keep session SET values.
  */
 const TRANSACTION_POOLER_PORT = 6543;
-const PROJECT_REF = /^[a-z0-9]{20}$/;
 const SESSION_SETTINGS =
   'SET search_path TO pg_catalog; SET statement_timeout = 2500; SET lock_timeout = 1500';
 

@@ -58,6 +58,7 @@ function publishedHost(
     }),
     dispatch: vi.fn(),
     navigate: vi.fn(),
+    resolveNavigation: vi.fn(async (path: string) => path),
     subscribe: () => () => {},
     failed,
   };
@@ -144,6 +145,7 @@ it('uses trusted published dispatch without adding a mock commerce controller', 
     }),
     dispatch: vi.fn(),
     navigate: vi.fn(),
+    resolveNavigation: vi.fn(async (path: string) => path),
     subscribe: () => () => {},
   };
   render(
@@ -195,6 +197,7 @@ it('keeps a preloaded published frame hidden until admitted and bridge-ready', (
     }),
     dispatch: vi.fn(),
     navigate: vi.fn(),
+    resolveNavigation: vi.fn(async (path: string) => path),
     subscribe: () => () => {},
     ready,
     failed,

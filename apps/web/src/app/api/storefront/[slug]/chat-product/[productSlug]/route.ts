@@ -76,8 +76,12 @@ export async function GET(
 function isSupportedCurrency(code?: string): boolean {
   if (!code || !/^[A-Z]{3}$/.test(code)) return false;
   try {
-    if (typeof Intl.supportedValuesOf === 'function')
-      return Intl.supportedValuesOf('currency').includes(code);
+    if (
+      typeof Intl.supportedValuesOf === 'function' &&
+      Intl.supportedValuesOf('currency').includes(code)
+    ) {
+      return true;
+    }
   } catch {
     return code in CURRENCY_SYMBOLS;
   }

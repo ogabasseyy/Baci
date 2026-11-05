@@ -57,6 +57,9 @@ async function assertNoBotReplyDuringHumanTakeover({
   publishTakeoverMarker,
   silenceWindowMs = 5000,
   pollIntervalMs = 500,
+  now = () => Date.now(),
+  sleep = (durationMs) =>
+    new Promise((resolve) => setTimeout(resolve, durationMs)),
 }) {
   const path = messagesPath(accountId, id);
   const before = await api(path, token);
@@ -80,7 +83,7 @@ async function assertNoBotReplyDuringHumanTakeover({
     'takeover customer message webhook'
   );
 
-  const end = Date.now() + silenceWindowMs;
+  const end = now() + silenceWindowMs;
   do {
     const conversation = await api(conversationPath(accountId, id), token);
     if (conversation.status !== 'open')
@@ -95,9 +98,9 @@ async function assertNoBotReplyDuringHumanTakeover({
     );
     if (unexpectedReply)
       throw new Error('AgentBot replied while a human had taken over');
-    if (Date.now() >= end) break;
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-  } while (Date.now() <= end);
+    if (now() >= end) break;
+    await sleep(pollIntervalMs);
+  } while (now() <= end);
 
   const conversation = await api(conversationPath(accountId, id), token);
   if (conversation.status !== 'open')
@@ -124,6 +127,8 @@ export async function verifyConversationHandoff({
   events,
   silenceWindowMs,
   silencePollIntervalMs,
+  now,
+  sleep,
 }) {
   const { account_id: accountId, conversation_id: id } = seed;
   const humanToken = seed.human_token;
@@ -158,6 +163,8 @@ export async function verifyConversationHandoff({
     publishTakeoverMarker,
     silenceWindowMs,
     pollIntervalMs: silencePollIntervalMs,
+    now,
+    sleep,
   });
 
   const human = await api(messagesPath(accountId, id), humanToken, {

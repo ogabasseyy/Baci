@@ -22,6 +22,8 @@ function mockHarness({
   silenceWindowMs = 30,
   silencePollIntervalMs = 5,
 } = {}) {
+  let currentTime = 0;
+  const scheduled = [];
   let conversationReads = 0;
   let messageReads = 0;
   let status = 'pending';
@@ -76,13 +78,24 @@ function mockHarness({
     throw new Error(`Unexpected Chatwoot API request: ${path}`);
   };
 
+  const schedule = (callback, delayMs) => {
+    scheduled.push({ at: currentTime + delayMs, callback });
+  };
+  const sleep = (durationMs) => {
+    currentTime += durationMs;
+    const due = scheduled.filter((task) => task.at <= currentTime);
+    for (const task of due) {
+      scheduled.splice(scheduled.indexOf(task), 1);
+      task.callback();
+    }
+  };
   const waitFor = async (predicate, label) => {
-    const end = Date.now() + 40;
+    const end = currentTime + 40;
     do {
       if (await predicate()) return;
-      if (Date.now() < end)
-        await new Promise((resolve) => setTimeout(resolve, 5));
-    } while (Date.now() <= end);
+      if (currentTime >= end) break;
+      await sleep(5);
+    } while (currentTime <= end);
     throw new Error(`Timed out waiting for ${label}`);
   };
 
@@ -109,7 +122,7 @@ function mockHarness({
           });
         }
         if (lateBotReplyDelayMs > 0) {
-          setTimeout(() => {
+          schedule(() => {
             messages.push({
               id: 5,
               content: 'Late AgentBot reply during takeover.',
@@ -122,7 +135,7 @@ function mockHarness({
           ? { ...takeoverEvent, content: 'Different synthetic message.' }
           : takeoverEvent;
         if (takeoverWebhookDelayMs > 0) {
-          setTimeout(() => events.push(event), takeoverWebhookDelayMs);
+          schedule(() => events.push(event), takeoverWebhookDelayMs);
         } else {
           events.push(event);
         }
@@ -133,6 +146,8 @@ function mockHarness({
       events,
       silenceWindowMs,
       silencePollIntervalMs,
+      now: () => currentTime,
+      sleep,
     });
 
   return {
@@ -140,6 +155,7 @@ function mockHarness({
     wasTriggerPublished: () => triggerPublished,
     wasFollowupPublished: () => followupPublished,
     messageReadCount: () => messageReads,
+    elapsedMs: () => currentTime,
     hasTakeoverMessage: () =>
       messages.some(
         (message) =>
@@ -245,7 +261,6 @@ test('checks message history after the final polling sleep crosses the deadline'
 
 test('accepts an open queue handoff, human reply, pending handback and bot follow-up', async () => {
   const harness = mockHarness();
-  const startedAt = Date.now();
 
   await harness.run();
 
@@ -256,7 +271,7 @@ test('accepts an open queue handoff, human reply, pending handback and bot follo
     'silence check should poll message history'
   );
   assert.ok(
-    Date.now() - startedAt >= 20,
+    harness.elapsedMs() >= 30,
     'silence check should wait for its bounded window'
   );
 });

@@ -33,7 +33,7 @@ it('projects explicit public fields, unlimited stock and missing media without p
     available: true,
     image: null,
     currency: 'NGN',
-    canonicalPath: '/phones/phone',
+    canonicalPath: '/smartphones/phone',
   });
   expect(JSON.stringify(value)).not.toMatch(
     /cost_price|merchant_id|stock_quantity/

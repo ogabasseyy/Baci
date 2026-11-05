@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { publishFollowupAfterPending } from './handback.mjs';
 
 const base = process.env.CHATWOOT_URL;
 const seed = JSON.parse(await readFile('/run/chatwoot-test/seed.json', 'utf8'));
@@ -161,13 +162,15 @@ try {
       body: { status: 'pending' },
     }
   );
-  const handedBack = await api(
-    `/api/v1/accounts/${seed.account_id}/conversations/${id}`,
-    seed.human_token
-  );
-  if (handedBack.status !== 'pending')
-    throw new Error(`Expected pending handback, received ${handedBack.status}`);
-  await writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready');
+  await publishFollowupAfterPending({
+    readConversation: () =>
+      api(
+        `/api/v1/accounts/${seed.account_id}/conversations/${id}`,
+        seed.human_token
+      ),
+    publishFollowup: () =>
+      writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready'),
+  });
   await waitForBotReply(id, 'Synthetic bot: I can help with that.');
   if (!events.some((event) => event.event === 'message_created'))
     throw new Error('AgentBot webhook was not observed');

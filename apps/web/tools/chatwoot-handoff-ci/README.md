@@ -10,8 +10,8 @@ The last sequence is an integration policy demonstration: the operator returns a
 
 Chatwoot behavior is checked against the tagged v4.19.1 source: `AgentBotListener` delivers incoming message events; `ConversationsController#toggle_status` calls `bot_handoff!` for an AgentBot changing a pending conversation to open; `bot_handoff!` clears AI assignment and opens the conversation. `AccessTokenable` creates an access token after user and bot creation, and the tagged bot endpoint allowlist includes conversation show/status/message operations used here. `SafeFetch` blocks private network access by default, so the isolated test explicitly enables it for callback delivery. Official Docker deployment docs describe the Rails, Sidekiq, Postgres and Redis service setup. The test intentionally does not claim a late-reply race guarantee; exercising race ordering needs a separately controlled test.
 
-Run the dependency-free static contract checks with:
+Run the dependency-free behavioral and contract tests with:
 
 ```sh
-node --test apps/web/tools/chatwoot-handoff-ci/contract.test.mjs
+node --test apps/web/tools/chatwoot-handoff-ci/*.test.mjs
 ```

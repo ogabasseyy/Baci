@@ -56,5 +56,5 @@ test('harness covers bot handoff, human attribution and resumed bot reply throug
   assert.match(harness, /senderKind\(item\.sender\) === 'agentbot'/);
   assert.match(harness, /message_type !== 'incoming'/);
   assert.match(harness, /harness-ready-for-followup/);
-  assert.match(harness, /handedBack\.status !== 'pending'/);
+  assert.match(harness, /publishFollowupAfterPending/);
 });

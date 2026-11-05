@@ -1,16 +1,32 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { publishFollowupAfterPending } from './handback.mjs';
 
-const harness = await readFile(new URL('./run.mjs', import.meta.url), 'utf8');
+test('does not publish follow-up when Chatwoot leaves handback open', async () => {
+  let followupPublished = false;
 
-test('verifies persisted pending handback before allowing the follow-up', () => {
-  const statusCheck = harness.indexOf("handedBack.status !== 'pending'");
-  const followupMarker = harness.indexOf(
-    "harness-ready-for-followup', 'ready'"
+  await assert.rejects(
+    publishFollowupAfterPending({
+      readConversation: async () => ({ status: 'open' }),
+      publishFollowup: async () => {
+        followupPublished = true;
+      },
+    }),
+    /Expected pending handback, received open/
   );
 
-  assert.notEqual(statusCheck, -1);
-  assert.notEqual(followupMarker, -1);
-  assert.ok(statusCheck < followupMarker);
+  assert.equal(followupPublished, false);
+});
+
+test('publishes follow-up after Chatwoot persists pending handback', async () => {
+  let followupPublished = false;
+
+  await publishFollowupAfterPending({
+    readConversation: async () => ({ status: 'pending' }),
+    publishFollowup: async () => {
+      followupPublished = true;
+    },
+  });
+
+  assert.equal(followupPublished, true);
 });

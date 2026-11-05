@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Static contract checks
-        run: node --test apps/web/tools/chatwoot-handoff-ci/contract.test.mjs
+        run: node --test apps/web/tools/chatwoot-handoff-ci/*.test.mjs
       - name: Pull pinned images before creating the isolated network
         run: docker compose -f apps/web/tools/chatwoot-handoff-ci/compose.yml pull postgres redis rails sidekiq harness
       - name: Run disposable Chatwoot synthetic handoff
@@ -62,7 +62,7 @@ jobs:
           "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Please connect me to a human operator.'
           wait_for_file harness-ready-for-followup
           "${compose[@]}" exec -T rails bundle exec rails runner /harness/trigger.rb 'Synthetic follow-up after handback.'
-          "${compose[@]}" wait harness
+          "${compose[@]}" wait harness || true
           container_id="$("${compose[@]}" ps -aq harness)"
-          "${compose[@]}" logs harness
+          "${compose[@]}" logs harness || true
           test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" -eq 0

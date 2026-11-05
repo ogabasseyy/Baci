@@ -218,7 +218,7 @@ export function handleCreateVirtualAccount(
   return Promise.resolve({
     success: false,
     error:
-      'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
+      'Virtual account setup is not available in this chat yet. Please contact support for help completing your virtual-account payment.',
   });
 }
 

@@ -199,3 +199,21 @@ it('deduplicates identical address hints without collapsing changed status or ap
   });
   expect(first?.deduplicationKey).not.toContain(base.phone_number);
 });
+
+it.each([
+  true,
+  false,
+])('accepts the documented selfie callback (%s) as a scoped KYC hint', (selfie) => {
+  const event = parseOxygenWebhook({
+    webhook_type: 'selfie_status_update',
+    phone_number: '2348000000000',
+    loan_request_reference: 'application-1',
+    selfie,
+  });
+  expect(event).toMatchObject({
+    kind: 'selfie',
+    applicationReference: 'application-1',
+    selfieConfirmed: selfie,
+    action: 'reconcile_kyc',
+  });
+});

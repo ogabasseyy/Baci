@@ -1,11 +1,30 @@
 CREATE TEMP TABLE checkout_clock_failures(message text);
 CREATE FUNCTION pg_temp.check_checkout_clock(ok boolean, message text) RETURNS void
 LANGUAGE sql AS $$ INSERT INTO checkout_clock_failures SELECT message WHERE NOT coalesce(ok, false) $$;
-UPDATE public.merchants SET premium_features = '["shared_cart"]' WHERE id = '11111111-1111-4111-8111-111111111111';
+-- Full chronological replay starts from schema-only migrations, unlike the
+-- focused harness, which imports commerce_cart_order_binding.sql fixtures.
+-- Seed the minimum merchant/product rows this regression needs in either
+-- schema. The focused stub omits merchants.email; the replay schema requires
+-- it, so select the compatible insert shape at runtime.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'email'
+  ) THEN
+    INSERT INTO public.merchants (id, email, slug, premium_features)
+    VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c001', 'checkout-clock-f6a6a006@example.invalid', 'checkout-clock-f6a6a006', '["shared_cart"]'::jsonb);
+  ELSE
+    INSERT INTO public.merchants (id, slug, premium_features)
+    VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c001', 'checkout-clock-f6a6a006', '["shared_cart"]'::jsonb);
+  END IF;
+END $$;
+INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity, stock, manage_stock)
+VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c002', 'f6a6a006-8f22-4cb4-a626-d71eac10c001', 'Checkout clock fixture', 15, 'active', 10, 10, true);
 DO $$
 DECLARE
-  m uuid := '11111111-1111-4111-8111-111111111111';
-  p uuid := '44444444-4444-4444-8444-444444444444';
+  m uuid := 'f6a6a006-8f22-4cb4-a626-d71eac10c001';
+  p uuid := 'f6a6a006-8f22-4cb4-a626-d71eac10c002';
   c uuid := 'aaaaaaaa-4404-4000-8000-000000000001';
   g uuid := 'bbbbbbbb-4404-4000-8000-000000000001';
   r jsonb; replay jsonb; stored jsonb;

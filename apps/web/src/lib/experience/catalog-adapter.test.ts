@@ -213,3 +213,15 @@ it.each([
     variants: [{ id: 'public-variant', available: true, price: 13000 }],
   });
 });
+
+it('derives canonical paths from live identity despite stale stored canonical URLs', () => {
+  for (const identity of [
+    { category: 'new', categories: { slug: 'new' } },
+    { category: null, product_categories: [{ categories: { slug: 'new' } }] },
+  ]) {
+    const catalog = projectExperienceCatalog(merchant, [
+      { ...row, slug: 'device', canonical_url: '/old/device', ...identity },
+    ]);
+    expect(catalog.products[0].canonicalPath).toBe('/new/device');
+  }
+});

@@ -5,8 +5,8 @@ import {
   getProductStockBucket,
 } from '@baci/shared/lib/product-inventory';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getProductUrl } from '@/lib/product-url';
 import { getPublicSerializedVariantSummariesByProductId } from '@/lib/public-serialized-variant-summary';
+import { buildStorefrontPdpCanonicalPath } from '@/lib/storefront-pdp-canonical-path';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import {
   experienceCatalogRowSchema,
@@ -53,7 +53,7 @@ export function projectExperienceCatalog(
         price: p.price,
         currency: merchant.currency,
         image: images.get(p.id) ?? null,
-        canonicalPath: getProductUrl({
+        canonicalPath: buildStorefrontPdpCanonicalPath({
           ...p,
           categories:
             p.categories ??

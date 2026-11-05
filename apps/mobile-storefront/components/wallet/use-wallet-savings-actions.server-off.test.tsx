@@ -73,4 +73,25 @@ describe('server keeps PiggyVest off', () => {
     expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
     expect(addSavingsContributionToGoal).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the card top-up and never opens Add money when primary is not ready', () => {
+    const startWalletTopUp = jest.fn();
+    const onAddMoney = jest.fn();
+    createWalletSavingsActions({
+      activeMerchantId: SERVER_OFF_MERCHANT_ID,
+      goal: goal as never,
+      idempotencyKeyRef: { current: null },
+      onAddMoney,
+      operationRailRef: { current: null },
+      refetchWallet: jest.fn(async () => undefined),
+      savingsContributionAmount: '2500',
+      spendableBalance: 0,
+      startWalletTopUp,
+      setIsAddingSavingsContribution: jest.fn(),
+      setShowSavingsProgressModal: jest.fn(),
+      setSavingsContributionAmount: jest.fn(),
+    }).handleFundSavingsWallet();
+    expect(startWalletTopUp).toHaveBeenCalledTimes(1);
+    expect(onAddMoney).not.toHaveBeenCalled();
+  });
 });

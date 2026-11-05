@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { WalletScreen } from './WalletScreen';
@@ -140,5 +140,24 @@ describe('server keeps PiggyVest off', () => {
     const input = jest.mocked(useWalletSavingsController).mock.calls[0][0];
     expect(input.idempotencyKeyRef.current).toBeNull();
     expect(input.operationRailRef.current).toBeNull();
+  });
+
+  it('never marks the primary wallet ready or polls the balance', () => {
+    jest.useFakeTimers();
+    const refetch = jest.fn();
+    mockUseWallet.mockReturnValue({
+      data: { wallet: {}, transactions: [] },
+      isError: false,
+      isLoading: false,
+      isRefetching: false,
+      refetch,
+    });
+    render(<WalletScreen />);
+    const input = jest.mocked(useWalletSavingsController).mock.calls[0][0];
+    expect(input.primaryReady).toBe(false);
+    act(() => input.onAddMoney?.());
+    act(() => jest.advanceTimersByTime(60_000));
+    expect(refetch).not.toHaveBeenCalled();
+    jest.useRealTimers();
   });
 });

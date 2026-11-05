@@ -29,8 +29,7 @@ on:
           - production
 
 concurrency:
-  # Serialize storefront release runs only. Cross-app serialization is avoided
-  # because GitHub preserves only one pending run per concurrency group.
+  # Per-ref serialization only; VPS resource ownership is job-scoped below.
   group: android-storefront-release-${{ github.ref }}
   cancel-in-progress: false
 
@@ -54,7 +53,13 @@ jobs:
   build-and-deploy:
     name: Build Storefront AAB & Upload to Play Store
     runs-on: baci-android
-    # Patched ReactAndroid and Hermes compile from source for all four ABIs.
+    # Both Android releases and production share one four-core VPS.
+    # A shared group is the only mutual exclusion GitHub offers; a waiting run
+    # replaces an older pending one, and refuse-superseded guards stale builds.
+    concurrency:
+      group: production-prebuilt-deploy
+      cancel-in-progress: false
+        # Patched ReactAndroid and Hermes compile from source for all four ABIs.
     # The measured cold source build exceeds a single 330-minute step. Give
     # native libraries and app packaging separate budgets, plus upload/cleanup.
     timeout-minutes: 600

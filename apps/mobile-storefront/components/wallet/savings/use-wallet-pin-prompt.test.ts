@@ -71,3 +71,32 @@ describe('useWalletPinPrompt', () => {
     act(() => useAuthStore.setState({ user: null as never }));
   });
 });
+
+describe('a request the server calls no longer valid', () => {
+  it('closes the sheet with no proof and reports the server message once', async () => {
+    const { result } = renderHook(() => useWalletPinPrompt());
+    expect(result.current.takeInvalid()).toBeNull();
+    let pending!: Promise<string | null>;
+    act(() => {
+      pending = result.current.requestProof(request);
+    });
+    act(() => result.current.sheetProps.onInvalid?.('Please start again.'));
+    await expect(pending).resolves.toBeNull();
+    expect(result.current.sheetProps.request).toBeNull();
+    expect(result.current.takeInvalid()).toBe('Please start again.');
+    expect(result.current.takeInvalid()).toBeNull();
+  });
+
+  it('does not report an earlier invalid answer for a later plain cancel', async () => {
+    const { result } = renderHook(() => useWalletPinPrompt());
+    act(() => {
+      void result.current.requestProof(request);
+    });
+    act(() => result.current.sheetProps.onInvalid?.('Please start again.'));
+    act(() => {
+      void result.current.requestProof(request);
+    });
+    act(() => result.current.sheetProps.onCancel());
+    expect(result.current.takeInvalid()).toBeNull();
+  });
+});

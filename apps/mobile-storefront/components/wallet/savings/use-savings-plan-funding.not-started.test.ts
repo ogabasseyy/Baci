@@ -118,3 +118,57 @@ describe('expired-claim status reading', () => {
     expect(await read({ status: 'ready', setupRetryable: true })).toBe('ready');
   });
 });
+
+describe('silent status re-read', () => {
+  it('keeps the current phase while in flight, then applies the answer', async () => {
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockResolvedValueOnce({ status: 'pending' } as never);
+    const { result } = renderHook(() => useSavingsPlanFunding(input));
+    await act(async () => {
+      await result.current.fetchExistingPlanFunding();
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    let finish: (value: never) => void = () => {};
+    jest.mocked(fetchExistingSavingsPlanFunding).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve as never;
+      })
+    );
+    let read: Promise<void> = Promise.resolve();
+    act(() => {
+      read = result.current.fetchExistingPlanFunding({ silent: true });
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    await act(async () => {
+      finish({ status: 'ready' } as never);
+      await read;
+    });
+    expect(result.current.planFundingPhase).toBe('ready');
+  });
+
+  it('rejects a failed silent read without flipping the phase to error', async () => {
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockResolvedValueOnce({ status: 'pending' } as never);
+    const { result } = renderHook(() => useSavingsPlanFunding(input));
+    await act(async () => {
+      await result.current.fetchExistingPlanFunding();
+    });
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockRejectedValueOnce(new Error('network down'));
+    await act(async () => {
+      await expect(
+        result.current.fetchExistingPlanFunding({ silent: true })
+      ).rejects.toThrow('network down');
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    expect(result.current.fundingError).toBeNull();
+    act(() =>
+      result.current.failExistingPlanFunding(new Error('network down'))
+    );
+    expect(result.current.planFundingPhase).toBe('error');
+    expect(result.current.fundingError).toBe('network down');
+  });
+});

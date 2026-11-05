@@ -76,3 +76,25 @@ describe('runWithPinProof', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('goal-action requests', () => {
+  it.each([
+    'cancel',
+    'complete',
+  ] as const)('passes a %s request (no amount) to the prompt unchanged', async (action) => {
+    const goalRequest: PinProofRequest = {
+      action,
+      merchantId: 'm',
+      goalId: 'g',
+      operationId: 'o',
+    };
+    const run = jest
+      .fn()
+      .mockRejectedValueOnce(refusal('PIN_PROOF_REQUIRED'))
+      .mockResolvedValueOnce('done');
+    const ask = jest.fn().mockResolvedValue(proof);
+    await expect(runWithPinProof(run, goalRequest, ask)).resolves.toBe('done');
+    expect(ask).toHaveBeenCalledWith(goalRequest);
+    expect(run).toHaveBeenNthCalledWith(2, proof);
+  });
+});

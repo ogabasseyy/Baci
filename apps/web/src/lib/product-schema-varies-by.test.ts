@@ -34,6 +34,30 @@ describe('getVariantSchemaVariesBy', () => {
     ];
     expect(getVariantSchemaVariesBy(variants)).toEqual([]);
   });
+  it.each([
+    [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+    [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+  ] as const)('keeps the independently complete dimension', (first, second, expected) => {
+    const variants: ProductVariant[] = [
+      {
+        id: '1',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: first,
+      },
+      {
+        id: '2',
+        product_id: 'p',
+        merchant_id: 'm',
+        stock_quantity: 1,
+        attributes: second,
+      },
+    ];
+    expect(getVariantSchemaVariesBy(variants)).toEqual([
+      `https://schema.org/${expected}`,
+    ]);
+  });
   it('deduplicates supported dimensions present on every variant', () => {
     const variants: ProductVariant[] = [
       {

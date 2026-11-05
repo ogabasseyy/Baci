@@ -651,6 +651,36 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variants[2]).not.toHaveProperty('size');
   });
 
+  it.each([
+    [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+    [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+  ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
+    const schema = generateProductSchema(
+      makeProduct({
+        variants: [
+          {
+            id: 'v1',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            stock_quantity: 2,
+            attributes: first,
+          },
+          {
+            id: 'v2',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            stock_quantity: 2,
+            attributes: second,
+          },
+        ],
+      }),
+      'TestStore',
+      'NGN',
+      'NG'
+    );
+    expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
+  });
+
   it('provides a truthful description on each product variant', () => {
     const schema = generateProductSchema(
       makeProduct({

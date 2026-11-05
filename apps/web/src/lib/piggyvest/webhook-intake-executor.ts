@@ -1,6 +1,7 @@
 import 'server-only';
 import { Client } from 'pg';
 import { piggyvestWebhookIntakeRuntimeSchema } from '@/schemas/piggyvest-webhook-intake-runtime';
+import { primaryDbLink } from './primary-db-link';
 
 /**
  * Database executor of the PiggyVest webhook receiver.
@@ -90,18 +91,17 @@ export function createPiggyvestWebhookIntakeExecutor(
   let closed = false;
 
   const open = async (): Promise<Client> => {
+    const link = primaryDbLink(database.login);
     const client = new Client({
       host: database.host,
       port: database.port,
       database: database.name,
-      user: database.login,
+      user: link.user,
       password: database.password,
       ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-piggyvest-webhook-intake',
     });
     rawClient = client;
@@ -109,6 +109,7 @@ export function createPiggyvestWebhookIntakeExecutor(
     // the next statement on it fails and maps to a code-less error.
     client.on('error', () => undefined);
     await client.connect();
+    await link.afterConnect(client);
     const verified = await client.query(verifySession);
     const session = verified.rows[0];
     if (

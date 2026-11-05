@@ -4,6 +4,7 @@ import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primar
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
+import { primaryDbLink } from './primary-db-link';
 
 const reserve =
   'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
@@ -62,11 +63,12 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
       scope.environment !== config.environment
     )
       throw new Error('Savings binding unavailable');
+    const link = primaryDbLink(config.database.login);
     const client = new Client({
       host: config.database.host,
       port: config.database.port,
       database: config.database.name,
-      user: config.database.login,
+      user: link.user,
       password: config.database.password,
       ssl: {
         rejectUnauthorized: true,
@@ -74,13 +76,12 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
       },
       connectionTimeoutMillis: 4000,
       query_timeout: 4000,
-      statement_timeout: 2500,
-      lock_timeout: 1500,
-      options: '-c search_path=pg_catalog',
+      ...link.startup,
       application_name: 'baci-piggyvest-primary-savings',
     });
     try {
       await client.connect();
+      await link.afterConnect(client);
       const result = await client.query(verify);
       const session = result.rows[0];
       if (

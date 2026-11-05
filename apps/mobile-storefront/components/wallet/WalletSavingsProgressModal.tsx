@@ -9,6 +9,7 @@ import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wall
 import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 import { getSavingsProgress } from './get-savings-progress';
+import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -281,6 +282,11 @@ export function WalletSavingsProgressModal({
             </Text>
           </Pressable>
         ) : null}
+        <GoalLifecycleEntry
+          colors={colors}
+          goal={goal}
+          hasPendingContribution={hasPendingContribution}
+        />
       </ScrollView>
     </ModalSheet>
   );

@@ -115,11 +115,13 @@ export function useSavingsPlanFunding({
     }
   };
 
-  const fetchExistingPlanFunding = async () => {
+  // A silent read (used while polling a pending setup) keeps the current
+  // phase on screen instead of flashing 'loading'.
+  const fetchExistingPlanFunding = async (options?: { silent?: boolean }) => {
     if (!goalId) return;
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
-    setPhase('loading');
+    if (!options?.silent) setPhase('loading');
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({

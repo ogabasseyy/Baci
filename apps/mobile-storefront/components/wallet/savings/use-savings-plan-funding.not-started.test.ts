@@ -118,3 +118,43 @@ describe('expired-claim status reading', () => {
     expect(await read({ status: 'ready', setupRetryable: true })).toBe('ready');
   });
 });
+
+describe('silent status re-read', () => {
+  it('keeps the current phase while in flight, then applies the answer', async () => {
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockResolvedValueOnce({ status: 'pending' } as never);
+    const { result } = renderHook(() => useSavingsPlanFunding(input));
+    await act(async () => {
+      await result.current.fetchExistingPlanFunding();
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    let finish: (value: never) => void = () => {};
+    jest.mocked(fetchExistingSavingsPlanFunding).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve as never;
+      })
+    );
+    let read: Promise<void> = Promise.resolve();
+    act(() => {
+      read = result.current.fetchExistingPlanFunding({ silent: true });
+    });
+    expect(result.current.planFundingPhase).toBe('pending');
+    await act(async () => {
+      finish({ status: 'ready' } as never);
+      await read;
+    });
+    expect(result.current.planFundingPhase).toBe('ready');
+  });
+
+  it('still reports a failed silent read as an error', async () => {
+    jest
+      .mocked(fetchExistingSavingsPlanFunding)
+      .mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useSavingsPlanFunding(input));
+    await act(async () => {
+      await result.current.fetchExistingPlanFunding({ silent: true });
+    });
+    expect(result.current.planFundingPhase).toBe('error');
+  });
+});

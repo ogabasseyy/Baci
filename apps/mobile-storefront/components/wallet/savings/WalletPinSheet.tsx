@@ -45,6 +45,11 @@ const COPY: Record<
   },
 };
 
+const ENTER_BODY = {
+  cancel: 'Enter your PIN to cancel this goal.',
+  complete: 'Enter your PIN to complete this goal.',
+} as const;
+
 function PinField(props: {
   colors: WalletColors;
   label: string;
@@ -89,9 +94,19 @@ export function WalletPinSheet({
   expectedUserId,
   onProof,
   onCancel,
+  onInvalid,
 }: WalletPinSheetBinding & { colors: WalletColors }) {
-  const sheet = useWalletPinSheet({ request, expectedUserId, onProof });
-  const copy = COPY[sheet.step];
+  const sheet = useWalletPinSheet({
+    request,
+    expectedUserId,
+    onProof,
+    onInvalid,
+  });
+  const baseCopy = COPY[sheet.step];
+  const copy =
+    sheet.step === 'enter' && request?.action && request.action !== 'fund'
+      ? { ...baseCopy, body: ENTER_BODY[request.action] }
+      : baseCopy;
   const entering =
     sheet.step === 'set' || sheet.step === 'reset' || sheet.step === 'enter';
   const choosing = sheet.step === 'set' || sheet.step === 'reset';

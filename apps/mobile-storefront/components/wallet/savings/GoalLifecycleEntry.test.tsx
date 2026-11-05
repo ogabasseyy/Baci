@@ -1,0 +1,122 @@
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { router } from 'expo-router';
+import Colors from '@/constants/Colors';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { GoalLifecycleEntry } from './GoalLifecycleEntry';
+import { usePrimaryGoalGate } from './use-primary-goal-gate';
+
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('./use-primary-goal-gate');
+
+function makeGoal(over: Partial<WalletActiveSavingsGoal> = {}) {
+  return {
+    id: 'goal-1',
+    title: 'iPhone',
+    status: 'active',
+    current_amount: 1000,
+    target_amount: 5000,
+    maturity_date: '2999-01-01',
+    source_mode: 'manual',
+    contribution_amount: 100,
+    contribution_frequency: 'weekly',
+    ...over,
+  } as WalletActiveSavingsGoal;
+}
+function renderEntry(
+  goal: WalletActiveSavingsGoal,
+  hasPendingContribution = false
+) {
+  render(
+    <GoalLifecycleEntry
+      colors={Colors.light}
+      goal={goal}
+      hasPendingContribution={hasPendingContribution}
+    />
+  );
+}
+const cancel = () =>
+  screen.queryByRole('button', { name: 'Cancel savings goal' });
+const complete = () =>
+  screen.queryByRole('button', { name: 'Complete savings goal' });
+
+beforeEach(() => {
+  jest.resetAllMocks();
+  jest.mocked(usePrimaryGoalGate).mockReturnValue('ready');
+});
+
+describe('GoalLifecycleEntry', () => {
+  it.each([
+    'active',
+    'paused',
+  ] as const)('offers Cancel (only) for a %s goal that is not eligible', (status) => {
+    renderEntry(makeGoal({ status }));
+    expect(cancel()).toBeOnTheScreen();
+    expect(screen.getByText('Cancel goal')).toBeOnTheScreen();
+    expect(complete()).toBeNull();
+  });
+
+  it('offers Complete (only) for a completed goal', () => {
+    renderEntry(makeGoal({ status: 'completed' }));
+    expect(complete()).toBeOnTheScreen();
+    expect(screen.getByText('Complete goal')).toBeOnTheScreen();
+    expect(cancel()).toBeNull();
+  });
+
+  it('offers both once the target is reached', () => {
+    renderEntry(makeGoal({ current_amount: 5000 }));
+    expect(cancel()).toBeOnTheScreen();
+    expect(complete()).toBeOnTheScreen();
+  });
+
+  describe('maturity date', () => {
+    beforeEach(() => {
+      jest.useFakeTimers({ now: new Date(2026, 10, 5, 15, 0, 0) });
+    });
+    afterEach(() => jest.useRealTimers());
+
+    it.each([
+      ['today', '2026-11-05', true],
+      ['today with a time', '2026-11-05T23:00:00.000Z', true],
+      ['the past', '2026-01-02', true],
+      ['tomorrow', '2026-11-06', false],
+      ['unreadable', 'soon', false],
+    ])('maturity %s -> Complete shown: %s', (_name, maturity_date, shown) => {
+      renderEntry(makeGoal({ maturity_date }));
+      expect(complete() !== null).toBe(shown);
+    });
+  });
+
+  it('navigates to the goal actions screen with the goal and kind', () => {
+    renderEntry(makeGoal({ current_amount: 5000 }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Cancel savings goal' })
+    );
+    expect(router.push).toHaveBeenLastCalledWith({
+      pathname: '/wallet/savings/goal-actions',
+      params: { goalId: 'goal-1', kind: 'cancel' },
+    });
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Complete savings goal' })
+    );
+    expect(router.push).toHaveBeenLastCalledWith({
+      pathname: '/wallet/savings/goal-actions',
+      params: { goalId: 'goal-1', kind: 'complete' },
+    });
+  });
+
+  it.each([
+    'checking',
+    'off',
+  ] as const)('renders nothing while the gate is %s', (gate) => {
+    jest.mocked(usePrimaryGoalGate).mockReturnValue(gate);
+    renderEntry(makeGoal({ current_amount: 5000 }));
+    expect(cancel()).toBeNull();
+    expect(complete()).toBeNull();
+  });
+
+  it('renders nothing while a contribution is pending', () => {
+    renderEntry(makeGoal({ current_amount: 5000 }), true);
+    expect(cancel()).toBeNull();
+    expect(complete()).toBeNull();
+  });
+});

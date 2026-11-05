@@ -1,0 +1,234 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { Redirect, router, Stack } from 'expo-router';
+import { useRef } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useColorScheme } from '@/components/useColorScheme';
+import Colors, { palette } from '@/constants/Colors';
+import { useRequireAuth } from '@/hooks/use-auth-guard';
+import { useWallet, walletKeys } from '@/hooks/use-wallet';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import type { GoalActionKind } from '@/schemas/goal-lifecycle';
+import {
+  GOAL_LIFECYCLE_COPY as COPY,
+  useGoalLifecycle,
+} from './use-goal-lifecycle';
+import { usePrimaryGoalGate } from './use-primary-goal-gate';
+import { WalletPinSheet } from './WalletPinSheet';
+
+type WalletColors = (typeof Colors)['light'];
+
+function Action(props: {
+  colors: WalletColors;
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  const { colors, label, onPress, primary = false } = props;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={[
+        styles.button,
+        primary
+          ? { backgroundColor: colors.primary }
+          : { borderColor: colors.border, borderWidth: 1 },
+      ]}
+    >
+      <Text
+        style={[
+          styles.buttonText,
+          { color: primary ? palette.white : colors.text },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function useFindGoal(goalId: string) {
+  const { data, isLoading } = useWallet({ cachePolicy: 'display' });
+  const wallet = data?.wallet;
+  const found =
+    wallet?.savings_goals?.find((item) => item.id === goalId) ??
+    (wallet?.active_savings_goal?.id === goalId
+      ? wallet.active_savings_goal
+      : undefined);
+  // A finished action makes the goal vanish from the wallet data; keep what
+  // was last seen so the screen does not lose its subject mid-flow.
+  const seen = useRef<WalletActiveSavingsGoal | undefined>(undefined);
+  if (found) seen.current = found;
+  return { goal: found ?? seen.current, isLoading: isLoading || !data };
+}
+
+export function GoalLifecycleScreen({
+  kind,
+  goalId,
+}: {
+  kind: GoalActionKind;
+  goalId: string;
+}) {
+  const colors = Colors[useColorScheme() ?? 'light'];
+  const copy = COPY[kind];
+  const queryClient = useQueryClient();
+  const auth = useRequireAuth();
+  const gate = usePrimaryGoalGate();
+  const { goal, isLoading } = useFindGoal(goalId);
+  const flow = useGoalLifecycle({ kind, goalId });
+
+  if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
+  if (gate === 'off') return <Redirect href="/wallet" />;
+  if (!isLoading && !goal && flow.step === 'review')
+    return <Redirect href="/wallet" />;
+
+  const backToWallet = () => {
+    void queryClient.invalidateQueries({ queryKey: walletKeys.all });
+    router.replace('/wallet');
+  };
+  const leave = () => router.replace('/wallet');
+  const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
+
+  let title: string =
+    flow.step === 'review' ? copy.reviewTitle : copy.screenTitle;
+  let body: string | null = copy.reviewBody;
+  let actions = (
+    <>
+      <Action
+        colors={colors}
+        label={copy.primary}
+        onPress={() => void flow.begin()}
+        primary
+      />
+      <Action colors={colors} label={copy.secondary} onPress={leave} />
+    </>
+  );
+  if (flow.step === 'done') {
+    title = copy.successTitle;
+    body = copy.successBody;
+    actions = (
+      <Action
+        colors={colors}
+        label={COPY.backToWallet}
+        onPress={backToWallet}
+        primary
+      />
+    );
+  } else if (flow.step === 'polling' || flow.step === 'timed_out') {
+    if (flow.step === 'timed_out') title = COPY.stillProcessing;
+    body = COPY.pending;
+    actions =
+      flow.step === 'timed_out' ? (
+        <>
+          <Action
+            colors={colors}
+            label={COPY.checkAgain}
+            onPress={() => void flow.checkAgain()}
+            primary
+          />
+          <Action colors={colors} label={COPY.backToWallet} onPress={leave} />
+        </>
+      ) : (
+        <Action colors={colors} label={COPY.backToWallet} onPress={leave} />
+      );
+  } else if (flow.step === 'pin_cancelled') {
+    body = COPY.pinCancelled;
+    actions = (
+      <>
+        <Action
+          colors={colors}
+          label={COPY.tryAgain}
+          onPress={() => void flow.retryPin()}
+          primary
+        />
+        <Action colors={colors} label={copy.secondary} onPress={leave} />
+      </>
+    );
+  } else if (flow.step === 'failed' || flow.step === 'needs_review') {
+    body = null;
+    actions = (
+      <>
+        {flow.canStartAgain ? (
+          <Action
+            colors={colors}
+            label={COPY.startAgain}
+            onPress={() => void flow.begin()}
+            primary
+          />
+        ) : null}
+        <Action
+          colors={colors}
+          label={COPY.backToWallet}
+          onPress={backToWallet}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Stack.Screen options={{ title: copy.screenTitle }} />
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text
+          accessibilityRole="header"
+          style={[styles.title, { color: colors.text }]}
+        >
+          {title}
+        </Text>
+        {goal ? (
+          <View style={styles.goal}>
+            <Text style={[styles.goalTitle, { color: colors.text }]}>
+              {goal.title}
+            </Text>
+            <Text style={{ color: colors.textSecondary }}>
+              {`${COPY.savedSoFar}: ${formatNgnCurrency(goal.current_amount)}`}
+            </Text>
+          </View>
+        ) : null}
+        {body ? (
+          <Text style={[styles.body, { color: colors.textSecondary }]}>
+            {body}
+          </Text>
+        ) : null}
+        {flow.message ? (
+          <Text
+            accessibilityRole="alert"
+            style={[styles.body, { color: colors.error }]}
+          >
+            {flow.message}
+          </Text>
+        ) : null}
+        {working || flow.step === 'polling' ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : null}
+        {working ? null : <View style={styles.actions}>{actions}</View>}
+      </ScrollView>
+      <WalletPinSheet colors={colors} {...flow.sheetProps} />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { gap: 16, padding: 20 },
+  title: { fontSize: 22, fontWeight: '700' },
+  goal: { gap: 4 },
+  goalTitle: { fontSize: 16, fontWeight: '600' },
+  body: { fontSize: 15, lineHeight: 22 },
+  actions: { gap: 10 },
+  button: {
+    alignItems: 'center',
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  buttonText: { fontSize: 15, fontWeight: '600' },
+});

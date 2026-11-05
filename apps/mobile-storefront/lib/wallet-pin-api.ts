@@ -75,3 +75,29 @@ export async function verifyFundPin(
   if (!result.success) throw new Error(SERVER_REPLY_UNREADABLE);
   return result.data.proof;
 }
+
+/** Single-use proof bound to this goal and operation (cancel or complete). */
+export async function verifyGoalActionPin(
+  input: {
+    merchantId: string;
+    pin: string;
+    action: 'cancel' | 'complete';
+    goalId: string;
+    operationId: string;
+  },
+  pinnedUserId?: string
+) {
+  const { client, expectedUserId } = begin(pinnedUserId);
+  const body = schemas.goalActionVerifyRequest.parse(input);
+  const result = schemas.fundVerifyResponse.safeParse(
+    await client.fetchJson({
+      path: '/api/storefront/customer/savings/goal-pin/verify',
+      method: 'POST',
+      includeCsrf: true,
+      expectedUserId,
+      body,
+    })
+  );
+  if (!result.success) throw new Error(SERVER_REPLY_UNREADABLE);
+  return result.data.proof;
+}

@@ -1,13 +1,36 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { useAuthStore } from '@/stores/auth-store';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 
 jest.mock('./WalletSavingsContributionFlow', () => ({
   WalletSavingsContributionFlow: () => {
     const { Text } = require('react-native');
     return <Text>wallet-contribution</Text>;
+  },
+}));
+const mockGate = jest.fn(() => 'off');
+jest.mock('./savings/use-primary-goal-gate', () => ({
+  usePrimaryGoalGate: () => mockGate(),
+}));
+const mockPlanFunding = jest.fn();
+jest.mock('./savings/use-savings-plan-funding', () => ({
+  useSavingsPlanFunding: (...args: unknown[]) => mockPlanFunding(...args),
+}));
+const mockPoll = jest.fn();
+jest.mock('./savings/use-goal-wallet-setup-poll', () => ({
+  useGoalWalletSetupPoll: (...args: unknown[]) => mockPoll(...args),
+}));
+jest.mock('./savings/SavingsPlanStatusNote', () => ({
+  SavingsPlanStatusNote: ({
+    funding,
+  }: {
+    funding?: { planFundingPhase: string };
+  }) => {
+    const { Text } = require('react-native');
+    return <Text>{`status-note:${funding?.planFundingPhase ?? 'own'}`}</Text>;
   },
 }));
 jest.mock('./WalletSavingsPlanFunding', () => ({
@@ -66,5 +89,100 @@ describe('WalletSavingsFundingSection', () => {
     );
     expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
     expect(screen.queryByText('plan-funding')).toBeNull();
+  });
+});
+
+describe('manual goal on a ready primary wallet (plan funding off)', () => {
+  const plan = (planFundingPhase: string) => ({
+    planFundingPhase,
+    fetchExistingPlanFunding: jest.fn(),
+  });
+  const renderManual = (sourceMode = 'manual') =>
+    render(
+      <WalletSavingsFundingSection
+        {...props(sourceMode, { usesPlanFunding: false })}
+      />
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGate.mockReturnValue('ready');
+    act(() => {
+      useAuthStore.setState({
+        user: { id: 'user-a' } as never,
+        merchantId: 'merchant-1',
+      });
+    });
+  });
+
+  it('shows the contribution flow only once the goal wallet is ready, with the note above it', () => {
+    mockPlanFunding.mockReturnValue(plan('ready'));
+    renderManual();
+    expect(screen.getByText('status-note:ready')).toBeOnTheScreen();
+    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+    expect(screen.queryByText('plan-funding')).toBeNull();
+  });
+
+  it.each([
+    'idle',
+    'loading',
+    'not_started',
+    'pending',
+    'setup_retryable',
+    'unavailable',
+    'error',
+  ])('shows only the note, no contribution flow, while the goal wallet is %s', (phase) => {
+    mockPlanFunding.mockReturnValue(plan(phase));
+    renderManual();
+    expect(screen.getByText(`status-note:${phase}`)).toBeOnTheScreen();
+    expect(screen.queryByText('wallet-contribution')).toBeNull();
+  });
+
+  it('reads one shared status: the hook, the note and the poll use the same instance', () => {
+    const shared = plan('pending');
+    mockPlanFunding.mockReturnValue(shared);
+    renderManual();
+    expect(mockPlanFunding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        goalId: 'g1',
+        identityKey: 'user-a',
+        activeMerchantId: 'merchant-1',
+        loadExisting: true,
+        notFoundMeansNotStarted: true,
+      })
+    );
+    expect(mockPoll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'pending',
+        reread: shared.fetchExistingPlanFunding,
+      })
+    );
+  });
+
+  it('renders nothing while the readiness check is still running', () => {
+    mockGate.mockReturnValue('checking');
+    renderManual();
+    expect(screen.queryByText('wallet-contribution')).toBeNull();
+    expect(screen.queryByText(/status-note/)).toBeNull();
+    expect(mockPlanFunding).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['off', 'manual'],
+    ['ready', 'auto_debit'],
+  ])("is today's wallet contribution alone for gate %s and a %s goal", (gate, mode) => {
+    mockGate.mockReturnValue(gate);
+    renderManual(mode);
+    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+    expect(screen.queryByText(/status-note/)).toBeNull();
+    expect(mockPlanFunding).not.toHaveBeenCalled();
+  });
+
+  it('leaves the staging plan-funding path untouched whatever the gate says', () => {
+    render(<WalletSavingsFundingSection {...props('manual')} />);
+    expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
+    expect(screen.getByText('plan-funding')).toBeOnTheScreen();
+    expect(screen.queryByText(/status-note/)).toBeNull();
+    expect(mockPlanFunding).not.toHaveBeenCalled();
   });
 });

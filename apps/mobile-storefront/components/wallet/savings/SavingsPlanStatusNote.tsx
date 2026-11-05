@@ -6,11 +6,18 @@ import { SavingsGoalSetupPrompt } from './SavingsGoalSetupPrompt';
 import { useSavingsGoalSetup } from './use-savings-goal-setup';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
+type PlanFunding = ReturnType<typeof useSavingsPlanFunding>;
+
 type Props = {
   colors: (typeof Colors)['light'];
   goalId: string;
   identityKey: string;
   merchantId: string;
+  /**
+   * A status hook the parent already runs (so the note and a gate beside it
+   * read one status). Without it the note reads its own.
+   */
+  funding?: PlanFunding;
 };
 
 /**
@@ -23,20 +30,32 @@ type Props = {
  * earlier claim expired: it gets a retry action that reuses the stored
  * interest answer.
  */
-export function SavingsPlanStatusNote({
-  colors,
-  goalId,
-  identityKey,
-  merchantId,
-}: Props) {
-  const primary = isPiggyvestPrimaryMerchant(merchantId);
+export function SavingsPlanStatusNote(props: Props) {
+  return props.funding ? (
+    <StatusNoteView {...props} funding={props.funding} />
+  ) : (
+    <OwnStatusNote {...props} />
+  );
+}
+
+function OwnStatusNote(props: Props) {
   const funding = useSavingsPlanFunding({
-    activeMerchantId: merchantId,
-    goalId,
-    identityKey,
-    loadExisting: primary,
+    activeMerchantId: props.merchantId,
+    goalId: props.goalId,
+    identityKey: props.identityKey,
+    loadExisting: isPiggyvestPrimaryMerchant(props.merchantId),
     notFoundMeansNotStarted: true,
   });
+  return <StatusNoteView {...props} funding={funding} />;
+}
+
+function StatusNoteView({
+  colors,
+  goalId,
+  merchantId,
+  funding,
+}: Props & { funding: PlanFunding }) {
+  const primary = isPiggyvestPrimaryMerchant(merchantId);
   const setup = useSavingsGoalSetup({
     goalId,
     merchantId,

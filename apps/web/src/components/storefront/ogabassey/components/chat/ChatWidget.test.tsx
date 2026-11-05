@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock heavy dependencies before any imports
 vi.mock('next/navigation', () => ({
@@ -10,7 +11,8 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/hooks/merchant', () => ({
   useMerchantSafe: vi.fn(() => ({
     basePath: '/ogabassey',
-    merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG' },
+    routingMode: 'domain',
+    merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG', payout_currency: 'NGN' },
   })),
 }));
 
@@ -41,9 +43,6 @@ vi.mock('./chat-cart-review', () => ({
   ),
 }));
 
-vi.mock('./chat-delivery-quote', () => ({
-  ChatDeliveryQuote: () => <section aria-label="Private destination entry">Private destination</section>,
-}));
 
 vi.mock('./use-ogabassey-chat', () => ({
   useOgabasseyChat: vi.fn(() => ({
@@ -63,9 +62,15 @@ vi.mock('./use-ogabassey-chat', () => ({
 }));
 
 import { useCart } from '@/hooks/cart';
+import { useMerchantSafe } from '@/hooks/merchant';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { ChatWidget } from './ChatWidget';
 import { useOgabasseyChat } from './use-ogabassey-chat';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.cookie = 'csrf-token=; Max-Age=0; path=/';
+});
 
 function getChatAnchor(container: HTMLElement) {
   const anchor = container.querySelector('.ogabassey-chat-anchor');
@@ -83,6 +88,11 @@ describe('ChatWidget - toggle button', () => {
       addToCart: vi.fn(),
       setIsCartOpen: vi.fn(),
     } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/ogabassey',
+      routingMode: 'domain',
+      merchant: { id: 'merchant-1', slug: 'ogabassey', country: 'NG', payout_currency: 'NGN' },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
 
     vi.mocked(useV2Theme).mockReturnValue({
       theme: 'standard',
@@ -242,6 +252,68 @@ describe('ChatWidget - chat window when open', () => {
     expect(screen.getByRole('region', { name: 'Cart review' })).toBeInTheDocument();
   });
 
+  it('keeps a private full destination out of chat and sends only the confirmed state for a quote', async () => {
+    const handleSend = vi.fn();
+    const handleSubmit = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ sessionId: 'quote-session', quotes: { all: [], featured: [] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    document.cookie = 'csrf-token=csrf-test-token; path=/';
+    vi.mocked(useCart).mockReturnValue({
+      isCartOpen: false,
+      cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      subtotal: 100,
+      isHydrated: true,
+      addToCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useOgabasseyChat).mockImplementation(() => {
+      const [input, setInput] = useState('');
+      return {
+        isOpen: true,
+        setIsOpen: vi.fn(),
+        messages: [],
+        input,
+        setInput,
+        isLoading: false,
+        proactiveMsg: null,
+        setProactiveMsg: vi.fn(),
+        messagesEndRef: { current: null },
+        handleSend,
+        handleSubmit,
+        handleAddSantaWishToCart: vi.fn(),
+      };
+    });
+
+    const user = userEvent.setup();
+    render(<ChatWidget />);
+    await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
+    await user.click(screen.getByRole('button', { name: 'Get delivery estimate' }));
+
+    const privateComposer = screen.getByRole('textbox', { name: 'Private delivery destination' });
+    await user.type(privateComposer, 'No. 12 Example Road, Lagos');
+    await user.click(screen.getByRole('button', { name: 'Check destination state' }));
+
+    expect(screen.getByText('Lagos', { selector: 'strong' })).toBeInTheDocument();
+    expect(handleSend).not.toHaveBeenCalled();
+    expect(handleSubmit).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Yes, check estimate' }));
+
+    expect(await screen.findByText(/No store-configured rate matched this state/i)).toBeInTheDocument();
+    expect(handleSend).not.toHaveBeenCalled();
+    expect(handleSubmit).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/chat/delivery-estimate', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ state: 'Lagos' }),
+    }));
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('No. 12 Example Road');
+  });
+
   it('clears private delivery mode when the floating close button is used', async () => {
     const setInput = vi.fn();
     const setIsOpen = vi.fn();
@@ -272,13 +344,55 @@ describe('ChatWidget - chat window when open', () => {
     render(<ChatWidget />);
     await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
     await user.click(screen.getByRole('button', { name: 'Get delivery estimate' }));
-    expect(screen.getByRole('region', { name: 'Private destination entry' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Private delivery estimate' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Toggle chat' }));
 
     expect(setInput).toHaveBeenCalledWith('');
     expect(setIsOpen).toHaveBeenCalledWith(false);
-    expect(screen.queryByRole('region', { name: 'Private destination entry' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Private delivery estimate' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['path routing', { routingMode: 'path', merchant: { country: 'NG', payout_currency: 'NGN' } }],
+    ['non-NGN payout currency', { routingMode: 'domain', merchant: { country: 'NG', payout_currency: 'USD' } }],
+  ])('hides delivery estimates for %s', async (_label, merchantContext) => {
+    vi.mocked(useMerchantSafe).mockReturnValue({
+      basePath: '/ogabassey',
+      routingMode: merchantContext.routingMode as 'path' | 'domain',
+      merchant: {
+        id: 'merchant-1',
+        slug: 'ogabassey',
+        ...merchantContext.merchant,
+      },
+    } as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(useCart).mockReturnValue({
+      isCartOpen: false,
+      cart: [{ cartItemId: 'line-1', quantity: 1, price: 100, name: 'Phone' }],
+      subtotal: 100,
+      isHydrated: true,
+      addToCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+    } as unknown as ReturnType<typeof useCart>);
+    vi.mocked(useOgabasseyChat).mockReturnValue({
+      isOpen: true,
+      setIsOpen: vi.fn(),
+      messages: [],
+      input: '',
+      setInput: vi.fn(),
+      isLoading: false,
+      proactiveMsg: null,
+      setProactiveMsg: vi.fn(),
+      messagesEndRef: { current: null },
+      handleSend: vi.fn(),
+      handleSubmit: vi.fn(),
+      handleAddSantaWishToCart: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(<ChatWidget />);
+    await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
+    expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
   });
 
   it('renders "Ogabassey AI" header when chat is open in standard mode', () => {

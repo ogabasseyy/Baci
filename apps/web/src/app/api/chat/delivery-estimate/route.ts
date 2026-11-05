@@ -1,16 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { loadPublicMerchantRates } from '@/app/api/shipping/quotes/load-public-merchant-rates';
 import { toPublicQuoteResponse } from '@/app/api/shipping/quotes/public-quote-response';
 import { resolveQuoteMerchantContext } from '@/app/api/shipping/quotes/quote-merchant-context';
 import { buildMerchantOnlyQuoteResponse } from '@/app/api/shipping/quotes/quote-source-orchestration';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { createClient } from '@/lib/supabase/server';
+import { chatDeliveryEstimateRequestSchema } from '@/schemas/chat-delivery-estimate';
 
-const RequestSchema = z
-  .object({ state: z.string().trim().min(2).max(100) })
-  .strict();
 const noStoreHeaders = { 'Cache-Control': 'no-store' };
 
 function hasTrustedStorefrontHeaders(request: NextRequest): boolean {
@@ -32,8 +30,16 @@ function hasTrustedStorefrontHeaders(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  const csrf = await checkCsrfProtection(request);
+  if (!csrf.valid) {
+    return NextResponse.json(
+      { error: 'CSRF validation failed' },
+      { status: 403, headers: noStoreHeaders }
+    );
+  }
+
   const body: unknown = await request.json().catch(() => null);
-  const parsed = RequestSchema.safeParse(body);
+  const parsed = chatDeliveryEstimateRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid estimate request' },
@@ -74,9 +80,16 @@ export async function POST(request: NextRequest) {
     !merchant.merchantId ||
     merchant.merchantCountry == null
   ) {
+    const status = merchant.ok ? 404 : merchant.status;
+    const message =
+      status === 403
+        ? 'Store delivery rates are forbidden'
+        : status >= 500
+          ? 'Store delivery rates could not be loaded'
+          : 'Store delivery rates are unavailable';
     return NextResponse.json(
-      { error: 'Store delivery rates are unavailable' },
-      { status: 404, headers: noStoreHeaders }
+      { error: message },
+      { status, headers: noStoreHeaders }
     );
   }
 

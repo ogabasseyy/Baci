@@ -1,6 +1,7 @@
 'use client';
 
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import { fetchWithCsrf } from '@/lib/api-client';
 import { getSubdivisions } from '@/lib/shipping/merchant-rates/subdivisions';
 import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
 import type { ShippingQuote } from '@/types/shipping-quote';
@@ -36,9 +37,13 @@ export function parseDestinationState(value: string):
         if (!termWords.every((word, offset) => words[start + offset] === word)) continue;
         const end = start + termWords.length;
         const preceding = words.slice(Math.max(0, start - 8), start).join(' ');
-        if (/\b(?:not|no|never|avoid|except|excluding|instead|rather)\b|\b(?:don t|doesn t|isn t|wasn t)\b/.test(preceding)) {
-          hasNegatedState = true;
-        }
+        const following = words.slice(end, end + 8).join(' ');
+        const precedingNegation = /\b(?:not|never|avoid|except|excluding|instead|rather)\b|\b(?:don t|doesn t|isn t|wasn t)\b/.test(preceding);
+        const followingNegation = /\b(?:not|never|isn t|is not|wasn t|was not|not my destination|not the destination)\b/.test(following);
+        // “No. 12 Lagos Street” is an address number, not a negated state.
+        const noIsStreetNumber = /\bno\.?\s*\d+\b/i.test(value.slice(0, value.toLowerCase().indexOf(term.toLowerCase())));
+        const precedingNo = /\bno\s*$/.test(preceding) && !noIsStreetNumber;
+        if (precedingNegation || followingNegation || precedingNo) hasNegatedState = true;
         if (subdivision.code === 'NG-NI') {
           const explicitlyQualified = words[end] === 'state' ||
             (words[start - 2] === 'state' && words[start - 1] === 'of');
@@ -125,7 +130,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
     setInput('');
     const state = confirmedState;
     try {
-      const response = await fetch('/api/chat/delivery-estimate', {
+      const response = await fetchWithCsrf('/api/chat/delivery-estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-baci-client': 'web-storefront' },
         signal: controller.signal,
@@ -185,9 +190,9 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
           data-ph-block=""
           data-session-replay-block=""
         >
-          <label className="block text-sm" htmlFor="chat-private-delivery-address">Destination</label>
-          <p id="chat-private-delivery-address" className="text-xs text-store-background-text/70">Type your destination in the private composer below. Include the Nigerian state or FCT area.</p>
-          {parseIssue === 'ambiguous' ? <p role="alert" className="text-sm">I found more than one state. Please revise the destination to identify one intended state.</p> : null}
+          <p className="block text-sm font-medium">Destination</p>
+          <p className="text-xs text-store-background-text/70">Type your destination in the private composer below. Include the Nigerian state or FCT area.</p>
+          {parseIssue === 'ambiguous' ? <p role="alert" className="text-sm">I couldn’t confidently identify one intended state. Your destination may mention conflicting states, negate a state, or use “Niger” without specifying Niger State. Please clarify the intended state.</p> : null}
           {parseIssue === 'missing' ? <p role="alert" className="text-sm">I couldn’t identify a Nigerian state. Please revise the destination to include its state or FCT.</p> : null}
           <div className="flex gap-2">
             <button type="submit" disabled={!input.trim()} className="flex-1 rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background disabled:opacity-60">Check state</button>
@@ -206,7 +211,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
               {quotes.map((quote) => (
                 <div key={quote.id} className="rounded-lg border border-store-border p-2 text-sm">
                   <p className="font-medium">{quote.displayName || quote.carrierName}</p>
-                  <p>{new Intl.NumberFormat(undefined, { style: 'currency', currency: quote.currency }).format(quote.price)} · {quote.deliveryRange || `${quote.estimatedDays} days`}</p>
+                  <p>{new Intl.NumberFormat(undefined, { style: 'currency', currency: quote.currency }).format(quote.price)}{quote.deliveryRange || quote.estimatedDays > 0 ? ` · ${quote.deliveryRange || `${quote.estimatedDays} days`}` : ''}</p>
                   <p className="text-xs text-store-background-text/70">Store-configured state-level estimate for {confirmedState}</p>
                 </div>
               ))}

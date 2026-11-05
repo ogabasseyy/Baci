@@ -48,6 +48,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         />
         <button
           type="submit"
+          aria-label={isSanta ? 'Send wish' : privateMode ? 'Check destination state' : 'Send message'}
           disabled={!input.trim() || isLoading}
           className={`p-2.5 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-sm flex items-center justify-center w-10 h-10 ${isSanta
             ? 'bg-red-600 hover:bg-red-700 hover:scale-105 active:scale-95'

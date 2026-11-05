@@ -3,17 +3,19 @@ import '@/app/(storefront)/storefront-chat.css';
 import { ShoppingCart, Sparkles, X } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FC } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
+import { ChatLauncher } from './ChatLauncher';
 import { ChatCartReview } from './chat-cart-review';
 import { ChatDeliveryQuote } from './chat-delivery-quote';
 import { ChatMessageBubble } from './chat-message';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
+import { canOfferPrivateDeliveryEstimate, getChatPanelMobileHeightCap, usePrivateDeliveryMode } from './use-private-delivery-mode';
 export interface ChatWidgetProps {
   openOnMount?: boolean;
 }
@@ -38,10 +40,8 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
   const merchant = useMerchantSafe();
   const isFooterVisible = useOgabasseyScrollVisibility();
   const isSanta = theme === 'santa';
-  const [privateDeliveryMode, setPrivateDeliveryMode] = useState(false);
-  const [privateComposerLocked, setPrivateComposerLocked] = useState(false);
+  const privateDelivery = usePrivateDeliveryMode();
   const [cartPanelOpen, setCartPanelOpen] = useState(false);
-  const privateSubmitRef = useRef<(() => void) | null>(null);
   const cartKey = JSON.stringify({
     lines: cart.map((item) => [item.cartItemId, item.quantity, item.price, item.negotiatedPrice]),
     subtotal,
@@ -70,26 +70,14 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
     storefrontSlug: merchant?.merchant?.slug,
   });
 
-  const handleComposerSubmit = (event: FormEvent) => {
-    if (privateDeliveryMode) {
-      event.preventDefault();
-      privateSubmitRef.current?.();
-      return;
-    }
-    handleSubmit(event);
-  };
   useEffect(() => {
-    if (cartPanelOpen || privateDeliveryMode) {
+    if (cartPanelOpen || privateDelivery.active) {
       messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
-  }, [cartPanelOpen, privateDeliveryMode, messagesEndRef]);
+  }, [cartPanelOpen, privateDelivery.active, messagesEndRef]);
   const closeChat = () => {
     setCartPanelOpen(false);
-    if (privateDeliveryMode) {
-      setInput('');
-      setPrivateDeliveryMode(false);
-      setPrivateComposerLocked(false);
-    }
+    if (privateDelivery.active) privateDelivery.close(() => setInput(''));
     setIsOpen(false);
   };
 
@@ -104,6 +92,7 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
       ? 'cart'
       : 'default';
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
+  const mobileBottomOffset = mobileOffset === 'cart' ? '6.75rem' : '1rem';
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',
@@ -128,7 +117,8 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
     >
       {isOpen && (
         <div
-          className={`w-[calc(100vw-32px)] md:w-[400px] h-auto min-h-[min(400px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] md:min-h-[min(420px,80vh)] md:max-h-[min(80vh,720px)] bg-store-background rounded-2xl shadow-2xl border ${isSanta ? 'border-store-primary/20' : 'border-store-border'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-store-background-text/5`}
+          className={`w-[calc(100vw-32px)] md:w-[400px] h-auto min-h-[min(400px,var(--chat-mobile-height-cap))] max-h-[var(--chat-mobile-height-cap)] md:min-h-[min(420px,80vh)] md:max-h-[min(80vh,720px)] bg-store-background rounded-2xl shadow-2xl border ${isSanta ? 'border-store-primary/20' : 'border-store-border'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-store-background-text/5`}
+          style={{ '--chat-mobile-height-cap': getChatPanelMobileHeightCap(mobileBottomOffset) } as CSSProperties}
         >
           <div
             className={`relative flex items-center justify-between p-4 border-b ${
@@ -253,26 +243,31 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
               <div id="chat-cart-panel" hidden={!cartPanelOpen}>
                 {cartPanelOpen ? (
                   <ChatCartReview onRequestDeliveryQuote={
-                    isHydrated && cart.length > 0 &&
-                    ['nigeria', 'ng'].includes(merchant?.merchant?.country?.trim().toLowerCase() ?? '')
+                    canOfferPrivateDeliveryEstimate({
+                      hydrated: isHydrated,
+                      hasItems: cart.length > 0,
+                      routingMode: merchant?.routingMode,
+                      country: merchant?.merchant?.country,
+                      payoutCurrency: merchant?.merchant?.payout_currency,
+                    })
                       ? () => {
                           setInput('');
                           setCartPanelOpen(false);
-                          setPrivateDeliveryMode(true);
+                          privateDelivery.start();
                         }
                       : undefined
                   } />
                 ) : null}
               </div>
 
-              {privateDeliveryMode ? (
+              {privateDelivery.active ? (
                 <ChatDeliveryQuote
                   cartKey={cartKey}
                   input={input}
                   setInput={setInput}
-                  submitRef={privateSubmitRef}
-                  onComposerLockChange={setPrivateComposerLocked}
-                  onClose={() => { setInput(''); setPrivateDeliveryMode(false); setPrivateComposerLocked(false); }}
+                  submitRef={privateDelivery.submitRef}
+                  onComposerLockChange={privateDelivery.setComposerLocked}
+                  onClose={() => privateDelivery.close(() => setInput(''))}
                 />
               ) : null}
 
@@ -283,82 +278,22 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
           <ChatInput
             input={input}
             setInput={setInput}
-            isLoading={isLoading || privateComposerLocked}
+            isLoading={isLoading || privateDelivery.composerLocked}
             isSanta={isSanta}
-            onSubmit={handleComposerSubmit}
-            privateMode={privateDeliveryMode}
+            onSubmit={(event) => privateDelivery.handleComposerSubmit(event, handleSubmit)}
+            privateMode={privateDelivery.active}
           />
         </div>
       )}
 
-      <div className="relative group">
-        {!isOpen && isSanta && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-32 bg-store-background px-4 py-3 rounded-2xl rounded-tr-none shadow-xl border-2 border-store-primary/10 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4">
-            <p className="text-sm font-bold text-store-background-text text-center leading-tight">
-              Make a wish! {'\u2728'}
-            </p>
-            <div className="absolute -bottom-2 -right-1 size-3 bg-store-background rounded-full border-r border-b border-store-primary/10" />
-            <div className="absolute -bottom-4 -right-3 size-2 bg-store-background/90 rounded-full border border-store-primary/10" />
-          </div>
-        )}
-
-        {/* Proactive Nudge Bubble (Standard Mode) */}
-        {!isOpen && !isSanta && proactiveMsg && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-store-background px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-store-primary/10 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
-            <div className="text-store-background-text text-xs font-medium leading-relaxed">
-              {proactiveMsg}
-            </div>
-            <div className="absolute -bottom-1.5 -right-1 size-4 bg-store-background rotate-45 border-r border-b border-store-primary/10" />
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setProactiveMsg(null);
-              }}
-              aria-label="Dismiss chat suggestion"
-              className="absolute -top-2 -left-2 bg-store-background-text/5 hover:bg-store-background-text/10 rounded-full p-1 transition-colors"
-            >
-              <X size={10} className="text-store-background-text/70" />
-            </button>
-          </div>
-        )}
-
-          <button
-            type="button"
-            onClick={() => (isOpen ? closeChat() : setIsOpen(true))}
-            className={buttonClasses}
-            aria-label="Toggle chat"
-          >
-            {isOpen ? (
-              <X size={28} />
-            ) : (
-              <>
-                {isSanta ? (
-                  <div className="relative w-full h-full">
-                    <Image
-                      src="/african-santa-head.svg"
-                      alt="Santa"
-                      fill
-                      sizes="64px"
-                      className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
-                    />
-                  </div>
-                ) : (
-                  <Sparkles
-                    size={28}
-                    className="md:w-8 md:h-8 drop-shadow-xs"
-                    fill="currentColor"
-                    fillOpacity={0.1}
-                  />
-                )}
-                <span className="ogabassey-chat-badge">
-                  <span className="ogabassey-chat-badge__ping" />
-                  <span className="ogabassey-chat-badge__label">AI</span>
-                </span>
-              </>
-            )}
-          </button>
-      </div>
+      <ChatLauncher
+        isOpen={isOpen}
+        isSanta={isSanta}
+        proactiveMsg={proactiveMsg}
+        buttonClasses={buttonClasses}
+        onToggle={() => (isOpen ? closeChat() : setIsOpen(true))}
+        onDismissSuggestion={() => setProactiveMsg(null)}
+      />
     </div>
   );
 };

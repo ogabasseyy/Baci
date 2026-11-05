@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -28,17 +28,23 @@ vi.mock('@/app/api/shipping/quotes/public-quote-response', () => ({
 
 import { POST } from './route';
 
-function request(body: unknown) {
-  return new Request('https://store.usebaci.com/api/chat/delivery-estimate', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      host: 'store.usebaci.com',
-      'x-merchant-slug': 'store',
-      'x-merchant-domain': 'store.usebaci.com',
-    },
-    body: JSON.stringify(body),
-  }) as NextRequest;
+function request(body: unknown, csrf = true) {
+  return new NextRequest(
+    'https://store.usebaci.com/api/chat/delivery-estimate',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        host: 'store.usebaci.com',
+        'x-merchant-slug': 'store',
+        'x-merchant-domain': 'store.usebaci.com',
+        ...(csrf
+          ? { cookie: 'csrf-token=test-token', 'x-csrf-token': 'test-token' }
+          : {}),
+      },
+      body: JSON.stringify(body),
+    }
+  );
 }
 
 beforeEach(() => {
@@ -57,6 +63,79 @@ beforeEach(() => {
 });
 
 describe('POST /api/chat/delivery-estimate', () => {
+  it('rejects a missing CSRF token before merchant or rate lookups', async () => {
+    const response = await POST(request({ state: 'Lagos' }, false));
+    expect(response.status).toBe(403);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.loadRates).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for root-host path aliases even when merchant headers are present', async () => {
+    const aliased = new NextRequest(
+      'https://usebaci.com/api/chat/delivery-estimate',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: 'csrf-token=test-token',
+          'x-csrf-token': 'test-token',
+          'x-merchant-slug': 'store',
+        },
+        body: JSON.stringify({ state: 'Lagos' }),
+      }
+    );
+    expect((await POST(aliased)).status).toBe(404);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+  });
+
+  it('rejects forged custom-domain context when the domain header does not match the host', async () => {
+    const mismatched = new NextRequest(
+      'https://shop.example.com/api/chat/delivery-estimate',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          host: 'shop.example.com',
+          cookie: 'csrf-token=test-token',
+          'x-csrf-token': 'test-token',
+          'x-merchant-domain': 'attacker.example',
+          'x-merchant-slug': 'attacker',
+        },
+        body: JSON.stringify({ state: 'Lagos' }),
+      }
+    );
+
+    expect((await POST(mismatched)).status).toBe(404);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.loadRates).not.toHaveBeenCalled();
+  });
+
+  it('accepts a custom domain when the domain header matches the request host', async () => {
+    const matching = new NextRequest(
+      'https://shop.example.com/api/chat/delivery-estimate',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          host: 'shop.example.com',
+          cookie: 'csrf-token=test-token',
+          'x-csrf-token': 'test-token',
+          'x-merchant-domain': 'shop.example.com',
+          'x-merchant-slug': 'store',
+        },
+        body: JSON.stringify({ state: 'Lagos' }),
+      }
+    );
+
+    expect((await POST(matching)).status).toBe(200);
+    expect(mocks.merchant).toHaveBeenCalledOnce();
+    expect(mocks.loadRates).toHaveBeenCalledWith('merchant-1', {
+      receiverCountryCode: 'NG',
+      receiverState: 'Lagos',
+      merchantCurrency: 'NGN',
+    });
+  });
+
   it('uses only a canonical confirmed state and never passes a subtotal or provider destination', async () => {
     const response = await POST(request({ state: 'Lagos' }));
     expect(response.status).toBe(200);
@@ -102,6 +181,19 @@ describe('POST /api/chat/delivery-estimate', () => {
       merchantPayoutCurrency: 'NGN',
     });
     mocks.loadRates.mockResolvedValueOnce({ loadFailed: true, quotes: [] });
+    const response = await POST(request({ state: 'Lagos' }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'Store delivery rates could not be loaded',
+    });
+  });
+
+  it('preserves merchant lookup status while returning only a safe public message', async () => {
+    mocks.merchant.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      error: 'database password and internal details',
+    });
     const response = await POST(request({ state: 'Lagos' }));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({

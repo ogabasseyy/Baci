@@ -24,7 +24,7 @@ describe('ChatInput', () => {
 
   it('renders a submit button', () => {
     render(<ChatInput {...defaultProps} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect(button).toBeDefined();
   });
 
@@ -42,19 +42,19 @@ describe('ChatInput', () => {
 
   it('submit button is disabled when input is empty', () => {
     render(<ChatInput {...defaultProps} input="" />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('submit button is disabled when loading is true', () => {
     render(<ChatInput {...defaultProps} input="some text" isLoading={true} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('submit button is enabled when input has text and not loading', () => {
     render(<ChatInput {...defaultProps} input="hello there" isLoading={false} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -80,7 +80,7 @@ describe('ChatInput', () => {
         onSubmit={onSubmit}
       />
     );
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     await user.click(button);
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });

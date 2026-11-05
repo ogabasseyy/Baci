@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T04:31:04+00:00",
-  "source_revision": "4af8927598598c4305f6eab54f27751c20428f18",
-  "evidence_digest": "26f2db7972b595dcfab34677b50c6682b54b58bc1290c5ee0596fe8a3a7110af",
-  "claims_digest": "09a6984d35e40dd14da1929dcc1b0d9dc3aefdd403f82f281a708892801c7763",
+  "reviewed_at": "2026-11-05T04:32:23+00:00",
+  "source_revision": "098690b44a8cbb20bcde29b1c2f63a6c99e33df6",
+  "evidence_digest": "46dbd69c36fd4ef5f0aef833589fe245e55639fe628f239762bd0bbe18a96179",
+  "claims_digest": "0b2cb23d3ee411ad560c2fed3a86308e57d2ea2611e1e40d86f1632c67f8104c",
   "review_scope": "Source-only experience re-review: mode-exit authorization and RPC failures, source-patch schema placement, bounded long MCP build finalization with cancellation, matching backend duration, typed owner approval request, and CI page/shipping/apply fixtures. Focused synthetic tests passed. Production composition remains uninstalled/disabled; no hosted migration, provider, payment or publication activation. Existing capability limitations remain. Current-head CI/review, host qualification and separate rollout authorization remain required; benchmarks parked.",
   "capabilities": [
     {

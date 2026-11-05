@@ -7,10 +7,6 @@ import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
 import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
-import {
-  piggyvestServerEnvShape,
-  readPiggyvestServerEnv,
-} from '@/schemas/piggyvest-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
 import { walletPinPepperEnvSchema } from '@/schemas/wallet-pin-pepper';
 
@@ -293,7 +289,7 @@ const serverSchema = z
     // Internal
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
-    ...piggyvestServerEnvShape,
+    PIGGYVEST_SECRET_KEY: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -780,7 +776,7 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         NODE_ENV: process.env.NODE_ENV,
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
-        ...readPiggyvestServerEnv(),
+        PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,

@@ -1,5 +1,8 @@
 import 'server-only';
-import { PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN as PROJECT_REF } from '@/schemas/piggyvest-env';
+import {
+  PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN as PROJECT_REF,
+  readPiggyvestPrimaryDbPoolerProjectRef,
+} from '@/schemas/piggyvest-env';
 
 /**
  * One rule for how PiggyVest restricted-login executors reach Postgres.
@@ -33,8 +36,8 @@ export type PrimaryDbLink = {
 };
 
 export function primaryDbLink(login: string, port: number): PrimaryDbLink {
-  const ref = process.env.PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF;
-  if (ref === undefined || ref === '') {
+  const ref = readPiggyvestPrimaryDbPoolerProjectRef();
+  if (ref === undefined) {
     return {
       user: login,
       startup: {

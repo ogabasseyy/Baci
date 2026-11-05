@@ -1,35 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
 import {
   PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN,
-  piggyvestServerEnvShape,
-  readPiggyvestServerEnv,
+  readPiggyvestPrimaryDbPoolerProjectRef,
 } from './piggyvest-env';
 
-const schema = z.object(piggyvestServerEnvShape);
-
-describe('piggyvest server env', () => {
-  it('reads both PiggyVest entries from the given source', () => {
+describe('readPiggyvestPrimaryDbPoolerProjectRef', () => {
+  it('returns the configured ref', () => {
     expect(
-      readPiggyvestServerEnv({
-        PIGGYVEST_SECRET_KEY: 'sk',
+      readPiggyvestPrimaryDbPoolerProjectRef({
         PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: 'abcdefghijklmnopqrst',
-        OTHER: 'ignored',
       })
-    ).toEqual({
-      PIGGYVEST_SECRET_KEY: 'sk',
-      PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: 'abcdefghijklmnopqrst',
-    });
+    ).toBe('abcdefghijklmnopqrst');
   });
 
-  it('never fails boot, including for a malformed pooler ref', () => {
-    expect(schema.safeParse({}).success).toBe(true);
+  it('treats an absent or blank ref as pooler mode off', () => {
+    expect(readPiggyvestPrimaryDbPoolerProjectRef({})).toBeUndefined();
     expect(
-      schema.safeParse({ PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: 'BAD REF' })
-        .success
-    ).toBe(true);
+      readPiggyvestPrimaryDbPoolerProjectRef({
+        PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: '',
+      })
+    ).toBeUndefined();
   });
 
+  it('returns a malformed ref unchanged so the executors fail closed', () => {
+    expect(
+      readPiggyvestPrimaryDbPoolerProjectRef({
+        PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF: 'BAD REF',
+      })
+    ).toBe('BAD REF');
+  });
+});
+
+describe('PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN', () => {
   it('accepts only a 20-character lowercase project ref', () => {
     expect(
       PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF_PATTERN.test(

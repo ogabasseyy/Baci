@@ -47,4 +47,28 @@ describe('server keeps PiggyVest off', () => {
     );
     expect(onFundWallet).toHaveBeenCalledTimes(1);
   });
+
+  it('shows no cancel or complete button for a signed-out customer', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount=""
+        colors={Colors.dark}
+        goal={{ ...goal, status: 'completed' as never }}
+        isAdding={false}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={0}
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Cancel savings goal' })
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Complete savings goal' })
+    ).toBeNull();
+  });
 });

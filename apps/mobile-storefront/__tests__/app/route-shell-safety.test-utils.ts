@@ -97,6 +97,7 @@ export const EXPLICIT_STATIC_ROUTES = new Set([
   'settings/wallet-pin.tsx',
   'utilities/history.tsx',
   'wallet/manage-cards.tsx',
+  'wallet/savings/goal-actions.tsx',
   'wallet/savings/start.tsx',
   'wallet/usdt.tsx',
 ]);

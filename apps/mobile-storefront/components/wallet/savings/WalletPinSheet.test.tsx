@@ -11,7 +11,9 @@ import {
   fetchWalletPinStatus,
   submitWalletPin,
   verifyFundPin,
+  verifyGoalActionPin,
 } from '@/lib/wallet-pin-api';
+import type { PinProofRequest } from '@/lib/wallet-pin-proof';
 import { WalletPinSheet } from './WalletPinSheet';
 
 jest.mock('@/lib/wallet-pin-api');
@@ -34,13 +36,13 @@ const status = (over: Partial<Status>): Status => ({
 const serverError = (message: string, code: string) =>
   Object.assign(new Error(message), { code });
 
-function renderSheet() {
+function renderSheet(open: PinProofRequest = request) {
   const onProof = jest.fn();
   const onCancel = jest.fn();
   render(
     <WalletPinSheet
       colors={Colors.light}
-      request={request}
+      request={open}
       onProof={onProof}
       onCancel={onCancel}
     />
@@ -219,5 +221,51 @@ describe('keyboard handling', () => {
     fireEvent.press(await screen.findByText('Enter your wallet PIN'));
     expect(dismiss).toHaveBeenCalled();
     expect(onCancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('goal actions', () => {
+  const goalIds = {
+    merchantId: request.merchantId,
+    goalId: request.goalId,
+    operationId: request.operationId,
+  };
+
+  it('keeps the contribution copy for the fund action', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    renderSheet();
+    expect(
+      await screen.findByText('Confirm this contribution with your PIN.')
+    ).toBeOnTheScreen();
+  });
+
+  it.each([
+    ['cancel', 'Enter your PIN to cancel this goal.'],
+    ['complete', 'Enter your PIN to complete this goal.'],
+  ] as const)('shows the %s copy and verifies that action without an amount', async (action, copy) => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    jest.mocked(verifyGoalActionPin).mockResolvedValue(proof);
+    const { onProof } = renderSheet({ ...goalIds, action });
+    expect(await screen.findByText(copy)).toBeOnTheScreen();
+    fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
+    fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(onProof).toHaveBeenCalledWith(proof));
+    expect(verifyGoalActionPin).toHaveBeenCalledWith(
+      { ...goalIds, action, pin: '4821' },
+      undefined
+    );
+    expect(verifyFundPin).not.toHaveBeenCalled();
+  });
+
+  it('switches to set / reset from a goal-action check, as the fund path does', async () => {
+    jest.mocked(fetchWalletPinStatus).mockResolvedValue(status({}));
+    jest
+      .mocked(verifyGoalActionPin)
+      .mockRejectedValue(serverError('Set a PIN first.', 'PIN_NOT_SET'));
+    renderSheet({ ...goalIds, action: 'cancel' });
+    await screen.findByText('Enter your PIN to cancel this goal.');
+    fireEvent.changeText(screen.getByLabelText('PIN'), '4821');
+    fireEvent.press(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Set a wallet PIN')).toBeOnTheScreen();
   });
 });

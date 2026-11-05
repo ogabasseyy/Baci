@@ -44,3 +44,25 @@ describe('server keeps PiggyVest off', () => {
     expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   });
 });
+
+describe('server keeps PiggyVest off (shared status)', () => {
+  it('renders nothing for a non-primary merchant even when handed a status', () => {
+    const { toJSON } = render(
+      <SavingsPlanStatusNote
+        colors={Colors.light}
+        goalId={SERVER_OFF_GOAL_ID}
+        identityKey="user-a"
+        merchantId={SERVER_OFF_MERCHANT_ID}
+        funding={
+          {
+            planFundingPhase: 'pending',
+            planFundingRequiresBvn: false,
+            fetchExistingPlanFunding: jest.fn(),
+          } as never
+        }
+      />
+    );
+    expect(toJSON()).toBeNull();
+    expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
+  });
+});

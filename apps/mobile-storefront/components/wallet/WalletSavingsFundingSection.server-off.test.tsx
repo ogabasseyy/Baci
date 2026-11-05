@@ -1,6 +1,16 @@
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
+import { useAuthStore } from '@/stores/auth-store';
+import {
+  expectNoPiggyvestUi,
+  SERVER_OFF_GOAL_ID,
+  SERVER_OFF_MERCHANT_ID,
+  serverOffError,
+} from '@/test-support/piggyvest-server-off.test-support';
+import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 
 jest.mock('./WalletSavingsContributionFlow', () => ({
@@ -8,6 +18,11 @@ jest.mock('./WalletSavingsContributionFlow', () => ({
     const { Text } = require('react-native');
     return <Text>wallet-contribution</Text>;
   },
+}));
+jest.mock('@/lib/piggyvest-primary-wallet');
+jest.mock('@/lib/is-piggyvest-primary-merchant');
+jest.mock('./savings/use-savings-plan-funding', () => ({
+  useSavingsPlanFunding: jest.fn(),
 }));
 jest.mock('./WalletSavingsPlanFunding', () => ({
   WalletSavingsPlanFunding: () => {
@@ -61,5 +76,49 @@ describe('server keeps PiggyVest off', () => {
     );
     expect(screen.getByText('wallet-contribution')).toBeOnTheScreen();
     expect(screen.queryByText('plan-funding')).toBeNull();
+  });
+});
+
+// The real readiness gate: the server refusing, or answering anything but a
+// ready wallet, leaves today's output and starts no goal-wallet status read.
+describe('server keeps PiggyVest off (readiness gate)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['PIGGYVEST_NOT_READY', () => Promise.reject(serverOffError())],
+    [
+      'a pending wallet',
+      () =>
+        Promise.resolve({
+          account: null,
+          requiresConsent: true,
+          provisioningStatus: 'pending',
+        }),
+    ],
+  ])('keeps the wallet contribution alone for %s', async (_name, answer) => {
+    jest.mocked(isPiggyvestPrimaryMerchant).mockReturnValue(true);
+    jest
+      .mocked(piggyvestPrimaryWalletApi.read)
+      .mockImplementation(answer as never);
+    act(() => {
+      useAuthStore.setState({
+        user: { id: 'u' } as never,
+        merchantId: SERVER_OFF_MERCHANT_ID,
+      });
+    });
+    render(
+      <WalletSavingsFundingSection
+        {...props}
+        goal={{ id: SERVER_OFF_GOAL_ID, source_mode: 'manual' } as never}
+        usesPlanFunding={false}
+        visible
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText('wallet-contribution')).toBeOnTheScreen()
+    );
+    expect(piggyvestPrimaryWalletApi.read).toHaveBeenCalled();
+    expect(useSavingsPlanFunding).not.toHaveBeenCalled();
+    expectNoPiggyvestUi();
   });
 });

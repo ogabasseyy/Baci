@@ -37,7 +37,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch', () => ({
   dispatchPrimaryCardSignedCustodyIntake: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () => withCaptureRpc(mocks.legacy()),
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.legacy()),
 }));
 
 import { POST } from './route';

@@ -171,7 +171,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
-      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/lib/storefront/server-intake-client.ts',
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',

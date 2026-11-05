@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-05T07:40:51+00:00",
-  "source_revision": "1660ca2c32d8a45f8ae89bd8661e987cb6712502",
-  "evidence_digest": "c852b8639595ce2863dad8027aa4c2e70d43fe99ce82e7717203c29476494d9c",
-  "claims_digest": "795f000e316e1f4aacedc2f8e01198dff2109886d6a777b32211839b5a71db06",
-  "review_scope": "Source-only follow-up after current-main reconciliation: direct experience tool-result schema tests cover JSON success envelopes, every ordinary failure code, fixed safe error text, unexpected fields, and required resource/reason fields for performance failures. Existing runtime fixes retained; no new capability promoted. Production composition remains disabled; current-head CI/review, hosted qualification and separate rollout authorization required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
+  "reviewed_at": "2026-11-05T09:35:26+00:00",
+  "source_revision": "f1566a2a55b698de53ccd674b9c4979209941b43",
+  "evidence_digest": "cc47f89fcdf8ff67e64feb83da4f71c768bfa28d25a98902032f5dd9d249544f",
+  "claims_digest": "4c4c88ab1f77a544cc1a0a9d5e9cfb3c304f36c90ad381f72efad5080c420df5",
+  "review_scope": "Source-only recovery follow-up: verifier evidence schema extracted with direct validation tests; committed publication receipts expose verification-only retry; mode-exit schema boundaries covered; SDK cart.reconcile preserves the original operation ID through timeout and bound host receipt reconciliation; merchantless domestic quotes bypass tenant storage while tenant quotes keep attested persistence. Local mocked tests passed. Production composition remains disabled; hosted qualification, current-head CI/review and separate rollout authorization remain required. Benchmarks parked; no hosted state, payment/provider or publication activation.",
   "capabilities": [
     {
       "id": "payments",

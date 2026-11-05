@@ -261,7 +261,10 @@ describe('WalletScreen PiggyVest main wallet', () => {
   function mountWith(primaryReady: boolean) {
     const refetch = jest.fn();
     mockUseWallet.mockReturnValue({
-      data: { wallet: { primary_balance_kobo: 123456 }, transactions: [] },
+      data: {
+        wallet: primaryReady ? { primary_balance_kobo: 123456 } : {},
+        transactions: [],
+      },
       isError: false,
       isLoading: false,
       isRefetching: false,

@@ -11,6 +11,12 @@ export interface WalletData {
    * `total_balance` stay the legacy figures that checkout still spends.
    */
   primary_balance_kobo?: number | null;
+  /**
+   * True when the primary read failed transiently (timeout or error), so the
+   * balance above is unknown rather than absent. Lets the wallet screen keep
+   * the last confirmed balance; any authoritative answer leaves it unset.
+   */
+  primary_unavailable?: boolean;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
   savings_goals?: WalletActiveSavingsGoal[];

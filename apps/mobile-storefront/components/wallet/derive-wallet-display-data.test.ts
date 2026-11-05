@@ -154,3 +154,14 @@ describe('deriveWalletDisplayData', () => {
     });
   });
 });
+
+describe('deriveWalletDisplayData legacy balance', () => {
+  it('keeps the legacy balance beside a primary-derived spendable balance', () => {
+    const data = deriveWalletDisplayData({
+      balance: 2000,
+      primary_balance_kobo: 0,
+    });
+    expect(data.spendableBalance).toBe(0);
+    expect(data.legacyBalance).toBe(2000);
+  });
+});

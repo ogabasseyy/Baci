@@ -20,7 +20,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import type { ContributionRail } from './savings/stored-contribution-operation';
 import { WalletPinSheet } from './savings/WalletPinSheet';
-import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
+import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
@@ -154,15 +154,14 @@ export function WalletScreen({
     setShowSavingsProgressModal,
     walletReturnTo,
   });
-  const display =
-    data && deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
-  const primaryReady = display?.primaryReady ?? false;
-  usePrimaryWalletCreditPoll({
-    balanceKobo: data?.wallet?.primary_balance_kobo,
-    enabled: showFundPanel && primaryReady,
+  const wallet = usePrimaryWalletWatch({
+    wallet: data?.wallet,
+    showFundPanel,
     scopeKey: `${user?.id ?? ''}:${activeMerchantId ?? ''}`,
     refetch,
   });
+  const display = wallet && deriveWalletDisplayData(wallet, routeSavingsGoalId);
+  const primaryReady = display?.primaryReady ?? false;
   const {
     hasPendingSavingsContribution,
     handleAddSavingsContribution,
@@ -183,6 +182,7 @@ export function WalletScreen({
     primaryReady,
     refetchWallet: refetch,
     savingsContributionAmount,
+    legacyBalance: display?.legacyBalance,
     spendableBalance: display?.spendableBalance ?? 0,
     walletTopUp: { customer, user, setIsFundPending },
     setIsAddingSavingsContribution,

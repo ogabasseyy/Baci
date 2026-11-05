@@ -76,6 +76,38 @@ describe('createWalletSavingsActions', () => {
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(false);
   });
 
+  it('validates a legacy-bound retry against the legacy balance, not the primary one', () => {
+    const operationRailRef = {
+      current: 'legacy' as 'primary' | 'legacy' | null,
+    };
+    createWalletSavingsActions({
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      idempotencyKeyRef: { current: 'stored-id' },
+      operationRailRef,
+      primaryReady: true,
+      savingsContributionAmount: '1000',
+      legacyBalance: 2000,
+      spendableBalance: 0,
+    }).handleAddSavingsContribution();
+    expect(addSavingsContributionToGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ walletBalance: 2000 })
+    );
+  });
+
+  it('validates a primary-rail contribution against the primary balance', () => {
+    createWalletSavingsActions({
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      primaryReady: true,
+      legacyBalance: 2000,
+      spendableBalance: 700,
+    }).handleAddSavingsContribution();
+    expect(addSavingsContributionToGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ walletBalance: 700 })
+    );
+  });
+
   it('opens plan creation when there is no active goal', () => {
     createWalletSavingsActions(createInput(null)).handleOpenSavings();
     expect(router.push).toHaveBeenCalledWith('/wallet/savings/start');

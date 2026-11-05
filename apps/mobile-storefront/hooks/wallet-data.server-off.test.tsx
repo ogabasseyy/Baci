@@ -82,6 +82,7 @@ describe('wallet data with the server off', () => {
     expect(wallet.balance).toBe(5000);
     expect('primary_balance_kobo' in wallet).toBe(false);
     expect(wallet.funding_account).toBeNull();
+    expect(wallet.primary_unavailable).toBe(true);
     expect(wallet.requires_funding_account_consent).toBe(true);
   });
 

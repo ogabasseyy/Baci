@@ -24,6 +24,7 @@ export function createWalletSavingsActions({
   activeMerchantSlug,
   goal,
   idempotencyKeyRef,
+  legacyBalance,
   onAddMoney,
   operationRailRef,
   primaryReady = false,
@@ -41,6 +42,8 @@ export function createWalletSavingsActions({
   activeMerchantSlug?: string;
   goal: WalletActiveSavingsGoal | null;
   idempotencyKeyRef: { current: string | null };
+  /** Legacy-rail balance; defaults to spendableBalance when not supplied. */
+  legacyBalance?: number;
   /** PiggyVest main wallet ready: opens Add money in place of a card top-up. */
   onAddMoney?: () => void;
   /** True only on an explicit server 'ready' verdict for the main wallet. */
@@ -179,7 +182,11 @@ export function createWalletSavingsActions({
       rawAmount: savingsContributionAmount,
       refetchWallet,
       setIsAddingSavingsContribution,
-      walletBalance: spendableBalance,
+      // An id bound to the legacy rail is validated against the legacy balance.
+      walletBalance:
+        rail === 'primary'
+          ? spendableBalance
+          : (legacyBalance ?? spendableBalance),
     });
   };
 

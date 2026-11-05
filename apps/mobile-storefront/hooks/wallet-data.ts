@@ -6,6 +6,7 @@ import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import {
   primaryBalanceField,
+  primaryUnavailableField,
   readPrimaryFundingAccountSoon,
 } from './wallet-primary-balance';
 import type {
@@ -266,6 +267,7 @@ export async function fetchWalletDataUnbounded(
       funding_account: fundingAccountData,
       loyalty_points: safeLoyaltyPoints,
       ...primaryBalanceField(primaryFunding),
+      ...primaryUnavailableField(primaryFunding),
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
       savings_goals: savingsGoals,

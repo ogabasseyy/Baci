@@ -29,6 +29,15 @@ export function readPrimaryFundingAccountSoon(
   ]);
 }
 
+/** Marks a transient primary read failure, as opposed to an authoritative answer. */
+export function primaryUnavailableField(
+  primary: SettledPrimaryFundingAccount
+): {
+  primary_unavailable?: true;
+} {
+  return primary.status === 'unavailable' ? { primary_unavailable: true } : {};
+}
+
 /**
  * The PiggyVest main-wallet balance (kobo) to expose on the wallet, only
  * when the server explicitly says the primary wallet is ready: a confirmed

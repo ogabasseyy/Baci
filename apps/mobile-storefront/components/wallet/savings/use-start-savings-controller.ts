@@ -18,6 +18,7 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { readParam } from './start-savings-controller.utils';
+import { deriveStartSavingsWalletBalance } from './start-savings-wallet-balance';
 import { useInitialContributionOperation } from './use-initial-contribution-operation';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
@@ -95,7 +96,7 @@ export function useStartSavingsController() {
     activeMerchantSlug,
     sourceMode,
   });
-  const safeWalletBalance = walletData?.wallet.balance ?? 0;
+  const safeWalletBalance = deriveStartSavingsWalletBalance(walletData?.wallet);
   const fundingAccount = walletData?.wallet.funding_account ?? null;
 
   const routeVariantId = readParam(params.variantId);

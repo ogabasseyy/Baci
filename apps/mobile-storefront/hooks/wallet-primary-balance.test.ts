@@ -9,6 +9,7 @@ import {
 import {
   PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS,
   primaryBalanceField,
+  primaryUnavailableField,
   readPrimaryFundingAccountSoon,
 } from './wallet-primary-balance';
 
@@ -73,5 +74,21 @@ describe('readPrimaryFundingAccountSoon', () => {
     const settled = readPrimaryFundingAccountSoon('m', 'u');
     jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
     await expect(settled).resolves.toEqual({ status: 'unavailable' });
+  });
+});
+
+describe('primaryUnavailableField', () => {
+  it('marks only a transient failure, never an authoritative answer', () => {
+    expect(primaryUnavailableField({ status: 'unavailable' })).toEqual({
+      primary_unavailable: true,
+    });
+    expect(primaryUnavailableField({ status: 'not_ready' })).toEqual({});
+    expect(
+      primaryUnavailableField({
+        status: 'ready',
+        account: null,
+        balanceKobo: null,
+      })
+    ).toEqual({});
   });
 });

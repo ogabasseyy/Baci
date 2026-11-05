@@ -86,3 +86,43 @@ it('delivers prerendered controls inert before the hydration module can execute'
     'Custom interaction'
   );
 });
+
+it('accepts React responsive-image preloads only for trusted asset candidates', async () => {
+  const { createElement } = await import('react');
+  const { renderToString } = await import('react-dom/server');
+  const images = ['small', 'large'].map((name) => ({
+    path: `assets/${name}`,
+    url: `http://127.0.0.1:4101/resource/${'a'.repeat(64)}/assets/${name}`,
+    digest: 'b'.repeat(64),
+  }));
+  const markup = renderToString(
+    createElement('img', {
+      src: images[0].url,
+      srcSet: `${images[0].url} 1x, ${images[1].url} 2x`,
+      sizes: '100vw',
+      loading: 'eager',
+      alt: 'Synthetic product',
+    })
+  );
+  expect(markup.toLowerCase()).toContain('imagesrcset');
+  const doc = createPrivatePrerenderDocument(markup, {} as never, [
+    ...resources,
+    ...images,
+  ]);
+  expect(doc.toLowerCase()).toContain('imagesrcset');
+  expect(doc).toContain(images[1].url);
+  for (const candidates of [
+    `${images[0].url} 1x, https://evil.test/image 2x`,
+    `${images[0].url} nope`,
+    '',
+    `${images[0].url} 0x`,
+  ]) {
+    expect(() =>
+      createPrivatePrerenderDocument(
+        `<link rel="preload" as="image" imagesrcset="${candidates}">`,
+        {} as never,
+        [...resources, ...images]
+      )
+    ).toThrow('BUILD_FAILED');
+  }
+});

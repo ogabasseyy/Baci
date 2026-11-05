@@ -178,7 +178,7 @@ export function createPrivateExperienceCapture(deps: {
         evidenceId: id,
         buildId: input.buildId,
         buildDigest: build.data.build_digest,
-        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId })}`,
+        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId, routeId: input.routeId })}`,
       };
     })();
     cache.set(key, { fingerprint, expires: Date.now() + 600000, value });

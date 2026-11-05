@@ -47,11 +47,7 @@ export function createPrivatePrerenderDocument(
       !(
         element.getAttribute('rel') === 'preload' &&
         element.getAttribute('as') === 'image' &&
-        resources.some(
-          (r) =>
-            r.path.startsWith('assets/') &&
-            r.url === element.getAttribute('href')
-        )
+        trustedImagePreload(element, resources)
       )
     )
       throw Error('BUILD_FAILED');
@@ -121,4 +117,25 @@ export function createPrivatePrerenderDocument(
   const integrity = (r: Resource) =>
     `sha256-${Buffer.from(r.digest, 'hex').toString('base64')}`;
   return `<!doctype html><html lang="en" data-baci-hydration="pending"${marker}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">${css ? `<link rel="stylesheet" href="${css.url}" integrity="${integrity(css)}" crossorigin="anonymous">` : ''}</head><body><div id="root" inert>${normalized}</div><script id="baci-prerender-bootstrap" type="application/json">${json}</script><script type="module" src="${js.url}" integrity="${integrity(js)}" crossorigin="anonymous"></script></body></html>`;
+}
+
+/** Responsive SSR preloads may omit href; every fetch candidate stays asset-bound. */
+function trustedImagePreload(element: Element, resources: Resource[]): boolean {
+  const trusted = (url: string) =>
+    resources.some((r) => r.path.startsWith('assets/') && r.url === url);
+  const href = element.getAttribute('href');
+  const srcset = element.getAttribute('imagesrcset');
+  if (href !== null && !trusted(href)) return false;
+  if (srcset === null) return href !== null && trusted(href);
+  return srcset.split(',').every((candidate) => {
+    const parts = candidate.trim().split(/\s+/);
+    return (
+      parts.length >= 1 &&
+      parts.length <= 2 &&
+      trusted(parts[0]) &&
+      (parts.length === 1 ||
+        (/^(?:[1-9]\d*w|(?:\d+(?:\.\d+)?|\.\d+)x)$/.test(parts[1]) &&
+          Number.parseFloat(parts[1]) > 0))
+    );
+  });
 }

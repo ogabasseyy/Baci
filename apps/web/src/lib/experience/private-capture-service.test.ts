@@ -191,3 +191,29 @@ it('does not persist evidence when owner authorization is revoked during capture
   await expect(f.run(f.ctx as never, input)).rejects.toThrow('NOT_FOUND');
   expect(f.record).not.toHaveBeenCalled();
 });
+
+it('returns the requested non-default route in the owner preview URL', async () => {
+  const f = fixture();
+  const artifact = f.rows.experience_artifacts as {
+    manifest: Record<string, unknown>;
+  };
+  artifact.manifest = {
+    ...artifact.manifest,
+    routes: [
+      { path: '/', view: 'home' },
+      { path: '/collections/all', view: 'collection' },
+    ],
+  };
+  const result = await f.run(f.ctx as never, {
+    ...input,
+    routeId: '/collections/all',
+  });
+  expect(new URL(result.previewUrl).searchParams.get('routeId')).toBe(
+    '/collections/all'
+  );
+  expect(f.bootstrap).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    '/collections/all'
+  );
+});

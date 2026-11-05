@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { experiencePreviewPageInput } from '@/schemas/experience-preview';
 import { PreviewClient } from './preview-client';
 export async function PrivatePreviewContent({
   searchParams,
@@ -7,14 +7,12 @@ export async function PrivatePreviewContent({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const ids = z
-    .object({ merchant: z.uuid(), build: z.uuid() })
-    .safeParse(params);
+  const ids = experiencePreviewPageInput.safeParse(params);
   const client = await createClient();
   const { data, error } = await client.auth.getUser();
   if (error || !data.user) {
     const query = ids.success
-      ? `?${new URLSearchParams(ids.data).toString()}`
+      ? `?${new URLSearchParams({ merchant: ids.data.merchant, build: ids.data.build, ...(ids.data.routeId ? { routeId: ids.data.routeId } : {}) }).toString()}`
       : '';
     return (
       <main>
@@ -38,6 +36,10 @@ export async function PrivatePreviewContent({
       </main>
     );
   return (
-    <PreviewClient merchantId={ids.data.merchant} buildId={ids.data.build} />
+    <PreviewClient
+      merchantId={ids.data.merchant}
+      buildId={ids.data.build}
+      routeId={ids.data.routeId}
+    />
   );
 }

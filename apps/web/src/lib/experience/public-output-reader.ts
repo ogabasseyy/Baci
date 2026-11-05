@@ -1,17 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import {
+  experiencePublicOutputFile,
+  experiencePublicPrerenderBinding,
+} from '@/schemas/experience-public-output';
 import { parsePublishedExperience } from './published-manifest';
 import { readPublishedResource } from './published-resource';
 
-const fileSchema = z.strictObject({
-  path: z.string().max(128),
-  digest: z.string().regex(/^[a-f0-9]{64}$/),
-  mime: z.enum(['text/javascript', 'text/css', 'image/png', 'font/woff2']),
-  hex: z
-    .string()
-    .max(33554432)
-    .regex(/^(?:[a-f0-9]{2})*$/),
-});
 export function createPublicOutputReader(client: SupabaseClient) {
   const manifest = async (slug: string) => {
     const r = await client.rpc('experience_public_manifest', { p_slug: slug });
@@ -26,7 +20,7 @@ export function createPublicOutputReader(client: SupabaseClient) {
       p_build: build,
       p_path: path,
     });
-    const value = fileSchema.safeParse(r.data);
+    const value = experiencePublicOutputFile.safeParse(r.data);
     return r.error || !value.success
       ? null
       : {
@@ -45,14 +39,7 @@ export function createPublicOutputReader(client: SupabaseClient) {
         p_slug: slug,
         p_build: build,
       });
-      const parsed = z
-        .strictObject({
-          merchantId: z.uuid(),
-          buildId: z.uuid(),
-          buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-          sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-        })
-        .safeParse(result.data);
+      const parsed = experiencePublicPrerenderBinding.safeParse(result.data);
       if (
         result.error ||
         !parsed.success ||

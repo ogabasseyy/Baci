@@ -10,9 +10,11 @@ type Launch = ExperienceFrameLaunch & { bindingId: string; merchantId: string };
 export function PreviewClient({
   merchantId,
   buildId,
+  routeId,
 }: {
   merchantId: string;
   buildId: string;
+  routeId?: string;
 }) {
   const [session, setSession] = useState<{
     launch: Launch;
@@ -27,6 +29,7 @@ export function PreviewClient({
       const launch = await apiPost<Launch>('/api/builder-experience/preview', {
         merchantId,
         buildId,
+        ...(routeId ? { routeId } : {}),
       });
 
       setSession({

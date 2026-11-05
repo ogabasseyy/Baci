@@ -169,3 +169,18 @@ it.each([
     expect(activeButton).toHaveAttribute('data-active', 'false')
   );
 });
+
+it('launches the exact route requested by the preview link', async () => {
+  apiPost.mockResolvedValue(launch);
+  render(
+    <PreviewClient merchantId="m" buildId="b" routeId="/collections/all" />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Open private preview' }));
+  await waitFor(() =>
+    expect(apiPost).toHaveBeenCalledWith('/api/builder-experience/preview', {
+      merchantId: 'm',
+      buildId: 'b',
+      routeId: '/collections/all',
+    })
+  );
+});

@@ -53,6 +53,15 @@ beforeEach(() => {
       }),
     },
     rpc: f.rpc,
+    from: vi.fn(() => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    })),
   }));
   f.getMerchant.mockImplementation(async () => ({
     merchantId: f.merchant,

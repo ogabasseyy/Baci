@@ -39,7 +39,11 @@ export function createBuilderBackendClient(
         redirect: 'manual',
         cache: 'no-store',
         signal: AbortSignal.any([
-          AbortSignal.timeout(25000),
+          // Finalization includes compilation and multiple bounded browser samples.
+          // Other tools retain their short admission/read budget.
+          AbortSignal.timeout(
+            tool === 'finalize_experience_build' ? 300000 : 25000
+          ),
           ...(signal ? [signal] : []),
         ]),
       }

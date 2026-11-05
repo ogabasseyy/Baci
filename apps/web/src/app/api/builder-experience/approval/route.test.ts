@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { afterEach, expect, it, vi } from 'vitest';
 
 const deps = vi.hoisted(() => ({ auth: vi.fn(), csrf: vi.fn() }));
@@ -13,10 +14,10 @@ const id = '11111111-1111-4111-8111-111111111111';
 afterEach(() => vi.clearAllMocks());
 it('authenticates before revealing runtime state; missing runtime returns 503', async () => {
   deps.auth.mockResolvedValueOnce({ data: { user: null }, error: null });
-  expect((await GET(new Request('http://localhost/api'))).status).toBe(401);
+  expect((await GET(new NextRequest('http://localhost/api'))).status).toBe(401);
   deps.auth.mockResolvedValue({ data: { user: { id } }, error: null });
   expect(
-    (await GET(new Request(`http://localhost/api?approval=${id}`))).status
+    (await GET(new NextRequest(`http://localhost/api?approval=${id}`))).status
   ).toBe(503);
 });
 it('installed HTTP GET is read-only; POST requires CSRF and confirms only the parsed ID', async () => {
@@ -30,13 +31,13 @@ it('installed HTTP GET is read-only; POST requires CSRF and confirms only the pa
   });
   try {
     expect(
-      (await GET(new Request(`http://localhost/api?approval=${id}`))).status
+      (await GET(new NextRequest(`http://localhost/api?approval=${id}`))).status
     ).toBe(200);
     expect(confirm).not.toHaveBeenCalled();
     deps.csrf.mockResolvedValueOnce({ valid: false });
     const post = () =>
       POST(
-        new Request('http://localhost/api', {
+        new NextRequest('http://localhost/api', {
           method: 'POST',
           body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
         })

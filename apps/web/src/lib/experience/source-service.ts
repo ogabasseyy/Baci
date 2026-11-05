@@ -1,9 +1,6 @@
-import { z } from 'zod';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
-import {
-  experienceDigest,
-  experienceSourcePath,
-} from '@/schemas/experience-upload';
+import { experienceSourcePatch } from '@/schemas/experience-source-patch';
+import { experienceSourcePath } from '@/schemas/experience-upload';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
@@ -17,15 +14,6 @@ import {
   writeChunk,
 } from './upload-service';
 
-const patch = z.strictObject({
-  baseDigest: experienceDigest,
-  expectedVersion: z.number().int().min(0),
-  files: z
-    .array(z.strictObject({ path: experienceSourcePath, content: z.string() }))
-    .min(1)
-    .max(128),
-  idempotencyKey: z.uuid(),
-});
 export async function readSource(
   inputCtx: OwnerRequestContext,
   input: {
@@ -51,7 +39,7 @@ export async function patchSource(
   inputCtx: OwnerRequestContext,
   input: unknown
 ) {
-  const v = patch.parse(input);
+  const v = experienceSourcePatch.parse(input);
   const ctx = await requireExperienceOwner(inputCtx);
   const base = await ctx.supabase
     .from('experience_artifacts')

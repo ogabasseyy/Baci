@@ -11,6 +11,7 @@ import {
   indiaReceiver,
   lagosRatesPayload,
   mockCreateAdminClient,
+  mockCreatePublicClient,
   mockCreateServerClient,
   mockGetQuotes,
   RATE_ID,
@@ -93,6 +94,7 @@ async function postBodyOnlyQuotes(
 ) {
   const supabase = buildBodyOnlySupabaseMock(ratesPayload);
   mockCreateAdminClient.mockReturnValue(supabase);
+  mockCreatePublicClient.mockReturnValue(supabase);
   mockCreateServerClient.mockResolvedValue(supabase);
   const { POST } = await import('./route');
 

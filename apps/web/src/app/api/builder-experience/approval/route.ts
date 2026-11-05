@@ -4,7 +4,7 @@ import { createOwnerApprovalHandler } from '@/lib/experience/owner-approval-hand
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { createClient } from '@/lib/supabase/server';
 
-async function handle(request: Request) {
+async function handle(request: NextRequest) {
   const client = await createClient();
   const user = await client.auth.getUser();
   const headers = {
@@ -24,8 +24,8 @@ async function handle(request: Request) {
     );
   return createOwnerApprovalHandler({
     ownerClient: async () => client,
-    checkMutation: async (r) => {
-      const csrf = await checkCsrfProtection(r as NextRequest);
+    checkMutation: async () => {
+      const csrf = await checkCsrfProtection(request);
       return csrf.valid ? null : new Response(null, { status: 403 });
     },
     load: runtime.load,

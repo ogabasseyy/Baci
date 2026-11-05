@@ -60,3 +60,74 @@ describe('fixed HTTPS execution client', () => {
     ).toMatchObject({ code: 'INSUFFICIENT_SCOPE' });
   });
 });
+
+it('allows a bounded long build while ordinary tools retain the short budget', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error('deadline')), ms);
+    return controller.signal;
+  });
+  try {
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 36000);
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            reject(init.signal?.reason);
+          },
+          { once: true }
+        );
+      });
+      return Response.json({ buildId: 'synthetic' });
+    });
+    const execute = createBuilderBackendClient({ fetchImpl });
+    const build = execute(
+      'outer.fixture',
+      'finalize_experience_build',
+      {}
+    ).then(
+      (value) => ({ value }),
+      (error) => ({ error })
+    );
+    const ordinary = execute('outer.fixture', 'list_storefronts', {});
+    const rejected = expect(ordinary).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(36000);
+    await rejected;
+    expect(await build).toEqual({ value: { buildId: 'synthetic' } });
+  } finally {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});
+
+it('retains caller cancellation and a finite deadline for build finalization', async () => {
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  const controller = new AbortController();
+  const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    expect(init?.signal?.aborted).toBe(false);
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener(
+        'abort',
+        () => reject(new Error('cancelled')),
+        { once: true }
+      );
+    });
+  });
+  try {
+    const pending = createBuilderBackendClient({ fetchImpl })(
+      'outer.fixture',
+      'finalize_experience_build',
+      {},
+      controller.signal
+    );
+    const rejected = expect(pending).rejects.toThrow('cancelled');
+    expect(timeout).toHaveBeenCalledWith(300000);
+    controller.abort();
+    await rejected;
+  } finally {
+    timeout.mockRestore();
+  }
+});

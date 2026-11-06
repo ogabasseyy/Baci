@@ -8,10 +8,15 @@ const state = vi.hoisted(() => ({
   reviewedItems: null as unknown,
 }));
 
-vi.mock('@/hooks/cart/shared-cart-client', () => ({
-  prepareSharedCartCheckout: (...args: unknown[]) => state.prepare(...args),
-  reviewedCheckoutItems: () => state.reviewedItems,
-}));
+vi.mock('@/hooks/cart/shared-cart-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/cart/shared-cart-client')>();
+  return {
+    ...actual,
+    prepareSharedCartCheckout: (...args: unknown[]) => state.prepare(...args),
+    reviewedCheckoutItems: (display: unknown, review: unknown) =>
+      state.reviewedItems ?? actual.reviewedCheckoutItems(display as never, review as never),
+  };
+});
 
 import { ChatCartCheckoutReview } from './chat-cart-checkout-review';
 
@@ -30,6 +35,7 @@ function successfulReview(overrides: Record<string, unknown> = {}) {
     ok: true,
     replayed: false,
     sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    sessionExpiresAtEpochMs: Date.now() + 30_000,
     sessionReused: false,
     review: {
       cartId: 'cart-1',
@@ -70,7 +76,7 @@ function props(overrides: Record<string, unknown> = {}) {
 describe('ChatCartCheckoutReview', () => {
   beforeEach(() => {
     state.prepare.mockReset();
-    state.reviewedItems = items;
+    state.reviewedItems = null;
   });
 
   it('renders the authoritative shared-cart review in the chat and invalidates cart or merchant drift', async () => {
@@ -97,6 +103,14 @@ describe('ChatCartCheckoutReview', () => {
 
     view.rerender(
       <ChatCartCheckoutReview
+        {...props({ items: [{ ...items[0], name: 'Hydrated phone' }] })}
+      />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('changed after this review');
+    expect(screen.queryByText('Reviewed subtotal')).not.toBeInTheDocument();
+
+    view.rerender(
+      <ChatCartCheckoutReview
         {...props({ sharedCartRef: { cartId: 'cart-1', version: 3 } })}
       />
     );
@@ -118,6 +132,47 @@ describe('ChatCartCheckoutReview', () => {
 
     expect(state.prepare).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent('still syncing');
+  });
+
+  it('rejects equal-count reviews whose line IDs do not match the display cart', async () => {
+    state.prepare.mockResolvedValue(
+      successfulReview({ lines: [{ ...successfulReview().review.lines[0], id: 'another-line' }] })
+    );
+    const refreshSharedCart = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatCartCheckoutReview {...props({ refreshSharedCart })} />);
+
+    await user.click(screen.getByRole('button', { name: 'Review checkout' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('cart or prices changed');
+    expect(refreshSharedCart).toHaveBeenCalledOnce();
+    expect(screen.queryByText('Reviewed subtotal')).not.toBeInTheDocument();
+  });
+
+  it('rejects per-line price changes even when they cancel out in the subtotal', async () => {
+    const twoItems = [
+      { ...items[0], price: 500, quantity: 1 },
+      { ...items[0], cartItemId: 'line-2', name: 'Case', price: 500, quantity: 1, serverLineId: 'line-2' },
+    ] as CartItem[];
+    state.reviewedItems = twoItems;
+    state.prepare.mockResolvedValue(
+      successfulReview({
+        lines: [
+          { ...successfulReview().review.lines[0], effectiveUnitPriceMinor: 60_000, quantity: 1 },
+          { ...successfulReview().review.lines[0], id: 'line-2', effectiveUnitPriceMinor: 40_000, quantity: 1 },
+        ],
+        subtotalMinor: 100_000,
+      })
+    );
+    const refreshSharedCart = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatCartCheckoutReview {...props({ items: twoItems, refreshSharedCart })} />);
+
+    await user.click(screen.getByRole('button', { name: 'Review checkout' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('cart or prices changed');
+    expect(refreshSharedCart).toHaveBeenCalledOnce();
+    expect(screen.queryByText('Reviewed subtotal')).not.toBeInTheDocument();
   });
 
   it('reuses its operation id after an indeterminate response', async () => {
@@ -163,6 +218,34 @@ describe('ChatCartCheckoutReview', () => {
 
       act(() => {
         vi.advanceTimersByTime(5_001);
+      });
+
+      expect(screen.getByRole('status')).toHaveTextContent('review expired');
+      expect(screen.queryByText('Reviewed subtotal')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('invalidates a review on resume when wall time passes its expiry', async () => {
+    vi.useFakeTimers();
+    try {
+      state.prepare.mockResolvedValue({
+        ...successfulReview(),
+        sessionExpiresAtMonotonicMs: performance.now() + 5_000,
+        sessionExpiresAtEpochMs: Date.now() + 5_000,
+      });
+      render(<ChatCartCheckoutReview {...props()} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Review checkout' }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.getByText('Reviewed subtotal')).toBeInTheDocument();
+
+      vi.setSystemTime(Date.now() + 5_001);
+      act(() => {
+        window.dispatchEvent(new Event('pageshow'));
       });
 
       expect(screen.getByRole('status')).toHaveTextContent('review expired');

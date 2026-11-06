@@ -6,6 +6,8 @@ import { isRecord } from './repository-envelope';
 export interface CartCheckoutLine {
   id: string;
   productId: string;
+  /** Server-sourced reviewed catalog name; omitted by older deployments. */
+  productName?: string | null;
   variantId: string | null;
   condition: string | null;
   options: Record<string, string>;
@@ -145,6 +147,17 @@ function parseLine(value: unknown): CartCheckoutLine | null {
     options: parseOptions(value.options),
     priceChanged: value.priceChanged,
     productId: value.productId,
+    ...(value.productName === undefined
+      ? {}
+      : {
+          productName:
+            value.productName === null
+              ? null
+              : typeof value.productName === 'string' &&
+                  Array.from(value.productName).length <= 200
+                ? value.productName
+                : null,
+        }),
     quantity: value.quantity,
     stockQty: value.stockQty,
     unavailableReason:

@@ -83,6 +83,7 @@ export type PrepareSharedCartCheckoutResult =
       ok: true;
       review: SharedCartCheckoutReview;
       sessionExpiresAtMonotonicMs: number;
+      sessionExpiresAtEpochMs: number;
       replayed: boolean;
       sessionReused: boolean;
     }
@@ -227,6 +228,7 @@ async function requestSharedCartCheckout(
         replayed: body.replayed === true,
         review,
         sessionExpiresAtMonotonicMs: responseReceivedAt + sessionExpiresInMs,
+        sessionExpiresAtEpochMs: Date.now() + sessionExpiresInMs,
         sessionReused: body.sessionReused === true,
       };
     }

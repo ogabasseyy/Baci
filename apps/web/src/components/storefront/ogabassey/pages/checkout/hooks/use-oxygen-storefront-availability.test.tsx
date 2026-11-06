@@ -4,6 +4,13 @@ import { useOxygenStorefrontAvailability } from './use-oxygen-storefront-availab
 
 describe('Oxygen storefront admission', () => {
   afterEach(() => vi.unstubAllGlobals());
+  it('starts admission lookup while the same customer session is resolving', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ available: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useOxygenStorefrontAvailability({ customerId: 'first', merchantId: 'merchant', revision: 1, authenticated: false, loading: true }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await waitFor(() => expect(result.current).toBe(true));
+  });
   it('keeps a same-account selection during refresh but clears it on sign-out', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ available: true }) }));
     const initial = { customerId: 'first', merchantId: 'merchant', revision: 1, authenticated: true, loading: false };

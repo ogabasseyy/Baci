@@ -14,9 +14,10 @@ interface AdmissionInput {
 export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean {
   const { customerId, merchantId, revision, authenticated, loading = false } = input;
   const key = customerId && merchantId ? `${customerId}:${merchantId}` : null;
+  const active = authenticated || loading;
   const [result, setResult] = useState<{ key: string; available: boolean } | null>(null);
   useEffect(() => {
-    if (!authenticated || !key || !merchantId) return;
+    if (!active || !key || !merchantId) return;
     const controller = new AbortController();
     void fetch(`/api/payments/oxygen/storefront-availability?merchantId=${encodeURIComponent(merchantId)}`, {
       cache: 'no-store', signal: controller.signal,
@@ -26,6 +27,6 @@ export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean 
         if (!controller.signal.aborted) setResult({ key, available });
       });
     return () => controller.abort();
-  }, [authenticated, key, merchantId, revision]);
-  return (authenticated || loading) && key !== null && result?.key === key && result.available;
+  }, [active, key, merchantId, revision]);
+  return active && key !== null && result?.key === key && result.available;
 }

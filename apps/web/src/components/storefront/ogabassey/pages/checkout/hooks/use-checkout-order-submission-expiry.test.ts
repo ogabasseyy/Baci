@@ -63,30 +63,39 @@ const review = {
 const expiryCases = [
   {
     label: 'monotonic deadline alone',
-    sessionExpiresAtEpochMs: Date.now() + 30_000,
-    sessionExpiresAtMonotonicMs: performance.now() - 1,
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() + 30_000,
+      sessionExpiresAtMonotonicMs: performance.now() - 1,
+    }),
   },
   {
     label: 'epoch deadline alone',
-    sessionExpiresAtEpochMs: Date.now() - 1,
-    sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() - 1,
+      sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    }),
   },
   {
     label: 'non-finite monotonic deadline',
-    sessionExpiresAtEpochMs: Date.now() + 30_000,
-    sessionExpiresAtMonotonicMs: Number.NaN,
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() + 30_000,
+      sessionExpiresAtMonotonicMs: Number.NaN,
+    }),
   },
   {
     label: 'non-finite epoch deadline',
-    sessionExpiresAtEpochMs: Number.POSITIVE_INFINITY,
-    sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Number.POSITIVE_INFINITY,
+      sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    }),
   },
 ] as const;
 
 describe('useCheckoutOrderSubmission session expiry', () => {
   it.each(expiryCases)(
     'stops a fresh order when the $label expires or is invalid',
-    async ({ sessionExpiresAtEpochMs, sessionExpiresAtMonotonicMs }) => {
+    async ({ createDeadlines }) => {
+    const { sessionExpiresAtEpochMs, sessionExpiresAtMonotonicMs } = createDeadlines();
     const context = createContext();
     context.cart.checkoutCart = [
       {

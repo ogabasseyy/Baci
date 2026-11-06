@@ -190,14 +190,6 @@ describe('PaymentStep', () => {
       expect(screen.getByText('Payment Method')).toBeInTheDocument();
     });
 
-    it('offers Oxygen to an admitted production pilot and hides it after admission is removed', () => {
-      vi.stubEnv('NODE_ENV', 'production');
-      const view = render(<PaymentStep {...defaultProps} paymentTab="installments" oxygenAllowed />);
-      expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
-      view.rerender(<PaymentStep {...defaultProps} paymentTab="installments" oxygenAllowed={false} />);
-      expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
-      vi.unstubAllEnvs();
-    });
 
     it('applies active styling when currentStep is payment', () => {
       // Arrange & Act

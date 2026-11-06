@@ -169,6 +169,8 @@ tenant_integrity_fix = ROOT / "supabase/migrations/20261106170000_harden_shippin
 run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
 revision_access_policy = ROOT / "supabase/migrations/20261106180000_deny_direct_shipping_revision_access.sql"
 run(PSQL, sql=f"{psql_include(revision_access_policy)}\n")
+access_boundary_comment = ROOT / "supabase/migrations/20261106190000_document_shipping_revision_access_boundary.sql"
+run(PSQL, sql=f"{psql_include(access_boundary_comment)}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))
     assert revised.pop("shipping_config_revision", None) is not None, "new projection omitted its revision"
@@ -239,6 +241,8 @@ assert scalar(f"SELECT count(*) FROM public.merchant_shipping_config_revisions W
 # The private revision is protected from all API roles.
 assert scalar("SELECT relrowsecurity FROM pg_class WHERE oid='public.merchant_shipping_config_revisions'::regclass") == "t", "revision table RLS is disabled"
 assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_shipping_config_revisions'::regclass AND polname='merchant_shipping_config_revisions_deny_direct_access' AND pg_get_expr(polqual, polrelid)='false' AND pg_get_expr(polwithcheck, polrelid)='false'") == "1", "revision table is missing its deny-all RLS policy"
+assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_shipping_config_revisions'::regclass") == "1", "revision table must have exactly one deny-all RLS policy"
+assert scalar("SELECT description FROM pg_description d JOIN pg_policy p ON d.objoid=p.oid AND d.classoid='pg_policy'::regclass WHERE p.polrelid='public.merchant_shipping_config_revisions'::regclass AND p.polname='merchant_shipping_config_revisions_deny_direct_access'") == "This RLS policy denies direct access for roles subject to row-level security. service_role bypasses RLS; its direct access is blocked by the table ACL revocation. Use narrowly scoped SECURITY DEFINER functions.", "policy comment must distinguish RLS from service_role ACL enforcement"
 assert scalar("SELECT confdeltype FROM pg_constraint WHERE conrelid='public.merchant_shipping_config_revisions'::regclass AND conname='merchant_shipping_config_revisions_merchant_id_fkey'") == "c", "revision rows must cascade with their merchant"
 for role in ["anon", "authenticated", "service_role"]:
     assert scalar(f"SELECT has_table_privilege('{role}','public.merchant_shipping_config_revisions','SELECT')") == "f", f"{role} can read internal revisions"

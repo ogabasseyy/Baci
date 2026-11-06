@@ -16,19 +16,24 @@ export function SavingsCelebrationCard({
   colors: (typeof Colors)['light'];
 }) {
   const reduceMotion = useReduceMotion();
-  const enter = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (reduceMotion) {
-      enter.setValue(1);
+    if (reduceMotion !== false) {
+      translateY.stopAnimation();
+      translateY.setValue(0);
       return;
     }
-    Animated.timing(enter, {
-      duration: 240,
+    translateY.stopAnimation();
+    translateY.setValue(4);
+    const entrance = Animated.timing(translateY, {
+      duration: 180,
       easing: Easing.bezier(0.23, 1, 0.32, 1),
-      toValue: 1,
+      toValue: 0,
       useNativeDriver: true,
-    }).start();
-  }, [enter, reduceMotion]);
+    });
+    entrance.start();
+    return () => entrance.stop();
+  }, [reduceMotion, translateY]);
   const reached = celebration.percent >= 100;
   const message = reached
     ? `Goal reached! ${formatNgnCurrency(celebration.added)} added. You did it.`
@@ -40,13 +45,10 @@ export function SavingsCelebrationCard({
       style={[
         styles.card,
         {
-          opacity: enter,
+          opacity: 1,
           transform: [
             {
-              translateY: enter.interpolate({
-                inputRange: [0, 1],
-                outputRange: [8, 0],
-              }),
+              translateY,
             },
           ],
         },

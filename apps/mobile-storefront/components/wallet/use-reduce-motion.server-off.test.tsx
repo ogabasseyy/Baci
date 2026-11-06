@@ -5,18 +5,26 @@ import { useReduceMotion } from './use-reduce-motion';
 describe('useReduceMotion', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  it('keeps motion reduced until the device preference is known', () => {
+  it('keeps motion safe and unresolved until the device preference is known', () => {
     jest
       .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
       .mockReturnValue(new Promise(() => undefined));
     const { result } = renderHook(() => useReduceMotion());
-    expect(result.current).toBe(true);
+    expect(result.current).toBeNull();
   });
 
   it('turns on when the device asks for reduced motion', async () => {
     jest
       .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
       .mockResolvedValue(true);
+    const { result } = renderHook(() => useReduceMotion());
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('fails safe to reduced motion when the preference query rejects', async () => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockRejectedValue(new Error('unavailable'));
     const { result } = renderHook(() => useReduceMotion());
     await waitFor(() => expect(result.current).toBe(true));
   });

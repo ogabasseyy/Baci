@@ -25,7 +25,7 @@ export function SavingsProgressMeter({
   const reduceMotion = useReduceMotion();
   const width = useRef(new Animated.Value(percent)).current;
   useEffect(() => {
-    if (reduceMotion) {
+    if (reduceMotion !== false) {
       width.setValue(percent);
       return;
     }

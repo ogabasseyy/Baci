@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** True when the device asks apps to cut down on motion. */
-export function useReduceMotion() {
-  const [reduceMotion, setReduceMotion] = useState(true);
+/** Null until resolved; true for reduced motion, false only when motion is allowed. */
+export function useReduceMotion(): boolean | null {
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -11,7 +11,9 @@ export function useReduceMotion() {
       .then((enabled) => {
         if (active) setReduceMotion(enabled);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (active) setReduceMotion(true);
+      });
     const subscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
       setReduceMotion

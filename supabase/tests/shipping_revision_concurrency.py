@@ -11,7 +11,7 @@ def psql_include(path):
 
 
 def verify_migration_seed_race(root, psql, scalar, revision):
-    migration_path = root / "supabase/migrations/20261106150000_merchant_shipping_config_revision.sql"
+    migration_path = root / "supabase/migrations/20261106150100_merchant_shipping_config_revision.sql"
     migration_sql = migration_path.read_text()
     backfill = "INSERT INTO public.merchant_shipping_config_revisions (merchant_id, revision)\nSELECT id, 1 FROM public.merchants"
     assert migration_sql.index("CREATE TRIGGER initialize_merchant_shipping_config_revision") < migration_sql.index(backfill), (

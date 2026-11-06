@@ -120,11 +120,10 @@ ${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 /*
   Blog listing LCP frame. storefront-blog.css is deferred so this geometry must
-  live on the shared render-blocking sheet or the 400px frame collapses until
-  the Tailwind chunk arrives and restyles LCP.
+  live on the shared render-blocking sheet or the 400px/500px frame collapses
+  until the Tailwind chunk arrives and restyles LCP.
 */
 .ogabassey-blog-lcp-hero {
-  min-height: 100svh;
   background: var(--store-background, #f9fafb);
   padding: 2rem 1rem 0;
 }
@@ -140,7 +139,7 @@ ${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
   color: inherit;
   display: block;
   height: 400px;
-  margin-bottom: 3rem;
+  margin-bottom: 0;
   overflow: hidden;
   position: relative;
   text-decoration: none;
@@ -156,6 +155,24 @@ ${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 .ogabassey-blog-featured-story__media {
   background: var(--ogabassey-blog-featured-scrim, rgb(17 24 39));
+  inset: 0;
+  position: absolute;
+}
+
+.ogabassey-blog-featured-story__media img {
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+  width: 100%;
+}
+
+.ogabassey-blog-featured-story__scrim {
+  background: linear-gradient(
+    to top,
+    var(--ogabassey-blog-featured-scrim, rgb(17 24 39)) 0%,
+    rgb(17 24 39 / 72%) 42%,
+    transparent 100%
+  );
   inset: 0;
   position: absolute;
 }
@@ -190,6 +207,35 @@ ${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 .ogabassey-blog-featured-story__date {
   font-size: 0.875rem;
   opacity: 0.82;
+}
+
+@media (min-width: 768px) {
+  .ogabassey-blog-lcp-hero {
+    padding: 3rem 1.5rem 0;
+  }
+
+  .ogabassey-blog-lcp-hero__frame {
+    height: 500px;
+  }
+
+  .ogabassey-blog-lcp-hero__copy {
+    padding: 3rem;
+    width: 75%;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ogabassey-blog-lcp-hero__copy {
+    width: 66.666667%;
+  }
+}
+
+/*
+  Reserve viewport height on the pending Suspense fallback so the footer stays
+  below the fold while blog posts stream in, then disappears once resolved.
+*/
+[aria-label="Loading blog posts"] {
+  min-height: 100svh;
 }
 
 /*

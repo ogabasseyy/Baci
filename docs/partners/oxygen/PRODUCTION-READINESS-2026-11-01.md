@@ -105,3 +105,18 @@ The selfie example uses `develop.d30bxii7anj4d3.amplifyapp.com` without establis
 The review PR snapshot is based on main `a8f29ecf89d9a6d11fdf3cd56f8c7daaad7936e5`; the source production-prep checkout's HEAD, staged patch, unstaged patch and status were verified unchanged after copying. A focused scan of all 703 initial changed source paths found no JWT, signed-token query, private key, provider live key or credential-URL patterns. This is a pattern scan, not a guarantee or replacement for CI secret scanning.
 
 The narrower CodeRabbit backend review subsequently completed successfully. It raised three issues: one major token-cache expiry/failure bug, one minor uncertain-error classification bug, and one row-validation improvement. All three were verified and fixed with failing-then-passing regression tests; the follow-up focused group passed 60 tests. This was a scoped review, not whole-patch approval. Full PR CI/review and production rollout gates remain open.
+
+## 5 November 2026 contract update: selfie callbacks
+
+The current official Support APIs now document `selfie_status_update` with
+`phone_number`, original `loan_request_reference`, and boolean `selfie`.
+Automatic verification emits success only; manual review may emit true or false.
+This supersedes the earlier no-selfie-callback observation above. The receiver
+queues these hints separately from address events, binds both phone and exact
+application reference under the configured partner/environment, and reads KYC.
+Callback fields never directly mark verification complete or authorize activation.
+Polling remains available when delivery is delayed or unavailable.
+
+Production enablement still requires verified worker bindings, exact production
+hostnames, callback registration, and serving deployment validation. This hotfix
+adds callback compatibility; merging it does not enable those policies.

@@ -1,9 +1,11 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { palette, withAlpha } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
@@ -33,7 +35,7 @@ type WalletSavingsProgressModalProps = {
 
 export function WalletSavingsProgressModal({
   addAmount,
-  colors,
+  colors: themeColors,
   goal,
   isAdding,
   hasPendingContribution = false,
@@ -49,6 +51,12 @@ export function WalletSavingsProgressModal({
   walletBalance,
   walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
+  const colors = {
+    ...themeColors,
+    primary: palette.red[600],
+    primaryForeground: palette.white,
+    primaryLowOpacity: withAlpha(palette.red[600], 0.12),
+  };
   if (!goal) {
     return null;
   }
@@ -64,19 +72,13 @@ export function WalletSavingsProgressModal({
       : 'This goal is funded by scheduled auto-debit.';
 
   return (
-    <ModalSheet
-      visible={visible}
-      animationType="slide"
-      backdropStyle={styles.backdrop}
-      cardStyle={[styles.card, { backgroundColor: colors.background }]}
-      keyboardAutomaticOffset
-      keyboardSurfaceColor={colors.background}
-      onBackdropPress={onClose}
-      onRequestClose={onClose}
-    >
+    <SavingsBottomSheet visible={visible} colors={colors} onClose={onClose}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text
+            accessibilityRole="header"
+            style={[styles.title, { color: colors.primary }]}
+          >
             {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
           </Text>
         </View>
@@ -90,7 +92,7 @@ export function WalletSavingsProgressModal({
         </Pressable>
       </View>
 
-      <ScrollView
+      <BottomSheetScrollView
         style={styles.scrollView}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -165,7 +167,7 @@ export function WalletSavingsProgressModal({
           onBeforeNavigate={onClose}
           walletUpdatedAt={walletUpdatedAt}
         />
-      </ScrollView>
-    </ModalSheet>
+      </BottomSheetScrollView>
+    </SavingsBottomSheet>
   );
 }

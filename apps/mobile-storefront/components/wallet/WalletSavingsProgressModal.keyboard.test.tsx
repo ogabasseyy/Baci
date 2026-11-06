@@ -1,10 +1,9 @@
 import { expect, it, jest } from '@jest/globals';
 import type { User } from '@supabase/supabase-js';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { ScrollView, StyleSheet } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
-import Colors from '@/constants/Colors';
+import Colors, { palette, withAlpha } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/auth-store';
+import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
 const authUser: User = {
@@ -58,9 +57,22 @@ it.each([
     );
 
     const payment = screen.getByRole('button', {
-      name: 'Continue to payment',
+      name: 'Wallet funding unavailable',
     });
     expect(payment).toHaveAccessibilityState({ disabled: true });
+    expect(screen.getByText('Wallet funding unavailable')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('header', { name: 'Add to savings' })
+    ).toBeOnTheScreen();
+    expect(
+      screen.UNSAFE_getByType(SavingsBottomSheet).props.colors.primary
+    ).toBe(palette.red[600]);
+    expect(
+      screen.getByRole('progressbar', { name: 'Savings plan progress details' })
+    ).toHaveStyle({ backgroundColor: withAlpha(palette.red[600], 0.12) });
+    expect(screen.getByText('Every naira counts')).toHaveStyle({
+      color: palette.red[600],
+    });
     expect(
       screen.getByText(
         /Wallet top-ups are disabled in this hosted staging preview/i
@@ -68,24 +80,6 @@ it.each([
     ).toBeOnTheScreen();
     fireEvent.press(payment);
     expect(onFundWallet).not.toHaveBeenCalled();
-    expect(screen.getByTestId('modal-keyboard-surface')).toHaveStyle({
-      height: 320,
-      backgroundColor: colors.background,
-    });
-    expect(screen.getByTestId('keyboard-container')).toHaveProp(
-      'automaticOffset',
-      true
-    );
-    expect(screen.UNSAFE_getByType(ScrollView).props.keyboardDismissMode).toBe(
-      'on-drag'
-    );
-    expect(screen.UNSAFE_getByType(ScrollView).props.style).toEqual({
-      flex: 1,
-    });
-    expect(
-      StyleSheet.flatten(screen.UNSAFE_getByType(ModalSheet).props.cardStyle)
-        .height
-    ).toBe('88%');
   } finally {
     if (previousMode === undefined)
       delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;

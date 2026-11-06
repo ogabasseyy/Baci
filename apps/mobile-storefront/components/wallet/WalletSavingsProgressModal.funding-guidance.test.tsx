@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { User } from '@supabase/supabase-js';
 import { render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import Colors from '@/constants/Colors';
+import Colors, { palette } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/auth-store';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
@@ -74,11 +74,11 @@ describe('WalletSavingsProgressModal funding guidance', () => {
     );
 
     expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
-    const condition = screen.getByText('Condition: New');
+    const condition = screen.getByLabelText('Device condition: New');
     expect(StyleSheet.flatten(condition.props.style)).toEqual(
       expect.objectContaining({
-        backgroundColor: Colors.dark.muted,
-        color: Colors.dark.text,
+        backgroundColor: palette.red[600],
+        color: palette.white,
       })
     );
     expect(

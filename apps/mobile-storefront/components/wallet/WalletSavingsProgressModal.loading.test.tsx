@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react-native';
-import { ScrollView, StyleSheet } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
+import { ScrollView } from 'react-native';
 import Colors from '@/constants/Colors';
+import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
 jest.mock('./WalletSavingsFundingSection', () => ({
@@ -53,11 +53,11 @@ it('keeps one bounded, scrollable sheet as its asynchronous body grows', () => {
     walletBalance: 0,
   };
   const view = render(<WalletSavingsProgressModal {...props} />);
-  const fixedHeight = StyleSheet.flatten(
-    screen.UNSAFE_getByType(ModalSheet).props.cardStyle
-  ).height;
-
-  expect(fixedHeight).toBe('88%');
+  const snapPoints = screen.getByTestId('gorhom-bottom-sheet').props.snapPoints;
+  expect(snapPoints).toEqual(['72%', '92%']);
+  expect(
+    screen.getByTestId('gorhom-bottom-sheet').props.enableDynamicSizing
+  ).toBe(false);
   expect(screen.UNSAFE_getByType(ScrollView).props.style).toEqual({ flex: 1 });
   expect(screen.getByText('Checking savings wallet…')).toBeOnTheScreen();
 
@@ -68,10 +68,9 @@ it('keeps one bounded, scrollable sheet as its asynchronous body grows', () => {
     />
   );
 
-  expect(screen.UNSAFE_getAllByType(ModalSheet)).toHaveLength(1);
-  expect(
-    StyleSheet.flatten(screen.UNSAFE_getByType(ModalSheet).props.cardStyle)
-      .height
-  ).toBe(fixedHeight);
+  expect(screen.UNSAFE_getAllByType(SavingsBottomSheet)).toHaveLength(1);
+  expect(screen.getByTestId('gorhom-bottom-sheet').props.snapPoints).toEqual(
+    snapPoints
+  );
   expect(screen.getByText('Ready actions')).toBeOnTheScreen();
 });

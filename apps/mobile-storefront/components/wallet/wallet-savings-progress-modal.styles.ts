@@ -14,6 +14,8 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   card: {
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
     borderTopLeftRadius: RADIUS['2xl'],
     borderTopRightRadius: RADIUS['2xl'],
     height: '88%',
@@ -23,7 +25,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   scrollView: { flex: 1 },
-  scrollContent: { flexGrow: 1, gap: SPACING.lg, paddingBottom: SPACING.md },
+  scrollContent: { flexGrow: 1, gap: SPACING.md, paddingBottom: SPACING.md },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -36,7 +38,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     gap: SPACING.xs,
   },
   title: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 18,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   iconButton: {
@@ -63,7 +65,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   amountInput: {
     alignItems: 'center',
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS['2xl'],
     borderWidth: 1,
     flexDirection: 'row',
     gap: SPACING.xs,
@@ -72,7 +74,8 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   amountInputField: {
     flex: 1,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 22,
+    fontWeight: '600',
     minWidth: 0,
     padding: 0,
   },

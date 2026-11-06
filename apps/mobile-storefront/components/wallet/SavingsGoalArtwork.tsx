@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { RADIUS } from '@/constants/Colors';
@@ -22,7 +23,11 @@ export function SavingsGoalArtwork({
   imageRequestSize: number;
   size: number;
 }) {
-  const source = getSavingsGoalImageSource(goal, imageRequestSize);
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const source =
+    failedImage === goal.product_image
+      ? null
+      : getSavingsGoalImageSource(goal, imageRequestSize);
   const inner = size - 8;
   return (
     <View
@@ -39,6 +44,7 @@ export function SavingsGoalArtwork({
         <Image
           accessibilityLabel={goal.title}
           source={source}
+          onError={() => setFailedImage(goal.product_image ?? null)}
           style={{ height: inner, width: inner }}
           contentFit="contain"
           autoplay={false}

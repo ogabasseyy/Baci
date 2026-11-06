@@ -3,11 +3,11 @@ import type Colors from '@/constants/Colors';
 import { RADIUS, SPACING } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsEncouragement } from './get-savings-encouragement';
 import { getSavingsProgress } from './get-savings-progress';
+import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
 import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
-import { SavingsGoalArtwork } from './SavingsGoalArtwork';
+import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
 
 /**
@@ -25,7 +25,9 @@ export function SavingsGoalSummary({
 }) {
   const { displayPercent, percent } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
-  const conditionLabel = formatProductConditionDisplay(goal.product_condition);
+  const { colour, details, storage } = getSavingsVariantPresentation(
+    goal.product_variant_label
+  );
   const cheer = getSavingsEncouragement(percent, goal.current_amount);
   const nudge =
     goal.status === 'completed'
@@ -37,46 +39,33 @@ export function SavingsGoalSummary({
   return (
     <>
       <View style={styles.contentRow}>
-        <SavingsGoalArtwork
+        <SavingsGoalConditionArtwork
           colors={colors}
           goal={goal}
-          imageRequestSize={170}
-          size={96}
+          imageRequestSize={128}
+          size={64}
         />
-        <View
-          style={[
-            styles.progressPane,
-            { backgroundColor: colors.primaryLowOpacity },
-          ]}
-        >
+        <View style={styles.progressPane}>
+          <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
+            SAVING TOWARDS
+          </Text>
           <Text style={[styles.goalTitle, { color: colors.text }]}>
             {goal.title}
           </Text>
-          <Text style={[styles.cheerTitle, { color: colors.primary }]}>
-            {cheer.title}
-          </Text>
-          <Text style={[styles.cheerBody, { color: colors.textSecondary }]}>
-            {cheer.body}
-          </Text>
           <View style={styles.metaRow}>
-            {conditionLabel ? (
+            {storage ? (
               <Text
                 style={[
                   styles.metaPill,
                   { backgroundColor: colors.muted, color: colors.text },
                 ]}
               >
-                Condition: {conditionLabel}
+                {storage}
               </Text>
             ) : null}
-            {goal.product_variant_label ? (
-              <Text
-                style={[
-                  styles.metaPill,
-                  { backgroundColor: colors.muted, color: colors.text },
-                ]}
-              >
-                {goal.product_variant_label}
+            {details ? (
+              <Text style={[styles.detail, { color: colors.textSecondary }]}>
+                {details}
               </Text>
             ) : null}
           </View>
@@ -93,7 +82,10 @@ export function SavingsGoalSummary({
               accessibilityRole="button"
               accessibilityLabel="Resolve savings device variant"
               onPress={onResolveVariant}
-              style={[styles.variantButton, { borderColor: colors.border }]}
+              style={[
+                styles.variantButton,
+                { borderColor: colors.primaryLowOpacity },
+              ]}
             >
               <Text style={[styles.variantText, { color: colors.text }]}>
                 Choose exact variant
@@ -101,13 +93,33 @@ export function SavingsGoalSummary({
             </Pressable>
           ) : null}
         </View>
+        {colour ? (
+          <View
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={`Device colour: ${colour.name}`}
+            style={[
+              styles.colourSwatch,
+              {
+                backgroundColor: colour.hex,
+                borderColor: colors.textSecondary,
+              },
+            ]}
+          />
+        ) : null}
       </View>
       <View
         style={[
           styles.progressCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          {
+            backgroundColor: colors.primaryLowOpacity,
+            borderColor: colors.primaryLowOpacity,
+          },
         ]}
       >
+        <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
+          YOUR PROGRESS
+        </Text>
         <View style={styles.amountRow}>
           <Text style={[styles.saved, { color: colors.text }]}>
             {formatNgnCurrency(goal.current_amount)} saved
@@ -130,6 +142,19 @@ export function SavingsGoalSummary({
             complete
           </Text>
         </View>
+        <View style={styles.encouragement}>
+          <View
+            style={[styles.accentDot, { backgroundColor: colors.primary }]}
+          />
+          <View style={styles.encouragementCopy}>
+            <Text style={[styles.cheerTitle, { color: colors.primary }]}>
+              {cheer.title}
+            </Text>
+            <Text style={[styles.cheerBody, { color: colors.textSecondary }]}>
+              {cheer.body}
+            </Text>
+          </View>
+        </View>
         {nudge ? (
           <Text style={[styles.nudge, { color: colors.text }]}>
             {nudge.label}
@@ -141,17 +166,33 @@ export function SavingsGoalSummary({
 }
 
 const styles = StyleSheet.create({
-  contentRow: { flexDirection: 'row', gap: SPACING.md },
+  eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
+  encouragement: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  encouragementCopy: { flex: 1, gap: 3 },
+  accentDot: { width: 7, height: 7, borderRadius: 4, marginTop: 7 },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   progressPane: {
     borderRadius: RADIUS.lg,
     flex: 1,
-    gap: 2,
+    gap: SPACING.xs,
     minWidth: 0,
-    padding: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
-  goalTitle: { fontSize: 16, fontWeight: '700' },
+  goalTitle: { fontSize: 18, lineHeight: 23, fontWeight: '700' },
   cheerTitle: { fontSize: 14, fontWeight: '700', marginTop: 2 },
   cheerBody: { fontSize: 13, lineHeight: 18 },
+  colourSwatch: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    marginTop: 20,
+  },
+  detail: { fontSize: 12, lineHeight: 16 },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -160,11 +201,11 @@ const styles = StyleSheet.create({
   },
   metaPill: {
     borderRadius: RADIUS.full,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     overflow: 'hidden',
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 5,
+    paddingVertical: 3,
   },
   hint: { fontSize: 14, lineHeight: 18, marginTop: SPACING.sm },
   variantButton: {
@@ -177,17 +218,19 @@ const styles = StyleSheet.create({
   },
   variantText: { fontSize: 14, fontWeight: '600' },
   progressCard: {
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS['2xl'],
     borderWidth: 1,
-    gap: SPACING.sm,
-    padding: SPACING.md,
+    gap: 8,
+    padding: 14,
   },
   amountRow: {
     flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
     gap: SPACING.sm,
     justifyContent: 'space-between',
   },
-  saved: { flexShrink: 1, fontSize: 14, fontWeight: '700' },
+  saved: { flexShrink: 1, fontSize: 24, fontWeight: '700' },
   small: { flexShrink: 1, fontSize: 12, fontWeight: '500' },
-  nudge: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
+  nudge: { fontSize: 12, fontWeight: '500', lineHeight: 18 },
 });

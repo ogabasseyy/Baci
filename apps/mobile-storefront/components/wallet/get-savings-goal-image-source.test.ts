@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 
 const goal = {
@@ -16,4 +17,13 @@ it('uses the catalog image when there is one', () => {
     128
   );
   expect(source).toHaveProperty('uri');
+});
+
+it('uses device artwork for the catalogue placeholder instead of a No Image tile', () => {
+  expect(
+    getSavingsGoalImageSource(
+      { ...goal, product_image: PRODUCT_PLACEHOLDER_IMAGE },
+      128
+    )
+  ).toBeNull();
 });

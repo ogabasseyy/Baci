@@ -38,9 +38,7 @@ export function SavingsQuickAmounts({
             style={[
               styles.chip,
               {
-                backgroundColor: selected
-                  ? colors.primary
-                  : colors.primaryLowOpacity,
+                backgroundColor: selected ? colors.primary : colors.card,
                 borderColor: selected ? colors.primary : colors.border,
               },
             ]}
@@ -64,9 +62,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   chip: {
     alignItems: 'center',
-    borderRadius: RADIUS.full,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
     justifyContent: 'center',
+    flexGrow: 1,
     minHeight: 44,
     paddingHorizontal: SPACING.md,
   },

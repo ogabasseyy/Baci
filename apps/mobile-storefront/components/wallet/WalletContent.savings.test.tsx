@@ -8,7 +8,14 @@ import {
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { WalletContent } from './WalletContent';
+import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
+
+let restoreCustomer: () => void;
+beforeEach(() => {
+  restoreCustomer = setWalletTestCustomer();
+});
+afterEach(() => restoreCustomer());
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(

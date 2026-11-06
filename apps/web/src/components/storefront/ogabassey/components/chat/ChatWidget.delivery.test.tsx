@@ -178,14 +178,21 @@ describe('ChatWidget private delivery', () => {
   });
 
   it.each([
-    ['path routing', makeMerchant('path')],
-    ['non-NGN payout currency', makeMerchant('domain', 'NG', 'USD')],
-    ['a different merchant', makeMerchant('domain', 'NG', 'NGN', 'another-store')],
-  ])('hides delivery estimates for %s', async (_label, merchant) => {
+    ['path routing without a resolved slug', makeMerchant('path', 'NG', 'NGN', ''), makeCart(''), false],
+    ['path routing with an invalid slug', makeMerchant('path', 'NG', 'NGN', 'api'), makeCart('api'), false],
+    ['non-NGN payout currency', makeMerchant('domain', 'NG', 'USD'), makeCart(), false],
+    ['a different merchant', makeMerchant('domain', 'NG', 'NGN', 'another-store'), makeCart(), false],
+    ['valid path routing', makeMerchant('path'), makeCart(), true],
+  ])('gates delivery estimates for %s', async (_label, merchant, cart, eligible) => {
     vi.mocked(useMerchantSafe).mockReturnValue(merchant as unknown as ReturnType<typeof useMerchantSafe>);
+    vi.mocked(useCart).mockReturnValue(cart as unknown as ReturnType<typeof useCart>);
     const user = userEvent.setup();
     render(<ChatWidget />);
     await user.click(screen.getByRole('button', { name: 'Cart, 1 item' }));
-    expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
+    if (eligible) {
+      expect(screen.getByRole('button', { name: 'Get delivery estimate' })).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole('button', { name: 'Get delivery estimate' })).not.toBeInTheDocument();
+    }
   });
 });

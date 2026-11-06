@@ -76,7 +76,6 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
   });
 
   const privateDelivery = usePrivateDeliveryMode(deliveryContext.eligible, setInput);
-
   useEffect(() => {
     if (cartPanelOpen || privateDelivery.active) {
       messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
@@ -261,8 +260,9 @@ export const ChatWidget: FC<ChatWidgetProps> = ({
                 ) : null}
               </div>
 
-              {privateDelivery.active && deliveryContext.eligible ? (
+              {privateDelivery.active && deliveryContext.eligible && deliveryContext.estimateUrl ? (
                 <ChatDeliveryQuote
+                  estimateUrl={deliveryContext.estimateUrl}
                   cartKey={deliveryContext.cartKey}
                   input={input}
                   setInput={setInput}

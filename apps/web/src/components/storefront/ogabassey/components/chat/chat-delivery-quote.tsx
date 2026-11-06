@@ -7,6 +7,7 @@ import type { ShippingQuote } from '@/types/shipping-quote';
 import { parseDestinationState } from './parse-chat-destination-state';
 
 interface ChatDeliveryQuoteProps {
+  estimateUrl: string;
   cartKey: string;
   input: string;
   setInput: (value: string) => void;
@@ -18,7 +19,7 @@ interface ChatDeliveryQuoteProps {
 const GENERIC_ERROR = 'Delivery estimate unavailable. Please try again or continue to checkout.';
 const ACTION_FOCUS_CLASSES = 'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2';
 
-export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onComposerLockChange, onClose }: ChatDeliveryQuoteProps) {
+export function ChatDeliveryQuote({ estimateUrl, cartKey, input, setInput, submitRef, onComposerLockChange, onClose }: ChatDeliveryQuoteProps) {
   const [confirmedState, setConfirmedState] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<ShippingQuote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
       requestIdRef.current += 1;
       controllerRef.current?.abort();
     };
-  }, [cartKey, setInput]);
+  }, [cartKey, estimateUrl, setInput]);
 
   function submitAddress() {
     controllerRef.current?.abort();
@@ -87,7 +88,7 @@ export function ChatDeliveryQuote({ cartKey, input, setInput, submitRef, onCompo
     setInput('');
     const state = confirmedState;
     try {
-      const response = await fetchWithCsrf('/api/chat/delivery-estimate', {
+      const response = await fetchWithCsrf(estimateUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-baci-client': 'web-storefront' },
         signal: controller.signal,

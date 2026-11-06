@@ -1,4 +1,6 @@
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { isValidMerchantSlug } from '@/lib/validation';
+import { getPrivateDeliveryEstimateUrl } from './chat-delivery-estimate-url';
 
 export function getChatDeliveryContext(input: {
   lines: Array<{
@@ -16,12 +18,13 @@ export function getChatDeliveryContext(input: {
   cartMerchantSlug?: string | null;
   country?: string;
   payoutCurrency?: string | null;
-}): { cartKey: string; eligible: boolean } {
+}): { cartKey: string; eligible: boolean; estimateUrl: string | null } {
   const country = input.country?.trim().toUpperCase() ?? '';
+  const validPathSlug = input.routingMode !== 'path' || Boolean(input.merchantSlug && isValidMerchantSlug(input.merchantSlug));
   const eligible = input.hydrated && input.lines.length > 0 &&
     Boolean(input.cartMerchantSlug) && Boolean(input.merchantSlug) &&
     input.cartMerchantSlug === input.merchantSlug &&
-    input.routingMode === 'domain' && country === 'NG' &&
+    (input.routingMode === 'domain' || input.routingMode === 'path') && validPathSlug && country === 'NG' &&
     resolveMerchantCurrencyConfig({
       country,
       payout_currency: input.payoutCurrency ?? null,
@@ -39,5 +42,9 @@ export function getChatDeliveryContext(input: {
     routingMode: input.routingMode,
   });
 
-  return { cartKey, eligible };
+  return {
+    cartKey,
+    eligible,
+    estimateUrl: getPrivateDeliveryEstimateUrl(input.routingMode, input.merchantSlug),
+  };
 }

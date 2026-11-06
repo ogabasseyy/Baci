@@ -16,14 +16,23 @@ describe('getChatDeliveryContext', () => {
 
   it('allows eligible NGN domain storefronts with matching cart ownership', () => {
     expect(getChatDeliveryContext(base).eligible).toBe(true);
+    expect(getChatDeliveryContext(base).estimateUrl).toBe('/api/chat/delivery-estimate');
     expect(getChatDeliveryContext({ ...base, payoutCurrency: undefined }).eligible).toBe(true);
+  });
+
+  it('allows path storefronts only with a valid slug matching cart ownership', () => {
+    const pathContext = { ...base, routingMode: 'path', merchantSlug: 'winter-store', cartMerchantSlug: 'winter-store' };
+    expect(getChatDeliveryContext(pathContext).eligible).toBe(true);
+    expect(getChatDeliveryContext(pathContext).estimateUrl).toBe('/api/storefront/winter-store/delivery-estimate');
+    expect(getChatDeliveryContext({ ...base, routingMode: 'path', merchantSlug: 'api', cartMerchantSlug: 'api' }).eligible).toBe(false);
+    expect(getChatDeliveryContext({ ...base, routingMode: 'path', merchantSlug: 'winter-store' }).eligible).toBe(false);
+    expect(getChatDeliveryContext({ ...base, routingMode: 'path', merchantSlug: undefined, cartMerchantSlug: undefined }).estimateUrl).toBeNull();
   });
 
   it('closes an active estimate context when merchant or cart eligibility changes', () => {
     expect(getChatDeliveryContext({ ...base, cartMerchantSlug: 'other-shop' }).eligible).toBe(false);
     expect(getChatDeliveryContext({ ...base, merchantSlug: 'other-shop' }).eligible).toBe(false);
     expect(getChatDeliveryContext({ ...base, cartMerchantSlug: null }).eligible).toBe(false);
-    expect(getChatDeliveryContext({ ...base, routingMode: 'path' }).eligible).toBe(false);
     expect(getChatDeliveryContext({ ...base, payoutCurrency: 'USD' }).eligible).toBe(false);
     expect(getChatDeliveryContext({ ...base, country: 'Nigeria' }).eligible).toBe(false);
     expect(getChatDeliveryContext({ ...base, hydrated: false }).eligible).toBe(false);
@@ -35,5 +44,6 @@ describe('getChatDeliveryContext', () => {
     expect(getChatDeliveryContext({ ...base, cartMerchantSlug: 'other-shop' }).cartKey).not.toBe(baseKey);
     expect(getChatDeliveryContext({ ...base, routingMode: 'path' }).cartKey).not.toBe(baseKey);
     expect(getChatDeliveryContext({ ...base, payoutCurrency: 'USD' }).cartKey).not.toBe(baseKey);
+    expect(getChatDeliveryContext({ ...base, merchantSlug: 'winter-store', cartMerchantSlug: 'winter-store' }).cartKey).not.toBe(baseKey);
   });
 });

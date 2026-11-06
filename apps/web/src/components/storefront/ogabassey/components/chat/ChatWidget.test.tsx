@@ -20,6 +20,7 @@ vi.mock('@/hooks/cart', () => ({
     isCartOpen: false,
     addToCart: vi.fn(),
     setIsCartOpen: vi.fn(),
+    merchantSlug: 'ogabassey',
   })),
 }));
 
@@ -86,6 +87,7 @@ describe('ChatWidget - toggle button', () => {
       isCartOpen: false,
       addToCart: vi.fn(),
       setIsCartOpen: vi.fn(),
+      merchantSlug: 'ogabassey',
     } as unknown as ReturnType<typeof useCart>);
     vi.mocked(useMerchantSafe).mockReturnValue({
       basePath: '/ogabassey',
@@ -216,6 +218,7 @@ describe('ChatWidget - chat window when open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: false,
       cart: [{ cartItemId: 'line-1', quantity: 2, price: 100, name: 'Phone' }],
+      merchantSlug: 'ogabassey',
       subtotal: 200,
       isHydrated: true,
       addToCart: vi.fn(),

@@ -138,4 +138,24 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       /\[aria-label="Loading blog posts"\]\s*\{[^}]*min-height:\s*100svh;/s
     );
   });
+  it('locks blog post title typography and reserves 16:9 hero aspect ratio', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      '[data-cwv-lcp-copy="blog-post"]'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toContain(
+      '.ogabassey-blog-post-hero-frame'
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="blog-post"\]\s*\{[^}]*font-family:\s*"Inter Fallback"/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="blog-post"\]\s*\{[^}]*font-size:\s*1\.875rem !important;/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /@media \(min-width: 768px\)\s*\{\s*\[data-cwv-lcp-copy="blog-post"\]\s*\{\s*font-size:\s*2\.25rem !important;/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\.ogabassey-blog-post-hero-frame\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*9;/
+    );
+  });
 });

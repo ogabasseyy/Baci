@@ -14,6 +14,7 @@ export interface ProductSemanticCandidate {
   condition?: string | null;
   stock?: number | null;
   stock_quantity?: number | null;
+  category_id?: string | null;
   category_slug?: string | null;
   category_slugs?: string[] | null;
   product_key_specs?: Record<string, unknown> | null;

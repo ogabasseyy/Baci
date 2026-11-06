@@ -16,11 +16,15 @@ import {
   OxygenPaymentOpenContext,
   OxygenPaymentSurfaceContext,
   OxygenSelfieConfirmedContext,
+  OxygenSelfieDismissedContext,
+  OxygenSelfieOpenContext,
+  OxygenSelfieRenewalContext,
   OxygenSelfieSurfaceContext,
 } from './OxygenPaymentSurfaceContext';
 import type { OxygenCheckoutProduct } from './OxygenProductSummary';
 import { OxygenProviderFlow } from './OxygenProviderFlow';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
+import type { OxygenSelfieRenewHandler } from './use-oxygen-selfie-renewal-bridge';
 
 export function OxygenApplicationDialog({
   orderId,
@@ -45,9 +49,11 @@ export function OxygenApplicationDialog({
   const stage = useRef<OxygenJourneyStage>('loading');
   const [open, setOpen] = useState(true);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [selfieDismissed, setSelfieDismissed] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [selfieWorkflowId, setSelfieWorkflowId] = useState<string>();
   const [selfieConfirmed, setSelfieConfirmed] = useState<string | null>(null);
+  const selfieRenew = useRef<OxygenSelfieRenewHandler | null>(null);
   const hostedOpen = Boolean(paymentUrl || selfieUrl);
 
   useEffect(() => {
@@ -105,8 +111,10 @@ export function OxygenApplicationDialog({
         className={`${styles.dialog} ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''}`}
         onCancel={(event) => {
           event.preventDefault();
-          if (selfieUrl) setSelfieUrl(null);
-          else if (paymentUrl) setPaymentUrl(null);
+          if (selfieUrl) {
+            setSelfieDismissed(true);
+            setSelfieUrl(null);
+          } else if (paymentUrl) setPaymentUrl(null);
           else close();
         }}
         onClose={() => {
@@ -139,39 +147,55 @@ export function OxygenApplicationDialog({
         <OxygenSelfieSurfaceContext.Provider
           value={(url, workflowId) => {
             if (isOxygenSelfieUrl(url, selfieOrigins)) {
+              setSelfieDismissed(false);
               setSelfieWorkflowId(workflowId);
               setSelfieUrl(url);
             }
           }}
         >
-          <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
-            <OxygenCheckoutCloseContext.Provider value={close}>
-              <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
-                <OxygenHostedOriginsContext.Provider value={hostedOrigins}>
-                  <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
-                    <div className={styles.body} hidden={hostedOpen}>
-                      <OxygenProviderFlow
-                        active={open && !selfieUrl}
-                        orderId={orderId}
-                        merchantSlug={merchantSlug}
-                        prefill={prefill}
-                        productAmount={productAmount}
-                        products={products}
-                        currency={currency}
-                        onProgress={(value) => {
-                          stage.current = value;
-                        }}
-                      />
-                    </div>
-                  </OxygenPaymentOpenContext.Provider>
-                </OxygenHostedOriginsContext.Provider>
-              </OxygenPaymentSurfaceContext.Provider>
-            </OxygenCheckoutCloseContext.Provider>
-          </OxygenSelfieConfirmedContext.Provider>
+          <OxygenSelfieDismissedContext.Provider value={selfieDismissed}>
+            <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
+              <OxygenSelfieRenewalContext.Provider
+                value={(handler) => {
+                  selfieRenew.current = handler;
+                  return () => {
+                    if (selfieRenew.current === handler)
+                      selfieRenew.current = null;
+                  };
+                }}
+              >
+                <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
+                  <OxygenCheckoutCloseContext.Provider value={close}>
+                    <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
+                      <OxygenHostedOriginsContext.Provider
+                        value={hostedOrigins}
+                      >
+                        <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
+                          <div className={styles.body} hidden={hostedOpen}>
+                            <OxygenProviderFlow
+                              active={open && !selfieUrl}
+                              orderId={orderId}
+                              merchantSlug={merchantSlug}
+                              prefill={prefill}
+                              productAmount={productAmount}
+                              products={products}
+                              currency={currency}
+                              onProgress={(value) => {
+                                stage.current = value;
+                              }}
+                            />
+                          </div>
+                        </OxygenPaymentOpenContext.Provider>
+                      </OxygenHostedOriginsContext.Provider>
+                    </OxygenPaymentSurfaceContext.Provider>
+                  </OxygenCheckoutCloseContext.Provider>
+                </OxygenSelfieConfirmedContext.Provider>
+              </OxygenSelfieRenewalContext.Provider>
+            </OxygenSelfieOpenContext.Provider>
+          </OxygenSelfieDismissedContext.Provider>
         </OxygenSelfieSurfaceContext.Provider>
         {selfieUrl && (
           <OxygenHostedSelfie
-            key={selfieUrl}
             url={selfieUrl}
             selfieOrigins={selfieOrigins}
             workflowId={selfieWorkflowId}
@@ -182,7 +206,20 @@ export function OxygenApplicationDialog({
               }
               setSelfieUrl(null);
             }}
-            onClose={() => setSelfieUrl(null)}
+            onRenew={async (automatic, signal) => {
+              if (!selfieRenew.current)
+                throw new Error('Verification unavailable');
+              return await selfieRenew.current(
+                selfieUrl,
+                selfieWorkflowId,
+                automatic,
+                signal
+              );
+            }}
+            onClose={() => {
+              setSelfieDismissed(true);
+              setSelfieUrl(null);
+            }}
           />
         )}
         {paymentUrl && (

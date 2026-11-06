@@ -56,6 +56,22 @@ export interface PublishedClusterPost {
   /** Only supplied by the current, publication-gated classification read. */
   merchant_intent?: MerchantBlogIntent | null;
   merchant_intent_source?: MerchantBlogIntentSource | null;
+  /** Phase 2A-2D semantic metadata v2 fields */
+  id?: string;
+  cluster_category_id?: string | null;
+  cluster_category_slug?: string | null;
+  guide_scope?: string | null;
+  guide_kind?: ContentClusterKind | null;
+  applicable_brands?: string[] | null;
+  metadata_status?: string | null;
+  metadata_source_revision?: string | null;
+  metadata_contract_version?: number | null;
+  eligibility_reason?: string | null;
+  subjects?: Array<{
+    productId: string;
+    subjectRole: 'primary' | 'comparison' | 'product_support';
+    sourceRevision?: string | null;
+  }>;
 }
 
 export interface InferContentClusterContextInput

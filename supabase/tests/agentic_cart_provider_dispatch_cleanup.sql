@@ -6,6 +6,10 @@ INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,prin
 VALUES ('eeeeeeee-4000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021','lost-ack-principal','guest',now()+interval '1 day');
 INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,status,expires_at,preparing_grant_id)
 VALUES ('eeeeeeee-4000-4000-8000-000000000023','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021',9,1,'lost-ack-principal','active',now()+interval '1 day','eeeeeeee-4000-4000-8000-000000000022');
+-- Simulate the older checkout generation left behind after prepare creates a
+-- newer generation on this same cart. It is not referenced by the hold itself.
+INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,status,expires_at,preparing_grant_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000032','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021',8,1,'lost-ack-principal','active',now()-interval '3 days','eeeeeeee-4000-4000-8000-000000000022');
 INSERT INTO public.checkout_sessions(id,session_id,merchant_id,status,metadata,payment_reference)
 VALUES ('eeeeeeee-4000-4000-8000-000000000024','dispatch-lost-ack-session','11111111-1111-4111-8111-111111111111','processing','{"agentic":{"payment_state":"claiming_payment"}}','claim-lost-ack-1');
 INSERT INTO public.commerce_cart_handoffs(handoff_hash,merchant_id,source_cart_id,expires_at)
@@ -54,17 +58,46 @@ UPDATE public.commerce_cart_checkout_sessions SET expires_at=now()-interval '3 d
   WHERE id='eeeeeeee-4000-4000-8000-000000000023';
 UPDATE public.commerce_cart_checkout_sessions SET submitted_at=now()-interval '120 days'
   WHERE id='eeeeeeee-4000-4000-8000-000000000003';
+UPDATE public.commerce_carts SET updated_at=now()-interval '120 days'
+  WHERE id='eeeeeeee-4000-4000-8000-000000000001';
+SELECT set_config('session_replication_role','origin',false);
+DO $$ BEGIN
+  PERFORM public.cleanup_commerce_carts();
+  IF NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000021' AND state='active')
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_checkout_sessions WHERE id='eeeeeeee-4000-4000-8000-000000000032') THEN
+    RAISE EXCEPTION 'cleanup changed active expired held cart or deleted an older generation';
+  END IF;
+END $$;
+-- Turn the same held cart terminal only after proving the expiry cleanup path;
+-- the terminal purge then exercises its separate hold-retention predicate.
+SELECT set_config('session_replication_role','replica',false);
+UPDATE public.commerce_carts SET state='expired',updated_at=now()-interval '120 days'
+  WHERE id='eeeeeeee-4000-4000-8000-000000000021';
 SELECT set_config('session_replication_role','origin',false);
 DO $$ BEGIN
   PERFORM public.cleanup_commerce_carts();
   IF NOT private.agentic_cart_dispatch_hold_is_live('11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021')
      OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_checkout_sessions WHERE id='eeeeeeee-4000-4000-8000-000000000023')
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_checkout_sessions WHERE id='eeeeeeee-4000-4000-8000-000000000032')
      OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_checkout_sessions WHERE id='eeeeeeee-4000-4000-8000-000000000003')
-     OR NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000021' AND state='active')
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000021' AND state='expired')
      OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE handoff_hash=repeat('b',64))
      OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE handoff_hash=repeat('c',64))
      OR NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000031' AND state='expired') THEN
     RAISE EXCEPTION 'cleanup did not retain held audit rows and drain unrelated expired rows';
+  END IF;
+END $$;
+
+-- Terminal purge must retain carts for any dispatch hold (live or terminal)
+-- while still purging an unrelated old terminal cart in the same batch.
+INSERT INTO public.commerce_carts(id,merchant_id,version,state,updated_at,expires_at)
+VALUES ('eeeeeeee-4000-4000-8000-000000000033','11111111-1111-4111-8111-111111111111',1,'expired',now()-interval '120 days',now()-interval '120 days');
+DO $$ BEGIN
+  PERFORM public.commerce_cart_purge_terminal_carts(interval '90 days',10000);
+  IF NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000001')
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000021')
+     OR EXISTS (SELECT 1 FROM public.commerce_carts WHERE id='eeeeeeee-4000-4000-8000-000000000033') THEN
+    RAISE EXCEPTION 'terminal purge did not retain held carts and remove unrelated terminal cart';
   END IF;
 END $$;
 SELECT dblink_disconnect('dispatch_lost_ack');

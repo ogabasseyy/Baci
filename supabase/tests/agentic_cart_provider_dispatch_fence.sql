@@ -5,6 +5,13 @@ DO $$ BEGIN
      OR has_function_privilege('service_role','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE') THEN
     RAISE EXCEPTION 'dispatch admission authorization grants are incorrect';
   END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_catalog.pg_class
+      WHERE oid='private.agentic_cart_dispatch_rollout'::regclass)
+     OR has_table_privilege('anon','private.agentic_cart_dispatch_rollout','SELECT')
+     OR has_table_privilege('authenticated','private.agentic_cart_dispatch_rollout','SELECT')
+     OR has_table_privilege('service_role','private.agentic_cart_dispatch_rollout','SELECT') THEN
+    RAISE EXCEPTION 'dispatch rollout table must have RLS and no application-role grants';
+  END IF;
 END $$;
 DO $$
 DECLARE r jsonb; claims jsonb; missing_key text;

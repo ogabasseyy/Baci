@@ -277,7 +277,7 @@ describe('createStorefrontOrderRpcClient', () => {
         checkoutBinding: {
           ...validCheckoutBinding,
           checkoutVariant: 'quiz_voucher',
-        } as StorefrontCheckoutBinding,
+        } as unknown as StorefrontCheckoutBinding,
       })
     ).toThrow(/Checkout binding variant/);
     expect(mocks.signScopedSupabaseJwt).not.toHaveBeenCalled();

@@ -1,11 +1,9 @@
-import {
-  buildMerchantRateAttestation,
-  buildSharedCartShippingRateMarker,
-  buildStorefrontCheckoutBinding,
-  isMerchantRateAttestationEnabled,
-  MerchantRateAttestationInputError,
-  type SharedCartRateBinding,
-} from './build-merchant-rate-attestation';
+import { buildMerchantRateAttestation } from './build-merchant-rate-attestation';
+import { buildSharedCartShippingRateMarker } from './build-shared-cart-shipping-rate-marker';
+import { buildStorefrontCheckoutBinding } from './build-storefront-checkout-binding';
+import { isMerchantRateAttestationEnabled } from './is-merchant-rate-attestation-enabled';
+import { MerchantRateAttestationInputError } from './merchant-rate-attestation-input-error';
+import type { SharedCartRateBinding } from './shared-cart-rate-binding';
 import type { StorefrontCheckoutVariant } from './storefront-order-claims';
 import type {
   StorefrontCheckoutBinding,

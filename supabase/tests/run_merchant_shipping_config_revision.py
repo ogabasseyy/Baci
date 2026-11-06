@@ -167,6 +167,8 @@ location_revision_fix = ROOT / "supabase/migrations/20261106160000_fix_shipping_
 run(PSQL, sql=f"{psql_include(location_revision_fix)}\n")
 tenant_integrity_fix = ROOT / "supabase/migrations/20261106170000_harden_shipping_revision_tenant_integrity.sql"
 run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
+revision_access_policy = ROOT / "supabase/migrations/20261106180000_deny_direct_shipping_revision_access.sql"
+run(PSQL, sql=f"{psql_include(revision_access_policy)}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))
     assert revised.pop("shipping_config_revision", None) is not None, "new projection omitted its revision"
@@ -236,7 +238,7 @@ assert scalar(f"SELECT count(*) FROM public.merchant_shipping_config_revisions W
 
 # The private revision is protected from all API roles.
 assert scalar("SELECT relrowsecurity FROM pg_class WHERE oid='public.merchant_shipping_config_revisions'::regclass") == "t", "revision table RLS is disabled"
-assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_shipping_config_revisions'::regclass") == "0", "revision table unexpectedly has a policy"
+assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_shipping_config_revisions'::regclass AND polname='merchant_shipping_config_revisions_deny_direct_access' AND pg_get_expr(polqual, polrelid)='false' AND pg_get_expr(polwithcheck, polrelid)='false'") == "1", "revision table is missing its deny-all RLS policy"
 assert scalar("SELECT confdeltype FROM pg_constraint WHERE conrelid='public.merchant_shipping_config_revisions'::regclass AND conname='merchant_shipping_config_revisions_merchant_id_fkey'") == "c", "revision rows must cascade with their merchant"
 for role in ["anon", "authenticated", "service_role"]:
     assert scalar(f"SELECT has_table_privilege('{role}','public.merchant_shipping_config_revisions','SELECT')") == "f", f"{role} can read internal revisions"

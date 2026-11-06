@@ -37,6 +37,10 @@ export function isNgnChargeCurrency(currency?: string | null): boolean {
   );
 }
 
+function isOxygenEligible(input: { oxygenAllowed: boolean; currency?: string | null; orderAmount: number; payableAmount: number }): boolean {
+  return (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) && isNgnChargeCurrency(input.currency) && input.payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(input.payableAmount, input.orderAmount);
+}
+
 function toAmountLimit(
   value: number | string | null | undefined,
   fallback: number,
@@ -139,6 +143,7 @@ export function isPaymentMethodAvailable({
   currency,
   orderAmount,
   payableAmount,
+  oxygenAllowed = false,
 }: {
   paymentMethod: PaymentMethod;
   paystackCheckoutAvailable: boolean;
@@ -149,10 +154,11 @@ export function isPaymentMethodAvailable({
   currency?: string | null;
   orderAmount: number;
   payableAmount: number;
+  oxygenAllowed?: boolean;
 }): boolean {
   switch (paymentMethod) {
     case 'oxygen':
-      return isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount);
+      return isOxygenEligible({ oxygenAllowed, currency, payableAmount, orderAmount });
     case 'paystack':
       return paystackCheckoutAvailable;
     case 'uba_redvault':
@@ -200,14 +206,16 @@ export function hasAnyInstallmentOption({
   currency,
   orderAmount,
   payableAmount,
+  oxygenAllowed = false,
 }: {
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
   orderAmount: number;
   payableAmount: number;
+  oxygenAllowed?: boolean;
 }): boolean {
   return Boolean(
-    (isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) ||
+    isOxygenEligible({ oxygenAllowed, currency, payableAmount, orderAmount }) ||
       isCreditDirectEligible({
         featureSettings,
         currency,

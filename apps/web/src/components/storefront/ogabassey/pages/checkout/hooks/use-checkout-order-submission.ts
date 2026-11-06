@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { handleSharedRedvaultReview } from '../handlers/handle-shared-redvault-review';
+import { checkOxygenStorefrontAvailability } from '../check-oxygen-storefront-availability';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
 import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import type { SharedCartOrderBinding } from '../types';
@@ -31,7 +32,7 @@ export function useCheckoutOrderSubmission(
     const { session: paymentSession } = payment;
 
     if (paymentSession.method === 'oxygen' &&
-      (!isOxygenStorefrontStagingEnabled() || payment.currencyCode !== 'NGN' ||
+      ((!isOxygenStorefrontStagingEnabled() && !(await checkOxygenStorefrontAvailability(merchant.id))) || payment.currencyCode !== 'NGN' ||
        paymentSession.wallet.amountUsed > 0 || !(await context.account.waitForResolvedCustomerAuth()))) {
       toast({ title: 'Payment plan unavailable', description: 'Sign in to continue with Oxygen. Wallet credit cannot be combined with this payment plan.', variant: 'destructive' });
       processing.releaseSubmission();

@@ -7,7 +7,15 @@ LANGUAGE sql AS $$ INSERT INTO checkout_clock_failures SELECT message WHERE NOT 
 -- schema. The focused stub omits merchants.email; the replay schema requires
 -- it, so select the compatible insert shape at runtime.
 DO $$
+DECLARE
+  prior_claims text := current_setting('request.jwt.claims', true);
+  prior_role text := current_setting('request.jwt.claim.role', true);
 BEGIN
+  -- The full replay installs merchant audit triggers which require an actor.
+  -- This JWT role is fixture-local to this statement and does not grant SQL
+  -- privileges or affect the shopper claims used by the prepare call.
+  PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'merchants' AND column_name = 'email'
@@ -18,9 +26,14 @@ BEGIN
     INSERT INTO public.merchants (id, slug, premium_features)
     VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c001', 'checkout-clock-f6a6a006', '["shared_cart"]'::jsonb);
   END IF;
+  -- Product insert policy triggers also inspect auth.role() through
+  -- enforce_mobile_admin_product_limit, so seed it under the same fixture
+  -- actor context rather than after this DO block restores prior GUCs.
+  INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity, stock, manage_stock)
+  VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c002', 'f6a6a006-8f22-4cb4-a626-d71eac10c001', 'Checkout clock fixture', 15, 'active', 10, 10, true);
+  PERFORM set_config('request.jwt.claims', coalesce(prior_claims, ''), true);
+  PERFORM set_config('request.jwt.claim.role', coalesce(prior_role, ''), true);
 END $$;
-INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity, stock, manage_stock)
-VALUES ('f6a6a006-8f22-4cb4-a626-d71eac10c002', 'f6a6a006-8f22-4cb4-a626-d71eac10c001', 'Checkout clock fixture', 15, 'active', 10, 10, true);
 DO $$
 DECLARE
   m uuid := 'f6a6a006-8f22-4cb4-a626-d71eac10c001';
@@ -38,6 +51,11 @@ BEGIN
     'role', 'commerce_cart_shopper', 'exp', 9999999999, 'cart_scope', 'session',
     'cart_merchant_id', m, 'cart_principal_id', 'database-clock', 'cart_id', c, 'cart_grant_id', g
   )::text, true);
+  PERFORM set_config('request.jwt.claim.role', 'commerce_cart_shopper', true);
+  PERFORM pg_temp.check_checkout_clock(
+    auth.role() = 'commerce_cart_shopper',
+    'prepare authorization role was not the cart shopper'
+  );
 
   r := public.commerce_cart_prepare_checkout(c, 1, 'prepare-db-clock');
   PERFORM pg_temp.check_checkout_clock(
@@ -67,32 +85,6 @@ END $$;
 DO $$ DECLARE failures text; BEGIN
   SELECT string_agg(message, E'\n') INTO failures FROM checkout_clock_failures;
   IF failures IS NOT NULL THEN
-    RAISE NOTICE 'Checkout database clock regressions: %', failures;
-    IF failures LIKE '%fresh prepare was rejected: unauthorized%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare authorization rejected' USING ERRCODE = 'P0007';
-    ELSIF failures LIKE '%fresh prepare was rejected: merchant_unavailable%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare merchant gate rejected' USING ERRCODE = 'P0008';
-    ELSIF failures LIKE '%fresh prepare was rejected: invalid_item%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare input rejected' USING ERRCODE = 'P0009';
-    ELSIF failures LIKE '%fresh prepare was rejected: expired%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare expiry rejected' USING ERRCODE = 'P0010';
-    ELSIF failures LIKE '%fresh prepare was rejected: idempotency_conflict%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare idempotency conflict' USING ERRCODE = 'P0011';
-    ELSIF failures LIKE '%fresh prepare was rejected: not_found%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare cart not found' USING ERRCODE = 'P0012';
-    ELSIF failures LIKE '%fresh prepare was rejected: refresh_required%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare version stale' USING ERRCODE = 'P0013';
-    ELSIF failures LIKE '%fresh prepare was rejected:%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare was rejected' USING ERRCODE = 'P0005';
-    ELSIF failures LIKE '%fresh prepare did not return databaseNow%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare assertion failed' USING ERRCODE = 'P0002';
-    ELSIF failures LIKE '%fresh prepare databaseNow was outside the database clock window%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh value assertion failed' USING ERRCODE = 'P0006';
-    ELSIF failures LIKE '%databaseNow was persisted in the idempotency receipt%' THEN
-      RAISE EXCEPTION 'Checkout clock receipt persistence assertion failed' USING ERRCODE = 'P0003';
-    ELSIF failures LIKE '%replay did not replace a stale persisted databaseNow with PostgreSQL time%' THEN
-      RAISE EXCEPTION 'Checkout clock replay assertion failed' USING ERRCODE = 'P0004';
-    END IF;
-    RAISE EXCEPTION 'Unclassified checkout database clock regression: %', failures;
+    RAISE EXCEPTION 'Checkout database clock regressions: %', failures;
   END IF;
 END $$;

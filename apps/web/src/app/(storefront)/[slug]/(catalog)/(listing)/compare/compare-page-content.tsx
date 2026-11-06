@@ -198,7 +198,7 @@ export async function ComparePageContent({
     <>
       <JsonLd data={breadcrumbSchema} />
 
-      <main className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
+      <div className="bg-[color-mix(in_srgb,var(--store-background)_94%,var(--store-background-text)_6%)] pb-20 pt-6">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
           <nav
             aria-label="Breadcrumb"
@@ -221,7 +221,7 @@ export async function ComparePageContent({
 
           {sectionsBody}
         </div>
-      </main>
+      </div>
     </>
   );
 }

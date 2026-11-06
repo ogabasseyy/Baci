@@ -142,18 +142,28 @@ describe('WalletPinSettingsScreen', () => {
     expect(router.back).not.toHaveBeenCalled();
   });
 
-  it('still navigates away when the background status refresh throws', async () => {
+  it.each([
+    'throw',
+    'reject',
+  ] as const)('still navigates away when the background status refresh %ss', async (failureMode) => {
     const alert = alertSpy();
     set.mockResolvedValue(undefined);
     (router.canGoBack as jest.Mock).mockReturnValue(true);
-    mockRefresh.mockImplementation(() => {
-      throw new Error('offline');
-    });
+    if (failureMode === 'throw') {
+      mockRefresh.mockImplementation(() => {
+        throw new Error('offline');
+      });
+    } else {
+      mockRefresh.mockRejectedValue(new Error('offline'));
+    }
     render(<WalletPinSettingsScreen />);
     type('New PIN', '1234');
     type('Confirm PIN', '1234');
     await act(async () => press('Save PIN'));
-    expect(() => doneButton(alert).onPress()).toThrow('offline');
+    await act(async () => {
+      expect(() => doneButton(alert).onPress()).not.toThrow();
+      await Promise.resolve();
+    });
     expect(router.back).toHaveBeenCalledTimes(1);
   });
 

@@ -110,7 +110,11 @@ export function useWalletPinSettings() {
     if (router.canGoBack()) router.back();
     else router.replace('/settings');
     // Refresh in the background; navigation never waits for it.
-    gate.refresh();
+    try {
+      void Promise.resolve(gate.refresh()).catch(() => undefined);
+    } catch {
+      // A failed background refresh must not escape the native alert callback.
+    }
   };
 
   const onSuccess = () => {

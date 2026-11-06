@@ -65,6 +65,23 @@ BEGIN
     'delivery context RPC execution grants are broader than the shopper role'
   );
 
+  UPDATE public.commerce_cart_checkout_sessions
+  SET reviewed_snapshot = jsonb_set(reviewed_snapshot, '{lines,0,quantity}', '10'::jsonb)
+  WHERE id = session_id;
+  result := public.commerce_cart_delivery_context(session_id, 7, 3);
+  PERFORM pg_temp.check_delivery_context(
+    result->>'ok' = 'true' AND result->'context'->'items'->0->>'quantity' = '10',
+    'maximum canonical line quantity of 10 was rejected or changed'
+  );
+  UPDATE public.commerce_cart_checkout_sessions
+  SET reviewed_snapshot = jsonb_set(reviewed_snapshot, '{lines,0,quantity}', '11'::jsonb)
+  WHERE id = session_id;
+  result := public.commerce_cart_delivery_context(session_id, 7, 3);
+  PERFORM pg_temp.check_delivery_context(result->>'ok' = 'false', 'line quantity above the cart limit of 10 was accepted');
+  UPDATE public.commerce_cart_checkout_sessions
+  SET reviewed_snapshot = jsonb_set(reviewed_snapshot, '{lines,0,quantity}', '2'::jsonb)
+  WHERE id = session_id;
+
   FOREACH malformed IN ARRAY ARRAY['"not-a-number"'::jsonb, 'null'::jsonb, '{}'::jsonb]
   LOOP
     PERFORM set_config('request.jwt.claims', (claims || jsonb_build_object('exp', malformed))::text, true);

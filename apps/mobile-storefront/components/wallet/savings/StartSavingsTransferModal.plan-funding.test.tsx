@@ -84,9 +84,7 @@ describe('StartSavingsTransferModal plan funding mode', () => {
       );
 
       expect(screen.getByText('Fund your plan to continue')).toBeOnTheScreen();
-      expect(
-        screen.queryByText('Fund wallet to continue')
-      ).not.toBeOnTheScreen();
+      expect(screen.queryByText('Add money to continue')).not.toBeOnTheScreen();
       fireEvent.changeText(
         screen.getByLabelText('BVN for plan account'),
         '00000000000'

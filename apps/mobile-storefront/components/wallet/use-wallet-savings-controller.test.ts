@@ -9,12 +9,20 @@ let mockReady = false;
 jest.mock('./use-primary-savings-recovery', () => ({
   usePrimarySavingsRecovery: () => ({ ready: mockReady, retry: mockRetry }),
 }));
+const mockGate = jest.fn();
+jest.mock('./savings/use-primary-goal-gate', () => ({
+  usePrimaryGoalGate: (key?: number) => mockGate(key),
+}));
+const mockCreateActions = jest.fn();
 jest.mock('./use-wallet-savings-actions', () => ({
-  createWalletSavingsActions: () => ({
-    hasPendingSavingsContribution: true,
-    handleAddSavingsContribution: mockSubmit,
-    handleFundSavingsWallet: mockFund,
-  }),
+  createWalletSavingsActions: (args: unknown) => {
+    mockCreateActions(args);
+    return {
+      hasPendingSavingsContribution: true,
+      handleAddSavingsContribution: mockSubmit,
+      handleFundSavingsWallet: mockFund,
+    };
+  },
 }));
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 const input = {
@@ -31,6 +39,7 @@ const input = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockReady = false;
+  mockGate.mockReturnValue('off');
 });
 it('blocks funding and submission until pending recovery is confirmed', () => {
   const { result } = renderHook(() => useWalletSavingsController(input));
@@ -73,4 +82,86 @@ it('drops the pending key when the scope changes so no foreign operation is quer
   rerender({ userId: 'user-b' });
   expect(idempotencyKeyRef.current).toBeNull();
   expect(operationRailRef.current).toBeNull();
+});
+it('hands the PiggyVest verdict and Add money callback to the savings actions', () => {
+  mockReady = true;
+  const onAddMoney = jest.fn();
+  renderHook(() =>
+    useWalletSavingsController({ ...input, onAddMoney, primaryReady: true })
+  );
+  expect(mockCreateActions).toHaveBeenCalledWith(
+    expect.objectContaining({ onAddMoney, primaryReady: true })
+  );
+});
+
+describe('goalAwaitingSettlement', () => {
+  const funded = { id: 'g', status: 'completed', current_amount: 5000 };
+  it.each([
+    ['ready', funded, true],
+    ['off', funded, false],
+    ['checking', funded, false],
+    ['ready', { ...funded, current_amount: 0 }, false],
+    ['ready', { ...funded, status: 'active' }, false],
+  ])('gate %s with %j -> %s', (gate, goal, expected) => {
+    mockGate.mockReturnValue(gate);
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal } as never)
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(expected);
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalAwaitingSettlement: expected })
+    );
+  });
+
+  it('re-reads the gate on a wallet refresh so a stale pending verdict resolves', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockImplementation((key?: number) =>
+      key === 2 ? 'ready' : 'off'
+    );
+    const { result, rerender } = renderHook(
+      ({ at }: { at: number }) =>
+        useWalletSavingsController({
+          ...input,
+          goal,
+          walletUpdatedAt: at,
+        } as never),
+      { initialProps: { at: 1 } }
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(false);
+    rerender({ at: 2 });
+    expect(mockGate).toHaveBeenLastCalledWith(2);
+    expect(result.current.goalAwaitingSettlement).toBe(true);
+  });
+
+  it('marks a funded completed goal as settlement-checking only while the gate is checking', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockReturnValue('checking');
+    renderHook(() => useWalletSavingsController({ ...input, goal } as never));
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalSettlementChecking: true })
+    );
+    mockGate.mockReturnValue('off');
+    renderHook(() => useWalletSavingsController({ ...input, goal } as never));
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ goalSettlementChecking: false })
+    );
+  });
+
+  it('hands the wallet content its savings props, including the refresh time', () => {
+    mockGate.mockReturnValue('ready');
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    const { result } = renderHook(() =>
+      useWalletSavingsController({
+        ...input,
+        goal,
+        walletUpdatedAt: 42,
+      } as never)
+    );
+    expect(result.current.walletContentSavingsProps).toEqual({
+      hasPendingSavingsContribution:
+        result.current.hasPendingSavingsContribution,
+      goalAwaitingSettlement: true,
+      walletUpdatedAt: 42,
+    });
+  });
 });

@@ -6,13 +6,16 @@ import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibilit
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import { OxygenEligibilityUnavailable } from './OxygenEligibilityUnavailable';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
-import { OxygenSelfieConfirmedContext } from './OxygenPaymentSurfaceContext';
+import {
+  OxygenSelfieConfirmedContext,
+  OxygenSelfieRenewalContext,
+} from './OxygenPaymentSurfaceContext';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
 import { OxygenVerificationActivity } from './OxygenVerificationActivity';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { pendingReadRecovery } from './oxygen-read-recovery';
 import { oxygenVerificationHeading } from './oxygen-verification-heading';
-import { selfieLinkExpiration, selfieLinkExpired } from './selfie-link-expired';
+import { useOxygenSelfieExpiration } from './use-oxygen-selfie-expiration';
 
 type Props = {
   snapshot: OxygenRuntimeSnapshot;
@@ -31,14 +34,14 @@ export function OxygenGuidedVerification({
   enabled = true,
 }: Props) {
   const attempts = useRef(new Map<string, number>());
-  const lastUsableSelfie = useRef<string | null>(null);
   useEffect(() => {
     if (!enabled) attempts.current.clear();
   }, [enabled]);
   const [retrying, setRetrying] = useState(false);
-  const [expiryTick, setExpiryTick] = useState(0);
   const retryLock = useRef(false);
   const state = snapshot.state;
+  const hostedRenewal = useContext(OxygenSelfieRenewalContext);
+
   const selfieConfirmed =
     useContext(OxygenSelfieConfirmedContext) === snapshot.workflowId;
   const eligibilityFailed = state.eligibilityStatus === 'failed';
@@ -50,24 +53,11 @@ export function OxygenGuidedVerification({
     ['eligibility_required', 'kyc_required'].includes(snapshot.stage);
   const selfieRequired =
     state.kyc?.selfie_status === 'NOT_DONE' && !selfieConfirmed;
-  const expiredSelfie = Boolean(
-    state.selfieUrl && selfieLinkExpired(state.selfieUrl)
+  const { expiredSelfie, lastUsableSelfie } = useOxygenSelfieExpiration(
+    state.selfieUrl,
+    Boolean(active),
+    selfieRequired
   );
-  useEffect(() => {
-    if (state.selfieUrl && !expiredSelfie)
-      lastUsableSelfie.current = state.selfieUrl;
-  }, [state.selfieUrl, expiredSelfie]);
-  useEffect(() => {
-    if (!active || !selfieRequired || !state.selfieUrl || expiredSelfie) return;
-    const expiration = selfieLinkExpiration(state.selfieUrl);
-    if (expiration === null) return;
-    const delay = Math.min(
-      Math.max(expiration - Math.max(Date.now(), expiryTick), 1),
-      2_147_483_647
-    );
-    const timer = window.setTimeout(() => setExpiryTick(Date.now()), delay);
-    return () => window.clearTimeout(timer);
-  }, [active, selfieRequired, state.selfieUrl, expiredSelfie, expiryTick]);
   // Oxygen confirms the bank during eligibility; bank status cannot gate that check.
   const identityComplete = oxygenEligibilityPrerequisites(state);
   const ninRequired =
@@ -115,13 +105,13 @@ export function OxygenGuidedVerification({
     let delay = 0;
     // Expired replacements share a bound until a usable link is observed.
     const selfieAttempt = state.selfieUrl
-      ? `selfie_link:expired:${lastUsableSelfie.current ?? ''}`
+      ? `selfie_link:expired:${lastUsableSelfie ?? ''}`
       : 'selfie_link:missing';
     if (!state.kyc) {
       action = 'refresh_kyc';
     } else if (
       selfieRequired &&
-      (!state.selfieUrl || expiredSelfie) &&
+      (!state.selfieUrl || (expiredSelfie && !hostedRenewal)) &&
       !count(selfieAttempt)
     ) {
       action = 'selfie_link';
@@ -171,6 +161,8 @@ export function OxygenGuidedVerification({
     eligibilityFailed,
     snapshot.ninAttemptStatus,
     submit,
+    hostedRenewal,
+    lastUsableSelfie,
   ]);
 
   if (!active || error) return null;
@@ -181,7 +173,8 @@ export function OxygenGuidedVerification({
         !state.eligible &&
         (attempts.current.get('refresh_eligibility') ?? 0) >= 3));
   if (state.eligible === false) return <OxygenEligibilityUnavailable />;
-  const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
+  const selfie =
+    selfieRequired && (!expiredSelfie || hostedRenewal) && state.selfieUrl;
   const ninRetry = ninRequired && snapshot.ninAttemptStatus === 'safe_retry';
   const queuedNin = active && pendingReadRecovery(snapshot) === 'validate_nin';
   const retryStatus =
@@ -226,6 +219,7 @@ export function OxygenGuidedVerification({
             selfie: Boolean(selfie),
             selfieConfirmed,
             ninPending,
+            retryStatus,
             bankPending,
             review,
             checking: busy || retrying,

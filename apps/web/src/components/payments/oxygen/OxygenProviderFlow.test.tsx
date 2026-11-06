@@ -1,6 +1,14 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), capture: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -28,6 +36,12 @@ beforeAll(() => {
       disconnect = vi.fn();
     }
   );
+});
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+afterEach(async () => {
+  cleanup();
+  await vi.runOnlyPendingTimersAsync();
+  vi.useRealTimers();
 });
 afterAll(() => vi.unstubAllGlobals());
 

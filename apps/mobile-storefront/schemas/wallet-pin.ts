@@ -31,4 +31,15 @@ export const WalletPinSchemas = {
     proof: z.string().regex(/^[0-9a-f]{64}$/),
     expiresAt: z.string(),
   }),
+  // Same route, actions 'cancel' and 'complete': the server moves the whole
+  // goal balance, so no amount is ever sent.
+  goalActionVerifyRequest: z
+    .object({
+      merchantId: z.uuid(),
+      pin,
+      action: z.enum(['cancel', 'complete']),
+      goalId: z.uuid(),
+      operationId: z.uuid(),
+    })
+    .strict(),
 };

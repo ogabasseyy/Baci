@@ -47,7 +47,7 @@ describe('WalletSavingsContributionFlow', () => {
 
     expect(screen.getByText('Available in wallet: ₦0')).toBeOnTheScreen();
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
@@ -69,7 +69,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', {
@@ -135,10 +135,10 @@ describe('WalletSavingsContributionFlow', () => {
 
       expect(screen.getByText(/do not send real money/i)).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Fund wallet for savings',
+        name: 'Add money for savings',
       });
       expect(payment).toHaveAccessibilityState({ disabled: false });
-      expect(payment).toHaveTextContent('Fund wallet');
+      expect(payment).toHaveTextContent('Add money');
       expect(screen.queryByText(/bank transfer/i)).toBeNull();
       fireEvent.press(payment);
       expect(props.onFundWallet).toHaveBeenCalledTimes(1);
@@ -162,7 +162,7 @@ describe('WalletSavingsContributionFlow', () => {
     render(<WalletSavingsContributionFlow {...props} />);
 
     expect(
-      screen.getByText(/Fund your wallet to add this amount to savings/i)
+      screen.getByText(/Add money to your wallet to save this amount/i)
     ).toBeOnTheScreen();
     expect(
       screen.queryByRole('button', { name: 'Confirm savings top-up' })
@@ -189,7 +189,7 @@ describe('WalletSavingsContributionFlow', () => {
       fireEvent.press(contribute);
       expect(props.onAddSavings).toHaveBeenCalledTimes(1);
       expect(props.onFundWallet).not.toHaveBeenCalled();
-      expect(screen.queryByText('Fund wallet')).toBeNull();
+      expect(screen.queryByText('Add money')).toBeNull();
     } finally {
       if (previousMode === undefined)
         delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;

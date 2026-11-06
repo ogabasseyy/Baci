@@ -12,11 +12,14 @@ import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
+  /** Funded goal the database marked completed that is not yet settled. */
+  awaitingSettlement?: boolean;
   goal: WalletActiveSavingsGoal;
   onOpen: () => void;
 };
 
 export function WalletSavingsPlanCard({
+  awaitingSettlement = false,
   colors,
   goal,
   onOpen,
@@ -41,11 +44,13 @@ export function WalletSavingsPlanCard({
   const hasStarted = goal.current_amount > 0;
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
-    : goal.status === 'completed'
-      ? 'Start another plan'
-      : goal.status === 'paused' || goal.source_mode !== 'manual'
-        ? 'View plan'
-        : 'Add to savings';
+    : awaitingSettlement
+      ? 'Move your savings'
+      : goal.status === 'completed'
+        ? 'Start another plan'
+        : goal.status === 'paused' || goal.source_mode !== 'manual'
+          ? 'View plan'
+          : 'Add to savings';
   const hasSavingsGlow = actionLabel === 'Add to savings';
   const heading =
     goal.status === 'completed'

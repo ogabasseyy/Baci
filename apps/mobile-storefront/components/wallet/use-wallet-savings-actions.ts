@@ -23,8 +23,13 @@ export function createWalletSavingsActions({
   activeMerchantId,
   activeMerchantSlug,
   goal,
+  goalAwaitingSettlement = false,
+  goalSettlementChecking = false,
   idempotencyKeyRef,
+  legacyBalance,
+  onAddMoney,
   operationRailRef,
+  primaryReady = false,
   refetchWallet,
   requestPinProof,
   savingsContributionAmount,
@@ -38,7 +43,17 @@ export function createWalletSavingsActions({
   activeMerchantId?: string;
   activeMerchantSlug?: string;
   goal: WalletActiveSavingsGoal | null;
+  /** Funded goal the database already marked completed; still completable. */
+  goalAwaitingSettlement?: boolean;
+  /** A funded completed goal whose readiness verdict is still being read. */
+  goalSettlementChecking?: boolean;
   idempotencyKeyRef: { current: string | null };
+  /** Legacy-rail balance; defaults to spendableBalance when not supplied. */
+  legacyBalance?: number;
+  /** PiggyVest main wallet ready: opens Add money in place of a card top-up. */
+  onAddMoney?: () => void;
+  /** True only on an explicit server 'ready' verdict for the main wallet. */
+  primaryReady?: boolean;
   // Rail of the attempt that minted the stored id: same scope as the id,
   // written before each request and cleared together with it.
   operationRailRef: { current: ContributionRail | null };
@@ -57,7 +72,14 @@ export function createWalletSavingsActions({
   setSavingsContributionAmount: (value: string) => void;
 }) {
   const handleOpenSavings = () => {
-    if (goal && (goal.status !== 'completed' || goal.selection_unresolved)) {
+    // Neither settle nor start a new plan until the verdict is in.
+    if (goalSettlementChecking) return;
+    if (
+      goal &&
+      (goal.status !== 'completed' ||
+        goal.selection_unresolved ||
+        goalAwaitingSettlement)
+    ) {
       setShowSavingsProgressModal(true);
       return;
     }
@@ -83,6 +105,11 @@ export function createWalletSavingsActions({
       return;
     }
     if (requestedAmount <= spendableBalance) {
+      return;
+    }
+    if (primaryReady) {
+      // Money comes from the PiggyVest main wallet: never a card payment.
+      onAddMoney?.();
       return;
     }
     if (startWalletTopUp) startWalletTopUp();
@@ -139,6 +166,8 @@ export function createWalletSavingsActions({
                 (pinProof) =>
                   addPiggyvestPrimarySavingsContribution({
                     ...input,
+                    // The screen showed the PiggyVest balance: never fall back to legacy funds.
+                    primaryAdvertised: primaryReady,
                     ...(pinProof ? { pinProof } : {}),
                     // A fallback sends the id on legacy, so retries must follow it.
                     onRail: (sentOn) => {
@@ -168,7 +197,11 @@ export function createWalletSavingsActions({
       rawAmount: savingsContributionAmount,
       refetchWallet,
       setIsAddingSavingsContribution,
-      walletBalance: spendableBalance,
+      // An id bound to the legacy rail is validated against the legacy balance.
+      walletBalance:
+        rail === 'primary'
+          ? spendableBalance
+          : (legacyBalance ?? spendableBalance),
     });
   };
 

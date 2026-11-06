@@ -4,6 +4,7 @@ import {
   fetchWalletPinStatus,
   submitWalletPin,
   verifyFundPin,
+  verifyGoalActionPin,
 } from '@/lib/wallet-pin-api';
 import { useWalletPinSheet } from './use-wallet-pin-sheet';
 
@@ -168,5 +169,72 @@ describe('request identity', () => {
       expect.objectContaining({ pin: '4821' }),
       'user-opened'
     );
+  });
+});
+
+describe('a goal-action request', () => {
+  it('restarts the sheet when only the action changes and verifies without an amount', async () => {
+    jest.mocked(verifyGoalActionPin).mockResolvedValue(proof);
+    const onProof = jest.fn();
+    const goal = {
+      merchantId: request.merchantId,
+      goalId: request.goalId,
+      operationId: request.operationId,
+    };
+    const { result } = renderHook(() =>
+      useWalletPinSheet({
+        request: { ...goal, action: 'complete' },
+        onProof,
+        expectedUserId: 'user-a',
+      })
+    );
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    act(() => result.current.setPin('4821'));
+    await act(async () => {
+      await result.current.submit();
+    });
+    expect(verifyGoalActionPin).toHaveBeenCalledWith(
+      { ...goal, action: 'complete', pin: '4821' },
+      'user-a'
+    );
+    expect(verifyFundPin).not.toHaveBeenCalled();
+    expect(onProof).toHaveBeenCalledWith(proof);
+  });
+});
+
+describe('a goal action whose operation is no longer valid', () => {
+  it.each([
+    'CANCEL_OPERATION_INVALID',
+    'COMPLETE_OPERATION_INVALID',
+  ])('hands %s up instead of leaving the customer in the sheet', async (code) => {
+    jest.mocked(verifyGoalActionPin).mockRejectedValue(
+      Object.assign(new Error('No longer valid. Please start again.'), {
+        code,
+      })
+    );
+    const onProof = jest.fn();
+    const onInvalid = jest.fn();
+    const { result } = renderHook(() =>
+      useWalletPinSheet({
+        request: {
+          action: 'cancel',
+          merchantId: request.merchantId,
+          goalId: request.goalId,
+          operationId: request.operationId,
+        },
+        onProof,
+        onInvalid,
+      })
+    );
+    await waitFor(() => expect(result.current.step).toBe('enter'));
+    act(() => result.current.setPin('4821'));
+    await act(async () => {
+      await result.current.submit();
+    });
+    expect(onInvalid).toHaveBeenCalledWith(
+      'No longer valid. Please start again.'
+    );
+    expect(onProof).not.toHaveBeenCalled();
+    expect(result.current.pin).toBe('');
   });
 });

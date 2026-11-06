@@ -1,45 +1,62 @@
 import Link from 'next/link';
+import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
+import {
+  BLOG_HERO_IMAGE_QUALITY,
+  BLOG_LISTING_FEATURED_IMAGE_SIZES,
+} from '@/components/storefront/ogabassey/config/blog-media';
 import { asRoute, joinRouteBasePath } from '@/lib/routes';
 import { BlogFeaturedStoryFrame } from './blog-featured-story-frame';
+import { preloadBlogListingFeaturedImage } from './blog-listing-featured-image-preload';
 import { ogabasseyBlogLcpSnapshot } from './ogabassey-blog-lcp-snapshot';
 
 /**
- * Text LCP hero for the Ogabassey listing shell.
+ * Committed LCP hero for the Ogabassey blog listing shell.
  *
- * A 400px CDN `<img>` in this slot is discoverable and tiny (~12KB) but still
- * owns Slow-4G simulated LCP (~7s) because it is the largest painted element.
- * Compare already lands ~4s as committed text. Keep the featured frame so CLS
- * stays stable, but paint the snapshot title — no network image — so LCP can
- * match that text path. Listing `hideFeaturedStory` must keep skipping the
- * `CdnFormatImage` picture or that later image becomes LCP again.
+ * Renders the snapshot featured image (`<picture>` with AVIF `<source>` +
+ * transformed CDN `<img>` fallback via `CdnFormatImage`) and preloads the
+ * byte-identical AVIF `srcSet` in the initial server HTML shell without waiting
+ * on `searchParams`, listing fetches, or client hydration.
  *
- * Geometry lives in storefront-blog.css semantic selectors so LCP size does
- * not wait on Tailwind `text-3xl` / `text-lg` utilities. The 100svh shell is
- * not a link — only the 400px frame is — and the snapshot title stays a
- * paragraph so it cannot precede the streamed page H1.
+ * Listing `hideFeaturedStory` keeps skipping the streamed duplicate hero in
+ * `OgabasseyV2Blog` on the unfiltered root view so the featured story and its
+ * image are never rendered or downloaded twice.
  *
- * Do not paint the snapshot excerpt here. Catalog naira in that sentence sits
- * in the first viewport, and the extra block grows the LCP text cluster on
- * Slow-4G. Title plus date is enough unique copy for the committed frame.
+ * Geometry and scrim rules live in `storefront-lcp-copy-css.ts` and
+ * `storefront-blog.css` semantic selectors so image sizing, overlay contrast,
+ * and typography do not wait on deferred Tailwind chunks.
  */
 export function BlogListingOgabasseyLcpHero() {
   if (!ogabasseyBlogLcpSnapshot) {
     return <BlogFeaturedStoryFrame />;
   }
 
-  const { basePath, featuredPost, publishedDateLabel } =
+  const { basePath, featuredPost, imageSrc, publishedDateLabel } =
     ogabasseyBlogLcpSnapshot;
+
+  preloadBlogListingFeaturedImage(imageSrc);
 
   return (
     <div className="ogabassey-blog-lcp-hero">
       <div className="ogabassey-blog-lcp-hero__inner">
         <Link
-          className="ogabassey-blog-lcp-hero__frame"
+          className="ogabassey-blog-lcp-hero__frame group"
           href={asRoute(
             joinRouteBasePath(basePath, `/blog/${featuredPost.slug}`)
           )}
         >
-          <div className="ogabassey-blog-featured-story__media" />
+          <div className="ogabassey-blog-featured-story__media">
+            <CdnFormatImage
+              alt=""
+              className="object-cover opacity-90 transition-transform duration-1000 group-hover:scale-105"
+              fetchPriority="high"
+              fill
+              loading="eager"
+              quality={BLOG_HERO_IMAGE_QUALITY}
+              sizes={BLOG_LISTING_FEATURED_IMAGE_SIZES}
+              src={imageSrc}
+            />
+            <div className="ogabassey-blog-featured-story__scrim" />
+          </div>
           <div className="ogabassey-blog-lcp-hero__copy">
             <p
               className="ogabassey-blog-featured-story__title"

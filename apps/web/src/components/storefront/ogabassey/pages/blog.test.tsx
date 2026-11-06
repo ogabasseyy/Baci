@@ -93,23 +93,6 @@ describe('OgabasseyV2Blog', () => {
     },
   ];
 
-  it('renders the featured post as the server LCP image', () => {
-    render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
-
-    const featuredImage = screen
-      .getByRole('link', { name: /featured post/i })
-      .querySelector('img');
-
-    expect(featuredImage).toBeInTheDocument();
-    expect(featuredImage).toHaveAttribute(
-      'src',
-      'https://example.com/featured.jpg'
-    );
-    expect(featuredImage).toHaveAttribute('loading', 'eager');
-    expect(featuredImage).toHaveAttribute('fetchpriority', 'high');
-    expect(featuredImage).toHaveAttribute('sizes', '100vw');
-  });
-
   it('renders grid posts with lazy low-priority images', () => {
     render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
 

@@ -169,7 +169,7 @@ tenant_integrity_fix = ROOT / "supabase/migrations/20261106170000_harden_shippin
 run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
 revision_access_policy = ROOT / "supabase/migrations/20261106180000_deny_direct_shipping_revision_access.sql"
 run(PSQL, sql=f"{psql_include(revision_access_policy)}\n")
-access_boundary_comment = ROOT / "supabase/migrations/20261106190000_document_shipping_revision_access_boundary.sql"
+access_boundary_comment = ROOT / "supabase/migrations/20261106200000_document_shipping_revision_access_boundary.sql"
 run(PSQL, sql=f"{psql_include(access_boundary_comment)}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))

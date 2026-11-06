@@ -23,7 +23,7 @@ if source.count(test_anchor) != 1:
     raise SystemExit('cart test anchor changed; refusing to run stale harness')
 source = source.replace(
     test_anchor,
-    " sql+='\\n'+(root/'supabase/migrations/20261015161000_commerce_cart_retirement_retention.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106190000_agentic_shared_cart_provider_dispatch_fence.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106191000_agentic_shared_cart_dispatch_cleanup_fence.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106192000_agentic_shared_cart_retention_fences.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\n tests=''",
+    " sql+='\\n'+(root/'supabase/migrations/20261015161000_commerce_cart_retirement_retention.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106190000_agentic_shared_cart_provider_dispatch_fence.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106191000_agentic_shared_cart_dispatch_cleanup_fence.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106192000_agentic_shared_cart_retention_fences.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\n sql+='\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\n tests=''",
     1,
 )
 append_anchor = " sql+='\\n'+tests"

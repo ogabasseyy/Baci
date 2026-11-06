@@ -1,9 +1,22 @@
 -- Synthetic contract checks appended to the existing disposable cart chain.
 DO $$ BEGIN
-  IF NOT has_function_privilege('authenticated','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE')
+  IF has_function_privilege('authenticated','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE')
      OR has_function_privilege('anon','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE')
-     OR has_function_privilege('service_role','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE') THEN
-    RAISE EXCEPTION 'dispatch admission authorization grants are incorrect';
+     OR has_function_privilege('service_role','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE')
+     OR has_function_privilege('authenticator','public.commerce_cart_admit_agentic_dva_dispatch(text)','EXECUTE') THEN
+    RAISE EXCEPTION 'dispatch admission must remain unreachable to application and gateway roles';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc p
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
+    ) acl
+    WHERE p.oid='public.commerce_cart_admit_agentic_dva_dispatch(text)'::regprocedure
+      AND acl.privilege_type='EXECUTE'
+      AND acl.grantee <> p.proowner
+  ) THEN
+    RAISE EXCEPTION 'dispatch admission has an execute grant beyond its database owner';
   END IF;
   IF NOT (SELECT relrowsecurity FROM pg_catalog.pg_class
       WHERE oid='private.agentic_cart_dispatch_rollout'::regclass)
@@ -66,6 +79,21 @@ BEGIN
       'principal_id','dispatch-principal','identity_kind','idempotent',
       'checkout_variant','base','checkout_request_hash',repeat('a',64)
     ))::text,true);
+  -- Even an enabled rollout flag cannot make the RPC callable by authenticated
+  -- API sessions before a later reviewed recovery migration restores a grant.
+  PERFORM set_config('role','authenticated',true);
+  BEGIN
+    PERFORM public.commerce_cart_admit_agentic_dva_dispatch('claim-dispatch-1');
+    RAISE EXCEPTION 'authenticated dispatch admission unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+  PERFORM set_config('role','postgres',true);
+  IF EXISTS (SELECT 1 FROM private.agentic_cart_dispatch_holds WHERE claim_reference='claim-dispatch-1') THEN
+    RAISE EXCEPTION 'denied authenticated call created a dispatch hold';
+  END IF;
+  -- Remaining SQL calls run as the disposable database owner to exercise the
+  -- admission function's private race/hold invariants behind the revoked API ACL.
   claims:=auth.jwt();
   FOREACH missing_key IN ARRAY ARRAY['cart_id','checkout_session_id','checkout_generation','cart_version'] LOOP
     PERFORM set_config('request.jwt.claims',jsonb_set(claims,

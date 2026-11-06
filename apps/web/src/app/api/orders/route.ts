@@ -14,6 +14,13 @@ import {
 import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
 import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
+import {
+  buildMerchantRateAttestation,
+  buildSharedCartShippingRateMarker,
+  buildStorefrontCheckoutBinding,
+  isMerchantRateAttestationEnabled,
+  MerchantRateAttestationInputError,
+} from '@/lib/checkout/build-merchant-rate-attestation';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
   computeCanonicalOrderSubtotal,
@@ -46,7 +53,11 @@ import { resolveEffectiveCheckoutShippingProvider } from '@/lib/checkout/resolve
 import { resolveOfferReplayForOrderRoute } from '@/lib/checkout/resolve-idempotent-offer-replay-route';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
-import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import {
+  createStorefrontOrderRpcClient,
+  type StorefrontCheckoutBinding,
+  type StorefrontMerchantRateAttestation,
+} from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
@@ -1600,7 +1611,7 @@ export async function POST(request: NextRequest) {
     const requestedSavingsRedemption =
       savingsRedemptionRequested && savingsCurrencySupported;
 
-    const redvaultOrderRpcClient = redvaultRequested
+    const redvaultReplayRpcClient = redvaultRequested
       ? createStorefrontOrderRpcClient({
           redvaultCustomerEmail: customer_email,
           fallbackClient: supabase,
@@ -1613,7 +1624,7 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (redvaultRequested) {
-      if (!redvaultOrderRpcClient) {
+      if (!redvaultReplayRpcClient) {
         return NextResponse.json(
           {
             code: 'REDVAULT_QUOTE_INVALID',
@@ -1649,7 +1660,7 @@ export async function POST(request: NextRequest) {
       }
       try {
         const { data: replayRows, error: replayError } =
-          await redvaultOrderRpcClient.rpc(
+          await redvaultReplayRpcClient.rpc(
             'get_storefront_redvault_checkout_replay',
             { p_checkout_key: requestIdempotencyKey }
           );
@@ -1663,7 +1674,7 @@ export async function POST(request: NextRequest) {
                 merchantId: merchant_id,
                 offerConditions: liveOfferConditions,
                 offerPrices: liveOfferPrices,
-                supabase: redvaultOrderRpcClient,
+                supabase: redvaultReplayRpcClient,
               });
       } catch (error) {
         logger.warn({
@@ -1754,6 +1765,7 @@ export async function POST(request: NextRequest) {
       rateName: string;
       currency: string;
       kind: MerchantRateKind;
+      shippingConfigRevision?: string;
       /**
        * Pickup collection snapshot for a `pickup` rate — persisted durably in
        * orders.shipping_pickup_details so the order retains the collection
@@ -1928,6 +1940,7 @@ export async function POST(request: NextRequest) {
         rateName: rateVerification.rateName,
         currency: rateVerification.currency,
         kind: rateVerification.kind,
+        shippingConfigRevision: rateVerification.shippingConfigRevision,
         pickupAddress: rateVerification.pickupAddress,
       };
 
@@ -2209,17 +2222,96 @@ export async function POST(request: NextRequest) {
             }
           : orderRpcArgs;
 
-    const orderRpcClient =
-      redvaultOrderRpcClient ??
-      createStorefrontOrderRpcClient({
-        ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
-        fallbackClient: supabase,
-        hasCanonicalDeliveryMetadata: Boolean(
-          canonicalDeliveryMethod || canonicalAirportType
-        ),
-        merchantId: merchant_id,
-        userId: resolvedUserId,
+    // This rollout flag only mints authenticated context. It does not enable
+    // protection by itself; the database binding guard must verify these
+    // claims before the feature can be enabled in any environment.
+    const merchantRateAttestationEnabled = isMerchantRateAttestationEnabled();
+    const sharedCartShippingRateMarker = buildSharedCartShippingRateMarker({
+      enabled: merchantRateAttestationEnabled,
+      sharedCart: shared_cart,
+      shippingRateId: body.shipping_rate_id,
+    });
+    const confirmedCheckoutReplay = Boolean(
+      replaySnapshot ||
+        isIdempotentMerchantRateReplay ||
+        isIdempotentOrderReplay ||
+        isIdempotentLocalAirportReplay ||
+        isIdempotentOfferOrderReplay ||
+        isLegacyIdempotencyReplay
+    );
+    let storefrontCheckoutBinding: StorefrontCheckoutBinding | null = null;
+    let merchantRateAttestation: StorefrontMerchantRateAttestation | null =
+      null;
+    try {
+      storefrontCheckoutBinding = buildStorefrontCheckoutBinding({
+        enabled: merchantRateAttestationEnabled,
+        sharedCart: shared_cart,
+        principalId: sharedCartPrincipalId,
+        idempotencyKey: requestIdempotencyKey,
+        checkoutRequestHash,
+        checkoutVariant: redvaultRequested ? 'redvault' : orderVariant,
+        hasQuizVoucherItem: hasVoucherItem,
+        voucherAwardId: quizVoucherAwardIdForOrder,
+        deliveryMode: confirmedCheckoutReplay
+          ? 'replay'
+          : isMerchantRateOrder
+            ? 'merchant_rate'
+            : 'no_merchant_rate',
       });
+      merchantRateAttestation = buildMerchantRateAttestation({
+        enabled: merchantRateAttestationEnabled,
+        sharedCart: shared_cart,
+        shippingRateId: body.shipping_rate_id,
+        shippingConfigRevision:
+          verifiedMerchantShippingRate?.shippingConfigRevision,
+        canonicalSubtotal: canonicalOrderSubtotal,
+        shippingFee: verifiedMerchantShippingRate?.amount ?? 0,
+        fulfillmentKind:
+          verifiedMerchantShippingRate?.kind === 'pickup' ? 'pickup' : 'ship',
+        addressCountry:
+          shippingAddressForOrder?.countryCode ||
+          shippingAddressForOrder?.country ||
+          null,
+        addressState: shippingAddressForOrder?.state ?? null,
+        merchantCountry: merchant.country?.trim() || 'NG',
+        isReplay: confirmedCheckoutReplay,
+      });
+    } catch (error) {
+      if (!(error instanceof MerchantRateAttestationInputError)) throw error;
+      logger.warn({
+        message: 'Shared-cart shipping attestation inputs are unavailable',
+        merchantId: merchant_id,
+        shippingRateId: body.shipping_rate_id ?? null,
+        code: error.message,
+      });
+      return NextResponse.json(
+        {
+          code: 'SHIPPING_RATE_BINDING_UNAVAILABLE',
+          error:
+            'Unable to bind this checkout to its verified shipping details',
+        },
+        { status: 409 }
+      );
+    }
+
+    const orderRpcClient = createStorefrontOrderRpcClient({
+      ...(redvaultRequested ? { redvaultCustomerEmail: customer_email } : {}),
+      fallbackClient: supabase,
+      hasCanonicalDeliveryMetadata: Boolean(
+        canonicalDeliveryMethod ||
+          canonicalAirportType ||
+          merchantRateAttestation ||
+          (merchantRateAttestationEnabled &&
+            shared_cart &&
+            body.shipping_rate_id)
+      ),
+      merchantId: merchant_id,
+      userId: resolvedUserId,
+      ...(storefrontCheckoutBinding
+        ? { checkoutBinding: storefrontCheckoutBinding }
+        : {}),
+      ...(merchantRateAttestation ? { merchantRateAttestation } : {}),
+    });
     if (redvaultRequested && redvaultQuote) {
       if (merchantResolvedCurrency !== 'NGN') {
         return NextResponse.json(
@@ -2234,6 +2326,7 @@ export async function POST(request: NextRequest) {
         client: orderRpcClient,
         orderRpcArgs: {
           ...orderRpcArgs,
+          ...(sharedCartShippingRateMarker ?? {}),
           ...redvaultOrderDraftFulfillment(
             verifiedMerchantShippingRate,
             body.shipping_rate_id
@@ -2317,7 +2410,10 @@ export async function POST(request: NextRequest) {
     // early; inner order rejections keep their message and fall through
     // to the existing mapper below.
     const dispatched = await dispatchOrderCreation({
-      args: orderCreateRpcArgs as Record<string, unknown>,
+      args: {
+        ...(orderCreateRpcArgs as Record<string, unknown>),
+        ...(sharedCartShippingRateMarker ?? {}),
+      },
       binding: shared_cart,
       client: orderRpcClient,
       principalId: sharedCartPrincipalId,

@@ -113,8 +113,15 @@ CREATE TEMP TABLE retry_claim AS SELECT * FROM savings_notifications.claim_push(
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM retry_claim WHERE push_token='ExpoPushToken[retry-probe]'), 'Retry probe claimed');
 SELECT savings_notifications.finish_push(notification_id,push_token,claim_id,'retryable',NULL) FROM retry_claim WHERE push_token='ExpoPushToken[retry-probe]';
 SELECT pg_temp.assert_true((SELECT status='pending' AND attempts=1 AND claim_id IS NULL FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[retry-probe]'), 'Retryable re-queues as pending');
+-- finish_push schedules a 15-minute backoff; claim_push accepts retry_after <= now().
+SELECT pg_temp.assert_true((SELECT retry_after=now()+interval '15 minutes' FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[retry-probe]'), 'Retryable schedules the 15-minute backoff');
+CREATE TEMP TABLE retry_before_due AS SELECT * FROM savings_notifications.claim_push(100);
+SELECT pg_temp.assert_true(NOT EXISTS (SELECT 1 FROM retry_before_due WHERE push_token='ExpoPushToken[retry-probe]'), 'Retry cannot be claimed before its due time');
 UPDATE savings_notifications.deliveries SET attempts=96 WHERE push_token='ExpoPushToken[retry-probe]';
+-- Advance only this synthetic delivery's due timestamp to the claim boundary.
+UPDATE savings_notifications.deliveries SET retry_after=now() WHERE push_token='ExpoPushToken[retry-probe]';
 CREATE TEMP TABLE retry_claim2 AS SELECT * FROM savings_notifications.claim_push(100);
+SELECT pg_temp.assert_true((SELECT count(*)=1 FROM retry_claim2 WHERE push_token='ExpoPushToken[retry-probe]'), 'Due retry is claimed once');
 SELECT savings_notifications.finish_push(notification_id,push_token,claim_id,'retryable',NULL) FROM retry_claim2 WHERE push_token='ExpoPushToken[retry-probe]';
 SELECT pg_temp.assert_true((SELECT status='rejected' FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[retry-probe]'), 'Exhausted retries dead-letter as rejected');
 ROLLBACK;

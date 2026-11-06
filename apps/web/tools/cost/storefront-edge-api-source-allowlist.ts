@@ -38,6 +38,7 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'payments/oxygen/bank-details',
   'payments/oxygen/chat',
   'payments/oxygen/draft',
+  'payments/oxygen/host-observation',
   'payments/oxygen/order-plan',
   'payments/oxygen/phone-handoff/redeem',
   'payments/oxygen/plans',

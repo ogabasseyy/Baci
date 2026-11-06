@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'f212a993ca123b20bf0f596b218f58ed7bc87f86628b980845d3cf63920de59d',
+      'b2050ff90a744bcedda161735e6ea74dcaa32596670551a6501208735cb2fa75',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 616,
+    rowCount: 617,
   });
 });
 
@@ -59,7 +59,7 @@ it('keeps every Oxygen API route on the dynamic origin', async () => {
   const rows = inventory.rows.filter((row) =>
     row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
   );
-  expect(rows).toHaveLength(23);
+  expect(rows).toHaveLength(24);
   expect(rows).toContainEqual(
     expect.objectContaining({
       sourcePath:

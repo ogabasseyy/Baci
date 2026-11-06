@@ -1,10 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { StorefrontDatabase } from '@/types/storefront-database';
-import {
-  getPublicSupabaseClient,
-  normalizeCachedStorefrontPdpCore,
-} from './cached-data';
+import { getPublicSupabaseClient } from './cached-data';
 import { sanitizePublicProduct } from './public-fulfillment-sanitizer';
+import { normalizeCachedStorefrontPdpCore } from './storefront-pdp-core-normalizer';
 import { readStorefrontPdpCoreSnapshot } from './storefront-pdp-core-snapshot';
 import {
   StorefrontReadUnavailableError,

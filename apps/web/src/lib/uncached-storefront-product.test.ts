@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('./cached-data', () => ({
   getPublicSupabaseClient: mocks.getPublicSupabaseClient,
+}));
+vi.mock('./storefront-pdp-core-normalizer', () => ({
   normalizeCachedStorefrontPdpCore: mocks.normalize,
 }));
 vi.mock('./public-fulfillment-sanitizer', () => ({

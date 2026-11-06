@@ -1,7 +1,10 @@
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import { BLOG_HERO_IMAGE_QUALITY } from '@/components/storefront/ogabassey/config/blog-media';
+import {
+  BLOG_HERO_IMAGE_QUALITY,
+  BLOG_LISTING_FEATURED_IMAGE_SIZES,
+} from '@/components/storefront/ogabassey/config/blog-media';
 import { asRoute, joinRouteBasePath } from '@/lib/routes';
 import type { BlogPostData } from '@/templates/registry';
 
@@ -42,7 +45,7 @@ export function BlogFeaturedStory({
           fill
           fetchPriority="high"
           loading="eager"
-          sizes="100vw"
+          sizes={BLOG_LISTING_FEATURED_IMAGE_SIZES}
           quality={BLOG_HERO_IMAGE_QUALITY}
         />
         <div className="ogabassey-blog-featured-story__scrim absolute inset-0" />

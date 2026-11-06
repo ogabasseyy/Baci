@@ -109,4 +109,22 @@ DO $$ DECLARE jobs jsonb; job jsonb; BEGIN
  IF jsonb_array_length(jobs)<>1 THEN RAISE EXCEPTION 'Valid redelivery did not start a fresh generation'; END IF;
 END $$;
 RESET ROLE;
+-- Transient financial failures must stay in the recoverable backlog after five attempts.
+INSERT INTO oxygen_private.callback_inbox(partner_reference,environment,deduplication_key,payload_hash,event,status,attempts)
+VALUES ('response-evidence-fixture','staging','financial-recovery',sha256(convert_to('financial-recovery','UTF8')),
+ '{"kind":"transaction","bookedLoanReference":"booking-fixture"}', 'queued',4);
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE job jsonb; BEGIN
+ RESET ROLE;
+ SELECT jsonb_build_object('id',id,'retryKey',retry_key) INTO job FROM oxygen_private.callback_inbox WHERE deduplication_key='financial-recovery';
+ SET LOCAL ROLE authenticated;
+ PERFORM public.oxygen_callback('defer','response-evidence-fixture',job);
+ RESET ROLE;
+ IF NOT EXISTS (SELECT 1 FROM oxygen_private.callback_inbox WHERE deduplication_key='financial-recovery' AND status='queued' AND attempts=5 AND retry_key<>(job->>'retryKey')::uuid) THEN
+  RAISE EXCEPTION 'Financial callback lost recoverability after transient failures';
+ END IF;
+ SET LOCAL ROLE authenticated;
+ IF (public.oxygen_callback('backlog','response-evidence-fixture')->>'pendingCount')::integer<1 THEN RAISE EXCEPTION 'Financial recovery disappeared from backlog'; END IF;
+END $$;
+RESET ROLE;
 ROLLBACK;

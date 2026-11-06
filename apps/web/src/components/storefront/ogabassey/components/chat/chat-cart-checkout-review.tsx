@@ -2,7 +2,7 @@
 
 import { formatMoneyMinor, getMoneyCurrencyExponent } from '@baci/shared/money';
 import { useRef, useState } from 'react';
-import { type CartItem } from '@/hooks/cart';
+import type { CartItem } from '@/hooks/cart';
 import { isSharedCartCheckoutDeadlineExpired } from '@/hooks/cart/shared-cart-checkout-deadline';
 import {
   calculateCartItemSubtotal,

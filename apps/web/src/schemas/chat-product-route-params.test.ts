@@ -23,6 +23,7 @@ describe('chatProductRouteParamsSchema', () => {
       '-phone..case-',
       'café-店',
       'discount-100%-case',
+      'battery-90%90-day',
     ]) {
       expect(
         chatProductRouteParamsSchema.safeParse({
@@ -50,9 +51,12 @@ describe('chatProductRouteParamsSchema', () => {
       { slug: 'store', productSlug: 'phone\\case' },
       { slug: 'store', productSlug: 'phone\u0000case' },
       { slug: 'store', productSlug: 'phone\u0085case' },
+      { slug: 'store', productSlug: 'phone%C2%85%ZZ' },
       { slug: 'store', productSlug: '%2Fescape' },
       { slug: 'store', productSlug: '%252Fescape' },
       { slug: 'store', productSlug: 'phone%2F%ZZ' },
+      { slug: 'store', productSlug: 'phone%252f%ZZ' },
+      { slug: 'store', productSlug: 'phone%25252f%ZZ' },
       { slug: 'store', productSlug: 'phone%5Ccase' },
       { slug: 'store', productSlug: 'phone%255Ccase' },
       { slug: 'store', productSlug: '%00escape' },

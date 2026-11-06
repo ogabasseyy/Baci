@@ -1,11 +1,32 @@
 import { z } from 'zod';
-import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
+import {
+  evaluateStorefrontSlugSafety,
+  MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH,
+} from '@/lib/storefront-slug-safety';
 
 const merchantSlug = z
   .string()
   .min(1)
   .max(160)
   .regex(/^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$/);
+
+const ENCODED_PATH_SEPARATOR_OR_CONTROL =
+  /%(?:2f|5c|0[0-9a-f]|1[0-9a-f]|7f|c2%(?:8[0-9a-f]|9[0-9a-f]))/i;
+
+function hasEncodedPathSeparatorOrControl(value: string): boolean {
+  let candidate = value;
+  for (
+    let pass = 0;
+    pass < MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH;
+    pass += 1
+  ) {
+    if (ENCODED_PATH_SEPARATOR_OR_CONTROL.test(candidate)) return true;
+    const decodedPercent = candidate.replace(/%25/gi, '%');
+    if (decodedPercent === candidate) return false;
+    candidate = decodedPercent;
+  }
+  return ENCODED_PATH_SEPARATOR_OR_CONTROL.test(candidate);
+}
 
 function isSafeProductRouteSegment(value: string): boolean {
   if (!evaluateStorefrontSlugSafety(value).safe) return false;
@@ -27,9 +48,7 @@ function isSafeProductRouteSegment(value: string): boolean {
     } catch {
       // Preserve ordinary literal percent characters, but do not let malformed
       // escapes hide encoded separators or control bytes from the path check.
-      return !/%(?:2f|5c|0[0-9a-f]|1[0-9a-f]|7f|8[0-9a-f]|9[0-9a-f])/i.test(
-        candidate
-      );
+      return !hasEncodedPathSeparatorOrControl(candidate);
     }
   }
 

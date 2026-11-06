@@ -144,21 +144,26 @@ describe('public chat product detail', () => {
     expect(chatProductResponseSchema.safeParse(body).success).toBe(true);
   });
   it('preserves literal percent characters in catalog slugs', async () => {
-    const response = await GET(req(), params('store', 'discount-100%-case'));
-    expect(response.status).toBe(200);
-    expect(mocks.uncachedProduct).toHaveBeenCalledWith(
-      'trusted-merchant',
-      'discount-100%-case'
-    );
+    for (const productSlug of ['discount-100%-case', 'battery-90%90-day']) {
+      const response = await GET(req(), params('store', productSlug));
+      expect(response.status).toBe(200);
+      expect(mocks.uncachedProduct).toHaveBeenCalledWith(
+        'trusted-merchant',
+        productSlug
+      );
+    }
   });
   it.each([
     '../escape',
     'phone\\case',
     'phone\u0000case',
     'phone\u0085case',
+    'phone%C2%85%ZZ',
     '%2Fescape',
     '%252Fescape',
     'phone%2F%ZZ',
+    'phone%252f%ZZ',
+    'phone%25252f%ZZ',
     'phone%5Ccase',
     'phone%255Ccase',
     '%00escape',

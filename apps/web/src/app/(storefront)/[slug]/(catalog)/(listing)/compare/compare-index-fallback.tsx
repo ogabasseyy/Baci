@@ -17,9 +17,33 @@ export function CompareIndexFallback({
         role="status"
         aria-label="Loading compare products"
         aria-live="polite"
-        className="sr-only"
+        className="space-y-6 pt-4"
       >
-        Loading compare products
+        <span className="sr-only">Loading compare products</span>
+        <div className="space-y-6">
+          {[1, 2].map((idx) => (
+            <div
+              key={idx}
+              className="rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-xs md:p-6 animate-pulse"
+            >
+              <div className="flex items-center justify-between border-b border-store-background-text/5 pb-4">
+                <div className="space-y-2">
+                  <div className="h-6 w-36 rounded-md bg-store-background-text/10" />
+                  <div className="h-4 w-24 rounded-md bg-store-background-text/5" />
+                </div>
+                <div className="h-4 w-28 rounded-md bg-store-background-text/10" />
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((cardIdx) => (
+                  <div
+                    key={cardIdx}
+                    className="h-24 rounded-2xl border border-store-background-text/5 bg-store-background-text/5"
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

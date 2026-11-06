@@ -68,6 +68,10 @@ describe('ProductCard imagePriority', () => {
     );
     expect(screen.getByRole('img')).toHaveAttribute('loading', 'eager');
     expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'high');
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'sizes',
+      '(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 280px'
+    );
   });
 
   it('keeps noncritical category images lazy by default', () => {

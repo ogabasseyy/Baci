@@ -71,6 +71,7 @@ CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
 CREATE SCHEMA auth;
 CREATE SCHEMA private;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
 CREATE FUNCTION public.check_staff_permission(uuid, uuid, text, text) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT true $$;
@@ -245,6 +246,7 @@ assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_sh
 assert scalar("SELECT description FROM pg_description d JOIN pg_policy p ON d.objoid=p.oid AND d.classoid='pg_policy'::regclass WHERE p.polrelid='public.merchant_shipping_config_revisions'::regclass AND p.polname='merchant_shipping_config_revisions_deny_direct_access'") == "This RLS policy denies direct access for roles subject to row-level security. service_role bypasses RLS; its direct access is blocked by the table ACL revocation. Use narrowly scoped SECURITY DEFINER functions.", "policy comment must distinguish RLS from service_role ACL enforcement"
 assert scalar("SELECT confdeltype FROM pg_constraint WHERE conrelid='public.merchant_shipping_config_revisions'::regclass AND conname='merchant_shipping_config_revisions_merchant_id_fkey'") == "c", "revision rows must cascade with their merchant"
 for role in ["anon", "authenticated", "service_role"]:
-    assert scalar(f"SELECT has_table_privilege('{role}','public.merchant_shipping_config_revisions','SELECT')") == "f", f"{role} can read internal revisions"
+    for privilege in ["SELECT", "INSERT", "UPDATE", "DELETE"]:
+        assert scalar(f"SELECT has_table_privilege('{role}','public.merchant_shipping_config_revisions','{privilege}')") == "f", f"{role} has {privilege} on internal revisions"
 
 print("merchant shipping config revision mutex, rollback, cascade and concurrency checks passed")

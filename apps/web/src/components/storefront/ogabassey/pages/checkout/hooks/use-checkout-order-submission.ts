@@ -5,6 +5,7 @@ import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
 } from '@/hooks/cart/shared-cart-client';
+import { isSharedCartCheckoutDeadlineExpired } from '@/hooks/cart/shared-cart-checkout-deadline';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
@@ -130,10 +131,8 @@ export function useCheckoutOrderSubmission(
     }
 
     if (await handleSharedRedvaultReview(context, merchant, prepared)) return;
-    // Shared carts review the authoritative cart first; the order submit
-    // binds to the returned session and generation. A stale review
-    // refreshes the cart view and stops: the shopper reviews the updated
-    // cart and submits again, never silently resubmitting changed lines.
+    // Review the authoritative version first and bind submission to it; a
+    // stale review stops so the shopper confirms changed lines before retry.
     let sharedCartBinding: SharedCartOrderBinding | null = null;
     let sharedCartSessionExpiresAtMonotonicMs: number | null = null;
     let sharedCartSessionExpiresAtEpochMs: number | null = null;
@@ -151,10 +150,7 @@ export function useCheckoutOrderSubmission(
       return;
     }
     if (cart.sharedCartRef) {
-      // The binding pins the reviewed version, but the order items come
-      // from the display cart: submitting with unconfirmed optimistic
-      // lines would order lines outside the reviewed version. Wait for
-      // a clean sync so display and confirmed lines agree.
+      // Wait for clean sync so order items match the pinned reviewed version.
       if (cart.sharedCartSyncStatus !== 'synced') {
         if (cart.sharedCartSyncStatus === 'error') {
           toast({
@@ -266,12 +262,10 @@ export function useCheckoutOrderSubmission(
 
     if (
       sharedCartBinding &&
-      (sharedCartSessionExpiresAtMonotonicMs === null ||
-        sharedCartSessionExpiresAtEpochMs === null ||
-        !Number.isFinite(sharedCartSessionExpiresAtMonotonicMs) ||
-        !Number.isFinite(sharedCartSessionExpiresAtEpochMs) ||
-        performance.now() >= sharedCartSessionExpiresAtMonotonicMs ||
-        Date.now() >= sharedCartSessionExpiresAtEpochMs)
+      isSharedCartCheckoutDeadlineExpired(
+        sharedCartSessionExpiresAtMonotonicMs,
+        sharedCartSessionExpiresAtEpochMs
+      )
     ) {
       toast({
         title: 'Checkout Unavailable',

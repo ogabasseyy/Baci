@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { verifyConversationHandoff } from './conversation-handoff.mjs';
+import { verifyLostAckMessageReconciliation } from './lost-ack.mjs';
 
 export function createAgentBotWebhookServer({
   onEvent,
@@ -69,10 +70,11 @@ export function createSyntheticAgentBotHandler({ seed, apiCall }) {
 }
 
 async function api(base, path, token, options = {}) {
-  const response = await fetch(base + path, {
+  const response = await fetch((options.base ?? base) + path, {
     method: options.method ?? 'GET',
     headers: { api_access_token: token, 'content-type': 'application/json' },
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal ?? AbortSignal.timeout(10_000),
   });
   const text = await response.text();
   if (!response.ok)
@@ -122,8 +124,16 @@ async function main() {
         writeFile('/run/chatwoot-test/harness-ready-for-followup', 'ready'),
       events,
     });
+    const recovery = await verifyLostAckMessageReconciliation({
+      seed,
+      api: (path, token, options = {}) => api(base, path, token, options),
+      upstreamBase: base,
+    });
     console.log(
       'PASS: incoming event → AgentBot API reply → bot_handoff → silent human takeover → human API reply → pending handback → AgentBot API reply'
+    );
+    console.log(
+      `PASS: Chatwoot message POST returned HTTP ${recovery.providerStatus}, response dropped; lookup found one stored message and reconciled without resending`
     );
   } finally {
     server.close();

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
@@ -34,6 +35,16 @@ describe('SavingsGoalSummary', () => {
     expect(
       screen.getByText(/^Save about ₦62,500 a week to reach this by /)
     ).toBeOnTheScreen();
+  });
+
+  it('lets the saved and target labels shrink inside their row', () => {
+    render(<SavingsGoalSummary colors={Colors.light} goal={goal} />);
+    expect(
+      StyleSheet.flatten(screen.getByText('₦0 saved').props.style)
+    ).toMatchObject({ flexShrink: 1 });
+    expect(
+      StyleSheet.flatten(screen.getByText('₦250,000 target').props.style)
+    ).toMatchObject({ flexShrink: 1 });
   });
 
   it('skips the pace line when the goal has no usable future date', () => {

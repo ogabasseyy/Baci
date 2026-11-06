@@ -15,6 +15,16 @@ it('offers only the needed remainder when funds exceed the goal', () => {
   ]);
 });
 
+it('does not claim the floored option reaches a fractional remainder', () => {
+  expect(getQuickAmountOptions({ available: 9000, remaining: 7000.5 })).toEqual(
+    [
+      { amount: 1000, label: '₦1,000' },
+      { amount: 5000, label: '₦5,000' },
+      { amount: 7000, label: '₦7,000' },
+    ]
+  );
+});
+
 it('offers only whole available funds when they are below a fixed amount', () => {
   expect(getQuickAmountOptions({ available: 400, remaining: 800 })).toEqual([
     { amount: 400, label: 'All available' },
@@ -28,4 +38,10 @@ it('shows no quick picks when the goal is already funded', () => {
 it('never offers an amount greater than what is left to save', () => {
   const options = getQuickAmountOptions({ available: 1000, remaining: 6000 });
   expect(options.every(({ amount }) => amount <= 6000)).toBe(true);
+});
+
+it('labels the exact goal remainder when fractional funds are left over', () => {
+  expect(
+    getQuickAmountOptions({ available: 7000.5, remaining: 7000 }).at(-1)
+  ).toEqual({ amount: 7000, label: 'Reach goal' });
 });

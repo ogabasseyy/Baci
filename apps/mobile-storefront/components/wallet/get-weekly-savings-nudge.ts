@@ -24,6 +24,14 @@ export function getWeeklySavingsNudge({
   if (Number.isNaN(end) || Number.isNaN(today) || end <= today) return null;
   const daysRemaining = (end - today) / MS_PER_DAY;
   const weeks = Math.max(1, Math.ceil(daysRemaining / 7));
+  if (daysRemaining < 7) {
+    const amountDue = Math.ceil(remaining);
+    return {
+      amountPerWeek: amountDue,
+      label: `Save ${formatNgnCurrency(amountDue)} by ${formatDateTimeDisplay(maturityDate, 'date')}`,
+      weeks,
+    };
+  }
   const amountPerWeek = Math.ceil(remaining / Math.max(1, daysRemaining / 7));
   return {
     amountPerWeek,

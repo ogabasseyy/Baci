@@ -62,6 +62,7 @@ describe('server keeps PiggyVest off', () => {
   });
 
   it('shows no cancel or complete button for a signed-out customer', () => {
+    useAuthStore.setState({ user: null });
     render(
       <WalletSavingsProgressModal
         addAmount=""
@@ -85,7 +86,7 @@ describe('server keeps PiggyVest off', () => {
     ).toBeNull();
   });
 
-  it('celebrates after money is added and keeps Cancel goal quiet', () => {
+  it('updates progress without inferring payment success from a balance change', () => {
     const view = (current: number, isAdding: boolean) => (
       <WalletSavingsProgressModal
         addAmount="500"
@@ -106,9 +107,8 @@ describe('server keeps PiggyVest off', () => {
     rerender(view(50000, true));
     rerender(view(60000, true));
     rerender(view(60000, false));
-    expect(
-      screen.getByText("Nice! ₦10,000 added. You're 60% there.")
-    ).toBeOnTheScreen();
+    expect(screen.queryByText(/Nice!.*added/)).toBeNull();
+    expect(screen.getByText('60%')).toBeOnTheScreen();
   });
 
   it('keeps the device change secondary to the saving action', () => {

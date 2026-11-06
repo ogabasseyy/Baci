@@ -4,10 +4,8 @@ import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { SavingsCelebrationCard } from './SavingsCelebrationCard';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
-import { useSavingsCelebration } from './use-savings-celebration';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -51,13 +49,6 @@ export function WalletSavingsProgressModal({
   walletBalance,
   walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
-  const celebration = useSavingsCelebration({
-    currentAmount: goal?.current_amount ?? 0,
-    goalId: goal?.id ?? '',
-    isAdding,
-    targetAmount: goal?.target_amount ?? 0,
-    visible,
-  });
   if (!goal) {
     return null;
   }
@@ -111,9 +102,6 @@ export function WalletSavingsProgressModal({
           goal={goal}
           onResolveVariant={onResolveVariant}
         />
-        {celebration ? (
-          <SavingsCelebrationCard celebration={celebration} colors={colors} />
-        ) : null}
         {hasPendingContribution ? (
           <WalletPendingSavingsContribution
             colors={colors}

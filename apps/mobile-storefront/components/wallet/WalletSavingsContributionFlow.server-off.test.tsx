@@ -92,6 +92,12 @@ describe('server keeps PiggyVest off', () => {
       first.unmount();
       const second = renderFlow({ remainingAmount: 400, walletBalance: 9000 });
       expect(second.onAddAmountChange).toHaveBeenCalledWith('400');
+      second.unmount();
+      const third = renderFlow({
+        remainingAmount: 250000,
+        walletBalance: 40055,
+      });
+      expect(third.onAddAmountChange).toHaveBeenCalledWith('1000');
     });
 
     it('never overwrites an amount that is already there', () => {

@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     justifyContent: 'space-between',
   },
-  saved: { fontSize: 14, fontWeight: '700' },
-  small: { fontSize: 12, fontWeight: '500' },
+  saved: { flexShrink: 1, fontSize: 14, fontWeight: '700' },
+  small: { flexShrink: 1, fontSize: 12, fontWeight: '500' },
   nudge: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
 });

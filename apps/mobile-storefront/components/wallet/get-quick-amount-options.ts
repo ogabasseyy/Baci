@@ -19,7 +19,11 @@ export function getQuickAmountOptions({
     options.push({
       amount: allAvailable,
       label:
-        Math.floor(available) <= remaining ? 'All available' : 'Reach goal',
+        available <= remaining
+          ? 'All available'
+          : allAvailable === remaining
+            ? 'Reach goal'
+            : formatNgnCurrency(allAvailable),
     });
   }
   return options;

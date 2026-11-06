@@ -24,11 +24,14 @@ it('uses the actual remaining days for a partial week', () => {
   ).toEqual(expect.objectContaining({ amountPerWeek: 876, weeks: 2 }));
 });
 
-it('uses at least one week when the goal date is very close', () => {
+it('shows the full amount due when the goal deadline is less than a week away', () => {
   expect(
     getWeeklySavingsNudge({ maturityDate: '2026-11-06', now, remaining: 7000 })
-      ?.amountPerWeek
-  ).toBe(7000);
+  ).toEqual({
+    amountPerWeek: 7000,
+    label: expect.stringMatching(/^Save ₦7,000 by /),
+    weeks: 1,
+  });
 });
 
 it.each([

@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AccessibilityInfo } from 'react-native';
 import { useReduceMotion } from './use-reduce-motion';
 
@@ -27,6 +27,61 @@ describe('useReduceMotion', () => {
       .mockRejectedValue(new Error('unavailable'));
     const { result } = renderHook(() => useReduceMotion());
     await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('keeps a newer preference event when the initial query resolves late', async () => {
+    let resolveInitialQuery: ((enabled: boolean) => void) | undefined;
+    const eventListener = jest.fn();
+    const remove = jest.fn();
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveInitialQuery = resolve;
+      })
+    );
+    jest
+      .spyOn(AccessibilityInfo, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        eventListener.mockImplementation(listener);
+        return { remove };
+      });
+
+    const { result } = renderHook(() => useReduceMotion());
+    await act(async () => {
+      eventListener(true);
+    });
+    await waitFor(() => expect(result.current).toBe(true));
+    await act(async () => {
+      resolveInitialQuery?.(false);
+    });
+    expect(result.current).toBe(true);
+  });
+
+  it('keeps an allowed-motion event when the initial query rejects late', async () => {
+    let rejectInitialQuery: ((error: Error) => void) | undefined;
+    const eventListener = jest.fn();
+    const remove = jest.fn();
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(
+      new Promise<boolean>((_resolve, reject) => {
+        rejectInitialQuery = reject;
+      })
+    );
+    jest
+      .spyOn(AccessibilityInfo, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        eventListener.mockImplementation(listener);
+        return { remove };
+      });
+
+    const { result } = renderHook(() => useReduceMotion());
+    await act(async () => {
+      eventListener(false);
+    });
+    await waitFor(() => expect(result.current).toBe(false));
+    await act(async () => {
+      rejectInitialQuery?.(new Error('stale query failure'));
+      await Promise.resolve();
+    });
+    expect(result.current).toBe(false);
   });
 });
 

@@ -71,4 +71,54 @@ describe('server keeps PiggyVest off', () => {
       screen.queryByRole('button', { name: 'Complete savings goal' })
     ).toBeNull();
   });
+
+  it('celebrates after money is added and keeps Cancel goal quiet', () => {
+    const view = (current: number, isAdding: boolean) => (
+      <WalletSavingsProgressModal
+        addAmount="500"
+        colors={Colors.dark}
+        goal={{ ...goal, current_amount: current }}
+        isAdding={isAdding}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={5000}
+      />
+    );
+    const { rerender } = render(view(50000, false));
+    expect(screen.queryByText(/added\. You're/)).toBeNull();
+    rerender(view(50000, true));
+    rerender(view(60000, true));
+    rerender(view(60000, false));
+    expect(
+      screen.getByText("Nice! ₦10,000 added. You're 60% there.")
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the device change secondary to the saving action', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount="500"
+        colors={Colors.light}
+        goal={goal}
+        isAdding={false}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={5000}
+      />
+    );
+    expect(
+      screen.getByRole('button', { name: 'Confirm savings top-up' })
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Change savings device' })
+    ).toBeOnTheScreen();
+  });
 });

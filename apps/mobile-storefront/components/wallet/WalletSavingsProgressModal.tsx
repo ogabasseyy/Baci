@@ -1,15 +1,13 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Image } from 'expo-image';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
-import { formatProductConditionDisplay } from '@/types/product';
-import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
-import { getSavingsProgress } from './get-savings-progress';
+import { SavingsCelebrationCard } from './SavingsCelebrationCard';
+import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
+import { useSavingsCelebration } from './use-savings-celebration';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsFundingSection } from './WalletSavingsFundingSection';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -53,14 +51,18 @@ export function WalletSavingsProgressModal({
   walletBalance,
   walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
+  const celebration = useSavingsCelebration({
+    currentAmount: goal?.current_amount ?? 0,
+    goalId: goal?.id ?? '',
+    isAdding,
+    targetAmount: goal?.target_amount ?? 0,
+    visible,
+  });
   if (!goal) {
     return null;
   }
 
-  const { milestone, percent } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
-  const conditionLabel = formatProductConditionDisplay(goal.product_condition);
-  const productImageSource = getSavingsGoalImageSource(goal, 170);
   const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
@@ -103,138 +105,14 @@ export function WalletSavingsProgressModal({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.contentRow}>
-          <View style={[styles.devicePane, { backgroundColor: colors.card }]}>
-            {productImageSource ? (
-              <Image
-                accessibilityLabel={goal.title}
-                source={productImageSource}
-                style={styles.deviceImage}
-                contentFit="contain"
-                autoplay={false}
-              />
-            ) : (
-              <View style={styles.devicePlaceholder}>
-                <Ionicons
-                  name="phone-portrait-outline"
-                  size={42}
-                  color={colors.textSecondary}
-                />
-              </View>
-            )}
-          </View>
-
-          <View style={styles.progressPane}>
-            <View style={styles.milestoneRow}>
-              <Text style={[styles.goalTitle, { color: colors.text }]}>
-                {goal.title}
-              </Text>
-              <Text
-                style={[styles.milestoneText, { color: colors.textSecondary }]}
-              >
-                {milestone}
-              </Text>
-            </View>
-
-            <View style={styles.metaRow}>
-              {conditionLabel ? (
-                <Text
-                  style={[
-                    styles.metaPill,
-                    { backgroundColor: colors.muted, color: colors.text },
-                  ]}
-                >
-                  Condition: {conditionLabel}
-                </Text>
-              ) : null}
-              {goal.product_variant_label ? (
-                <Text
-                  style={[
-                    styles.metaPill,
-                    { backgroundColor: colors.muted, color: colors.text },
-                  ]}
-                >
-                  {goal.product_variant_label}
-                </Text>
-              ) : null}
-            </View>
-            {goal.selection_unresolved ? (
-              <Text
-                style={[styles.autoDebitHint, { color: colors.textSecondary }]}
-              >
-                Choose the exact device variant before buying. This plan does
-                not guess a model, storage or colour.
-              </Text>
-            ) : null}
-            {goal.status === 'completed' &&
-            goal.selection_unresolved &&
-            goal.variant_resolution_options?.length ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Resolve savings device variant"
-                onPress={onResolveVariant}
-                style={[
-                  styles.changeDeviceButton,
-                  { borderColor: colors.border },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.changeDeviceButtonText,
-                    { color: colors.text },
-                  ]}
-                >
-                  Choose exact variant
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-        <View
-          style={[
-            styles.progressCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLeft, { color: colors.text }]}>
-              {formatNgnCurrency(goal.current_amount)} saved
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(goal.target_amount)} target
-            </Text>
-          </View>
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress details"
-            accessibilityValue={{ max: 100, min: 0, now: percent }}
-            style={[
-              styles.progressTrack,
-              { backgroundColor: colors.primaryLowOpacity },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${percent}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(amountLeft)} left
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              <Text style={{ color: colors.primary }}>{percent}%</Text> complete
-            </Text>
-          </View>
-        </View>
+        <SavingsGoalSummary
+          colors={colors}
+          goal={goal}
+          onResolveVariant={onResolveVariant}
+        />
+        {celebration ? (
+          <SavingsCelebrationCard celebration={celebration} colors={colors} />
+        ) : null}
         {hasPendingContribution ? (
           <WalletPendingSavingsContribution
             colors={colors}
@@ -271,15 +149,21 @@ export function WalletSavingsProgressModal({
             accessibilityRole="button"
             accessibilityLabel="Change savings device"
             onPress={onChangeDevice}
-            style={[styles.changeDeviceButton, { borderColor: colors.border }]}
+            style={[
+              styles.changeDeviceButton,
+              { backgroundColor: colors.muted },
+            ]}
           >
             <Ionicons
               name="swap-horizontal-outline"
               size={16}
-              color={colors.text}
+              color={colors.textSecondary}
             />
             <Text
-              style={[styles.changeDeviceButtonText, { color: colors.text }]}
+              style={[
+                styles.changeDeviceButtonText,
+                { color: colors.textSecondary },
+              ]}
             >
               Change device
             </Text>

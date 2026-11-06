@@ -23,3 +23,9 @@ it('clamps invalid targets and overfunding', () => {
     100
   );
 });
+
+it('does not announce a reached goal before the full target is saved', () => {
+  expect(getSavingsProgress({ ...goal, current_amount: 99999 }).percent).toBe(
+    99
+  );
+});

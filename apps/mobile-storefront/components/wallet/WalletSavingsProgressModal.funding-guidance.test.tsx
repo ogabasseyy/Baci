@@ -61,7 +61,7 @@ describe('WalletSavingsProgressModal funding guidance', () => {
       />
     );
 
-    expect(screen.getByText('Your plan is ready')).toBeOnTheScreen();
+    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
     const condition = screen.getByText('Condition: New');
     expect(StyleSheet.flatten(condition.props.style)).toEqual(
       expect.objectContaining({

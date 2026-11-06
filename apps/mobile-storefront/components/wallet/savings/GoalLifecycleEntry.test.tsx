@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { GoalLifecycleEntry } from './GoalLifecycleEntry';
@@ -170,5 +171,29 @@ describe('GoalLifecycleEntry', () => {
     renderEntry(makeGoal({ current_amount: 5000 }), true);
     expect(cancel()).toBeNull();
     expect(complete()).toBeNull();
+  });
+
+  it('renders Cancel as a quiet underlined link that still opens the cancel flow', () => {
+    renderEntry(makeGoal({ status: 'active' }));
+    const label = screen.getByText('Cancel goal');
+    expect(StyleSheet.flatten(label.props.style)).toEqual(
+      expect.objectContaining({ textDecorationLine: 'underline' })
+    );
+    expect(StyleSheet.flatten(cancel()?.props.style)).not.toHaveProperty(
+      'borderWidth'
+    );
+    fireEvent.press(cancel() as never);
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/wallet/savings/goal-actions',
+      params: { goalId: 'goal-1', kind: 'cancel' },
+    });
+  });
+
+  it('keeps Complete as a regular button', () => {
+    renderEntry(makeGoal({ status: 'completed' }));
+    expect(StyleSheet.flatten(complete()?.props.style)).toHaveProperty(
+      'borderWidth',
+      1
+    );
   });
 });

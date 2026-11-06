@@ -62,7 +62,7 @@ describe('server keeps PiggyVest off', () => {
         totalBalance={display.totalBalance}
       />
     );
-    expect(screen.getByText('₦5,000')).toBeOnTheScreen();
+    expect(screen.getAllByText('₦5,000').length).toBeGreaterThan(0);
     expect(screen.queryByText('Add money')).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Continue to payment' })

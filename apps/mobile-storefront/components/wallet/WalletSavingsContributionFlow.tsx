@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
@@ -6,6 +6,11 @@ import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { SavingsQuickAmounts } from './SavingsQuickAmounts';
+import {
+  getDefaultContributionAmount,
+  getQuickAmountOptions,
+} from './savings-encouragement';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -35,7 +40,28 @@ export function WalletSavingsContributionFlow({
 }: WalletSavingsContributionFlowProps) {
   const primaryReady = useWalletPrimaryReady();
   const [isFundFocused, setIsFundFocused] = useState(false);
+  const [hasSeededAmount, setHasSeededAmount] = useState(false);
+  const defaultAmount = getDefaultContributionAmount({
+    available: walletBalance,
+    remaining: remainingAmount,
+  });
+  // Start from a sensible amount (never more than the wallet holds or the
+  // goal still needs). Only an empty field is filled, and only once, so
+  // nothing the customer typed or a returning top-up amount is overwritten.
+  useEffect(() => {
+    if (hasSeededAmount) return;
+    if (addAmount.trim().length > 0) {
+      setHasSeededAmount(true);
+    } else if (defaultAmount > 0) {
+      setHasSeededAmount(true);
+      onAddAmountChange(String(defaultAmount));
+    }
+  }, [addAmount, defaultAmount, hasSeededAmount, onAddAmountChange]);
   const amount = Number(addAmount);
+  const quickAmounts = getQuickAmountOptions({
+    available: walletBalance,
+    remaining: remainingAmount,
+  });
   const hasAmount = addAmount.trim().length > 0;
   const invalidAmount =
     hasAmount &&
@@ -87,13 +113,26 @@ export function WalletSavingsContributionFlow({
             .replace(/\D/g, '')
             .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           editable={!isBusy}
-          onChangeText={(text) => onAddAmountChange(text.replace(/\D/g, ''))}
+          onChangeText={(text) => {
+            setHasSeededAmount(true);
+            onAddAmountChange(text.replace(/\D/g, ''));
+          }}
           keyboardType="number-pad"
           placeholder="0"
           placeholderTextColor={colors.placeholder}
           style={[styles.amountInputField, { color: colors.text }]}
         />
       </View>
+      <SavingsQuickAmounts
+        colors={colors}
+        disabled={isBusy}
+        onSelect={(value) => {
+          setHasSeededAmount(true);
+          onAddAmountChange(String(value));
+        }}
+        options={quickAmounts}
+        selectedAmount={amount}
+      />
       <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
         Available in wallet: {formatNgnCurrency(walletBalance)}
       </Text>

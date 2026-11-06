@@ -31,7 +31,7 @@ describe('WalletSavingsPlanCard', () => {
       />
     );
 
-    expect(screen.getByText('Your plan is ready')).toBeOnTheScreen();
+    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
     expect(
       screen.getByText('Start with your first contribution')
     ).toBeOnTheScreen();

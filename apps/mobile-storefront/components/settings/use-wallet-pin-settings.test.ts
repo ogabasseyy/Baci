@@ -185,4 +185,24 @@ describe('useWalletPinSettings', () => {
     await act(async () => resolveRequest());
     expect(Alert.alert).not.toHaveBeenCalled();
   });
+
+  it('ignores a pending request after the authenticated user changes', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result, rerender } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    mockUserId = 'user-2';
+    rerender({});
+    await act(async () => resolveRequest());
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
 });

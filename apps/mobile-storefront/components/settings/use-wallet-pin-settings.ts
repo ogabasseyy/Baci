@@ -1,5 +1,5 @@
 import { router, useNavigation } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
@@ -82,12 +82,12 @@ export function useWalletPinSettings() {
   const screenActive = useRef(true);
   const requestGeneration = useRef(0);
   const currentUserId = useRef(userId);
-  const previousUserId = useRef(userId);
-  if (previousUserId.current !== userId) {
-    previousUserId.current = userId;
+
+  useLayoutEffect(() => {
+    if (currentUserId.current === userId) return;
+    currentUserId.current = userId;
     requestGeneration.current += 1;
-  }
-  currentUserId.current = userId;
+  }, [userId]);
 
   const mode =
     override && override.status === gate.status

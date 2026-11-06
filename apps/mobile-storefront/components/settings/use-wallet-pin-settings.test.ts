@@ -117,8 +117,9 @@ describe('useWalletPinSettings', () => {
     act(() => {
       result.current.setNewPin('1234');
       result.current.setConfirmPin('1234');
-      result.current.submit();
     });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
     act(() => mockNavigationListeners.get('blur')?.());
     await act(async () => resolveRequest());
     expect(Alert.alert).not.toHaveBeenCalled();
@@ -157,8 +158,9 @@ describe('useWalletPinSettings', () => {
     act(() => {
       result.current.setNewPin('1234');
       result.current.setConfirmPin('1234');
-      result.current.submit();
     });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
     unmount();
     await act(async () => resolveRequest());
     expect(Alert.alert).not.toHaveBeenCalled();
@@ -175,8 +177,9 @@ describe('useWalletPinSettings', () => {
     act(() => {
       result.current.setNewPin('1234');
       result.current.setConfirmPin('1234');
-      result.current.submit();
     });
+    act(() => result.current.submit());
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
     act(() => mockNavigationListeners.get('blur')?.());
     act(() => mockNavigationListeners.get('focus')?.());
     await act(async () => resolveRequest());

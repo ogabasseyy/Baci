@@ -7,6 +7,7 @@ import { WalletPinSettingsScreen } from './WalletPinSettingsScreen';
 
 const mockRefresh = jest.fn();
 const mockSignOut = jest.fn();
+const mockNavigation = { addListener: () => () => undefined };
 let mockGate: { state: string; status: unknown; refresh: () => void };
 
 jest.mock('./use-wallet-pin-settings-gate', () => ({
@@ -22,7 +23,7 @@ jest.mock('expo-router', () => {
     router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn() },
     Redirect: ({ href }: { href: string }) => <Text>{`redirect:${href}`}</Text>,
     Stack: { Screen: () => null },
-    useNavigation: () => ({ addListener: () => () => undefined }),
+    useNavigation: () => mockNavigation,
   };
 });
 jest.mock('@/hooks/use-auth-guard', () => ({

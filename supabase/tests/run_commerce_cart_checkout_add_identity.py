@@ -4,7 +4,7 @@
 No project credentials or remote network connections are used. --baseline
 reproduces the core defects before corrective migrations. All orders are mocks.
 """
-import pathlib,tempfile,subprocess,sys
+import pathlib,tempfile,subprocess,sys,time,os
 root=pathlib.Path(__file__).resolve().parents[2]
 p=pathlib.Path(tempfile.mkdtemp(prefix='cart-review-pg-')); (p/'sock').mkdir(); started=False
 try:
@@ -48,13 +48,93 @@ try:
  if '--baseline' not in sys.argv:
   for name in ['20261015145000_commerce_cart_checkout_complete_vouchers.sql', '20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql','20261105210000_commerce_cart_checkout_database_clock.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/migrations/20261105210000_commerce_cart_checkout_database_clock.sql').read_text()
+  sql+='\n'+(root/'supabase/migrations/20261106130000_commerce_cart_delivery_context.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_add_identity.sql').read_text()
+ if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_delivery_context.sql').read_text()
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_database_clock.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_account_empty_observation.sql').read_text()
- sql+='\nROLLBACK;'
+ sql+='\nCOMMIT;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-checkout-add-review.log','w'),stderr=subprocess.STDOUT,cwd=root)
- print('PASS' if r.returncode==0 else 'FAIL')
- if r.returncode: print(pathlib.Path('/tmp/cart-checkout-add-review.log').read_text()[-2800:])
- sys.exit(r.returncode)
+ if r.returncode:
+  print('FAIL')
+  print(pathlib.Path('/tmp/cart-checkout-add-review.log').read_text()[-2800:])
+  sys.exit(r.returncode)
+ if '--baseline' not in sys.argv:
+  psql=['psql','-X','-q','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres']
+  barrier_key=366221123
+  def wait_for_activity(query):
+   deadline=time.monotonic()+8
+   delay=0.01
+   while time.monotonic()<deadline:
+    remaining=deadline-time.monotonic()
+    try:
+     probe=subprocess.run(psql+['-At','-c',query],text=True,capture_output=True,cwd=root,
+       timeout=max(0.1,min(1.0,remaining)))
+    except subprocess.TimeoutExpired:
+     probe=None
+    if probe is not None and probe.returncode==0 and probe.stdout.strip()=='1': return True
+    time.sleep(min(delay,max(0,deadline-time.monotonic())))
+    delay=min(delay*2,0.1)
+   return False
+
+  controller_env=os.environ.copy(); controller_env['PGAPPNAME']='delivery-context-controller'
+  controller=subprocess.Popen(psql+['-At'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=controller_env,cwd=root)
+  controller.stdin.write(f'SELECT pg_advisory_lock({barrier_key});\n')
+  controller.stdin.flush()
+  controller_lock_probe=("SELECT count(*) FROM pg_stat_activity a JOIN pg_locks l ON l.pid=a.pid "
+    "WHERE a.application_name='delivery-context-controller' AND a.state='idle' "
+    f"AND l.locktype='advisory' AND l.database=(SELECT oid FROM pg_database WHERE datname=current_database()) "
+    f"AND l.classid=0::oid AND l.objid={barrier_key}::oid AND l.objsubid=1 AND l.granted;")
+  if not wait_for_activity(controller_lock_probe):
+   controller.kill(); controller.communicate()
+   raise RuntimeError('delivery-context controller did not acquire its barrier lock')
+  holder_sql=("BEGIN; SET LOCAL statement_timeout='25s'; SET LOCAL deadlock_timeout='200ms'; "
+    "SELECT id FROM public.commerce_carts WHERE id='aaaaaaaa-6600-4000-8000-000000000002' FOR UPDATE; "
+    f"SELECT pg_advisory_lock({barrier_key}); "
+    "UPDATE public.commerce_cart_checkout_sessions SET reviewed_snapshot=reviewed_snapshot "
+    "WHERE id='cccccccc-6600-4000-8000-000000000002'; COMMIT;")
+  holder_env=os.environ.copy(); holder_env['PGAPPNAME']='delivery-context-cart-lock-holder'
+  holder=subprocess.Popen(psql,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=holder_env,cwd=root)
+  holder.stdin.write(holder_sql)
+  holder.stdin.flush()
+  holder.stdin.close()
+  holder.stdin=None
+  if not wait_for_activity("SELECT count(*) FROM pg_stat_activity WHERE application_name='delivery-context-cart-lock-holder' AND state='active' AND wait_event='advisory';"):
+   controller.stdin.write(f'SELECT pg_advisory_unlock({barrier_key});\\q\n'); controller.stdin.flush(); controller.stdin.close(); controller.stdin=None
+   controller.communicate(); holder.kill(); holder.communicate()
+   print('FAIL: did not observe cart-lock holder before delivery-context call')
+   sys.exit(1)
+  claim=("{\"role\":\"commerce_cart_shopper\",\"exp\":9999999999,"
+    "\"cart_scope\":\"session\",\"cart_merchant_id\":\"11111111-1111-4111-8111-111111111111\","
+    "\"cart_id\":\"aaaaaaaa-6600-4000-8000-000000000002\","
+    "\"cart_grant_id\":\"bbbbbbbb-6600-4000-8000-000000000003\","
+    "\"cart_principal_id\":\"delivery-context-lock\"}")
+  delivery_sql=("BEGIN; SET LOCAL statement_timeout='25s'; SET LOCAL deadlock_timeout='200ms'; "
+    f"SELECT set_config('request.jwt.claims','{claim}',true); "
+    "SELECT public.commerce_cart_delivery_context("
+    "'cccccccc-6600-4000-8000-000000000002',9,3)->>'ok'; COMMIT;")
+  caller_env=os.environ.copy(); caller_env['PGAPPNAME']='delivery-context-caller'
+  caller=subprocess.Popen(psql+['-At'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=caller_env,cwd=root)
+  caller.stdin.write(delivery_sql)
+  caller.stdin.flush()
+  caller.stdin.close()
+  caller.stdin=None
+  if not wait_for_activity("SELECT count(*) FROM pg_stat_activity WHERE application_name='delivery-context-caller' AND state='active' AND wait_event_type='Lock' AND query LIKE '%commerce_cart_delivery_context%';"):
+   controller.stdin.write(f'SELECT pg_advisory_unlock({barrier_key});\\q\n'); controller.stdin.flush(); controller.stdin.close(); controller.stdin=None
+   controller.communicate(); caller.kill(); caller.communicate(); holder.communicate()
+   print('FAIL: delivery-context caller never reached the cart-lock wait')
+   sys.exit(1)
+  controller.stdin.write(f'SELECT pg_advisory_unlock({barrier_key});\\q\n')
+  controller.stdin.flush()
+  controller.stdin.close()
+  controller.stdin=None
+  controller.communicate(timeout=8)
+  delivery_out,delivery_err=caller.communicate(timeout=8)
+  holder_out,holder_err=holder.communicate(timeout=8)
+  if caller.returncode or holder.returncode or delivery_out.splitlines()[-1:]!=['true']:
+   print('FAIL: delivery-context cart/session lock-order race')
+   print((delivery_err+holder_err+delivery_out+holder_out)[-2400:])
+   sys.exit(1)
+ print('PASS')
 finally:
  if started: subprocess.run(['pg_ctl','-D',str(p/'data'),'stop','-m','fast'],check=True,stdout=subprocess.DEVNULL)

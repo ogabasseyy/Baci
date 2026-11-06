@@ -94,6 +94,8 @@ SELECT * FROM (VALUES
    'FOLLOW-UP: no app caller, but storefront_cluster_guide_* suites pin anon/authenticated/service_role EXECUTE; revoke together with those tests'),
   ('public.get_storefront_cluster_guide_candidates_v2(uuid,text,jsonb,text,integer)',
    'public storefront/feed read; anon-safe projection'),
+  ('public.get_storefront_cluster_guide_candidates_v2(uuid,text,uuid,uuid,integer)',
+   'public storefront/feed read; anon-safe projection'),
   ('public.get_storefront_discount_code(uuid,text,boolean)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.get_storefront_offer_resolution(uuid,uuid[])',

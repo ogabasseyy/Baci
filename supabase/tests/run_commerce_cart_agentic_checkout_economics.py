@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix='cart-condition-order-') as directory:
         if '--without-price-drift-fix' not in sys.argv:
             sql += (root / 'supabase/migrations/20261106090000_commerce_cart_bind_validated_price.sql').read_text()*2
         if '--before-assurance-fix' not in sys.argv:
-            assurance_migration=(root / 'supabase/migrations/20261106140000_commerce_cart_bind_reviewed_assurance.sql').read_text()
+            assurance_migration=(root / 'supabase/migrations/20261106220000_commerce_cart_bind_reviewed_assurance.sql').read_text()
             sql += """
 CREATE TEMP TABLE assurance_binder_backup(definition text);
 INSERT INTO assurance_binder_backup

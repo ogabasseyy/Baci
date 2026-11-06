@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { OgabasseyV2Blog, type BlogPost } from './blog';
+import { BLOG_LISTING_FEATURED_IMAGE_SIZES } from '../config/blog-media';
 
 interface MockNextImageProps {
   alt: string;
@@ -107,7 +108,10 @@ describe('OgabasseyV2Blog', () => {
     );
     expect(featuredImage).toHaveAttribute('loading', 'eager');
     expect(featuredImage).toHaveAttribute('fetchpriority', 'high');
-    expect(featuredImage).toHaveAttribute('sizes', '100vw');
+    expect(featuredImage).toHaveAttribute(
+      'sizes',
+      BLOG_LISTING_FEATURED_IMAGE_SIZES
+    );
   });
 
   it('renders grid posts with lazy low-priority images', () => {

@@ -329,6 +329,8 @@ jobs:
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
+      - name: Test reviewed commerce cart checkout product names
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test loyalty checkout replay fixture against PostgreSQL

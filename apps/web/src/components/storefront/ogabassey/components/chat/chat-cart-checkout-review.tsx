@@ -3,7 +3,10 @@
 import { formatMoneyMinor, getMoneyCurrencyExponent } from '@baci/shared/money';
 import { useEffect, useRef, useState } from 'react';
 import { type CartItem } from '@/hooks/cart';
-import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
+import {
+  calculateCartItemSubtotal,
+  getCartItemCheckoutUnitPrice,
+} from '@/lib/checkout/cart-entitlement-sanitizer';
 import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
@@ -12,7 +15,7 @@ import {
 import type { SharedCartSyncStatus } from '@/hooks/cart/cart-types';
 
 interface ChatCartCheckoutReviewProps {
-  items: CartItem[];
+  items: DisplayedCartItem[];
   merchantId: string | null | undefined;
   merchantSlug: string | null;
   currencyCode: string;
@@ -21,6 +24,11 @@ interface ChatCartCheckoutReviewProps {
   syncStatus?: SharedCartSyncStatus;
   refreshSharedCart?: () => Promise<void>;
 }
+
+type DisplayedCartItem = CartItem & {
+  hydrationFailed?: boolean;
+  serverLineId?: string | null;
+};
 
 export function ChatCartCheckoutReview({
   items,
@@ -35,9 +43,10 @@ export function ChatCartCheckoutReview({
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<{
-    items: CartItem[];
     review: SharedCartCheckoutReview;
     expiresAtMonotonicMs: number;
+    expiresAtEpochMs: number;
+    displayDetailsKey: string;
   } | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const operationRef = useRef<{
@@ -59,6 +68,37 @@ export function ChatCartCheckoutReview({
     return () => window.clearTimeout(timeout);
   }, [prepared]);
 
+  useEffect(() => {
+    if (!prepared) return;
+    const invalidateAfterResume = () => {
+      if (
+        document.visibilityState === 'hidden' ||
+        (prepared.expiresAtMonotonicMs > performance.now() &&
+          prepared.expiresAtEpochMs > Date.now())
+      ) {
+        return;
+      }
+      setSessionExpired(true);
+    };
+    document.addEventListener('visibilitychange', invalidateAfterResume);
+    window.addEventListener('pageshow', invalidateAfterResume);
+    return () => {
+      document.removeEventListener('visibilitychange', invalidateAfterResume);
+      window.removeEventListener('pageshow', invalidateAfterResume);
+    };
+  }, [prepared]);
+
+  const displayDetailsKey = JSON.stringify(
+    items.map((item) => [
+      item.serverLineId ?? null,
+      item.name,
+      item.price,
+      item.image,
+      item.hydrationFailed === true,
+      item.variantAttributes ?? null,
+    ])
+  );
+
   const isCurrent = Boolean(
     prepared &&
       sharedCartRef?.cartId === prepared.review.cartId &&
@@ -66,6 +106,8 @@ export function ChatCartCheckoutReview({
       merchantId === prepared.review.merchantId &&
       currencyCode.toUpperCase() === prepared.review.currency.toUpperCase() &&
       prepared.expiresAtMonotonicMs > performance.now() &&
+      prepared.expiresAtEpochMs > Date.now() &&
+      prepared.displayDetailsKey === displayDetailsKey &&
       !sessionExpired &&
       syncStatus === 'synced'
   );
@@ -140,6 +182,14 @@ export function ChatCartCheckoutReview({
         return;
       }
       const reviewedItems = reviewedCheckoutItems(items, result.review);
+      const linePricesMatch = result.review.lines.every((line) => {
+        const item = items.find((candidate) => candidate.serverLineId === line.id);
+        return (
+          item &&
+          item.quantity === line.quantity &&
+          Math.abs(getCartItemCheckoutUnitPrice(item) * 100 - line.effectiveUnitPriceMinor) < 0.5
+        );
+      });
       if (
         result.review.unavailableCount > 0 ||
         result.review.lines.some((line) => !line.available) ||
@@ -147,6 +197,7 @@ export function ChatCartCheckoutReview({
           result.review.subtotalMinor / 10 ** exponent -
             calculateCartItemSubtotal(items, true)
         ) > 0.005 ||
+        !linePricesMatch ||
         !reviewedItems
       ) {
         await refreshSharedCart?.();
@@ -156,9 +207,10 @@ export function ChatCartCheckoutReview({
         return;
       }
       setPrepared({
-        items: reviewedItems,
         review: result.review,
         expiresAtMonotonicMs: result.sessionExpiresAtMonotonicMs,
+        expiresAtEpochMs: result.sessionExpiresAtEpochMs,
+        displayDetailsKey,
       });
     } catch {
       setError('We could not review your cart. Please try again.');
@@ -197,21 +249,20 @@ export function ChatCartCheckoutReview({
           {isCurrent ? (
             <>
               <ul className="mt-2 divide-y divide-store-border">
-                {prepared.review.lines.map((line, index) => {
-                  const item = prepared.items[index];
-                  return (
-                    <li key={line.id} className="py-2 text-sm">
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-store-background-text/70">
-                        {line.quantity} ×{' '}
-                        {formatMoneyMinor(
-                          line.effectiveUnitPriceMinor,
-                          prepared.review.currency
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
+                {prepared.review.lines.map((line) => (
+                  <li key={line.id} className="py-2 text-sm">
+                    <div className="font-medium">
+                      {line.productName?.trim() || 'Product'}
+                    </div>
+                    <div className="text-store-background-text/70">
+                      {line.quantity} ×{' '}
+                      {formatMoneyMinor(
+                        line.effectiveUnitPriceMinor,
+                        prepared.review.currency
+                      )}
+                    </div>
+                  </li>
+                ))}
               </ul>
               <div className="mt-2 flex justify-between border-t border-store-border pt-2 text-sm font-semibold">
                 <span>Reviewed subtotal</span>

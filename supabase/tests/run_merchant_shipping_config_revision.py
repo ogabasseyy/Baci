@@ -136,6 +136,10 @@ r5 = "30000000-0000-4000-8000-000000000005"
 baseline_m1 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m1}')::text"))
 baseline_m2 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m2}')::text"))
 verify_migration_seed_race(ROOT, PSQL, scalar, revision)
+# Apply the append-only correction after exercising the original migration's
+# concurrent seed/backfill behavior.
+location_revision_fix = ROOT / "supabase/migrations/20261106160000_fix_shipping_location_revision_trigger.sql"
+run(PSQL, sql=f"\\i {location_revision_fix}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))
     assert revised.pop("shipping_config_revision", None) is not None, "new projection omitted its revision"
@@ -153,6 +157,11 @@ for sql, merchant in [
     before = revision(merchant)
     run(PSQL + ["-c", sql])
     assert revision(merchant) > before, f"config mutation did not advance {merchant}: {sql}"
+
+# A location reassignment resolves both merchants through its old and new zones.
+before_one, before_two = revision(m1), revision(m2)
+run(PSQL + ["-c", f"UPDATE public.merchant_shipping_zone_locations SET zone_id='{z2}' WHERE zone_id='{z1}' AND country_code='NG'"])
+assert revision(m1) > before_one and revision(m2) > before_two, "location reassignment did not advance both merchant revisions"
 
 before_one, before_two = revision(m1), revision(m2)
 run(PSQL + ["-c", f"UPDATE public.merchant_shipping_rates SET merchant_id='{m2}',zone_id='{z2}' WHERE id='{r1}'"])

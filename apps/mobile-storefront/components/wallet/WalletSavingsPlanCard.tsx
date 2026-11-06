@@ -7,9 +7,10 @@ import type Colors from '@/constants/Colors';
 import { palette } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { getSavingsEncouragement } from './get-savings-encouragement';
+import { getSavingsProgress } from './get-savings-progress';
 import { SavingsGoalArtwork } from './SavingsGoalArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
-import { getSavingsEncouragement } from './savings-encouragement';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
@@ -30,16 +31,7 @@ export function WalletSavingsPlanCard({
     colors.primaryForeground === palette.black
       ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
       : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const progress =
-    goal.target_amount > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            Math.round((goal.current_amount / goal.target_amount) * 100)
-          )
-        )
-      : 0;
+  const { percent: progress } = getSavingsProgress(goal);
   const remaining = Math.max(0, goal.target_amount - goal.current_amount);
   const hasStarted = goal.current_amount > 0;
   const actionLabel = goal.selection_unresolved

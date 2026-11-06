@@ -3,7 +3,7 @@ import type Colors from '@/constants/Colors';
 import { RADIUS, SPACING } from '@/constants/Colors';
 import { triggerHaptic } from '@/hooks/use-haptics';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import type { QuickAmountOption } from './savings-encouragement';
+import type { QuickAmountOption } from './get-quick-amount-options';
 
 /** Tap-to-fill amounts. Selecting one only changes the amount field. */
 export function SavingsQuickAmounts({

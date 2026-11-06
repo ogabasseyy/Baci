@@ -4,13 +4,11 @@ import { RADIUS, SPACING } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { formatProductConditionDisplay } from '@/types/product';
+import { getSavingsEncouragement } from './get-savings-encouragement';
 import { getSavingsProgress } from './get-savings-progress';
+import { getWeeklySavingsNudge } from './get-weekly-savings-nudge';
 import { SavingsGoalArtwork } from './SavingsGoalArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
-import {
-  getSavingsEncouragement,
-  getWeeklySavingsNudge,
-} from './savings-encouragement';
 
 /**
  * Top of the savings sheet: what is being saved for, how far along it is, a

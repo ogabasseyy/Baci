@@ -6,11 +6,9 @@ import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { getDefaultContributionAmount } from './get-default-contribution-amount';
+import { getQuickAmountOptions } from './get-quick-amount-options';
 import { SavingsQuickAmounts } from './SavingsQuickAmounts';
-import {
-  getDefaultContributionAmount,
-  getQuickAmountOptions,
-} from './savings-encouragement';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';

@@ -62,6 +62,22 @@ describe('WalletSavingsPlanCard', () => {
     expect(screen.getByText('₦50,000 to go')).toBeOnTheScreen();
   });
 
+  it('does not announce goal completion until the full target is saved', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 99500 }}
+        onOpen={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Almost there!')).toBeOnTheScreen();
+    expect(screen.queryByText('Goal reached!')).toBeNull();
+    expect(
+      screen.getByRole('progressbar', { name: 'Savings plan progress' })
+    ).toHaveAccessibilityValue({ now: 99 });
+  });
+
   it('labels the completed-plan action as starting another plan', () => {
     render(
       <WalletSavingsPlanCard

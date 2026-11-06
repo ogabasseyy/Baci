@@ -2,8 +2,8 @@
 -- fixture commits its durable tables and enables the dormant gate.
 INSERT INTO public.commerce_carts(id,merchant_id,version,state,expires_at)
 VALUES ('eeeeeeee-4000-4000-8000-000000000021','11111111-1111-4111-8111-111111111111',1,'active',now()+interval '1 day');
-INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,principal_type,expires_at)
-VALUES ('eeeeeeee-4000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021','lost-ack-principal','guest',now()+interval '1 day');
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,principal_type,expires_at,device_principal_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000022','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021','lost-ack-principal','guest',now()+interval '1 day','lost-ack-root');
 INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,status,expires_at,preparing_grant_id)
 VALUES ('eeeeeeee-4000-4000-8000-000000000023','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021',9,1,'lost-ack-principal','active',now()+interval '1 day','eeeeeeee-4000-4000-8000-000000000022');
 -- Simulate the older checkout generation left behind after prepare creates a
@@ -46,6 +46,105 @@ DO $$ BEGIN
   IF (SELECT result->>'status' FROM lost_ack_retry) IS DISTINCT FROM 'dispatch_unknown'
      OR NOT private.agentic_cart_dispatch_hold_is_live('11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021') THEN
     RAISE EXCEPTION 'lost acknowledgement retry did not fail closed: %',(SELECT result FROM lost_ack_retry);
+  END IF;
+END $$;
+
+-- A live hold blocks grant edits but must not block logout's exact grant
+-- revocation. The effective device key differs from the prepared principal.
+-- Positive control: the same effective device can admit a valid checkout
+-- before its retirement tombstone exists.
+INSERT INTO public.commerce_carts(id,merchant_id,version,state,expires_at)
+VALUES ('eeeeeeee-4000-4000-8000-000000000045','11111111-1111-4111-8111-111111111111',1,'active',now()+interval '1 day');
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,principal_type,expires_at,device_principal_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000046','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000045','control-principal','guest',now()+interval '1 day','lost-ack-root');
+INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,status,expires_at,preparing_grant_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000047','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000045',1,1,'control-principal','active',now()+interval '1 day','eeeeeeee-4000-4000-8000-000000000046');
+INSERT INTO public.checkout_sessions(id,session_id,merchant_id,status,metadata,payment_reference)
+VALUES ('eeeeeeee-4000-4000-8000-000000000048','dispatch-before-revoke','11111111-1111-4111-8111-111111111111','processing','{"agentic":{"payment_state":"claiming_payment"}}','claim-before-revoke');
+DO $$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','authenticated','aud','authenticated','agentic_context','checkout',
+    'agentic_session_id','dispatch-before-revoke',
+    'agentic_merchant_id','11111111-1111-4111-8111-111111111111',
+    'agentic_shared_cart_checkout_binding',jsonb_build_object(
+      'version',1,'agentic_session_id','dispatch-before-revoke',
+      'cart_id','eeeeeeee-4000-4000-8000-000000000045',
+      'checkout_session_id','eeeeeeee-4000-4000-8000-000000000047',
+      'checkout_generation',1,'cart_version',1,'principal_id','control-principal',
+      'identity_kind','idempotent','checkout_variant','base'
+    ))::text,true);
+  r:=public.commerce_cart_admit_agentic_dva_dispatch('claim-before-revoke');
+  IF r->>'status' IS DISTINCT FROM 'dispatch_permitted' THEN
+    RAISE EXCEPTION 'valid non-retired linked device positive control failed: %',r;
+  END IF;
+END $$;
+DO $$
+DECLARE r jsonb;
+BEGIN
+  BEGIN
+    UPDATE public.commerce_cart_grants SET expires_at=expires_at+interval '1 hour'
+     WHERE id='eeeeeeee-4000-4000-8000-000000000022';
+    RAISE EXCEPTION 'held grant allowed non-revocation mutation';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL;
+  END;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','commerce_cart_shopper','exp',extract(epoch FROM now())::bigint+3600,
+    'cart_scope','session','cart_merchant_id','11111111-1111-4111-8111-111111111111',
+    'cart_principal_id','lost-ack-principal','cart_id','eeeeeeee-4000-4000-8000-000000000021',
+    'cart_grant_id','eeeeeeee-4000-4000-8000-000000000022'
+  )::text,true);
+  r:=public.commerce_cart_revoke_device_grants();
+  IF r->>'ok' IS DISTINCT FROM 'true'
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE id='eeeeeeee-4000-4000-8000-000000000022' AND revoked_at IS NOT NULL)
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE id='eeeeeeee-4000-4000-8000-000000000046' AND revoked_at IS NOT NULL)
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_device_retirements WHERE merchant_id='11111111-1111-4111-8111-111111111111' AND device_principal_id='lost-ack-root')
+     OR NOT private.agentic_cart_dispatch_hold_is_live('11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000021')
+     OR NOT private.agentic_cart_dispatch_hold_is_live('11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000045') THEN
+    RAISE EXCEPTION 'scoped device logout failed or released the admitted hold: %',r;
+  END IF;
+END $$;
+
+-- A new, otherwise-valid grant for the retired device cannot start dispatch
+-- on another cart after logout.
+INSERT INTO public.commerce_carts(id,merchant_id,version,state,expires_at)
+VALUES ('eeeeeeee-4000-4000-8000-000000000041','11111111-1111-4111-8111-111111111111',1,'active',now()+interval '1 day');
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,principal_type,expires_at,device_principal_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000042','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000041','new-lost-ack-principal','guest',now()+interval '1 day','lost-ack-root');
+INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,status,expires_at,preparing_grant_id)
+VALUES ('eeeeeeee-4000-4000-8000-000000000043','11111111-1111-4111-8111-111111111111','eeeeeeee-4000-4000-8000-000000000041',1,1,'new-lost-ack-principal','active',now()+interval '1 day','eeeeeeee-4000-4000-8000-000000000042');
+INSERT INTO public.checkout_sessions(id,session_id,merchant_id,status,metadata,payment_reference)
+VALUES ('eeeeeeee-4000-4000-8000-000000000044','dispatch-after-revoke','11111111-1111-4111-8111-111111111111','processing','{"agentic":{"payment_state":"claiming_payment"}}','claim-after-revoke');
+DO $$
+DECLARE r jsonb;
+BEGIN
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','authenticated','aud','authenticated','agentic_context','checkout',
+    'agentic_session_id','dispatch-after-revoke',
+    'agentic_merchant_id','11111111-1111-4111-8111-111111111111',
+    'agentic_shared_cart_checkout_binding',jsonb_build_object(
+      'version',1,'agentic_session_id','dispatch-after-revoke',
+      'cart_id','eeeeeeee-4000-4000-8000-000000000041',
+      'checkout_session_id','eeeeeeee-4000-4000-8000-000000000043',
+      'checkout_generation',1,'cart_version',1,'principal_id','new-lost-ack-principal',
+      'identity_kind','idempotent','checkout_variant','base'
+    ))::text,true);
+  r:=public.commerce_cart_admit_agentic_dva_dispatch('claim-after-revoke');
+  IF r->>'status' IS DISTINCT FROM 'blocked'
+     OR EXISTS (SELECT 1 FROM private.agentic_cart_dispatch_holds WHERE claim_reference='claim-after-revoke') THEN
+    RAISE EXCEPTION 'retired linked device created a new dispatch hold: %',r;
+  END IF;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object(
+    'role','commerce_cart_shopper','exp',extract(epoch FROM now())::bigint+3600,
+    'cart_scope','session','cart_merchant_id','11111111-1111-4111-8111-111111111111',
+    'cart_principal_id','new-lost-ack-principal','cart_id','eeeeeeee-4000-4000-8000-000000000041',
+    'cart_grant_id','eeeeeeee-4000-4000-8000-000000000042'
+  )::text,true);
+  r:=public.commerce_cart_mutate('eeeeeeee-4000-4000-8000-000000000041','after-revoke',1,
+    '{"type":"clear"}'::jsonb);
+  IF r->>'code' IS DISTINCT FROM 'unauthorized' THEN
+    RAISE EXCEPTION 'revoked device retained shopper authority: %',r;
   END IF;
 END $$;
 

@@ -12,6 +12,15 @@ DO $$ BEGIN
      OR has_table_privilege('service_role','private.agentic_cart_dispatch_rollout','SELECT') THEN
     RAISE EXCEPTION 'dispatch rollout table must have RLS and no application-role grants';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_index i
+    JOIN pg_catalog.pg_class idx ON idx.oid=i.indexrelid
+    WHERE idx.relname='agentic_cart_dispatch_holds_cart_fk_idx'
+      AND i.indrelid='private.agentic_cart_dispatch_holds'::regclass
+      AND i.indisvalid AND i.indpred IS NULL
+  ) THEN
+    RAISE EXCEPTION 'dispatch holds need an unconditional cart foreign-key index';
+  END IF;
 END $$;
 DO $$
 DECLARE r jsonb; claims jsonb; missing_key text;

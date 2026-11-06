@@ -12,7 +12,7 @@ describe('chatProductRouteParamsSchema', () => {
     expect(
       chatProductRouteParamsSchema.safeParse({
         slug: 's'.repeat(160),
-        productSlug: 'p'.repeat(160),
+        productSlug: 'p'.repeat(200),
       }).success
     ).toBe(true);
   });
@@ -22,7 +22,7 @@ describe('chatProductRouteParamsSchema', () => {
       { slug: '', productSlug: 'phone' },
       { slug: 'store', productSlug: '' },
       { slug: 's'.repeat(161), productSlug: 'phone' },
-      { slug: 'store', productSlug: 'p'.repeat(161) },
+      { slug: 'store', productSlug: 'p'.repeat(201) },
       { slug: 'store_name', productSlug: 'phone' },
       { slug: 'store', productSlug: 'phone/../escape' },
       { slug: 'store', productSlug: 'phone--case' },

@@ -3,7 +3,14 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { setClipboardString } from '@/lib/clipboard';
 import { deriveWalletDisplayData } from './derive-wallet-display-data';
 import { WalletContent } from './WalletContent';
+import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
+
+let restoreCustomer: () => void;
+beforeEach(() => {
+  restoreCustomer = setWalletTestCustomer();
+});
+afterEach(() => restoreCustomer());
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(

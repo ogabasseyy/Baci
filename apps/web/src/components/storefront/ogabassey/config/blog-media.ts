@@ -29,8 +29,19 @@ export const BLOG_POST_HERO_IMAGE_SIZES =
  */
 export const BLOG_POST_HERO_IMAGE_PRELOAD_WIDTH = 1200;
 
-/** Full-bleed `sizes` for the blog listing featured-story hero. */
-export const BLOG_LISTING_FEATURED_IMAGE_SIZES = '100vw';
+/**
+ * Responsive `sizes` for the blog listing featured-story hero.
+ *
+ * Matches the hero frame geometry (.ogabassey-blog-lcp-hero):
+ * - Mobile (<768px): 1rem padding per side -> calc(100vw - 2rem)
+ * - Tablet/Desktop (768px - 1440px): 1.5rem padding per side -> calc(100vw - 3rem)
+ * - Desktop (>1440px): max-width container capped at 1400px
+ *
+ * On 390px mobile (3x DPR = 1074 physical px), this selects 1080w instead of
+ * 1200w, reducing download bytes on Slow-4G without visible artifacting.
+ */
+export const BLOG_LISTING_FEATURED_IMAGE_SIZES =
+  '(max-width: 767px) calc(100vw - 2rem), (max-width: 1440px) calc(100vw - 3rem), 1400px';
 
 /** Fallback preload width for the blog listing featured-story hero. */
 export const BLOG_LISTING_FEATURED_IMAGE_PRELOAD_WIDTH = 750;

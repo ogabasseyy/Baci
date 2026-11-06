@@ -1,20 +1,23 @@
 'use client';
 import '@/app/(storefront)/storefront-chat.css';
-import { Sparkles, X } from 'lucide-react';
+import { ShoppingCart, Sparkles, X } from 'lucide-react';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
-import type React from 'react';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState, type CSSProperties, type FC } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
-import { asRoute } from '@/lib/routes';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
+import { ChatLauncher } from './ChatLauncher';
 import { ChatCartReview } from './chat-cart-review';
+import { ChatDeliveryQuote } from './chat-delivery-quote';
 import { ChatMessageBubble } from './chat-message';
-import { resolveSuggestionNavigationPath, SUGGESTIONS } from './types';
+import { getChatDeliveryContext } from './get-chat-delivery-context';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
+import { getChatPanelMobileHeightCap } from './chat-panel-mobile-height-cap';
+import { usePrivateDeliveryMode } from './use-private-delivery-mode';
 export interface ChatWidgetProps {
   openOnMount?: boolean;
 }
@@ -24,17 +27,36 @@ const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
   'data-mobile-offset-product': '1rem',
   'data-mobile-offset-screen': '1rem',
 } as const;
-export const ChatWidget: React.FC<ChatWidgetProps> = ({
+export const ChatWidget: FC<ChatWidgetProps> = ({
   openOnMount = false,
 }) => {
-  const { isCartOpen } = useCart();
+  const {
+    isCartOpen,
+    cart = [],
+    subtotal = 0,
+    isHydrated = false,
+    sharedCartRef,
+    merchantSlug: cartMerchantSlug,
+  } = useCart();
   const { theme } = useV2Theme();
   const pathname = usePathname();
-  const router = useRouter();
   const merchant = useMerchantSafe();
   const isFooterVisible = useOgabasseyScrollVisibility();
   const isSanta = theme === 'santa';
-
+  const [cartPanelOpen, setCartPanelOpen] = useState(false);
+  const deliveryContext = getChatDeliveryContext({
+    lines: cart,
+    subtotal,
+    sharedVersion: sharedCartRef?.version,
+    hydrated: isHydrated,
+    routingMode: merchant?.routingMode,
+    merchantId: merchant?.merchant?.id,
+    merchantSlug: merchant?.merchant?.slug,
+    cartMerchantSlug,
+    country: merchant?.merchant?.country,
+    payoutCurrency: merchant?.merchant?.payout_currency,
+  });
+  const cartItemCount = cart.reduce((count, item) => count + item.quantity, 0);
   const {
     isOpen,
     setIsOpen,
@@ -52,19 +74,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     isSanta,
     storefrontSlug: merchant?.merchant?.slug,
   });
-  const handleSuggestionClick = (label: string) => {
-    const suggestion = SUGGESTIONS.find((entry) => entry.label === label);
-    const navigationPath = suggestion
-      ? resolveSuggestionNavigationPath(suggestion, merchant?.basePath ?? '')
-      : null;
 
-    if (navigationPath) {
-      setIsOpen(false);
-      router.push(asRoute(navigationPath));
-      return;
+  const privateDelivery = usePrivateDeliveryMode(deliveryContext.eligible, setInput);
+
+  useEffect(() => {
+    if (cartPanelOpen || privateDelivery.active) {
+      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
-
-    handleSend(label);
+  }, [cartPanelOpen, privateDelivery.active, messagesEndRef]);
+  const closeChat = () => {
+    setCartPanelOpen(false);
+    if (privateDelivery.active) privateDelivery.close();
+    setIsOpen(false);
   };
 
   const isProductPage =
@@ -78,6 +99,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       ? 'cart'
       : 'default';
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
+  const mobileBottomOffset = mobileOffset === 'cart' ? '6.75rem' : '1rem';
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',
@@ -102,7 +124,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     >
       {isOpen && (
         <div
-          className={`w-[calc(100vw-32px)] md:w-[400px] h-[400px] md:h-[500px] max-h-[70vh] bg-store-background rounded-2xl shadow-2xl border ${isSanta ? 'border-store-primary/20' : 'border-store-border'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-store-background-text/5`}
+          className={`w-[calc(100vw-32px)] md:w-[400px] h-auto min-h-[min(400px,var(--chat-mobile-height-cap))] max-h-[var(--chat-mobile-height-cap)] md:min-h-[min(420px,80vh)] md:max-h-[min(80vh,720px)] bg-store-background rounded-2xl shadow-2xl border ${isSanta ? 'border-store-primary/20' : 'border-store-border'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-store-background-text/5`}
+          style={{ '--chat-mobile-height-cap': getChatPanelMobileHeightCap(mobileBottomOffset) } as CSSProperties}
         >
           <div
             className={`relative flex items-center justify-between p-4 border-b ${
@@ -151,18 +174,36 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className={`relative z-10 p-2 rounded-full ${isSanta ? 'hover:bg-store-primary/80' : 'hover:bg-store-background-text/5'} transition-colors`}
-              aria-label="Close chat"
-            >
-              <X size={20} />
-            </button>
+            <div className="relative z-10 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCartPanelOpen((open) => !open)}
+                className={`relative min-h-10 min-w-10 rounded-full ${isSanta ? 'hover:bg-store-primary/80' : 'hover:bg-store-background-text/5'} transition-colors inline-flex items-center justify-center`}
+                aria-label={`Cart, ${cartItemCount} ${cartItemCount === 1 ? 'item' : 'items'}`}
+                aria-expanded={cartPanelOpen}
+                aria-controls="chat-cart-panel"
+                title="Toggle cart"
+              >
+                <ShoppingCart size={19} aria-hidden="true" />
+                {cartItemCount > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-store-primary text-[10px] font-semibold text-store-background">
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={closeChat}
+                className={`min-h-10 min-w-10 rounded-full ${isSanta ? 'hover:bg-store-primary/80' : 'hover:bg-store-background-text/5'} transition-colors inline-flex items-center justify-center`}
+                aria-label="Close chat"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
           <div
-            className={`flex-1 overflow-y-auto p-4 scroll-smooth relative ${isSanta ? 'bg-store-primary/5' : 'bg-store-background'}`}
+            className={`min-h-0 flex-1 overflow-y-auto p-4 scroll-smooth relative ${isSanta ? 'bg-store-primary/5' : 'bg-store-background'}`}
           >
             <div className="space-y-6 relative z-10">
               <div className="text-center">
@@ -172,8 +213,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   Today
                 </span>
               </div>
-
-              <ChatCartReview />
 
               {messages.map((msg, idx) => (
                 <ChatMessageBubble
@@ -207,6 +246,32 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   </div>
                 </div>
               )}
+
+              <div id="chat-cart-panel" hidden={!cartPanelOpen}>
+                {cartPanelOpen ? (
+                  <ChatCartReview onRequestDeliveryQuote={
+                    deliveryContext.eligible
+                      ? () => {
+                          setInput('');
+                          setCartPanelOpen(false);
+                          privateDelivery.start();
+                        }
+                      : undefined
+                  } />
+                ) : null}
+              </div>
+
+              {privateDelivery.active && deliveryContext.eligible ? (
+                <ChatDeliveryQuote
+                  cartKey={deliveryContext.cartKey}
+                  input={input}
+                  setInput={setInput}
+                  submitRef={privateDelivery.submitRef}
+                  onComposerLockChange={privateDelivery.setComposerLocked}
+                  onClose={privateDelivery.close}
+                />
+              ) : null}
+
               <div ref={messagesEndRef} />
             </div>
           </div>
@@ -214,87 +279,22 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           <ChatInput
             input={input}
             setInput={setInput}
-            isLoading={isLoading}
+            isLoading={isLoading || privateDelivery.composerLocked}
             isSanta={isSanta}
-            showSuggestions={messages.length < 3 && !isLoading}
-            onSubmit={handleSubmit}
-            onSuggestionClick={handleSuggestionClick}
+            onSubmit={(event) => privateDelivery.handleComposerSubmit(event, handleSubmit)}
+            privateMode={privateDelivery.active}
           />
-          <div className="text-center mt-2">
-            <p className="text-[10px] text-gray-300">
-              AI can make mistakes. Check product details before buying.
-            </p>
-          </div>
         </div>
       )}
 
-      <div className="relative group">
-        {!isOpen && isSanta && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-32 bg-store-background px-4 py-3 rounded-2xl rounded-tr-none shadow-xl border-2 border-store-primary/10 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4">
-            <p className="text-sm font-bold text-store-background-text text-center leading-tight">
-              Make a wish! {'\u2728'}
-            </p>
-            <div className="absolute -bottom-2 -right-1 size-3 bg-store-background rounded-full border-r border-b border-store-primary/10" />
-            <div className="absolute -bottom-4 -right-3 size-2 bg-store-background/90 rounded-full border border-store-primary/10" />
-          </div>
-        )}
-
-        {/* Proactive Nudge Bubble (Standard Mode) */}
-        {!isOpen && !isSanta && proactiveMsg && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-store-background px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-store-primary/10 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
-            <div className="text-store-background-text text-xs font-medium leading-relaxed">
-              {proactiveMsg}
-            </div>
-            <div className="absolute -bottom-1.5 -right-1 size-4 bg-store-background rotate-45 border-r border-b border-store-primary/10" />
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setProactiveMsg(null);
-              }}
-              aria-label="Dismiss chat suggestion"
-              className="absolute -top-2 -left-2 bg-store-background-text/5 hover:bg-store-background-text/10 rounded-full p-1 transition-colors"
-            >
-              <X size={10} className="text-store-background-text/70" />
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className={buttonClasses}
-          aria-label="Toggle chat"
-        >
-          {isOpen ? (
-            <X size={28} />
-          ) : (
-            <>
-              {isSanta ? (
-                <div className="relative w-full h-full">
-                  <Image
-                    src="/african-santa-head.svg"
-                    alt="Santa"
-                    fill
-                    sizes="64px"
-                    className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
-                  />
-                </div>
-              ) : (
-                <Sparkles
-                  size={28}
-                  className="md:w-8 md:h-8 drop-shadow-xs"
-                  fill="currentColor"
-                  fillOpacity={0.1}
-                />
-              )}
-              <span className="ogabassey-chat-badge">
-                <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">AI</span>
-              </span>
-            </>
-          )}
-        </button>
-      </div>
+      <ChatLauncher
+        isOpen={isOpen}
+        isSanta={isSanta}
+        proactiveMsg={proactiveMsg}
+        buttonClasses={buttonClasses}
+        onToggle={() => (isOpen ? closeChat() : setIsOpen(true))}
+        onDismissSuggestion={() => setProactiveMsg(null)}
+      />
     </div>
   );
 };

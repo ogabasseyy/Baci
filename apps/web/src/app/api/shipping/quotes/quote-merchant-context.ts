@@ -4,9 +4,11 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import { normalizeStorefrontHeader } from '@/lib/normalize-storefront-header';
 import { buildMerchantSenderInfo } from '@/lib/shipping/merchant-sender-location';
 import type { ShippingAddress } from '@/lib/shipping/types';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { hasTrustedStorefrontHeaders } from '@/lib/trusted-storefront-headers';
 import { resolveBodyOnlyMerchantSender } from './resolve-body-only-merchant-sender';
 import { resolveMerchantDetails } from './resolve-quote-merchant-details';
 import { resolveQuoteMerchantLookupClient } from './resolve-quote-merchant-lookup-client';
@@ -39,35 +41,6 @@ type HeaderReader = {
     get(name: string): string | null;
   };
 };
-
-function normalizeHeader(value: string | null): string | undefined {
-  return value?.trim().toLowerCase() || undefined;
-}
-
-function normalizeHost(value: string | null): string {
-  return (value ?? '').split(':')[0]?.trim().toLowerCase() ?? '';
-}
-
-function isTrustedStorefrontHeader(request: HeaderReader): boolean {
-  const host = normalizeHost(request.headers.get('host'));
-  const slug = normalizeHeader(request.headers.get('x-merchant-slug'));
-  const domain = normalizeHeader(request.headers.get('x-merchant-domain'));
-  const rootDomain = (
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com'
-  ).toLowerCase();
-
-  if (domain && (host === domain || host === `www.${domain}`)) {
-    return true;
-  }
-
-  if (!slug) return false;
-
-  return (
-    host === `${slug}.${rootDomain}` ||
-    host === `${slug}.localhost` ||
-    host.startsWith(`${slug}.localhost:`)
-  );
-}
 
 async function resolveAuthenticatedMerchantId(
   request: HeaderReader,
@@ -105,9 +78,11 @@ async function resolveStorefrontMerchantId(
   request: HeaderReader,
   supabase: SupabaseClient
 ): Promise<string | undefined | QuoteMerchantContextResult> {
-  if (!isTrustedStorefrontHeader(request)) return undefined;
+  if (!hasTrustedStorefrontHeaders(request)) return undefined;
 
-  const slug = normalizeHeader(request.headers.get('x-merchant-slug'));
+  const slug = normalizeStorefrontHeader(
+    request.headers.get('x-merchant-slug')
+  );
   if (slug) {
     const { data, error } = await supabase
       .from('merchants')
@@ -149,7 +124,9 @@ async function resolveStorefrontMerchantId(
     if (aliasRow?.merchant_id) return aliasRow.merchant_id;
   }
 
-  const domain = normalizeHeader(request.headers.get('x-merchant-domain'));
+  const domain = normalizeStorefrontHeader(
+    request.headers.get('x-merchant-domain')
+  );
   if (!domain) return undefined;
 
   const { data, error } = await supabase

@@ -9,9 +9,7 @@ describe('ChatInput', () => {
     setInput: vi.fn(),
     isLoading: false,
     isSanta: false,
-    showSuggestions: false,
     onSubmit: vi.fn(),
-    onSuggestionClick: vi.fn(),
   };
 
   beforeEach(() => {
@@ -26,8 +24,23 @@ describe('ChatInput', () => {
 
   it('renders a submit button', () => {
     render(<ChatInput {...defaultProps} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect(button).toBeDefined();
+  });
+
+  it('labels the private destination action in Santa theme', () => {
+    render(
+      <ChatInput
+        {...defaultProps}
+        isSanta
+        privateMode
+        input="Lagos"
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Check destination state' })
+    ).toBeDefined();
   });
 
   it('displays placeholder "Type your message..." in standard mode', () => {
@@ -44,19 +57,19 @@ describe('ChatInput', () => {
 
   it('submit button is disabled when input is empty', () => {
     render(<ChatInput {...defaultProps} input="" />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('submit button is disabled when loading is true', () => {
     render(<ChatInput {...defaultProps} input="some text" isLoading={true} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('submit button is enabled when input has text and not loading', () => {
     render(<ChatInput {...defaultProps} input="hello there" isLoading={false} />);
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -66,15 +79,8 @@ describe('ChatInput', () => {
     expect(input.disabled).toBe(true);
   });
 
-  it('shows suggestion chips when showSuggestions is true', () => {
-    render(<ChatInput {...defaultProps} showSuggestions={true} />);
-    // SUGGESTIONS contains "Track my order" as one of the labels
-    expect(screen.getByText('Track my order')).toBeDefined();
-    expect(screen.getByText('Contact support')).toBeDefined();
-  });
-
-  it('hides suggestion chips when showSuggestions is false', () => {
-    render(<ChatInput {...defaultProps} showSuggestions={false} />);
+  it('keeps suggested actions out of the composer', () => {
+    render(<ChatInput {...defaultProps} />);
     expect(screen.queryByText('Track my order')).toBeNull();
     expect(screen.queryByText('Contact support')).toBeNull();
   });
@@ -89,7 +95,7 @@ describe('ChatInput', () => {
         onSubmit={onSubmit}
       />
     );
-    const button = screen.getByRole('button', { name: '' });
+    const button = screen.getByRole('button', { name: 'Send message' });
     await user.click(button);
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
@@ -116,36 +122,6 @@ describe('ChatInput', () => {
     const input = screen.getByRole('textbox');
     await user.type(input, 'a');
     expect(setInput).toHaveBeenCalledWith('a');
-  });
-
-  it('calls onSuggestionClick with the suggestion label when clicked', async () => {
-    const onSuggestionClick = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <ChatInput
-        {...defaultProps}
-        showSuggestions={true}
-        onSuggestionClick={onSuggestionClick}
-      />
-    );
-    const chip = screen.getByText('Track my order');
-    await user.click(chip);
-    expect(onSuggestionClick).toHaveBeenCalledWith('Track my order');
-  });
-
-  it('calls onSuggestionClick with the correct label for each chip', async () => {
-    const onSuggestionClick = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <ChatInput
-        {...defaultProps}
-        showSuggestions={true}
-        onSuggestionClick={onSuggestionClick}
-      />
-    );
-    const chip = screen.getByText('Contact support');
-    await user.click(chip);
-    expect(onSuggestionClick).toHaveBeenCalledWith('Contact support');
   });
 
   it('reflects the current input value in the text field', () => {

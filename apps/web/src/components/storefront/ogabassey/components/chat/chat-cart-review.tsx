@@ -14,7 +14,11 @@ import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiatio
 import { CartVariantDetails } from '../cart-variant-details';
 import { hasCartMerchantContext } from '../cart-sidebar-merchant-context';
 
-export function ChatCartReview() {
+export function ChatCartReview({
+  onRequestDeliveryQuote,
+}: {
+  onRequestDeliveryQuote?: () => void;
+}) {
   const { cart, setIsCartOpen, isHydrated, merchantSlug } = useCart();
   const { formatCurrency } = useCurrency();
   const merchant = useMerchantSafe()?.merchant;
@@ -101,6 +105,15 @@ export function ChatCartReview() {
           >
             Open cart to edit items
           </button>
+          {onRequestDeliveryQuote ? (
+            <button
+              type="button"
+              onClick={onRequestDeliveryQuote}
+              className="mt-2 w-full rounded-lg bg-store-primary px-3 py-2 text-sm font-medium text-store-background hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary"
+            >
+              Get delivery estimate
+            </button>
+          ) : null}
         </>
       )}
     </div>

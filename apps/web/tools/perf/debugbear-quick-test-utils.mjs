@@ -92,6 +92,8 @@ export function getDebugBearCategoryScore(body, names) {
   for (const name of names) {
     const score =
       normalizeScore(body.categories?.[name]?.score) ??
+      normalizeScore(body.metrics?.[`${name}.score`]) ??
+      normalizeScore(body.summary?.[`${name}.score`]) ??
       normalizeScore(body.lighthouseResult?.categories?.[name]?.score) ??
       normalizeScore(body[name]?.score);
 

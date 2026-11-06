@@ -93,7 +93,7 @@ describe('ChatCartReview', () => {
   });
 
   it('shows the empty cart state from the canonical cart', () => {
-    const view = render(<ChatCartReview />);
+    render(<ChatCartReview />);
     expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
     expect(screen.queryByText('Estimated subtotal')).not.toBeInTheDocument();
     expect(

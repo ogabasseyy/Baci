@@ -1,7 +1,44 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
-import { createAgentBotWebhookServer } from './run.mjs';
+import {
+  createAgentBotWebhookServer,
+  createSyntheticAgentBotHandler,
+} from './run.mjs';
+
+test('synthetic AgentBot stays silent while an incoming conversation is open', async () => {
+  let status = 'open';
+  const requests = [];
+  const handler = createSyntheticAgentBotHandler({
+    seed: { account_id: 7, agent_token: 'synthetic-agent-token' },
+    apiCall: (path, _token, options = {}) => {
+      requests.push({ path, options });
+      if (path.endsWith('/conversations/12')) return { status };
+      return {};
+    },
+  });
+  const event = {
+    event: 'message_created',
+    message_type: 'incoming',
+    content: 'Synthetic customer question.',
+    conversation: { id: 12 },
+  };
+
+  await handler(event);
+
+  assert.equal(requests.length, 1, 'open conversation should only be checked');
+  assert.equal(requests[0].path, '/api/v1/accounts/7/conversations/12');
+
+  status = 'pending';
+  await handler(event);
+
+  assert.equal(requests.length, 3);
+  assert.equal(
+    requests[2].path,
+    '/api/v1/accounts/7/conversations/12/messages'
+  );
+  assert.equal(requests[2].options.body.message_type, 'outgoing');
+});
 
 test('rejects malformed webhook JSON without taking down the harness server', async () => {
   const events = [];

@@ -1,3 +1,4 @@
+vi.mock('@/contexts/customer-auth-context', () => ({ useOptionalCustomerAuth: () => ({}), useCustomerAuth: () => ({ sendOtp: vi.fn(), verifyOtp: vi.fn() }) }));
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -79,103 +80,11 @@ describe('CheckoutIdentityModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     expect(
-      screen.getByPlaceholderText('name@example.com')
+      screen.getByRole('textbox', { name: 'Email address' })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /sign in & checkout/i })
+      screen.getByRole('button', { name: /send sign-in code/i })
     ).toBeInTheDocument();
-  });
-
-  it('keeps the password visibility toggle name stable while pressed', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    const passwordInput = screen.getByLabelText('Password');
-    const toggleButton = screen.getByRole('button', {
-      name: 'Show password',
-    });
-
-    expect(passwordInput).toHaveAttribute('type', 'password');
-    expect(toggleButton).toHaveAttribute('aria-pressed', 'false');
-    expect(toggleButton).not.toHaveTextContent('Show');
-
-    fireEvent.click(toggleButton);
-
-    expect(passwordInput).toHaveAttribute('type', 'text');
-    expect(
-      screen.getByRole('button', { name: 'Show password' })
-    ).toHaveAttribute('aria-pressed', 'true');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
-
-    expect(passwordInput).toHaveAttribute('type', 'password');
-    expect(
-      screen.getByRole('button', { name: 'Show password' })
-    ).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  it('shows error message when sign-in fails', async () => {
-    const loginError = Object.assign(new Error('Invalid login credentials'), {
-      name: 'AuthApiError',
-      status: 400,
-    });
-    mockSignInWithPassword.mockResolvedValue({
-      error: loginError as never,
-    });
-
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    // Switch to sign-in tab
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    // Fill in credentials
-    fireEvent.change(screen.getByPlaceholderText('name@example.com'), {
-      target: { value: 'bad@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'wrong-password' },
-    });
-
-    // Submit the form
-    fireEvent.click(
-      screen.getByRole('button', { name: /sign in & checkout/i })
-    );
-
-    // Expect the error to be displayed
-    await waitFor(() => {
-      expect(
-        screen.getByText('Invalid login credentials')
-      ).toBeInTheDocument();
-    });
-
-    // Should NOT navigate on failure
-    expect(mockPush).not.toHaveBeenCalled();
-  });
-
-  it('navigates to checkout on successful sign-in', async () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    // Switch to sign-in tab
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    // Fill in credentials
-    fireEvent.change(screen.getByPlaceholderText('name@example.com'), {
-      target: { value: 'user@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'correct-password' },
-    });
-
-    // Submit the form
-    fireEvent.click(
-      screen.getByRole('button', { name: /sign in & checkout/i })
-    );
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/checkout');
-      expect(defaultProps.onClose).toHaveBeenCalled();
-    });
   });
 
   it('navigates to signup with encoded redirect on register click', () => {

@@ -80,6 +80,5 @@ test('lost-ack integration drops only after a complete upstream response and rec
   assert.match(ambiguousReconciliation, /reconcileAmbiguousSend\(/);
   assert.match(ambiguousReconciliation, /request was not retried/);
   assert.match(lostAck, /assert\.equal\(postCount, 1/);
-  assert.match(lostAck, /assert\.equal\(postCount, 1/);
   assert.match(runner, /verifyLostAckMessageReconciliation/);
 });

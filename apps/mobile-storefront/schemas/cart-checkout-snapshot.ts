@@ -12,6 +12,13 @@ export const nativeCheckoutSnapshotSchema = z.object({
       z.object({
         id: z.string().min(1).max(64),
         productId: z.uuid(),
+        // Optional during rolling deployments while older sessions expire.
+        // Array.from counts Unicode code points like PostgreSQL left(..., 200).
+        productName: z
+          .string()
+          .refine((value) => Array.from(value).length <= 200)
+          .nullable()
+          .optional(),
         variantId: z.uuid().nullable(),
         condition: z.string().nullable(),
         options: z.record(z.string(), z.string()),

@@ -6,11 +6,16 @@ reproduces the core defects before corrective migrations. All orders are mocks.
 """
 import pathlib,tempfile,subprocess,sys,time,os
 root=pathlib.Path(__file__).resolve().parents[2]
+pg_bindir=pathlib.Path(subprocess.check_output(['pg_config','--bindir'],text=True).strip())
+pg_tools={name:pg_bindir/name for name in ('initdb','pg_ctl','psql')}
+for name,path in pg_tools.items():
+ if not path.is_file() or not os.access(path,os.X_OK):
+  raise RuntimeError(f'pg_config --bindir does not contain executable {name}: {path}')
 p=pathlib.Path(tempfile.mkdtemp(prefix='cart-review-pg-')); (p/'sock').mkdir(); started=False
 try:
  with open('/tmp/cart-sql-init.log','w') as log:
-  subprocess.run(['initdb','-D',str(p/'data'),'-U','postgres','--auth=trust','--no-locale'],check=True,stdout=log,stderr=log)
-  subprocess.run(['pg_ctl','-D',str(p/'data'),'-l',str(p/'pg.log'),'-o',f"-h '' -k {p/'sock'} -p 55489",'start'],check=True,stdout=log,stderr=log);started=True
+  subprocess.run([str(pg_tools['initdb']),'-D',str(p/'data'),'-U','postgres','--auth=trust','--no-locale'],check=True,stdout=log,stderr=log)
+  subprocess.run([str(pg_tools['pg_ctl']),'-D',str(p/'data'),'-l',str(p/'pg.log'),'-o',f"-h '' -k {p/'sock'} -p 55489",'start'],check=True,stdout=log,stderr=log);started=True
  sql=(root/'supabase/tests/commerce_cart_order_binding.sql').read_text().split('-- 7. Bound submission')[0]
  sql='\n'.join('\\i '+str((root/'supabase/tests'/s[4:]).resolve()) if s.startswith('\\ir ') else s for s in sql.splitlines())
  sql+="\nCREATE ROLE authenticator; CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(auth.jwt()->>'sub','')::uuid $$; CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT coalesce(auth.jwt()->>'role',nullif(current_setting('request.jwt.claim.role',true),'')) $$; CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid,user_id uuid);"
@@ -48,18 +53,21 @@ try:
  if '--baseline' not in sys.argv:
   for name in ['20261015145000_commerce_cart_checkout_complete_vouchers.sql', '20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql','20261105210000_commerce_cart_checkout_database_clock.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/migrations/20261106130000_commerce_cart_delivery_context.sql').read_text()
+  delivery_lifetime_migration=(root/'supabase/migrations/20261106140000_commerce_cart_delivery_context_absolute_lifetime.sql').read_text()
+  sql+='\n'+delivery_lifetime_migration
+  sql+='\n'+delivery_lifetime_migration  # Reapplication must verify all replacements and no-op.
  sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_add_identity.sql').read_text()
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_delivery_context.sql').read_text()
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_database_clock.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_account_empty_observation.sql').read_text()
  sql+='\nCOMMIT;'
- r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-checkout-add-review.log','w'),stderr=subprocess.STDOUT,cwd=root)
+ r=subprocess.run([str(pg_tools['psql']),'-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-checkout-add-review.log','w'),stderr=subprocess.STDOUT,cwd=root)
  if r.returncode:
   print('FAIL')
   print(pathlib.Path('/tmp/cart-checkout-add-review.log').read_text()[-2800:])
   sys.exit(r.returncode)
  if '--baseline' not in sys.argv:
-  psql=['psql','-X','-q','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres']
+  psql=[str(pg_tools['psql']),'-X','-q','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres']
   barrier_key=366221123
   def wait_for_activity(query):
    deadline=time.monotonic()+8
@@ -136,4 +144,4 @@ try:
    sys.exit(1)
  print('PASS')
 finally:
- if started: subprocess.run(['pg_ctl','-D',str(p/'data'),'stop','-m','fast'],check=True,stdout=subprocess.DEVNULL)
+ if started: subprocess.run([str(pg_tools['pg_ctl']),'-D',str(p/'data'),'stop','-m','fast'],check=True,stdout=subprocess.DEVNULL)

@@ -156,6 +156,33 @@ BEGIN
   DELETE FROM public.commerce_cart_device_retirements
   WHERE merchant_id = merchant AND device_principal_id = principal;
 
+  UPDATE public.commerce_carts
+  SET created_at = now() - interval '8 days', expires_at = now() + interval '1 day'
+  WHERE id = cart;
+  result := public.commerce_cart_delivery_context(session_id, 7, 3);
+  PERFORM pg_temp.check_delivery_context(result->>'ok' = 'false', 'overextended cart lifetime was accepted');
+  UPDATE public.commerce_carts
+  SET created_at = now(), expires_at = now() + interval '1 day'
+  WHERE id = cart;
+
+  UPDATE public.commerce_cart_checkout_sessions
+  SET created_at = now() - interval '8 days', expires_at = now() + interval '1 day'
+  WHERE id = session_id;
+  result := public.commerce_cart_delivery_context(session_id, 7, 3);
+  PERFORM pg_temp.check_delivery_context(result->>'ok' = 'false', 'overextended checkout session lifetime was accepted');
+  UPDATE public.commerce_cart_checkout_sessions
+  SET created_at = now(), expires_at = now() + interval '30 minutes'
+  WHERE id = session_id;
+
+  UPDATE public.commerce_cart_grants
+  SET created_at = now() - interval '8 days', expires_at = now() + interval '1 day'
+  WHERE id = grant_id;
+  result := public.commerce_cart_delivery_context(session_id, 7, 3);
+  PERFORM pg_temp.check_delivery_context(result->>'ok' = 'false', 'overextended grant lifetime was accepted');
+  UPDATE public.commerce_cart_grants
+  SET created_at = now(), expires_at = now() + interval '1 day'
+  WHERE id = grant_id;
+
   PERFORM set_config('request.jwt.claims', (claims || jsonb_build_object('cart_grant_id', other_grant))::text, true);
   result := public.commerce_cart_delivery_context(session_id, 7, 3);
   PERFORM pg_temp.check_delivery_context(result->>'ok' = 'false', 'other grant was accepted');

@@ -43,9 +43,9 @@ export async function POST(request: Request) {
                 callbackId,
                 retryKey
               ),
-            event.kind === 'address'
+            event.kind === 'address' || event.kind === 'selfie'
               ? {
-                  kind: 'address',
+                  kind: event.kind,
                   applicationReference: event.applicationReference,
                 }
               : { kind: 'transaction' },

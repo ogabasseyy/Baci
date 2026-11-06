@@ -8,6 +8,24 @@ export function parseOxygenWebhook(input: unknown) {
   const parsed = oxygenWebhookSchema.safeParse(input);
   if (!parsed.success) return null;
   const event = parsed.data;
+  if (event.webhook_type === 'selfie_status_update') {
+    return {
+      kind: 'selfie' as const,
+      phoneNumber: event.phone_number,
+      applicationReference: event.loan_request_reference,
+      selfieConfirmed: event.selfie,
+      deduplicationKey: `selfie:${createHash('sha256')
+        .update(
+          JSON.stringify([
+            event.phone_number,
+            event.loan_request_reference,
+            event.selfie,
+          ])
+        )
+        .digest('hex')}`,
+      action: 'reconcile_kyc' as const,
+    };
+  }
   if (event.webhook_type === 'address_status_update') {
     return {
       kind: 'address' as const,

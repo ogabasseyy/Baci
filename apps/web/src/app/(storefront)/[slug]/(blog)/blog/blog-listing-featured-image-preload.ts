@@ -13,6 +13,12 @@ import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
 // URL and the rendered image resolve to the same CDN transform (one fetch).
 const BLOG_LISTING_FEATURED_IMAGE_QUALITY = BLOG_HERO_IMAGE_QUALITY;
 
+/**
+ * Normalizes and validates a candidate blog image URL for early resource preloading.
+ *
+ * Rejects empty candidates, protocol-relative URLs (`//`), and placeholder assets,
+ * ensuring only absolute HTTP/HTTPS or relative local paths are preloaded.
+ */
 function resolvePreloadableBlogImage(src: string | null | undefined) {
   const candidate = src?.trim();
   if (!candidate || candidate.startsWith('//')) {

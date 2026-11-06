@@ -13,9 +13,5 @@ export function getSavingsGoalImageSource(
     });
   }
 
-  if (__DEV__ && goal.title.trim().toLowerCase() === 'synthetic phone') {
-    return require('../../assets/images/synthetic-phone-preview.png') as number;
-  }
-
   return null;
 }

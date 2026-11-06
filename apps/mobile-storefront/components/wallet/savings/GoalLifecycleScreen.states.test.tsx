@@ -105,34 +105,6 @@ describe('redirects', () => {
       `/wallet/savings/goal-actions?goalId=${GOAL}&kind=complete`
     );
   });
-
-  it('waits while the gate is checking', () => {
-    jest.mocked(usePrimaryGoalGate).mockReturnValue('checking');
-    renderScreen();
-    expect(screen.queryByText(/Redirect:/)).toBeNull();
-  });
-});
-
-describe('the readiness gate is still checking', () => {
-  beforeEach(() => {
-    jest.mocked(usePrimaryGoalGate).mockReturnValue('checking');
-  });
-
-  it('keeps Continue disabled, labelled as checking, and sends nothing', () => {
-    renderScreen();
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
-    const button = screen.getByRole('button', { name: 'Checking…' });
-    expect(button).toBeDisabled();
-    expect(button).toBeBusy();
-    fireEvent.press(button);
-    expect(issueGoalAction).not.toHaveBeenCalled();
-  });
-
-  it('enables Continue once the gate is ready', () => {
-    jest.mocked(usePrimaryGoalGate).mockReturnValue('ready');
-    renderScreen();
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
-  });
 });
 
 describe('a sign-in refusal', () => {

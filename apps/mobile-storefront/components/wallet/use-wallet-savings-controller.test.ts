@@ -147,6 +147,21 @@ describe('goalAwaitingSettlement', () => {
     );
   });
 
+  it('keeps a funded completed goal blocked after a transient gate error', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockReturnValue('error');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal } as never)
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(false);
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        goalAwaitingSettlement: false,
+        goalSettlementChecking: true,
+      })
+    );
+  });
+
   it('hands the wallet content its savings props, including the refresh time', () => {
     mockGate.mockReturnValue('ready');
     const goal = { id: 'g', status: 'completed', current_amount: 5000 };

@@ -1,8 +1,19 @@
 import { expect, it, jest } from '@jest/globals';
+import type { User } from '@supabase/supabase-js';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { ScrollView } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
+import { ModalSheet } from '@/components/ui/ModalSheet';
 import Colors from '@/constants/Colors';
+import { useAuthStore } from '@/stores/auth-store';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
+
+const authUser: User = {
+  id: 'customer-a',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 jest.mock('@/hooks/use-keyboard', () => ({
@@ -16,6 +27,7 @@ it.each([
   const previousMode = process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
   process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
   try {
+    useAuthStore.setState({ user: authUser, merchantId: 'merchant-a' });
     const onFundWallet = jest.fn();
     render(
       <WalletSavingsProgressModal
@@ -67,6 +79,13 @@ it.each([
     expect(screen.UNSAFE_getByType(ScrollView).props.keyboardDismissMode).toBe(
       'on-drag'
     );
+    expect(screen.UNSAFE_getByType(ScrollView).props.style).toEqual({
+      flex: 1,
+    });
+    expect(
+      StyleSheet.flatten(screen.UNSAFE_getByType(ModalSheet).props.cardStyle)
+        .height
+    ).toBe('88%');
   } finally {
     if (previousMode === undefined)
       delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;

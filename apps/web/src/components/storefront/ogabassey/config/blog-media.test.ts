@@ -26,9 +26,9 @@ describe('blog media config', () => {
     expect(NEXT_IMAGE_QUALITIES).toContain(BLOG_HERO_IMAGE_QUALITY);
   });
 
-  it('exposes full-column sizes for the blog post hero', () => {
-    expect(BLOG_POST_HERO_IMAGE_SIZES).toContain('100vw');
-    expect(BLOG_POST_HERO_IMAGE_SIZES).toContain('1200px');
+  it('exposes responsive sizes for the blog post hero matching article padding', () => {
+    expect(BLOG_POST_HERO_IMAGE_SIZES).toContain('calc(100vw - 80px)');
+    expect(BLOG_POST_HERO_IMAGE_SIZES).toContain('1056px');
     expect(BLOG_POST_HERO_IMAGE_PRELOAD_WIDTH).toBe(1200);
   });
 

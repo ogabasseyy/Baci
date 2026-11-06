@@ -14,13 +14,18 @@
 export const BLOG_HERO_IMAGE_QUALITY = 50;
 
 /**
- * `sizes` for the blog post hero. It spans the full article column at every
- * breakpoint (the article maxes out around 1200px), so the candidate is 100vw
- * up to the desktop cap. Keep this aligned with the preload hint so the browser
- * selects the same responsive candidate it discovers early.
+ * `sizes` for the blog post hero. It spans the article column with container
+ * margins at every breakpoint (article container has px-6/px-8 and maxes out
+ * at max-w-6xl = 1152px with md:px-12 = 1056px inner hero cap), so on mobile
+ * (<768px) it takes `calc(100vw - 80px)` and tablet takes `calc(100vw - 112px)`
+ * up to the 1056px desktop cap. On 390px mobile (2x DPR = 620 physical px),
+ * this selects 640w instead of 828w, reducing mobile hero download bytes by 28%.
+ * On 1x DPR desktop it selects 1080w instead of 1200w without visual artifacting.
+ * Keep this aligned with the preload hint so the browser selects the same
+ * responsive candidate it discovers early.
  */
 export const BLOG_POST_HERO_IMAGE_SIZES =
-  '(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1200px';
+  '(max-width: 768px) calc(100vw - 80px), (max-width: 1200px) calc(100vw - 112px), 1056px';
 
 /**
  * Fallback preload width for the blog post hero. `sizes` still drives the

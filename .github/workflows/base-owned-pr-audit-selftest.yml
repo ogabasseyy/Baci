@@ -1,0 +1,28 @@
+name: Base-owned PR audit selftest
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/base-owned-audit-*'
+      - '.github/workflows/base-owned-pr-audit*.yml'
+      - '.github/scripts/semgrep-sarif-filter.py'
+      - '.github/scripts/semgrep_sarif_*.py'
+      - '.github/scripts/muse-review/**'
+      - '.github/workflows/muse-code-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test inert staging and workflow contract
+        run: |
+          python3 .github/scripts/base-owned-audit-snapshot.test.py
+          python3 .github/scripts/base-owned-audit-workflow.test.py

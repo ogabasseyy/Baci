@@ -20,7 +20,10 @@ export type PrimaryGoalGate = 'checking' | 'ready' | 'off' | 'error';
  * failure never demotes an already-ready verdict; only an authoritative
  * not-ready answer (a non-ready snapshot or PIGGYVEST_NOT_READY) does.
  */
-export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
+export function usePrimaryGoalGate(
+  refreshKey?: number,
+  retryNonce = 0
+): PrimaryGoalGate {
   const userId = useAuthStore((state) => state.user?.id);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
   const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);
@@ -30,6 +33,7 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
   const scope = eligible ? `${userId}:${merchantId}` : null;
   const [answer, setAnswer] = useState<{
     scope: string;
+    retryNonce: number;
     status: 'ready' | 'off' | 'error';
   } | null>(null);
 
@@ -43,6 +47,7 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
         if (current)
           setAnswer({
             scope,
+            retryNonce,
             status:
               snapshot.provisioningStatus === 'ready' &&
               snapshot.account !== null
@@ -58,18 +63,20 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
           'code' in error &&
           error.code === 'PIGGYVEST_NOT_READY';
         setAnswer((previous) => {
-          if (authoritative) return { scope, status: 'off' };
+          if (authoritative) return { scope, retryNonce, status: 'off' };
           if (previous?.scope === scope && previous.status !== 'error')
             return previous;
-          return { scope, status: 'error' };
+          return { scope, retryNonce, status: 'error' };
         });
       });
     return () => {
       current = false;
     };
-  }, [scope, userId, merchantId, refreshKey]);
+  }, [scope, userId, merchantId, refreshKey, retryNonce]);
 
   if (!scope) return 'off';
   if (answer?.scope !== scope) return 'checking';
+  if (answer.status === 'error' && answer.retryNonce !== retryNonce)
+    return 'checking';
   return answer.status;
 }

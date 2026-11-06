@@ -186,7 +186,6 @@ export function GoalLifecycleScreen({
             label={COPY.checkAgain}
             onPress={() => void flow.checkAgain()}
             primary
-            busy={gate !== 'ready'}
           />
           <Action colors={colors} label={COPY.backToWallet} onPress={leave} />
         </>

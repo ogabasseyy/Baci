@@ -146,6 +146,23 @@ describe('usePrimaryGoalGate', () => {
       await waitFor(() => expect(result.current).toBe('error'));
     });
 
+    it('retries a scoped error only when its nonce changes', async () => {
+      read
+        .mockRejectedValueOnce(new Error('network'))
+        .mockResolvedValueOnce(ready);
+      const { result, rerender } = renderHook(
+        ({ nonce }: { nonce: number }) => usePrimaryGoalGate(undefined, nonce),
+        { initialProps: { nonce: 0 } }
+      );
+      await waitFor(() => expect(result.current).toBe('error'));
+      expect(read).toHaveBeenCalledTimes(1);
+
+      rerender({ nonce: 1 });
+      expect(result.current).toBe('checking');
+      await waitFor(() => expect(result.current).toBe('ready'));
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    });
+
     it.each([
       ['a not-ready snapshot', () => read.mockResolvedValueOnce(pending)],
       [

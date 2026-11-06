@@ -208,7 +208,7 @@ it('shows a server refusal verbatim in an alert', async () => {
   expect(screen.queryByRole('button', { name: 'Start again' })).toBeNull();
 });
 
-it('an indeterminate submit shows the pending text and polls instead of resubmitting', async () => {
+it('keeps read-only Check again available after a gate error', async () => {
   jest.useFakeTimers();
   jest
     .mocked(issueGoalAction)
@@ -221,7 +221,12 @@ it('an indeterminate submit shows the pending text and polls instead of resubmit
   jest
     .mocked(checkGoalActionStatus)
     .mockResolvedValue({ status: 'pending', operationId: OP });
-  renderScreen();
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <GoalLifecycleScreen kind="cancel" goalId={GOAL} />
+    </QueryClientProvider>
+  );
   fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByText('PIN for cancel');
   fireEvent.press(screen.getByRole('button', { name: 'Enter PIN' }));
@@ -234,7 +239,17 @@ it('an indeterminate submit shows the pending text and polls instead of resubmit
     await jest.advanceTimersByTimeAsync(120_000);
   });
   expect(screen.getByText('Still processing')).toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Check again' })).toBeOnTheScreen();
+  jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+  view.rerender(
+    <QueryClientProvider client={client}>
+      <GoalLifecycleScreen kind="cancel" goalId={GOAL} />
+    </QueryClientProvider>
+  );
+  const checkAgain = screen.getByRole('button', { name: 'Check again' });
+  expect(checkAgain).toBeEnabled();
+  jest.mocked(checkGoalActionStatus).mockClear();
+  fireEvent.press(checkAgain);
+  await waitFor(() => expect(checkGoalActionStatus).toHaveBeenCalledTimes(1));
   expect(submitGoalAction).toHaveBeenCalledTimes(1);
   jest.useRealTimers();
 });

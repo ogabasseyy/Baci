@@ -62,7 +62,7 @@ export function ChatCartCheckoutReview({
   const isCurrent = Boolean(
     prepared &&
       sharedCartRef?.cartId === prepared.review.cartId &&
-      sharedCartRef.version === prepared.review.cartVersion &&
+      sharedCartRef?.version === prepared.review.cartVersion &&
       merchantId === prepared.review.merchantId &&
       currencyCode.toUpperCase() === prepared.review.currency.toUpperCase() &&
       prepared.expiresAtMonotonicMs > performance.now() &&

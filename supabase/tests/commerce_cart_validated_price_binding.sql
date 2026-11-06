@@ -19,6 +19,7 @@ DECLARE
   lane text;
   effective numeric;
   expected_calls bigint;
+  previous_stub_failure text;
   order_payload jsonb;
   quote_payload jsonb := '{}'::jsonb;
   submitted_items jsonb;
@@ -122,12 +123,22 @@ BEGIN
       'storefront_order_merchant_id',m,
       'storefront_redvault_customer_email','fixture@example.invalid')::text, true);
     SELECT count(*) INTO expected_calls FROM public.order_stub_calls;
+    IF variant IN ('base', 'quiz_voucher') THEN
+      SELECT fail_with INTO previous_stub_failure
+      FROM public.order_stub_behavior WHERE id = 1;
+      UPDATE public.order_stub_behavior
+      SET fail_with = 'unexpected_order_leaf_entry' WHERE id = 1;
+    END IF;
     BEGIN
       PERFORM public.create_storefront_order_with_cart_binding(variant, sid, 1, args);
       RAISE EXCEPTION 'validated catalog price drift was accepted for %', lane;
     EXCEPTION WHEN raise_exception THEN
       IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
     END;
+    IF variant IN ('base', 'quiz_voucher') THEN
+      UPDATE public.order_stub_behavior
+      SET fail_with = previous_stub_failure WHERE id = 1;
+    END IF;
     IF (SELECT count(*) FROM public.order_stub_calls) IS DISTINCT FROM expected_calls THEN
       RAISE EXCEPTION 'stale % checkout reached the order RPC', lane;
     END IF;

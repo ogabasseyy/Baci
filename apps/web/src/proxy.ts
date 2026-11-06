@@ -28,6 +28,7 @@ import {
   isPostHogRelayPath,
   isStaticAssetOutsidePostHogRelay,
 } from '@/lib/proxy/posthog-relay';
+import { applyApiRateLimitHeaders } from '@/lib/proxy/rate-limit-headers';
 import { CASE_PRESERVING_PREFIXES } from '@/lib/proxy/routing-constants';
 import {
   isSessionRoutingEligible,
@@ -38,9 +39,31 @@ import {
   getRequestSubdomain,
   runSubdomainRouting,
 } from '@/lib/proxy/subdomain-routing';
+import type { RateLimitResult } from '@/lib/rate-limit';
+import { getRateLimitConfig } from '@/lib/rate-limit-routes';
 
 /** Coordinates ordered proxy stages; each stage owns its former early returns. */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  let quota: { result: RateLimitResult; windowMs: number } | undefined;
+  const response = await runProxy(request, (result, pathname) => {
+    if (
+      request.method === 'GET' &&
+      ['/api/products', '/api/merchants/by-slug'].includes(pathname)
+    ) {
+      quota = {
+        result,
+        windowMs: getRateLimitConfig(pathname).config.windowMs,
+      };
+    }
+  });
+  if (quota) applyApiRateLimitHeaders(response, quota.result, quota.windowMs);
+  return response;
+}
+
+async function runProxy(
+  request: NextRequest,
+  onRateLimit: (result: RateLimitResult, pathname: string) => void
+): Promise<NextResponse> {
   const hostname = request.headers.get('host') || '';
   const userAgent = request.headers.get('user-agent') || '';
   const pathname = request.nextUrl.pathname;
@@ -87,7 +110,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     apiSecurityContext.apiRateLimitPathname.startsWith('/api') ||
     (apiSecurityContext.isAliasApiShaped && apiSecurityContext.aliasApiShape)
   ) {
-    const response = await runApiSecurityStage(request, apiSecurityContext);
+    const response = await runApiSecurityStage(
+      request,
+      apiSecurityContext,
+      onRateLimit
+    );
     if (response) return response;
   }
 

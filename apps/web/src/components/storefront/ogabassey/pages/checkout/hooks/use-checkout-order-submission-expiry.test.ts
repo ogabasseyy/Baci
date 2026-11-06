@@ -61,25 +61,41 @@ const review = {
 };
 
 const expiryCases = [
-  [
-    'monotonic deadline alone',
-    () => ({ sessionExpiresAtMonotonicMs: performance.now() - 1 }),
-  ],
-  ['epoch deadline alone', () => ({ sessionExpiresAtEpochMs: Date.now() - 1 })],
-  [
-    'non-finite monotonic deadline',
-    () => ({ sessionExpiresAtMonotonicMs: Number.NaN }),
-  ],
-  [
-    'non-finite epoch deadline',
-    () => ({ sessionExpiresAtEpochMs: Number.POSITIVE_INFINITY }),
-  ],
+  {
+    label: 'monotonic deadline alone',
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() + 30_000,
+      sessionExpiresAtMonotonicMs: performance.now() - 1,
+    }),
+  },
+  {
+    label: 'epoch deadline alone',
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() - 1,
+      sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    }),
+  },
+  {
+    label: 'non-finite monotonic deadline',
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Date.now() + 30_000,
+      sessionExpiresAtMonotonicMs: Number.NaN,
+    }),
+  },
+  {
+    label: 'non-finite epoch deadline',
+    createDeadlines: () => ({
+      sessionExpiresAtEpochMs: Number.POSITIVE_INFINITY,
+      sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+    }),
+  },
 ] as const;
 
 describe('useCheckoutOrderSubmission session expiry', () => {
   it.each(expiryCases)(
-    'stops a fresh order when the %s expires or is invalid',
-    async (_label, makeOverrides) => {
+    'stops a fresh order when the $label expires or is invalid',
+    async ({ createDeadlines }) => {
+    const { sessionExpiresAtEpochMs, sessionExpiresAtMonotonicMs } = createDeadlines();
     const context = createContext();
     context.cart.checkoutCart = [
       {
@@ -113,7 +129,10 @@ describe('useCheckoutOrderSubmission session expiry', () => {
       },
     } as never);
     vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
-      readySharedCartCheckout(review, makeOverrides())
+      readySharedCartCheckout(review, {
+        sessionExpiresAtMonotonicMs,
+        sessionExpiresAtEpochMs,
+      })
     );
 
     const { result } = renderHook(() => useCheckoutOrderSubmission(context));

@@ -71,7 +71,7 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
         <span
           className={`text-[10px] text-gray-400 px-1 ${message.role === 'user' ? 'text-right' : 'text-left'}`}
         >
-          {message.role === 'user' ? 'You' : isSanta ? 'Santa AI' : 'Ogabassey AI'}
+          {message.role === 'user' ? 'You' : isSanta ? 'Santa AI' : 'Ekaette'}
         </span>
         <div
           className={`px-4 py-3 rounded-2xl text-[14px] leading-relaxed shadow-sm whitespace-pre-wrap ${message.role === 'user'

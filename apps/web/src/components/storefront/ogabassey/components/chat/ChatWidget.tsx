@@ -157,7 +157,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                       <span className="text-xs ml-1">{'\u{1F384}'}</span>
                     </>
                   ) : (
-                    'Ogabassey AI'
+                    'Ekaette'
                   )}
                 </h3>
                 <p

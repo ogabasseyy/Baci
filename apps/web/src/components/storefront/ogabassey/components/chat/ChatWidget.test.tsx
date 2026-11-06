@@ -101,7 +101,7 @@ describe('ChatWidget - Ekaette ask bar', () => {
 
   it('does not render chat window when isOpen is false', () => {
     render(<ChatWidget />);
-    expect(screen.queryByText('Ogabassey AI')).toBeNull();
+    expect(screen.queryByText('Ekaette')).toBeNull();
   });
 
   it('submits the edited ask-bar text into the existing chat', async () => {
@@ -269,7 +269,7 @@ describe('ChatWidget - chat window when open', () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it('renders "Ogabassey AI" header when chat is open in standard mode', () => {
+  it('renders "Ekaette" header when chat is open in standard mode', () => {
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: true,
       setIsOpen: vi.fn(),
@@ -286,7 +286,7 @@ describe('ChatWidget - chat window when open', () => {
     });
 
     render(<ChatWidget />);
-    expect(screen.getByText('Ogabassey AI')).toBeDefined();
+    expect(screen.getByText('Ekaette')).toBeDefined();
   });
 
   it('renders close button inside chat window', () => {

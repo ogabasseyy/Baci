@@ -82,7 +82,7 @@ describe('ChatMessageBubble', () => {
     expect(outerDiv.className).toContain('flex-row-reverse');
   });
 
-  it('renders AI message with "Ogabassey AI" label when not santa mode', () => {
+  it('renders AI message with "Ekaette" label when not santa mode', () => {
     render(
       <ChatMessageBubble
         message={modelMessage}
@@ -91,7 +91,7 @@ describe('ChatMessageBubble', () => {
         onAddToCart={onAddToCart}
       />
     );
-    expect(screen.getByText('Ogabassey AI')).toBeDefined();
+    expect(screen.getByText('Ekaette')).toBeDefined();
   });
 
   it('renders AI message with "Santa AI" label in santa mode', () => {

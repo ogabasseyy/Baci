@@ -62,8 +62,9 @@ with tempfile.TemporaryDirectory(prefix='cart-condition-order-') as directory:
         # private replay wrapper and financial/inventory transaction.
         actual=re.search(r'CREATE OR REPLACE FUNCTION private.create_storefront_order\([\s\S]*?\$\$;', (root / 'supabase/migrations/20260828130000_scope_storefront_order_replay_route_context.sql').read_text()).group()
         capture=actual.replace('FUNCTION private.create_storefront_order(','FUNCTION public.create_storefront_order(',1)
-        capture=capture.replace('BEGIN',"BEGIN\n INSERT INTO public.agentic_binding_calls(discount,expected,items) VALUES(p_discount_amount,p_expected_total,p_items);",1)
-        sql += "\nCREATE TABLE public.agentic_binding_calls(discount numeric,expected numeric,items jsonb);\n"+capture
+        # Sequence advancement survives rollback and exposes attempted dispatch.
+        capture=capture.replace('BEGIN',"BEGIN\n PERFORM nextval('public.agentic_binding_dispatch_seq');\n INSERT INTO public.agentic_binding_calls(discount,expected,items) VALUES(p_discount_amount,p_expected_total,p_items);",1)
+        sql += "\nCREATE SEQUENCE public.agentic_binding_dispatch_seq;\nCREATE TABLE public.agentic_binding_calls(discount numeric,expected numeric,items jsonb);\n"+capture
         if '--before-agentic-economics-fix' not in sys.argv:
             sql += (root / 'supabase/migrations/20261015150000_commerce_cart_agentic_checkout_economics.sql').read_text()*2
         if '--before-partial-voucher-binding-fix' not in sys.argv:

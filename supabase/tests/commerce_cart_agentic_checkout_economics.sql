@@ -1,7 +1,7 @@
 -- Final binding + actual final financial leaf, with captured public RPC args.
 DO $$
 DECLARE m uuid:='11111111-1111-4111-8111-111111111111'; p uuid:='33333333-3333-4333-8333-333333333333';
- c uuid; g uuid; sid uuid; line_id uuid; snapshot jsonb; r jsonb; args jsonb; n integer; count_before bigint; variant text;
+ c uuid; g uuid; sid uuid; line_id uuid; snapshot jsonb; r jsonb; args jsonb; n integer; count_before bigint; dispatch_marker_before bigint; variant text;
 BEGIN
  FOR n IN 1..11 LOOP
   c:=('aaaaaaaa-4600-4000-8000-'||lpad(n::text,12,'0'))::uuid;
@@ -35,6 +35,8 @@ BEGIN
    UPDATE public.commerce_cart_lines SET assurance_rate=0.1 WHERE id=line_id;
   END IF;
   IF n IN (7,9,10) THEN
+   -- Sequence advancement survives the exception subtransaction rollback.
+   SELECT last_value INTO dispatch_marker_before FROM public.agentic_binding_dispatch_seq;
    SELECT count(*) INTO count_before FROM agentic_binding_calls;
    BEGIN
     PERFORM public.create_storefront_order_with_cart_binding('base',sid,1,args);
@@ -42,13 +44,15 @@ BEGIN
    EXCEPTION WHEN raise_exception THEN
     IF SQLERRM NOT IN ('cart_checkout_stale') THEN RAISE; END IF;
    END;
-   IF (SELECT count(*) FROM agentic_binding_calls) IS DISTINCT FROM count_before
+   IF (SELECT last_value FROM public.agentic_binding_dispatch_seq) IS DISTINCT FROM dispatch_marker_before
+     OR (SELECT count(*) FROM agentic_binding_calls) IS DISTINCT FROM count_before
      OR (SELECT state FROM commerce_carts WHERE id=c) IS DISTINCT FROM 'active' THEN
     RAISE EXCEPTION 'stale assurance case % executed order or completed cart',n;
    END IF;
    CONTINUE;
   END IF;
   IF n=2 THEN
+   SELECT last_value INTO dispatch_marker_before FROM public.agentic_binding_dispatch_seq;
    SELECT count(*) INTO count_before FROM agentic_binding_calls;
    FOREACH variant IN ARRAY ARRAY['base','savings','discount_code'] LOOP
     BEGIN
@@ -56,7 +60,9 @@ BEGIN
      RAISE EXCEPTION 'voucher % dispatch executed without award authority',variant;
     EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'cart_order_voucher_authority_required' THEN RAISE; END IF; END;
    END LOOP;
-   IF (SELECT count(*) FROM agentic_binding_calls) IS DISTINCT FROM count_before OR (SELECT state FROM commerce_carts WHERE id=c) IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'rejected voucher executed order or completed cart'; END IF;
+   IF (SELECT last_value FROM public.agentic_binding_dispatch_seq) IS DISTINCT FROM dispatch_marker_before
+     OR (SELECT count(*) FROM agentic_binding_calls) IS DISTINCT FROM count_before
+     OR (SELECT state FROM commerce_carts WHERE id=c) IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'rejected voucher executed order or completed cart'; END IF;
    CONTINUE;
   ELSIF n=3 THEN args:=args||'{"p_discount_amount":999,"p_expected_total":1}';
   ELSIF n IN (5,6,8) THEN args:=args||jsonb_build_object('p_tax_amount',1.5,'p_tax_basis',CASE WHEN n=5 THEN 'exclusive' ELSE 'inclusive' END);

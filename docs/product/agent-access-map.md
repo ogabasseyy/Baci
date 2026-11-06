@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 6 November 2026 against source revision
-`3d344e110a67ec7edfac5b801be485b362eaf9e3`. Guest OAuth consent and renewable authorization were
+`4203ba20a5ae7dae548deae0917fde9ef3a904e2`. Guest OAuth consent and renewable authorization were
 re-reviewed and tested. Upstream payment review confirms uncertain DVA outcomes
 retain their reconciliation claim and checkout eligibility reflects CredPal retirement.
 Oxygen supports local staging and a separately configured, policy-controlled production pilot; production transactions are not yet verified. This is a navigation map, not authorization or proof of

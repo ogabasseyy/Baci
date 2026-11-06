@@ -29,7 +29,17 @@ BEGIN
     RAISE EXCEPTION 'provider evidence writer must be a fresh dormant role without memberships';
   END IF;
   IF has_function_privilege(
+       'anon',
+       'public.commerce_cart_persist_agentic_dva_provider_success(uuid,text,text,text,text,text,text)',
+       'EXECUTE'
+     )
+     OR has_function_privilege(
        'authenticated',
+       'public.commerce_cart_persist_agentic_dva_provider_success(uuid,text,text,text,text,text,text)',
+       'EXECUTE'
+     )
+     OR has_function_privilege(
+       'authenticator',
        'public.commerce_cart_persist_agentic_dva_provider_success(uuid,text,text,text,text,text,text)',
        'EXECUTE'
      )

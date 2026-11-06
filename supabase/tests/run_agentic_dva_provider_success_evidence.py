@@ -10,12 +10,12 @@ import socket
 root = Path(__file__).resolve().parents[2]
 base_runner = root / 'supabase/tests/run_agentic_cart_provider_dispatch_fence.py'
 source = base_runner.read_text()
-anchor = "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n tests=''"
+anchor = "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''"
 if source.count(anchor) != 1:
     raise SystemExit('dispatch migration anchor changed; refusing stale harness')
 source = source.replace(
     anchor,
-    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n tests=''",
+    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''",
     1,
 )
 anchor = "agentic_cart_provider_dispatch_revocation_race.sql').read_text()"

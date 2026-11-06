@@ -135,6 +135,8 @@ export function useCheckoutOrderSubmission(
     // refreshes the cart view and stops: the shopper reviews the updated
     // cart and submits again, never silently resubmitting changed lines.
     let sharedCartBinding: SharedCartOrderBinding | null = null;
+    let sharedCartSessionExpiresAtMonotonicMs: number | null = null;
+    let sharedCartSessionExpiresAtEpochMs: number | null = null;
     let reviewedCheckoutItemsResult: ReturnType<
       typeof buildCheckoutOrderItems
     > | null = null;
@@ -257,6 +259,27 @@ export function useCheckoutOrderSubmission(
         checkout_generation: review.review.generation,
         checkout_session_id: review.review.checkoutSessionId,
       };
+      sharedCartSessionExpiresAtMonotonicMs =
+        review.sessionExpiresAtMonotonicMs;
+      sharedCartSessionExpiresAtEpochMs = review.sessionExpiresAtEpochMs;
+    }
+
+    if (
+      sharedCartBinding &&
+      (sharedCartSessionExpiresAtMonotonicMs === null ||
+        sharedCartSessionExpiresAtEpochMs === null ||
+        !Number.isFinite(sharedCartSessionExpiresAtMonotonicMs) ||
+        !Number.isFinite(sharedCartSessionExpiresAtEpochMs) ||
+        performance.now() >= sharedCartSessionExpiresAtMonotonicMs ||
+        Date.now() >= sharedCartSessionExpiresAtEpochMs)
+    ) {
+      toast({
+        title: 'Checkout Unavailable',
+        description: 'Your checkout review expired. Please review your cart again.',
+        variant: 'destructive',
+      });
+      processing.releaseSubmission();
+      return;
     }
 
     await submitPreparedCheckout(

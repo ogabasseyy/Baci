@@ -94,6 +94,7 @@ describe('shared-cart-client checkout prepare', () => {
       ok: true,
       replayed: false,
       sessionExpiresAtMonotonicMs: expect.any(Number),
+      sessionExpiresAtEpochMs: expect.any(Number),
       review: {
         cartId: '22222222-2222-4222-8222-222222222222',
         cartVersion: 3,

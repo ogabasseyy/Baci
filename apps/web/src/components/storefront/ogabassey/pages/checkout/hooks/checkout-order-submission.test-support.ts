@@ -5,12 +5,18 @@ import type { CheckoutOrderSubmissionContext } from './checkout-order-submission
 
 export function readySharedCartCheckout(
   review: Extract<PrepareSharedCartCheckoutResult, { ok: true }>['review'],
-  overrides: { replayed?: boolean; sessionReused?: boolean } = {}
+  overrides: {
+    replayed?: boolean;
+    sessionReused?: boolean;
+    sessionExpiresAtMonotonicMs?: number;
+    sessionExpiresAtEpochMs?: number;
+  } = {}
 ): Extract<PrepareSharedCartCheckoutResult, { ok: true }> {
   return {
     ok: true,
     replayed: false,
     sessionExpiresAtMonotonicMs: performance.now() + 30 * 60_000,
+    sessionExpiresAtEpochMs: Date.now() + 30 * 60_000,
     review,
     sessionReused: false,
     ...overrides,

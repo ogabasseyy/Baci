@@ -8,7 +8,7 @@ const merchantSlug = z
 const productSlug = z
   .string()
   .min(1)
-  .max(160)
+  .max(200)
   .regex(/^[a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)*$/);
 export const chatProductRouteParamsSchema = z
   .object({ slug: merchantSlug, productSlug })

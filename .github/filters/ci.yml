@@ -284,6 +284,11 @@ deploy_scripts:
 # sources are listed here. Keep this group free of interior comments: the CI
 # workflow tests parse it as one unbroken run of list items.
 web:
+  - '.github/actions/typecheck-cache/**'
+  - '.github/scripts/ci-typecheck-cache.test.mjs'
+  - '.github/scripts/find-trusted-typecheck-state*'
+  - '.github/scripts/diff-guardian-runner.test.mjs'
+  - '.github/workflows/diff-guardian.yml'
   - 'public/guides/**'
   - 'supabase/functions/_shared/scheduled-notification*'
   - 'supabase/functions/process-scheduled-notifications/**'

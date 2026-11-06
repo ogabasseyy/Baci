@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { STOREFRONT_PRODUCT_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 
 vi.mock('@/components/storefront/cdn-format-image', () => ({
   CdnFormatImage: (props: Record<string, unknown>) => {
@@ -70,7 +71,7 @@ describe('ProductCard imagePriority', () => {
     expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'high');
     expect(screen.getByRole('img')).toHaveAttribute(
       'sizes',
-      '(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 280px'
+      STOREFRONT_PRODUCT_CARD_IMAGE_SIZES
     );
   });
 

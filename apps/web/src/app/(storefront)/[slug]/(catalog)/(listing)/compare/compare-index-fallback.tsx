@@ -19,7 +19,6 @@ export function CompareIndexFallback({
         aria-live="polite"
         className="space-y-6 pt-4"
       >
-        <span className="sr-only">Loading compare products</span>
         <div className="space-y-6">
           {[1, 2].map((idx) => (
             <div

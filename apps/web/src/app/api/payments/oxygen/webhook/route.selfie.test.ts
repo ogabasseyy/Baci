@@ -42,9 +42,10 @@ beforeEach(() => {
 });
 
 it.each([
-  'accepted',
-  'duplicate',
-] as const)('wakes a pending %s selfie callback only for its supplied application', async (acceptance) => {
+  ['accepted', 'DONE'],
+  ['duplicate', 'DONE'],
+  ['accepted', 'PROCESSING'],
+] as const)('wakes a pending %s selfie callback only for its supplied application', async (acceptance, selfieStatus) => {
   const workflow = '60000000-0000-4000-8000-000000000011';
   const application = '60000000-0000-4000-8000-000000000012';
   const callback = '60000000-0000-4000-8000-000000000013';
@@ -64,7 +65,9 @@ it.each([
     eligible: true,
     kyc,
   };
-  const call = vi.fn().mockResolvedValue(kyc);
+  const call = vi
+    .fn()
+    .mockResolvedValue({ ...kyc, selfie_status: selfieStatus });
   const payment = vi.fn();
   m.connect.mockReturnValue({
     partnerReference: 'partner',
@@ -159,7 +162,7 @@ it.each([
   expect(m.rpc).toHaveBeenCalledWith(
     'oxygen_callback',
     expect.objectContaining({
-      p_operation: 'complete',
+      p_operation: selfieStatus === 'DONE' ? 'complete' : 'defer',
       p_payload: { id: callback, retryKey: callback },
     })
   );

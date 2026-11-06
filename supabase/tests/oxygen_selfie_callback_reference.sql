@@ -34,7 +34,7 @@ SELECT ('efae0000-0000-4000-8000-00000000004'||n)::uuid,
 FROM generate_series(1,7) n;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
-SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000","applicationReference":"application-4"}');
+SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000","applicationReference":"application-4","deduplicationKey":"renewable-selfie"}');
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000","applicationReference":"unknown"}');
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000"}');
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000"}');
@@ -81,4 +81,32 @@ DO $$ BEGIN
   RAISE EXCEPTION 'Unique phone-only callback was not quarantined';
  END IF;
 END $$;
+-- A targeted wake must bypass a hundred earlier callbacks for another application.
+INSERT INTO oxygen_private.callback_inbox(partner_reference,environment,deduplication_key,payload_hash,event,status,received_at,next_attempt_at)
+SELECT 'response-evidence-fixture','staging','backlog-'||n,sha256(convert_to(n::text,'UTF8')),
+ '{"kind":"selfie","phoneNumber":"08010000000","applicationReference":"application-1"}'::jsonb,
+ 'queued',now()-interval '2 minutes',now()-interval '2 minutes'
+FROM generate_series(1,100) n;
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE jobs jsonb; job jsonb; BEGIN
+ jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"selfie","applicationReference":"application-4"}');
+ IF jsonb_array_length(jobs)<>1 THEN RAISE EXCEPTION 'Targeted wake starved by unrelated backlog: %',jobs; END IF;
+ FOR n IN 1..5 LOOP
+  job:=jobs->0;
+  PERFORM public.oxygen_callback('defer','response-evidence-fixture',jsonb_build_object('id',job->>'id','retryKey',job->>'retryKey'));
+  -- Expiry is advanced by the privileged fixture below, not by production callers.
+  RESET ROLE;
+  UPDATE oxygen_private.callback_inbox SET next_attempt_at=now() WHERE id=(job->>'id')::uuid;
+  SET LOCAL ROLE authenticated;
+  jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"selfie","applicationReference":"application-4"}');
+  IF n<5 AND jsonb_array_length(jobs)<>1 THEN RAISE EXCEPTION 'Retry retired too early'; END IF;
+ END LOOP;
+ IF jsonb_array_length(jobs)<>0 THEN RAISE EXCEPTION 'Exhausted generation remains pending'; END IF;
+ -- A stale retry key cannot revive an exhausted generation.
+ PERFORM public.oxygen_callback('defer','response-evidence-fixture',jsonb_build_object('id',job->>'id','retryKey',job->>'retryKey'));
+ PERFORM public.oxygen_callback('accept','response-evidence-fixture','{"kind":"selfie","phoneNumber":"08010000000","applicationReference":"application-4","deduplicationKey":"renewable-selfie"}');
+ jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"selfie","applicationReference":"application-4"}');
+ IF jsonb_array_length(jobs)<>1 THEN RAISE EXCEPTION 'Valid redelivery did not start a fresh generation'; END IF;
+END $$;
+RESET ROLE;
 ROLLBACK;

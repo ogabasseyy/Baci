@@ -217,3 +217,22 @@ it.each([
     action: 'reconcile_kyc',
   });
 });
+
+it('separates selfie callback keys by application and confirmation outcome', () => {
+  const body = {
+    webhook_type: 'selfie_status_update',
+    phone_number: '2348000000000',
+    loan_request_reference: 'application-1',
+    selfie: true,
+  };
+  const key = parseOxygenWebhook(body)?.deduplicationKey;
+  expect(key).toBeTruthy();
+  expect(parseOxygenWebhook(body)?.deduplicationKey).toBe(key);
+  expect(
+    parseOxygenWebhook({ ...body, selfie: false })?.deduplicationKey
+  ).not.toBe(key);
+  expect(
+    parseOxygenWebhook({ ...body, loan_request_reference: 'application-2' })
+      ?.deduplicationKey
+  ).not.toBe(key);
+});

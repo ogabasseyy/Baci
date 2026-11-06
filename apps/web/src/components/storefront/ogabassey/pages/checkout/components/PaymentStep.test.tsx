@@ -190,6 +190,7 @@ describe('PaymentStep', () => {
       expect(screen.getByText('Payment Method')).toBeInTheDocument();
     });
 
+
     it('applies active styling when currentStep is payment', () => {
       // Arrange & Act
       const { container } = render(<PaymentStep {...defaultProps} />);

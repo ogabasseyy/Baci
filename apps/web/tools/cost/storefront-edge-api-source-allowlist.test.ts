@@ -101,6 +101,7 @@ it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown 
     'reconcile',
     'recovery',
     'residential-context',
+    'storefront-availability',
     'webhook',
     'workflows',
     'workflows/actions',

@@ -46,6 +46,7 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'payments/oxygen/reconcile',
   'payments/oxygen/recovery',
   'payments/oxygen/residential-context',
+  'payments/oxygen/storefront-availability',
   'payments/oxygen/webhook',
   'payments/oxygen/workflows',
   'payments/oxygen/workflows/actions',

@@ -111,12 +111,22 @@ describe('handlePlaceOrder', () => {
     expect(opts.clearCart).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
-  it('blocks Oxygen order creation outside local staging', async () => {
+  it('blocks Oxygen order creation when production admission cannot be checked', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const opts = buildOpts({ paymentMethod: 'oxygen', user: { id: 'user' } });
     await handlePlaceOrder(opts);
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toContain('/api/payments/oxygen/storefront-availability');
     expect(opts.routerPush).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
+  });
+  it('permits the admitted production pilot to create an Oxygen order', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ available: true }) });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ order: { id: '60000000-0000-4000-8000-000000000001' }, amountDueToGateway: 12000 }) });
+    const opts = buildOpts({ paymentMethod: 'oxygen', user: { id: 'user' }, payWithWallet: false });
+    await handlePlaceOrder(opts);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(navigation.oxygen).toHaveBeenCalledWith('60000000-0000-4000-8000-000000000001');
   });
 });

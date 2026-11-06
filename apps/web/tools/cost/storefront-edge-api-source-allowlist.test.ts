@@ -93,6 +93,7 @@ it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown 
     'bank-details',
     'chat',
     'draft',
+    'host-observation',
     'order-plan',
     'phone-handoff/redeem',
     'plans',

@@ -14,6 +14,14 @@ const workflow = await readFile(
 const seed = await readFile(new URL('seed.rb', directory), 'utf8');
 const trigger = await readFile(new URL('trigger.rb', directory), 'utf8');
 const lostAck = await readFile(new URL('lost-ack.mjs', directory), 'utf8');
+const messageLookup = await readFile(
+  new URL('message-lookup.mjs', directory),
+  'utf8'
+);
+const ambiguousReconciliation = await readFile(
+  new URL('ambiguous-send-reconciliation.mjs', directory),
+  'utf8'
+);
 const runner = await readFile(new URL('run.mjs', directory), 'utf8');
 
 test('pins service images and keeps the Compose network unpublished and internal', () => {
@@ -67,9 +75,10 @@ test('lost-ack integration drops only after a complete upstream response and rec
   );
   assert.match(lostAck, /clientResponse\.destroy\(\)/);
   assert.match(lostAck, /outcome\.status >= 200 && outcome\.status < 300/);
-  assert.match(lostAck, /findSyntheticMessage\(/);
-  assert.match(lostAck, /url\.searchParams\.set\('before', before\)/);
-  assert.match(lostAck, /reconcileAmbiguousSend\(/);
+  assert.match(messageLookup, /url\.searchParams\.set\('before', before\)/);
+  assert.match(messageLookup, /AbortSignal\.timeout/);
+  assert.match(ambiguousReconciliation, /reconcileAmbiguousSend\(/);
+  assert.match(ambiguousReconciliation, /request was not retried/);
   assert.match(lostAck, /assert\.equal\(postCount, 1/);
   assert.match(lostAck, /assert\.equal\(postCount, 1/);
   assert.match(runner, /verifyLostAckMessageReconciliation/);

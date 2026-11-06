@@ -1,112 +1,11 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createServer, request as httpRequest } from 'node:http';
+import { reconcileAmbiguousSend } from './ambiguous-send-reconciliation.mjs';
+import { findSyntheticMessage } from './message-lookup.mjs';
 
 function messagesPath(accountId, conversationId) {
   return `/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`;
-}
-
-const PAGE_SIZE = 20;
-const MAX_LOOKUP_PAGES = 20;
-const LOOKUP_DEADLINE_MS = 15_000;
-const TRANSPORT_ERROR_CODES = new Set([
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_HEADERS_TIMEOUT',
-  'UND_ERR_SOCKET',
-]);
-
-function isAmbiguousTransportError(error) {
-  if (error instanceof TypeError) return true;
-  if (error?.name === 'AbortError' || error?.name === 'TimeoutError')
-    return true;
-  return TRANSPORT_ERROR_CODES.has(error?.code ?? error?.cause?.code);
-}
-
-export async function findSyntheticMessage({
-  api,
-  path,
-  token,
-  content,
-  timeoutMs = LOOKUP_DEADLINE_MS,
-}) {
-  const matches = [];
-  let before;
-  const deadline = Date.now() + timeoutMs;
-  const seenCursors = new Set();
-
-  for (let page = 0; page < MAX_LOOKUP_PAGES; page += 1) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0)
-      throw new Error('Chatwoot message lookup exceeded its time limit');
-    const url = new URL(path, 'http://chatwoot.invalid');
-    if (before) url.searchParams.set('before', before);
-    const messages = (
-      await api(`${url.pathname}${url.search}`, token, {
-        signal: AbortSignal.timeout(Math.min(remainingMs, 10_000)),
-      })
-    ).payload;
-    if (!Array.isArray(messages))
-      throw new Error('Chatwoot message lookup returned an invalid payload');
-
-    matches.push(
-      ...messages.filter(
-        (message) =>
-          message.content === content &&
-          (message.message_type === 1 ||
-            String(message.message_type).toLowerCase() === 'outgoing') &&
-          String(message.sender?.type ?? message.sender_type ?? '')
-            .replace(/[^a-z]/gi, '')
-            .toLowerCase() === 'user'
-      )
-    );
-    if (messages.length < PAGE_SIZE) break;
-
-    if (page === MAX_LOOKUP_PAGES - 1)
-      throw new Error('Chatwoot message lookup reached its page limit');
-    const oldestId = messages.reduce((oldest, message) =>
-      Number(message.id) < Number(oldest.id) ? message : oldest
-    ).id;
-    const cursor = String(oldestId);
-    if (!/^\d+$/.test(cursor))
-      throw new Error('Chatwoot message lookup returned an invalid cursor');
-    if (seenCursors.has(cursor))
-      throw new Error('Chatwoot message lookup pagination did not advance');
-    seenCursors.add(cursor);
-    before = cursor;
-  }
-
-  return matches;
-}
-
-/** Test-harness recovery policy: resolve only a unique visible effect. An
- * empty, duplicate, or failed lookup leaves the outcome unknown and never
- * triggers another send. */
-export async function reconcileAmbiguousSend({ send, lookup }) {
-  try {
-    return { result: await send(), recovered: false };
-  } catch (sendError) {
-    if (!isAmbiguousTransportError(sendError)) throw sendError;
-    let matches;
-    try {
-      matches = await lookup();
-    } catch (lookupError) {
-      throw new Error(
-        'Chatwoot send outcome remains unknown because reconciliation failed; request was not retried',
-        { cause: lookupError }
-      );
-    }
-    if (matches.length === 1) return { result: matches[0], recovered: true };
-    if (matches.length > 1)
-      throw new Error(
-        'Chatwoot send outcome is ambiguous because multiple messages matched; request was not retried'
-      );
-    throw new Error(
-      'Chatwoot send outcome remains unknown because no message was visible; request was not retried',
-      { cause: sendError }
-    );
-  }
 }
 
 /**

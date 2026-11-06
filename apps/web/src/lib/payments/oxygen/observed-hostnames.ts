@@ -24,6 +24,8 @@ export function observedOxygenHostnames(
       if (typeof value !== 'string') continue;
       try {
         const url = new URL(value);
+        // projectOxygenResponse stores only url.origin, never a usable signed
+        // provider URL. Reject anything else rather than exposing its token.
         if (
           url.protocol === 'https:' &&
           !url.username &&

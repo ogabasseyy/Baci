@@ -113,6 +113,12 @@ describe('Oxygen host observation', () => {
     expect((await GET(request())).status).toBe(404);
     expect(mocks.evidence).not.toHaveBeenCalled();
   });
+  it('returns 429 without reading a workflow when the rate limit denies access', async () => {
+    mocks.limit.mockResolvedValueOnce({ allowed: false });
+    expect((await GET(request())).status).toBe(429);
+    expect(mocks.snapshot).not.toHaveBeenCalled();
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
   it('fails closed when the workflow is not owned or evidence cannot be read', async () => {
     mocks.snapshot.mockRejectedValueOnce(new Error('not owned'));
     expect((await GET(request())).status).toBe(404);

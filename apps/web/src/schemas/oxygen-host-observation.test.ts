@@ -14,4 +14,17 @@ it('requires both workflow and command UUIDs', () => {
   expect(oxygenHostObservationQuery.safeParse({ workflowId }).success).toBe(
     false
   );
+  expect(
+    oxygenHostObservationQuery.safeParse({ workflowId: 'bad', commandId })
+      .success
+  ).toBe(false);
+  expect(oxygenHostObservationQuery.safeParse({ commandId }).success).toBe(
+    false
+  );
+  expect(
+    oxygenHostObservationQuery.parse({
+      workflowId: workflowId.toUpperCase(),
+      commandId: commandId.toUpperCase(),
+    })
+  ).toEqual({ workflowId, commandId });
 });

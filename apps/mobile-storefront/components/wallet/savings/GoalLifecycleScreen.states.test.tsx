@@ -111,6 +111,17 @@ describe('redirects', () => {
     renderScreen();
     expect(screen.queryByText(/Redirect:/)).toBeNull();
   });
+
+  it('keeps Continue disabled after a readiness read error', () => {
+    jest.mocked(usePrimaryGoalGate).mockReturnValue('error');
+    renderScreen();
+    expect(screen.queryByText(/Redirect:/)).toBeNull();
+    const button = screen.getByRole('button', { name: 'Checking…' });
+    expect(button).toBeDisabled();
+    expect(button).toBeBusy();
+    fireEvent.press(button);
+    expect(issueGoalAction).not.toHaveBeenCalled();
+  });
 });
 
 describe('the readiness gate is still checking', () => {

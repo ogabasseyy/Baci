@@ -131,7 +131,7 @@ export function GoalLifecycleScreen({
   };
   const leave = () => router.replace('/wallet');
   const signIn = () => router.replace(loginHref(pathname, goalId, kind));
-  const checking = gate === 'checking';
+  const checking = gate !== 'ready';
   // Continue stays off until the goal it would act on is on screen.
   const waiting = checking || !goal || auth.isLoading;
   const working = ['issuing', 'pin', 'submitting'].includes(flow.step);
@@ -186,6 +186,7 @@ export function GoalLifecycleScreen({
             label={COPY.checkAgain}
             onPress={() => void flow.checkAgain()}
             primary
+            busy={gate !== 'ready'}
           />
           <Action colors={colors} label={COPY.backToWallet} onPress={leave} />
         </>
@@ -201,6 +202,7 @@ export function GoalLifecycleScreen({
           label={COPY.tryAgain}
           onPress={() => void flow.retryPin()}
           primary
+          busy={gate !== 'ready'}
         />
         <Action colors={colors} label={copy.secondary} onPress={leave} />
       </>
@@ -223,6 +225,7 @@ export function GoalLifecycleScreen({
             label={COPY.startAgain}
             onPress={() => void flow.begin()}
             primary
+            busy={gate !== 'ready'}
           />
         ) : null}
         <Action

@@ -5,15 +5,14 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
 
-export type PrimaryGoalGate = 'checking' | 'ready' | 'off';
+export type PrimaryGoalGate = 'checking' | 'ready' | 'off' | 'error';
 
 /**
  * Whether the goal lifecycle (cancel / complete) may be shown: only on an
  * explicit server verdict that this customer's main wallet is ready, on a
- * PiggyVest merchant. Anything else (pending, no account, a not-ready or any
- * other failure, another merchant) is 'off' and the screens stay as they
- * were. The answer is pinned to the signed-in user: one that arrives after an
- * account or merchant switch is dropped.
+ * PiggyVest merchant. A pending/no-account/not-ready verdict is 'off'; a
+ * transient read failure is 'error'. The answer is pinned to the signed-in
+ * user: one that arrives after an account or merchant switch is dropped.
  *
  * `refreshKey` is any value that changes when the wallet refreshes (for
  * example the wallet query's `dataUpdatedAt`); each change re-reads the
@@ -31,7 +30,7 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
   const scope = eligible ? `${userId}:${merchantId}` : null;
   const [answer, setAnswer] = useState<{
     scope: string;
-    ready: boolean;
+    status: 'ready' | 'off' | 'error';
   } | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a deliberate re-read trigger, not read inside the effect.
@@ -44,9 +43,11 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
         if (current)
           setAnswer({
             scope,
-            ready:
+            status:
               snapshot.provisioningStatus === 'ready' &&
-              snapshot.account !== null,
+              snapshot.account !== null
+                ? 'ready'
+                : 'off',
           });
       })
       .catch((error: unknown) => {
@@ -56,11 +57,12 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
           error !== null &&
           'code' in error &&
           error.code === 'PIGGYVEST_NOT_READY';
-        setAnswer((previous) =>
-          !authoritative && previous?.scope === scope && previous.ready
-            ? previous
-            : { scope, ready: false }
-        );
+        setAnswer((previous) => {
+          if (authoritative) return { scope, status: 'off' };
+          if (previous?.scope === scope && previous.status !== 'error')
+            return previous;
+          return { scope, status: 'error' };
+        });
       });
     return () => {
       current = false;
@@ -69,5 +71,5 @@ export function usePrimaryGoalGate(refreshKey?: number): PrimaryGoalGate {
 
   if (!scope) return 'off';
   if (answer?.scope !== scope) return 'checking';
-  return answer.ready ? 'ready' : 'off';
+  return answer.status;
 }

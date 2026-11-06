@@ -85,7 +85,7 @@ export function getWeeklySavingsNudge({
 
 export type QuickAmountOption = { amount: number; label: string };
 
-/** Whole-naira amount the wallet can put in right now, capped by what is left. */
+/** Suggest a modest amount; spending the full available balance is opt-in. */
 export function getDefaultContributionAmount({
   available,
   remaining,
@@ -93,8 +93,7 @@ export function getDefaultContributionAmount({
   available: number;
   remaining: number;
 }) {
-  const cap = Math.floor(Math.min(available, remaining));
-  return Number.isSafeInteger(cap) && cap > 0 ? cap : 0;
+  return Math.min(QUICK_AMOUNTS[0], getContributionCap(available, remaining));
 }
 
 /**
@@ -109,7 +108,7 @@ export function getQuickAmountOptions({
   available: number;
   remaining: number;
 }): QuickAmountOption[] {
-  const allAvailable = getDefaultContributionAmount({ available, remaining });
+  const allAvailable = getContributionCap(available, remaining);
   const options: QuickAmountOption[] = QUICK_AMOUNTS.filter(
     (amount) => amount <= remaining && amount !== allAvailable
   ).map((amount) => ({ amount, label: formatNgnCurrency(amount) }));
@@ -121,4 +120,9 @@ export function getQuickAmountOptions({
     });
   }
   return options;
+}
+
+function getContributionCap(available: number, remaining: number) {
+  const cap = Math.floor(Math.min(available, remaining));
+  return Number.isSafeInteger(cap) && cap > 0 ? cap : 0;
 }

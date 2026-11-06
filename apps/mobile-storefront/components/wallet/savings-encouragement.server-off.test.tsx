@@ -89,16 +89,16 @@ describe('getWeeklySavingsNudge', () => {
 });
 
 describe('quick amounts', () => {
-  it('defaults to the smaller of the wallet balance and what is left', () => {
+  it('defaults to a modest amount capped by the wallet and what is left', () => {
     expect(
       getDefaultContributionAmount({ available: 1000, remaining: 250000 })
     ).toBe(1000);
     expect(
       getDefaultContributionAmount({ available: 90000, remaining: 4000 })
-    ).toBe(4000);
+    ).toBe(1000);
     expect(
       getDefaultContributionAmount({ available: 1500.75, remaining: 9000 })
-    ).toBe(1500);
+    ).toBe(1000);
   });
 
   it('has no default when the wallet is empty or the goal is full', () => {
@@ -142,4 +142,13 @@ describe('quick amounts', () => {
       []
     );
   });
+});
+
+it('suggests a modest starting amount without preselecting the whole wallet', () => {
+  expect(
+    getDefaultContributionAmount({ available: 40055, remaining: 250000 })
+  ).toBe(1000);
+  expect(
+    getQuickAmountOptions({ available: 40055, remaining: 250000 })
+  ).toContainEqual({ amount: 40055, label: 'All available' });
 });

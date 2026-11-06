@@ -179,6 +179,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     crypto,
     dva,
     handlePlaceOrder,
+    oxygenAllowed,
     redvaultAvailable,
     walletFundedTransfer,
   } = useCheckoutPaymentExecution({
@@ -285,6 +286,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
     },
     availability: {
+      oxygenAllowed,
       redvaultAvailable,
     },
   });

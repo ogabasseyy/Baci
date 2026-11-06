@@ -7,6 +7,15 @@ import {
 } from './payment-step-availability';
 
 describe('payment-step availability helpers', () => {
+  it('shows an admitted Oxygen pilot for a full NGN payment only', () => {
+    const base = { paymentMethod: 'oxygen' as const, paystackCheckoutAvailable: false,
+      korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false,
+      currency: 'NGN', orderAmount: 50000, payableAmount: 50000 };
+    expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true })).toBe(true);
+    expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: false })).toBe(false);
+    expect(isPaymentMethodAvailable({ ...base, oxygenAllowed: true, payableAmount: 40000 })).toBe(false);
+    expect(hasAnyInstallmentOption({ ...base, oxygenAllowed: true })).toBe(true);
+  });
   it('requires enabled NGN Klump payments with matching payable amount', () => {
     expect(
       isKlumpEligible({

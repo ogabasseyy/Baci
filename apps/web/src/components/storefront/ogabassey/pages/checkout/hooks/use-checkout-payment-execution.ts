@@ -86,6 +86,7 @@ export function useCheckoutPaymentExecution({
     merchantId: identity.merchantId,
     revision: customerSession.revision,
     authenticated: customerSession.isAuthenticated,
+    loading: customerSession.status === 'loading',
   });
   const dva = useCheckoutDvaSession({
     checkoutCart: cart.checkoutCart,

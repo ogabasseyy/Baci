@@ -7,6 +7,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { checkoutHref } from './checkout/checkout-href';
 import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
 import { CheckoutResumeFallback } from './checkout/components/CheckoutResumeFallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
@@ -54,10 +55,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   } = checkoutPaymentRails(merchant, currencyCode);
   const basePath = merchantContext?.basePath;
   const router = useRouter();
-  const getHref = (path: string) =>
-    path.startsWith('http')
-      ? path
-      : `${basePath || ''}${path === '/' ? '' : path}`;
+  const getHref = (path: string) => checkoutHref(basePath, path);
   const searchParams = useSearchParams();
   const auth = useAuthSafe();
   const user = auth?.user;

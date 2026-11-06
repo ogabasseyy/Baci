@@ -7,16 +7,16 @@ interface AdmissionInput {
   merchantId: string | null | undefined;
   revision: number;
   authenticated: boolean;
+  loading?: boolean;
 }
 
 /** A fail-closed display hint, tied to both the merchant and auth revision. */
 export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean {
-  const { customerId, merchantId, revision, authenticated } = input;
-  const key = authenticated && customerId && merchantId
-    ? `${customerId}:${merchantId}:${revision}` : null;
+  const { customerId, merchantId, revision, authenticated, loading = false } = input;
+  const key = customerId && merchantId ? `${customerId}:${merchantId}` : null;
   const [result, setResult] = useState<{ key: string; available: boolean } | null>(null);
   useEffect(() => {
-    if (!key || !merchantId) return;
+    if (!authenticated || !key || !merchantId) return;
     const controller = new AbortController();
     void fetch(`/api/payments/oxygen/storefront-availability?merchantId=${encodeURIComponent(merchantId)}`, {
       cache: 'no-store', signal: controller.signal,
@@ -26,6 +26,6 @@ export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean 
         if (!controller.signal.aborted) setResult({ key, available });
       });
     return () => controller.abort();
-  }, [key, merchantId]);
-  return key !== null && result?.key === key && result.available;
+  }, [authenticated, key, merchantId, revision]);
+  return (authenticated || loading) && key !== null && result?.key === key && result.available;
 }

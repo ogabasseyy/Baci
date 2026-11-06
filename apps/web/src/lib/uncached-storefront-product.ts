@@ -1,17 +1,11 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { StorefrontDatabase } from '@/types/storefront-database';
-import { getPublicSupabaseClient } from './cached-data';
 import { sanitizePublicProduct } from './public-fulfillment-sanitizer';
 import { normalizeCachedStorefrontPdpCore } from './storefront-pdp-core-normalizer';
 import { readStorefrontPdpCoreSnapshot } from './storefront-pdp-core-snapshot';
+import { getStorefrontSnapshotSupabaseClient } from './storefront-pdp-snapshot-client';
 import {
   StorefrontReadUnavailableError,
   unwrapStorefrontReadResultForCache,
 } from './storefront-read-result';
-
-function getStorefrontSnapshotSupabaseClient(): SupabaseClient<StorefrontDatabase> {
-  return getPublicSupabaseClient() as unknown as SupabaseClient<StorefrontDatabase>;
-}
 
 /**
  * Reads the bounded merchant-scoped PDP snapshot without using Next's product

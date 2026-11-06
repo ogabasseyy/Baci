@@ -57,6 +57,7 @@ import {
   type PublicStorefrontProductVariant,
 } from '@/lib/storefront-pdp-core-normalizer';
 import { readStorefrontPdpCoreSnapshot } from '@/lib/storefront-pdp-core-snapshot';
+import { getStorefrontSnapshotSupabaseClient } from '@/lib/storefront-pdp-snapshot-client';
 import {
   StorefrontReadUnavailableError,
   unwrapStorefrontReadResultForCache,
@@ -66,16 +67,17 @@ import {
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 import type { MerchantAboutPage } from '@/types/about-page';
-import type {
-  StorefrontDatabase,
-  StorefrontMerchantSnapshotRow,
-} from '@/types/storefront-database';
+import type { StorefrontMerchantSnapshotRow } from '@/types/storefront-database';
 import type { MerchantTrustProfileDraft } from '../../../../packages/shared/src/contracts/merchant-trust-profile';
 import { sanitizePublicProduct } from './public-fulfillment-sanitizer';
 
 export { getCachedCategoryPageShellData } from '@/lib/cached-category-page-shell';
 export type { CachedProductLcpHint, CachedStorefrontPdpCore };
-export { getPublicSupabaseClient, normalizeCachedStorefrontPdpCore };
+export {
+  getPublicSupabaseClient,
+  getStorefrontSnapshotSupabaseClient,
+  normalizeCachedStorefrontPdpCore,
+};
 
 // Supabase/PostgREST `estimated` keeps small public blog counts exact while
 // avoiding full COUNT scans when stale route regeneration hits large merchant
@@ -125,13 +127,6 @@ function combineUniqueRelatedBlogPosts<T extends RelatedBlogPostIdentity>(
   }
 
   return uniquePosts;
-}
-
-function getStorefrontSnapshotSupabaseClient(): SupabaseClient<StorefrontDatabase> {
-  // The runtime client is the same anonymous public client used by the rest of
-  // cached-data. This narrow generated-schema cast makes only the snapshot RPC
-  // boundary aware of migrations that are not live when types are generated.
-  return getPublicSupabaseClient() as unknown as SupabaseClient<StorefrontDatabase>;
 }
 
 /**

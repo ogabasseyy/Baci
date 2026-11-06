@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   evaluateStorefrontSlugSafety,
   MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH,
+  MAX_SLUG_DECODE_PASSES,
 } from '@/lib/storefront-slug-safety';
 
 const merchantSlug = z
@@ -32,7 +33,7 @@ function isSafeProductRouteSegment(value: string): boolean {
   if (!evaluateStorefrontSlugSafety(value).safe) return false;
 
   let candidate = value;
-  for (let pass = 0; pass <= 3; pass += 1) {
+  for (let pass = 0; pass <= MAX_SLUG_DECODE_PASSES; pass += 1) {
     if (
       candidate === '.' ||
       candidate === '..' ||
@@ -52,8 +53,8 @@ function isSafeProductRouteSegment(value: string): boolean {
     }
   }
 
-  // The shared safety guard rejects values that remain encoded beyond three
-  // passes; this branch is only reachable for an already-bounded safe value.
+  // The shared safety guard rejects values that remain encoded beyond its
+  // decode budget. This branch is only reachable for an already-bounded safe value.
   return true;
 }
 

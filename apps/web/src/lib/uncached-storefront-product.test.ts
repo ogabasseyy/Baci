@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   client: {},
-  getPublicSupabaseClient: vi.fn(),
+  getStorefrontSnapshotSupabaseClient: vi.fn(),
   normalize: vi.fn(),
   read: vi.fn(),
   sanitize: vi.fn(),
 }));
 
-vi.mock('./cached-data', () => ({
-  getPublicSupabaseClient: mocks.getPublicSupabaseClient,
+vi.mock('./storefront-pdp-snapshot-client', () => ({
+  getStorefrontSnapshotSupabaseClient:
+    mocks.getStorefrontSnapshotSupabaseClient,
 }));
 vi.mock('./storefront-pdp-core-normalizer', () => ({
   normalizeCachedStorefrontPdpCore: mocks.normalize,
@@ -25,7 +26,7 @@ import { getUncachedProductWithDetails } from './uncached-storefront-product';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getPublicSupabaseClient.mockReturnValue(mocks.client);
+  mocks.getStorefrontSnapshotSupabaseClient.mockReturnValue(mocks.client);
   mocks.read.mockResolvedValue({
     status: 'found',
     value: { kind: 'product', product: { id: 'product-1' } },

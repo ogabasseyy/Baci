@@ -96,7 +96,12 @@
   background: linear-gradient(
     to top,
     var(--ogabassey-blog-featured-scrim, rgb(17 24 39)) 0%,
-    rgb(17 24 39 / 72%) 42%,
+    color-mix(
+        in srgb,
+        var(--ogabassey-blog-featured-scrim, rgb(17 24 39)) 72%,
+        transparent
+      )
+      42%,
     transparent 100%
   );
   inset: 0;

@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "b82536bd04788de45181c0ed09966ae3db6c1129",
+  "originMainSha": "e4bd3059126a1a60788fc27192420485023ae486",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "ea81545f50f6e43afb223e496edc021031cae20a5c692fae5eeffc240eaa77d3",
-  "routingProxyInputSha256": "57434ce6280df9d7baa2fb7ec25c78ef6920b2e549a86ecf8e016402d975145c",
+  "routingProxyInputSha256": "28e6ac2ae8ef375be042a8f9baa77422c6c27bde11895dbcf7cb035084c44550",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -618,6 +618,19 @@
       "routePattern": "/api/payments/oxygen/draft",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/payments/oxygen/draft/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:payments/oxygen/host-observation/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/payments/oxygen/host-observation",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/payments/oxygen/host-observation/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -9039,5 +9052,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "41df6ff74c3ff71d2898534355cb367feaa4a2f64628e92b8a41e208146f4e89"
+  "inventorySha256": "0db3c2ae90f83a9a854315527d46f10eb5ce6f21ea7969a4c97da3fdb2a2093d"
 }

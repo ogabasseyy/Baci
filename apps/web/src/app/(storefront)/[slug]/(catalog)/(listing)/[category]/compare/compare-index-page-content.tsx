@@ -100,7 +100,7 @@ export function CompareIndexPageContent({
             No comparison guides are ready for this category yet.
           </p>
           <Link
-            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-store-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-store-primary px-4 py-2 text-sm font-semibold text-store-primary-text transition-opacity hover:opacity-90"
             href={asRoute(resolveStorefrontPathHref(pathPrefix, categoryHref))}
             prefetch={false}
           >

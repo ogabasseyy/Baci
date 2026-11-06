@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 def main():
+    """Run the notification SQL contracts against a disposable database."""
     parser = argparse.ArgumentParser()
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--container")
@@ -65,11 +66,12 @@ def main():
 
     try:
         if temporary is not None:
+            # initdb can leave child processes or partial state after a timeout.
+            startup_attempted = True
             run_command([
                 str(postgres_bin / "initdb"), "-D", str(temporary / "data"),
                 "-A", "trust", "-U", "postgres", "--no-locale", "--encoding=UTF8",
             ], check=True, capture_output=True, text=True, timeout=45)
-            startup_attempted = True
             run_command([
                 str(postgres_bin / "pg_ctl"), "-D", str(temporary / "data"),
                 "-l", str(temporary / "postgres.log"), "-o",
@@ -123,7 +125,16 @@ def main():
         raise
     finally:
         if temporary is None:
-            run_command(command_prefix + ["dropdb", database], check=True)
+            try:
+                run_command(command_prefix + ["dropdb", "--force", database], check=True)
+            except BaseException as cleanup_error:
+                if "primary_error" not in locals():
+                    raise
+                print(
+                    f"PostgreSQL cleanup failed for owned database {database} "
+                    f"({type(cleanup_error).__name__})",
+                    file=sys.stderr,
+                )
         else:
             pid_file = temporary / "data/postmaster.pid"
             cleanup_error = None

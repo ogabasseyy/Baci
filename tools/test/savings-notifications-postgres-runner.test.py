@@ -22,6 +22,7 @@ SPEC.loader.exec_module(RUNNER)
 
 class SavingsNotificationsPostgresRunnerTests(unittest.TestCase):
     def run_harness(self):
+        """Capture SQL and subprocess calls while simulating a disposable Docker DB."""
         statements = []
         commands = []
         lock = threading.Lock()
@@ -205,6 +206,7 @@ class SavingsNotificationsPostgresRunnerTests(unittest.TestCase):
         self.assertIn(str(private_root), stderr.getvalue())
 
     def test_existing_fixture_supplies_the_base_rows_required_by_finish_push_suite(self):
+        """Keep fixture columns consumed by the migration contracts explicit."""
         fixture = (MIGRATIONS / 'tests/customer_savings_engagement.fixture.sql').read_text()
 
         for required in (
@@ -215,6 +217,14 @@ class SavingsNotificationsPostgresRunnerTests(unittest.TestCase):
             'platform text',
         ):
             self.assertIn(required, fixture)
+        goals = fixture.split('CREATE TABLE public.customer_savings_goals', 1)[1].split(
+            'CREATE TABLE public.customer_savings_contributions', 1
+        )[0]
+        tokens = fixture.split('CREATE TABLE public.push_tokens', 1)[1].split(
+            'CREATE SCHEMA piggyvest_staging', 1
+        )[0]
+        self.assertIn('source_mode text', goals)
+        self.assertIn('merchant_id uuid NOT NULL REFERENCES public.merchants(id)', tokens)
 
     def test_loads_existing_storage_migration_instead_of_nonexistent_timestamp(self):
         statements, commands = self.run_harness()

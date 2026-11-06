@@ -82,6 +82,9 @@ describe('ChatCartReview', () => {
     expect(screen.getByText('2 × ₦500')).toBeInTheDocument();
     expect(screen.getByText('Estimated subtotal')).toBeInTheDocument();
     expect(screen.getByText('₦1,000')).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', { name: 'Quantity for Phone' })
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Decrease Phone quantity' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Increase Phone quantity' }));
     expect(state.updateQuantity).toHaveBeenCalledWith('line-1', 3);

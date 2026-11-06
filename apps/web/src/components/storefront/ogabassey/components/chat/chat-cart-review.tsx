@@ -116,35 +116,38 @@ export function ChatCartReview() {
                   <div
                     className="mt-2 inline-flex h-8 items-center rounded-md border border-store-border"
                     aria-label={`Quantity for ${item.name}`}
+                    role="group"
                   >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateQuantity(item.cartItemId, item.quantity - 1)
-                    }
-                    disabled={item.quantity <= (item.minimum_order_quantity ?? 1)}
-                    aria-label={`Decrease ${item.name} quantity`}
-                    className="h-full rounded-l-md px-2 text-store-background-text/70 hover:bg-store-background-text/5 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-store-primary"
-                  >
-                    <Minus size={14} aria-hidden="true" />
-                  </button>
-                  <span className="min-w-8 px-1 text-center text-xs font-medium">
-                    {item.quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateQuantity(item.cartItemId, item.quantity + 1)
-                    }
-                    disabled={
-                      item.quantity >= SHARED_CART_MAX_QUANTITY_PER_LINE ||
-                      !nextQuantityAllowed
-                    }
-                    aria-label={`Increase ${item.name} quantity`}
-                    className="h-full rounded-r-md px-2 text-store-background-text/70 hover:bg-store-background-text/5 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-store-primary"
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(item.cartItemId, item.quantity - 1)
+                      }
+                      disabled={
+                        item.quantity <= (item.minimum_order_quantity ?? 1)
+                      }
+                      aria-label={`Decrease ${item.name} quantity`}
+                      className="h-full rounded-l-md px-2 text-store-background-text/70 hover:bg-store-background-text/5 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-store-primary"
+                    >
+                      <Minus size={14} aria-hidden="true" />
+                    </button>
+                    <span className="min-w-8 px-1 text-center text-xs font-medium">
+                      {item.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(item.cartItemId, item.quantity + 1)
+                      }
+                      disabled={
+                        item.quantity >= SHARED_CART_MAX_QUANTITY_PER_LINE ||
+                        !nextQuantityAllowed
+                      }
+                      aria-label={`Increase ${item.name} quantity`}
+                      className="h-full rounded-r-md px-2 text-store-background-text/70 hover:bg-store-background-text/5 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-store-primary"
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                    </button>
                   </div>
                 )}
               </li>

@@ -1,5 +1,5 @@
-import { useNavigation } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, useNavigation } from 'expo-router';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
@@ -17,7 +17,7 @@ const MISMATCH_ERROR = 'The two PINs do not match.';
 const SAME_PIN_ERROR = 'Choose a different PIN from your current one.';
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 const SUCCESS: Record<WalletPinMode, string> = {
-  set: 'Your wallet PIN has been saved.',
+  set: 'Your wallet PIN has been set.',
   change: 'Your wallet PIN has been changed.',
   reset: 'Your wallet PIN has been reset.',
 };
@@ -70,7 +70,6 @@ export function useWalletPinSettings() {
   const [confirmPin, setConfirmPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [reauthRequired, setReauthRequired] = useState(false);
   // A mode picked by the user or by an outcome only holds for the status it
   // was chosen against; a fresh status read decides again.
@@ -79,21 +78,53 @@ export function useWalletPinSettings() {
     status: WalletPinStatus | null;
   } | null>(null);
   const inFlight = useRef(false);
+  const mounted = useRef(true);
+  const screenActive = useRef(true);
+  const requestGeneration = useRef(0);
+  const currentUserId = useRef(userId);
+
+  useLayoutEffect(() => {
+    if (currentUserId.current === userId) return;
+    currentUserId.current = userId;
+    requestGeneration.current += 1;
+  }, [userId]);
 
   const mode =
     override && override.status === gate.status
       ? override.mode
       : modeFromStatus(gate.status);
 
-  useEffect(
-    () =>
-      navigation.addListener('blur', () => {
+  useEffect(() => {
+    const invalidate = (clear: boolean) => {
+      requestGeneration.current += 1;
+      screenActive.current = false;
+      if (clear) {
         setCurrentPin('');
         setNewPin('');
         setConfirmPin('');
-      }),
-    [navigation]
-  );
+      }
+    };
+    const unsubscribeBlur = navigation.addListener('blur', () =>
+      invalidate(true)
+    );
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      screenActive.current = true;
+    });
+    mounted.current = true;
+    screenActive.current = true;
+    return () => {
+      invalidate(false);
+      mounted.current = false;
+      unsubscribeBlur();
+      unsubscribeFocus();
+    };
+  }, [navigation]);
+
+  const isRequestCurrent = (generation: number, requestUserId: string) =>
+    mounted.current &&
+    screenActive.current &&
+    requestGeneration.current === generation &&
+    currentUserId.current === requestUserId;
 
   const clearFields = () => {
     setCurrentPin('');
@@ -107,22 +138,43 @@ export function useWalletPinSettings() {
     setOverride({ mode: next, status: gate.status });
   };
 
-  const onSuccess = () => {
-    setNotice(SUCCESS[mode]);
+  const leaveScreen = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/settings');
+    // Refresh in the background; navigation never waits for it.
+    try {
+      void Promise.resolve(gate.refresh()).catch(() => undefined);
+    } catch {
+      // A failed background refresh must not escape the native alert callback.
+    }
+  };
+
+  const onSuccess = (generation: number, requestUserId: string) => {
+    if (!isRequestCurrent(generation, requestUserId)) return;
     setOverride({ mode: 'change', status: gate.status });
-    // Refresh only after the user has seen the notice: a failed refresh can
-    // turn the gate off and redirect away from this screen.
     Alert.alert(
       SUCCESS[mode],
       undefined,
-      [{ text: 'OK', onPress: gate.refresh }],
+      [
+        {
+          text: 'Done',
+          onPress: () => {
+            if (isRequestCurrent(generation, requestUserId)) leaveScreen();
+          },
+        },
+      ],
       {
         cancelable: false,
       }
     );
   };
 
-  const onFailure = (failure: unknown) => {
+  const onFailure = (
+    failure: unknown,
+    generation: number,
+    requestUserId: string
+  ) => {
+    if (!isRequestCurrent(generation, requestUserId)) return;
     const code = codeOf(failure);
     if (code === 'PIN_ALREADY_SET') {
       switchMode('change');
@@ -146,9 +198,10 @@ export function useWalletPinSettings() {
       return;
     }
     inFlight.current = true;
+    const generation = requestGeneration.current;
+    const requestUserId = userId;
     setBusy(true);
     setError(null);
-    setNotice(null);
     setReauthRequired(false);
     const request =
       mode === 'change'
@@ -156,11 +209,13 @@ export function useWalletPinSettings() {
         : submitWalletPin(mode, newPin, userId);
     clearFields();
     request
-      .then(onSuccess)
-      .catch(onFailure)
+      .then(() => onSuccess(generation, requestUserId))
+      .catch((failure: unknown) =>
+        onFailure(failure, generation, requestUserId)
+      )
       .finally(() => {
         inFlight.current = false;
-        setBusy(false);
+        if (mounted.current) setBusy(false);
       });
   };
 
@@ -182,7 +237,6 @@ export function useWalletPinSettings() {
     setConfirmPin,
     busy,
     error,
-    notice,
     reauthRequired,
     submit,
     forgotPin: () => switchMode('reset'),

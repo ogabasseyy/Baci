@@ -83,14 +83,6 @@ export function WalletPinSettingsScreen() {
             {copy.body}
           </Text>
         ) : null}
-        {pin.notice ? (
-          <Text
-            accessibilityLiveRegion="polite"
-            style={[styles.message, { color: colors.text }]}
-          >
-            {pin.notice}
-          </Text>
-        ) : null}
         {pin.mode === 'change' ? (
           <WalletPinField
             colors={colors}

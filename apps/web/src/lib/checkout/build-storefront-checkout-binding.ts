@@ -3,7 +3,7 @@ import type { SharedCartRateBinding } from './shared-cart-rate-binding';
 import type {
   StorefrontCheckoutBinding,
   StorefrontCheckoutVariant,
-} from './storefront-order-claims';
+} from './storefront-order-claim-types';
 
 /** Creates the identity claim only from server-verified shared-cart authority. */
 export function buildStorefrontCheckoutBinding({

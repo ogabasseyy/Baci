@@ -4,7 +4,7 @@ import { buildStorefrontCheckoutBinding } from './build-storefront-checkout-bind
 import { isMerchantRateAttestationEnabled } from './is-merchant-rate-attestation-enabled';
 import { MerchantRateAttestationInputError } from './merchant-rate-attestation-input-error';
 import type { SharedCartRateBinding } from './shared-cart-rate-binding';
-import type { StorefrontCheckoutVariant } from './storefront-order-claims';
+import type { StorefrontCheckoutVariant } from './storefront-order-claim-types';
 import type {
   StorefrontCheckoutBinding,
   StorefrontMerchantRateAttestation,

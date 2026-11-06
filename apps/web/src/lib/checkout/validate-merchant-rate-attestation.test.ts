@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import {
-  type StorefrontCheckoutBinding,
-  type StorefrontMerchantRateAttestation,
-  validateCheckoutBinding,
-  validateMerchantRateAttestation,
-} from './storefront-order-claims';
+import type {
+  StorefrontCheckoutBinding,
+  StorefrontMerchantRateAttestation,
+} from './storefront-order-claim-types';
+import { validateCheckoutBinding } from './validate-checkout-binding';
+import { validateMerchantRateAttestation } from './validate-merchant-rate-attestation';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const SHIPPING_RATE_ID = '22222222-2222-4222-8222-222222222222';
-const CART_ID = '33333333-3333-4333-8333-333333333333';
-const CHECKOUT_SESSION_ID = '44444444-4444-4444-8444-444444444444';
-
 const validCheckoutBinding: StorefrontCheckoutBinding = {
-  cartId: CART_ID,
-  checkoutSessionId: CHECKOUT_SESSION_ID,
+  cartId: '33333333-3333-4333-8333-333333333333',
+  checkoutSessionId: '44444444-4444-4444-8444-444444444444',
   checkoutGeneration: 4,
   cartVersion: 8,
   identityKind: 'idempotent',
@@ -23,8 +20,7 @@ const validCheckoutBinding: StorefrontCheckoutBinding = {
   checkoutRequestHash: 'a'.repeat(64),
   deliveryMode: 'merchant_rate',
 };
-
-const validMerchantRateAttestation: StorefrontMerchantRateAttestation = {
+const validAttestation: StorefrontMerchantRateAttestation = {
   shippingRateId: SHIPPING_RATE_ID,
   shippingConfigRevision: '9223372036854775807',
   canonicalSubtotalMinor: 123_456,
@@ -34,51 +30,6 @@ const validMerchantRateAttestation: StorefrontMerchantRateAttestation = {
   fulfillmentKind: 'ship',
 };
 
-describe('validateCheckoutBinding', () => {
-  it('normalizes UUID fields while preserving opaque identity fields', () => {
-    expect(
-      validateCheckoutBinding({
-        ...validCheckoutBinding,
-        cartId: CART_ID.toUpperCase(),
-        checkoutSessionId: CHECKOUT_SESSION_ID.toUpperCase(),
-      })
-    ).toEqual({
-      version: 1,
-      cart_id: CART_ID,
-      checkout_session_id: CHECKOUT_SESSION_ID,
-      checkout_generation: 4,
-      cart_version: 8,
-      principal_id: 'shared-cart-principal-opaque',
-      delivery_mode: 'merchant_rate',
-      identity_kind: 'idempotent',
-      checkout_variant: 'base',
-      idempotency_key: 'checkout-idempotency-0001',
-      checkout_request_hash: 'a'.repeat(64),
-    });
-  });
-
-  it.each([
-    ['invalid cart UUID', { cartId: 'cart-1' }],
-    ['invalid session UUID', { checkoutSessionId: 'session-1' }],
-    ['zero generation', { checkoutGeneration: 0 }],
-    ['fractional cart version', { cartVersion: 1.5 }],
-    ['blank principal', { principalId: '  ' }],
-    ['short idempotency key', { idempotencyKey: 'too-short' }],
-    ['invalid request hash', { checkoutRequestHash: 'a'.repeat(63) }],
-    [
-      'quiz voucher variant for idempotent identity',
-      { checkoutVariant: 'quiz_voucher' },
-    ],
-  ])('rejects %s', (_case, overrides) => {
-    expect(() =>
-      validateCheckoutBinding({
-        ...validCheckoutBinding,
-        ...overrides,
-      } as StorefrontCheckoutBinding)
-    ).toThrow();
-  });
-});
-
 describe('validateMerchantRateAttestation', () => {
   const checkoutBinding = validateCheckoutBinding(validCheckoutBinding);
 
@@ -87,7 +38,7 @@ describe('validateMerchantRateAttestation', () => {
       validateMerchantRateAttestation({
         merchantId: ` ${MERCHANT_ID.toUpperCase()} `,
         attestation: {
-          ...validMerchantRateAttestation,
+          ...validAttestation,
           shippingRateId: SHIPPING_RATE_ID.toUpperCase(),
         },
         checkoutBinding,
@@ -122,9 +73,9 @@ describe('validateMerchantRateAttestation', () => {
       validateMerchantRateAttestation({
         merchantId: MERCHANT_ID,
         attestation: {
-          ...validMerchantRateAttestation,
+          ...validAttestation,
           ...overrides,
-        } as StorefrontMerchantRateAttestation,
+        } as unknown as StorefrontMerchantRateAttestation,
         checkoutBinding,
         hasCanonicalDeliveryMetadata: true,
       })
@@ -135,27 +86,26 @@ describe('validateMerchantRateAttestation', () => {
     expect(() =>
       validateMerchantRateAttestation({
         merchantId: 'merchant-1',
-        attestation: validMerchantRateAttestation,
+        attestation: validAttestation,
         checkoutBinding,
         hasCanonicalDeliveryMetadata: true,
       })
     ).toThrow(/UUID merchant id/);
   });
 
-  it('rejects missing canonical delivery metadata and non-merchant-rate mode', () => {
+  it('rejects missing delivery metadata and non-merchant-rate mode', () => {
     expect(() =>
       validateMerchantRateAttestation({
         merchantId: MERCHANT_ID,
-        attestation: validMerchantRateAttestation,
+        attestation: validAttestation,
         checkoutBinding,
         hasCanonicalDeliveryMetadata: false,
       })
     ).toThrow(/canonical delivery metadata/);
-
     expect(() =>
       validateMerchantRateAttestation({
         merchantId: MERCHANT_ID,
-        attestation: validMerchantRateAttestation,
+        attestation: validAttestation,
         checkoutBinding: validateCheckoutBinding({
           ...validCheckoutBinding,
           deliveryMode: 'replay',

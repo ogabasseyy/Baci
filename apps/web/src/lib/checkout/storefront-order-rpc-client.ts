@@ -5,18 +5,18 @@ import { signScopedSupabaseJwt } from '@/lib/supabase/scoped-jwt';
 
 const STOREFRONT_ORDER_CONTEXT_TTL_SECONDS = 5 * 60;
 
-import {
-  type StorefrontCheckoutBinding,
-  type StorefrontMerchantRateAttestation,
-  validateCheckoutBinding,
-  validateMerchantRateAttestation,
-} from './storefront-order-claims';
+import type {
+  StorefrontCheckoutBinding,
+  StorefrontMerchantRateAttestation,
+} from './storefront-order-claim-types';
+import { validateCheckoutBinding } from './validate-checkout-binding';
+import { validateMerchantRateAttestation } from './validate-merchant-rate-attestation';
 
 export type {
   StorefrontCheckoutBinding,
   StorefrontCheckoutVariant,
   StorefrontMerchantRateAttestation,
-} from './storefront-order-claims';
+} from './storefront-order-claim-types';
 
 /**
  * Creates the short-lived server context used by storefront order RPCs.

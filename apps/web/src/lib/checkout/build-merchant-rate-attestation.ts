@@ -1,7 +1,7 @@
 import { resolveSubdivisionCode } from '@/lib/shipping/merchant-rates/subdivisions';
 import { MerchantRateAttestationInputError } from './merchant-rate-attestation-input-error';
 import type { SharedCartRateBinding } from './shared-cart-rate-binding';
-import type { StorefrontMerchantRateAttestation } from './storefront-order-claims';
+import type { StorefrontMerchantRateAttestation } from './storefront-order-claim-types';
 
 function toMinorUnits(value: number, field: string): number {
   if (!Number.isFinite(value) || value < 0) {

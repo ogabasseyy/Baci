@@ -62,9 +62,19 @@ export function GoalLifecycleEntry({
               params: { goalId: goal.id, kind },
             });
           }}
-          style={[styles.button, { borderColor: colors.border }]}
+          style={
+            kind === 'cancel'
+              ? styles.quietLink
+              : [styles.button, { borderColor: colors.border }]
+          }
         >
-          <Text style={[styles.text, { color: colors.text }]}>
+          <Text
+            style={
+              kind === 'cancel'
+                ? [styles.quietText, { color: colors.textSecondary }]
+                : [styles.text, { color: colors.text }]
+            }
+          >
             {GOAL_LIFECYCLE_COPY[kind].entryButton}
           </Text>
         </Pressable>
@@ -82,4 +92,13 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   text: { fontSize: 14, fontWeight: '600' },
+  // Cancelling is available but deliberately quiet: a text link, not a button.
+  quietLink: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
+  quietText: { fontSize: 13, textDecorationLine: 'underline' },
 });

@@ -47,7 +47,8 @@ export function useWalletSavingsController(
     ...input,
     goalAwaitingSettlement,
     goalSettlementChecking:
-      gate === 'checking' && isFundedUnsettledGoal(input.goal),
+      (gate === 'checking' || gate === 'error') &&
+      isFundedUnsettledGoal(input.goal),
     requestPinProof: requestProof,
   });
   const retryRecovery = () => {

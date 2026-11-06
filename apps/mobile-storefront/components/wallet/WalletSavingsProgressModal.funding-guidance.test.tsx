@@ -1,7 +1,9 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { User } from '@supabase/supabase-js';
 import { render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
+import { useAuthStore } from '@/stores/auth-store';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
 jest.mock('expo-image', () => {
@@ -42,8 +44,18 @@ const goal = {
   target_amount: 100000,
   title: 'iPhone 15 Pro',
 };
+const authUser: User = {
+  id: 'customer-a',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 
 describe('WalletSavingsProgressModal funding guidance', () => {
+  beforeEach(() => {
+    useAuthStore.setState({ user: authUser, merchantId: 'merchant-a' });
+  });
   it('shows the saved device condition legibly on the dark Add to savings sheet', () => {
     render(
       <WalletSavingsProgressModal
@@ -61,7 +73,7 @@ describe('WalletSavingsProgressModal funding guidance', () => {
       />
     );
 
-    expect(screen.getByText('Your plan is ready')).toBeOnTheScreen();
+    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
     const condition = screen.getByText('Condition: New');
     expect(StyleSheet.flatten(condition.props.style)).toEqual(
       expect.objectContaining({

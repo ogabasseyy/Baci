@@ -1,5 +1,4 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -8,7 +7,10 @@ import type Colors from '@/constants/Colors';
 import { palette } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
+import { getSavingsEncouragement } from './get-savings-encouragement';
+import { getSavingsProgress } from './get-savings-progress';
+import { SavingsGoalArtwork } from './SavingsGoalArtwork';
+import { SavingsProgressMeter } from './SavingsProgressMeter';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
@@ -29,18 +31,8 @@ export function WalletSavingsPlanCard({
     colors.primaryForeground === palette.black
       ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
       : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const progress =
-    goal.target_amount > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            Math.round((goal.current_amount / goal.target_amount) * 100)
-          )
-        )
-      : 0;
+  const { displayPercent, percent: progress } = getSavingsProgress(goal);
   const remaining = Math.max(0, goal.target_amount - goal.current_amount);
-  const productImageSource = getSavingsGoalImageSource(goal, 128);
   const hasStarted = goal.current_amount > 0;
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
@@ -57,9 +49,7 @@ export function WalletSavingsPlanCard({
       ? 'Plan complete'
       : goal.status === 'paused'
         ? 'Plan paused'
-        : hasStarted
-          ? 'Your next upgrade is taking shape'
-          : 'Your plan is ready';
+        : getSavingsEncouragement(progress, goal.current_amount).title;
 
   return (
     <View
@@ -69,23 +59,12 @@ export function WalletSavingsPlanCard({
       ]}
     >
       <View style={styles.topRow}>
-        <View style={[styles.iconWrap, { backgroundColor: colors.muted }]}>
-          {productImageSource ? (
-            <Image
-              accessibilityLabel={goal.title}
-              source={productImageSource}
-              style={styles.image}
-              contentFit="contain"
-              autoplay={false}
-            />
-          ) : (
-            <Ionicons
-              name="phone-portrait-outline"
-              size={36}
-              color={colors.primary}
-            />
-          )}
-        </View>
+        <SavingsGoalArtwork
+          colors={colors}
+          goal={goal}
+          imageRequestSize={128}
+          size={86}
+        />
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
             YOUR NEXT UPGRADE
@@ -125,23 +104,12 @@ export function WalletSavingsPlanCard({
               </Text>
             </Text>
           </View>
-          <View
-            accessible
-            accessibilityRole="progressbar"
+          <SavingsProgressMeter
             accessibilityLabel="Savings plan progress"
-            accessibilityValue={{ min: 0, max: 100, now: progress }}
-            style={[
-              styles.track,
-              { backgroundColor: colors.primaryLowOpacity },
-            ]}
-          >
-            <View
-              style={[
-                styles.fill,
-                { width: `${progress}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
+            colors={colors}
+            height={9}
+            percent={progress}
+          />
         </View>
       </View>
       <View style={styles.footer}>
@@ -151,7 +119,7 @@ export function WalletSavingsPlanCard({
             : 'Start with your first contribution'}
         </Text>
         <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {progress}% · {formatDateTimeDisplay(goal.maturity_date, 'date')}
+          {displayPercent} · {formatDateTimeDisplay(goal.maturity_date, 'date')}
         </Text>
       </View>
       <View
@@ -216,14 +184,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  iconWrap: {
-    width: 86,
-    height: 86,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  image: { width: 78, height: 78 },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: {
     fontSize: 10,
@@ -253,12 +213,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   targetAmount: { fontSize: 11, fontWeight: '400' },
-  track: {
-    height: 7,
-    borderRadius: 9,
-    overflow: 'hidden',
-  },
-  fill: { height: '100%', borderRadius: 9 },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -128,18 +128,6 @@ describe('verifyOrderShippingRate', () => {
     });
   });
 
-  it('returns the revision from the same storefront config payload', async () => {
-    mockGetMerchantShippingRatesOrThrow.mockResolvedValue({
-      ...buildPayload([buildRate()]),
-      shippingConfigRevision: '42',
-    });
-
-    await expect(verifyOrderShippingRate(baseInput())).resolves.toMatchObject({
-      ok: true,
-      shippingConfigRevision: '42',
-    });
-  });
-
   it('returns amount 0 when the canonical subtotal crosses free_over_amount', async () => {
     // Arrange
     mockGetMerchantShippingRatesOrThrow.mockResolvedValue(

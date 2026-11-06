@@ -8,6 +8,7 @@ it('keeps truthful progress available while storefront savings are server-off', 
   } as WalletActiveSavingsGoal;
 
   expect(getSavingsProgress(goal)).toEqual({
+    displayPercent: '99%',
     milestone: 'Almost there',
     percent: 99,
   });

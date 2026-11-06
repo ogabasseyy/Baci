@@ -16,12 +16,14 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   card: {
     borderTopLeftRadius: RADIUS['2xl'],
     borderTopRightRadius: RADIUS['2xl'],
+    height: '88%',
     maxHeight: '88%',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
-  scrollContent: { gap: SPACING.lg, paddingBottom: SPACING.md },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1, gap: SPACING.lg, paddingBottom: SPACING.md },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -110,7 +112,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: palette.emerald[800],
+    backgroundColor: palette.red[600],
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
     minHeight: 48,

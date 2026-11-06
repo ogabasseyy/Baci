@@ -31,7 +31,7 @@ export function WalletSavingsPlanCard({
     colors.primaryForeground === palette.black
       ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
       : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const { percent: progress } = getSavingsProgress(goal);
+  const { displayPercent, percent: progress } = getSavingsProgress(goal);
   const remaining = Math.max(0, goal.target_amount - goal.current_amount);
   const hasStarted = goal.current_amount > 0;
   const actionLabel = goal.selection_unresolved
@@ -49,7 +49,7 @@ export function WalletSavingsPlanCard({
       ? 'Plan complete'
       : goal.status === 'paused'
         ? 'Plan paused'
-        : getSavingsEncouragement(progress).title;
+        : getSavingsEncouragement(progress, goal.current_amount).title;
 
   return (
     <View
@@ -119,7 +119,7 @@ export function WalletSavingsPlanCard({
             : 'Start with your first contribution'}
         </Text>
         <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {progress}% · {formatDateTimeDisplay(goal.maturity_date, 'date')}
+          {displayPercent} · {formatDateTimeDisplay(goal.maturity_date, 'date')}
         </Text>
       </View>
       <View

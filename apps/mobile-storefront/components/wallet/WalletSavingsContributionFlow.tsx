@@ -195,6 +195,7 @@ export function WalletSavingsContributionFlow({
           </Pressable>
         ) : (
           <WalletSavingsContributionButton
+            colors={colors}
             disabled={!validAmount}
             isAdding={isAdding}
             onPress={onAddSavings}

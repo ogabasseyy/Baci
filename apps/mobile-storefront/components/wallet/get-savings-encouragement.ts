@@ -1,7 +1,10 @@
 type Encouragement = { body: string; title: string };
 
 /** Friendly line for how far along a goal is. Never promises a return. */
-export function getSavingsEncouragement(percent: number): Encouragement {
+export function getSavingsEncouragement(
+  percent: number,
+  savedAmount = 0
+): Encouragement {
   if (percent >= 100) {
     return {
       title: 'Goal reached!',
@@ -26,7 +29,13 @@ export function getSavingsEncouragement(percent: number): Encouragement {
       body: 'Nice momentum. Every top-up gets you closer.',
     };
   }
-  if (percent > 0) {
+  if (percent === 0 && savedAmount > 0) {
+    return {
+      title: 'Your plan is growing',
+      body: 'Small steps add up. Keep it going.',
+    };
+  }
+  if (percent > 0 || savedAmount > 0) {
     return {
       title: 'Great start!',
       body: 'Small steps add up. Keep it going.',

@@ -53,6 +53,14 @@ describe('useSavingsCelebration', () => {
     expect(Haptics.notificationAsync).not.toHaveBeenCalled();
   });
 
+  it('keeps exact whole-number celebration percentages', () => {
+    const { result, rerender } = setup({ amount: 0, adding: false });
+    rerender({ amount: 0, adding: true });
+    rerender({ amount: 5800, adding: true });
+    rerender({ amount: 5800, adding: false });
+    expect(result.current).toEqual({ added: 5800, percent: 58 });
+  });
+
   it('clears the celebration when the next add starts or the sheet closes', () => {
     const { result, rerender } = setup({ amount: 0, adding: false });
     rerender({ amount: 0, adding: true });

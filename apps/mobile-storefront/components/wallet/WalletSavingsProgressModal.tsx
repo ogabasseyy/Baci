@@ -100,6 +100,7 @@ export function WalletSavingsProgressModal({
       </View>
 
       <ScrollView
+        style={styles.scrollView}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}

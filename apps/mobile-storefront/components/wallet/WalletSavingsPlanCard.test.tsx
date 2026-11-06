@@ -78,6 +78,23 @@ describe('WalletSavingsPlanCard', () => {
     ).toHaveAccessibilityValue({ now: 99 });
   });
 
+  it('recognizes a small saved amount below one percent of the target', () => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 400, target_amount: 250000 }}
+        onOpen={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Your plan is growing')).toBeOnTheScreen();
+    expect(screen.queryByText('Every naira counts')).toBeNull();
+    expect(screen.getByText('<1% · 30 October 2026')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('progressbar', { name: 'Savings plan progress' })
+    ).toHaveAccessibilityValue({ now: 0 });
+  });
+
   it('labels the completed-plan action as starting another plan', () => {
     render(
       <WalletSavingsPlanCard

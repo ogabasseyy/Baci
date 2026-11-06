@@ -50,7 +50,7 @@ export function useSavingsCelebration({
     if (added > 0) {
       const percent =
         targetAmount > 0
-          ? Math.min(100, Math.floor((currentAmount / targetAmount) * 100))
+          ? Math.min(100, Math.floor((currentAmount * 100) / targetAmount))
           : 0;
       setCelebration({ added, percent });
       triggerHaptic('success');

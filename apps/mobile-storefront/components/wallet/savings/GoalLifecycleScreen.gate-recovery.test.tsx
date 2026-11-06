@@ -6,7 +6,13 @@ import { useWallet } from '@/hooks/use-wallet';
 import { issueGoalAction } from '@/lib/goal-lifecycle-api';
 import { useAuthStore } from '@/stores/auth-store';
 import { GoalLifecycleScreen } from './GoalLifecycleScreen';
+import { type GoalLifecycleStep, useGoalLifecycle } from './use-goal-lifecycle';
 import { usePrimaryGoalGate } from './use-primary-goal-gate';
+
+let mockStep: GoalLifecycleStep = 'review';
+const mockBegin = jest.fn(async () => undefined);
+const mockRetryPin = jest.fn(async () => undefined);
+const mockCheckAgain = jest.fn(async () => undefined);
 
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => {
@@ -24,6 +30,10 @@ jest.mock('@/hooks/use-wallet', () => ({
 jest.mock('@/hooks/use-auth-guard');
 jest.mock('@/lib/goal-lifecycle-api');
 jest.mock('./use-primary-goal-gate');
+jest.mock('./use-goal-lifecycle', () => ({
+  ...jest.requireActual('./use-goal-lifecycle'),
+  useGoalLifecycle: jest.fn(),
+}));
 jest.mock('./WalletPinSheet', () => ({ WalletPinSheet: () => null }));
 
 const MERCHANT = '11111111-1111-4111-8111-111111111111';
@@ -46,6 +56,17 @@ function renderScreen(children?: ReactNode) {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  mockStep = 'review';
+  jest.mocked(useGoalLifecycle).mockImplementation(() => ({
+    step: mockStep,
+    message: null,
+    canStartAgain: mockStep === 'failed',
+    needsSignIn: false,
+    begin: mockBegin,
+    retryPin: mockRetryPin,
+    checkAgain: mockCheckAgain,
+    sheetProps: { request: null, onProof: jest.fn(), onCancel: jest.fn() },
+  }));
   jest.mocked(useRequireAuth).mockReturnValue({
     isAuthenticated: true,
     isLoading: false,
@@ -68,7 +89,6 @@ beforeEach(() => {
 describe('readiness gate recovery', () => {
   it.each([
     'checking',
-    'error',
   ] as const)('keeps Continue disabled while the gate is %s', (gate) => {
     jest.mocked(usePrimaryGoalGate).mockReturnValue(gate);
     renderScreen();
@@ -79,6 +99,38 @@ describe('readiness gate recovery', () => {
     expect(button).toBeBusy();
     fireEvent.press(button);
     expect(issueGoalAction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'review',
+    'pin_cancelled',
+    'failed',
+    'needs_review',
+  ] as const)('retries a failed readiness check from %s without starting a money action', (step) => {
+    mockStep = step;
+    jest
+      .mocked(usePrimaryGoalGate)
+      .mockImplementation((_key, retryNonce) =>
+        retryNonce ? 'checking' : 'error'
+      );
+    renderScreen();
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry).toBeEnabled();
+    fireEvent.press(retry);
+    expect(usePrimaryGoalGate).toHaveBeenLastCalledWith(undefined, 1);
+    for (const button of screen.getAllByRole('button')) {
+      if (
+        ['Continue', 'Try again', 'Start again', 'Checking…'].includes(
+          button.props.accessibilityLabel
+        )
+      ) {
+        expect(button).toBeDisabled();
+      }
+    }
+    expect(issueGoalAction).not.toHaveBeenCalled();
+    expect(mockBegin).not.toHaveBeenCalled();
+    expect(mockRetryPin).not.toHaveBeenCalled();
+    expect(mockCheckAgain).not.toHaveBeenCalled();
   });
 
   it('enables Continue after the gate becomes ready', () => {

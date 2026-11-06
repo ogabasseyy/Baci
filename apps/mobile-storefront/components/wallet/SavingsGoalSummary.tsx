@@ -23,10 +23,10 @@ export function SavingsGoalSummary({
   goal: WalletActiveSavingsGoal;
   onResolveVariant?: () => void;
 }) {
-  const { percent } = getSavingsProgress(goal);
+  const { displayPercent, percent } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
   const conditionLabel = formatProductConditionDisplay(goal.product_condition);
-  const cheer = getSavingsEncouragement(percent);
+  const cheer = getSavingsEncouragement(percent, goal.current_amount);
   const nudge =
     goal.status === 'completed'
       ? null
@@ -43,7 +43,12 @@ export function SavingsGoalSummary({
           imageRequestSize={170}
           size={96}
         />
-        <View style={styles.progressPane}>
+        <View
+          style={[
+            styles.progressPane,
+            { backgroundColor: colors.primaryLowOpacity },
+          ]}
+        >
           <Text style={[styles.goalTitle, { color: colors.text }]}>
             {goal.title}
           </Text>
@@ -121,7 +126,8 @@ export function SavingsGoalSummary({
             {formatNgnCurrency(amountLeft)} left
           </Text>
           <Text style={[styles.small, { color: colors.textSecondary }]}>
-            <Text style={{ color: colors.primary }}>{percent}%</Text> complete
+            <Text style={{ color: colors.primary }}>{displayPercent}</Text>{' '}
+            complete
           </Text>
         </View>
         {nudge ? (
@@ -136,7 +142,13 @@ export function SavingsGoalSummary({
 
 const styles = StyleSheet.create({
   contentRow: { flexDirection: 'row', gap: SPACING.md },
-  progressPane: { flex: 1, gap: 2, minWidth: 0 },
+  progressPane: {
+    borderRadius: RADIUS.lg,
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+    padding: SPACING.sm,
+  },
   goalTitle: { fontSize: 16, fontWeight: '700' },
   cheerTitle: { fontSize: 14, fontWeight: '700', marginTop: 2 },
   cheerBody: { fontSize: 13, lineHeight: 18 },

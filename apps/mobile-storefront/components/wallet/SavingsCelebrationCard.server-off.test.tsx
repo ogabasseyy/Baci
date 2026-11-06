@@ -3,6 +3,8 @@ import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { SavingsCelebrationCard } from './SavingsCelebrationCard';
 
+type InspectableAnimatedValue = Animated.Value & { __getValue: () => number };
+
 describe('SavingsCelebrationCard', () => {
   afterEach(() => jest.restoreAllMocks());
 
@@ -42,13 +44,14 @@ describe('SavingsCelebrationCard', () => {
       if (!(value instanceof Animated.Value)) {
         throw new Error('Expected a scalar celebration translation');
       }
+      const sharedValue = value as InspectableAnimatedValue;
       return {
         reset: jest.fn(),
         start: () => {
-          const from = value.__getValue();
+          const from = sharedValue.__getValue();
           const to = config.toValue as number;
           transitions.push({ from, to });
-          value.setValue(to);
+          sharedValue.setValue(to);
         },
         stop: jest.fn(),
       };
@@ -62,7 +65,8 @@ describe('SavingsCelebrationCard', () => {
     );
     const card = UNSAFE_getByType(Animated.View);
     const style = StyleSheet.flatten(card.props.style);
-    const translation = style.transform?.[0]?.translateY as Animated.Value;
+    const translation = style.transform?.[0]
+      ?.translateY as InspectableAnimatedValue;
     expect(style.opacity).toBe(1);
     expect(translation.__getValue()).toBe(0);
 

@@ -20,3 +20,10 @@ it('invites a contribution at zero and never promises returns', () => {
     expect(`${title} ${body}`).not.toMatch(/interest|return|earn|profit/i);
   }
 });
+
+it('recognizes saved money when its floored progress is below one percent', () => {
+  expect(getSavingsEncouragement(0, 400)).toEqual({
+    title: 'Your plan is growing',
+    body: 'Small steps add up. Keep it going.',
+  });
+});

@@ -60,6 +60,25 @@ describe('SavingsGoalSummary', () => {
     expect(screen.getByText(title)).toBeOnTheScreen();
   });
 
+  it('acknowledges ₦400 saved toward ₦250,000 without rounding the meter up', () => {
+    render(
+      <SavingsGoalSummary
+        colors={Colors.light}
+        goal={{ ...goal, current_amount: 400 }}
+      />
+    );
+
+    expect(screen.getByText('Your plan is growing')).toBeOnTheScreen();
+    expect(
+      screen.getByText('Small steps add up. Keep it going.')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Every naira counts')).toBeNull();
+    expect(screen.getByText(/<1% complete/)).toBeOnTheScreen();
+    expect(
+      screen.getByRole('progressbar', { name: 'Savings plan progress details' })
+    ).toHaveAccessibilityValue({ now: 0 });
+  });
+
   it('celebrates a finished goal and drops the pace line', () => {
     render(
       <SavingsGoalSummary

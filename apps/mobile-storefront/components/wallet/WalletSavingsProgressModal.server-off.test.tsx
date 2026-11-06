@@ -1,5 +1,8 @@
+import { beforeEach } from '@jest/globals';
+import type { User } from '@supabase/supabase-js';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+import { useAuthStore } from '@/stores/auth-store';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
@@ -19,10 +22,20 @@ const goal = {
   target_amount: 100000,
   title: 'iPhone 15 Pro',
 };
+const authUser: User = {
+  id: 'customer-a',
+  app_metadata: {},
+  user_metadata: {},
+  aud: 'authenticated',
+  created_at: '2026-01-01T00:00:00.000Z',
+};
 
 // Outside the hosted staging preview the modal is production's: the regular
 // wallet contribution flow and no plan-funding notes.
 describe('server keeps PiggyVest off', () => {
+  beforeEach(() => {
+    useAuthStore.setState({ user: authUser, merchantId: 'merchant-a' });
+  });
   it('shows the wallet contribution and no plan notes', () => {
     const onFundWallet = jest.fn();
     render(

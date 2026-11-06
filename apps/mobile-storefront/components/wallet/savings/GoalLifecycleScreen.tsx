@@ -3,62 +3,26 @@ import { Redirect, router, Stack, usePathname } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors, { palette } from '@/constants/Colors';
+import Colors from '@/constants/Colors';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
 import { useWallet, walletKeys } from '@/hooks/use-wallet';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { GoalActionKind } from '@/schemas/goal-lifecycle';
 import { useAuthStore } from '@/stores/auth-store';
+import { GoalLifecycleAction as Action } from './GoalLifecycleAction';
 import {
   GOAL_LIFECYCLE_COPY as COPY,
   useGoalLifecycle,
 } from './use-goal-lifecycle';
 import { usePrimaryGoalGate } from './use-primary-goal-gate';
 import { WalletPinSheet } from './WalletPinSheet';
-
-type WalletColors = (typeof Colors)['light'];
-
-function Action(props: {
-  colors: WalletColors;
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
-  busy?: boolean;
-}) {
-  const { colors, label, onPress, primary = false, busy = false } = props;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: busy, busy }}
-      disabled={busy}
-      onPress={onPress}
-      style={[
-        styles.button,
-        primary
-          ? { backgroundColor: colors.primary }
-          : { borderColor: colors.border, borderWidth: 1 },
-      ]}
-    >
-      <Text
-        style={[
-          styles.buttonText,
-          { color: primary ? palette.white : colors.text },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /** Login URL whose way back keeps the goal and action (the route reads both). */
 function loginHref(pathname: string, goalId: string, kind: GoalActionKind) {
@@ -112,7 +76,8 @@ export function GoalLifecycleScreen({
   const copy = COPY[kind];
   const queryClient = useQueryClient();
   const auth = useRequireAuth();
-  const gate = usePrimaryGoalGate();
+  const [gateRetryNonce, setGateRetryNonce] = useState(0);
+  const gate = usePrimaryGoalGate(undefined, gateRetryNonce);
   const { goal, isLoading, loadFailed, reload } = useFindGoal(goalId);
   const flow = useGoalLifecycle({ kind, goalId });
   const pathname = usePathname();
@@ -131,6 +96,7 @@ export function GoalLifecycleScreen({
   };
   const leave = () => router.replace('/wallet');
   const signIn = () => router.replace(loginHref(pathname, goalId, kind));
+  const gateError = gate === 'error';
   const checking = gate !== 'ready';
   // Continue stays off until the goal it would act on is on screen.
   const waiting = checking || !goal || auth.isLoading;
@@ -236,6 +202,24 @@ export function GoalLifecycleScreen({
     );
   }
 
+  if (
+    gateError &&
+    ['review', 'pin_cancelled', 'failed', 'needs_review'].includes(flow.step)
+  ) {
+    body = 'We couldn’t check your wallet. Please try again.';
+    actions = (
+      <>
+        <Action
+          colors={colors}
+          label={COPY.tryAgain}
+          onPress={() => setGateRetryNonce((nonce) => nonce + 1)}
+          primary
+        />
+        <Action colors={colors} label={COPY.backToWallet} onPress={leave} />
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: copy.screenTitle }} />
@@ -286,11 +270,4 @@ const styles = StyleSheet.create({
   goalTitle: { fontSize: 16, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 22 },
   actions: { gap: 10 },
-  button: {
-    alignItems: 'center',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  buttonText: { fontSize: 15, fontWeight: '600' },
 });

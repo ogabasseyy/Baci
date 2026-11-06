@@ -28,6 +28,21 @@ describe('ChatInput', () => {
     expect(button).toBeDefined();
   });
 
+  it('labels the private destination action in Santa theme', () => {
+    render(
+      <ChatInput
+        {...defaultProps}
+        isSanta
+        privateMode
+        input="Lagos"
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Check destination state' })
+    ).toBeDefined();
+  });
+
   it('displays placeholder "Type your message..." in standard mode', () => {
     render(<ChatInput {...defaultProps} isSanta={false} />);
     const input = screen.getByPlaceholderText('Type your message...');

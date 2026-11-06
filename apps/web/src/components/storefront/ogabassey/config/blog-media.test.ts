@@ -32,8 +32,9 @@ describe('blog media config', () => {
     expect(BLOG_POST_HERO_IMAGE_PRELOAD_WIDTH).toBe(1200);
   });
 
-  it('exposes full-bleed listing hero sizes and a responsive card sizes value', () => {
-    expect(BLOG_LISTING_FEATURED_IMAGE_SIZES).toBe('100vw');
+  it('exposes responsive listing hero sizes and a responsive card sizes value', () => {
+    expect(BLOG_LISTING_FEATURED_IMAGE_SIZES).toContain('calc(100vw - 2rem)');
+    expect(BLOG_LISTING_FEATURED_IMAGE_SIZES).toContain('1400px');
     expect(BLOG_LISTING_FEATURED_IMAGE_PRELOAD_WIDTH).toBe(750);
     expect(BLOG_LISTING_CARD_IMAGE_SIZES).toContain('33vw');
   });

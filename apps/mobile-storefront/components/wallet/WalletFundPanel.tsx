@@ -34,6 +34,8 @@ interface WalletFundPanelProps {
   creditWatch: WalletCreditWatch;
   fundAmount: string;
   fundingAccount: WalletDisplayFundingAccount | null;
+  /** A card top-up credits the legacy wallet: hidden for primary-funded flows. */
+  hideCardFunding?: boolean;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   needsPhone: boolean;
@@ -54,6 +56,7 @@ export function WalletFundPanel({
   creditWatch,
   fundAmount,
   fundingAccount,
+  hideCardFunding = false,
   isCreatingFundingAccount,
   isFundPending,
   needsPhone,
@@ -222,7 +225,7 @@ export function WalletFundPanel({
         </Text>
       ) : null}
 
-      {cardEntryVisible ? (
+      {hideCardFunding ? null : cardEntryVisible ? (
         <WalletCardTopUpForm
           colors={colors}
           fundAmount={fundAmount}

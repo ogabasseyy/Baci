@@ -7,7 +7,7 @@ import {
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
-import { shouldReportContributionFailure } from './wallet-contribution-failure';
+import { reportContributionError } from './wallet-contribution-error';
 
 interface AddSavingsContributionParams {
   activeMerchantId?: string;
@@ -108,7 +108,7 @@ export async function addSavingsContributionToGoal({
 
   if (amount > walletBalance) {
     Alert.alert(
-      'Fund wallet first',
+      'Add money first',
       `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`
     );
     return;
@@ -180,11 +180,7 @@ export async function addSavingsContributionToGoal({
       `Added ${formatNgnCurrency(amount)} to your savings goal.`
     );
   } catch (error) {
-    if (!shouldReportContributionFailure(error, clearIdempotencyKey)) return;
-    Alert.alert(
-      'Unable to add savings',
-      error instanceof Error ? error.message : 'Please try again in a moment.'
-    );
+    reportContributionError(error, clearIdempotencyKey);
   } finally {
     setIsAddingSavingsContribution(false);
   }

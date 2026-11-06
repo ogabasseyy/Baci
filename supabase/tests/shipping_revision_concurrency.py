@@ -5,6 +5,11 @@ import time
 from pathlib import Path
 
 
+def psql_include(path):
+    quoted_path = str(path).replace("\\", "\\\\").replace("'", "''")
+    return f"\\i '{quoted_path}'"
+
+
 def verify_migration_seed_race(root, psql, scalar, revision):
     migration_path = root / "supabase/migrations/20261106150000_merchant_shipping_config_revision.sql"
     migration_sql = migration_path.read_text()
@@ -29,7 +34,7 @@ def verify_migration_seed_race(root, psql, scalar, revision):
         raise AssertionError("concurrent merchant insert did not start")
 
     migration = subprocess.Popen(
-        psql + ["-c", f"\\i {migration_path}"],
+        psql + ["-c", psql_include(migration_path)],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

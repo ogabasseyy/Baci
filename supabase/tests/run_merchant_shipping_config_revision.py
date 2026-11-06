@@ -49,6 +49,15 @@ def run(args, *, sql=None, check=True, env=None):
     )
 
 
+def psql_quote(path):
+    quoted_path = str(path).replace("\\", "\\\\").replace("'", "''")
+    return f"'{quoted_path}'"
+
+
+def psql_include(path):
+    return f"\\i {psql_quote(path)}"
+
+
 run(["initdb", "-D", str(DATA), "-U", "postgres", "--auth=trust", "--no-locale"])
 with socket.socket() as port_reservation:
     port_reservation.bind(("127.0.0.1", 0))
@@ -96,7 +105,7 @@ for key, filename in {
     "__MIGRATION_120003__": "20260713120003_shipping_rate_zone_same_merchant.sql",
     "__MIGRATION_120005__": "20260713120005_enforce_shipping_zone_location_no_overlap.sql",
 }.items():
-    setup = setup.replace(key, str(ROOT / "supabase/migrations" / filename))
+    setup = setup.replace(key, psql_quote(ROOT / "supabase/migrations" / filename))
 provider_migration = (ROOT / "supabase/migrations/20260926130000_repair_shipping_provider_policy_audit.sql").read_text()
 carrier_function = re.search(
     r"CREATE OR REPLACE FUNCTION private\.supported_carrier_provider_ids\(\)[\s\S]*?\$\$;",
@@ -136,10 +145,28 @@ r5 = "30000000-0000-4000-8000-000000000005"
 baseline_m1 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m1}')::text"))
 baseline_m2 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m2}')::text"))
 verify_migration_seed_race(ROOT, PSQL, scalar, revision)
+# Exercise location mutations while the original revision trigger is installed.
+# The preceding shipping migration stamps merchant_id from the parent zone, so
+# the original trigger must advance the old and new merchant revisions.
+before_one, before_two = revision(m1), revision(m2)
+run(PSQL + ["-c", f"INSERT INTO public.merchant_shipping_zone_locations(zone_id,country_code,subdivision_code) VALUES ('{z1}','GH','GH-AA')"])
+assert revision(m1) > before_one, "original location trigger did not advance the revision on insert"
+before_one = revision(m1)
+run(PSQL + ["-c", f"DELETE FROM public.merchant_shipping_zone_locations WHERE zone_id='{z1}' AND country_code='GH'"])
+assert revision(m1) > before_one, "original location trigger did not advance the revision on delete"
+before_one, before_two = revision(m1), revision(m2)
+run(PSQL + ["-c", f"UPDATE public.merchant_shipping_zone_locations SET zone_id='{z2}' WHERE zone_id='{z1}' AND country_code='NG'"])
+assert revision(m1) > before_one and revision(m2) > before_two, "original location trigger did not advance both reassigned merchant revisions"
+before_one, before_two = revision(m1), revision(m2)
+run(PSQL + ["-c", f"UPDATE public.merchant_shipping_zone_locations SET zone_id='{z1}' WHERE zone_id='{z2}' AND country_code='NG'"])
+assert revision(m1) > before_one and revision(m2) > before_two, "restoring the location did not advance both merchant revisions"
+assert scalar(f"SELECT count(*) FROM public.merchant_shipping_zone_locations WHERE zone_id='{z1}' AND country_code='NG'") == "1", "pre-fix location setup was not restored"
 # Apply the append-only correction after exercising the original migration's
 # concurrent seed/backfill behavior.
 location_revision_fix = ROOT / "supabase/migrations/20261106160000_fix_shipping_location_revision_trigger.sql"
-run(PSQL, sql=f"\\i {location_revision_fix}\n")
+run(PSQL, sql=f"{psql_include(location_revision_fix)}\n")
+tenant_integrity_fix = ROOT / "supabase/migrations/20261106170000_harden_shipping_revision_tenant_integrity.sql"
+run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))
     assert revised.pop("shipping_config_revision", None) is not None, "new projection omitted its revision"
@@ -173,6 +200,11 @@ assert revision(m3) == 1, "new merchant did not receive initial revision"
 z3 = "20000000-0000-4000-8000-000000000003"
 run(PSQL + ["-c", f"INSERT INTO public.merchant_shipping_zones(id,merchant_id,name) VALUES ('{z3}','{m3}','three')"])
 assert revision(m3) == 2, "first config mutation did not advance new merchant revision"
+run(PSQL + ["-c", f"INSERT INTO public.merchant_feature_settings(merchant_id) VALUES ('{m3}')"])
+run(PSQL + ["-c", f"DELETE FROM public.merchant_feature_settings WHERE merchant_id='{m2}'"])
+before_two, before_three = revision(m2), revision(m3)
+run(PSQL + ["-c", f"UPDATE public.merchant_feature_settings SET merchant_id='{m2}' WHERE merchant_id='{m3}'"])
+assert revision(m2) > before_two and revision(m3) > before_three, "feature settings reassignment did not advance both merchant revisions"
 
 # A config rollback must roll its revision write back as well.
 before = revision(m2)
@@ -205,6 +237,7 @@ assert scalar(f"SELECT count(*) FROM public.merchant_shipping_config_revisions W
 # The private revision is protected from all API roles.
 assert scalar("SELECT relrowsecurity FROM pg_class WHERE oid='public.merchant_shipping_config_revisions'::regclass") == "t", "revision table RLS is disabled"
 assert scalar("SELECT count(*) FROM pg_policy WHERE polrelid='public.merchant_shipping_config_revisions'::regclass") == "0", "revision table unexpectedly has a policy"
+assert scalar("SELECT confdeltype FROM pg_constraint WHERE conrelid='public.merchant_shipping_config_revisions'::regclass AND conname='merchant_shipping_config_revisions_merchant_id_fkey'") == "c", "revision rows must cascade with their merchant"
 for role in ["anon", "authenticated", "service_role"]:
     assert scalar(f"SELECT has_table_privilege('{role}','public.merchant_shipping_config_revisions','SELECT')") == "f", f"{role} can read internal revisions"
 

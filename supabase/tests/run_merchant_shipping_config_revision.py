@@ -170,6 +170,23 @@ tenant_integrity_fix = ROOT / "supabase/migrations/20261106170000_harden_shippin
 run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
 revision_access_policy = ROOT / "supabase/migrations/20261106180000_deny_direct_shipping_revision_access.sql"
 run(PSQL, sql=f"{psql_include(revision_access_policy)}\n")
+# These two forward migrations can be applied again individually without
+# changing the intended FK or the single deny-all policy.
+run(PSQL, sql=f"{psql_include(tenant_integrity_fix)}\n")
+run(PSQL, sql=f"{psql_include(revision_access_policy)}\n")
+wrong_fk_replay = f"""
+BEGIN;
+ALTER TABLE public.merchant_shipping_config_revisions
+  DROP CONSTRAINT merchant_shipping_config_revisions_merchant_id_fkey;
+ALTER TABLE public.merchant_shipping_config_revisions
+  ADD CONSTRAINT merchant_shipping_config_revisions_merchant_id_fkey
+  FOREIGN KEY (merchant_id) REFERENCES public.merchants(id) ON DELETE RESTRICT;
+{psql_include(tenant_integrity_fix)}
+ROLLBACK;
+"""
+wrong_fk_result = run(PSQL, sql=wrong_fk_replay, check=False)
+assert wrong_fk_result.returncode != 0 and "already exists" in wrong_fk_result.stderr.lower(), "tenant-integrity replay must fail closed for a same-name FK with a different delete action"
+assert scalar("SELECT confdeltype FROM pg_constraint WHERE conrelid='public.merchant_shipping_config_revisions'::regclass AND conname='merchant_shipping_config_revisions_merchant_id_fkey'") == "c", "wrong-FK replay fixture did not roll back to ON DELETE CASCADE"
 access_boundary_comment = ROOT / "supabase/migrations/20261106200000_document_shipping_revision_access_boundary.sql"
 run(PSQL, sql=f"{psql_include(access_boundary_comment)}\n")
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:

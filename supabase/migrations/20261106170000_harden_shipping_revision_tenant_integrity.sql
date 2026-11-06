@@ -1,8 +1,40 @@
-ALTER TABLE public.merchant_shipping_config_revisions
-  ADD CONSTRAINT merchant_shipping_config_revisions_merchant_id_fkey
-  FOREIGN KEY (merchant_id)
-  REFERENCES public.merchants(id)
-  ON DELETE CASCADE;
+DO $$
+DECLARE
+  v_revision_merchant_id_attnum smallint;
+  v_merchants_id_attnum smallint;
+BEGIN
+  SELECT attnum INTO STRICT v_revision_merchant_id_attnum
+  FROM pg_attribute
+  WHERE attrelid = 'public.merchant_shipping_config_revisions'::regclass
+    AND attname = 'merchant_id'
+    AND NOT attisdropped;
+
+  SELECT attnum INTO STRICT v_merchants_id_attnum
+  FROM pg_attribute
+  WHERE attrelid = 'public.merchants'::regclass
+    AND attname = 'id'
+    AND NOT attisdropped;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint AS c
+    WHERE c.conrelid = 'public.merchant_shipping_config_revisions'::regclass
+      AND c.conname = 'merchant_shipping_config_revisions_merchant_id_fkey'
+      AND c.contype = 'f'
+      AND c.conkey = ARRAY[v_revision_merchant_id_attnum]::smallint[]
+      AND c.confrelid = 'public.merchants'::regclass
+      AND c.confkey = ARRAY[v_merchants_id_attnum]::smallint[]
+      AND c.confdeltype = 'c'
+      AND c.convalidated
+  ) THEN
+    ALTER TABLE public.merchant_shipping_config_revisions
+      ADD CONSTRAINT merchant_shipping_config_revisions_merchant_id_fkey
+      FOREIGN KEY (merchant_id)
+      REFERENCES public.merchants(id)
+      ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 
 DROP TRIGGER IF EXISTS cleanup_merchant_shipping_config_revision ON public.merchants;
 DROP FUNCTION IF EXISTS private.cleanup_merchant_shipping_config_revision();

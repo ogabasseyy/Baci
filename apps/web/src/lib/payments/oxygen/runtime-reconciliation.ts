@@ -58,7 +58,10 @@ export async function reconcileOxygenCallbacks(
     callbackId: string,
     retryKey: string
   ) => Promise<void>,
-  filter?: { kind: 'address' | 'transaction'; applicationReference?: string },
+  filter?: {
+    kind: 'address' | 'selfie' | 'transaction';
+    applicationReference?: string;
+  },
   options?: { deadlineMs: number }
 ): Promise<void> {
   const deadlineMs =
@@ -68,7 +71,7 @@ export async function reconcileOxygenCallbacks(
       z.object({
         id: z.uuid(),
         retryKey: z.uuid(),
-        kind: z.enum(['address', 'transaction']),
+        kind: z.enum(['address', 'selfie', 'transaction']),
         workflowIds: z.array(z.uuid()),
       })
     )
@@ -103,9 +106,10 @@ export async function reconcileOxygenCallbacks(
         // Address hints only advance pre-activation verification. Preserve the
         // event in the inbox but retire its current generation once the bound
         // workflow is already activated; replaying KYC cannot advance it.
-        if (job.kind === 'address' && snapshot.stage === 'activated') continue;
+        if (job.kind !== 'transaction' && snapshot.stage === 'activated')
+          continue;
         const command =
-          job.kind === 'address'
+          job.kind !== 'transaction'
             ? { action: 'refresh_kyc' as const }
             : { action: 'refresh_payment_setup' as const };
         if (
@@ -134,8 +138,10 @@ export async function reconcileOxygenCallbacks(
           );
         if (queued.status === 'succeeded') {
           if (
-            job.kind === 'address' &&
-            snapshot.state.kyc?.address_status !== 'DONE'
+            job.kind !== 'transaction' &&
+            snapshot.state.kyc?.[
+              job.kind === 'selfie' ? 'selfie_status' : 'address_status'
+            ] !== 'DONE'
           )
             complete = false;
           continue;
@@ -195,8 +201,10 @@ export async function reconcileOxygenCallbacks(
         // A successful status lookup may still be PROCESSING. Keep the durable
         // hint eligible for bounded retry until Oxygen actually confirms it.
         if (
-          job.kind === 'address' &&
-          result.state.kyc?.address_status !== 'DONE'
+          job.kind !== 'transaction' &&
+          result.state.kyc?.[
+            job.kind === 'selfie' ? 'selfie_status' : 'address_status'
+          ] !== 'DONE'
         )
           complete = false;
       } catch {

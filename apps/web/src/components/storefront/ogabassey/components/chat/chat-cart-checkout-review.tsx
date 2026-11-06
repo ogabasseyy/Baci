@@ -1,8 +1,9 @@
 'use client';
 
 import { formatMoneyMinor, getMoneyCurrencyExponent } from '@baci/shared/money';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { type CartItem } from '@/hooks/cart';
+import { isSharedCartCheckoutDeadlineExpired } from '@/hooks/cart/shared-cart-checkout-deadline';
 import {
   calculateCartItemSubtotal,
   getCartItemCheckoutUnitPrice,
@@ -10,9 +11,10 @@ import {
 import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
-  type SharedCartCheckoutReview,
 } from '@/hooks/cart/shared-cart-client';
+import type { SharedCartCheckoutReview } from '@/hooks/cart/shared-cart-client';
 import type { SharedCartSyncStatus } from '@/hooks/cart/cart-types';
+import { useChatCartCheckoutReviewExpiry } from './use-chat-cart-checkout-review-expiry';
 
 interface ChatCartCheckoutReviewProps {
   items: DisplayedCartItem[];
@@ -48,45 +50,15 @@ export function ChatCartCheckoutReview({
     expiresAtEpochMs: number;
     displayDetailsKey: string;
   } | null>(null);
-  const [sessionExpired, setSessionExpired] = useState(false);
   const operationRef = useRef<{
     scopeKey: string;
     operationId: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (!prepared) return;
-    const remainingMs = prepared.expiresAtMonotonicMs - performance.now();
-    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
-      setSessionExpired(true);
-      return;
-    }
-    const timeout = window.setTimeout(
-      () => setSessionExpired(true),
-      remainingMs
-    );
-    return () => window.clearTimeout(timeout);
-  }, [prepared]);
-
-  useEffect(() => {
-    if (!prepared) return;
-    const invalidateAfterResume = () => {
-      if (
-        document.visibilityState === 'hidden' ||
-        (prepared.expiresAtMonotonicMs > performance.now() &&
-          prepared.expiresAtEpochMs > Date.now())
-      ) {
-        return;
-      }
-      setSessionExpired(true);
-    };
-    document.addEventListener('visibilitychange', invalidateAfterResume);
-    window.addEventListener('pageshow', invalidateAfterResume);
-    return () => {
-      document.removeEventListener('visibilitychange', invalidateAfterResume);
-      window.removeEventListener('pageshow', invalidateAfterResume);
-    };
-  }, [prepared]);
+  const sessionExpired = useChatCartCheckoutReviewExpiry(
+    prepared?.expiresAtMonotonicMs ?? null,
+    prepared?.expiresAtEpochMs ?? null
+  );
 
   const displayDetailsKey = JSON.stringify(
     items.map((item) => [
@@ -105,8 +77,10 @@ export function ChatCartCheckoutReview({
       sharedCartRef?.version === prepared.review.cartVersion &&
       merchantId === prepared.review.merchantId &&
       currencyCode.toUpperCase() === prepared.review.currency.toUpperCase() &&
-      prepared.expiresAtMonotonicMs > performance.now() &&
-      prepared.expiresAtEpochMs > Date.now() &&
+      !isSharedCartCheckoutDeadlineExpired(
+        prepared.expiresAtMonotonicMs,
+        prepared.expiresAtEpochMs
+      ) &&
       prepared.displayDetailsKey === displayDetailsKey &&
       !sessionExpired &&
       syncStatus === 'synced'
@@ -116,7 +90,6 @@ export function ChatCartCheckoutReview({
     if (items.length === 0 || isPreparing) return;
     setError(null);
     setPrepared(null);
-    setSessionExpired(false);
     setIsPreparing(true);
     try {
       if (!sharedCartEnabled) {
@@ -158,8 +131,10 @@ export function ChatCartCheckoutReview({
       }
       operationRef.current = null;
       if (
-        !Number.isFinite(result.sessionExpiresAtMonotonicMs) ||
-        result.sessionExpiresAtMonotonicMs <= performance.now()
+        isSharedCartCheckoutDeadlineExpired(
+          result.sessionExpiresAtMonotonicMs,
+          result.sessionExpiresAtEpochMs
+        )
       ) {
         setError('This checkout review has expired. Please review it again.');
         return;

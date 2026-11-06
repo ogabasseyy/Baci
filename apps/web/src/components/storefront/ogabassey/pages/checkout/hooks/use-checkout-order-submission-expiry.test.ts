@@ -60,8 +60,33 @@ const review = {
   unavailableCount: 0,
 };
 
+const expiryCases = [
+  {
+    label: 'monotonic deadline alone',
+    sessionExpiresAtEpochMs: Date.now() + 30_000,
+    sessionExpiresAtMonotonicMs: performance.now() - 1,
+  },
+  {
+    label: 'epoch deadline alone',
+    sessionExpiresAtEpochMs: Date.now() - 1,
+    sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+  },
+  {
+    label: 'non-finite monotonic deadline',
+    sessionExpiresAtEpochMs: Date.now() + 30_000,
+    sessionExpiresAtMonotonicMs: Number.NaN,
+  },
+  {
+    label: 'non-finite epoch deadline',
+    sessionExpiresAtEpochMs: Number.POSITIVE_INFINITY,
+    sessionExpiresAtMonotonicMs: performance.now() + 30_000,
+  },
+] as const;
+
 describe('useCheckoutOrderSubmission session expiry', () => {
-  it('stops a fresh order when its prepared checkout session expired', async () => {
+  it.each(expiryCases)(
+    'stops a fresh order when the $label expires or is invalid',
+    async ({ sessionExpiresAtEpochMs, sessionExpiresAtMonotonicMs }) => {
     const context = createContext();
     context.cart.checkoutCart = [
       {
@@ -96,8 +121,8 @@ describe('useCheckoutOrderSubmission session expiry', () => {
     } as never);
     vi.mocked(prepareSharedCartCheckout).mockResolvedValue(
       readySharedCartCheckout(review, {
-        sessionExpiresAtMonotonicMs: performance.now() - 1,
-        sessionExpiresAtEpochMs: Date.now() - 1,
+        sessionExpiresAtMonotonicMs,
+        sessionExpiresAtEpochMs,
       })
     );
 
@@ -109,5 +134,6 @@ describe('useCheckoutOrderSubmission session expiry', () => {
       expect.objectContaining({ title: 'Checkout Unavailable' })
     );
     expect(context.processing.releaseSubmission).toHaveBeenCalledOnce();
-  });
+    }
+  );
 });

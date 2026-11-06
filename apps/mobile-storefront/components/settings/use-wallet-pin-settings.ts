@@ -78,21 +78,53 @@ export function useWalletPinSettings() {
     status: WalletPinStatus | null;
   } | null>(null);
   const inFlight = useRef(false);
+  const mounted = useRef(true);
+  const screenActive = useRef(true);
+  const requestGeneration = useRef(0);
+  const currentUserId = useRef(userId);
+  const previousUserId = useRef(userId);
+  if (previousUserId.current !== userId) {
+    previousUserId.current = userId;
+    requestGeneration.current += 1;
+  }
+  currentUserId.current = userId;
 
   const mode =
     override && override.status === gate.status
       ? override.mode
       : modeFromStatus(gate.status);
 
-  useEffect(
-    () =>
-      navigation.addListener('blur', () => {
+  useEffect(() => {
+    const invalidate = (clear: boolean) => {
+      requestGeneration.current += 1;
+      screenActive.current = false;
+      if (clear) {
         setCurrentPin('');
         setNewPin('');
         setConfirmPin('');
-      }),
-    [navigation]
-  );
+      }
+    };
+    const unsubscribeBlur = navigation.addListener('blur', () =>
+      invalidate(true)
+    );
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      screenActive.current = true;
+    });
+    mounted.current = true;
+    screenActive.current = true;
+    return () => {
+      invalidate(false);
+      mounted.current = false;
+      unsubscribeBlur();
+      unsubscribeFocus();
+    };
+  }, [navigation]);
+
+  const isRequestCurrent = (generation: number, requestUserId: string) =>
+    mounted.current &&
+    screenActive.current &&
+    requestGeneration.current === generation &&
+    currentUserId.current === requestUserId;
 
   const clearFields = () => {
     setCurrentPin('');
@@ -117,19 +149,32 @@ export function useWalletPinSettings() {
     }
   };
 
-  const onSuccess = () => {
+  const onSuccess = (generation: number, requestUserId: string) => {
+    if (!isRequestCurrent(generation, requestUserId)) return;
     setOverride({ mode: 'change', status: gate.status });
     Alert.alert(
       SUCCESS[mode],
       undefined,
-      [{ text: 'Done', onPress: leaveScreen }],
+      [
+        {
+          text: 'Done',
+          onPress: () => {
+            if (isRequestCurrent(generation, requestUserId)) leaveScreen();
+          },
+        },
+      ],
       {
         cancelable: false,
       }
     );
   };
 
-  const onFailure = (failure: unknown) => {
+  const onFailure = (
+    failure: unknown,
+    generation: number,
+    requestUserId: string
+  ) => {
+    if (!isRequestCurrent(generation, requestUserId)) return;
     const code = codeOf(failure);
     if (code === 'PIN_ALREADY_SET') {
       switchMode('change');
@@ -153,6 +198,8 @@ export function useWalletPinSettings() {
       return;
     }
     inFlight.current = true;
+    const generation = requestGeneration.current;
+    const requestUserId = userId;
     setBusy(true);
     setError(null);
     setReauthRequired(false);
@@ -162,11 +209,13 @@ export function useWalletPinSettings() {
         : submitWalletPin(mode, newPin, userId);
     clearFields();
     request
-      .then(onSuccess)
-      .catch(onFailure)
+      .then(() => onSuccess(generation, requestUserId))
+      .catch((failure: unknown) =>
+        onFailure(failure, generation, requestUserId)
+      )
       .finally(() => {
         inFlight.current = false;
-        setBusy(false);
+        if (mounted.current) setBusy(false);
       });
   };
 

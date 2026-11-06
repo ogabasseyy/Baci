@@ -1,9 +1,21 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import { submitWalletPin } from '@/lib/wallet-pin-api';
 import { changeWalletPin } from '@/lib/wallet-pin-change-api';
 import { useWalletPinSettings } from './use-wallet-pin-settings';
 
 const mockRefresh = jest.fn();
+const mockBack = jest.fn();
+const mockReplace = jest.fn();
+const mockCanGoBack = jest.fn();
+const mockNavigationListeners = new Map<string, () => void>();
+const mockNavigation = {
+  addListener: (event: string, listener: () => void) => {
+    mockNavigationListeners.set(event, listener);
+    return () => mockNavigationListeners.delete(event);
+  },
+};
+let mockUserId: string | null = 'user-1';
 let mockStatus: object = {
   primary: true,
   hasPin: false,
@@ -22,17 +34,24 @@ jest.mock('@/lib/wallet-pin-change-api', () => ({
   changeWalletPin: jest.fn(),
 }));
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn() },
-  useNavigation: () => ({ addListener: () => () => undefined }),
+  router: { back: mockBack, replace: mockReplace, canGoBack: mockCanGoBack },
+  useNavigation: () => mockNavigation,
 }));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (s: unknown) => unknown) =>
-    selector({ user: { id: 'user-1' }, signOut: jest.fn() }),
+    selector({
+      user: mockUserId ? { id: mockUserId } : null,
+      signOut: jest.fn(),
+    }),
 }));
 
 describe('useWalletPinSettings', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockCanGoBack.mockReturnValue(true);
+    mockNavigationListeners.clear();
+    mockUserId = 'user-1';
     mockStatus = {
       primary: true,
       hasPin: false,
@@ -85,5 +104,82 @@ describe('useWalletPinSettings', () => {
     expect(submitWalletPin).toHaveBeenCalledWith('set', '1234', 'user-1');
     expect(result.current.newPin).toBe('');
     expect(result.current.busy).toBe(false);
+  });
+
+  it('ignores success after blur', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+      result.current.submit();
+    });
+    act(() => mockNavigationListeners.get('blur')?.());
+    await act(async () => resolveRequest());
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('does not run Done from an alert after the screen blurs', async () => {
+    (submitWalletPin as jest.Mock).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+    });
+    await act(async () => result.current.submit());
+    await act(
+      async () => new Promise<void>((resolve) => setImmediate(resolve))
+    );
+    expect(submitWalletPin).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0]?.[2] as Array<{
+      onPress?: () => void;
+    }>;
+    act(() => mockNavigationListeners.get('blur')?.());
+    act(() => buttons[0]?.onPress?.());
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late success after unmount', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result, unmount } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+      result.current.submit();
+    });
+    unmount();
+    await act(async () => resolveRequest());
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+
+  it('does not revive a pending request when focus returns', async () => {
+    let resolveRequest!: () => void;
+    (submitWalletPin as jest.Mock).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    const { result } = renderHook(() => useWalletPinSettings());
+    act(() => {
+      result.current.setNewPin('1234');
+      result.current.setConfirmPin('1234');
+      result.current.submit();
+    });
+    act(() => mockNavigationListeners.get('blur')?.());
+    act(() => mockNavigationListeners.get('focus')?.());
+    await act(async () => resolveRequest());
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 });

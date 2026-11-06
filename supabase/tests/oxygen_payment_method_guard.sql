@@ -16,6 +16,13 @@ INSERT INTO oxygen_private.partner_workers(partner_reference,worker_user_id)
 VALUES ('environment-fixture','efab0000-0000-4000-8000-000000000003');
 INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_reference,environment,enabled)
 VALUES ('efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000003','environment-fixture','production',true);
+-- Permit this existing production fixture when the later pilot policy exists.
+DO $$ BEGIN
+ IF to_regclass('oxygen_private.production_admission_policy') IS NOT NULL THEN
+  INSERT INTO oxygen_private.production_admission_policy(merchant_id,mode)
+  VALUES ('efab0000-0000-4000-8000-000000000011','open');
+ END IF;
+END $$;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN

@@ -1,10 +1,13 @@
 import 'server-only';
+import { preconnect, prefetchDNS } from 'react-dom';
 import { emitOgabasseyImagePreload } from '@/app/(storefront)/ogabassey/emit-ogabassey-image-preload';
 import {
   BLOG_HERO_IMAGE_QUALITY,
   BLOG_LISTING_FEATURED_IMAGE_PRELOAD_WIDTH,
   BLOG_LISTING_FEATURED_IMAGE_SIZES,
 } from '@/components/storefront/ogabassey/config/blog-media';
+import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
+import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
 
 // Must stay in lockstep with the featured-story <Image> quality so the preload
 // URL and the rendered image resolve to the same CDN transform (one fetch).
@@ -33,6 +36,9 @@ function resolvePreloadableBlogImage(src: string | null | undefined) {
 /**
  * Early high-priority preload for the blog listing featured-story LCP hero.
  *
+ * Preconnects the OgaBassey CDN origin when loading a CDN-hosted hero so DNS
+ * resolution and TLS negotiation finish early on mobile networks.
+ *
  * The featured story renders an explicit per-format `<picture>` (AVIF
  * `<source>` + jpeg/png `<img>` fallback) via `CdnFormatImage`, so this hint
  * targets the SAME AVIF tier through the SAME shared builders
@@ -49,6 +55,11 @@ export function preloadBlogListingFeaturedImage(
 ): void {
   const preloadSrc = resolvePreloadableBlogImage(src);
   if (!preloadSrc) return;
+
+  if (isOgabasseyCdnImageUrl(preloadSrc)) {
+    prefetchDNS(OGABASSEY_CDN_ORIGIN);
+    preconnect(OGABASSEY_CDN_ORIGIN);
+  }
 
   emitOgabasseyImagePreload({
     preloadWidth: BLOG_LISTING_FEATURED_IMAGE_PRELOAD_WIDTH,

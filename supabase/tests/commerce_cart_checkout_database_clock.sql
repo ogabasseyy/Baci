@@ -85,34 +85,6 @@ END $$;
 DO $$ DECLARE failures text; BEGIN
   SELECT string_agg(message, E'\n') INTO failures FROM checkout_clock_failures;
   IF failures IS NOT NULL THEN
-    RAISE NOTICE 'Checkout database clock regressions: %', failures;
-    IF failures LIKE '%fresh prepare was rejected: unauthorized%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare authorization rejected' USING ERRCODE = 'P0007';
-    ELSIF failures LIKE '%fresh prepare was rejected: merchant_unavailable%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare merchant gate rejected' USING ERRCODE = 'P0008';
-    ELSIF failures LIKE '%fresh prepare was rejected: invalid_item%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare input rejected' USING ERRCODE = 'P0009';
-    ELSIF failures LIKE '%fresh prepare was rejected: expired%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare expiry rejected' USING ERRCODE = 'P0010';
-    ELSIF failures LIKE '%fresh prepare was rejected: idempotency_conflict%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare idempotency conflict' USING ERRCODE = 'P0011';
-    ELSIF failures LIKE '%fresh prepare was rejected: not_found%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare cart not found' USING ERRCODE = 'P0012';
-    ELSIF failures LIKE '%fresh prepare was rejected: refresh_required%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare version stale' USING ERRCODE = 'P0013';
-    ELSIF failures LIKE '%prepare authorization role was not the cart shopper%' THEN
-      RAISE EXCEPTION 'Checkout clock prepare authorization role leaked' USING ERRCODE = 'P0014';
-    ELSIF failures LIKE '%fresh prepare was rejected:%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare was rejected' USING ERRCODE = 'P0005';
-    ELSIF failures LIKE '%fresh prepare did not return databaseNow%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh prepare assertion failed' USING ERRCODE = 'P0002';
-    ELSIF failures LIKE '%fresh prepare databaseNow was outside the database clock window%' THEN
-      RAISE EXCEPTION 'Checkout clock fresh value assertion failed' USING ERRCODE = 'P0006';
-    ELSIF failures LIKE '%databaseNow was persisted in the idempotency receipt%' THEN
-      RAISE EXCEPTION 'Checkout clock receipt persistence assertion failed' USING ERRCODE = 'P0003';
-    ELSIF failures LIKE '%replay did not replace a stale persisted databaseNow with PostgreSQL time%' THEN
-      RAISE EXCEPTION 'Checkout clock replay assertion failed' USING ERRCODE = 'P0004';
-    END IF;
-    RAISE EXCEPTION 'Unclassified checkout database clock regression: %', failures;
+    RAISE EXCEPTION 'Checkout database clock regressions: %', failures;
   END IF;
 END $$;

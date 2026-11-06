@@ -190,6 +190,9 @@ export function useStorefrontCartLineHandlers({
     }
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
+      const hasExactCartItemId =
+        !variantId &&
+        previousCart.some((item) => item.cartItemId === cartItemIdOrProductId);
       const filtered = previousCart.filter((item) => {
         if (variantId) {
           return !(
@@ -197,8 +200,8 @@ export function useStorefrontCartLineHandlers({
           );
         }
 
-        if (item.cartItemId && item.cartItemId === cartItemIdOrProductId) {
-          return false;
+        if (hasExactCartItemId) {
+          return item.cartItemId !== cartItemIdOrProductId;
         }
 
         return !(item.id === cartItemIdOrProductId && !item.variantId);

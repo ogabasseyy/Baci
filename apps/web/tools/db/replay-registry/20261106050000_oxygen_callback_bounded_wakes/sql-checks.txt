@@ -1,1 +1,0 @@
-supabase/tests/oxygen_selfie_callback_reference.sql

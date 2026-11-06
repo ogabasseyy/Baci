@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Apply real shipping schema migrations and exercise revision row mutexes."""
 import atexit
-import os
 import json
 import pathlib
 import re
@@ -9,7 +8,11 @@ import shutil
 import socket
 import subprocess
 import tempfile
-import time
+from shipping_revision_concurrency import (
+    verify_deadlock_fails_closed,
+    verify_migration_seed_race,
+    verify_projection_locking,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BIN = pathlib.Path(subprocess.check_output(["pg_config", "--bindir"], text=True).strip())
@@ -132,52 +135,7 @@ r5 = "30000000-0000-4000-8000-000000000005"
 # newly-added revision field.
 baseline_m1 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m1}')::text"))
 baseline_m2 = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{m2}')::text"))
-migration_path = ROOT / "supabase/migrations/20261106150000_merchant_shipping_config_revision.sql"
-migration_sql = migration_path.read_text()
-assert migration_sql.index("CREATE TRIGGER initialize_merchant_shipping_config_revision") < migration_sql.index(
-    "INSERT INTO public.merchant_shipping_config_revisions (merchant_id, revision)\nSELECT id, 1 FROM public.merchants"
-), "merchant initialization trigger must precede revision backfill"
-
-# Keep a merchant insert open while migration DDL installs the seed trigger.
-# CREATE TRIGGER must wait for that writer; the following backfill then sees
-# its committed row, closing the backfill/trigger installation race.
-race_merchant = "10000000-0000-4000-8000-000000000099"
-writer = subprocess.Popen(
-    PSQL + ["-c", f"SET application_name='shipping_revision_race_writer'; INSERT INTO public.merchants(id,slug) VALUES ('{race_merchant}','merchant-race'); SELECT pg_sleep(1.5)"],
-    text=True,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
-writer_ready = False
-writer_deadline = time.monotonic() + 5
-while time.monotonic() < writer_deadline:
-    if scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name='shipping_revision_race_writer' AND state='active'") == "1":
-        writer_ready = True
-        break
-    time.sleep(0.05)
-assert writer_ready, "concurrent merchant insert did not start"
-
-migration = subprocess.Popen(
-    PSQL + ["-c", f"\\i {migration_path}"],
-    text=True,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-)
-trigger_waited = False
-migration_deadline = time.monotonic() + 8
-while time.monotonic() < migration_deadline:
-    if scalar("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%CREATE TRIGGER initialize_merchant_shipping_config_revision%'") == "1":
-        trigger_waited = True
-        break
-    if migration.poll() is not None:
-        break
-    time.sleep(0.05)
-assert trigger_waited, "migration did not wait for the in-flight merchant insert at trigger installation"
-writer_out, writer_err = writer.communicate(timeout=8)
-assert writer.returncode == 0, f"concurrent merchant insert failed: {writer_err or writer_out}"
-migration_out, migration_err = migration.communicate(timeout=10)
-assert migration.returncode == 0, f"migration failed: {migration_err or migration_out}"
-assert revision(race_merchant) == 1, "merchant committed during trigger installation was missed by backfill"
+verify_migration_seed_race(ROOT, PSQL, scalar, revision)
 for merchant, baseline in [(m1, baseline_m1), (m2, baseline_m2)]:
     revised = json.loads(scalar(f"SELECT public.get_storefront_shipping_rates('{merchant}')::text"))
     assert revised.pop("shipping_config_revision", None) is not None, "new projection omitted its revision"
@@ -224,87 +182,8 @@ providers = scalar(f"SELECT public.get_storefront_shipping_rates('{m1}') -> 'shi
 assert providers == '["gigl", "topship"]', f"provider projection lost production normalization/allowlist behavior: {providers}"
 assert scalar("SELECT provolatile FROM pg_proc WHERE oid='public.get_storefront_shipping_rates(uuid)'::regprocedure") == "v", "projection must be VOLATILE for post-wait rereads"
 
-# Hold m2's revision row through a config update. The quote RPC must wait, then
-# return the committed revision and amount; m1 remains independently writable.
-reader_sql = f"BEGIN; SELECT public.get_storefront_shipping_rates('{m2}'); SELECT pg_sleep(1.2); COMMIT"
-reader = subprocess.Popen(
-    [str(BIN / "psql"), *PSQL[1:], "-c", reader_sql], text=True,
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    env={**os.environ, "PGAPPNAME": "shipping_reader_m2"},
-)
-deadline = time.monotonic() + 5
-active_reader = "0"
-while time.monotonic() < deadline:
-    active_reader = scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name='shipping_reader_m2' AND wait_event='PgSleep'")
-    if active_reader == "1":
-        break
-    time.sleep(0.03)
-assert active_reader == "1", "reader did not retain its shared revision lock"
-start = time.monotonic()
-scalar(f"SELECT public.get_storefront_shipping_rates('{m2}') ->> 'shipping_config_revision'")
-concurrent_reader_elapsed = time.monotonic() - start
-assert concurrent_reader_elapsed < 0.7, f"same-merchant quote readers serialized ({concurrent_reader_elapsed:.2f}s)"
-start = time.monotonic()
-run(PSQL + ["-c", f"UPDATE public.merchant_shipping_rates SET base_amount=13 WHERE id='{r1}'"])
-writer_waited_for_reader = time.monotonic() - start
-reader.communicate(timeout=10)
-assert reader.returncode == 0 and writer_waited_for_reader >= 0.7, "config writer did not wait for active quote snapshot"
-
-writer_sql = f"BEGIN; UPDATE public.merchant_shipping_rates SET base_amount=12 WHERE id='{r1}'; SELECT pg_sleep(1.4); COMMIT"
-writer = subprocess.Popen(
-    [str(BIN / "psql"), *PSQL[1:], "-c", writer_sql], text=True,
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    env={**os.environ, "PGAPPNAME": "shipping_writer_m2"},
-)
-deadline = time.monotonic() + 5
-active = "0"
-while time.monotonic() < deadline:
-    active = scalar("SELECT count(*) FROM pg_stat_activity WHERE application_name='shipping_writer_m2' AND wait_event='PgSleep'")
-    if active == "1":
-        break
-    time.sleep(0.03)
-assert active == "1", "writer did not reach its held-revision interval"
-
-start = time.monotonic()
-run(PSQL + ["-c", f"UPDATE public.merchant_shipping_rates SET base_amount=4 WHERE id='{r3}'"])
-unrelated_elapsed = time.monotonic() - start
-assert unrelated_elapsed < 0.7, f"merchant m1 write waited on merchant m2 revision ({unrelated_elapsed:.2f}s)"
-
-quote_sql = f"SELECT (payload->>'shipping_config_revision') || ':' || (SELECT rate->>'base_amount' FROM jsonb_array_elements(payload->'rates') AS rate WHERE rate->>'id'='{r1}') FROM (SELECT public.get_storefront_shipping_rates('{m2}') AS payload) AS quote"
-start = time.monotonic()
-quote = scalar(quote_sql)
-quote_elapsed = time.monotonic() - start
-writer.communicate(timeout=10)
-assert writer.returncode == 0, "config writer failed"
-assert quote_elapsed >= 0.7, f"same-merchant projection did not wait for writer commit ({quote_elapsed:.2f}s)"
-quote_revision, quote_amount = quote.split(":")
-assert int(quote_revision) == revision(m2) and quote_amount == "12.00", f"projection mixed config and revision: {quote}"
-
-# Reordered multi-statement transactions can still deadlock when they acquire
-# merchant revision rows in opposite orders. PostgreSQL must abort one complete
-# transaction (40P01); neither partial config writes nor hidden replay occur.
-deadlock_a_sql = f"BEGIN; UPDATE public.merchant_shipping_rates SET base_amount=31 WHERE id='{r3}'; SELECT pg_sleep(0.45); UPDATE public.merchant_shipping_rates SET base_amount=41 WHERE id='{r4}'; COMMIT"
-deadlock_b_sql = f"BEGIN; UPDATE public.merchant_shipping_rates SET base_amount=22 WHERE id='{r2}'; SELECT pg_sleep(0.45); UPDATE public.merchant_shipping_rates SET base_amount=51 WHERE id='{r5}'; COMMIT"
-verbose_psql = [str(BIN / "psql"), *PSQL[1:3], "-v", "VERBOSITY=verbose", *PSQL[3:]]
-deadlock_a = subprocess.Popen(
-    verbose_psql + ["-c", deadlock_a_sql], text=True,
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    env={**os.environ, "PGAPPNAME": "shipping_multi_tx_a"},
-)
-time.sleep(0.12)
-deadlock_b = subprocess.Popen(
-    verbose_psql + ["-c", deadlock_b_sql], text=True,
-    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    env={**os.environ, "PGAPPNAME": "shipping_multi_tx_b"},
-)
-deadlock_a_out = deadlock_a.communicate(timeout=10)
-deadlock_b_out = deadlock_b.communicate(timeout=10)
-assert "40P01" in deadlock_a_out[1] or "40P01" in deadlock_b_out[1], "opposite-order merchant mutex contention did not fail closed with 40P01"
-assert (deadlock_a.returncode == 0) != (deadlock_b.returncode == 0), "expected exactly one multi-tenant transaction to abort"
-values = scalar(f"SELECT string_agg(id::text||'='||base_amount::text,',' ORDER BY id) FROM public.merchant_shipping_rates WHERE id IN ('{r2}','{r3}','{r4}','{r5}')")
-committed_a = f"{r2}=20.00,{r3}=31.00,{r4}=41.00,{r5}=50.00"
-committed_b = f"{r2}=22.00,{r3}=4.00,{r4}=40.00,{r5}=51.00"
-assert values in (committed_a, committed_b), f"deadlocked transaction partially applied or retried: {values}"
+verify_projection_locking(BIN, PSQL, scalar, revision, run, r1, r3, m1, m2)
+verify_deadlock_fails_closed(BIN, PSQL, scalar, r2, r3, r4, r5)
 
 # Cascaded zone deletion bumps its merchant; merchant deletion removes revision
 # state and child cascades cannot recreate it.

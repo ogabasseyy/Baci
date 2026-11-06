@@ -143,8 +143,24 @@ describe('public chat product detail', () => {
     expect(body.product.currency.code).toBe('NGN');
     expect(chatProductResponseSchema.safeParse(body).success).toBe(true);
   });
-  it('rejects an invalid product slug before looking up a merchant', async () => {
-    const response = await GET(req(), params('store', '../escape'));
+  it.each([
+    '../escape',
+    'phone\\case',
+    'phone\u0000case',
+    'phone\u0085case',
+    '%2Fescape',
+    '%252Fescape',
+    'phone%5Ccase',
+    'phone%255Ccase',
+    '%00escape',
+    '%2500escape',
+    '%2E',
+    '%2E%2E',
+    '%252E%252E',
+    '.',
+    '..',
+  ])('rejects unsafe product path segments before merchant lookup (%s)', async (productSlug) => {
+    const response = await GET(req(), params('store', productSlug));
     expect(response.status).toBe(400);
     expect(mocks.resolve).not.toHaveBeenCalled();
   });

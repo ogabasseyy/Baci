@@ -41,6 +41,21 @@ describe('chatProductRouteParamsSchema', () => {
       { slug: 'store', productSlug: 'p'.repeat(201) },
       { slug: 'store_name', productSlug: 'phone' },
       { slug: 'store', productSlug: overEncodedProductSlug },
+      { slug: 'store', productSlug: '../escape' },
+      { slug: 'store', productSlug: 'phone\\case' },
+      { slug: 'store', productSlug: 'phone\u0000case' },
+      { slug: 'store', productSlug: 'phone\u0085case' },
+      { slug: 'store', productSlug: '%2Fescape' },
+      { slug: 'store', productSlug: '%252Fescape' },
+      { slug: 'store', productSlug: 'phone%5Ccase' },
+      { slug: 'store', productSlug: 'phone%255Ccase' },
+      { slug: 'store', productSlug: '%00escape' },
+      { slug: 'store', productSlug: '%2500escape' },
+      { slug: 'store', productSlug: '%2E' },
+      { slug: 'store', productSlug: '%2E%2E' },
+      { slug: 'store', productSlug: '%252E%252E' },
+      { slug: 'store', productSlug: '.' },
+      { slug: 'store', productSlug: '..' },
     ]) {
       expect(chatProductRouteParamsSchema.safeParse(value).success).toBe(false);
     }

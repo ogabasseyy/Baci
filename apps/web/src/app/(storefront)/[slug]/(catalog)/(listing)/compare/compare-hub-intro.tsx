@@ -11,11 +11,11 @@ export function CompareHubIntro({
   merchantName,
 }: CompareHubIntroProps) {
   return (
-    <div className="mt-6 max-w-3xl space-y-3">
+    <div className="mt-6 max-w-3xl space-y-3" data-compare-hub-intro="">
       <div className="inline-flex items-center gap-1.5 rounded-full border border-store-primary/20 bg-store-primary/10 px-3 py-1 text-xs font-semibold text-store-primary">
         <span>Device Comparison Hub</span>
       </div>
-      <div data-cwv-lcp-fold="">
+      <div data-cwv-lcp-fold="" className="min-h-0">
         <h1
           className="text-3xl font-bold tracking-tight text-store-background-text md:text-4xl"
           data-cwv-lcp-copy="compare"

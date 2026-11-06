@@ -25,7 +25,11 @@ function isSafeProductRouteSegment(value: string): boolean {
       if (decoded === candidate) return true;
       candidate = decoded;
     } catch {
-      return true;
+      // Preserve ordinary literal percent characters, but do not let malformed
+      // escapes hide encoded separators or control bytes from the path check.
+      return !/%(?:2f|5c|0[0-9a-f]|1[0-9a-f]|7f|8[0-9a-f]|9[0-9a-f])/i.test(
+        candidate
+      );
     }
   }
 

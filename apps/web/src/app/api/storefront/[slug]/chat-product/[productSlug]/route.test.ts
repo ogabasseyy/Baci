@@ -143,6 +143,14 @@ describe('public chat product detail', () => {
     expect(body.product.currency.code).toBe('NGN');
     expect(chatProductResponseSchema.safeParse(body).success).toBe(true);
   });
+  it('preserves literal percent characters in catalog slugs', async () => {
+    const response = await GET(req(), params('store', 'discount-100%-case'));
+    expect(response.status).toBe(200);
+    expect(mocks.uncachedProduct).toHaveBeenCalledWith(
+      'trusted-merchant',
+      'discount-100%-case'
+    );
+  });
   it.each([
     '../escape',
     'phone\\case',
@@ -150,6 +158,7 @@ describe('public chat product detail', () => {
     'phone\u0085case',
     '%2Fescape',
     '%252Fescape',
+    'phone%2F%ZZ',
     'phone%5Ccase',
     'phone%255Ccase',
     '%00escape',

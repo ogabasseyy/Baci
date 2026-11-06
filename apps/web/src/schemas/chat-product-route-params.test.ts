@@ -18,7 +18,12 @@ describe('chatProductRouteParamsSchema', () => {
   });
 
   it('accepts bounded custom slugs supported by storefront PDP routing', () => {
-    for (const productSlug of ['phone--case', '-phone..case-', 'café-店']) {
+    for (const productSlug of [
+      'phone--case',
+      '-phone..case-',
+      'café-店',
+      'discount-100%-case',
+    ]) {
       expect(
         chatProductRouteParamsSchema.safeParse({
           slug: 'store-name',
@@ -47,6 +52,7 @@ describe('chatProductRouteParamsSchema', () => {
       { slug: 'store', productSlug: 'phone\u0085case' },
       { slug: 'store', productSlug: '%2Fescape' },
       { slug: 'store', productSlug: '%252Fescape' },
+      { slug: 'store', productSlug: 'phone%2F%ZZ' },
       { slug: 'store', productSlug: 'phone%5Ccase' },
       { slug: 'store', productSlug: 'phone%255Ccase' },
       { slug: 'store', productSlug: '%00escape' },

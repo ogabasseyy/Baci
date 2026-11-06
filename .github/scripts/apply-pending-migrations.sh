@@ -43,8 +43,10 @@
 # off. Keep deploy.yml's two-phase apply/probe/apply sequence (or an
 # equivalent) whenever a canary proof is required.
 #
-# `statements` remains ARRAY[]::text[] because the CLI only consults version/name;
-# preserving SQL there would require fragile escaping of `$$` and single quotes.
+# New migration rows still use ARRAY[]::text[] because preserving newly applied
+# SQL requires fragile escaping of `$$` and single quotes. For historical rows
+# that already contain statements, known timestamp aliases are reconciled only
+# after hashing their stored SQL against the current file and pinned checksum.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -139,15 +141,6 @@ build_register_migration_query() {
 . "$script_dir/apply-pending-migration.sh"
 . "$script_dir/repair-sales-migration-collision.sh"
 
-applied_versions_body="$(jq -n '{query: "SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version"}')"
-applied_versions_response="$(api_query <<<"$applied_versions_body")"
-applied_migrations="$(jq -r '.[] | [.version, .name] | @tsv' <<<"$applied_versions_response")"
-
-verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
-
-applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
-echo "Applied versions on remote: ${applied_count_remote}"
-
 shopt -s nullglob
 files=("$migrations_dir"/*.sql)
 shopt -u nullglob
@@ -161,10 +154,20 @@ fi
 # Avoid mapfile so the deployment preflight is also testable with macOS Bash.
 sorted_files=("${files[@]}")
 
+load_historical_migration_version_alias_history "${sorted_files[@]}" || exit 1
+
+verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
+
+applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
+echo "Applied versions on remote: ${applied_count_remote}"
+
 applied_count=0
 skipped_count=0
 deferred_count=0
 atomic_group_skip_bases=''
+
+# Preflight aliases against the snapshot before earlier migrations can write.
+preflight_historical_migration_version_aliases "${sorted_files[@]}" || exit 1
 
 if [ "$checkout_recovery_legacy_upgrade_required" -eq 1 ]; then
   . "$script_dir/reconcile-checkout-recovery-legacy.sh"
@@ -182,6 +185,16 @@ for file in "${sorted_files[@]}"; do
   fi
 
   recorded_name="$(awk -F '\t' -v version="$version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  if [ -z "$recorded_name" ] && alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+    if handle_historical_migration_version_alias "$version" "$name" "$base" "$file" "$alias_spec"; then
+      continue
+    else
+      alias_status=$?
+      if [ "$alias_status" -ne 1 ]; then
+        exit 1
+      fi
+    fi
+  fi
   # This byte-identical wallet migration was renamed after it had shipped.
   # Treat the original ledger entry as its authority, without replaying old
   # function definitions or inserting a fabricated new history row.

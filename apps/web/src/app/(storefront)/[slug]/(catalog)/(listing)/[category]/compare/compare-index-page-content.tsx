@@ -58,13 +58,13 @@ export function CompareIndexPageContent({
           {compareLinks.map((link) => (
             <article
               key={link.href}
-              className="group flex flex-col justify-between rounded-2xl border border-store-background-text/10 bg-store-background p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-store-primary/40 hover:shadow-md"
+              className="group relative flex flex-col justify-between rounded-2xl border border-store-background-text/10 bg-store-background p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-store-primary/40 hover:shadow-md"
             >
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <Link
                     aria-label={link.label}
-                    className="text-base font-semibold text-store-primary transition-colors group-hover:underline"
+                    className="text-base font-semibold text-store-primary transition-colors group-hover:underline after:absolute after:inset-0"
                     href={asRoute(
                       resolveStorefrontPathHref(pathPrefix, link.href)
                     )}

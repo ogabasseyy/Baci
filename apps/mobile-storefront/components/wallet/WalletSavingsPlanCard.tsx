@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
+import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { getSavingsEncouragement } from './get-savings-encouragement';
 import { getSavingsProgress } from './get-savings-progress';
-import { SavingsGoalArtwork } from './SavingsGoalArtwork';
+import { getSavingsVariantPresentation } from './get-savings-variant-presentation';
+import { SavingsGoalConditionArtwork } from './SavingsGoalConditionArtwork';
 import { SavingsProgressMeter } from './SavingsProgressMeter';
 
 type WalletSavingsPlanCardProps = {
@@ -22,17 +22,27 @@ type WalletSavingsPlanCardProps = {
 
 export function WalletSavingsPlanCard({
   awaitingSettlement = false,
-  colors,
+  colors: themeColors,
   goal,
   onOpen,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
-  const actionGlowColors =
-    colors.primaryForeground === palette.black
-      ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
-      : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const { displayPercent, percent: progress } = getSavingsProgress(goal);
-  const remaining = Math.max(0, goal.target_amount - goal.current_amount);
+  // This is the Ogabassey app: savings actions retain its brand across appearance modes.
+  const colors = {
+    ...themeColors,
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
+  };
+  const actionGlowColors = [
+    BRAND.primaryDark,
+    BRAND.primary,
+    BRAND.primaryDark,
+  ] as const;
+  const { percent: progress } = getSavingsProgress(goal);
+  const { colour, details, storage } = getSavingsVariantPresentation(
+    goal.product_variant_label
+  );
   const hasStarted = goal.current_amount > 0;
   const actionLabel = goal.selection_unresolved
     ? 'Choose exact variant'
@@ -49,7 +59,7 @@ export function WalletSavingsPlanCard({
       ? 'Plan complete'
       : goal.status === 'paused'
         ? 'Plan paused'
-        : getSavingsEncouragement(progress, goal.current_amount).title;
+        : null;
 
   return (
     <View
@@ -59,7 +69,7 @@ export function WalletSavingsPlanCard({
       ]}
     >
       <View style={styles.topRow}>
-        <SavingsGoalArtwork
+        <SavingsGoalConditionArtwork
           colors={colors}
           goal={goal}
           imageRequestSize={128}
@@ -75,21 +85,30 @@ export function WalletSavingsPlanCard({
           >
             {goal.title}
           </Text>
-          {goal.product_variant_label ? (
+          {storage ? (
+            <Text
+              style={[
+                styles.storageTag,
+                { backgroundColor: colors.muted, color: colors.text },
+              ]}
+            >
+              {storage}
+            </Text>
+          ) : null}
+          {details ? (
             <Text
               style={[styles.variant, { color: colors.textSecondary }]}
               numberOfLines={1}
             >
-              {goal.product_variant_label}
+              {details}
             </Text>
           ) : null}
-          <Text style={[styles.heading, { color: colors.textSecondary }]}>
-            {heading}
-          </Text>
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
-              SAVED
+          {heading ? (
+            <Text style={[styles.heading, { color: colors.textSecondary }]}>
+              {heading}
             </Text>
+          ) : null}
+          <View style={styles.amountRow}>
             <Text
               style={[styles.savedAmount, { color: colors.cardForeground }]}
               numberOfLines={1}
@@ -111,16 +130,32 @@ export function WalletSavingsPlanCard({
             percent={progress}
           />
         </View>
+        {colour ? (
+          <View
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel={`Device colour: ${colour.name}`}
+            style={[
+              styles.colourSwatch,
+              {
+                backgroundColor: colour.hex,
+                borderColor: colors.textSecondary,
+              },
+            ]}
+          />
+        ) : null}
       </View>
       <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {hasStarted
-            ? `${formatNgnCurrency(remaining)} to go`
-            : 'Start with your first contribution'}
-        </Text>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {displayPercent} · {formatDateTimeDisplay(goal.maturity_date, 'date')}
-        </Text>
+        {!hasStarted ? (
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+            Start with your first contribution
+          </Text>
+        ) : null}
+        {goal.maturity_date ? (
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+            Ends {formatDateTimeDisplay(goal.maturity_date, 'date')}
+          </Text>
+        ) : null}
       </View>
       <View
         style={[
@@ -184,6 +219,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  colourSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignSelf: 'flex-start',
+    marginTop: 18,
+  },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: {
     fontSize: 10,
@@ -191,6 +234,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   title: { fontSize: 18, fontWeight: '700' },
+  storageTag: {
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '600',
+  },
   variant: { fontSize: 12 },
   heading: { fontSize: 12, marginTop: 1 },
   amountRow: {
@@ -200,17 +252,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 5,
   },
-  amountLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginRight: 3,
-  },
   savedAmount: {
     fontSize: 18,
     fontWeight: '700',
     flexShrink: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   targetAmount: { fontSize: 11, fontWeight: '400' },
   footer: {

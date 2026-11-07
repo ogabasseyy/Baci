@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import {
@@ -9,6 +9,7 @@ import {
 import { getDefaultContributionAmount } from './get-default-contribution-amount';
 import { getQuickAmountOptions } from './get-quick-amount-options';
 import { SavingsQuickAmounts } from './SavingsQuickAmounts';
+import { SavingsSheetTextInput } from './SavingsSheetTextInput';
 import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -99,13 +100,15 @@ export function WalletSavingsContributionFlow({
         style={[
           styles.amountInput,
           {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
+            backgroundColor: validAmount
+              ? colors.primaryLowOpacity
+              : colors.card,
+            borderColor: validAmount ? colors.primary : colors.border,
           },
         ]}
       >
         <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
-        <TextInput
+        <SavingsSheetTextInput
           accessibilityLabel="Savings top-up amount"
           value={addAmount
             .replace(/\D/g, '')
@@ -148,11 +151,13 @@ export function WalletSavingsContributionFlow({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              primaryReady
-                ? 'Add money to wallet'
-                : usesPlanFunding
-                  ? 'Add money for savings'
-                  : 'Continue to payment'
+              topUpBlocked
+                ? 'Wallet funding unavailable'
+                : primaryReady
+                  ? 'Add money to wallet'
+                  : usesPlanFunding
+                    ? 'Add money for savings'
+                    : 'Continue to payment'
             }
             accessibilityState={{
               disabled: !validAmount || isBusy || topUpBlocked,
@@ -165,7 +170,7 @@ export function WalletSavingsContributionFlow({
             style={[
               styles.primaryButton,
               {
-                backgroundColor: colors.primary,
+                backgroundColor: topUpBlocked ? colors.muted : colors.primary,
               },
               isFundFocused && {
                 borderColor: colors.primaryForeground,
@@ -178,19 +183,23 @@ export function WalletSavingsContributionFlow({
               style={[
                 styles.primaryButtonText,
                 {
-                  color: colors.primaryForeground,
+                  color: topUpBlocked
+                    ? colors.textSecondary
+                    : colors.primaryForeground,
                 },
               ]}
             >
-              {primaryReady
-                ? 'Add money'
-                : isFundPending
-                  ? usesPlanFunding
-                    ? 'Opening wallet funding...'
-                    : 'Opening payment...'
-                  : usesPlanFunding
-                    ? 'Add money'
-                    : 'Continue to payment'}
+              {topUpBlocked
+                ? 'Wallet funding unavailable'
+                : primaryReady
+                  ? 'Add money'
+                  : isFundPending
+                    ? usesPlanFunding
+                      ? 'Opening wallet funding...'
+                      : 'Opening payment...'
+                    : usesPlanFunding
+                      ? 'Add money'
+                      : 'Continue to payment'}
             </Text>
           </Pressable>
         ) : (

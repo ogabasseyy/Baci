@@ -11,7 +11,10 @@ beforeEach(() => {
   restoreCustomer = setWalletTestCustomer();
 });
 afterEach(() => restoreCustomer());
-const goal = createWalletContentProps().activeSavingsGoal;
+const goal = {
+  ...createWalletContentProps().activeSavingsGoal,
+  product_variant_label: 'Color: Black · Storage: 256GB',
+};
 
 describe('savings contribution actions', () => {
   it('renders progress and wires manual contribution actions', () => {
@@ -40,8 +43,11 @@ describe('savings contribution actions', () => {
     expect(screen.getAllByText('Add to savings').length).toBeGreaterThan(0);
     expect(screen.getByText('50%')).toBeOnTheScreen();
     expect(screen.getByText('₦50,000 left')).toBeOnTheScreen();
-    expect(screen.getByText('Condition: Used')).toBeOnTheScreen();
-    expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Device condition: Used')).toBeOnTheScreen();
+    expect(screen.getByText('256GB')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('image', { name: 'Device colour: Black' })
+    ).toBeOnTheScreen();
 
     fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
     fireEvent.press(
@@ -58,6 +64,8 @@ describe('savings contribution actions', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Close savings progress' })
     );
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent(screen.getByTestId('gorhom-bottom-sheet'), 'close');
 
     expect(onAddAmountChange).toHaveBeenCalledWith('500');
     expect(onAddSavings).toHaveBeenCalledTimes(1);

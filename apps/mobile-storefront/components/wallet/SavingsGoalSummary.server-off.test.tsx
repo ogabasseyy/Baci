@@ -37,6 +37,25 @@ describe('SavingsGoalSummary', () => {
     ).toBeOnTheScreen();
   });
 
+  it('uses the compact condition, capacity and colour arrangement', () => {
+    render(
+      <SavingsGoalSummary
+        colors={Colors.dark}
+        goal={{
+          ...goal,
+          product_condition: 'used',
+          product_variant_label: 'Color: Black · Storage: 256GB',
+        }}
+      />
+    );
+    expect(screen.getByLabelText('Device condition: Used')).toBeOnTheScreen();
+    expect(screen.getByText('256GB')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('image', { name: 'Device colour: Black' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/Condition:|Storage:|Color:/)).toBeNull();
+  });
+
   it('lets the saved and target labels shrink inside their row', () => {
     render(<SavingsGoalSummary colors={Colors.light} goal={goal} />);
     expect(

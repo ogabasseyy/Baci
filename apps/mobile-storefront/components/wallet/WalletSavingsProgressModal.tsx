@@ -1,9 +1,11 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { SavingsGoalSummary } from './SavingsGoalSummary';
 import { GoalLifecycleEntry } from './savings/GoalLifecycleEntry';
 import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
@@ -33,7 +35,7 @@ type WalletSavingsProgressModalProps = {
 
 export function WalletSavingsProgressModal({
   addAmount,
-  colors,
+  colors: themeColors,
   goal,
   isAdding,
   hasPendingContribution = false,
@@ -49,6 +51,12 @@ export function WalletSavingsProgressModal({
   walletBalance,
   walletUpdatedAt,
 }: WalletSavingsProgressModalProps) {
+  const colors = {
+    ...themeColors,
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
+  };
   if (!goal) {
     return null;
   }
@@ -64,108 +72,108 @@ export function WalletSavingsProgressModal({
       : 'This goal is funded by scheduled auto-debit.';
 
   return (
-    <ModalSheet
-      visible={visible}
-      animationType="slide"
-      backdropStyle={styles.backdrop}
-      cardStyle={[styles.card, { backgroundColor: colors.background }]}
-      keyboardAutomaticOffset
-      keyboardSurfaceColor={colors.background}
-      onBackdropPress={onClose}
-      onRequestClose={onClose}
-    >
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close savings progress"
-          onPress={onClose}
-          style={styles.iconButton}
-        >
-          <Ionicons name="close" size={18} color={colors.textSecondary} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <SavingsGoalSummary
-          colors={colors}
-          goal={goal}
-          onResolveVariant={onResolveVariant}
-        />
-        {hasPendingContribution ? (
-          <WalletPendingSavingsContribution
-            colors={colors}
-            isChecking={isAdding}
-            onCheck={onAddSavings}
-          />
-        ) : canAddToSavings ? (
-          <WalletSavingsFundingSection
-            addAmount={addAmount}
-            colors={colors}
-            goal={goal}
-            isAdding={isAdding}
-            isFundPending={isFundPending}
-            onAddAmountChange={onAddAmountChange}
-            onAddSavings={onAddSavings}
-            onFundWallet={onFundWallet}
-            onRefreshWallet={onRefreshWallet}
-            remainingAmount={amountLeft}
-            usesPlanFunding={usesPlanFunding}
-            visible={visible}
-            walletBalance={walletBalance}
-            walletUpdatedAt={walletUpdatedAt}
-          />
-        ) : (
-          <Text style={[styles.autoDebitHint, { color: colors.textSecondary }]}>
-            {unavailableContributionMessage}
-          </Text>
-        )}
-        {canAddToSavings ||
-        (goal.selection_unresolved &&
-          (goal.status !== 'completed' ||
-            !goal.variant_resolution_options?.length)) ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Change savings device"
-            onPress={onChangeDevice}
-            style={[
-              styles.changeDeviceButton,
-              { backgroundColor: colors.muted },
-            ]}
-          >
-            <Ionicons
-              name="swap-horizontal-outline"
-              size={16}
-              color={colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.changeDeviceButtonText,
-                { color: colors.textSecondary },
-              ]}
+    <SavingsBottomSheet visible={visible} colors={colors} onClose={onClose}>
+      {(dismiss) => (
+        <>
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              <Text
+                accessibilityRole="header"
+                style={[styles.title, { color: colors.primary }]}
+              >
+                {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close savings progress"
+              onPress={dismiss}
+              style={styles.iconButton}
             >
-              Change device
-            </Text>
-          </Pressable>
-        ) : null}
-        <GoalLifecycleEntry
-          colors={colors}
-          goal={goal}
-          hasPendingContribution={hasPendingContribution}
-          onBeforeNavigate={onClose}
-          walletUpdatedAt={walletUpdatedAt}
-        />
-      </ScrollView>
-    </ModalSheet>
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <BottomSheetScrollView
+            style={styles.scrollView}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            <SavingsGoalSummary
+              colors={colors}
+              goal={goal}
+              onResolveVariant={onResolveVariant}
+            />
+            {hasPendingContribution ? (
+              <WalletPendingSavingsContribution
+                colors={colors}
+                isChecking={isAdding}
+                onCheck={onAddSavings}
+              />
+            ) : canAddToSavings ? (
+              <WalletSavingsFundingSection
+                addAmount={addAmount}
+                colors={colors}
+                goal={goal}
+                isAdding={isAdding}
+                isFundPending={isFundPending}
+                onAddAmountChange={onAddAmountChange}
+                onAddSavings={onAddSavings}
+                onFundWallet={onFundWallet}
+                onRefreshWallet={onRefreshWallet}
+                remainingAmount={amountLeft}
+                usesPlanFunding={usesPlanFunding}
+                visible={visible}
+                walletBalance={walletBalance}
+                walletUpdatedAt={walletUpdatedAt}
+              />
+            ) : (
+              <Text
+                style={[styles.autoDebitHint, { color: colors.textSecondary }]}
+              >
+                {unavailableContributionMessage}
+              </Text>
+            )}
+            {canAddToSavings ||
+            (goal.selection_unresolved &&
+              (goal.status !== 'completed' ||
+                !goal.variant_resolution_options?.length)) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Change savings device"
+                onPress={onChangeDevice}
+                style={[
+                  styles.changeDeviceButton,
+                  { backgroundColor: colors.muted },
+                ]}
+              >
+                <Ionicons
+                  name="swap-horizontal-outline"
+                  size={16}
+                  color={colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.changeDeviceButtonText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Change device
+                </Text>
+              </Pressable>
+            ) : null}
+            <GoalLifecycleEntry
+              colors={colors}
+              goal={goal}
+              hasPendingContribution={hasPendingContribution}
+              onBeforeNavigate={onClose}
+              walletUpdatedAt={walletUpdatedAt}
+            />
+          </BottomSheetScrollView>
+        </>
+      )}
+    </SavingsBottomSheet>
   );
 }

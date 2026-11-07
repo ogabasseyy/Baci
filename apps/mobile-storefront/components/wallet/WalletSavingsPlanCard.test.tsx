@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet } from 'react-native';
-import Colors, { palette } from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
 
@@ -21,6 +21,28 @@ const goal: WalletActiveSavingsGoal = {
 };
 
 describe('WalletSavingsPlanCard', () => {
+  it('reads its action colour from the central brand configuration', () => {
+    const replacement = jest.replaceProperty(
+      BRAND,
+      'primary',
+      Colors.light.success
+    );
+    try {
+      render(
+        <WalletSavingsPlanCard
+          colors={Colors.dark}
+          goal={goal}
+          onOpen={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
+      ).toHaveStyle({ backgroundColor: Colors.light.success });
+    } finally {
+      replacement.restore();
+    }
+  });
+
   it('shows a created but unfunded plan without claiming progress', () => {
     const onOpen = jest.fn();
     render(
@@ -31,7 +53,8 @@ describe('WalletSavingsPlanCard', () => {
       />
     );
 
-    expect(screen.getByText('Every naira counts')).toBeOnTheScreen();
+    expect(screen.queryByText('Every naira counts')).toBeNull();
+    expect(screen.queryByText('SAVED')).toBeNull();
     expect(
       screen.getByText('Start with your first contribution')
     ).toBeOnTheScreen();
@@ -58,8 +81,9 @@ describe('WalletSavingsPlanCard', () => {
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress' })
     ).toHaveAccessibilityValue({ now: 50 });
-    expect(screen.getByText('50% · 30 October 2026')).toBeOnTheScreen();
-    expect(screen.getByText('₦50,000 to go')).toBeOnTheScreen();
+    expect(screen.getByText('Ends 30 October 2026')).toBeOnTheScreen();
+    expect(screen.queryByText(/50%/)).toBeNull();
+    expect(screen.queryByText(/to go/)).toBeNull();
   });
 
   it('does not announce goal completion until the full target is saved', () => {
@@ -71,7 +95,7 @@ describe('WalletSavingsPlanCard', () => {
       />
     );
 
-    expect(screen.getByText('Almost there!')).toBeOnTheScreen();
+    expect(screen.queryByText('Almost there!')).toBeNull();
     expect(screen.queryByText('Goal reached!')).toBeNull();
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress' })
@@ -87,9 +111,10 @@ describe('WalletSavingsPlanCard', () => {
       />
     );
 
-    expect(screen.getByText('Your plan is growing')).toBeOnTheScreen();
+    expect(screen.queryByText('Your plan is growing')).toBeNull();
     expect(screen.queryByText('Every naira counts')).toBeNull();
-    expect(screen.getByText('<1% · 30 October 2026')).toBeOnTheScreen();
+    expect(screen.getByText('Ends 30 October 2026')).toBeOnTheScreen();
+    expect(screen.queryByText(/<1%/)).toBeNull();
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress' })
     ).toHaveAccessibilityValue({ now: 0 });
@@ -149,13 +174,20 @@ describe('WalletSavingsPlanCard', () => {
         goal={{
           ...goal,
           product_image: 'https://example.com/phone.jpg',
-          product_variant_label: '256GB · Blue',
+          product_variant_label: 'Storage: 256GB · Blue',
+          product_condition: 'used',
         }}
         onOpen={jest.fn()}
       />
     );
 
-    expect(screen.getByText('256GB · Blue')).toBeOnTheScreen();
+    expect(screen.getByText('256GB')).toBeOnTheScreen();
+    expect(screen.queryByText(/Storage:/)).toBeNull();
+    expect(screen.getByLabelText('Device condition: Used')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('image', { name: 'Device colour: Blue' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Blue')).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
     ).toBeOnTheScreen();
@@ -173,11 +205,11 @@ describe('WalletSavingsPlanCard', () => {
     const rendered = JSON.stringify(toJSON());
     expect(rendered).toContain(Colors.dark.card);
     expect(rendered).toContain(Colors.dark.cardForeground);
-    expect(rendered).toContain(Colors.dark.primary);
+    expect(rendered).toContain(BRAND.primary);
     expect(rendered).not.toContain(Colors.light.cardForeground);
   });
 
-  it('gives the dark mode Add to savings CTA a static horizontal amber glow', () => {
+  it('gives the dark mode Add to savings CTA a static horizontal red glow', () => {
     const onOpen = jest.fn();
     const { UNSAFE_getByType } = render(
       <WalletSavingsPlanCard colors={Colors.dark} goal={goal} onOpen={onOpen} />
@@ -185,7 +217,7 @@ describe('WalletSavingsPlanCard', () => {
 
     expect(UNSAFE_getByType(LinearGradient).props).toEqual(
       expect.objectContaining({
-        colors: [palette.amber[600], palette.amber[400], palette.amber[600]],
+        colors: [BRAND.primaryDark, BRAND.primary, BRAND.primaryDark],
         start: { x: 0, y: 0.5 },
         end: { x: 1, y: 0.5 },
       })
@@ -195,7 +227,7 @@ describe('WalletSavingsPlanCard', () => {
     });
     fireEvent(button, 'focus');
     expect(StyleSheet.flatten(button.props.style)).toEqual(
-      expect.objectContaining({ borderColor: palette.black, borderWidth: 2 })
+      expect.objectContaining({ borderColor: BRAND.onPrimary, borderWidth: 2 })
     );
     fireEvent.press(button);
     expect(onOpen).toHaveBeenCalledTimes(1);

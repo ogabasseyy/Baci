@@ -32,11 +32,49 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: QuizPage, metadata } = await import('./page');
+const { default: QuizPage, generateMetadata } = await import('./page');
 
 describe('QuizPage', () => {
-  it('declares a self-referencing canonical in static metadata', () => {
-    expect(metadata.alternates).toEqual({ canonical: '/quiz' });
+  it('declares a self-referencing canonical in metadata', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.usebaci.com/quiz',
+    });
+    expect(metadata.title).toBe('Super Quiz | Ogabassey');
+  });
+
+  it('uses custom domain for canonical when available', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      custom_domain: 'ogabassey.com',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.com/quiz',
+    });
+  });
+
+  it('returns fallback metadata when store is not found or non-ogabassey', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue(null);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'missing' }),
+    });
+
+    expect(metadata).toEqual({ title: 'Store Not Found' });
   });
   it('renders the Ogabassey web quiz route with structured data', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({

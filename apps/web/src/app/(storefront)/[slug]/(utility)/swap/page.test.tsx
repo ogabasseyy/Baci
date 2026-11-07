@@ -24,7 +24,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: SwapPage, metadata } = await import('./page');
+const { default: SwapPage, generateMetadata } = await import('./page');
 
 describe('SwapPage', () => {
   beforeEach(() => {
@@ -53,9 +53,46 @@ describe('SwapPage', () => {
     expect(screen.getByText(/exact model, storage size/i)).toBeInTheDocument();
   });
 
-  it('uses a service-focused meta description and self-referencing canonical', () => {
+  it('uses a service-focused meta description and self-referencing canonical', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
     expect(metadata.description).toContain('eligible phone, laptop');
-    expect(metadata.alternates).toEqual({ canonical: '/swap' });
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.usebaci.com/swap',
+    });
+  });
+
+  it('uses custom domain for canonical when available', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      slug: 'ogabassey',
+      custom_domain: 'ogabassey.com',
+      template_id: 'ogabassey',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(metadata.alternates).toEqual({
+      canonical: 'https://ogabassey.com/swap',
+    });
+  });
+
+  it('returns fallback metadata when store is not found or non-ogabassey', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue(null);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'missing' }),
+    });
+
+    expect(metadata).toEqual({ title: 'Store Not Found' });
   });
 
   it('throws notFound for non-ogabassey templates', async () => {

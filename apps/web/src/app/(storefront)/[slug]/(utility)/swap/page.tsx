@@ -5,17 +5,49 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 
-export const metadata: Metadata = {
-  title: 'Swap Your Device',
-  description:
-    'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
-  alternates: { canonical: '/swap' },
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  if (!isValidMerchantIdentifier(slug)) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const lookupKey = slug.toLowerCase();
+  const merchant = isDomainIdentifier(slug)
+    ? await getCachedMerchantByDomain(lookupKey)
+    : await getCachedMerchant(lookupKey);
+
+  if (
+    !merchant ||
+    (merchant as unknown as { template_id?: string }).template_id !==
+      'ogabassey'
+  ) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const baseUrl = buildStoreUrl(merchant);
+
+  return {
+    title: 'Swap Your Device',
+    description:
+      'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
+    alternates: { canonical: `${baseUrl}/swap` },
+  };
+}
 
 export default async function SwapPage({
   params,

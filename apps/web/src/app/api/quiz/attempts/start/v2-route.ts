@@ -1,4 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  QuizAppOnlyError,
+  quizAppOnlyErrorResponse,
+} from '@/app/api/quiz/_shared/quiz-app-only-error';
 import { enrichQuizV2AttemptWithSubmissionTime } from '@/app/api/quiz/_shared/quiz-v2-attempt-submission';
 import {
   readQuizDeviceFingerprint,
@@ -68,9 +72,13 @@ export async function postQuizStartV2(request: NextRequest) {
     await enforceQuizStartGuards(
       auth.supabase,
       parsed.data.eventId,
-      auth.user.id
+      auth.user.id,
+      auth.authMethod
     );
   } catch (error) {
+    if (error instanceof QuizAppOnlyError) {
+      return quizAppOnlyErrorResponse(error);
+    }
     if (isQuizAgeGateError(error)) return quizAgeGateErrorResponse(error);
     if (error instanceof QuizProductionNotApprovedError) {
       return prizeGuardErrorResponse(error);

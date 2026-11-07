@@ -47,9 +47,9 @@ const projection = {
   serverNow: '2026-08-05T10:00:01.000Z',
 };
 
-function request() {
+function request(extraQuery = '') {
   return new NextRequest(
-    `https://shop.test/api/quiz/events?merchantId=${MERCHANT_ID}`,
+    `https://shop.test/api/quiz/events?merchantId=${MERCHANT_ID}${extraQuery}`,
     { headers: { 'X-Baci-Quiz-Contract': '2' } }
   );
 }
@@ -117,5 +117,47 @@ describe('v2 quiz events route', () => {
     const response = await getQuizEventsV2(request());
     expect(response.status).toBe(403);
     expect(JSON.stringify(await response.json())).not.toContain('permit');
+  });
+
+  it('returns only joinable events in one response when current=1', async () => {
+    const rpc = authenticated({
+      data: {
+        ...projection,
+        events: [
+          projection.events[0],
+          {
+            ...projection.events[0],
+            id: '22222222-2222-4222-8222-000000000009',
+            status: 'completed',
+          },
+        ],
+      },
+      error: null,
+    });
+
+    const response = await getQuizEventsV2(request('&current=1'));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.events.map((event: { id: string }) => event.id)).toEqual([
+      EVENT_ID,
+    ]);
+    expect(body.pagination).toBeUndefined();
+    expect(rpc).toHaveBeenLastCalledWith('list_quiz_events_v2', {
+      p_limit: 50,
+      p_merchant_id: MERCHANT_ID,
+      p_offset: 0,
+    });
+  });
+
+  it('maps a current-listing refusal like the paged listing', async () => {
+    authenticated({
+      data: null,
+      error: { code: 'QZ031', message: 'not_authorized' },
+    });
+
+    const response = await getQuizEventsV2(request('&current=1'));
+
+    expect(response.status).toBe(403);
   });
 });

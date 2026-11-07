@@ -1,6 +1,5 @@
 -- Dormant, server-attested Paystack DVA assignment evidence for dispatch holds.
 -- This does not call Paystack, enable dispatch, or make evidence caller-writable.
-BEGIN;
 
 DO $roles$
 BEGIN
@@ -200,5 +199,3 @@ REVOKE ALL ON FUNCTION public.commerce_cart_persist_agentic_dva_provider_success
 GRANT EXECUTE ON FUNCTION public.commerce_cart_persist_agentic_dva_provider_success(
   uuid, text, text, text, text, text, text
 ) TO agentic_dva_provider_evidence_writer;
-
-COMMIT;

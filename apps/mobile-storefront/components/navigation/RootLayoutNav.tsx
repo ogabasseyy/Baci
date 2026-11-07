@@ -1,4 +1,5 @@
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack, useRootNavigationState } from 'expo-router';
 import {
   DarkTheme,
   DefaultTheme,
@@ -19,6 +20,7 @@ import { renderRootStackScreens } from '@/components/navigation/RootStackScreens
 import { RouteResumeController } from '@/components/navigation/RouteResumeController';
 import { getRootStackScreenOptions } from '@/components/navigation/root-stack-screen-options';
 import AppKeyboardProvider from '@/components/ui/AppKeyboardProvider';
+import { StartupMotionProvider } from '@/components/ui/StartupMotionContext';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
@@ -28,6 +30,7 @@ import { useRouteDiagnostics } from '@/hooks/use-route-diagnostics';
 import { CONFIG } from '@/lib/config';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { QueryProvider } from '@/lib/QueryProvider';
+import { markStartupTiming } from '@/lib/startup-timing';
 import { getTemplateConfig } from '@/lib/templates';
 import { AdTrackingRouteReadinessProvider } from '@/services/tiktok-product-route-tracking';
 
@@ -56,16 +59,22 @@ const OgabasseyDarkTheme = {
 };
 
 interface RootLayoutNavProps {
+  onFirstLayout?: () => void;
   adTrackingReady?: boolean;
   persistenceEnabled?: boolean;
   shouldResumeNavigation?: boolean;
 }
 
 export function RootLayoutNav({
+  onFirstLayout,
   adTrackingReady = true,
   persistenceEnabled = true,
   shouldResumeNavigation = false,
 }: RootLayoutNavProps) {
+  const rootNavigationState = useRootNavigationState();
+  useEffect(() => {
+    if (rootNavigationState?.key) markStartupTiming('router_ready');
+  }, [rootNavigationState?.key]);
   const { GestureHandlerRootView } = getOptionalGestureHandlerRuntime();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
@@ -82,31 +91,33 @@ export function RootLayoutNav({
   useRouteDiagnostics();
 
   return (
-    <QueryProvider persistenceEnabled={persistenceEnabled}>
-      <GestureHandlerRootView
-        style={[styles.root, { backgroundColor: colors.background }]}
-      >
-        <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
-          <SafeAreaProvider>
-            <AppKeyboardProvider>
-              <ThemeProvider
-                value={
-                  colorScheme === 'dark'
-                    ? OgabasseyDarkTheme
-                    : OgabasseyLightTheme
-                }
-              >
-                <StatusBar
-                  barStyle={
-                    colorScheme === 'dark' ? 'light-content' : 'dark-content'
+    <StartupMotionProvider enabled={persistenceEnabled}>
+      <QueryProvider persistenceEnabled={persistenceEnabled}>
+        <GestureHandlerRootView
+          style={[styles.root, { backgroundColor: colors.background }]}
+        >
+          <NavigationBarStyleProvider rootStyle={rootNavigationBarStyle}>
+            <SafeAreaProvider>
+              <AppKeyboardProvider>
+                <ThemeProvider
+                  value={
+                    colorScheme === 'dark'
+                      ? OgabasseyDarkTheme
+                      : OgabasseyLightTheme
                   }
-                />
-                <View
-                  style={[
-                    styles.appShell,
-                    { backgroundColor: colors.background },
-                  ]}
                 >
+                  <StatusBar
+                    barStyle={
+                      colorScheme === 'dark' ? 'light-content' : 'dark-content'
+                    }
+                  />
+                  <View
+                    onLayout={onFirstLayout}
+                    style={[
+                      styles.appShell,
+                      { backgroundColor: colors.background },
+                    ]}
+                  >
                   {/*
                    * The offline banner sits above the app, in the layout, so
                    * it pushes every screen down instead of covering headers.
@@ -122,7 +133,7 @@ export function RootLayoutNav({
                         <RouteResumeController
                           shouldResume={shouldResumeNavigation}
                         />
-                        <MobileUpdateController />
+                        {persistenceEnabled && <MobileUpdateController />}
                         <SharedCartBridge />
                         <NativeCartPairingPanel />
                         <CartWriteNotice />
@@ -161,13 +172,14 @@ export function RootLayoutNav({
                     {enableNegotiationModal ? <NegotiationModal /> : null}
                     {enableDrawerMenu ? <DrawerMenu /> : null}
                   </SafeAreaProvider>
-                </View>
-              </ThemeProvider>
-            </AppKeyboardProvider>
-          </SafeAreaProvider>
-        </NavigationBarStyleProvider>
-      </GestureHandlerRootView>
-    </QueryProvider>
+                  </View>
+                </ThemeProvider>
+              </AppKeyboardProvider>
+            </SafeAreaProvider>
+          </NavigationBarStyleProvider>
+        </GestureHandlerRootView>
+      </QueryProvider>
+    </StartupMotionProvider>
   );
 }
 

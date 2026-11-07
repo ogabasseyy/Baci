@@ -1,11 +1,6 @@
 import type { jest } from '@jest/globals';
 import { expect, it } from '@jest/globals';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { render, screen, waitFor } from '@testing-library/react-native';
 import type React from 'react';
 
 interface AuthState {
@@ -22,6 +17,7 @@ interface AttTestDependencies {
   activateDueSavingsReminderNotification: jest.Mock;
   useAppTrackingTransparency: jest.Mock;
   setTrackingAuthorizationSettled: (settled: boolean) => void;
+  finishNativeSplash: () => Promise<void>;
 }
 
 export function registerRootLayoutAttTests({
@@ -33,6 +29,7 @@ export function registerRootLayoutAttTests({
   activateDueSavingsReminderNotification,
   useAppTrackingTransparency,
   setTrackingAuthorizationSettled,
+  finishNativeSplash,
 }: AttTestDependencies) {
   it('waits for ATT settlement before starting ad tracking', async () => {
     initializeStorage.mockResolvedValue(undefined);
@@ -42,7 +39,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(initializeStorage).toHaveBeenCalledTimes(1);
     });
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,
@@ -74,7 +71,7 @@ export function registerRootLayoutAttTests({
       enabled: false,
     });
 
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
 
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
@@ -93,7 +90,7 @@ export function registerRootLayoutAttTests({
     await waitFor(() => {
       expect(initializeStorage).toHaveBeenCalledTimes(1);
     });
-    fireEvent.press(screen.getByTestId('animated-splash'));
+    await finishNativeSplash();
     await waitFor(() => {
       expect(useAppTrackingTransparency).toHaveBeenLastCalledWith({
         enabled: true,

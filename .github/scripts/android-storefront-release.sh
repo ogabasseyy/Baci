@@ -145,6 +145,9 @@ NODE
     GRADLE_ARGS="$GRADLE_TASKS -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
     # shellcheck disable=SC2086
     ./gradlew $GRADLE_ARGS
+    if [ "$operation" = build ]; then
+      node "$GITHUB_WORKSPACE/.github/scripts/android-native-library-check.mjs" app/build/outputs/bundle/release/app-release.aab
+    fi
     ;;
   upload-guard)
     CURRENT_MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"

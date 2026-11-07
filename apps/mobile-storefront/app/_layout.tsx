@@ -7,15 +7,17 @@ import {
   Inter_700Bold,
   Inter_900Black,
 } from '@expo-google-fonts/inter';
-import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
-import { AnimatedSplash } from '@/components/AnimatedSplash';
-import { ErrorFallback } from '@/components/ErrorBoundary';
+import { StyleSheet, View } from 'react-native';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
+import { RootStartupError } from '@/components/navigation/RootStartupError';
+import { StartupRecoveryScreen } from '@/components/navigation/StartupRecoveryScreen';
 import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparency';
+import { useNativeSplashHandoff } from '@/hooks/use-native-splash-handoff';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
+import { verifyBenchmarkTelemetry } from '@/lib/benchmark-telemetry-check';
 import {
   installCrashDiagnostics,
   recordCrashBreadcrumb,
@@ -23,6 +25,7 @@ import {
 import { offlineQueue } from '@/lib/offline-queue';
 import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
+import { markStartupTiming } from '@/lib/startup-timing';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
 import { initAnalytics } from '@/services/analytics';
 import { useAuthStore } from '@/stores/auth-store';
@@ -30,14 +33,12 @@ import { useAuthStore } from '@/stores/auth-store';
 type ErrorBoundaryProps = { error: Error; retry: () => void };
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  return <ErrorFallback error={error} retry={retry} />;
+  return <RootStartupError error={error} retry={retry} />;
 }
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
-
-SplashScreen.preventAutoHideAsync();
 
 const bootstrapState = {
   hasCompletedInitialBoot: false,
@@ -77,26 +78,33 @@ export default function RootLayout() {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const storeUser = useAuthStore((state) => state.user);
   const storeMerchantId = useAuthStore((state) => state.merchantId);
-  const {
-    register: registerPushNotifications,
-    isRegistered: isPushRegistered,
-    registeredUserId,
-    isLoading: isPushLoading,
-  } = usePushNotifications();
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const pushAttemptsRef = useRef<{ userId: string | null; count: number }>({
     userId: null,
     count: 0,
   });
-  const [showSplash, setShowSplash] = useState(
-    () => !bootstrapState.hasCompletedInitialBoot
-  );
   const [hasCompletedInitialBoot, setHasCompletedInitialBoot] = useState(
     () => bootstrapState.hasCompletedInitialBoot
   );
   const [isStorageReady, setIsStorageReady] = useState(
     () => bootstrapState.isStorageReady
   );
+  const { showSplash, onFirstLayout, shouldRenderApp, timedOut } =
+    useNativeSplashHandoff({
+      initialVisible: !bootstrapState.hasCompletedInitialBoot,
+      ready: loaded && isInitialized && isStorageReady,
+    });
+  const {
+    register: registerPushNotifications,
+    isRegistered: isPushRegistered,
+    registeredUserId,
+    isLoading: isPushLoading,
+  } = usePushNotifications({
+    navigationReady: !showSplash && loaded && isStorageReady,
+  });
+  useEffect(() => {
+    if (!showSplash) void verifyBenchmarkTelemetry();
+  }, [showSplash]);
   const { isTrackingAuthorizationSettled } = useAppTrackingTransparency({
     enabled: !showSplash && isInitialized && isStorageReady,
   });
@@ -105,6 +113,7 @@ export default function RootLayout() {
   );
 
   useEffect(() => {
+    markStartupTiming('root_mounted');
     installCrashDiagnostics('RootLayout');
     recordCrashBreadcrumb('root_layout:mounted');
     return () => recordCrashBreadcrumb('root_layout:unmounted');
@@ -251,27 +260,13 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
-  // Safety timeout: force-dismiss splash if auth initialization hangs
-  useEffect(() => {
-    if (!showSplash) return;
-    const timeout = setTimeout(() => {
-      recordCrashBreadcrumb('root_layout:splash_timeout', {
-        isInitialized,
-        isStorageReady,
-      });
-      setShowSplash(false);
-    }, 8000);
-    return () => clearTimeout(timeout);
-  }, [isInitialized, isStorageReady, showSplash]);
+  if (!shouldRenderApp) {
+    return <View style={styles.startupPlaceholder} />;
+  }
 
-  // Hide the native splash as soon as fonts load so the JS AnimatedSplash takes over
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync().catch(() => {
-        // Ignore — splash may already be hidden (e.g. fast reload)
-      });
-    }
-  }, [loaded]);
+  if (timedOut && (!loaded || !isStorageReady)) {
+    return <StartupRecoveryScreen onLayout={onFirstLayout} />;
+  }
 
   if (!loaded) {
     return null;
@@ -281,19 +276,16 @@ export default function RootLayout() {
     return null;
   }
 
+  if (!isStorageReady) return null;
+
   return (
-    <AnimatedSplash
-      isReady={isInitialized && isStorageReady}
-      isVisible={showSplash}
-      onAnimationEnd={() => setShowSplash(false)}
-    >
-      {isStorageReady ? (
-        <RootLayoutNav
-          adTrackingReady={isStartupAdTrackingReady}
-          persistenceEnabled={!showSplash}
-          shouldResumeNavigation={hasCompletedInitialBoot}
-        />
-      ) : null}
-    </AnimatedSplash>
+    <RootLayoutNav
+      onFirstLayout={onFirstLayout}
+      adTrackingReady={isStartupAdTrackingReady}
+      persistenceEnabled={!showSplash}
+      shouldResumeNavigation={hasCompletedInitialBoot}
+    />
   );
 }
+
+const styles = StyleSheet.create({ startupPlaceholder: { flex: 1 } });

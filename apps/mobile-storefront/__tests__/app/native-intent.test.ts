@@ -35,6 +35,24 @@ describe('redirectSystemPath', () => {
     mockEnv.rootDomain = undefined;
   });
 
+  it('keeps the Expo Router synthesized native launcher root on the home route', () => {
+    expect(redirectSystemPath({ path: 'ogabassey:///', initial: true })).toBe(
+      '/'
+    );
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('continues validating non-root, decorated, and non-initial URLs', () => {
+    for (const value of [
+      { path: 'ogabassey:///cart', initial: true },
+      { path: 'ogabassey:///?handoff=secret', initial: true },
+      { path: 'ogabassey:///', initial: false },
+    ]) {
+      expect(redirectSystemPath(value)).toBe('/cart');
+    }
+    expect(mockCapture).toHaveBeenCalledTimes(3);
+  });
+
   it('delegates to pairing capture with the configured merchant and platform root', () => {
     const result = redirectSystemPath({
       path: '/cart/link#handoff=token',

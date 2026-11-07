@@ -84,7 +84,9 @@ describe('Expo compliance', () => {
       }
 
       expect(typeof config.runtimeVersion).toBe('string');
-      expect(config.runtimeVersion).toBe(`${config.version}-ios-sdk58-rn0880`);
+      expect(config.runtimeVersion).toBe(
+        `${config.version}-ios-sdk58-rn0880-splashmotion1`
+      );
     } finally {
       if (originalFacebookAppId === undefined) {
         delete process.env.STOREFRONT_FACEBOOK_APP_ID;
@@ -211,21 +213,21 @@ describe('Expo compliance', () => {
     });
   });
 
-  it('configures the Expo splash plugin without a static splash image', () => {
+  it('configures the native motion splash without competing Expo splash plugins', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
       sentryPlugin: null,
       tiktokBusinessPlugin: null,
     });
-
-    const splashPlugin = findPlugin(plugins, 'expo-splash-screen');
-
-    expect(splashPlugin?.[1]).toEqual({
-      backgroundColor: '#000000',
+    const splashPlugin = findPlugin(plugins, 'react-native-splash-motion');
+    expect(splashPlugin?.[1]).toMatchObject({
+      source: './assets/splash-scene/native-splash.json',
+      background: '#20000b',
+      loop: false,
     });
-    expect(splashPlugin?.[1]).not.toHaveProperty('image');
-    expect(splashPlugin?.[1]).not.toHaveProperty('resizeMode');
-    expect(plugins).toContain('./config/withNoSplashImage.js');
+    expect(findPlugin(plugins, 'expo-splash-screen')).toBeUndefined();
+    expect(plugins).not.toContain('./config/withBackgroundOnlyIosSplash.js');
+    expect(plugins).not.toContain('./config/withNoSplashImage.js');
   });
 
   it('gradle.properties does not contain newArchEnabled', () => {

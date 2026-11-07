@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen, waitFor, within } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 import type React from 'react';
 import { Platform, Text, View } from 'react-native';
+import { useStartupMotionEnabled } from '@/components/ui/StartupMotionContext';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
 import { getTemplateConfig } from '@/lib/templates';
 import { RootLayoutNav } from './RootLayoutNav';
@@ -16,6 +23,10 @@ const mockUseAuthGuard = jest.fn();
 const mockSetNavigationBarStyle = jest.fn();
 const mockRootStackOptions = jest.fn();
 const originalPlatformOS = Platform.OS;
+function StartupMotionProbe() {
+  const enabled = useStartupMotionEnabled();
+  return <Text>{enabled ? 'startup-motion:on' : 'startup-motion:off'}</Text>;
+}
 const renderMockQueryProvider = ({
   children,
   persistenceEnabled,
@@ -24,6 +35,7 @@ const renderMockQueryProvider = ({
   persistenceEnabled?: boolean;
 }) => (
   <View>
+    <StartupMotionProbe />
     <Text>{persistenceEnabled ? 'persist:on' : 'persist:off'}</Text>
     {children}
   </View>
@@ -90,6 +102,10 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => (
     <MockView testID="safe-area-provider">{children}</MockView>
   ),
+}));
+
+jest.mock('@/components/updates/MobileUpdateController', () => ({
+  MobileUpdateController: () => <MockText>update-controller</MockText>,
 }));
 
 jest.mock('@/components/cart/SharedCartBridge', () => ({
@@ -162,6 +178,15 @@ jest.mock('@/lib/QueryProvider', () => ({
 }));
 
 describe('RootLayoutNav', () => {
+  it('reports a layout from the app shell', () => {
+    const onFirstLayout = jest.fn();
+    const { UNSAFE_getByProps } = render(
+      <RootLayoutNav onFirstLayout={onFirstLayout} />
+    );
+    fireEvent(UNSAFE_getByProps({ onLayout: onFirstLayout }), 'layout');
+    expect(onFirstLayout).toHaveBeenCalledTimes(1);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockQueryProvider.mockImplementation(renderMockQueryProvider);
@@ -193,6 +218,22 @@ describe('RootLayoutNav', () => {
     expect(screen.getByText('negotiation-modal')).toBeTruthy();
     expect(screen.getByText('drawer-menu')).toBeTruthy();
     expect(mockUseAuthGuard).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts update prompts only after the native splash handoff', () => {
+    const view = render(<RootLayoutNav persistenceEnabled={false} />);
+    expect(screen.queryByText('update-controller')).toBeNull();
+
+    view.rerender(<RootLayoutNav persistenceEnabled />);
+    expect(screen.getByText('update-controller')).toBeTruthy();
+  });
+
+  it('pauses underlying motion until the native splash handoff', () => {
+    const view = render(<RootLayoutNav persistenceEnabled={false} />);
+    expect(screen.getByText('startup-motion:off')).toBeTruthy();
+
+    view.rerender(<RootLayoutNav persistenceEnabled />);
+    expect(screen.getByText('startup-motion:on')).toBeTruthy();
   });
 
   it('bugfix: puts the offline banner above the screens, so it pushes headers down instead of covering them', () => {

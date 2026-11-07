@@ -223,6 +223,28 @@ describe('buildMerchantTrustProfile', () => {
       privacy: 'https://ogabassey.com/privacy',
       terms: 'https://ogabassey.com/terms',
     });
+    expect(result.derivedLinks.faq).toBeUndefined();
+  });
+
+  it('publishes derived faq link for ogabassey template or structured faq_items', () => {
+    const ogabasseyResult = buildMerchantTrustProfile(
+      {
+        template_id: 'ogabassey',
+        pages: { faq: null },
+      },
+      'https://ogabassey.com'
+    );
+    expect(ogabasseyResult.derivedLinks.faq).toBe('https://ogabassey.com/faq');
+
+    const faqItemsResult = buildMerchantTrustProfile(
+      {
+        faq_items: [{ question: 'Warranty?', answer: '1 year.' }],
+      },
+      'https://store.usebaci.com'
+    );
+    expect(faqItemsResult.derivedLinks.faq).toBe(
+      'https://store.usebaci.com/faq'
+    );
   });
 
   it('normalizes enabled Google review settings into merchant review authority', () => {

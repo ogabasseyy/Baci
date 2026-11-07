@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { isLegalPagePublishable } from '@/app/(storefront)/[slug]/get-static-sitemap-entries';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2PrivacyPolicy } from '@/components/storefront/ogabassey/pages/privacy-policy';
@@ -30,6 +31,8 @@ export async function generateMetadata({
     return { title: 'Privacy Policy' };
   }
 
+  const isPublishable = isLegalPagePublishable(merchant, 'privacy');
+
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/privacy`;
   const description = generateMetaDescription(
@@ -49,7 +52,9 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: isPublishable
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: false },
   };
 }
 
@@ -69,15 +74,14 @@ async function PrivacyPageContent({ params }: PageProps) {
     notFound();
   }
 
-  const hasPrivacyContent = merchant.pages?.privacy;
-  const templateHasPrivacyPage =
-    !!merchant.template_id &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
-
-  if (!hasPrivacyContent && !templateHasPrivacyPage) {
+  if (!isLegalPagePublishable(merchant, 'privacy')) {
     notFound();
   }
+
+  const templateHasPrivacyPage =
+    Boolean(merchant.template_id) &&
+    merchant.template_id !== 'default' &&
+    merchant.template_id !== 'puck';
 
   const baseUrl = buildRequestScopedStoreUrl(merchant, await headers());
 

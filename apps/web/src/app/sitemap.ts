@@ -10,6 +10,8 @@ async function fetchActiveMerchants() {
     const { data: merchants, error } = await supabase
       .from('merchants')
       .select('slug, updated_at')
+      .eq('is_published', true)
+      .is('custom_domain', null)
       .not('slug', 'is', null)
       .order('updated_at', { ascending: false });
 
@@ -51,7 +53,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Map static pages to sitemap entries
   const sitemapEntries: MetadataRoute.Sitemap = staticPages.map((page) => ({
     url: `${siteUrl}${page.path}`,
-    lastModified: new Date(),
     changeFrequency: page.changeFreq,
     priority: page.priority,
   }));
@@ -73,11 +74,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           ? updatedAt
           : publishedAt && !Number.isNaN(publishedAt.getTime())
             ? publishedAt
-            : new Date();
+            : undefined;
 
       sitemapEntries.push({
         url: `${siteUrl}/blog/${post.slug}`,
-        lastModified,
+        ...(lastModified && { lastModified }),
         changeFrequency: 'weekly',
         priority: 0.7,
       });
@@ -98,11 +99,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           ? `/storefront/${merchant.slug}`
           : `/${merchant.slug}`;
 
+      const updatedAt = merchant.updated_at
+        ? new Date(merchant.updated_at)
+        : null;
+      const lastModified =
+        updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined;
+
       sitemapEntries.push({
         url: `${siteUrl}${storefrontPath}`,
-        lastModified: merchant.updated_at
-          ? new Date(merchant.updated_at)
-          : new Date(),
+        ...(lastModified && { lastModified }),
         changeFrequency: 'daily',
         priority: 0.6,
       });

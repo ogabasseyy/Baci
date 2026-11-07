@@ -4,6 +4,8 @@ const mockCookies = vi.fn();
 const mockHeaders = vi.fn();
 const mockCreateClient = vi.fn();
 const mockSelect = vi.fn();
+const mockEq = vi.fn();
+const mockIs = vi.fn();
 const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
@@ -44,8 +46,16 @@ describe('root sitemap', () => {
       order: mockOrder,
     });
 
-    mockSelect.mockReturnValue({
+    mockIs.mockReturnValue({
       not: mockNot,
+    });
+
+    mockEq.mockReturnValue({
+      is: mockIs,
+    });
+
+    mockSelect.mockReturnValue({
+      eq: mockEq,
     });
 
     mockCreateClient.mockReturnValue({
@@ -101,6 +111,9 @@ describe('root sitemap', () => {
 
     const result = await sitemap();
 
+    expect(mockEq).toHaveBeenCalledWith('is_published', true);
+    expect(mockIs).toHaveBeenCalledWith('custom_domain', null);
+    expect(mockNot).toHaveBeenCalledWith('slug', 'is', null);
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -111,6 +124,42 @@ describe('root sitemap', () => {
         }),
       ])
     );
+  });
+
+  it('does not fabricate lastModified timestamps on static pages or untimestamped records', async () => {
+    mockOrder.mockResolvedValueOnce({
+      data: [
+        {
+          slug: 'untimestamped-store',
+          updated_at: null,
+        },
+      ],
+      error: null,
+    });
+    mockGetPlatformBlogSitemapPosts.mockResolvedValueOnce([
+      {
+        published_at: null,
+        slug: 'untimestamped-post',
+        updated_at: null,
+      },
+    ]);
+
+    const { default: sitemap } = await import('./sitemap');
+    const result = await sitemap();
+
+    const homeEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/'
+    );
+    const blogEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/blog/untimestamped-post'
+    );
+    const storeEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/untimestamped-store'
+    );
+
+    expect(homeEntry?.lastModified).toBeUndefined();
+    expect(blogEntry?.lastModified).toBeUndefined();
+    expect(storeEntry?.lastModified).toBeUndefined();
   });
 
   it('falls back to static platform pages when dynamic lookups fail', async () => {

@@ -11,17 +11,16 @@ describe('getStaticSitemapEntries', () => {
     ).toEqual([]);
   });
 
-  it('returns the indexable home, products, and FAQ URLs', () => {
-    expect(
-      getStaticSitemapEntries({
-        merchant: {
-          slug: 'zorvexa',
-          is_published: true,
-          business_name: 'Zorvexa',
-        },
-        storeUrl: 'https://zorvexa.usebaci.com',
-      })
-    ).toEqual(
+  it('returns the indexable home and products URLs by default, gating FAQ on publishable content', () => {
+    const withoutFaq = getStaticSitemapEntries({
+      merchant: {
+        slug: 'zorvexa',
+        is_published: true,
+        business_name: 'Zorvexa',
+      },
+      storeUrl: 'https://zorvexa.usebaci.com',
+    });
+    expect(withoutFaq).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           url: 'https://zorvexa.usebaci.com',
@@ -32,8 +31,59 @@ describe('getStaticSitemapEntries', () => {
           priority: 0.9,
           changeFrequency: 'daily',
         }),
+      ])
+    );
+    expect(withoutFaq.some((entry) => entry.url.endsWith('/faq'))).toBe(false);
+
+    const withFaqItems = getStaticSitemapEntries({
+      merchant: {
+        slug: 'zorvexa',
+        is_published: true,
+        business_name: 'Zorvexa',
+        faq_items: [{ question: 'How fast?', answer: 'Same day.' }],
+      },
+      storeUrl: 'https://zorvexa.usebaci.com',
+    });
+    expect(withFaqItems).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           url: 'https://zorvexa.usebaci.com/faq',
+          priority: 0.5,
+        }),
+      ])
+    );
+
+    const withLegacyFaq = getStaticSitemapEntries({
+      merchant: {
+        slug: 'zorvexa',
+        is_published: true,
+        business_name: 'Zorvexa',
+        pages: { faq: 'Q: Shipping?\nA: Nationwide.' },
+      },
+      storeUrl: 'https://zorvexa.usebaci.com',
+    });
+    expect(withLegacyFaq).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: 'https://zorvexa.usebaci.com/faq',
+          priority: 0.5,
+        }),
+      ])
+    );
+
+    const withOgabasseyTemplate = getStaticSitemapEntries({
+      merchant: {
+        slug: 'ogabassey',
+        is_published: true,
+        business_name: 'Ogabassey',
+        template_id: 'ogabassey',
+      },
+      storeUrl: 'https://ogabassey.com',
+    });
+    expect(withOgabasseyTemplate).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: 'https://ogabassey.com/faq',
           priority: 0.5,
         }),
       ])

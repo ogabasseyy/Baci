@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { isLegalPagePublishable } from '@/app/(storefront)/[slug]/get-static-sitemap-entries';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2LegalDispute } from '@/components/storefront/ogabassey/pages/legal-dispute';
@@ -30,6 +31,8 @@ export async function generateMetadata({
     return { title: 'Terms of Service' };
   }
 
+  const isPublishable = isLegalPagePublishable(merchant, 'terms');
+
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/terms`;
   const description = generateMetaDescription(
@@ -49,7 +52,9 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: isPublishable
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: false },
   };
 }
 
@@ -69,15 +74,14 @@ async function TermsPageContent({ params }: PageProps) {
     notFound();
   }
 
-  const hasTermsContent = merchant.pages?.terms;
-  const templateHasTermsPage =
-    !!merchant.template_id &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
-
-  if (!hasTermsContent && !templateHasTermsPage) {
+  if (!isLegalPagePublishable(merchant, 'terms')) {
     notFound();
   }
+
+  const templateHasTermsPage =
+    Boolean(merchant.template_id) &&
+    merchant.template_id !== 'default' &&
+    merchant.template_id !== 'puck';
 
   const baseUrl = buildRequestScopedStoreUrl(merchant, await headers());
 

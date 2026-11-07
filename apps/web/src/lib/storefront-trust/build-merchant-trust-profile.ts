@@ -1,6 +1,7 @@
 import type { RegisteredAddress } from '@baci/shared';
 import { normalizeGooglePlaceId } from '@/lib/google-place-id-normalization';
 import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
+import { hasPublishableFaqContent } from '@/types/faq';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileRouteLinks,
@@ -154,7 +155,7 @@ function buildDerivedLinks(
     derivedLinks.terms = buildDerivedLink(normalizedBaseUrl, '/terms');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.faq)) {
+  if (hasPublishableFaqContent(merchant)) {
     derivedLinks.faq = buildDerivedLink(normalizedBaseUrl, '/faq');
   }
 

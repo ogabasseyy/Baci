@@ -1,3 +1,5 @@
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+
 /**
  * Types for structured FAQ data
  * Supports JSON-LD FAQPage schema for rich search results
@@ -9,6 +11,49 @@ export interface FAQItem {
   answer: string;
   category?: string;
   order?: number;
+}
+
+function isFaqItem(value: unknown): value is FAQItem {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.question === 'string' &&
+    item.question.trim().length > 0 &&
+    typeof item.answer === 'string' &&
+    item.answer.trim().length > 0
+  );
+}
+
+/**
+ * Extracts FAQ items from merchant data, checking both structured faq_items
+ * and legacy FAQ content. Returns an empty array when no valid items exist.
+ */
+export function extractFaqItems(merchant: {
+  faq_items?: unknown;
+  pages?: { faq?: string | null } | null;
+}): FAQItem[] {
+  if (Array.isArray(merchant.faq_items)) {
+    const valid = merchant.faq_items.filter(isFaqItem);
+    if (valid.length > 0) {
+      return valid;
+    }
+  }
+  if (merchant.pages?.faq) {
+    return parseLegacyFAQ(merchant.pages.faq);
+  }
+  return [];
+}
+
+export function hasPublishableFaqContent(merchant: {
+  template_id?: string | null;
+  faq_items?: unknown;
+  pages?: { faq?: string | null } | null;
+}): boolean {
+  return (
+    merchant.template_id === OGABASSEY_TEMPLATE_ID ||
+    extractFaqItems(merchant).length > 0 ||
+    Boolean(merchant.pages?.faq?.trim())
+  );
 }
 
 /**

@@ -1,0 +1,56 @@
+import { hasPrivateHost } from './has-private-host';
+
+describe('private host detection', () => {
+  it.each([
+    '0.0.0.0',
+    '0.1.2.3',
+    '100.64.0.1',
+    '100.127.255.255',
+  ])('rejects a non-public host %s', (host) =>
+    expect(hasPrivateHost(`http://${host}/`)).toBe(true));
+  it.each(['100.63.255.255', '100.128.0.0'])('accepts %s', (host) =>
+    expect(hasPrivateHost(`http://${host}/`)).toBe(false));
+  it.each([
+    '10.0.0.1',
+    '127.0.0.1',
+    '169.254.169.254',
+    '172.16.0.0',
+    '172.31.255.255',
+    '192.168.0.1',
+    'localhost',
+    'api.localhost',
+    'printer.local',
+    'localhost.',
+    'api.localhost.',
+    'printer.local.',
+    '127.0.0.1.',
+    '2130706433',
+    '127.1',
+    '[0:0:0:0:0:ffff:127.0.0.1]',
+    '[::1]',
+    '[fd00::1]',
+    '[fe80::1]',
+    '198.18.0.0',
+    '198.19.255.255',
+    '192.0.0.1',
+    '224.0.0.1',
+    '255.255.255.255',
+    '[64:ff9b::7f00:1]',
+    '[::127.0.0.1]',
+  ])('rejects private host %s', (host) =>
+    expect(hasPrivateHost(`http://${host}/`)).toBe(true));
+  it.each([
+    '172.15.255.255',
+    '172.32.0.0',
+    '8.8.8.8',
+    'chowdeck-api.readme.io',
+    '198.17.255.255',
+    '198.20.0.0',
+    '[fc0::1]',
+    '[fe8::1]',
+  ])('accepts public host %s', (host) =>
+    expect(hasPrivateHost(`http://${host}/`)).toBe(false));
+  it('rejects an unparsable URL candidate', () => {
+    expect(hasPrivateHost('http://[::1')).toBe(true);
+  });
+});

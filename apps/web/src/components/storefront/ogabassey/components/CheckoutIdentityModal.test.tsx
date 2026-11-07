@@ -46,6 +46,13 @@ describe('CheckoutIdentityModal', () => {
     expect(screen.getByText('Checkout')).toBeInTheDocument();
   });
 
+  it('uses the responsive overlay rather than a competing bottom-alignment utility', () => {
+    render(<CheckoutIdentityModal {...defaultProps} />);
+    const overlay = screen.getByRole('button', { name: 'Dismiss checkout modal backdrop' }).parentElement;
+    expect(overlay?.className).toContain('overlay');
+    expect(overlay).not.toHaveClass('items-end');
+  });
+
   it('returns null when not open', () => {
     render(<CheckoutIdentityModal {...defaultProps} isOpen={false} />);
 

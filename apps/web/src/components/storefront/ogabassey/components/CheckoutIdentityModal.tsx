@@ -6,6 +6,7 @@ import { CheckoutCodeSignin } from '@/components/storefront/checkout-code-signin
 import { useEffect } from 'react';
 import { buildCheckoutIdentityRoutes } from '@/components/storefront/checkout-route';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import styles from './CheckoutIdentityModal.module.css';
 
 interface CheckoutIdentityModalProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export function CheckoutIdentityModal({
   };
 
   return (
-    <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center">
+    <div className={`fixed inset-0 z-100 flex justify-center ${styles.overlay}`}>
       <button
         type="button"
         aria-label="Dismiss checkout modal backdrop"

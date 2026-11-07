@@ -1,0 +1,10 @@
+.overlay {
+  align-items: flex-end;
+}
+
+@media (min-width: 640px) {
+  .overlay.overlay {
+    align-items: center;
+    padding: 1rem;
+  }
+}

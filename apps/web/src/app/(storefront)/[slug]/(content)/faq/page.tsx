@@ -119,7 +119,7 @@ async function FAQContent({ params }: PageProps) {
     <FAQPageClient
       merchant={merchant}
       faqItems={faqItems}
-      legacyContent={!merchant.faq_items ? merchant.pages?.faq : undefined}
+      legacyContent={merchant.pages?.faq}
     >
       <ContentPageCrawlSummary
         kind="faq"

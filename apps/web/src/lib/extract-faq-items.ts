@@ -28,7 +28,7 @@ export function extractFaqItems(merchant: MerchantFaqSource): FAQItem[] {
     }
   }
   if (merchant.pages?.faq) {
-    return parseLegacyFAQ(merchant.pages.faq);
+    return parseLegacyFAQ(merchant.pages.faq).filter(isFaqItemCandidate);
   }
   return [];
 }

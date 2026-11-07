@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { isLegalPagePublishable } from './is-legal-page-publishable';
 
 describe('isLegalPagePublishable', () => {
@@ -24,11 +25,11 @@ describe('isLegalPagePublishable', () => {
     ).toBe(true);
   });
 
-  it('returns true for templates that provide built-in legal pages even without custom content', () => {
+  it('returns true for Ogabassey template even without custom content', () => {
     expect(
       isLegalPagePublishable(
         {
-          template_id: 'ogabassey',
+          template_id: OGABASSEY_TEMPLATE_ID,
           pages: null,
         },
         'privacy'
@@ -38,7 +39,7 @@ describe('isLegalPagePublishable', () => {
     expect(
       isLegalPagePublishable(
         {
-          template_id: 'ogabassey',
+          template_id: OGABASSEY_TEMPLATE_ID,
           pages: {},
         },
         'terms'
@@ -84,6 +85,52 @@ describe('isLegalPagePublishable', () => {
         {
           template_id: 'puck',
           pages: null,
+        },
+        'terms'
+      )
+    ).toBe(false);
+  });
+
+  it('returns false for non-Ogabassey templates when custom page content is absent', () => {
+    for (const templateId of ['boutique', 'restaurant', 'minimal', 'modern']) {
+      expect(
+        isLegalPagePublishable(
+          {
+            template_id: templateId,
+            pages: null,
+          },
+          'privacy'
+        )
+      ).toBe(false);
+
+      expect(
+        isLegalPagePublishable(
+          {
+            template_id: templateId,
+            pages: {},
+          },
+          'terms'
+        )
+      ).toBe(false);
+    }
+  });
+
+  it('treats whitespace-only strings as empty page content', () => {
+    expect(
+      isLegalPagePublishable(
+        {
+          template_id: 'default',
+          pages: { privacy: '   ', terms: '\n\t  ' },
+        },
+        'privacy'
+      )
+    ).toBe(false);
+
+    expect(
+      isLegalPagePublishable(
+        {
+          template_id: 'boutique',
+          pages: { privacy: '\r\n  \t', terms: '    ' },
         },
         'terms'
       )

@@ -162,6 +162,49 @@ describe('root sitemap', () => {
     expect(storeEntry?.lastModified).toBeUndefined();
   });
 
+  it('omits invalid lastModified timestamps for malformed merchant and blog dates', async () => {
+    mockOrder.mockResolvedValueOnce({
+      data: [
+        {
+          slug: 'malformed-store',
+          updated_at: 'not-a-valid-date',
+        },
+      ],
+      error: null,
+    });
+    mockGetPlatformBlogSitemapPosts.mockResolvedValueOnce([
+      {
+        published_at: '2026-05-16T09:00:00.000Z',
+        slug: 'fallback-post',
+        updated_at: 'malformed-updated-at',
+      },
+      {
+        published_at: 'malformed-published-at',
+        slug: 'invalid-post',
+        updated_at: 'malformed-updated-at',
+      },
+    ]);
+
+    const { default: sitemap } = await import('./sitemap');
+    const result = await sitemap();
+
+    const storeEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/malformed-store'
+    );
+    const fallbackPostEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/blog/fallback-post'
+    );
+    const invalidPostEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/blog/invalid-post'
+    );
+
+    expect(storeEntry?.lastModified).toBeUndefined();
+    expect(fallbackPostEntry?.lastModified).toEqual(
+      new Date('2026-05-16T09:00:00.000Z')
+    );
+    expect(invalidPostEntry?.lastModified).toBeUndefined();
+  });
+
   it('falls back to static platform pages when dynamic lookups fail', async () => {
     const errorSpy = vi
       .spyOn(console, 'error')

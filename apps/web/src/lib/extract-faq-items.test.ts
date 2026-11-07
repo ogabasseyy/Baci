@@ -53,6 +53,30 @@ describe('extractFaqItems', () => {
     ]);
   });
 
+  it('filters out legacy FAQ entries with empty or whitespace-only answers', () => {
+    expect(
+      extractFaqItems({
+        pages: {
+          faq: 'Q: Valid question?\nA: Valid answer.\n\nQ: Unanswered question?\nA:   ',
+        },
+      })
+    ).toEqual([
+      {
+        question: 'Valid question?',
+        answer: 'Valid answer.',
+        order: 0,
+      },
+    ]);
+
+    expect(
+      extractFaqItems({
+        pages: {
+          faq: 'Q: Unanswered question?\nA:   ',
+        },
+      })
+    ).toEqual([]);
+  });
+
   it('returns an empty array when neither structured items nor pages.faq exist', () => {
     expect(extractFaqItems({})).toEqual([]);
     expect(extractFaqItems({ faq_items: [], pages: { faq: '   ' } })).toEqual(

@@ -1,3 +1,5 @@
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+
 export function isLegalPagePublishable(
   merchant: {
     template_id?: string | null;
@@ -5,10 +7,7 @@ export function isLegalPagePublishable(
   },
   kind: 'privacy' | 'terms'
 ): boolean {
-  const hasPageContent = Boolean(merchant.pages?.[kind]);
-  const templateHasPolicyPage =
-    Boolean(merchant.template_id) &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
+  const hasPageContent = Boolean(merchant.pages?.[kind]?.trim());
+  const templateHasPolicyPage = merchant.template_id === OGABASSEY_TEMPLATE_ID;
   return hasPageContent || templateHasPolicyPage;
 }

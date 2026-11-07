@@ -1,9 +1,11 @@
 # Baci capabilities and agent access
 
-Reviewed 6 November 2026 against source revision
-`4203ba20a5ae7dae548deae0917fde9ef3a904e2`. Guest OAuth consent and renewable authorization were
-re-reviewed and tested. Upstream payment review confirms uncertain DVA outcomes
-retain their reconciliation claim and checkout eligibility reflects CredPal retirement.
+Reviewed 7 November 2026 against source revision
+`8acc61d681e3bac5af75948a061f9b33c9caa386`. Agentic checkout session quotes now include
+registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
+proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
+review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility
+reflects CredPal retirement.
 Oxygen supports local staging and a separately configured, policy-controlled production pilot; production transactions are not yet verified. This is a navigation map, not authorization or proof of
 current deployment. Check the current implementation, live tool discovery and
 merchant entitlement before calling or claiming a tool.

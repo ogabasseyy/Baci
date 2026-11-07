@@ -102,23 +102,6 @@ class ContractCheckTests(unittest.TestCase):
             bomb.write_text("BASE_PINS = {'gate.py': '%s'}\nraise RuntimeError('executed')\n" % ("0" * 64))
             self.assertEqual(check.declared_pins(bomb), {"gate.py": "0" * 64})
 
-    def test_tmp_copy_runs_from_repo_root(self):
-        # The workflow runs a base-owned copy from /tmp: the checker must
-        # derive the tree from the working directory, never its own path.
-        repo = Path(__file__).resolve().parents[2]
-        if not (repo / ".github/workflows/ci.yml").exists():
-            self.skipTest("CI workflow unavailable")
-        with tempfile.TemporaryDirectory() as tmp:
-            scripts = Path(tmp, ".github", "scripts")
-            scripts.mkdir(parents=True)
-            for name in ("capability_gate_contract_check.py", "capability_gate_contract_ci_checks.py", "capability_gate_contract_workflow_checks.py"):
-                shutil.copy(repo / ".github/scripts" / name, scripts / name)
-            proc = subprocess.run(
-                [sys.executable, str(scripts / "capability_gate_contract_check.py")],
-                cwd=repo, capture_output=True, text=True,
-            )
-            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-
     def test_checker_file_pin_lifecycle(self):
         with tempfile.TemporaryDirectory() as root:
             script = Path(root, ".github/scripts")

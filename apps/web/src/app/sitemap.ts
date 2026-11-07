@@ -8,6 +8,7 @@ interface SitemapDomain {
   status: string | null;
   domain_type: string | null;
   is_primary?: boolean | null;
+  verified_at?: string | null;
 }
 
 interface SitemapMerchant {
@@ -16,13 +17,26 @@ interface SitemapMerchant {
   domains?: SitemapDomain | SitemapDomain[] | null;
 }
 
-// Fetch active merchants for dynamic storefront URLs
+/**
+ * Fetches active merchants for dynamic storefront URLs.
+ *
+ * RLS policy note:
+ * Queries `merchants` and its nested `domains` relation using the standard
+ * `createClient(await cookies())` (anon role). `public.domains` has the
+ * `domains_select_policy` RLS policy in PostgreSQL:
+ *   CREATE POLICY "domains_select_policy" ON "public"."domains"
+ *   FOR SELECT USING (((("status" = 'active'::"text") AND ("verified_at" IS NOT NULL)) OR ...))
+ * which permits public anon reads strictly for verified, active domains. Downstream,
+ * `hasActiveCustomDomain` verifies `d.status === 'active'` to omit merchants whose canonical
+ * storefront URL is served by their own custom domain.
+ */
 async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
   try {
     const supabase = createClient(await cookies());
     const { data: merchants, error } = await supabase
       .from('merchants')
       .select(
+        // domains_select_policy allows anon SELECT where status = 'active' AND verified_at IS NOT NULL
         'slug, updated_at, domains(domain, status, domain_type, is_primary)'
       )
       .eq('is_published', true)

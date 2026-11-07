@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  userId: 'owner',
+  canRecover: true,
   merchantId: 'owner',
   recovery: {
     draft: {
@@ -32,9 +32,6 @@ const mocks = vi.hoisted(() => ({
     requestPreview: vi.fn(),
     confirm: vi.fn(),
   },
-}));
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: mocks.userId } }),
 }));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'm', user_id: mocks.merchantId } }),
@@ -84,7 +81,7 @@ function open() {
 }
 describe('CheckoutShippingRecoveryPanel', () => {
   beforeEach(() => {
-    mocks.userId = 'owner';
+    mocks.canRecover = true;
     mocks.recovery.preview = null;
     mocks.recovery.busy = false;
     mocks.recovery.confirmed = false;
@@ -94,6 +91,7 @@ describe('CheckoutShippingRecoveryPanel', () => {
     const blocking = vi.fn();
     render(
       <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
         order={order}
         onBlockingChange={blocking}
       />
@@ -122,7 +120,11 @@ describe('CheckoutShippingRecoveryPanel', () => {
       },
     };
     render(
-      <CheckoutShippingRecoveryPanel order={order} onBlockingChange={vi.fn()} />
+      <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
+        order={order}
+        onBlockingChange={vi.fn()}
+      />
     );
     open();
     const save = screen.getByRole('button', {
@@ -154,21 +156,30 @@ describe('CheckoutShippingRecoveryPanel', () => {
       },
     };
     render(
-      <CheckoutShippingRecoveryPanel order={order} onBlockingChange={vi.fn()} />
+      <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
+        order={order}
+        onBlockingChange={vi.fn()}
+      />
     );
     open();
     expect(screen.getByText(/differs from the paid/)).toBeTruthy();
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
-  it('hides recovery for staff and non-checkout orders', () => {
-    mocks.userId = 'staff';
+  it('hides recovery from users who cannot book GIG and for non-checkout orders', () => {
+    mocks.canRecover = false;
     const { rerender } = render(
-      <CheckoutShippingRecoveryPanel order={order} onBlockingChange={vi.fn()} />
+      <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
+        order={order}
+        onBlockingChange={vi.fn()}
+      />
     );
     expect(screen.queryByRole('button')).toBeNull();
-    mocks.userId = 'owner';
+    mocks.canRecover = true;
     rerender(
       <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
         order={{ ...order, shipping_funding_source: 'merchant_wallet' }}
         onBlockingChange={vi.fn()}
       />
@@ -188,7 +199,11 @@ describe('CheckoutShippingRecoveryPanel', () => {
       },
     };
     render(
-      <CheckoutShippingRecoveryPanel order={order} onBlockingChange={vi.fn()} />
+      <CheckoutShippingRecoveryPanel
+        canRecover={mocks.canRecover}
+        order={order}
+        onBlockingChange={vi.fn()}
+      />
     );
     open();
     fireEvent.click(screen.getByRole('checkbox'));

@@ -7,14 +7,6 @@ import { expect, it, vi } from 'vitest';
 import { canUseSelectedShippingProvider } from '@/lib/order-shipment';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
-const state = vi.hoisted(() => ({
-  userId: 'owner',
-  busy: false,
-  confirmed: false,
-  preview: vi.fn(),
-  confirm: vi.fn(),
-  update: vi.fn(),
-}));
 vi.mock('./ShipmentFlowSheetPresence', () => ({
   ShipmentFlowSheetPresence: ({
     accessory,
@@ -31,10 +23,6 @@ vi.mock('./ShipmentFlowSheetPresence', () => ({
         {accessory}
       </section>
     ) : null,
-}));
-
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: state.userId } }),
 }));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant', user_id: 'owner' } }),
@@ -108,6 +96,7 @@ const actions = {
 };
 const props = {
   ...actions,
+  canBookGigl: true,
   recoveryOrder: order,
   canUseProvider: canUseSelectedShippingProvider(order),
   fulfillmentDetails: { imei: '', serialNumber: '', items: [] },

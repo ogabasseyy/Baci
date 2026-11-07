@@ -9,6 +9,7 @@ import type {
   OrderGiglQuote,
   OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
+import { ShipmentGiglPreviewCard } from './ShipmentGiglPreviewCard';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
@@ -50,6 +51,11 @@ const LOADING_DETAILS: ShipmentOptionDetail[] = [{ text: 'From your wallet' }];
 
 interface Props {
   addressDraft: Partial<OrderGiglReceiver>;
+  /**
+   * False for staff who may see the GIG price but not book it: the panel shows
+   * the price and a note instead of a selectable option.
+   */
+  bookingAllowed: boolean;
   error: string | null;
   fundingAccount: MerchantWalletFundingAccount | null;
   missingFields: OrderGiglMissingField[];
@@ -104,6 +110,7 @@ function ActionButton({
 
 export function ShipmentFlowGiglPanel({
   addressDraft,
+  bookingAllowed,
   error,
   fundingAccount,
   missingFields,
@@ -120,6 +127,7 @@ export function ShipmentFlowGiglPanel({
 }: Props) {
   const { colors } = useTheme();
   const loading = state === 'loading';
+  const isSelected = bookingAllowed && selected;
   const description = quote
     ? getQuoteSummary(quote, addressDraft)
     : loading
@@ -138,19 +146,36 @@ export function ShipmentFlowGiglPanel({
 
   return (
     <View>
-      <ShipmentOptionCard
-        badge="GIG"
-        colors={colors}
-        description={description}
-        details={details}
-        disabled={loading}
-        icon="paper-plane-outline"
-        onPress={onModeChange}
-        price={price}
-        selected={selected}
-        title="Ship with GIG"
-      />
+      {bookingAllowed ? (
+        <ShipmentOptionCard
+          badge="GIG"
+          colors={colors}
+          description={description}
+          details={details}
+          disabled={loading}
+          icon="paper-plane-outline"
+          onPress={onModeChange}
+          price={price}
+          selected={isSelected}
+          title="Ship with GIG"
+        />
+      ) : (
+        <ShipmentGiglPreviewCard
+          colors={colors}
+          description={description}
+          details={details}
+          price={price}
+        />
+      )}
 
+      {bookingAllowed ? null : (
+        <Text style={[panelStyles.note, { color: colors.textSecondary }]}>
+          Ask the store owner or an admin to book GIG for this order.
+        </Text>
+      )}
+
+      {/* Preview-only staff may still fill a missing address and retry, so
+          they can see a delivery price; nothing here books or charges. */}
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>
@@ -169,7 +194,7 @@ export function ShipmentFlowGiglPanel({
         <ActionButton label="Retry quote" onPress={onRetryQuote} />
       ) : null}
 
-      {selected &&
+      {isSelected &&
       quote &&
       wallet &&
       !wallet.canBook &&
@@ -181,7 +206,7 @@ export function ShipmentFlowGiglPanel({
           onPress={onFundWallet}
         />
       ) : null}
-      {state === 'funding_pending' && !fundingAccount ? (
+      {bookingAllowed && state === 'funding_pending' && !fundingAccount ? (
         <View>
           <Text style={{ color: colors.textSecondary }}>
             Your bank transfer account is being prepared. Check again shortly.
@@ -193,7 +218,7 @@ export function ShipmentFlowGiglPanel({
         </View>
       ) : null}
 
-      {selected && fundingAccount?.status === 'active' ? (
+      {isSelected && fundingAccount?.status === 'active' ? (
         <View
           style={[
             panelStyles.account,
@@ -259,6 +284,7 @@ const panelStyles = StyleSheet.create({
   },
   copyRow: { flexDirection: 'row', gap: 8 },
   field: { gap: 6, marginBottom: 10 },
+  note: { marginBottom: 12, paddingHorizontal: 12 },
   input: {
     borderRadius: 10,
     borderWidth: 1,

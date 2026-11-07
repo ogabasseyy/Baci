@@ -40,6 +40,7 @@ export function getShipmentFlowPrimaryActionLabel({
 }
 
 export function isShipmentFlowPrimaryDisabled({
+  canBookGigl,
   canUseProvider,
   externalWaybill,
   giglShipping,
@@ -48,6 +49,7 @@ export function isShipmentFlowPrimaryDisabled({
   step,
 }: Pick<
   ShipmentFlowSheetProps,
+  | 'canBookGigl'
   | 'canUseProvider'
   | 'externalWaybill'
   | 'giglShipping'
@@ -68,6 +70,7 @@ export function isShipmentFlowPrimaryDisabled({
   if (selectedMode !== 'provider') return false;
   if (!giglShipping) return !canUseProvider;
   return (
+    !canBookGigl ||
     !giglShipping.wallet?.canBook ||
     giglShipping.state === 'loading' ||
     giglShipping.state === 'funding' ||

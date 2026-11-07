@@ -64,6 +64,7 @@ export function OrderDetailsScreenModals({
 
       <ShipmentFlowSheet
         recoveryOrder={order}
+        canBookGigl={controller.canBookGigl}
         canUseProvider={controller.providerBookingAvailable}
         checkoutPaidShippingLabel={
           checkoutPaidShippingFee === null

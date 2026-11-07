@@ -1,8 +1,15 @@
 import { renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const OWNER = { canFulfill: true, canEdit: true };
+const accessState = vi.hoisted(() => ({
+  current: { canFulfill: true, canEdit: true },
+}));
 const shippingHook = vi.hoisted(() => vi.fn());
 const prefetchHook = vi.hoisted(() => vi.fn(() => 'preview-scope'));
+vi.mock('@/hooks/useOrderFulfillAccess', () => ({
+  useOrderFulfillAccess: () => accessState.current,
+}));
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   useOrderGiglShipping: shippingHook,
 }));
@@ -22,12 +29,17 @@ import { useOrderDetailsGiglShipping } from './useOrderDetailsGiglShipping';
 type OrderShipmentModule = typeof import('@/lib/order-shipment');
 
 describe('useOrderDetailsGiglShipping background price', () => {
-  it('never prefetches a GIG preview for non-owner staff', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    accessState.current = OWNER;
+  });
+
+  it('never prefetches a GIG preview for staff without orders.fulfill', () => {
+    accessState.current = { canFulfill: false, canEdit: false };
     shippingHook.mockReturnValue({ quote: null });
     renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
         order: { id: 'order-1', shipping_status: 'processing' } as never,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
@@ -43,12 +55,32 @@ describe('useOrderDetailsGiglShipping background price', () => {
     );
   });
 
+  it('prefetches for staff with orders.fulfill once they open the status sheet', () => {
+    accessState.current = { canFulfill: true, canEdit: false };
+    shippingHook.mockReturnValue({ quote: null });
+    renderHook(() =>
+      useOrderDetailsGiglShipping({
+        giglEligible: true,
+        order: { id: 'order-1', shipping_status: 'processing' } as never,
+        pendingShipmentMode: 'self_fulfillment',
+        providerLabel: null,
+        shipmentFlowStep: 'details',
+        showShipmentFlow: false,
+        showStatusModal: true,
+        userId: 'staff-1',
+      })
+    );
+
+    expect(prefetchHook).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true, userId: 'staff-1' })
+    );
+  });
+
   it('does not prefetch while the owner is only viewing the order', () => {
     shippingHook.mockReturnValue({ quote: null });
     renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
         order: { id: 'order-1', shipping_status: 'processing' } as never,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
@@ -79,7 +111,6 @@ describe('useOrderDetailsGiglShipping background price', () => {
     renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
         order,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
@@ -109,7 +140,6 @@ describe('useOrderDetailsGiglShipping background price', () => {
     renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: true,
-        merchant: { user_id: 'owner-1' } as never,
         order: { id: 'order-1', shipping_status: 'processing' } as never,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,
@@ -133,7 +163,6 @@ describe('useOrderDetailsGiglShipping background price', () => {
     renderHook(() =>
       useOrderDetailsGiglShipping({
         giglEligible: false,
-        merchant: { user_id: 'owner-1' } as never,
         order: { id: 'order-1', shipping_status: 'processing' } as never,
         pendingShipmentMode: 'self_fulfillment',
         providerLabel: null,

@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -129,23 +129,40 @@ function contextResponse(contextToken: string) {
   };
 }
 
-async function establishWidgetContext(target: Window, conversationId = 905) {
+async function establishWidgetContext(
+  target: Window,
+  postMessage: ReturnType<typeof installFrame>['postMessage'],
+  conversationId = 905
+) {
   const requestId =
     conversationId === 906 ? 'context_654321' : 'context_123456';
+  postMessage.mockClear();
   sendWidgetMessage(target, 'baci-commerce-context-request', {
     requestId,
     conversationId,
     websiteToken: 'synthetic-widget-token-123456',
     visitorTokenSha256: 'b'.repeat(64),
   });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitFor(() =>
+    expect(
+      postMessage.mock.calls.some(([payload]) =>
+        String(payload).startsWith('baci-commerce-context-challenge:')
+      )
+    ).toBe(true)
+  );
   sendWidgetMessage(target, 'baci-commerce-context-ready', {
     requestId,
     conversationId,
     contextToken: `context-${conversationId}`,
     expiresAt: Math.floor(Date.now() / 1000) + 60,
   });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitFor(() =>
+    expect(
+      postMessage.mock.calls.some(([payload]) =>
+        String(payload).startsWith('baci-commerce-context-authorized:')
+      )
+    ).toBe(true)
+  );
 }
 
 describe('ChatwootInlineCartBridge', () => {
@@ -178,14 +195,20 @@ describe('ChatwootInlineCartBridge', () => {
     render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
 
     await act(async () => {
-      await establishWidgetContext(target);
+      await establishWidgetContext(target, postMessage);
       postMessage.mockClear();
       sendWidgetMessage(target, 'baci-checkout-review-request', {
         requestId: 'review-0001',
         conversationId: 905,
         sessionToken: 'session-905',
       });
-      await Promise.resolve();
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) =>
+            String(payload).startsWith('baci-checkout-review:')
+          )
+        ).toBe(true)
+      );
     });
 
     expect(fetch).toHaveBeenCalledWith(
@@ -237,14 +260,20 @@ describe('ChatwootInlineCartBridge', () => {
     const { target, postMessage } = installFrame();
     render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
     await act(async () => {
-      await establishWidgetContext(target);
+      await establishWidgetContext(target, postMessage);
       postMessage.mockClear();
       sendWidgetMessage(target, 'baci-checkout-review-request', {
         requestId: 'review-0004',
         conversationId: 905,
         sessionToken: 'session-905',
       });
-      await Promise.resolve();
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) =>
+            String(payload).startsWith('baci-checkout-review:')
+          )
+        ).toBe(true)
+      );
     });
     const payload = String(postMessage.mock.calls.at(-1)?.[0]);
     expect(JSON.parse(payload.slice('baci-checkout-review:'.length))).toEqual({
@@ -257,13 +286,19 @@ describe('ChatwootInlineCartBridge', () => {
     const { target, postMessage } = installFrame();
     render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
     await act(async () => {
-      await establishWidgetContext(target);
+      await establishWidgetContext(target, postMessage);
       sendWidgetMessage(target, 'baci-cart-request', {
         requestId: 'cart-0001',
         conversationId: 905,
         sessionToken: 'session-905',
       });
-      await Promise.resolve();
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) =>
+            String(payload).startsWith('baci-cart-view:')
+          )
+        ).toBe(true)
+      );
     });
     const cartPayload = String(postMessage.mock.calls.at(-1)?.[0]);
     const cart = JSON.parse(cartPayload.slice('baci-cart-view:'.length));
@@ -278,7 +313,13 @@ describe('ChatwootInlineCartBridge', () => {
         conversationId: 905,
         sessionToken: 'session-905',
       });
-      await Promise.resolve();
+      await waitFor(() =>
+        expect(
+          postMessage.mock.calls.some(([payload]) =>
+            String(payload).startsWith('baci-cart-quantity-result:')
+          )
+        ).toBe(true)
+      );
     });
 
     const quantityPayload = String(postMessage.mock.calls.at(-1)?.[0]);

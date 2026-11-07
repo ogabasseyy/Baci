@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -65,15 +65,18 @@ function send(target: Window, event: string, data: Record<string, unknown>) {
   );
 }
 
-function authorizedResponse(conversationId: number) {
+function authorizedResponse(conversationId: number, onJson?: () => void) {
   return {
     ok: true,
-    json: async () => ({
-      authorized: true,
-      conversationId,
-      sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
-      cartSnapshot: snapshot,
-    }),
+    json: async () => {
+      onJson?.();
+      return {
+        authorized: true,
+        conversationId,
+        sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
+        cartSnapshot: snapshot,
+      };
+    },
   };
 }
 
@@ -93,23 +96,40 @@ function contextResponse(contextToken: string) {
   };
 }
 
-async function establishContext(target: Window, conversationId = 905) {
+async function establishContext(
+  target: Window,
+  postMessage: ReturnType<typeof installFrame>['postMessage'],
+  conversationId = 905
+) {
   const requestId =
     conversationId === 906 ? 'context_654321' : 'context_123456';
+  postMessage.mockClear();
   send(target, 'baci-commerce-context-request', {
     requestId,
     conversationId,
     websiteToken: 'synthetic-widget-token-123456',
     visitorTokenSha256: 'b'.repeat(64),
   });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitFor(() =>
+    expect(
+      postMessage.mock.calls.some(([payload]) =>
+        String(payload).startsWith('baci-commerce-context-challenge:')
+      )
+    ).toBe(true)
+  );
   send(target, 'baci-commerce-context-ready', {
     requestId,
     conversationId,
     contextToken: `context-${conversationId}`,
     expiresAt: Math.floor(Date.now() / 1000) + 60,
   });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitFor(() =>
+    expect(
+      postMessage.mock.calls.some(([payload]) =>
+        String(payload).startsWith('baci-commerce-context-authorized:')
+      )
+    ).toBe(true)
+  );
 }
 
 describe('ChatwootInlineCartBridge async context races', () => {
@@ -142,6 +162,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
 
   it('discards an authorization response after the conversation changes', async () => {
     const { target, postMessage } = installFrame();
+    let authorizationParsed = false;
     let resolveAuthorize:
       | ((value: ReturnType<typeof authorizedResponse>) => void)
       | undefined;
@@ -170,7 +191,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
     render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
 
     await act(async () => {
-      await establishContext(target);
+      await establishContext(target, postMessage);
       send(target, 'baci-checkout-review-request', {
         requestId: 'review-0001',
         conversationId: 905,
@@ -178,15 +199,13 @@ describe('ChatwootInlineCartBridge async context races', () => {
       });
     });
     await act(async () => {
-      send(target, 'baci-commerce-context-request', {
-        requestId: 'context_654321',
-        conversationId: 906,
-        websiteToken: 'synthetic-widget-token-123456',
-        visitorTokenSha256: 'b'.repeat(64),
-      });
-      await Promise.resolve();
-      resolveAuthorize?.(authorizedResponse(905));
-      await Promise.resolve();
+      await establishContext(target, postMessage, 906);
+      resolveAuthorize?.(
+        authorizedResponse(905, () => {
+          authorizationParsed = true;
+        })
+      );
+      await waitFor(() => expect(authorizationParsed).toBe(true));
     });
 
     expect(
@@ -228,13 +247,19 @@ describe('ChatwootInlineCartBridge async context races', () => {
       <HookHarness storeSlug="store" widgetOrigin={origin} />
     );
     await act(async () => {
-      await establishContext(target);
+      await establishContext(target, postMessage);
       postMessage.mockClear();
       send(target, 'baci-checkout-review-request', {
         requestId: 'review-0003',
         conversationId: 905,
         sessionToken: 'session-905',
       });
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/storefront/chatwoot/context/authorize',
+          expect.anything()
+        )
+      );
     });
     holder.replaceChildren(document.createElement('iframe'));
     mocks.cartState.merchantSlug = 'another-store';
@@ -242,8 +267,13 @@ describe('ChatwootInlineCartBridge async context races', () => {
       <HookHarness storeSlug="another-store" widgetOrigin={origin} />
     );
     await act(async () => {
-      resolveFetch?.(authorizedResponse(905));
-      await Promise.resolve();
+      let authorizationParsed = false;
+      resolveFetch?.(
+        authorizedResponse(905, () => {
+          authorizationParsed = true;
+        })
+      );
+      await waitFor(() => expect(authorizationParsed).toBe(true));
     });
     expect(postMessage).not.toHaveBeenCalled();
   });

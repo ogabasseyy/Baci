@@ -19,6 +19,13 @@ concern its unmerged primitives. Those functions are absent from main and
 should not be introduced merely to fix those deferred findings. The original
 draft, branch and review findings remain available for any future revival.
 
+One independent test idea is retained from #3940: compare the readiness
+capability lists with explicit function grants recorded in migration source.
+The adapted contract covers the current onboarding and goal-provisioning
+roles without importing `is_backed` or the obsolete backing-state model. It
+checks source declarations; disposable/live catalog permission checks remain
+a separate requirement.
+
 ## Reuse the current capture and replay pipeline
 
 Main already captures deliveries durably, verifies their stored bytes on

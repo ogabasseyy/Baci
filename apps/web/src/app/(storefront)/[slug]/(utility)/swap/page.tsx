@@ -14,6 +14,7 @@ export const metadata: Metadata = {
   title: 'Swap Your Device',
   description:
     'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
+  alternates: { canonical: '/swap' },
 };
 
 export default async function SwapPage({

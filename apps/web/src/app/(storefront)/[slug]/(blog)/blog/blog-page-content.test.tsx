@@ -270,4 +270,71 @@ describe('BlogPageContent', () => {
       })
     );
   });
+
+  it('emits a noindex, follow robots meta tag on paginated, search, or query-category blog listings and omits it on clean page 1 routes', async () => {
+    const cleanListing = render(
+      await BlogPageContent({
+        params: Promise.resolve({ slug: 'test-store' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    cleanListing.unmount();
+
+    const cleanCategoryListing = render(
+      await BlogPageContent({
+        categoryOverride: 'Smartphones',
+        isCleanCategoryRoute: true,
+        params: Promise.resolve({ slug: 'test-store' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    cleanCategoryListing.unmount();
+
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({ totalPosts: 40 })
+    );
+    const paginatedListing = render(
+      await BlogPageContent({
+        params: Promise.resolve({ slug: 'test-store' }),
+        searchParams: Promise.resolve({ page: '2' }),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, follow'
+    );
+    paginatedListing.unmount();
+
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({ totalPosts: 5 })
+    );
+    const searchListing = render(
+      await BlogPageContent({
+        params: Promise.resolve({ slug: 'test-store' }),
+        searchParams: Promise.resolve({ search: 'iphone' }),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, follow'
+    );
+    searchListing.unmount();
+
+    mockGetCachedBlogListing.mockResolvedValueOnce(
+      buildListingResult({ totalPosts: 40 })
+    );
+    const queryCategoryPaginatedListing = render(
+      await BlogPageContent({
+        params: Promise.resolve({ slug: 'test-store' }),
+        searchParams: Promise.resolve({ category: 'Smartphones', page: '2' }),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, follow'
+    );
+    queryCategoryPaginatedListing.unmount();
+  });
 });

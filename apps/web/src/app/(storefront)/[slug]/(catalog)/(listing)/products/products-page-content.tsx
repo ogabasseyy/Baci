@@ -58,18 +58,13 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
 
   const showMaintainedLinkModules = merchant.id === OGABASSEY_MERCHANT_ID;
 
-  const [categoryResult, currentProductIndex, firstPageProductIndex] =
-    await Promise.all([
-      getStorefrontCategories(merchant.id),
-      getCachedStorefrontProductIndex(merchant.id, {
-        page: currentPage,
-        limit: STOREFRONT_PRODUCTS_PER_PAGE,
-      }),
-      getCachedStorefrontProductIndex(merchant.id, {
-        page: 1,
-        limit: STOREFRONT_PRODUCTS_PER_PAGE,
-      }),
-    ]);
+  const [categoryResult, currentProductIndex] = await Promise.all([
+    getStorefrontCategories(merchant.id),
+    getCachedStorefrontProductIndex(merchant.id, {
+      page: currentPage,
+      limit: STOREFRONT_PRODUCTS_PER_PAGE,
+    }),
+  ]);
   const { categories } = categoryResult;
   const totalPages = Math.max(1, currentProductIndex.totalPages || 1);
 
@@ -144,12 +139,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
     currentProductIndex.totalCount === 0
       ? 0
       : rangeStart + currentProductIndex.products.length - 1;
-  const deepLinkProducts =
-    currentPage > 1
-      ? firstPageProductIndex.products
-          .filter((product) => product.slug)
-          .slice(0, 18)
-      : [];
 
   return (
     <>
@@ -219,37 +208,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
             </div>
           ) : (
             <>
-              {deepLinkProducts.length > 0 && (
-                <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
-                  <h2 className="text-lg font-semibold text-store-background-text">
-                    Popular Product Links
-                  </h2>
-                  <ul className="mt-4 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                    {deepLinkProducts.map((product) => {
-                      const categorySlug =
-                        canonicalizeCategorySlug(product.category_slug) ??
-                        'products';
-                      const href =
-                        categorySlug === 'products'
-                          ? `${pathPrefix}/products/${product.slug}`
-                          : `${pathPrefix}/${categorySlug}/${product.slug}`;
-
-                      return (
-                        <li key={`deep-link-${product.id}`}>
-                          <Link
-                            href={asRoute(href)}
-                            prefetch={false}
-                            className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
-                          >
-                            {product.name}
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-
               <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                 {currentProductIndex.products.map((product) => (
                   <ProductIndexCard
@@ -267,7 +225,9 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 crawlDiscoveryAllPagesThreshold={
                   STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT
                 }
-                crawlDiscoveryLabel="Browse product index pages"
+                crawlDiscoveryLabel={
+                  currentPage === 1 ? 'Browse product index pages' : undefined
+                }
                 crawlDiscoveryPageLabel="Products page"
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -276,7 +236,7 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
           )}
           {/* These links are independently streamed SEO enrichment. Keep them
               after the catalog so their late arrival cannot push painted cards. */}
-          {showMaintainedLinkModules && (
+          {showMaintainedLinkModules && currentPage === 1 && (
             <Suspense fallback={null}>
               <ProductsPageDeferredLinkModules
                 baseUrl={baseUrl}

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import { STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT } from '@/lib/storefront-pagination';
 
 const {
@@ -10,6 +11,7 @@ const {
   mockGetCachedStorefrontProductIndex,
   mockGetRequestScopedMerchant,
   mockHeaders,
+  mockLoadProductsPageLinkModules,
   mockStorefrontPagination,
 } = vi.hoisted(() => ({
   mockGenerateBreadcrumbSchema: vi.fn(() => ({})),
@@ -18,6 +20,7 @@ const {
   mockGetCachedStorefrontProductIndex: vi.fn(),
   mockGetRequestScopedMerchant: vi.fn(),
   mockHeaders: vi.fn(),
+  mockLoadProductsPageLinkModules: vi.fn(),
   mockStorefrontPagination: vi.fn((_props: Record<string, unknown>) => null),
 }));
 
@@ -110,6 +113,33 @@ vi.mock('./product-index-card', () => ({
       <span>{formattedPrice}</span>
     </article>
   ),
+}));
+
+vi.mock('./products-page-link-modules', () => ({
+  loadProductsPageLinkModules: (...args: unknown[]) =>
+    mockLoadProductsPageLinkModules(...args),
+}));
+
+vi.mock('./products-page-deferred-link-modules', () => ({
+  ProductsPageDeferredLinkModules: (props: {
+    baseUrl: string;
+    categories: unknown[];
+    merchantId: string;
+    pathPrefix: string;
+    productTotalPages: number;
+  }) => {
+    mockLoadProductsPageLinkModules({
+      baseUrl: props.baseUrl,
+      categories: props.categories,
+      merchantId: props.merchantId,
+      productTotalPages: props.productTotalPages,
+    });
+    return (
+      <section aria-label="Explore Ogabassey buying paths">
+        <a href={`${props.pathPrefix}/smartphones`}>Smartphones</a>
+      </section>
+    );
+  },
 }));
 
 const { ProductsPageContent } = await import('./products-page-content');
@@ -303,11 +333,11 @@ describe('ProductsPageContent', () => {
     ).toBeInTheDocument();
   });
 
-  it('enables crawl discovery pagination for the product index', async () => {
+  it('enables crawl discovery pagination and deferred link modules on page 1', async () => {
     mockGetRequestScopedMerchant.mockResolvedValue({
-      id: 'merchant-1',
-      business_name: 'Demo Store',
-      slug: 'demo-store',
+      id: OGABASSEY_MERCHANT_ID,
+      business_name: 'Ogabassey',
+      slug: 'ogabassey',
       country: 'NG',
       payout_currency: 'NGN',
       site_description: 'Browse products',
@@ -329,16 +359,26 @@ describe('ProductsPageContent', () => {
     });
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'demo-store' }),
+      params: Promise.resolve({ slug: 'ogabassey' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
 
     render(result as React.ReactElement);
 
+    expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledTimes(1);
+    expect(mockLoadProductsPageLinkModules).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: OGABASSEY_MERCHANT_ID,
+        productTotalPages: 64,
+      })
+    );
+    expect(
+      screen.getByRole('region', { name: 'Explore Ogabassey buying paths' })
+    ).toBeInTheDocument();
     expect(mockStorefrontPagination).toHaveBeenCalledWith(
       expect.objectContaining({
         ariaLabel: 'Products pagination',
-        basePath: '/demo-store/products',
+        basePath: '/ogabassey/products',
         crawlDiscoveryAllPagesThreshold:
           STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT,
         crawlDiscoveryLabel: 'Browse product index pages',
@@ -349,11 +389,11 @@ describe('ProductsPageContent', () => {
     );
   });
 
-  it('omits Popular Product Links on page 1 to prevent duplication of current grid items', async () => {
+  it('skips deferred link modules, crawl discovery links, and Popular Product Links on page 2+', async () => {
     mockGetRequestScopedMerchant.mockResolvedValue({
-      id: 'merchant-1',
-      business_name: 'Demo Store',
-      slug: 'demo-store',
+      id: OGABASSEY_MERCHANT_ID,
+      business_name: 'Ogabassey',
+      slug: 'ogabassey',
       country: 'NG',
       payout_currency: 'NGN',
       site_description: 'Browse products',
@@ -364,90 +404,43 @@ describe('ProductsPageContent', () => {
       totalPages: 2,
       products: [
         {
-          id: 'prod-1',
-          name: 'Galaxy S25',
-          slug: 'galaxy-s25',
-          price: 2500,
+          id: 'prod-page2',
+          name: 'Second Page Product',
+          slug: 'second-page-product',
+          price: 3000,
           images: [],
-          categories: [{ name: 'Smartphones', slug: 'smartphones' }],
+          category_slug: 'smartphones',
         },
       ],
     });
 
     const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'demo-store' }),
-      searchParams: Promise.resolve({ page: '1' }),
-    });
-
-    render(result as React.ReactElement);
-
-    expect(
-      screen.queryByRole('heading', { name: 'Popular Product Links' })
-    ).not.toBeInTheDocument();
-  });
-
-  it('renders Popular Product Links on page 2+ linking to top products', async () => {
-    mockGetRequestScopedMerchant.mockResolvedValue({
-      id: 'merchant-1',
-      business_name: 'Demo Store',
-      slug: 'demo-store',
-      country: 'NG',
-      payout_currency: 'NGN',
-      site_description: 'Browse products',
-    });
-    mockGetCachedStorefrontProductIndex.mockImplementation(
-      (_merchantId, options: { page?: number } | number) => {
-        const page =
-          typeof options === 'object' && options !== null
-            ? options.page
-            : options;
-        if (page === 1) {
-          return Promise.resolve({
-            hasError: false,
-            totalCount: 40,
-            totalPages: 2,
-            products: [
-              {
-                id: 'prod-page1',
-                name: 'First Page Product',
-                slug: 'first-page-product',
-                price: 2500,
-                images: [],
-                category_slug: 'smartphones',
-              },
-            ],
-          });
-        }
-        return Promise.resolve({
-          hasError: false,
-          totalCount: 40,
-          totalPages: 2,
-          products: [
-            {
-              id: 'prod-page2',
-              name: 'Second Page Product',
-              slug: 'second-page-product',
-              price: 3000,
-              images: [],
-              category_slug: 'smartphones',
-            },
-          ],
-        });
-      }
-    );
-
-    const result = await ProductsPageContent({
-      params: Promise.resolve({ slug: 'demo-store' }),
+      params: Promise.resolve({ slug: 'ogabassey' }),
       searchParams: Promise.resolve({ page: '2' }),
     });
 
     render(result as React.ReactElement);
 
+    expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledTimes(1);
+    expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledWith(
+      OGABASSEY_MERCHANT_ID,
+      expect.objectContaining({ page: 2 })
+    );
+    expect(mockLoadProductsPageLinkModules).not.toHaveBeenCalled();
     expect(
-      screen.getByRole('heading', { name: 'Popular Product Links' })
-    ).toBeInTheDocument();
+      screen.queryByRole('region', { name: 'Explore Ogabassey buying paths' })
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: 'First Page Product' })
-    ).toHaveAttribute('href', '/demo-store/smartphones/first-page-product');
+      screen.queryByRole('heading', { name: 'Popular Product Links' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: 'Popular Product Links' })
+    ).not.toBeInTheDocument();
+    expect(mockStorefrontPagination).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentPage: 2,
+        crawlDiscoveryLabel: undefined,
+      })
+    );
   });
 });

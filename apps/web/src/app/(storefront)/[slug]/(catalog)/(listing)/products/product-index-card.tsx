@@ -136,6 +136,7 @@ export function ProductIndexCard({
       <Link
         href={asRoute(searchProductPath)}
         prefetch={false}
+        rel={matchParams.size > 0 ? 'nofollow' : undefined}
         className={modern ? 'block flex-1' : 'block h-full'}
       >
         <div className="relative aspect-square bg-store-background-text/5">
@@ -213,6 +214,7 @@ export function ProductIndexCard({
           <Link
             prefetch={false}
             href={asRoute(searchProductPath)}
+            rel={matchParams.size > 0 ? 'nofollow' : undefined}
             aria-label={`Choose ${product.name} to buy`}
             className="flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-store-background-text/5 px-2 text-xs font-medium text-store-background-text"
           >

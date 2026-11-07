@@ -56,14 +56,16 @@ export function BlogAuthorPagination({
         )}
       </div>
 
-      <BlogCrawlDiscoveryLinks
-        buildHref={buildHref}
-        className="border-t border-border/70 pt-4 text-center"
-        currentPage={safeCurrentPage}
-        label={`Browse ${authorName} article pages`}
-        pageLabel={`${authorName} articles page`}
-        totalPages={safeTotalPages}
-      />
+      {safeCurrentPage === 1 ? (
+        <BlogCrawlDiscoveryLinks
+          buildHref={buildHref}
+          className="border-t border-border/70 pt-4 text-center"
+          currentPage={safeCurrentPage}
+          label={`Browse ${authorName} article pages`}
+          pageLabel={`${authorName} articles page`}
+          totalPages={safeTotalPages}
+        />
+      ) : null}
     </nav>
   );
 }

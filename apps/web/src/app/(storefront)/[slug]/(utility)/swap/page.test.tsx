@@ -53,8 +53,9 @@ describe('SwapPage', () => {
     expect(screen.getByText(/exact model, storage size/i)).toBeInTheDocument();
   });
 
-  it('uses a service-focused meta description', () => {
+  it('uses a service-focused meta description and self-referencing canonical', () => {
     expect(metadata.description).toContain('eligible phone, laptop');
+    expect(metadata.alternates).toEqual({ canonical: '/swap' });
   });
 
   it('throws notFound for non-ogabassey templates', async () => {

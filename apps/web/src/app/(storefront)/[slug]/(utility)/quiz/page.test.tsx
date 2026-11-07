@@ -32,9 +32,12 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: QuizPage } = await import('./page');
+const { default: QuizPage, metadata } = await import('./page');
 
 describe('QuizPage', () => {
+  it('declares a self-referencing canonical in static metadata', () => {
+    expect(metadata.alternates).toEqual({ canonical: '/quiz' });
+  });
   it('renders the Ogabassey web quiz route with structured data', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       slug: 'ogabassey',

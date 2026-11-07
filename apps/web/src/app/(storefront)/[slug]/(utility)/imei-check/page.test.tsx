@@ -106,8 +106,9 @@ describe('ImeiCheckPage', () => {
     expect(screen.getByText('IMEI checker UI')).toBeInTheDocument();
   });
 
-  it('uses a verification-focused meta description', () => {
+  it('uses a verification-focused meta description and self-referencing canonical', () => {
     expect(metadata.description).toContain('device identity');
+    expect(metadata.alternates).toEqual({ canonical: '/imei-check' });
   });
 
   it('uses an absolute title so the platform suffix cannot leak onto the storefront', () => {

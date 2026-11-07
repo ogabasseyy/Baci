@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -30,6 +31,12 @@ const {
 vi.mock('@/lib/blog-authors', () => ({
   getBlogAuthorBySlug: (...args: unknown[]) => mockGetBlogAuthorBySlug(...args),
   getBlogAuthorSlugs: () => mockGetBlogAuthorSlugs(),
+}));
+
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -369,5 +376,79 @@ describe('blog author page metadata', () => {
       'Bassey John',
       { page: 1 }
     );
+  });
+
+  it('renders noindex, follow robots meta tag from BlogAuthorPageContent when currentPage > 1 and omits it on clean page 1', async () => {
+    const { BlogAuthorPageContent: RealBlogAuthorPageContent } =
+      await vi.importActual<typeof import('./blog-author-page-content')>(
+        './blog-author-page-content'
+      );
+
+    mockGetCachedBlogAuthor.mockResolvedValueOnce({
+      merchant: {
+        id: 'm1',
+        business_name: 'Ogabassey',
+        slug: 'ogabassey',
+        logo_url: null,
+        custom_domain: 'ogabassey.com',
+      },
+      author: {
+        name: 'Bassey John',
+        title: 'Performance Marketing Specialist',
+        bio: 'Bassey John writes practical device buying guides.',
+        imageUrl: null,
+      },
+      posts: [],
+      totalPosts: 24,
+      currentPage: 1,
+      totalPages: 2,
+    });
+
+    const page1 = render(
+      await RealBlogAuthorPageContent({
+        params: Promise.resolve({
+          slug: 'ogabassey.com',
+          authorSlug: 'bassey-john',
+        }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    page1.unmount();
+
+    mockGetCachedBlogAuthor.mockResolvedValueOnce({
+      merchant: {
+        id: 'm1',
+        business_name: 'Ogabassey',
+        slug: 'ogabassey',
+        logo_url: null,
+        custom_domain: 'ogabassey.com',
+      },
+      author: {
+        name: 'Bassey John',
+        title: 'Performance Marketing Specialist',
+        bio: 'Bassey John writes practical device buying guides.',
+        imageUrl: null,
+      },
+      posts: [],
+      totalPosts: 24,
+      currentPage: 2,
+      totalPages: 2,
+    });
+
+    const page2 = render(
+      await RealBlogAuthorPageContent({
+        params: Promise.resolve({
+          slug: 'ogabassey.com',
+          authorSlug: 'bassey-john',
+        }),
+        searchParams: Promise.resolve({ page: '2' }),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, follow'
+    );
+    page2.unmount();
   });
 });

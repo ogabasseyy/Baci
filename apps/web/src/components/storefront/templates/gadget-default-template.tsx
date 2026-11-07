@@ -172,7 +172,7 @@ export function GadgetDefaultTemplate({
                       radiusClass
                     )}
                   >
-                    <Link href={asRoute(getFullHref('/category/all'))}>
+                    <Link href={asRoute(getFullHref('/products'))}>
                       Shop Now
                     </Link>
                   </ThemedButton>
@@ -203,7 +203,7 @@ export function GadgetDefaultTemplate({
                       radiusClass
                     )}
                   >
-                    <Link href={asRoute(getFullHref('/category/all'))}>
+                    <Link href={asRoute(getFullHref('/products'))}>
                       Explore Collection <ArrowRight className="size-5" />
                     </Link>
                   </ThemedButton>
@@ -291,6 +291,7 @@ export function GadgetDefaultTemplate({
                   <Link
                     key={brand}
                     href={asRoute(getFullHref(`/search?q=${brand}`))}
+                    rel="nofollow"
                     className={cn(
                       'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',
                       radiusClass,
@@ -323,6 +324,7 @@ export function GadgetDefaultTemplate({
                 <Link
                   key={range.href}
                   href={asRoute(getFullHref(range.href))}
+                  rel="nofollow"
                   className={cn(
                     'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',
                     radiusClass,

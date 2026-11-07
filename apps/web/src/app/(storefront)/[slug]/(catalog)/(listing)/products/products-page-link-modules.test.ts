@@ -77,11 +77,11 @@ describe('loadProductsPageLinkModules', () => {
     expect(modules.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         'catalog-categories',
-        'catalog-pages',
         'category-pages',
         'compare-modules',
       ])
     );
+    expect(modules.some((module) => module.id === 'catalog-pages')).toBe(false);
     expect(
       modules.flatMap((module) => module.items).map((item) => item.href)
     ).toContain('/smartphones/compare/samsung-galaxy-s24-ultra-vs-xiaomi-13t');

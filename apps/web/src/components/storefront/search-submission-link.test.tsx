@@ -25,6 +25,7 @@ describe('search submission link', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/search?q=phone%20%26%20case');
+    expect(link).toHaveAttribute('rel', 'nofollow');
     fireEvent.mouseOver(link);
     fireEvent.focus(link);
     expect(fetchMock).not.toHaveBeenCalled();

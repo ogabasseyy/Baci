@@ -29,7 +29,92 @@ import {
   BOT_USER_AGENT_REGEX,
   IMAGE_FILES_REGEX,
 } from '@/lib/proxy/routing-constants';
-import { isStorefrontNestedListingPath } from '@/lib/proxy/routing-policy';
+import {
+  getStorefrontContentSegments,
+  isStorefrontNestedListingPath,
+} from '@/lib/proxy/routing-policy';
+
+function getStorefrontBlogListingRouteKind(
+  pathname: string,
+  hostname: string | undefined,
+  routeType: 'admin' | 'auth' | 'storefront' | 'api'
+): 'root' | 'category' | 'author' | null {
+  if (routeType !== 'storefront') {
+    return null;
+  }
+
+  const contentSegments = getStorefrontContentSegments(
+    pathname,
+    hostname,
+    routeType
+  );
+  const pathSegments = pathname.split('/').filter(Boolean);
+
+  const matchSegments = (
+    segments: string[]
+  ): 'root' | 'category' | 'author' | null => {
+    const first = segments[0]?.toLowerCase();
+    if (first !== 'blog') {
+      return null;
+    }
+    if (segments.length === 1) {
+      return 'root';
+    }
+    const second = segments[1]?.toLowerCase();
+    if (segments.length === 3 && second === 'category' && segments[2]) {
+      return 'category';
+    }
+    if (segments.length === 3 && second === 'author' && segments[2]) {
+      return 'author';
+    }
+    return null;
+  };
+
+  const directMatch = matchSegments(contentSegments);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  if (pathSegments.length >= 2) {
+    return matchSegments(pathSegments.slice(1));
+  }
+
+  return null;
+}
+
+export function shouldSetStorefrontBlogQueryNoIndexHeader(
+  pathname: string,
+  hostname: string | undefined,
+  routeType: 'admin' | 'auth' | 'storefront' | 'api',
+  searchParams: URLSearchParams | undefined
+): boolean {
+  if (!searchParams) {
+    return false;
+  }
+
+  const routeKind = getStorefrontBlogListingRouteKind(
+    pathname,
+    hostname,
+    routeType
+  );
+  if (!routeKind) {
+    return false;
+  }
+
+  const rawPage = searchParams.get('page')?.trim() ?? '';
+  const parsedPage = Number.parseInt(rawPage, 10);
+  const hasPaginatedQuery =
+    (Number.isFinite(parsedPage) && parsedPage > 1) ||
+    (rawPage.length > 0 && rawPage !== '1');
+
+  const rawSearch = searchParams.get('search')?.trim() ?? '';
+  const hasSearchQuery = rawSearch.length > 0;
+
+  const rawCategory = searchParams.get('category')?.trim() ?? '';
+  const hasRootCategoryQuery = routeKind === 'root' && rawCategory.length > 0;
+
+  return hasPaginatedQuery || hasSearchQuery || hasRootCategoryQuery;
+}
 
 export function applyStorefrontDocumentCacheHeaders(
   response: NextResponse,
@@ -142,6 +227,17 @@ export function applySecurityHeaders(
     // overwrite Vary later, so product-like rewrites also carry the internal
     // metadata bucket query param set before Next renders the route.
     appendVaryHeader(response, STOREFRONT_METADATA_CACHE_BUCKET_HEADER);
+    if (
+      !response.headers.has('X-Robots-Tag') &&
+      shouldSetStorefrontBlogQueryNoIndexHeader(
+        pathname,
+        hostname,
+        routeType,
+        request?.nextUrl.searchParams
+      )
+    ) {
+      response.headers.set('X-Robots-Tag', 'noindex, follow');
+    }
   }
 
   // HSTS: Enforce HTTPS with subdomains and preload (Lighthouse Best Practice)

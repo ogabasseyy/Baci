@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   }).metadataTitle,
   description:
     'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.',
+  alternates: { canonical: '/imei-check' },
 };
 
 export function generateStaticParams(): Array<{ slug: string }> {

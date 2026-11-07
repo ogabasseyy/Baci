@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import CustomerAuthLayout from '@/app/(storefront)/[slug]/customer-auth-layout';
 
 export const metadata: Metadata = {
-  robots: { follow: true, index: false },
+  robots: { index: false, follow: false },
 };
 
 export default async function AccountLayout({

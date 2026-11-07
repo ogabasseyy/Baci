@@ -301,4 +301,38 @@ describe('BlogAuthorPageContent', () => {
       })
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
+
+  it('emits a noindex, follow robots meta tag on paginated author pages and omits it on page 1', async () => {
+    const page1 = render(
+      await BlogAuthorPageContent({
+        params: Promise.resolve({
+          slug: 'ogabassey.com',
+          authorSlug: 'bassey-john',
+        }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    page1.unmount();
+
+    mockGetCachedBlogAuthor.mockResolvedValueOnce({
+      ...authorData,
+      currentPage: 2,
+      totalPages: 3,
+    });
+    const page2 = render(
+      await BlogAuthorPageContent({
+        params: Promise.resolve({
+          slug: 'ogabassey.com',
+          authorSlug: 'bassey-john',
+        }),
+        searchParams: Promise.resolve({ page: '2' }),
+      })
+    );
+    expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex, follow'
+    );
+    page2.unmount();
+  });
 });

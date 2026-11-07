@@ -7,12 +7,17 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockMerchant = vi.hoisted(() => ({
+  id: 'merchant-1',
+  slug: 'oldstore',
+  custom_domain: undefined as string | undefined,
+}));
 const mockApiPost = vi.fn();
 const mockToast = vi.fn();
 
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: () => ({
-    merchant: { id: 'merchant-1', slug: 'oldstore' },
+    merchant: mockMerchant,
   }),
 }));
 
@@ -35,6 +40,7 @@ function typeNewSlug(value: string) {
 describe('ChangeStoreUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMerchant.custom_domain = undefined;
   });
 
   it('shows the current store URL', () => {
@@ -42,6 +48,35 @@ describe('ChangeStoreUrl', () => {
     expect(
       screen.getByText((_, el) => el?.textContent === 'oldstore.usebaci.com')
     ).toBeInTheDocument();
+  });
+
+  it('shows the active custom domain separately from the editable Baci address', () => {
+    mockMerchant.custom_domain = 'ogabassey.com';
+    render(<ChangeStoreUrl />);
+
+    expect(
+      screen.getByText('Current URL').nextElementSibling
+    ).toHaveTextContent('ogabassey.com');
+    expect(
+      screen.getByText('Baci subdomain').nextElementSibling
+    ).toHaveTextContent('oldstore.usebaci.com');
+    expect(screen.getByLabelText('New Baci subdomain')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Changing your Baci subdomain does not change/)
+    ).toBeInTheDocument();
+  });
+
+  it('returns to the Baci address when the active custom domain is removed', () => {
+    mockMerchant.custom_domain = 'ogabassey.com';
+    const { rerender } = render(<ChangeStoreUrl />);
+    mockMerchant.custom_domain = undefined;
+    rerender(<ChangeStoreUrl />);
+
+    expect(
+      screen.getByText('Current URL').nextElementSibling
+    ).toHaveTextContent('oldstore.usebaci.com');
+    expect(screen.queryByText('ogabassey.com')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('New URL')).toBeInTheDocument();
   });
 
   it('disables the change button for an empty or unchanged slug', () => {
@@ -83,6 +118,31 @@ describe('ChangeStoreUrl', () => {
         expect.objectContaining({ title: 'Store URL changed' })
       )
     );
+  });
+
+  it('renames only the Baci subdomain when a custom domain is active', async () => {
+    mockMerchant.custom_domain = 'ogabassey.com';
+    mockApiPost.mockResolvedValue({
+      slug: 'newstore',
+      url: 'https://newstore.usebaci.com',
+    });
+    render(<ChangeStoreUrl />);
+    fireEvent.change(screen.getByLabelText('New Baci subdomain'), {
+      target: { value: 'newstore' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Change URL' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Your Baci subdomain will change from');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Change URL' }));
+    await waitFor(() =>
+      expect(mockApiPost).toHaveBeenCalledWith('/api/merchant/rename-slug', {
+        merchantId: 'merchant-1',
+        new_slug: 'newstore',
+      })
+    );
+    expect(
+      screen.getByText('Current URL').nextElementSibling
+    ).toHaveTextContent('ogabassey.com');
   });
 
   it('surfaces the server error message when the rename fails', async () => {

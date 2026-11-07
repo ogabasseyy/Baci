@@ -20,6 +20,70 @@ const NO_CHANGES = {
   test_plan_mode: 'targeted',
 };
 
+function lintRunner({ isPrivate, enabled, event, headRepository, repository }) {
+  const expression = workflow.jobs['quality-lint']['runs-on'];
+  assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
+  const values = {
+    'github.event.repository.private': isPrivate,
+    'vars.BACI_PRIVATE_CI_ENABLED': enabled,
+    'github.event_name': event,
+    'github.event.pull_request.head.repo.full_name': headRepository,
+    'github.repository': repository,
+  };
+  let source = expression.slice(3, -2);
+  for (const [key, value] of Object.entries(values)) {
+    const identifier = new RegExp(`${key.replaceAll('.', '\\.')}(?![\\w.])`, 'g');
+    source = source.replace(identifier, JSON.stringify(value));
+  }
+  source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) =>
+    JSON.stringify(JSON.parse(json))
+  );
+  assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
+  return Function(`"use strict"; return (${source});`)();
+}
+
+test('routes lint to the private runner only for an opted-in private repository and trusted PR head', () => {
+  const trusted = {
+    isPrivate: true,
+    enabled: 'true',
+    event: 'pull_request',
+    headRepository: 'owner/repo',
+    repository: 'owner/repo',
+  };
+  const privateRunner = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
+  assert.deepEqual(lintRunner(trusted), privateRunner);
+  assert.equal(lintRunner({ ...trusted, isPrivate: false }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, isPrivate: null }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, enabled: '' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, enabled: 'false' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, headRepository: '' }), 'ubuntu-24.04');
+  for (const event of ['push', 'merge_group', 'workflow_dispatch']) {
+    assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
+  }
+});
+
+test('does not expose remote-cache credentials to the private runner', () => {
+  const lint = workflow.jobs['quality-lint'].steps.find(
+    (step) => step.name === 'Run Lint'
+  );
+  for (const name of ['TURBO_TOKEN', 'TURBO_TEAM']) {
+    const expression = lint.env[name];
+    assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
+    const evaluate = (environment) => {
+      const source = expression
+        .slice(3, -2)
+        .replaceAll('runner.environment', JSON.stringify(environment))
+        .replaceAll(`secrets.${name}`, JSON.stringify('test-value'));
+      assert.match(source, /^[\s()'"\w=!&|\-]+$/);
+      return Function(`"use strict"; return (${source});`)();
+    };
+    assert.equal(evaluate('self-hosted'), '');
+    assert.equal(evaluate(null), '');
+    assert.equal(evaluate('github-hosted'), 'test-value');
+  }
+});
+
 // GitHub expressions limited to `needs.changes.outputs.*`, quoted strings,
 // ==, !=, &&, || and parentheses are also valid JavaScript.
 function evaluateJobCondition(condition, outputs) {

@@ -149,6 +149,9 @@ it.each([
   expect(boundary.intake).toHaveBeenCalledWith({
     rawBody: expect.any(Buffer),
     signature: expect.any(String),
+    env: expect.objectContaining({
+      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
+    }),
   });
   expect(boundary.dispatch).not.toHaveBeenCalled();
   // One client, used only for the capture write.

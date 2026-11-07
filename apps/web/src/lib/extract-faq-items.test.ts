@@ -77,6 +77,55 @@ describe('extractFaqItems', () => {
     ).toEqual([]);
   });
 
+  it('filters out structured items with empty markup or whitespace in question or answer', () => {
+    expect(
+      extractFaqItems({
+        faq_items: [
+          { question: '<p> </p>', answer: 'Valid answer' },
+          { question: '<p>&nbsp;</p>', answer: 'Valid answer' },
+          { question: 'Valid question', answer: '<p> </p>' },
+          { question: 'Valid question', answer: '<p>&nbsp;</p>' },
+          { question: 'Valid question', answer: '<div>&#160;</div>' },
+          { question: 'Valid question', answer: '<p>Actual answer</p>' },
+        ],
+      })
+    ).toEqual([{ question: 'Valid question', answer: '<p>Actual answer</p>' }]);
+  });
+
+  it('normalizes optional category: keeps trimmed string and omits non-string or whitespace category', () => {
+    expect(
+      extractFaqItems({
+        faq_items: [
+          {
+            question: 'Question 1',
+            answer: 'Answer 1',
+            category: { name: 'Support' },
+          },
+          {
+            question: 'Question 2',
+            answer: 'Answer 2',
+            category: 42,
+          },
+          {
+            question: 'Question 3',
+            answer: 'Answer 3',
+            category: '   ',
+          },
+          {
+            question: 'Question 4',
+            answer: 'Answer 4',
+            category: '  Shipping  ',
+          },
+        ],
+      })
+    ).toEqual([
+      { question: 'Question 1', answer: 'Answer 1' },
+      { question: 'Question 2', answer: 'Answer 2' },
+      { question: 'Question 3', answer: 'Answer 3' },
+      { question: 'Question 4', answer: 'Answer 4', category: 'Shipping' },
+    ]);
+  });
+
   it('returns an empty array when neither structured items nor pages.faq exist', () => {
     expect(extractFaqItems({})).toEqual([]);
     expect(extractFaqItems({ faq_items: [], pages: { faq: '   ' } })).toEqual(

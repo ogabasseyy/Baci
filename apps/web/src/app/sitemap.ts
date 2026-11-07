@@ -8,7 +8,6 @@ interface SitemapDomain {
   status: string | null;
   domain_type: string | null;
   is_primary?: boolean | null;
-  verified_at?: string | null;
 }
 
 interface SitemapMerchant {
@@ -23,11 +22,9 @@ interface SitemapMerchant {
  * RLS policy note:
  * Queries `merchants` and its nested `domains` relation using the standard
  * `createClient(await cookies())` (anon role). `public.domains` has the
- * `domains_select_policy` RLS policy in PostgreSQL:
- *   CREATE POLICY "domains_select_policy" ON "public"."domains"
- *   FOR SELECT USING (((("status" = 'active'::"text") AND ("verified_at" IS NOT NULL)) OR ...))
- * which permits public anon reads strictly for verified, active domains. Downstream,
- * `hasActiveCustomDomain` verifies `d.status === 'active'` to omit merchants whose canonical
+ * `domains_select_policy` RLS policy in PostgreSQL permitting anon reads
+ * for active verified domains. Downstream, `hasActiveCustomDomain` verifies
+ * active status and custom/purchased domain type to omit merchants whose canonical
  * storefront URL is served by their own custom domain.
  */
 async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
@@ -36,7 +33,7 @@ async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
     const { data: merchants, error } = await supabase
       .from('merchants')
       .select(
-        // domains_select_policy allows anon SELECT where status = 'active' AND verified_at IS NOT NULL
+        // Active domains are permitted under domains_select_policy RLS
         'slug, updated_at, domains(domain, status, domain_type, is_primary)'
       )
       .eq('is_published', true)
@@ -55,12 +52,15 @@ async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
           : merchant.domains
             ? [merchant.domains]
             : [];
-        const hasActiveCustomDomain = domainRows.some(
-          (d) =>
-            d.status === 'active' &&
-            (d.domain_type === 'custom' || d.domain_type === 'purchased') &&
+        const hasActiveCustomDomain = domainRows.some((d) => {
+          const status = d.status?.trim().toLowerCase();
+          const domainType = d.domain_type?.trim().toLowerCase();
+          return (
+            status === 'active' &&
+            (domainType === 'custom' || domainType === 'purchased') &&
             Boolean(d.domain?.trim())
-        );
+          );
+        });
         return !hasActiveCustomDomain;
       }
     );

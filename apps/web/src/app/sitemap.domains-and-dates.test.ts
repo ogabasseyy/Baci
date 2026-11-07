@@ -146,6 +146,30 @@ describe('root sitemap domain filtering and timestamps', () => {
             is_primary: true,
           },
         },
+        {
+          slug: 'mixed-case-custom-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'case1.example.com',
+              status: 'Active',
+              domain_type: 'Custom',
+              is_primary: true,
+            },
+          ],
+        },
+        {
+          slug: 'mixed-case-purchased-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'case2.example.com',
+              status: 'ACTIVE',
+              domain_type: 'PURCHASED',
+              is_primary: false,
+            },
+          ],
+        },
       ],
       error: null,
     });
@@ -157,6 +181,10 @@ describe('root sitemap domain filtering and timestamps', () => {
     expect(urls).not.toContain('https://usebaci.com/custom-domain-store');
     expect(urls).not.toContain('https://usebaci.com/purchased-domain-store');
     expect(urls).not.toContain('https://usebaci.com/single-obj-active-store');
+    expect(urls).not.toContain('https://usebaci.com/mixed-case-custom-store');
+    expect(urls).not.toContain(
+      'https://usebaci.com/mixed-case-purchased-store'
+    );
     expect(urls).toContain('https://usebaci.com/pending-domain-store');
     expect(urls).toContain('https://usebaci.com/empty-domain-store');
     expect(urls).toContain('https://usebaci.com/subdomain-type-store');

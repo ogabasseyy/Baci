@@ -8,9 +8,15 @@ export interface MerchantPublishableFaqSource extends MerchantFaqSource {
 export function hasPublishableFaqContent(
   merchant: MerchantPublishableFaqSource
 ): boolean {
+  const hasLegacyText = Boolean(
+    merchant.pages?.faq
+      ?.replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;|&#160;/gi, ' ')
+      .trim()
+  );
   return (
     merchant.template_id === OGABASSEY_TEMPLATE_ID ||
     extractFaqItems(merchant).length > 0 ||
-    Boolean(merchant.pages?.faq?.trim())
+    hasLegacyText
   );
 }

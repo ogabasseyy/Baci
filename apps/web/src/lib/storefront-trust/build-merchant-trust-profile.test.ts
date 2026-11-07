@@ -218,6 +218,16 @@ describe('buildMerchantTrustProfile', () => {
     expect(withoutCopy.derivedLinks.privacy).toBeUndefined();
     expect(withoutCopy.derivedLinks.terms).toBeUndefined();
 
+    const withEmptyMarkup = buildMerchantTrustProfile(
+      {
+        template_id: 'modern-electronics',
+        pages: { privacy: '<p> </p>', terms: '<p>&nbsp;</p>' },
+      },
+      'https://ogabassey.com'
+    );
+    expect(withEmptyMarkup.derivedLinks.privacy).toBeUndefined();
+    expect(withEmptyMarkup.derivedLinks.terms).toBeUndefined();
+
     const withCopy = buildMerchantTrustProfile(
       {
         template_id: 'modern-electronics',

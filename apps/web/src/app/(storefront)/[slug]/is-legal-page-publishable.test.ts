@@ -137,6 +137,28 @@ describe('isLegalPagePublishable', () => {
     ).toBe(false);
   });
 
+  it('treats markup-only or empty HTML strings as unpublished for non-default templates', () => {
+    expect(
+      isLegalPagePublishable(
+        {
+          template_id: 'default',
+          pages: { privacy: '<p> </p>', terms: '<p>&nbsp;</p>' },
+        },
+        'privacy'
+      )
+    ).toBe(false);
+
+    expect(
+      isLegalPagePublishable(
+        {
+          template_id: 'boutique',
+          pages: { privacy: '<div>   </div>', terms: '<p>&#160;</p>' },
+        },
+        'terms'
+      )
+    ).toBe(false);
+  });
+
   it('returns false when template_id is null or missing and page content is absent', () => {
     expect(
       isLegalPagePublishable(

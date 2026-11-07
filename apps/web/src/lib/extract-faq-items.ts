@@ -5,15 +5,53 @@ export interface MerchantFaqSource {
   pages?: { faq?: string | null } | null;
 }
 
-function isFaqItemCandidate(value: unknown): value is FAQItem {
+function hasVisibleText(value: string): boolean {
+  return (
+    value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;|&#160;/gi, ' ')
+      .trim().length > 0
+  );
+}
+
+interface FaqItemCandidate {
+  question: string;
+  answer: string;
+  id?: unknown;
+  category?: unknown;
+  order?: unknown;
+}
+
+function isFaqItemCandidate(value: unknown): value is FaqItemCandidate {
   if (typeof value !== 'object' || value === null) return false;
   const item = value as Record<string, unknown>;
   return (
     typeof item.question === 'string' &&
-    item.question.trim().length > 0 &&
+    hasVisibleText(item.question) &&
     typeof item.answer === 'string' &&
-    item.answer.trim().length > 0
+    hasVisibleText(item.answer)
   );
+}
+
+function normalizeFaqItem(item: FaqItemCandidate): FAQItem {
+  const result: FAQItem = {
+    question: item.question.trim(),
+    answer: item.answer.trim(),
+  };
+
+  if (typeof item.id === 'string' && item.id.trim().length > 0) {
+    result.id = item.id.trim();
+  }
+
+  if (typeof item.category === 'string' && item.category.trim().length > 0) {
+    result.category = item.category.trim();
+  }
+
+  if (typeof item.order === 'number' && Number.isFinite(item.order)) {
+    result.order = item.order;
+  }
+
+  return result;
 }
 
 /**
@@ -22,13 +60,17 @@ function isFaqItemCandidate(value: unknown): value is FAQItem {
  */
 export function extractFaqItems(merchant: MerchantFaqSource): FAQItem[] {
   if (Array.isArray(merchant.faq_items)) {
-    const valid = merchant.faq_items.filter(isFaqItemCandidate);
+    const valid = merchant.faq_items
+      .filter(isFaqItemCandidate)
+      .map(normalizeFaqItem);
     if (valid.length > 0) {
       return valid;
     }
   }
   if (merchant.pages?.faq) {
-    return parseLegacyFAQ(merchant.pages.faq).filter(isFaqItemCandidate);
+    return parseLegacyFAQ(merchant.pages.faq)
+      .filter(isFaqItemCandidate)
+      .map(normalizeFaqItem);
   }
   return [];
 }

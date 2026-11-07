@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-06T18:25:30.189271+00:00",
-  "source_revision": "4203ba20a5ae7dae548deae0917fde9ef3a904e2",
-  "evidence_digest": "fcff9239ef506c3934bfda82ca6349e972c7dc9e7eaeb5b19f90e9bdd9391c8b",
-  "claims_digest": "f9911d77fee0141e6764db3a5838c11f5a97a4af657c4b01d5577e1f50c75a2b",
+  "reviewed_at": "2026-11-07T12:49:11+00:00",
+  "source_revision": "330562efc0a52a8e83a589eb82b4ef9f4721086c",
+  "evidence_digest": "b512f774a3fb9ce323b1d42224f83c7a1fd2328e9d477a65117874c1a9caf947",
+  "claims_digest": "acc7247396612d29f9c3e7dad47e6cee7bbeb28c6d5737f6e738d6baed243850",
   "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
@@ -199,7 +199,15 @@
         "apps/web/src/app/api/agentic/catalog/search/route.ts",
         "apps/web/src/app/api/agentic/carts/route.ts",
         "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
-        "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+        "apps/web/src/app/api/agentic/orders/[id]/route.ts",
+        "apps/web/src/lib/agentic/checkout.ts",
+        "apps/web/src/lib/agentic/checkout-session-tax.ts",
+        "apps/web/src/lib/agentic/agentic-line-tax.ts",
+        "apps/web/src/lib/agentic/checkout-catalog.ts",
+        "apps/web/src/lib/agentic/checkout-order-tax.ts",
+        "apps/web/src/lib/agentic/checkout-completion-payloads.ts",
+        "apps/web/src/lib/agentic/checkout-totals.ts",
+        "apps/web/src/lib/agentic/ucp-response-adapters.ts"
       ]
     },
     {

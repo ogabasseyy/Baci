@@ -173,10 +173,14 @@ function mapCheckoutLineItem(lineItem: unknown) {
     toIntegerAmount(lineItemRecord.subtotal) ??
     toIntegerAmount(lineItemRecord.base_amount) ??
     0;
+  const unitPriceBasis =
+    toIntegerAmount(lineItemRecord.base_amount) ??
+    toIntegerAmount(lineItemRecord.subtotal) ??
+    lineTotal;
   const unitPrice =
     quantity > 0
-      ? Math.max(0, Math.round(lineTotal / quantity))
-      : Math.max(0, lineTotal);
+      ? Math.max(0, Math.round(unitPriceBasis / quantity))
+      : Math.max(0, unitPriceBasis);
 
   return {
     ...lineItemRecord,

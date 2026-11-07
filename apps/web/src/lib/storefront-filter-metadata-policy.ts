@@ -40,6 +40,8 @@ const STOREFRONT_CANONICAL_FILTER_QUERY_KEYS = [
   ['storage', ['storage']],
 ] as const satisfies readonly [string, readonly string[]][];
 
+const NON_INDEXABLE_CANONICAL_FILTER_KEYS = new Set(['graphicsHub', 'sort']);
+
 export type StorefrontRobotsSearchParams = Record<
   string,
   string | string[] | undefined
@@ -75,12 +77,6 @@ function getActiveStorefrontFilterKeys(
   }
 
   return activeFilters;
-}
-
-function countActiveStorefrontFilters(
-  searchParams?: StorefrontRobotsSearchParams
-): number {
-  return getActiveStorefrontFilterKeys(searchParams).size;
 }
 
 function getCanonicalStorefrontFilterQueryKey(
@@ -160,10 +156,16 @@ export function getIndexableRobotsMetadata(
   searchParams?: StorefrontRobotsSearchParams,
   options: StorefrontFilterMetadataOptions = {}
 ): Metadata['robots'] {
-  const activeFilterCount = countActiveStorefrontFilters(searchParams);
+  const activeFilterKeys = getActiveStorefrontFilterKeys(searchParams);
+  const activeFilterCount = activeFilterKeys.size;
+  const hasNonIndexableParam = Array.from(activeFilterKeys).some((key) =>
+    NON_INDEXABLE_CANONICAL_FILTER_KEYS.has(key)
+  );
+
   const isIndexable =
-    activeFilterCount === 0 ||
-    (options.filtersAffectResults === true && activeFilterCount <= 1);
+    !hasNonIndexableParam &&
+    (activeFilterCount === 0 ||
+      (options.filtersAffectResults === true && activeFilterCount <= 1));
 
   return {
     index: isIndexable,

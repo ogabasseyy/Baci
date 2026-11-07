@@ -7,6 +7,7 @@ import { resolveRouteIdentifier } from '@/lib/storefront-route-identifier';
 export const STOREFRONT_DISALLOWED_PATHS = [
   '/api/',
   '/checkout/',
+  '/account/login/',
   '/cart',
   '/wishlist',
   '/account/',

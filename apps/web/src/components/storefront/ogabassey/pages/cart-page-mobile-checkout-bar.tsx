@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import type React from 'react';
+import styles from './cart-page-mobile-checkout-bar.module.css';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';
 
 interface CartPageMobileCheckoutBarProps {
@@ -18,7 +19,7 @@ export function CartPageMobileCheckoutBar({
   onOpenTotalNegotiation,
 }: CartPageMobileCheckoutBarProps) {
   return (
-    <div className="fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 flex items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden z-40">
+    <div className={`fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 flex items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden z-40 ${styles.checkoutBar}`}>
       {hasPriceNegotiation && !hasNonNegotiableCartItem && (
         <button
           type="button"

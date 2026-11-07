@@ -79,3 +79,22 @@ test('cart summary checkout action remains hidden on mobile', async ({
   await mobileCheckout.click();
   await expect(page).toHaveURL(/\/checkout$/);
 });
+
+test('cart keeps the compact checkout action visible at tablet widths', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 850, height: 900 });
+  await page.addInitScript((item) => {
+    localStorage.setItem('baci-cart-ogabassey-guest', JSON.stringify([item]));
+  }, cartItem);
+  await page.goto('/cart-navigation-start');
+  await page.getByRole('link', { name: 'View test phone' }).click();
+  await page.getByRole('link', { name: 'View cart' }).click();
+  await expect(
+    page.getByRole('button', { name: /Proceed to Checkout/ })
+  ).toBeHidden();
+  const checkout = page.getByRole('button', { name: /^Checkout • ₦100,000$/ });
+  await expect(checkout).toBeVisible();
+  await checkout.click();
+  await expect(page).toHaveURL(/\/checkout$/);
+});

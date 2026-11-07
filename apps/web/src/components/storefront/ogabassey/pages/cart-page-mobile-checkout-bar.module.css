@@ -1,0 +1,10 @@
+.checkoutBar {
+  display: flex;
+}
+
+/* Keep the compact action hidden when the desktop summary is visible. */
+@media (min-width: 64rem) {
+  .checkoutBar {
+    display: none;
+  }
+}

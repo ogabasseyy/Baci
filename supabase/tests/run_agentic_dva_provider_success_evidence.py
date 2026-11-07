@@ -15,7 +15,7 @@ if source.count(anchor) != 1:
     raise SystemExit('dispatch migration anchor changed; refusing stale harness')
 source = source.replace(
     anchor,
-    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''",
+    "20261106193000_agentic_cart_dispatch_revocation_safety.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261107103000_agentic_dva_postlogout_finalizer.sql').read_text()\\n sql+='\\\\n'+(root/'supabase/migrations/20261106230000_agentic_cart_dispatch_admission_off.sql').read_text()\\n tests=''",
     1,
 )
 anchor = "agentic_cart_provider_dispatch_revocation_race.sql').read_text()"
@@ -27,6 +27,7 @@ evidence_parts = (
     'agentic_dva_provider_success_evidence_setup.sql',
     'agentic_dva_provider_success_evidence_rejections.sql',
     'agentic_dva_provider_success_evidence_persistence.sql',
+    'agentic_dva_postlogout_finalizer.sql',
 )
 fragment_loader = "+'\\\\n'+".join(
     f"(root/'supabase/tests/{name}').read_text()" for name in evidence_parts
@@ -62,6 +63,18 @@ for with_membership in (False, True):
                 if with_membership:
                     setup += ' GRANT agentic_dva_provider_evidence_writer TO dva_membership_sentinel;'
                 subprocess.run(conn + ['-c', setup], check=True, stdout=log, stderr=log)
+                # Match the migration's same-principal CREATE ROLE then
+                # ALTER ROLE sequence under a non-superuser CREATEROLE role.
+                subprocess.run(
+                    conn + ['-c', 'CREATE ROLE migration_applier NOLOGIN CREATEROLE; GRANT migration_applier TO postgres;'],
+                    check=True, stdout=log, stderr=log,
+                )
+                role_transition = subprocess.run(
+                    conn + ['-c', "SET ROLE migration_applier; CREATE ROLE agentic_dva_finalizer NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS; ALTER ROLE agentic_dva_finalizer CONNECTION LIMIT -1 PASSWORD NULL;"],
+                    text=True, capture_output=True,
+                )
+                if role_transition.returncode:
+                    raise SystemExit('non-superuser CREATEROLE could not create and converge the new finalizer role: ' + role_transition.stderr)
                 snapshot_sql = "SELECT (r.rolname || ':' || r.rolcanlogin || ':' || r.rolinherit || ':' || r.rolsuper || ':' || r.rolcreatedb || ':' || r.rolcreaterole || ':' || r.rolreplication || ':' || r.rolbypassrls || ':' || coalesce(array_to_string(r.rolconfig, ','), '') || ':' || has_schema_privilege(r.oid, 'public', 'USAGE') || ':' || (SELECT count(*) FROM pg_catalog.pg_default_acl d WHERE d.defaclrole=r.oid) || ':' || (SELECT count(*) FROM pg_catalog.pg_auth_members m WHERE m.roleid=r.oid OR m.member=r.oid)) FROM pg_catalog.pg_roles r WHERE r.rolname='agentic_dva_provider_evidence_writer'"
                 before = subprocess.run(conn + ['-Atc', snapshot_sql], check=True, text=True, capture_output=True).stdout.strip()
                 rejected = subprocess.run(conn, input=(root / 'supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql').read_text(), text=True, capture_output=True)

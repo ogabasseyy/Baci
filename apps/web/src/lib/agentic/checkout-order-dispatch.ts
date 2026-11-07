@@ -75,6 +75,8 @@ export async function createAgenticCheckoutOrder(
      * requires it on every submit; omitting it fails closed there.
      */
     boundPrincipalId?: string | null;
+    /** Dormant evidence-bound worker capability; only the binding RPC uses it. */
+    bindingClient?: SupabaseClient;
   }
 ): Promise<AgenticCheckoutOrderResult> {
   const parseResult = orderCreateSchema.safeParse(orderPayload);
@@ -211,6 +213,7 @@ export async function createAgenticCheckoutOrder(
         orderRpcArgs: orderRpcArgs as Record<string, unknown>,
         sharedCart: sharedCartBinding,
         supabase,
+        bindingClient: options?.bindingClient,
       })
     : null;
   if (bindingOutcome?.kind === 'failure') return bindingOutcome.result;

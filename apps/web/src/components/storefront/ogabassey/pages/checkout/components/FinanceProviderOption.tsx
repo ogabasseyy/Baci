@@ -30,7 +30,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
   return <div className={`${styles.option} ${selected ? styles.selected : ''}`}>
     <label className={styles.header}>
       <input type="radio" name="payment" value={provider} checked={selected} onChange={() => onSelect(provider)} className="sr-only" />
-      <Image src={logo} alt={oxygen ? 'Oxygen X Finance Company' : 'Credit Direct lending logo'} width={48} height={40} className={styles.logo} />
+      <span className={styles.logoTile}><Image src={logo} alt={oxygen ? 'Oxygen X Finance Company' : 'Credit Direct lending logo'} width={48} height={40} className={`${styles.logo} ${oxygen ? styles.oxygenLogo : ''}`} /></span>
       <span className={styles.content}><span className={styles.title}>{title}</span><span className={styles.chips}><span><HandCoins size={13} aria-hidden="true" /> From {oxygen ? '25%' : '30%'} down</span><span><CalendarDays size={13} aria-hidden="true" /> {oxygen ? '3–12' : '3–6'} months</span></span></span>
       <span className={styles.dot} aria-hidden="true" />
     </label>

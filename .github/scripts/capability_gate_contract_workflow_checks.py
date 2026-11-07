@@ -31,6 +31,13 @@ EXPECTED_RUN = [
     "fi",
     'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
 ]
+EXPECTED_RUN_WITH_COMPANION = [
+    line.replace(
+        "capability_gate_contract_workflow_checks.py | tar",
+        "capability_gate_contract_workflow_checks.py vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py | tar",
+    )
+    for line in EXPECTED_RUN
+]
 
 # The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
 EXPECTED_FIRST_STEP = [
@@ -251,7 +258,7 @@ def workflow_failures(workflow_text):
         if len(line) - len(line.lstrip()) <= indent:
             break
         body.append(stripped)
-    if body != EXPECTED_RUN:
+    if body not in (EXPECTED_RUN, EXPECTED_RUN_WITH_COMPANION):
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
     # Startup env preloads PR code before the checker starts: job env carries only the pin, steps none.
     for line in block:

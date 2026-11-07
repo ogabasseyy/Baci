@@ -40,6 +40,15 @@
   isolation: isolate;
 }
 
+.dialog input:focus {
+  border-color: var(--store-primary, #dc2626);
+}
+
+.dialog input:focus-visible {
+  outline: 2px solid var(--store-primary, #dc2626);
+  outline-offset: 2px;
+}
+
 /* Rotate only the arc; the close target and its icon stay stationary. */
 .dialog:has([aria-busy="true"]) .close::after {
   content: "";

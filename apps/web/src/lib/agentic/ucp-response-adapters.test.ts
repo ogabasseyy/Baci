@@ -111,6 +111,43 @@ describe('buildUcpCheckoutResponse', () => {
     });
   });
 
+  it('keeps UCP unit prices pre-tax when line totals include VAT', () => {
+    const response = buildUcpCheckoutResponse({
+      line_items: [
+        {
+          base_amount: 2_000,
+          id: 'line_product_1',
+          item: { id: 'product_1', quantity: 2, title: 'Laptop' },
+          subtotal: 2_000,
+          total: 2_150,
+        },
+      ],
+      totals: [
+        { amount: 2_000, display_text: 'Items', type: 'items_base_amount' },
+        { amount: 150, display_text: 'Tax', type: 'tax' },
+        { amount: 2_150, display_text: 'Total', type: 'total' },
+      ],
+    });
+
+    expect(response).toMatchObject({
+      line_items: [
+        {
+          item: { id: 'product_1', price: 1_000, title: 'Laptop' },
+          quantity: 2,
+          totals: [
+            { amount: 2_000, type: 'subtotal' },
+            { amount: 2_150, type: 'total' },
+          ],
+        },
+      ],
+      totals: [
+        { amount: 2_000, type: 'subtotal' },
+        { amount: 150, type: 'tax' },
+        { amount: 2_150, type: 'total' },
+      ],
+    });
+  });
+
   it('ignores malformed totals entries without throwing', () => {
     const response = buildUcpCheckoutResponse({
       line_items: [],

@@ -59,6 +59,8 @@ interface Props {
   onModeChange: () => void;
   onRetryQuote: () => void;
   onTransferred: () => void;
+  /** Merchant-facing provider name, e.g. "GIG" — shown as "Ship with …". */
+  providerName: string;
   quote: OrderGiglQuote | null;
   selected: boolean;
   state: OrderGiglShippingState;
@@ -113,6 +115,7 @@ export function ShipmentFlowGiglPanel({
   onModeChange,
   onRetryQuote,
   onTransferred,
+  providerName,
   quote,
   selected,
   state,
@@ -124,7 +127,7 @@ export function ShipmentFlowGiglPanel({
     ? getQuoteSummary(quote, addressDraft)
     : loading
       ? 'Getting a delivery price…'
-      : 'Get a GIG delivery price for this order.';
+      : `Get a ${providerName} delivery price for this order.`;
   const price = quote
     ? formatPrice(quote.price)
     : loading
@@ -139,7 +142,7 @@ export function ShipmentFlowGiglPanel({
   return (
     <View>
       <ShipmentOptionCard
-        badge="GIG"
+        badge={providerName}
         colors={colors}
         description={description}
         details={details}
@@ -148,7 +151,7 @@ export function ShipmentFlowGiglPanel({
         onPress={onModeChange}
         price={price}
         selected={selected}
-        title="Ship with GIG"
+        title={`Ship with ${providerName}`}
       />
 
       {missingFields.map((field) => (

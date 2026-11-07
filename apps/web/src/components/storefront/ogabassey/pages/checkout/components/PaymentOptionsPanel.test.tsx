@@ -101,7 +101,7 @@ describe('payment schedule selection', () => {
   it('hides unavailable installments and restores full payment choices', async () => {
     renderPanel('installments', true, false);
     expect(
-      screen.queryByRole('button', { name: 'Pay in Installments' })
+      screen.queryByRole('button', { name: 'Pay Small Small' })
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
   });
@@ -151,8 +151,8 @@ describe('payment schedule selection', () => {
   });
 
   it.each([
-    ['full', 'Pay in Full', 'Pay in Installments'],
-    ['installments', 'Pay in Installments', 'Pay in Full'],
+    ['full', 'Pay in Full', 'Pay Small Small'],
+    ['installments', 'Pay Small Small', 'Pay in Full'],
     ['invoice', 'Get a Proforma Invoice', 'Pay in Full'],
   ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
     renderPanel(value);
@@ -178,7 +178,7 @@ describe('payment schedule selection', () => {
   });
 
   it.each([
-    ['full', 'Pay in Installments', 'installments'],
+    ['full', 'Pay Small Small', 'installments'],
     ['installments', 'Pay in Full', 'full'],
     ['invoice', 'Pay in Full', 'full'],
   ] as const)('switches away from %s and clears the old gateway', (value, label, next) => {

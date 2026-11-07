@@ -89,7 +89,7 @@ export function PaymentOptionsPanel({
                 : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
             }`}
           >
-            Pay in Installments
+            Pay Small Small
           </button>
         )}
         <button

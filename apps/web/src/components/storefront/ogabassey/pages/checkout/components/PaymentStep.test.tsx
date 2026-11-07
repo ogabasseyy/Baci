@@ -556,7 +556,7 @@ describe('PaymentStep', () => {
     );
   });
 
-  describe('Pay in Installments Options', () => {
+  describe('Pay Small Small Options', () => {
     it('hides retired CredPal even when enabled in feature settings', () => {
       // Arrange
       const merchant = {
@@ -635,7 +635,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -682,7 +682,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -750,7 +750,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay in Installments' }),
+        screen.queryByRole('button', { name: 'Pay Small Small' }),
       ).not.toBeInTheDocument();
     });
 
@@ -833,7 +833,7 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
     });
 
     it('does not show retired CredPal instructions for a stale selection', () => {
@@ -854,7 +854,7 @@ describe('PaymentStep', () => {
 
       // Assert
       expect(screen.queryByText('How CredPal works')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct info when Credit Direct is selected', () => {

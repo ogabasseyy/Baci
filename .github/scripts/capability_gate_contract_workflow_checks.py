@@ -258,7 +258,7 @@ def workflow_failures(workflow_text):
         if len(line) - len(line.lstrip()) <= indent:
             break
         body.append(stripped)
-    if body not in (EXPECTED_RUN_WITH_COMPANION, EXPECTED_RUN_PRIVATE):
+    if body != EXPECTED_RUN_PRIVATE:
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
     if body == EXPECTED_RUN_PRIVATE and "        env:" not in block:
         failures.append("authenticated fetch must supply its read-only token")

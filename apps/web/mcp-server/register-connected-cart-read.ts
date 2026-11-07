@@ -16,7 +16,7 @@ export function registerConnectedCartRead(
     {
       title: 'Get Ogabassey Guest Cart',
       description:
-        'Read this connection’s current guest cart and prepare a fresh website checkout link. No cart token is needed. Use this before reviewing the cart on the website or when previous cart details are missing. This never places an order or starts payment.',
+        'Read this connection’s current guest cart and prepare a fresh website checkout link. No cart token is needed. Use this before reviewing the cart on the website or when previous cart details are missing. If the shopper says the link ended, expired, is invalid or does not work, call this tool once to refresh the link for the same connected cart. Return the new cart_url exactly as received; never reconstruct or edit it. Do not replay add/remove operations or create a replacement cart to recover a link. If the returned cart is empty, explain that there are no saved items to recover; never repopulate it from chat history. If refreshing fails or the new link still fails, explain that recovery did not succeed rather than repeatedly retrying or claiming the cart was recovered. This never places an order or starts payment.',
       inputSchema: guestOAuthReadCartInputSchema,
       outputSchema: guestOAuthCartOutputSchema,
       // Initial access can bootstrap an empty cart and persist a handoff receipt.

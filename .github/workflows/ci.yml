@@ -805,11 +805,11 @@ jobs:
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.
     needs: [changes]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Bounded build-time storefront reads can extend page-data collection past
     # 30 minutes on a cold runner. Keep enough headroom for that safe pressure
     # control plus setup and post-job cache/checkout cleanup.
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 75 || 45 }}
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -818,7 +818,7 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - name: Reclaim unused hosted-runner SDK space
-        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        if: runner.environment == 'github-hosted' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: |
           df -h .
           # This web-only hosted job does not use .NET, Android, or Haskell.

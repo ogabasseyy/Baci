@@ -45,3 +45,10 @@ usage, test isolation and cancellation cleanup before enabling it broadly.
 Remove the web-test variable to send newly scheduled shards back to hosted
 runners. A zero Actions budget can prevent hosted jobs from starting when
 included usage is exhausted; do not increase the budget without owner approval.
+
+The web build has its own `BACI_PRIVATE_BUILD_ENABLED` opt-in. Enable it only
+after a complete cold build succeeds on Contabo with placeholder credentials
+and the existing private CI switch enabled. The hosted-only SDK cleanup must
+never run on the VPS. Monitor build duration and available disk; a single
+runner queues builds behind other jobs. Remove this variable to route newly
+scheduled builds back to GitHub-hosted runners, subject to the Actions budget.

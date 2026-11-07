@@ -4,6 +4,8 @@ import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import './ci-lint-gate-contract.test.mjs';
 import './ci-typecheck-runner-contract.test.mjs';
 import './ci-web-shard-runner-contract.test.mjs';
+import './ci-build-runner-contract.test.mjs';
+import './dependency-review-availability.test.mjs';
 import './jules-sunset-contract.test.mjs';
 import './tools-worker-typecheck-contract.test.mjs';
 import './web-build-timeout-contract.test.mjs';

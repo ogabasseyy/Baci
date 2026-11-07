@@ -141,6 +141,10 @@ describe('Chatwoot context authorization route', () => {
 
     const response = await POST(request());
     const body = await response.json();
+    expect(mocks.loadChatwootCartContext).toHaveBeenCalledWith(
+      expect.any(NextRequest),
+      { includeProductNames: true }
+    );
     expect(body.cartSnapshot).toEqual({
       cartVersion: 12,
       currency: 'NGN',

@@ -118,6 +118,13 @@ function prepareVerifiedCart() {
   });
 }
 
+function request() {
+  return new NextRequest(
+    `${binding.origin}/api/storefront/chatwoot/context/authorize`,
+    { headers: { host: 'shop.example.com', origin: binding.origin } }
+  );
+}
+
 describe('Chatwoot cart product-name projection', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -127,14 +134,7 @@ describe('Chatwoot cart product-name projection', () => {
   it('queries names only under the independently resolved merchant and active catalog', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
     prepareVerifiedCart();
-    const request = new NextRequest(
-      `${binding.origin}/api/storefront/chatwoot/context/authorize`,
-      {
-        headers: { host: 'shop.example.com', origin: binding.origin },
-      }
-    );
-
-    const result = await loadChatwootCartContext(request, {
+    const result = await loadChatwootCartContext(request(), {
       includeProductNames: true,
     });
 
@@ -149,5 +149,64 @@ describe('Chatwoot cart product-name projection', () => {
     );
     expect(mocks.productQuery.eq).toHaveBeenCalledWith('status', 'active');
     expect(mocks.productQuery.in).toHaveBeenCalledWith('id', ['product-1']);
+  });
+
+  it('does not query products by default', async () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    prepareVerifiedCart();
+
+    await expect(loadChatwootCartContext(request())).resolves.toMatchObject({
+      ok: true,
+    });
+
+    expect(mocks.productQuery.select).not.toHaveBeenCalled();
+    expect(mocks.productQuery.in).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a requested product has no usable name', async () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    prepareVerifiedCart();
+    mocks.productQuery.in.mockResolvedValue({ data: [], error: null });
+
+    await expect(
+      loadChatwootCartContext(request(), { includeProductNames: true })
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 503,
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it.each([
+    ['query error', { data: null, error: new Error('query failed') }],
+    ['null data', { data: null, error: null }],
+  ])('fails closed on a product-name lookup %s', async (_label, result) => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    prepareVerifiedCart();
+    mocks.productQuery.in.mockResolvedValue(result);
+
+    await expect(
+      loadChatwootCartContext(request(), { includeProductNames: true })
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 503,
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('trims and truncates server product names to 120 characters', async () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    prepareVerifiedCart();
+    mocks.productQuery.in.mockResolvedValue({
+      data: [{ id: 'product-1', name: `  ${'P'.repeat(140)}  ` }],
+      error: null,
+    });
+
+    await expect(
+      loadChatwootCartContext(request(), { includeProductNames: true })
+    ).resolves.toMatchObject({
+      ok: true,
+      productNames: { 'product-1': 'P'.repeat(120) },
+    });
   });
 });

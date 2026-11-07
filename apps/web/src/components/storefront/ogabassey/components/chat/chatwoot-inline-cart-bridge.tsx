@@ -2,10 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
-import { buildCsrfHeaders } from '@/lib/csrf';
-import {
-  chatwootCartReviewSnapshotSchema,
-} from '@/schemas/chatwoot-commerce-context';
 import {
   readChatwootCommerceContextMessage,
   readChatwootCommerceMessage,
@@ -14,6 +10,11 @@ import {
   postChatwootCanonicalCartView,
 } from './chatwoot-inline-cart-controls';
 import { buildChatwootInlineReview } from './chatwoot-inline-review';
+import {
+  authorizeChatwootBridgeSession,
+  isCurrentChatwootBridgeTarget,
+  postChatwootBridgeJson,
+} from './chatwoot-inline-bridge-transport';
 
 type Props = { storeSlug: string; widgetOrigin: string };
 
@@ -41,81 +42,21 @@ export function ChatwootInlineCartBridge({ storeSlug, widgetOrigin }: Props) {
     const post = (target: Window, prefix: string, value: unknown) => {
       target.postMessage(`${prefix}${JSON.stringify(value)}`, widgetOrigin);
     };
-    const postJson = async (
-      path: string,
-      body: Record<string, unknown>
-    ): Promise<Record<string, unknown> | null> => {
-      const response = await fetch(path, {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) return null;
-      const value: unknown = await response.json();
-      return value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-    };
     const isCurrentTarget = (
       frame: HTMLIFrameElement,
       target: Window,
       conversationId: number
-    ) => {
-      const currentFrame = document.getElementById(
-        'chatwoot_live_chat_widget'
-      );
-      const holder = document.getElementById('cw-widget-holder');
-      const state = latestState.current;
-      return Boolean(
-        active &&
-          currentFrame === frame &&
-          frame.isConnected &&
-          holder?.contains(frame) &&
-          frame.contentWindow === target &&
-          activeConversationId === conversationId &&
-          activeContextRequestId !== null &&
-          state.isHydrated &&
-          state.merchantSlug === storeSlug &&
-          state.sharedCartEnabled === true
-      );
-    };
-    const authorize = async (sessionToken: string) => {
-      const response = await fetch(
-        '/api/storefront/chatwoot/context/authorize',
-        {
-          method: 'POST',
-          credentials: 'same-origin',
-          cache: 'no-store',
-          headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ sessionToken, includeCartSnapshot: true }),
-        }
-      );
-      if (!response.ok) return null;
-      const result: unknown = await response.json();
-      if (!result || typeof result !== 'object' || Array.isArray(result)) {
-        return null;
-      }
-      const value = result as Record<string, unknown>;
-      const snapshot = chatwootCartReviewSnapshotSchema.safeParse(
-        value.cartSnapshot
-      );
-      if (
-        value.authorized !== true ||
-        !Number.isSafeInteger(value.conversationId) ||
-        !Number.isSafeInteger(value.sessionExpiresAt) ||
-        (value.sessionExpiresAt as number) * 1000 <= Date.now() ||
-        !snapshot.success
-      ) {
-        return null;
-      }
-      return {
-        conversationId: value.conversationId as number,
-        sessionExpiresAt: value.sessionExpiresAt as number,
-        snapshot: snapshot.data,
-      };
-    };
+    ) =>
+      isCurrentChatwootBridgeTarget({
+        active,
+        frame,
+        target,
+        storeSlug,
+        conversationId,
+        activeConversationId,
+        activeContextRequestId,
+        cartState: latestState.current,
+      });
 
     async function onMessage(event: MessageEvent) {
       const frame = document.getElementById(
@@ -144,7 +85,7 @@ export function ChatwootInlineCartBridge({ storeSlug, widgetOrigin }: Props) {
         lineTokens.clear();
         let challenge: Record<string, unknown> | null;
         try {
-          challenge = await postJson(
+          challenge = await postChatwootBridgeJson(
             '/api/storefront/chatwoot/context/challenge',
             contextMessage.data
           );
@@ -194,7 +135,7 @@ export function ChatwootInlineCartBridge({ storeSlug, widgetOrigin }: Props) {
         const matchingChallenge = challengeToken;
         let verified: Record<string, unknown> | null;
         try {
-          verified = await postJson(
+          verified = await postChatwootBridgeJson(
             '/api/storefront/chatwoot/context/verify',
             { challengeToken: matchingChallenge, contextToken }
           );
@@ -271,7 +212,7 @@ export function ChatwootInlineCartBridge({ storeSlug, widgetOrigin }: Props) {
       const actionTarget = target;
       let authorized: Awaited<ReturnType<typeof authorize>>;
       try {
-        authorized = await authorize(messageSessionToken);
+        authorized = await authorizeChatwootBridgeSession(messageSessionToken);
       } catch {
         authorized = null;
       }

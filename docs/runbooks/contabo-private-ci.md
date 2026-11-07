@@ -16,7 +16,9 @@ Docker access must not be treated as an isolation boundary from its own user.
 After the runner is online and a representative job has passed, set the Baci
 Actions variable `BACI_PRIVATE_CI_ENABLED` to `true`. The lint job uses Contabo
 only when the repository is private and the variable is enabled. Pull requests
-from a different repository use GitHub-hosted runners. If the private runner is
+from a different repository and merge-queue groups use GitHub-hosted runners.
+Merge groups can combine PRs without exposing each source in the event payload,
+so they remain hosted until their provenance can be established. If the private runner is
 offline, matching lint jobs queue instead of silently switching to paid compute.
 The lint job does not receive `TURBO_TOKEN` or `TURBO_TEAM` on a self-hosted runner.
 
@@ -28,7 +30,7 @@ lint failures and that pending jobs complete after a runner outage or cancellati
 
 Typechecking has a separate opt-in. After the complete production typecheck
 sequence passes on Contabo, set `BACI_PRIVATE_TYPECHECK_ENABLED` to `true` in
-addition to the existing private CI switch. Fork PRs remain GitHub-hosted and
+addition to the existing private CI switch. Fork PRs and merge groups remain GitHub-hosted and
 self-hosted typechecks receive no remote-cache credentials. With one runner,
 lint and typecheck queue behind each other. Remove the typecheck variable to
 route subsequently scheduled typechecks back to GitHub-hosted runners.

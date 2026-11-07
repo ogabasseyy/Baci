@@ -132,9 +132,9 @@ jobs:
     # packages.
     if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     # Opt in only after the repository is private and its dedicated runner is
-    # registered. Fork PRs stay on hosted runners; no hosted fallback is
+    # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,8 +157,8 @@ jobs:
     name: Quality Gate - Typecheck
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 30 || 15 }}
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 30 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

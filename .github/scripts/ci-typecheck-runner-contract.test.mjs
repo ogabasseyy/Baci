@@ -31,7 +31,9 @@ test('typecheck requires explicit private opt-in and trusted repository head', (
     assert.equal(route(value), 'ubuntu-24.04');
     assert.equal(route(value, 'timeout-minutes'), 15);
   }
-  for (const event of ['push', 'merge_group', 'workflow_dispatch']) {
+  assert.equal(route({ event: 'merge_group', head: '' }), 'ubuntu-24.04');
+  assert.equal(route({ event: 'merge_group', head: '' }, 'timeout-minutes'), 15);
+  for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(route({ event, head: '' }), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
   }
 });

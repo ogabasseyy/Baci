@@ -58,7 +58,8 @@ test('routes lint to the private runner only for an opted-in private repository 
   assert.equal(lintRunner({ ...trusted, enabled: 'false' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: '' }), 'ubuntu-24.04');
-  for (const event of ['push', 'merge_group', 'workflow_dispatch']) {
+  assert.equal(lintRunner({ ...trusted, event: 'merge_group', headRepository: '' }), 'ubuntu-24.04');
+  for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
   }
 });

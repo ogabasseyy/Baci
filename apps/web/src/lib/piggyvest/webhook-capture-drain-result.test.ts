@@ -19,6 +19,7 @@ beforeEach(() => {
   resolve = vi.fn<DrainDeps['resolve']>(async () => true);
   deps = {
     claim: async () => [],
+    renew: async () => true,
     resolve,
     verify: () => ({ status: 'unconfigured' }),
     process: async () => ({ status: 200 }),

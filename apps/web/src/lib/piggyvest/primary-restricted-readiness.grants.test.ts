@@ -18,7 +18,7 @@ function signaturesIn(statement: string) {
 function roleList(statement: string, keyword: 'TO' | 'FROM') {
   const match = statement
     .replace(/;$/, '')
-    .match(new RegExp(`\\b${keyword}\\s+(.+)$`, 'i'));
+    .match(keyword === 'TO' ? /\bTO\s+(.+)$/i : /\bFROM\s+(.+)$/i);
   return match
     ? match[1]
         .split(',')

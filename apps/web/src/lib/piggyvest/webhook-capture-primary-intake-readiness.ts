@@ -45,15 +45,23 @@ function firstReaderDecides(reads: readonly (() => unknown)[]): boolean {
   return false;
 }
 
+function bankReadersReady(env: NodeJS.ProcessEnv): boolean {
+  const inbox = probe(() => readPrimaryWalletBankInboxRuntime('intake', env));
+  const fallback = probe(() => readPrimaryWalletInflowRuntime(env));
+  // A deliberately disabled fallback is valid: the inbox still accepts the
+  // family. A configured-but-broken fallback is not, because unknown-wallet
+  // receipts can be declined by the inbox and dispatched to that path.
+  if (inbox === 'ready') return fallback !== 'broken';
+  if (inbox === 'broken') return false;
+  return fallback === 'ready';
+}
+
 export function collectPrimaryIntakeEvidence(
   env: NodeJS.ProcessEnv,
   now: Date
 ): PrimaryIntakeEvidence {
   const ready: Record<PrimaryIntakeFamily, boolean> = {
-    bank: firstReaderDecides([
-      () => readPrimaryWalletBankInboxRuntime('intake', env),
-      () => readPrimaryWalletInflowRuntime(env),
-    ]),
+    bank: bankReadersReady(env),
     custody: firstReaderDecides([
       () => readPrimaryCardCustodyIntakeRuntime(env, now.getTime()),
     ]),

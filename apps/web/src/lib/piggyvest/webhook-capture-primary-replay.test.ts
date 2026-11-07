@@ -93,6 +93,7 @@ describe('replayPrimaryDelivery', () => {
       }),
       families: ['bank'],
       keyScope: 'replay',
+      env: expect.any(Object),
     });
   });
 

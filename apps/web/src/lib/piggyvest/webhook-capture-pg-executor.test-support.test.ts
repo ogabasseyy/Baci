@@ -137,13 +137,20 @@ describe('createStatefulCaptureExecutor', () => {
     expect(rows[0]?.next_attempt_at).toBe(T0 + 181 * SECOND + 60 * SECOND);
   });
 
-  it('lets a tokenless inline finisher close only a pending row', async () => {
+  it('lets successful inline completion win without letting a stale worker overwrite it', async () => {
     const { completeInline, queue, advance, rows, stored } = model();
     advance(121 * SECOND);
-    await queue.claim(5);
-    // The receiver cannot overwrite a row the drain holds.
-    expect(completeInline(stored.id)).toBe(false);
-    expect(rows[0]?.processing_state).toBe('claimed');
+    const [claim] = await queue.claim(5);
+    expect(completeInline(stored.id)).toBe(true);
+    expect(
+      await queue.resolve(
+        stored.id,
+        claim?.claim_token ?? '',
+        'needs_review',
+        'STALE'
+      )
+    ).toBe(false);
+    expect(rows[0]?.processing_state).toBe('processed');
   });
 
   it('refuses a tokenless resolve through the drain statement (claim-bound entry point)', async () => {
@@ -160,6 +167,7 @@ describe('createStatefulCaptureExecutor', () => {
       pending: 1,
       claimed: 0,
       needsReview: 0,
+      claimRecoveryVersion: 1,
       oldestUnprocessedAt: new Date(T0).toISOString(),
       lastCapturedAt: new Date(T0).toISOString(),
       lastProcessedAt: null,

@@ -36,6 +36,7 @@ export type CaptureResolution =
 
 export interface CaptureQueue {
   claim(limit: number): Promise<PiggyvestClaimedCapture[]>;
+  renew(captureId: string, claimToken: string): Promise<boolean>;
   resolve(
     captureId: string,
     claimToken: string,
@@ -54,6 +55,16 @@ export function createPgCaptureQueue(
   executor: CaptureDrainExecutor
 ): CaptureQueue & { status(): Promise<PiggyvestCaptureStatus> } {
   return {
+    async renew(captureId, claimToken) {
+      const rows = await executor
+        .query('resolve', [captureId, claimToken, 'renew', null])
+        .catch(() => null);
+      const parsed =
+        rows?.length === 1
+          ? piggyvestCaptureResolveRowSchema.safeParse(rows[0])
+          : null;
+      return parsed?.success ? parsed.data.resolved : false;
+    },
     async claim(limit) {
       const rows = await executor
         .query('claim', [limit, LEASE_SECONDS, MIN_AGE_SECONDS])

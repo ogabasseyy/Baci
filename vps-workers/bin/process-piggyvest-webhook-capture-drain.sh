@@ -12,4 +12,6 @@ if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--once" ] && [ "$1" != "--re
 fi
 
 export BACI_WORKER_PROFILE="${BACI_WORKER_PROFILE:-piggyvest-webhook-capture-drain}"
-exec "$SCRIPT_DIR/run-web-script.sh" piggyvest-webhook-capture-drain src/scripts/piggyvest-webhook-capture-drain-cli.ts "${1:---once}"
+trap 'exit 124' TERM
+trap 'status=$?; if [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || [ "$status" -eq 143 ]; then echo "[piggyvest-webhook-capture-drain] pass timed out; any active lease will be reclaimed" >&2; fi' EXIT
+"$SCRIPT_DIR/run-web-script.sh" piggyvest-webhook-capture-drain src/scripts/piggyvest-webhook-capture-drain-cli.ts "${1:---once}"

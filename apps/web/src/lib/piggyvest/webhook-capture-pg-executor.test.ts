@@ -6,7 +6,6 @@ import type { ClientConfig } from 'pg';
 import {
   PIGGYVEST_CAPTURE_DRAIN_LOGIN,
   PIGGYVEST_CAPTURE_WORKER_ROLE,
-  type PiggyvestCaptureDrainRuntime,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
 import {
   CaptureDrainDatabaseError,
@@ -14,30 +13,11 @@ import {
   createCaptureDrainPgExecutor,
 } from './webhook-capture-pg-executor';
 
-const PASSWORD = 'drain-password-never-logged';
-const runtime: PiggyvestCaptureDrainRuntime = {
-  database: {
-    host: 'db.example.supabase.co',
-    port: 5432,
-    name: 'postgres',
-    login: PIGGYVEST_CAPTURE_DRAIN_LOGIN,
-    password: PASSWORD,
-    certificateAuthority: 'placeholder-ca',
-  },
-};
-
-const safeSession = {
-  database_name: 'postgres',
-  login_name: PIGGYVEST_CAPTURE_DRAIN_LOGIN,
-  role_name: PIGGYVEST_CAPTURE_DRAIN_LOGIN,
-  login_safe: true,
-  membership_count: 1,
-  worker_membership: true,
-  grants_usable: true,
-  capture_surface_denied: true,
-  unexpected_privileges: 0,
-  tls: true,
-};
+import {
+  CAPTURE_TEST_PASSWORD as PASSWORD,
+  captureTestRuntime as runtime,
+  safeCaptureSession as safeSession,
+} from './webhook-capture-pg-executor-session.test-support';
 
 interface FakeClient extends CaptureDrainPgClient {
   config: ClientConfig;

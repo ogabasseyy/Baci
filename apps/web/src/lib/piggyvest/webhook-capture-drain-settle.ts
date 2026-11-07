@@ -2,6 +2,7 @@ import 'server-only';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import type { DrainDeps } from './webhook-capture-drain';
+import { captureFailureDetail } from './webhook-capture-failure-detail';
 import type { CaptureResolution } from './webhook-capture-queue';
 import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 
@@ -29,8 +30,11 @@ export async function settle(
 ): Promise<boolean> {
   try {
     return await deps.resolve(row.capture_id, row.claim_token, state, error);
-  } catch {
-    console.warn('[PiggyVest Webhook] Failed to resolve captured delivery');
+  } catch (error) {
+    console.warn('[PiggyVest Webhook] Failed to resolve captured delivery', {
+      captureId: row.capture_id,
+      ...captureFailureDetail(error, 'settle'),
+    });
     return false;
   }
 }

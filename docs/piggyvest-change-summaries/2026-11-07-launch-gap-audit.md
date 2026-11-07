@@ -64,9 +64,18 @@ SQL tests and import-graph checks do not prove a deployed schedule. Any later
 production provisioning, activation or financial acceptance remains a
 separate owner-controlled step. The recording account is excluded.
 
-CI follow-up: the worker schedule renderer is extracted from `deploy.sh` so
-the deployment entry point stays within its existing size limit. The
+CI follow-up: the worker schedule remains literal in `deploy.sh`, within
+the existing size limit, so both deployment renderers can consume it. A
+portable test runs the actual isolated release renderer against this block. The
 kill-switch source sweep now excludes comments when deciding whether code
 constructs an enable flag; it retains its existing literal/construction
 detection and separately checks real environment reads. A readiness error
 code alongside a documentation-only flag name is not a bypass.
+
+The review follow-up also adds claim renewal and inline-completion coordination
+in one append-only migration, gated by `claimRecoveryVersion: 1`. No new
+login or grant is introduced. The host uses its supplied environment throughout
+replay, defers unavailable families, claims work one row at a time within an
+admission budget, and monitors durable review counters on every enabled pass.
+The existing three restricted database statements remain the only worker
+entry points; renewal is an explicit command on claim-bound resolution.

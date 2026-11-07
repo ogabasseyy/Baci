@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -13,14 +21,9 @@ const wrapper = join(
   'process-piggyvest-webhook-capture-drain.sh'
 );
 const script = 'src/scripts/piggyvest-webhook-capture-drain-cli.ts';
-const renderer = join(
-  workerRoot,
-  'lib',
-  'render-piggyvest-capture-drain-cron.sh'
-);
 
 function cronLines() {
-  return readFileSync(renderer, 'utf8')
+  return readFileSync(join(workerRoot, 'deploy.sh'), 'utf8')
     .split('\n')
     .filter((line) => line.includes('piggyvest-webhook-capture-drain'));
 }
@@ -31,7 +34,7 @@ describe('PiggyVest webhook capture drain schedule', () => {
     assert.equal(lines.length, 1);
     assert.match(
       lines[0],
-      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-webhook-capture-drain\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=10s 50s \$REMOTE_DIR\/bin\/process-piggyvest-webhook-capture-drain\.sh --once' >> \$REMOTE_DIR\/logs\/piggyvest-webhook-capture-drain\.log 2>&1$/
+      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/piggyvest-webhook-capture-drain\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd \$REMOTE_DIR && timeout --verbose --signal=TERM --kill-after=10s 50s \$REMOTE_DIR\/bin\/process-piggyvest-webhook-capture-drain\.sh --once' >> \$REMOTE_DIR\/logs\/piggyvest-webhook-capture-drain\.log 2>&1$/
     );
   });
 
@@ -42,27 +45,11 @@ describe('PiggyVest webhook capture drain schedule', () => {
       deployScript.indexOf('$CRON_BLOCK_END\n')
     );
     assert.ok(
-      block.includes(
-        '$(bash "$WORKER_ROOT/lib/render-piggyvest-capture-drain-cron.sh" "$REMOTE_DIR")'
-      )
+      block.includes('process-piggyvest-webhook-capture-drain.sh --once')
     );
     // The release refuses a schedule with variables it cannot resolve.
     const variables = cronLines()[0].match(/\$\{?[A-Z_]+/g) ?? [];
     assert.deepEqual([...new Set(variables)], ['$REMOTE_DIR']);
-  });
-
-  it('renders the bound directory without installing or starting the worker', () => {
-    const rendered = spawnSync('bash', [renderer, '/srv/qa-workers'], {
-      encoding: 'utf8',
-      timeout: 5000,
-      env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
-    });
-    assert.equal(rendered.status, 0, rendered.stderr);
-    assert.equal(
-      rendered.stdout.trim(),
-      cronLines()[0].replaceAll('$REMOTE_DIR', '/srv/qa-workers')
-    );
-    assert.doesNotMatch(rendered.stdout, /\$[A-Z_]+/);
   });
 
   it('never carries a credential, a web cron hop or a URL', () => {
@@ -74,6 +61,30 @@ describe('PiggyVest webhook capture drain schedule', () => {
 });
 
 describe('process-piggyvest-webhook-capture-drain.sh', () => {
+  it('logs a timeout exit explicitly without starting a real worker', () => {
+    const root = mkdtempSync(join(tmpdir(), 'capture-wrapper-'));
+    try {
+      const copy = join(root, 'capture.sh');
+      writeFileSync(copy, readFileSync(wrapper, 'utf8'));
+      writeFileSync(
+        join(root, 'run-web-script.sh'),
+        '#!/usr/bin/env bash\nexit 124\n',
+        { mode: 0o700 }
+      );
+      const result = spawnSync('bash', [copy, '--once'], {
+        encoding: 'utf8',
+        timeout: 5000,
+        env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+      });
+      assert.equal(result.status, 124);
+      assert.match(
+        result.stderr,
+        /pass timed out; any active lease will be reclaimed/
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it('is an executable wrapper that delegates straight to its web script', () => {
     assert.ok(statSync(wrapper).mode & 0o111, 'wrapper must be executable');
     const source = readFileSync(wrapper, 'utf8');

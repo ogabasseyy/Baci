@@ -21,7 +21,7 @@ the pull request that adds the drain changes production behaviour by itself.
    session before anything else: exactly that login, a member of
    `piggyvest_webhook_capture_worker` and of nothing else, no elevated rights,
    and a TLS connection. Any doubt stops the run.
-3. Claims at most 10 stored deliveries that are at least two minutes old,
+3. Claims at most 10 stored deliveries, one at a time, that are at least two minutes old,
    re-checks each stored signature, and hands the ones a PiggyVest primary
    intake owns (bank inflow, card custody outflow, interest payout) to that
    intake, which writes through its own dedicated login. A delivery signed
@@ -34,6 +34,18 @@ the pull request that adds the drain changes production behaviour by itself.
    web receiver keeps asking PiggyVest to redeliver them, and a successful
    redelivery closes them automatically.
 
+Each pass admits new work for ten seconds and reserves the rest of the 50-second
+cron bound for the current replay, settlement and alert delivery. Before each
+replay the worker renews its still-live claim through its restricted settle
+entry point; a stale token, expired lease or late renewal response prevents
+replay. GNU timeout uses `--verbose`, and the wrapper also records timeout exits.
+
+Unavailable primary families are deferred without spending an attempt; ready
+families continue. If every family is unavailable the pass reads review
+metadata only and claims nothing. Every enabled pass awaits a metadata-only
+review monitor before and after draining: parked rows stay durable alert
+evidence even if an earlier settlement response or immediate alert was lost.
+
 Replaying is safe to repeat: every downstream ledger is keyed on PiggyVest's
 transaction id. If the job is killed mid-run, the claimed delivery returns
 to the queue five minutes later and the next run finishes it.
@@ -42,7 +54,10 @@ to the queue five minutes later and the next run finishes it.
 
 - The migration `20261102202552_piggyvest_webhook_capture_worker_role` is
   applied by the normal deploy (it only creates the non-login role, one
-  claim-bound settle function, and three grants).
+  claim-bound settle function, and three grants). Apply the append-only
+  `20261107121500_piggyvest_capture_claim_recovery` migration too. Worker
+  status must report `claimRecoveryVersion: 1`; an older database fails closed
+  before any claim and cannot pass worker readiness.
 - The worker env file already holds the PiggyVest primary configuration the
   intakes need (database host/port/name/CA, the **current bank, custody and
   interest signing keys, the same as the web app's**, each intake's own

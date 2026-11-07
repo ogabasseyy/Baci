@@ -139,57 +139,8 @@ END
 $$;
 
 -- Everything the worker can use through any route, PUBLIC included, is what
--- the anonymous anon role can use plus the three drain entry points (ZGRT5).
--- anon holds exactly what PUBLIC grants every role, so this bounds the
--- PUBLIC-derived privileges every login that inherits the worker gets: the
--- ACL checks above only see entries that name the worker. The catalog's own
--- answer (has_*_privilege follows inheritance and PUBLIC) is compared with
--- anon's; OFFSET 0 keeps each privilege function off relations of the
--- wrong kind. The offenders are listed in the error.
-DO $$
-DECLARE
-  v_offenders text;
-BEGIN
-  SELECT string_agg(found.what, ', ' ORDER BY found.what) INTO v_offenders
-  FROM (
-    SELECT 'function ' || p.oid::regprocedure::text AS what
-    FROM (SELECT x.oid FROM pg_catalog.pg_proc x OFFSET 0) p
-    WHERE pg_catalog.has_function_privilege('piggyvest_webhook_capture_worker', p.oid, 'EXECUTE')
-      AND NOT pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
-      AND p.oid <> ALL (ARRAY[
-        'public.claim_piggyvest_webhook_captures(integer,integer,integer)'::regprocedure::oid,
-        'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure::oid,
-        'public.piggyvest_webhook_capture_status()'::regprocedure::oid])
-    UNION ALL
-    SELECT 'relation ' || c.oid::regclass::text
-    FROM (SELECT x.oid FROM pg_catalog.pg_class x
-      WHERE x.relkind IN ('r', 'p', 'v', 'm', 'f') OFFSET 0) c
-    WHERE pg_catalog.has_any_column_privilege('piggyvest_webhook_capture_worker', c.oid,
-        'SELECT, INSERT, UPDATE, REFERENCES')
-      AND NOT pg_catalog.has_any_column_privilege('anon', c.oid, 'SELECT, INSERT, UPDATE, REFERENCES')
-    UNION ALL
-    SELECT 'sequence ' || c.oid::regclass::text
-    FROM (SELECT x.oid FROM pg_catalog.pg_class x WHERE x.relkind = 'S' OFFSET 0) c
-    WHERE pg_catalog.has_sequence_privilege('piggyvest_webhook_capture_worker', c.oid,
-        'USAGE, SELECT, UPDATE')
-      AND NOT pg_catalog.has_sequence_privilege('anon', c.oid, 'USAGE, SELECT, UPDATE')
-  ) AS found;
-  IF v_offenders IS NOT NULL THEN
-    RAISE EXCEPTION 'the worker can use more than anon and the drain: %', v_offenders
-      USING ERRCODE = 'ZGRT5';
-  END IF;
-
-  -- Nothing on the capture table, from any grantee that reaches every role.
-  IF EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_class c,
-      LATERAL pg_catalog.aclexplode(c.relacl) AS acl
-    WHERE c.oid = 'public.piggyvest_webhook_captures'::regclass AND acl.grantee = 0
-  ) THEN
-    RAISE EXCEPTION 'PUBLIC holds a privilege on piggyvest_webhook_captures' USING ERRCODE = 'ZGRT5';
-  END IF;
-END
-$$;
+-- anon can use plus the three drain entry points (ZGRT5).
+\ir piggyvest_webhook_capture_worker_privilege_comparison.inc.sql
 
 -- The functions the worker reaches stay definer functions with a pinned
 -- search_path (ZDEF1), and every ACL names exactly the intended grantees

@@ -99,6 +99,18 @@ describe('collectPrimaryIntakeEvidence', () => {
       readers.inflow.mockImplementation(broken);
       expect(collectPrimaryIntakeEvidence(ENV, NOW).notReady).toEqual(['bank']);
     });
+
+    it('is not ready when the inbox is configured but its direct fallback is broken', () => {
+      readers.bankInbox.mockReturnValue(configured);
+      readers.inflow.mockImplementation(broken);
+      expect(collectPrimaryIntakeEvidence(ENV, NOW).notReady).toEqual(['bank']);
+    });
+
+    it('is ready when the inbox is configured and the fallback is deliberately off', () => {
+      readers.bankInbox.mockReturnValue(configured);
+      readers.inflow.mockImplementation(off);
+      expect(collectPrimaryIntakeEvidence(ENV, NOW).notReady).toEqual([]);
+    });
   });
 
   describe('interest', () => {

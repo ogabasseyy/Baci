@@ -43,5 +43,7 @@ export const piggyvestCaptureResolveRowSchema = z.object({
 });
 
 export const piggyvestCaptureStatusRowSchema = z.object({
-  status: piggyvestCaptureStatusSchema,
+  status: piggyvestCaptureStatusSchema.extend({
+    claimRecoveryVersion: z.literal(1),
+  }),
 });

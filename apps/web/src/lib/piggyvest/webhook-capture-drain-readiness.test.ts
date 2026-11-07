@@ -16,7 +16,7 @@ import { collectPrimaryIntakeEvidence } from './webhook-capture-primary-intake-r
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const WORKERS = '/srv/baci-worker/baci-workers';
-const CRON_LINE = `* * * * * flock -n ${WORKERS}/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd ${WORKERS} && timeout --signal=TERM --kill-after=10s 50s ${WORKERS}/bin/process-piggyvest-webhook-capture-drain.sh --once' >> ${WORKERS}/logs/piggyvest-webhook-capture-drain.log 2>&1`;
+const CRON_LINE = `* * * * * flock -n ${WORKERS}/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd ${WORKERS} && timeout --verbose --signal=TERM --kill-after=10s 50s ${WORKERS}/bin/process-piggyvest-webhook-capture-drain.sh --once' >> ${WORKERS}/logs/piggyvest-webhook-capture-drain.log 2>&1`;
 const status = {
   pending: 0,
   claimed: 0,
@@ -24,6 +24,7 @@ const status = {
   oldestUnprocessedAt: null,
   lastCapturedAt: null,
   lastProcessedAt: null,
+  claimRecoveryVersion: 1,
 };
 
 describe('captureDrainCronState', () => {
@@ -54,9 +55,28 @@ describe('captureDrainCronState', () => {
     ],
     [
       'an entry without the time bound',
-      CRON_LINE.replace('timeout --signal=TERM --kill-after=10s 50s ', ''),
+      CRON_LINE.replace(
+        'timeout --verbose --signal=TERM --kill-after=10s 50s ',
+        ''
+      ),
       'missing',
     ],
+    ...[
+      ['zero-second kill grace', '--kill-after=0s 50s'],
+      ['one-second kill grace', '--kill-after=1s 50s'],
+      ['huge kill grace', '--kill-after=999999s 50s'],
+      ['wrong run timeout', '--kill-after=10s 49s'],
+      ['zero run timeout', '--kill-after=10s 0s'],
+      ['one-second run timeout', '--kill-after=10s 1s'],
+      ['huge run timeout', '--kill-after=10s 999999s'],
+    ].map(
+      ([label, timing]) =>
+        [
+          `an entry with ${label}`,
+          CRON_LINE.replace('--kill-after=10s 50s', timing),
+          'missing',
+        ] as const
+    ),
     [
       'an entry without the worker profile',
       CRON_LINE.replace(
@@ -68,8 +88,8 @@ describe('captureDrainCronState', () => {
     [
       'an entry that runs the wrapper under another root',
       CRON_LINE.replace(
-        `timeout --signal=TERM --kill-after=10s 50s ${WORKERS}/bin`,
-        'timeout --signal=TERM --kill-after=10s 50s /tmp/other/bin'
+        `timeout --verbose --signal=TERM --kill-after=10s 50s ${WORKERS}/bin`,
+        'timeout --verbose --signal=TERM --kill-after=10s 50s /tmp/other/bin'
       ),
       'missing',
     ],
@@ -79,7 +99,7 @@ describe('captureDrainCronState', () => {
       'missing',
     ],
     ['a duplicated entry', `${CRON_LINE}\n${CRON_LINE}`, 'duplicated'],
-  ])('reports %s', (_label, crontab, state) => {
+  ] as const)('reports %s', (_label, crontab, state) => {
     expect(captureDrainCronState(crontab)).toBe(state);
   });
 });

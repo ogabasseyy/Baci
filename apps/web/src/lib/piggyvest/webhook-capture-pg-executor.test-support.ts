@@ -48,6 +48,7 @@ export function scriptedCaptureExecutor(
         string,
         string | null,
       ];
+      if (state === 'renew') return [{ resolved: true }];
       return [{ resolved: onResolve({ id, token, state, error }) }];
     }
     return [
@@ -56,6 +57,7 @@ export function scriptedCaptureExecutor(
           pending: 0,
           claimed: 0,
           needsReview: 0,
+          claimRecoveryVersion: 1,
           oldestUnprocessedAt: null,
           lastCapturedAt: null,
           lastProcessedAt: null,
@@ -184,7 +186,7 @@ export function createStatefulCaptureExecutor(clock: () => number) {
         (token === null &&
           (row.processing_state === 'pending' ||
             (state === 'processed' &&
-              row.processing_state === 'needs_review'))));
+              ['claimed', 'needs_review'].includes(row.processing_state)))));
     if (!row || !fenced) return false;
     const now = clock();
     const deferred = state === 'deferred';
@@ -219,6 +221,7 @@ export function createStatefulCaptureExecutor(clock: () => number) {
       pending: count('pending'),
       claimed: count('claimed'),
       needsReview: count('needs_review'),
+      claimRecoveryVersion: 1,
       oldestUnprocessedAt: iso(
         open.length ? Math.min(...open.map((row) => row.received_at)) : null
       ),
@@ -247,6 +250,15 @@ export function createStatefulCaptureExecutor(clock: () => number) {
       ];
       if (token === null)
         throw new Error('a claimed capture and its claim token are required');
+      if (state === 'renew') {
+        const row = rows.find((candidate) => candidate.id === id);
+        const valid =
+          row?.processing_state === 'claimed' &&
+          row.claim_token === token &&
+          (row.lease_until ?? 0) > clock();
+        if (valid && row) row.lease_until = clock() + 300_000;
+        return [{ resolved: valid }];
+      }
       return [{ resolved: resolve(id, token, state, error) }];
     }
     return [{ status: status() }];
@@ -258,7 +270,7 @@ export function createStatefulCaptureExecutor(clock: () => number) {
       new Promise((done) => done(answer(statement, parameters))),
     verifySession: () => Promise.resolve({ ok: true }),
   };
-  /** The receiver's inline completion: tokenless, a pending row only. */
+  /** Successful receiver completion wins over a concurrent worker claim. */
   const completeInline = (id: string) => resolve(id, null, 'processed', null);
   return { executor, rows, insert, completeInline };
 }

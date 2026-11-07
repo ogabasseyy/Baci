@@ -19,13 +19,35 @@ let alerts: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   resolve = vi.fn(async () => true);
-  deps = { resolve } as unknown as DrainDeps;
+  deps = {
+    resolve,
+    claim: async () => [],
+    renew: async () => true,
+    verify: () => ({ status: 'unconfigured' }),
+    process: async () => ({ status: 503 }),
+  };
   alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
   alerts.mockClear();
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('settle', () => {
+  it('reports safe diagnostics without exposing the original exception or provider payload', async () => {
+    resolve.mockRejectedValue(
+      Object.assign(new Error('private credential must not be logged'), {
+        sqlState: '42501',
+        providerResponse: 'private payload',
+      })
+    );
+    expect(await settle(deps, stored, 'processed', null)).toBe(false);
+    expect(console.warn).toHaveBeenCalledWith(
+      '[PiggyVest Webhook] Failed to resolve captured delivery',
+      { captureId: stored.capture_id, phase: 'settle', sqlState: '42501' }
+    );
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(
+      /private credential|private payload/
+    );
+  });
   it('resolves the claimed row fenced by its own claim token', async () => {
     await settle(deps, stored, 'processed', null);
 

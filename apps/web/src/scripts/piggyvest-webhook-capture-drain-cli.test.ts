@@ -71,7 +71,7 @@ const PRIMARY_KEYS = {
   custody: deterministicTestKey('capture-drain-cli:custody'),
   interest: deterministicTestKey('capture-drain-cli:interest'),
 };
-const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd /w && timeout --signal=TERM --kill-after=10s 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/piggyvest-webhook-capture-drain.log 2>&1`;
+const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd /w && timeout --verbose --signal=TERM --kill-after=10s 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/piggyvest-webhook-capture-drain.log 2>&1`;
 
 let output: string[];
 let createExecutor: ReturnType<typeof vi.fn<(runtime: unknown) => CaptureDrainExecutor>>;
@@ -132,7 +132,7 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
       };
     });
     await expect(cli(['--once'])).resolves.toBe(0);
-    expect(claims).toEqual([[10, 300, 120]]);
+    expect(claims).toEqual([[1, 300, 120]]);
     expect(JSON.parse(output[0] ?? '')).toEqual({
       status: 'drained',
       claimed: 0,
@@ -142,14 +142,14 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
     });
   });
 
-  it('does not claim anything while a primary intake is not ready', async () => {
-    mocks.intakesNotReady = ['bank'];
+  it('does not claim anything while all primary intakes are not ready', async () => {
+    mocks.intakesNotReady = ['bank', 'custody', 'interest'];
     await expect(cli(['--once'])).resolves.toBe(1);
     expect(JSON.parse(output[0] ?? '')).toEqual({
       status: 'intake_not_ready',
-      notReady: ['bank'],
+      notReady: ['bank', 'custody', 'interest'],
     });
-    expect(createExecutor).not.toHaveBeenCalled();
+    expect(createExecutor).toHaveBeenCalledOnce();
   });
 
   it('redacts a database failure and says the rows stay pending', async () => {

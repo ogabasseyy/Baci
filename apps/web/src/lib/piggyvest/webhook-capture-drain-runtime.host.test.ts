@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), bankKey: '' }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('pg', () => ({ Client: vi.fn() }));
+vi.mock('@/lib/posthog/piggyvest-money-alert-events', () => ({
+  sendPiggyvestMoneyAlert: vi.fn(async () => 'sent'),
+}));
 vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
   dispatchPrimaryPiggyvestIntake: mocks.dispatch,
   isKillSwitchDeferral: () => false,
@@ -28,6 +31,7 @@ import { deterministicTestKey } from './deterministic-test-data.test-support';
 import { schemaValidInflow } from './webhook-capture-drain.test-support';
 import { runPiggyvestWebhookCaptureDrain } from './webhook-capture-drain-runtime';
 import { createStatefulCaptureExecutor } from './webhook-capture-pg-executor.test-support';
+import type { PrimaryIntakeFamily } from './webhook-capture-primary-intake-readiness';
 import { derivePiggyvestKeyVersion } from './webhook-key-archive';
 import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
 
@@ -76,13 +80,13 @@ function store() {
       event_type: eventType,
     });
   };
-  const run = () =>
+  const run = (notReady: PrimaryIntakeFamily[] = []) =>
     runPiggyvestWebhookCaptureDrain({
       env: ENV,
       deps: {
         createExecutor: () => model.executor,
         now: () => new Date(now),
-        primaryIntake: () => ({ notReady: [] }),
+        primaryIntake: () => ({ notReady }),
       },
     });
   return { ...model, add, run };
@@ -99,6 +103,47 @@ beforeEach(() => {
 });
 
 describe('rows the worker host cannot finish', () => {
+  it('recovers bank captures while custody is off and defers custody without spending attempts', async () => {
+    const model = store();
+    const bank = model.add('ready-bank', mocks.bankKey, ['bank']);
+    const custody = model.add('off-custody', legacyKey, ['custody'], {
+      eventType: 'wallet-transfer.outflow.success',
+    });
+    now += 121 * SECOND;
+    expect(await model.run(['custody'])).toMatchObject({
+      summary: { processed: 1, retried: 1 },
+    });
+    expect(bank.processing_state).toBe('processed');
+    expect(custody).toMatchObject({
+      processing_state: 'pending',
+      attempts: 0,
+      last_error: 'PRIMARY_INTAKE_UNAVAILABLE',
+    });
+    expect(mocks.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('rediscovers a durable review after its settlement response and alert were lost', async () => {
+    const model = store();
+    const legacy = model.add('lost-review-response', legacyKey, ['legacy']);
+    const query = model.executor.query.bind(model.executor);
+    model.executor.query = async (statement, parameters) => {
+      const rows = await query(statement, parameters);
+      if (statement === 'resolve' && parameters[2] === 'needs_review')
+        throw new Error('response lost after commit');
+      return rows;
+    };
+    now += 121 * SECOND;
+    await model.run();
+    expect(legacy.processing_state).toBe('needs_review');
+    alerts.mockClear();
+    await model.run();
+    expect(
+      alertLines().some((line) =>
+        line.includes('captured deliveries remain in needs_review')
+      )
+    ).toBe(true);
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
   it('never claims a set-aside row again, so a later primary deposit is claimed on the next pass', async () => {
     const model = store();
     const legacy = Array.from({ length: 12 }, (_, index) =>

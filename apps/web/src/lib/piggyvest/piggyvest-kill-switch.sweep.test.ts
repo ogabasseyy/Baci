@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { createScanner, ScriptTarget, SyntaxKind } from 'typescript';
+import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
 import { PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES } from '@/schemas/piggyvest-primary-wallet-capability';
 
@@ -89,9 +89,14 @@ function buildsEnableFlag(text: string): boolean {
   // Keep literals and operators intact, but exclude comments from the flag
   // family context. A documentation-only flag name plus a diagnostic such as
   // DRAIN_NOT_ENABLED must not look like executable flag-name construction.
-  const scanner = createScanner(ScriptTarget.Latest, true, undefined, text);
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    true,
+    undefined,
+    text
+  );
   const tokens: string[] = [];
-  while (scanner.scan() !== SyntaxKind.EndOfFileToken)
+  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken)
     tokens.push(scanner.getTokenText());
   const executable = tokens.join(' ');
   return (

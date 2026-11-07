@@ -24,6 +24,7 @@ const status = {
   pending: 2,
   claimed: 0,
   needsReview: 0,
+  claimRecoveryVersion: 1,
   oldestUnprocessedAt: '2026-10-30T11:58:00.000Z',
   lastCapturedAt: '2026-10-30T11:59:00.000Z',
   lastProcessedAt: null,
@@ -47,6 +48,36 @@ function executorReturning(rows: unknown[] | Error) {
 }
 
 describe('createPgCaptureQueue', () => {
+  it('renews through the existing restricted claim-bound command and fails closed', async () => {
+    const result = executorReturning([{ resolved: true }]);
+    expect(
+      await createPgCaptureQueue(result.executor).renew(
+        claimRow.capture_id,
+        claimRow.claim_token
+      )
+    ).toBe(true);
+    expect(result.query).toHaveBeenCalledWith('resolve', [
+      claimRow.capture_id,
+      claimRow.claim_token,
+      'renew',
+      null,
+    ]);
+    const broken = executorReturning(new Error('unavailable'));
+    expect(
+      await createPgCaptureQueue(broken.executor).renew(
+        claimRow.capture_id,
+        claimRow.claim_token
+      )
+    ).toBe(false);
+  });
+
+  it('refuses pre-recovery migration status before any claim can be made', async () => {
+    const { claimRecoveryVersion: _version, ...oldStatus } = status;
+    const old = executorReturning([{ status: oldStatus }]);
+    await expect(createPgCaptureQueue(old.executor).status()).rejects.toThrow(
+      'PiggyVest capture status failed'
+    );
+  });
   it('claims with the same lease and inline-processing grace as the web queue', async () => {
     const { executor, query } = executorReturning([claimRow]);
     await expect(createPgCaptureQueue(executor).claim(10)).resolves.toEqual([

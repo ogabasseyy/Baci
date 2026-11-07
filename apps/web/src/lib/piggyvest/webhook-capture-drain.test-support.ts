@@ -123,6 +123,7 @@ export function drainDeps(
   );
   return {
     claim: (limit) => queue.claim(limit),
+    renew: (id, token) => queue.renew(id, token),
     resolve: (id, token, status, error) =>
       queue.resolve(id, token, status, error),
     verify: (input) =>

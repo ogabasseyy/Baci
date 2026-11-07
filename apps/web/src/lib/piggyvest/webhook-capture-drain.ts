@@ -18,6 +18,7 @@ import {
   setAsideBeforeReplay,
   settle,
 } from './webhook-capture-drain-settle';
+import { captureFailureDetail } from './webhook-capture-failure-detail';
 import type { CaptureResolution } from './webhook-capture-queue';
 import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
 
@@ -64,6 +65,9 @@ export interface ReplayDelivery {
 
 export interface DrainDeps {
   claim(limit: number): Promise<PiggyvestClaimedCapture[]>;
+  renew(captureId: string, claimToken: string): Promise<boolean>;
+  nowMs?: () => number;
+  deferBeforeReplay?(row: PiggyvestClaimedCapture): string | null;
   resolve(
     captureId: string,
     claimToken: string,
@@ -193,6 +197,24 @@ async function drainRow(
     }
   }
 
+  // A claim may have expired while an earlier row or connection was stalled.
+  // Renew atomically, and measure from BEFORE the request: a delayed response
+  // must not grant a fresh local replay window on an already expired lease.
+  const nowMs = deps.nowMs ?? (() => performance.now());
+  const renewalStarted = nowMs();
+  try {
+    if (
+      !(await deps.renew(row.capture_id, row.claim_token)) ||
+      nowMs() - renewalStarted >= 30_000
+    )
+      return 'retried';
+  } catch (error) {
+    console.warn('[PiggyVest Webhook] Capture renewal failed', {
+      captureId: row.capture_id,
+      ...captureFailureDetail(error, 'renew'),
+    });
+    return 'retried';
+  }
   let result: ReplayProcessResult | null = null;
   try {
     result = await deps.process({
@@ -204,7 +226,11 @@ async function drainRow(
       incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
-  } catch {
+  } catch (error) {
+    console.warn('[PiggyVest Webhook] Capture replay failed', {
+      captureId: row.capture_id,
+      ...captureFailureDetail(error, 'process'),
+    });
     result = null;
   }
   return settleReplayResult(
@@ -227,13 +253,19 @@ export async function drainPiggyvestWebhookCaptures(
     needsReview: 0,
   };
   // Rows this runtime may not replay are settled first, before any replay
-  // runs: a provider redelivery completed inline cannot close a claimed
-  // row, so each such row is held only for the instant of the claim.
+  // runs. A successful inline redelivery can close even a claimed row;
+  // token-fenced settlement then refuses to overwrite that completion.
   const inScope: PiggyvestClaimedCapture[] = [];
   for (const row of rows) {
     const scope = deps.outOfScope?.(row) ?? null;
     if (scope) summary[await setAsideBeforeReplay(deps, row, scope)] += 1;
-    else inScope.push(row);
+    else {
+      const deferred = deps.deferBeforeReplay?.(row);
+      if (deferred) {
+        await settle(deps, row, 'deferred', deferred);
+        summary.retried += 1;
+      } else inScope.push(row);
+    }
   }
   for (const row of inScope) {
     const outcome = await drainRow(deps, row);

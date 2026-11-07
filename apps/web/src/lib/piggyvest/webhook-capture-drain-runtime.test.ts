@@ -48,6 +48,7 @@ import {
 } from './webhook-capture-drain-runtime';
 import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
 import { createStatefulCaptureExecutor } from './webhook-capture-pg-executor.test-support';
+import type { PrimaryIntakeEvidence } from './webhook-capture-primary-intake-readiness';
 
 const T0 = Date.parse('2026-10-30T12:00:00.000Z');
 const SECOND = 1000;
@@ -146,17 +147,26 @@ describe('enable flag and configuration', () => {
     ).toBe(false);
   });
 
-  it('leaves every row untouched and opens no connection while a primary intake is not ready', async () => {
-    const createExecutor = vi.fn();
-    const primaryIntake = vi.fn(() => ({ notReady: ['bank' as const] }));
+  it('only monitors review metadata without claiming while every intake is not ready', async () => {
+    const model = createStatefulCaptureExecutor(() => T0);
+    const query = vi.spyOn(model.executor, 'query');
+    const createExecutor = vi.fn(() => model.executor);
+    const primaryIntake = vi.fn(
+      (): PrimaryIntakeEvidence => ({
+        notReady: ['bank', 'custody', 'interest'],
+      })
+    );
     await expect(
       runPiggyvestWebhookCaptureDrain({
         env: ENV,
         deps: { createExecutor, primaryIntake, now: () => new Date(T0) },
       })
-    ).resolves.toEqual({ status: 'intake_not_ready', notReady: ['bank'] });
+    ).resolves.toEqual({
+      status: 'intake_not_ready',
+      notReady: ['bank', 'custody', 'interest'],
+    });
     expect(primaryIntake).toHaveBeenCalledWith(ENV, new Date(T0));
-    expect(createExecutor).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledExactlyOnceWith('status', []);
     expect(mocks.pgClient).not.toHaveBeenCalled();
   });
 
@@ -236,7 +246,7 @@ describe('worker-host replay', () => {
       ...model.executor,
       async query(statement, parameters) {
         // The worker dies after processing, before it can settle the row.
-        if (statement === 'resolve' && crashed)
+        if (statement === 'resolve' && parameters[2] !== 'renew' && crashed)
           throw new Error('worker killed');
         return model.executor.query(statement, parameters);
       },

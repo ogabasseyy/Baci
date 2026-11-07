@@ -108,6 +108,7 @@ describe('session and statement rows', () => {
       pending: 0,
       claimed: 0,
       needsReview: 0,
+      claimRecoveryVersion: 1,
       oldestUnprocessedAt: null,
       lastCapturedAt: null,
       lastProcessedAt: null,

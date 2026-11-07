@@ -33,7 +33,8 @@ import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
  *   receiver completes inline still closes it.
  */
 export async function replayPrimaryDelivery(
-  delivery: ReplayDelivery
+  delivery: ReplayDelivery,
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<ReplayProcessResult> {
   const { rawBody, signature, matchedSecret, families, incompleteKeySet } =
     delivery;
@@ -56,6 +57,7 @@ export async function replayPrimaryDelivery(
       matchedSecret,
       event,
       families,
+      env,
       keyScope: 'replay',
     });
   } catch {

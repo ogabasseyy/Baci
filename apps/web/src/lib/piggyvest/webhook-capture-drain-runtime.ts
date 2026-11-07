@@ -4,12 +4,10 @@ import {
   type PiggyvestCaptureDrainRuntime,
   piggyvestCaptureDrainRuntimeSchema,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
+import { primaryOwnerFamily } from './primary-event-owner';
 import { isPiggyvestCaptureDrainEnabled } from './webhook-capture-attestation';
-import {
-  type DrainDeps,
-  type DrainSummary,
-  drainPiggyvestWebhookCaptures,
-} from './webhook-capture-drain';
+import type { DrainDeps, DrainSummary } from './webhook-capture-drain';
+import { runCaptureDrainPass } from './webhook-capture-drain-pass';
 import { workerHostReplayScope } from './webhook-capture-drain-scope';
 import { verifyOnWorkerHost } from './webhook-capture-host-verify';
 import {
@@ -23,6 +21,7 @@ import {
 } from './webhook-capture-primary-intake-readiness';
 import { replayPrimaryDelivery } from './webhook-capture-primary-replay';
 import { createPgCaptureQueue } from './webhook-capture-queue';
+import { monitorCaptureReviews } from './webhook-capture-review-monitor';
 
 /**
  * The worker-host capture drain (R5): one bounded pass over the captured
@@ -78,6 +77,7 @@ export interface CaptureDrainRuntimeDeps {
   ) => CaptureDrainExecutor;
   process?: DrainDeps['process'];
   now?: () => Date;
+  nowMs?: () => number;
   /** Whether each primary intake can finish a replay on this host. */
   primaryIntake?: (env: NodeJS.ProcessEnv, now: Date) => PrimaryIntakeEvidence;
 }
@@ -93,19 +93,28 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
   if (!runtime) return { status: 'unconfigured' };
   // A primary intake that is off or broken answers every replay 503, which
   // would spend the rows' attempt budget on a configuration gap. Leave the
-  // rows untouched (no connection, no claim) until the intakes are ready.
+  // unavailable families deferred without blocking ready families. A metadata
+  // monitor still runs when all intakes are off, so parked reviews stay visible.
   const { notReady } = (deps.primaryIntake ?? collectPrimaryIntakeEvidence)(
     env,
     deps.now?.() ?? new Date()
   );
-  if (notReady.length > 0) return { status: 'intake_not_ready', notReady };
   const executor = (deps.createExecutor ?? createCaptureDrainPgExecutor)(
     runtime
   );
   const queue = createPgCaptureQueue(executor);
-  const summary = await drainPiggyvestWebhookCaptures(
+  await monitorCaptureReviews(() => queue.status());
+  if (
+    notReady.includes('bank') &&
+    notReady.includes('custody') &&
+    notReady.includes('interest')
+  )
+    return { status: 'intake_not_ready', notReady };
+  const summary = await runCaptureDrainPass(
     {
       claim: (limit) => queue.claim(limit),
+      renew: (id, token) => queue.renew(id, token),
+      nowMs: deps.nowMs,
       resolve: (id, token, state, error) =>
         queue.resolve(id, token, state, error),
       verify: (delivery) =>
@@ -114,10 +123,18 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
           env,
           now: deps.now?.() ?? new Date(),
         }),
-      process: deps.process ?? replayPrimaryDelivery,
+      process:
+        deps.process ?? ((delivery) => replayPrimaryDelivery(delivery, env)),
+      deferBeforeReplay: (row) => {
+        const family = primaryOwnerFamily(row.event_type ?? '');
+        return family && notReady.some((unavailable) => unavailable === family)
+          ? 'PRIMARY_INTAKE_UNAVAILABLE'
+          : null;
+      },
       outOfScope: workerHostReplayScope,
     },
-    { limit: input.limit ?? CAPTURE_DRAIN_BATCH }
+    { limit: input.limit ?? CAPTURE_DRAIN_BATCH, nowMs: deps.nowMs }
   );
+  await monitorCaptureReviews(() => queue.status());
   return { status: 'drained', summary };
 }

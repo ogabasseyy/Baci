@@ -52,19 +52,8 @@ export interface CaptureDrainEvidence {
  * must match everywhere it appears, so an entry that merely mentions these
  * strings, or runs a different root or profile, does not count.
  */
-const CRON_ENTRY = new RegExp(
-  [
-    String.raw`^\*\s+\*\s+\*\s+\*\s+\*\s+`,
-    String.raw`flock -n (\S+)/locks/piggyvest-webhook-capture-drain\.lock `,
-    "bash -lc '",
-    'export NODE_ENV=production && ',
-    'export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && ',
-    String.raw`cd \1 && `,
-    String.raw`timeout --signal=TERM --kill-after=\d+s \d+s `,
-    String.raw`\1/bin/process-piggyvest-webhook-capture-drain\.sh --once' `,
-    String.raw`>> \1/logs/piggyvest-webhook-capture-drain\.log 2>&1$`,
-  ].join('')
-);
+const CRON_ENTRY =
+  /^\*\s+\*\s+\*\s+\*\s+\*\s+flock -n (\S+)\/locks\/piggyvest-webhook-capture-drain\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd \1 && timeout --verbose --signal=TERM --kill-after=10s 50s \1\/bin\/process-piggyvest-webhook-capture-drain\.sh --once' >> \1\/logs\/piggyvest-webhook-capture-drain\.log 2>&1$/;
 
 /** Exactly one active, every-minute, flock-guarded drain entry. */
 export function captureDrainCronState(

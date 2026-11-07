@@ -18,6 +18,7 @@ import {
   getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
+  hasFilterableQueryParams,
   isRedundantPlatformListParenthetical,
   stripRedundantPlatformParentheticals,
 } from './seo-utils';
@@ -1138,7 +1139,7 @@ describe('getIndexableRobotsMetadata', () => {
     });
   });
 
-  it('ignores the hub transition token in robots and canonical decisions', () => {
+  it('noindexes hub transition token URLs and omits the token from canonical params', () => {
     expect(
       getIndexableRobotsMetadata({
         graphics: 'NVIDIA RTX 4070',
@@ -1150,11 +1151,44 @@ describe('getIndexableRobotsMetadata', () => {
     });
 
     expect(
+      getIndexableRobotsMetadata(
+        {
+          graphics: 'NVIDIA RTX 4070',
+          graphicsHub: 'rtx-4070',
+        },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
       getCanonicalStorefrontFilterSearchParams(
         { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
         { filtersAffectResults: true }
       ).toString()
-    ).toBe('graphics=NVIDIA+RTX+4070');
+    ).toBe('');
+  });
+
+  it('noindexes sort, sortBy, order, and graphicsHub listing URLs while preserving follow directives', () => {
+    for (const searchParams of [
+      { sort: 'price-asc' },
+      { sort: 'newest' },
+      { sortBy: 'price' },
+      { order: 'desc' },
+      { graphicsHub: 'rtx-4070' },
+    ]) {
+      expect(hasFilterableQueryParams(searchParams)).toBe(true);
+      expect(getIndexableRobotsMetadata(searchParams)).toMatchObject({
+        index: false,
+        follow: true,
+        googleBot: {
+          index: false,
+          follow: true,
+        },
+      });
+    }
   });
 
   it('treats graphics as a storefront filter for faceted listing URLs', () => {

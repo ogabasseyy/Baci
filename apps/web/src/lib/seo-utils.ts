@@ -1323,10 +1323,14 @@ const STOREFRONT_FILTER_SEARCH_PARAMS: ReadonlyMap<string, string> = new Map([
   ['search', 'search'],
   ['displayType', 'displayType'],
   ['graphics', 'graphics'],
+  ['graphicsHub', 'graphicsHub'],
   ['maxPrice', 'price'],
   ['minPrice', 'price'],
+  ['order', 'sort'],
   ['ram', 'ram'],
   ['simType', 'simType'],
+  ['sort', 'sort'],
+  ['sortBy', 'sort'],
   ['storage', 'storage'],
 ] as const);
 
@@ -1343,6 +1347,12 @@ const STOREFRONT_CANONICAL_FILTER_QUERY_KEYS = [
   ['simType', ['simType']],
   ['storage', ['storage']],
 ] as const satisfies readonly [string, readonly string[]][];
+
+export function hasFilterableQueryParams(
+  searchParams?: StorefrontRobotsSearchParams
+): boolean {
+  return getActiveStorefrontFilterKeys(searchParams).size > 0;
+}
 
 function getCanonicalStorefrontFilterQueryKey(
   queryKey: string,

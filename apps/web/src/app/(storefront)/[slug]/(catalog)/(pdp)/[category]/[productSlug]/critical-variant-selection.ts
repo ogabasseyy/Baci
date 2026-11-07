@@ -7,11 +7,47 @@ import {
 } from '@baci/shared/lib';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import type { Product, ProductVariant } from '@/lib/products';
+import {
+  type CriticalRouteOfferInput,
+  resolveCriticalRouteOffer,
+} from './critical-route-offer';
 
 export type CategoryProductRouteSearchParams = Record<
   string,
   string | string[] | undefined
 >;
+
+export interface ServerPdpRouteSelectionStatus {
+  missingVariantId: boolean;
+  missingOfferId: boolean;
+  hasMissingRouteSelection: boolean;
+}
+
+export function resolveServerPdpRouteSelectionStatus({
+  product,
+  offers,
+  searchParams,
+}: {
+  product: Product;
+  offers?: readonly CriticalRouteOfferInput[] | null;
+  searchParams: CategoryProductRouteSearchParams;
+}): ServerPdpRouteSelectionStatus {
+  const selectionResolution = resolveVariantSelectionParamResolution(
+    product,
+    searchParams
+  );
+  const missingVariantId = selectionResolution.type === 'invalid_variant_id';
+  const missingOfferId = resolveCriticalRouteOffer({
+    offers: offers ?? product.offers,
+    searchParams,
+  }).missing;
+
+  return {
+    missingVariantId,
+    missingOfferId,
+    hasMissingRouteSelection: missingVariantId || missingOfferId,
+  };
+}
 
 export function normalizeRouteSelectionValue(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : '';

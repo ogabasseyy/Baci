@@ -66,3 +66,14 @@ Further investigation must isolate gallery/thumbnails, detail mounting and
 background work with separate release-like captures, retaining whole-operation
 frame tails and functional price/stock/selection checks. No product-page smoothness
 or universal crash-freedom claim is made here.
+
+## PR runtime launch check
+
+The Android APK built from d442a5a2b8 (after synchronizing main) was installed
+without clearing data and cold-launched on the Samsung. It reached Home with an
+empty cart and no fatal entry for that process. Startup markers reported native
+intro completion, then router/first layout, then splash-hide completion, each
+once. Times relative to JS entry were 5.327 s, 6.052 s (first layout), and 7.157 s
+(hide completion). These are event timings, not display-frame measurements.
+The subsequent server-off coverage follow-up changes tests/documentation only;
+it does not change the runtime exercised by this APK.

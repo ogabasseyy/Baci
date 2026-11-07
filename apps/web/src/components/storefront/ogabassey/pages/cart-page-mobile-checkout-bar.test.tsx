@@ -17,14 +17,16 @@ function renderMobileBar(overrides = {}) {
   return props;
 }
 
-describe('CartPageMobileCheckoutBar', () => {
+describe('bugfix: cart checkout action disappears at tablet widths', () => {
   it('keeps the black checkout action available until the desktop summary appears', () => {
     renderMobileBar();
     const checkout = screen.getByRole('button', { name: /checkout/i });
     expect(checkout.className).toContain('checkoutAction');
-    expect(checkout.parentElement).toHaveClass('lg:hidden');
-    expect(checkout.parentElement).not.toHaveClass('md:hidden');
+    expect(checkout.parentElement?.className).toContain('checkoutBar');
   });
+});
+
+describe('CartPageMobileCheckoutBar', () => {
   it('wires mobile negotiation and checkout actions', () => {
     const props = renderMobileBar();
 

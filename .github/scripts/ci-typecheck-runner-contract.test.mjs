@@ -39,5 +39,8 @@ test('typecheck requires explicit private opt-in and trusted repository head', (
 });
 
 test('typecheck job does not reference secrets', () => {
-  assert.doesNotMatch(JSON.stringify(job), /\bsecrets\s*(?:\.|\[)/);
+  const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
+  assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(job);
 });

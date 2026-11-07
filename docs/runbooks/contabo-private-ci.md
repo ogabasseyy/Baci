@@ -34,3 +34,14 @@ addition to the existing private CI switch. Fork PRs and merge groups remain Git
 self-hosted typechecks receive no remote-cache credentials. With one runner,
 lint and typecheck queue behind each other. Remove the typecheck variable to
 route subsequently scheduled typechecks back to GitHub-hosted runners.
+
+Full web-test shards have a third opt-in. After representative full shards
+pass on the isolated Contabo runner, set `BACI_PRIVATE_WEB_TEST_ENABLED` to
+`true` alongside `BACI_PRIVATE_CI_ENABLED`. The six shards retain full Git
+history and reference no configured repository secrets; each uses at most four Vitest workers.
+Fork PRs and merge groups continue on GitHub-hosted runners. With one Contabo
+runner the six shards run sequentially, so monitor total queue time, disk
+usage, test isolation and cancellation cleanup before enabling it broadly.
+Remove the web-test variable to send newly scheduled shards back to hosted
+runners. A zero Actions budget can prevent hosted jobs from starting when
+included usage is exhausted; do not increase the budget without owner approval.

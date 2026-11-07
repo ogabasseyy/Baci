@@ -264,8 +264,8 @@ jobs:
     # Only the full-affected plan runs the complete web suite; targeted plans
     # keep their narrow vitest invocations inside quality-test.
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 45 || 25 }}
     strategy:
       fail-fast: false
       matrix:
@@ -285,7 +285,12 @@ jobs:
       - name: Run web vitest shard
         env:
           VITEST_SHARD: ${{ matrix.shard }}
-        run: pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
+        run: |
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6" --maxWorkers=4
+          else
+            pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
+          fi
 
   quality-db-replay:
     name: Quality Gate - DB Replay

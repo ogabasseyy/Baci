@@ -65,7 +65,10 @@ test('routes lint to the private runner only for an opted-in private repository 
 });
 
 test('lint job does not reference secrets', () => {
-  assert.doesNotMatch(JSON.stringify(workflow.jobs['quality-lint']), /\bsecrets\s*(?:\.|\[)/);
+  const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
+  assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(workflow.jobs['quality-lint']);
 });
 
 // GitHub expressions limited to `needs.changes.outputs.*`, quoted strings,

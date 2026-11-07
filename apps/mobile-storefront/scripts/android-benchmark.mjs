@@ -5,6 +5,7 @@ import { chmodSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdt
 import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createAndroidBenchmarkGradleInit } from './android-benchmark-gradle.mjs';
 import { resolveBenchmarkIdentity } from './android-benchmark-identity.mjs';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -113,26 +114,8 @@ chmodSync(temp, 0o700);
 const initFile = join(temp, 'benchmark.gradle');
 const testFile = join(appDir, 'android/settings-gradle-include-build.test.mjs');
 const testBackup = existsSync(testFile) ? readFileSync(testFile) : null;
-const init = `gradle.beforeProject { project ->
-  if (project.name == 'app') {
-    project.pluginManager.withPlugin('com.android.application') {
-      project.extensions.getByName('androidComponents').finalizeDsl { androidDsl ->
-        def release = androidDsl.buildTypes.getByName('release')
-        ${identity.suffix ? "release.applicationIdSuffix = '.benchmark'" : ''}
-        release.signingConfig = androidDsl.signingConfigs.getByName('debug')
-      }
-    }
-    project.pluginManager.withPlugin('com.facebook.react') {
-      project.extensions.getByName('react').extraPackagerArgs.addAll(['--max-workers', '2'])
-    }
-  }
-  project.tasks.configureEach { task ->
-    // The SDK sets enabled=true after task registration. An onlyIf predicate
-    // stays false even when that later configuration re-enables the task.
-    if (task.name.toLowerCase().contains('posthog') && task.name.toLowerCase().contains('upload')) task.onlyIf { false }
-  }
-}
-`;
+const init = createAndroidBenchmarkGradleInit(identity);
+
 function execute(label, command, commandArgs, cwd) {
   console.log(`${label}…`);
   const rawLog = join(temp, 'step-output.log');

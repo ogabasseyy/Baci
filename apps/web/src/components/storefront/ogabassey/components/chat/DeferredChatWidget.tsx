@@ -1,12 +1,12 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
 import { useCart } from '@/hooks/cart';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
+import { EkaetteAskBar } from './EkaetteAskBar';
 import type { ChatWidgetProps } from './ChatWidget';
 
 interface ChatWidgetModule {
@@ -57,12 +57,16 @@ export function DeferredChatWidget({
   const [ChatRuntime, setChatRuntime] =
     useState<ChatWidgetModule['ChatWidget'] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [submittedDraft, setSubmittedDraft] = useState<string | undefined>();
 
   const isSanta = theme === 'santa';
   const footerOffset = getMobileOffset(pathname);
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
   const anchorClasses = [
     'ogabassey-chat-anchor',
+    !isSanta && 'ogabassey-chat-anchor--ask',
     isCartOpen && 'ogabassey-chat-anchor--hidden',
   ]
     .filter(Boolean)
@@ -75,17 +79,24 @@ export function DeferredChatWidget({
     .filter(Boolean)
     .join(' ');
 
-  const activateChat = () => {
+  const activateChat = (message?: string) => {
     if (ChatRuntime || isLoading) {
       return;
     }
 
+    setLoadError(null);
     setIsLoading(true);
     const resolveChatWidget = loadChatWidget ?? loadDefaultChatWidget;
 
     void resolveChatWidget()
       .then((module) => {
+        if (message?.trim()) {
+          setSubmittedDraft(message.trim());
+        }
         setChatRuntime(() => module.ChatWidget);
+      })
+      .catch(() => {
+        setLoadError('Could not open Ekaette. Your question is saved; try again.');
       })
       .finally(() => {
         setIsLoading(false);
@@ -93,7 +104,7 @@ export function DeferredChatWidget({
   };
 
   if (ChatRuntime) {
-    return <ChatRuntime openOnMount />;
+    return <ChatRuntime openOnMount initialMessage={submittedDraft} />;
   }
 
   return (
@@ -103,15 +114,26 @@ export function DeferredChatWidget({
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >
       <StorefrontChatStyleLoader />
-      <div className="relative group">
-        <button
-          type="button"
-          onClick={activateChat}
-          disabled={isLoading}
-          className={buttonClasses}
-          aria-label="Open AI chat assistant"
-        >
-          {isSanta ? (
+      {!isSanta ? (
+        <EkaetteAskBar
+          error={loadError}
+          isLoading={isLoading}
+          onChange={setDraft}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (draft.trim() && !isLoading) activateChat(draft);
+          }}
+          value={draft}
+        />
+      ) : (
+        <div className="relative group">
+          <button
+            type="button"
+            onClick={() => activateChat()}
+            disabled={isLoading}
+            className={buttonClasses}
+            aria-label="Open AI chat assistant"
+          >
             <div className="relative w-full h-full">
               <img
                 src="/african-santa-head.svg"
@@ -119,24 +141,9 @@ export function DeferredChatWidget({
                 className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
               />
             </div>
-          ) : (
-            <>
-              <Sparkles
-                size={28}
-                className="md:w-8 md:h-8 drop-shadow-xs"
-                fill="currentColor"
-                fillOpacity={0.1}
-              />
-              <span className="ogabassey-chat-badge">
-                <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">
-                  AI
-                </span>
-              </span>
-            </>
-          )}
-        </button>
-      </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

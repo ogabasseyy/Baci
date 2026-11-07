@@ -32,26 +32,6 @@ EXPECTED_RUN = [
     'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
 ]
 
-PRIVATE_ENV = "        env:\n          GH_TOKEN: ${{ github.token }}\n"
-PRIVATE_RUN = """            base_sha=$(jq -r .pull_request.base.sha "$GITHUB_EVENT_PATH")
-            printf '%s' "$base_sha" | LC_ALL=C grep -Eq '^[0-9a-f]{40}$'
-            [ "$GITHUB_SERVER_URL" = "https://github.com" ]
-            [ "$(jq -r .repository.full_name "$GITHUB_EVENT_PATH")" = "$GITHUB_REPOSITORY" ]
-            umask 077
-            ask_dir=$(mktemp -d)
-            trap 'rm -rf "$ask_dir"' EXIT
-            askpass="$ask_dir/askpass"
-            # shellcheck disable=SC2016 # The helper expands the token only when Git runs it.
-            printf '%s\\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\\n" x-access-token ;; *) printf "%s\\n" "$GH_TOKEN" ;; esac' > "$askpass"
-            chmod 700 "$askpass"
-            GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch --no-tags --depth 1 "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" "$base_sha"
-            unset GH_TOKEN
-            rm -rf "$ask_dir"
-            trap - EXIT
-"""
-PRIVATE_RUN_LINES = [line.strip() for line in PRIVATE_RUN.splitlines() if not line.strip().startswith("#")]
-EXPECTED_RUN_PRIVATE = EXPECTED_RUN[:2] + PRIVATE_RUN_LINES + EXPECTED_RUN[4:]
-
 # The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
 EXPECTED_FIRST_STEP = [
     "- name: Checkout head tree as data # nosemgrep: yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout",
@@ -271,10 +251,8 @@ def workflow_failures(workflow_text):
         if len(line) - len(line.lstrip()) <= indent:
             break
         body.append(stripped)
-    if body not in (EXPECTED_RUN, EXPECTED_RUN_PRIVATE):
+    if body != EXPECTED_RUN:
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
-    if body == EXPECTED_RUN_PRIVATE and "        env:" not in block:
-        failures.append("authenticated fetch must supply its read-only token")
     # Startup env preloads PR code before the checker starts: job env carries only the pin, steps none.
     for line in block:
         if _has_escaped_key(line):
@@ -296,14 +274,7 @@ def workflow_failures(workflow_text):
                     break
                 continue
             env_open = False
-        if re.match(r"^        [\"']?env[\"']?\s*:", line) and not (
-            body == EXPECTED_RUN_PRIVATE and line == "        env:"
-            and block.count("        env:") == 1
-            and "          GH_TOKEN: ${{ github.token }}" in block
-            and "        shell: bash" in block
-            and block.index("          GH_TOKEN: ${{ github.token }}") == block.index(line) + 1
-            and block.index("        shell: bash") == block.index(line) + 2
-        ):
+        if re.match(r"^        [\"']?env[\"']?\s*:", line):
             failures.append("contract workflow steps must not set environment")
             break
     # Steps must run their scripts with the default shell: a custom shell

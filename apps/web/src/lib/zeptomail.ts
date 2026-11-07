@@ -158,6 +158,9 @@ interface SendEmailParams {
   // cron phases pass 1 and let the next tick retry instead of burning
   // the phase on in-process retries.
   maxAttemptsPerSender?: number;
+  // Log only the provider error code (never its message or details) for
+  // call graphs that must keep provider bodies out of logs.
+  redactProviderErrorLog?: boolean;
 }
 
 interface EmailAttachment {
@@ -376,6 +379,7 @@ export async function sendEmail({
   resetTransportDispatch,
   fallbackDeadlineMs,
   maxAttemptsPerSender = RETRY_CONFIG.maxRetries + 1,
+  redactProviderErrorLog = false,
 }: SendEmailParams): Promise<EmailResult> {
   const sender = await resolveSenderAddress(
     emailType,
@@ -487,7 +491,12 @@ export async function sendEmail({
   const totalAttempts = outcome.attempts;
   const finalSenderAddress = outcome.finalSenderAddress;
 
-  console.error('ZeptoMail email error:', JSON.stringify(lastError));
+  console.error(
+    'ZeptoMail email error:',
+    redactProviderErrorLog
+      ? (lastError.code ?? 'unknown')
+      : JSON.stringify(lastError)
+  );
   await updateEmailAttempts(auditIds, {
     status: 'failed',
     attempt_count: totalAttempts,

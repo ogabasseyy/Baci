@@ -4289,33 +4289,39 @@ export type Database = {
           app_version: string | null;
           categories: string[] | null;
           created_at: string | null;
+          device: string | null;
           id: string;
           merchant_id: string | null;
           message: string | null;
           platform: string | null;
-          rating: number;
+          rating: number | null;
+          screen: string | null;
           user_id: string | null;
         };
         Insert: {
           app_version?: string | null;
           categories?: string[] | null;
           created_at?: string | null;
+          device?: string | null;
           id?: string;
           merchant_id?: string | null;
           message?: string | null;
           platform?: string | null;
-          rating: number;
+          rating?: number | null;
+          screen?: string | null;
           user_id?: string | null;
         };
         Update: {
           app_version?: string | null;
           categories?: string[] | null;
           created_at?: string | null;
+          device?: string | null;
           id?: string;
           merchant_id?: string | null;
           message?: string | null;
           platform?: string | null;
-          rating?: number;
+          rating?: number | null;
+          screen?: string | null;
           user_id?: string | null;
         };
         Relationships: [

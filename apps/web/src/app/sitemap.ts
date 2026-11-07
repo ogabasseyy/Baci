@@ -3,15 +3,29 @@ import { cookies, headers } from 'next/headers';
 import { getPlatformBlogSitemapPosts } from '@/lib/platform-blog';
 import { createClient } from '@/lib/supabase/server';
 
+interface SitemapDomain {
+  domain: string | null;
+  status: string | null;
+  domain_type: string | null;
+  is_primary?: boolean | null;
+}
+
+interface SitemapMerchant {
+  slug: string | null;
+  updated_at: string | null;
+  domains?: SitemapDomain | SitemapDomain[] | null;
+}
+
 // Fetch active merchants for dynamic storefront URLs
-async function fetchActiveMerchants() {
+async function fetchActiveMerchants(): Promise<SitemapMerchant[]> {
   try {
     const supabase = createClient(await cookies());
     const { data: merchants, error } = await supabase
       .from('merchants')
-      .select('slug, updated_at')
+      .select(
+        'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+      )
       .eq('is_published', true)
-      .is('custom_domain', null)
       .not('slug', 'is', null)
       .order('updated_at', { ascending: false });
 
@@ -20,7 +34,22 @@ async function fetchActiveMerchants() {
       return [];
     }
 
-    return merchants || [];
+    return ((merchants as SitemapMerchant[] | null) || []).filter(
+      (merchant) => {
+        const domainRows = Array.isArray(merchant.domains)
+          ? merchant.domains
+          : merchant.domains
+            ? [merchant.domains]
+            : [];
+        const hasActiveCustomDomain = domainRows.some(
+          (d) =>
+            d.status === 'active' &&
+            (d.domain_type === 'custom' || d.domain_type === 'purchased') &&
+            Boolean(d.domain?.trim())
+        );
+        return !hasActiveCustomDomain;
+      }
+    );
   } catch (error) {
     console.error('Failed to fetch merchants:', error);
     return [];

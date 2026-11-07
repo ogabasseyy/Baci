@@ -5,7 +5,6 @@ const mockHeaders = vi.fn();
 const mockCreateClient = vi.fn();
 const mockSelect = vi.fn();
 const mockEq = vi.fn();
-const mockIs = vi.fn();
 const mockNot = vi.fn();
 const mockOrder = vi.fn();
 const mockGetPlatformBlogSitemapPosts = vi.fn();
@@ -46,12 +45,8 @@ describe('root sitemap', () => {
       order: mockOrder,
     });
 
-    mockIs.mockReturnValue({
-      not: mockNot,
-    });
-
     mockEq.mockReturnValue({
-      is: mockIs,
+      not: mockNot,
     });
 
     mockSelect.mockReturnValue({
@@ -111,8 +106,10 @@ describe('root sitemap', () => {
 
     const result = await sitemap();
 
+    expect(mockSelect).toHaveBeenCalledWith(
+      'slug, updated_at, domains(domain, status, domain_type, is_primary)'
+    );
     expect(mockEq).toHaveBeenCalledWith('is_published', true);
-    expect(mockIs).toHaveBeenCalledWith('custom_domain', null);
     expect(mockNot).toHaveBeenCalledWith('slug', 'is', null);
     expect(result).toEqual(
       expect.arrayContaining([
@@ -124,6 +121,101 @@ describe('root sitemap', () => {
         }),
       ])
     );
+  });
+
+  it('excludes merchants with active custom or purchased domains and includes merchants without custom domains', async () => {
+    mockOrder.mockResolvedValueOnce({
+      data: [
+        {
+          slug: 'custom-domain-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'custom.example.com',
+              status: 'active',
+              domain_type: 'custom',
+              is_primary: true,
+            },
+          ],
+        },
+        {
+          slug: 'purchased-domain-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'purchased.example.com',
+              status: 'active',
+              domain_type: 'purchased',
+              is_primary: false,
+            },
+          ],
+        },
+        {
+          slug: 'pending-domain-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'pending.example.com',
+              status: 'pending',
+              domain_type: 'custom',
+              is_primary: true,
+            },
+          ],
+        },
+        {
+          slug: 'empty-domain-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: '   ',
+              status: 'active',
+              domain_type: 'custom',
+              is_primary: true,
+            },
+          ],
+        },
+        {
+          slug: 'subdomain-type-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [
+            {
+              domain: 'subdomain.usebaci.com',
+              status: 'active',
+              domain_type: 'subdomain',
+              is_primary: true,
+            },
+          ],
+        },
+        {
+          slug: 'no-domain-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: [],
+        },
+        {
+          slug: 'single-obj-active-store',
+          updated_at: '2026-04-21T12:00:00.000Z',
+          domains: {
+            domain: 'single.example.com',
+            status: 'active',
+            domain_type: 'custom',
+            is_primary: true,
+          },
+        },
+      ],
+      error: null,
+    });
+
+    const { default: sitemap } = await import('./sitemap');
+    const result = await sitemap();
+    const urls = result.map((entry) => entry.url);
+
+    expect(urls).not.toContain('https://usebaci.com/custom-domain-store');
+    expect(urls).not.toContain('https://usebaci.com/purchased-domain-store');
+    expect(urls).not.toContain('https://usebaci.com/single-obj-active-store');
+    expect(urls).toContain('https://usebaci.com/pending-domain-store');
+    expect(urls).toContain('https://usebaci.com/empty-domain-store');
+    expect(urls).toContain('https://usebaci.com/subdomain-type-store');
+    expect(urls).toContain('https://usebaci.com/no-domain-store');
   });
 
   it('does not fabricate lastModified timestamps on static pages or untimestamped records', async () => {
@@ -180,8 +272,18 @@ describe('root sitemap', () => {
       },
       {
         published_at: 'malformed-published-at',
-        slug: 'invalid-post',
+        slug: 'invalid-post-both',
         updated_at: 'malformed-updated-at',
+      },
+      {
+        published_at: null,
+        slug: 'invalid-post-updated-only',
+        updated_at: 'malformed-updated-at',
+      },
+      {
+        published_at: 'malformed-published-at',
+        slug: 'invalid-post-published-only',
+        updated_at: null,
       },
     ]);
 
@@ -194,15 +296,25 @@ describe('root sitemap', () => {
     const fallbackPostEntry = result.find(
       (entry) => entry.url === 'https://usebaci.com/blog/fallback-post'
     );
-    const invalidPostEntry = result.find(
-      (entry) => entry.url === 'https://usebaci.com/blog/invalid-post'
+    const invalidPostBothEntry = result.find(
+      (entry) => entry.url === 'https://usebaci.com/blog/invalid-post-both'
+    );
+    const invalidPostUpdatedOnlyEntry = result.find(
+      (entry) =>
+        entry.url === 'https://usebaci.com/blog/invalid-post-updated-only'
+    );
+    const invalidPostPublishedOnlyEntry = result.find(
+      (entry) =>
+        entry.url === 'https://usebaci.com/blog/invalid-post-published-only'
     );
 
     expect(storeEntry?.lastModified).toBeUndefined();
     expect(fallbackPostEntry?.lastModified).toEqual(
       new Date('2026-05-16T09:00:00.000Z')
     );
-    expect(invalidPostEntry?.lastModified).toBeUndefined();
+    expect(invalidPostBothEntry?.lastModified).toBeUndefined();
+    expect(invalidPostUpdatedOnlyEntry?.lastModified).toBeUndefined();
+    expect(invalidPostPublishedOnlyEntry?.lastModified).toBeUndefined();
   });
 
   it('falls back to static platform pages when dynamic lookups fail', async () => {

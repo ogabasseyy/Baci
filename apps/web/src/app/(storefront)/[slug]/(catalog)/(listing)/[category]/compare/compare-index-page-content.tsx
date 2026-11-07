@@ -94,7 +94,9 @@ export function CompareIndexPageContent({
       ) : (
         <section className="mt-8 rounded-2xl border border-store-background-text/10 bg-store-background p-8 text-center shadow-xs">
           <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
-            <span className="text-xl font-bold">⇌</span>
+            <span aria-hidden="true" className="text-xl font-bold">
+              ⇌
+            </span>
           </div>
           <p className="text-sm font-medium text-store-background-text/65">
             No comparison guides are ready for this category yet.

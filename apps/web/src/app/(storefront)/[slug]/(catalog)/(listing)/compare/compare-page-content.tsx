@@ -80,7 +80,9 @@ export async function ComparePageContent({
     sections.length === 0 ? (
       <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-xs">
         <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-store-primary/10 text-store-primary">
-          <span className="text-xl font-bold">⇌</span>
+          <span aria-hidden="true" className="text-xl font-bold">
+            ⇌
+          </span>
         </div>
         <h2 className="text-xl font-semibold text-store-background-text">
           {queryFailed

@@ -261,6 +261,14 @@ describe('deploy crontab', () => {
       /17\s+\*\s+\*\s+\*\s+\* flock -n \$REMOTE_DIR\/locks\/process-import-jobs\.lock/
     );
     assert.match(deployScript, /\$REMOTE_DIR\/bin\/process-import-jobs\.sh/);
+    assert.match(
+      deployScript,
+      /process-import-jobs\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=import-jobs && cd/
+    );
+    assert.match(
+      deployScript,
+      /sync-jumia-orders\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=jumia-order-sync && cd/
+    );
     assert.doesNotMatch(
       deployScript,
       /2-59\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/process-import-jobs\.lock/

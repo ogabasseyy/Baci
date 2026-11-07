@@ -45,3 +45,32 @@ for (const [wrapper, label, script] of [
     }
   });
 }
+
+for (const [wrapper, label, script, profile] of [
+  [
+    'sync-jumia-orders.sh',
+    'sync-jumia-orders',
+    'src/scripts/sync-jumia-orders.ts',
+    'jumia-order-sync',
+  ],
+  [
+    'process-import-jobs.sh',
+    'process-import-jobs',
+    'src/scripts/process-import-jobs.ts',
+    'import-jobs',
+  ],
+]) {
+  // Regression: without a bounded worker profile, env.ts validated these
+  // workers as the public web app and demanded QUIZ_RPC_SERVER_SECRET.
+  test(`${wrapper} runs under the bounded ${profile} worker profile`, () => {
+    const source = readFileSync(join(directory, wrapper), 'utf8');
+
+    assert.match(
+      source,
+      new RegExp(
+        `export BACI_WORKER_PROFILE="\\$\\{BACI_WORKER_PROFILE:-${profile}\\}"\\nexec "\\$SCRIPT_DIR/run-web-script\\.sh" ${label} ${script}`
+      )
+    );
+    assert.doesNotMatch(source, /QUIZ_RPC_SERVER_SECRET/);
+  });
+}

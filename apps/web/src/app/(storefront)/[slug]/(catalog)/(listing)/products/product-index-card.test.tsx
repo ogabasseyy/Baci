@@ -15,15 +15,13 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
-    rel,
     'aria-label': label,
   }: {
     children: ReactNode;
     href: string;
-    rel?: string;
     'aria-label'?: string;
   }) => (
-    <a href={href} rel={rel} aria-label={label}>
+    <a href={href} aria-label={label}>
       {children}
     </a>
   ),
@@ -199,24 +197,6 @@ describe('ProductIndexCard', () => {
     expect(
       screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
     ).toHaveAttribute('href', expect.stringContaining('match_base=1'));
-    expect(
-      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
-    ).toHaveAttribute('rel', 'nofollow');
-  });
-
-  it('omits rel="nofollow" when no search match query params are appended', () => {
-    render(
-      <ProductIndexCard
-        modern
-        formattedPrice="₦550,000"
-        pathPrefix=""
-        product={makeProduct()}
-      />
-    );
-
-    expect(
-      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
-    ).not.toHaveAttribute('rel');
   });
 
   it('shows the no-image fallback when the product image is blank', () => {

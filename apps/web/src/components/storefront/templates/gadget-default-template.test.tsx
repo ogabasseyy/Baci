@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
@@ -67,8 +67,21 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   }),
 }));
 
+let selectChangeHandler: (val: string) => void = () => {};
+
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Select: ({
+    children,
+    onValueChange,
+  }: {
+    children: ReactNode;
+    onValueChange?: (val: string) => void;
+  }) => {
+    if (onValueChange) {
+      selectChangeHandler = onValueChange;
+    }
+    return <div>{children}</div>;
+  },
   SelectTrigger: ({ children }: { children?: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -106,6 +119,13 @@ describe('GadgetDefaultTemplate', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: /shop by/i })
     ).toBeInTheDocument();
+    act(() => {
+      selectChangeHandler('brand');
+    });
+    expect(screen.getByRole('link', { name: 'Apple' })).toHaveAttribute(
+      'href',
+      '/gadgets/search?q=Apple'
+    );
     expect(screen.getByTestId('product-grid')).toBeInTheDocument();
     expect(screen.getByTestId('newsletter')).toBeInTheDocument();
     expect(screen.getByTestId('footer')).toBeInTheDocument();

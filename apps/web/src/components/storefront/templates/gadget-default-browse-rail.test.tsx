@@ -2,10 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { IndustryTheme } from '@/hooks/use-industry-theme';
-import {
-  GadgetDefaultBrowseRail,
-  PRICE_RANGES,
-} from './gadget-default-browse-rail';
+import { GadgetDefaultBrowseRail } from './gadget-default-browse-rail';
 
 vi.mock('next/link', () => ({
   default: ({
@@ -149,10 +146,15 @@ describe('GadgetDefaultBrowseRail', () => {
       selectChangeHandler('price');
     });
 
-    for (const range of PRICE_RANGES) {
-      const link = screen.getByRole('link', { name: range.label });
+    for (const [label, expectedHref] of [
+      ['Under ₦5,000', '/search?max_price=5000'],
+      ['₦5,000 - ₦20,000', '/search?min_price=5000&max_price=20000'],
+      ['₦20,000 - ₦50,000', '/search?min_price=20000&max_price=50000'],
+      ['Over ₦50,000', '/search?min_price=50000'],
+    ] as const) {
+      const link = screen.getByRole('link', { name: label });
       expect(link).toBeInTheDocument();
-      expect(link).toHaveAttribute('href', range.href);
+      expect(link).toHaveAttribute('href', expectedHref);
       expect(link).toHaveAttribute('rel', 'nofollow');
     }
   });

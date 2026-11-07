@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 
 export type BrowseMode = 'category' | 'brand' | 'price';
 
-export const PRICE_RANGES = [
+const PRICE_RANGES = [
   { label: 'Under ₦5,000', href: '/search?max_price=5000' },
   {
     label: '₦5,000 - ₦20,000',
@@ -87,6 +87,7 @@ export function GadgetDefaultBrowseRail({
           onValueChange={(v) => setBrowseMode(v as BrowseMode)}
         >
           <SelectTrigger
+            aria-label="Shop by"
             className="w-[180px] text-2xl font-bold border-none shadow-none focus:ring-0 px-0 h-auto"
             style={{ color: theme.colors.accent }}
           >
@@ -134,7 +135,9 @@ export function GadgetDefaultBrowseRail({
             allBrands.map((brand) => (
               <Link
                 key={brand}
-                href={asRoute(getFullHref(`/search?q=${brand}`))}
+                href={asRoute(
+                  getFullHref(`/search?q=${encodeURIComponent(brand)}`)
+                )}
                 rel="nofollow"
                 className={cn(
                   'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',

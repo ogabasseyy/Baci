@@ -1,8 +1,8 @@
 import { getStorefrontContentSegments } from '@/lib/proxy/routing-policy';
 
-export type StorefrontBlogListingRouteKind = 'root' | 'category' | 'author';
+type StorefrontBlogListingRouteKind = 'root' | 'category' | 'author';
 
-export function getStorefrontBlogListingRouteKind(
+function getStorefrontBlogListingRouteKind(
   pathname: string,
   hostname: string | undefined,
   routeType: 'admin' | 'auth' | 'storefront' | 'api'
@@ -43,7 +43,7 @@ export function getStorefrontBlogListingRouteKind(
     return directMatch;
   }
 
-  if (pathSegments.length >= 2) {
+  if (!hostname && pathSegments.length >= 2) {
     return matchSegments(pathSegments.slice(1));
   }
 

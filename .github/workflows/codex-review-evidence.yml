@@ -1,0 +1,60 @@
+# Advisory observation only. The app comment format is not a signed review
+# API and this status must not be added as a required gate without review.
+name: Codex Review Evidence
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  # The bot ID must match BOT_USER_ID in codex-review-evidence.mjs.
+  group: codex-evidence-${{ github.event_name == 'issue_comment' && (github.event.comment.user.id != 199175422 || github.event.comment.user.type != 'Bot') && github.run_id || github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       github.event.comment.user.id == 199175422 && github.event.comment.user.type == 'Bot')
+    # The persistent CI runner executes PR code and cannot safely hold this
+    # status-writing token. This small advisory job uses hosted minutes.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # Mark the current head pending even if later checkout or setup fails.
+      - name: Start a fresh observation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$PR_NUMBER" =~ ^[0-9]+$ ]]
+          head=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .head.sha)
+          [[ "$head" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method POST "repos/$REPO/statuses/$head" -f state=pending \
+            -f context='Codex review evidence / code' \
+            -f description='Checking the current Codex code review' \
+            -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
+      # Always check out the trusted default branch, never the PR branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+      - name: Observe Codex code review for the current head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: bash .github/scripts/report-codex-review-evidence.sh "$REPO" "$PR_NUMBER"

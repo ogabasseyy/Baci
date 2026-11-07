@@ -19,6 +19,11 @@
   --color-store-option-secondary: var(--store-option-secondary, #f3f4f6);
 }
 
+:root {
+  --store-checkout-button-bg: #000;
+  --store-checkout-button-text: #fff;
+}
+
 @layer base {
   body {
     margin: 0;

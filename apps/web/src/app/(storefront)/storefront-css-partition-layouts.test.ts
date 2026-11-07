@@ -53,7 +53,7 @@ describe('storefront CSS partitioning (route layouts and delta sheets)', () => {
       comparePage.match(
         /var\(--store-background,#ffffff\).*?var\(--store-background-text,#111827\)/g
       )
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(comparePage).not.toContain('storefront-eager-full-css-layout');
     expect(compareLayout).toContain('StorefrontEagerListingCssLayout');
     expect(categoryLayout).toContain('StorefrontEagerListingCssLayout');

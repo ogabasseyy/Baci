@@ -3,46 +3,12 @@ import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { hasAnyRenderedAboutField } from '@/types/about-page';
 import { hasPublishableFaqContent } from '@/types/faq';
+import { hasPublishableContactInfo } from './has-publishable-contact-info';
 import { isStorefrontStaticSitemapEligible } from './is-storefront-static-sitemap-eligible';
 import type { SitemapStaticMerchant } from './sitemap-static-merchant';
 
 function hasNonEmptyText(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-export function hasPublishableContactInfo(
-  merchant: {
-    pages?: { contact?: string | null } | null;
-    email?: string | null;
-    phone?: string | null;
-  },
-  trustProfile: {
-    supportEmail?: string;
-    supportPhone?: string;
-  }
-): boolean {
-  return [
-    merchant.pages?.contact,
-    merchant.email,
-    merchant.phone,
-    trustProfile.supportEmail,
-    trustProfile.supportPhone,
-  ].some(hasNonEmptyText);
-}
-
-export function isLegalPagePublishable(
-  merchant: {
-    template_id?: string | null;
-    pages?: { privacy?: string | null; terms?: string | null } | null;
-  },
-  kind: 'privacy' | 'terms'
-): boolean {
-  const hasPageContent = Boolean(merchant.pages?.[kind]);
-  const templateHasPolicyPage =
-    Boolean(merchant.template_id) &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
-  return hasPageContent || templateHasPolicyPage;
 }
 
 export function getStaticSitemapEntries({

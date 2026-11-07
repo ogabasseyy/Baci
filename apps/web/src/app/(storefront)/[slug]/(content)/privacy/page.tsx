@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
-import { isLegalPagePublishable } from '@/app/(storefront)/[slug]/get-static-sitemap-entries';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2PrivacyPolicy } from '@/components/storefront/ogabassey/pages/privacy-policy';
@@ -15,6 +14,7 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import { isLegalPagePublishable } from '../../is-legal-page-publishable';
 import { PrivacyPageClient } from '../pages/privacy/privacy-page-client';
 
 interface PageProps {

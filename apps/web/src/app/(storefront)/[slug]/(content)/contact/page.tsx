@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { hasPublishableContactInfo } from '@/app/(storefront)/[slug]/get-static-sitemap-entries';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
 import {
@@ -9,6 +8,7 @@ import {
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
+import { hasPublishableContactInfo } from '../../has-publishable-contact-info';
 import { ContactPageContent } from './contact-page-content';
 
 interface PageProps {

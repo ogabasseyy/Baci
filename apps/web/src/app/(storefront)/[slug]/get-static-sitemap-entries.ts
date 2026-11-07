@@ -1,8 +1,8 @@
 import type { MetadataRoute } from 'next';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { hasAnyRenderedAboutField } from '@/types/about-page';
-import { hasPublishableFaqContent } from '@/types/faq';
 import { hasPublishableContactInfo } from './has-publishable-contact-info';
 import { isStorefrontStaticSitemapEligible } from './is-storefront-static-sitemap-eligible';
 import type { SitemapStaticMerchant } from './sitemap-static-merchant';

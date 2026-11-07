@@ -1,7 +1,7 @@
 import type { RegisteredAddress } from '@baci/shared';
 import { normalizeGooglePlaceId } from '@/lib/google-place-id-normalization';
+import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
-import { hasPublishableFaqContent } from '@/types/faq';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileRouteLinks,

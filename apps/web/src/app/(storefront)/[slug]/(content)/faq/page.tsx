@@ -9,10 +9,11 @@ import {
   getMerchantByIdentifier,
   getRequestScopedMerchant,
 } from '@/lib/cached-data';
+import { extractFaqItems } from '@/lib/extract-faq-items';
+import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import { generateFAQSchema, getIndexableRobotsMetadata } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
-import { extractFaqItems, hasPublishableFaqContent } from '@/types/faq';
 import { ContentPageCrawlSummary } from '../content-page-crawl-summary';
 import { FAQPageClient } from '../pages/faq/faq-page-client';
 

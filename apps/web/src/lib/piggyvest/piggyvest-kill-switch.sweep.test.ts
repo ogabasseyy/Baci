@@ -86,18 +86,25 @@ const templateBuilt = /PIGGYVEST_\w*\$\{/;
 const suffixBuilt = /['"`](?!PIGGYVEST_)\w*_ENABLED['"`]/;
 function buildsEnableFlag(text: string): boolean {
   if (!text.includes('PIGGYVEST_')) return false;
-  // Keep literals and operators intact, but exclude comments from the flag
-  // family context. A documentation-only flag name plus a diagnostic such as
-  // DRAIN_NOT_ENABLED must not look like executable flag-name construction.
-  const scanner = ts.createScanner(
+  // Syntax-aware leaf tokens exclude comments without treating slash pairs
+  // inside a regular-expression literal as comment delimiters.
+  const sourceFile = ts.createSourceFile(
+    'kill-switch-scan.ts',
+    text,
     ts.ScriptTarget.Latest,
-    true,
-    undefined,
-    text
+    true
   );
   const tokens: string[] = [];
-  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken)
-    tokens.push(scanner.getTokenText());
+  const collectTokens = (node: ts.Node) => {
+    if (node.kind === ts.SyntaxKind.JSDocComment) return;
+    const children = node.getChildren(sourceFile);
+    if (children.length === 0) {
+      tokens.push(node.getText(sourceFile));
+      return;
+    }
+    for (const child of children) collectTokens(child);
+  };
+  collectTokens(sourceFile);
   const executable = tokens.join(' ');
   return (
     templateBuilt.test(executable) ||
@@ -282,6 +289,11 @@ describe('no direct reads of PiggyVest enable flags', () => {
         buildsEnableFlag(`const prefix = 'PIGGYVEST_'; ${source}`),
         source
       ).toBe(true);
+    expect(
+      buildsEnableFlag(
+        "const re = /[/*]/; const prefix = 'PIGGYVEST_'; const flag = prefix + '_ENABLED';"
+      )
+    ).toBe(true);
   });
   it('no module builds a PIGGYVEST_ name or an _ENABLED suffix at runtime', () => {
     const offenders = sources

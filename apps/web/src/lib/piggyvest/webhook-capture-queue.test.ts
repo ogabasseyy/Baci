@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import type {
-  CaptureDrainExecutor,
-  CaptureDrainStatement,
+import {
+  CaptureDrainDatabaseError,
+  type CaptureDrainExecutor,
+  type CaptureDrainStatement,
 } from './webhook-capture-pg-executor';
 import { createPgCaptureQueue } from './webhook-capture-queue';
 
@@ -71,12 +72,51 @@ describe('createPgCaptureQueue', () => {
     ).toBe(false);
   });
 
+  it('logs only the bounded SQLSTATE when lease renewal fails', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const broken = executorReturning(new CaptureDrainDatabaseError('42501'));
+    try {
+      await expect(
+        createPgCaptureQueue(broken.executor).renew(
+          claimRow.capture_id,
+          claimRow.claim_token
+        )
+      ).resolves.toBe(false);
+      expect(warning).toHaveBeenCalledWith(
+        '[PiggyVest Webhook] Failed to renew captured delivery',
+        { phase: 'renew', sqlState: '42501' }
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
   it('refuses pre-recovery migration status before any claim can be made', async () => {
     const { claimRecoveryVersion: _version, ...oldStatus } = status;
     const old = executorReturning([{ status: oldStatus }]);
     await expect(createPgCaptureQueue(old.executor).status()).rejects.toThrow(
       'PiggyVest capture status failed'
     );
+  });
+  it('preserves the bounded SQLSTATE through status and resolve errors', async () => {
+    const broken = executorReturning(new CaptureDrainDatabaseError('42883'));
+    await expect(
+      createPgCaptureQueue(broken.executor).status()
+    ).rejects.toMatchObject({
+      message: 'PiggyVest capture status failed',
+      sqlState: '42883',
+    });
+    await expect(
+      createPgCaptureQueue(broken.executor).resolve(
+        claimRow.capture_id,
+        claimRow.claim_token,
+        'processed',
+        null
+      )
+    ).rejects.toMatchObject({
+      message: 'PiggyVest capture resolve failed',
+      sqlState: '42883',
+    });
   });
   it('claims with the same lease and inline-processing grace as the web queue', async () => {
     const { executor, query } = executorReturning([claimRow]);

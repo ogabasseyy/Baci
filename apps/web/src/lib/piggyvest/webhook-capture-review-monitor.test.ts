@@ -8,6 +8,7 @@ vi.mock('./webhook-alerts', () => ({
 }));
 
 import { monitorCaptureReviews } from './webhook-capture-review-monitor';
+import type { CaptureReviewState } from './webhook-capture-review-state';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -22,11 +23,23 @@ const snapshot = (needsReview: number) => ({
   lastProcessedAt: null,
 });
 
+function memoryState(initialCount = 0): CaptureReviewState {
+  let count = initialCount;
+  return {
+    readLastPagedCount: () => count,
+    writeLastPagedCount: (nextCount) => {
+      count = nextCount;
+    },
+  };
+}
+
 it('retries a parked review notification after a crash or failed send', async () => {
   const status = vi.fn(async () => snapshot(1));
-  await monitorCaptureReviews(status);
+  const state = memoryState();
+  await monitorCaptureReviews(status, state);
   alerts.send.mockResolvedValue(true);
-  await monitorCaptureReviews(status);
+  await monitorCaptureReviews(status, state);
+  await monitorCaptureReviews(status, state);
   expect(alerts.send).toHaveBeenCalledTimes(2);
   expect(alerts.send).toHaveBeenLastCalledWith(
     'PIGGYVEST_WEBHOOK_NEEDS_REVIEW',
@@ -35,6 +48,16 @@ it('retries a parked review notification after a crash or failed send', async ()
 });
 
 it('stops alerting once the durable review state has been resolved', async () => {
-  await monitorCaptureReviews(async () => snapshot(0));
+  const state = memoryState(1);
+  await monitorCaptureReviews(async () => snapshot(0), state);
+  await monitorCaptureReviews(async () => snapshot(0), state);
   expect(alerts.send).not.toHaveBeenCalled();
+});
+
+it('pages only when the review count increases and resets after resolution', async () => {
+  alerts.send.mockResolvedValue(true);
+  const state = memoryState();
+  for (const count of [1, 1, 2, 0, 1])
+    await monitorCaptureReviews(async () => snapshot(count), state);
+  expect(alerts.send).toHaveBeenCalledTimes(3);
 });

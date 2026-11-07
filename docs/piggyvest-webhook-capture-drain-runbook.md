@@ -42,9 +42,12 @@ replay. GNU timeout uses `--verbose`, and the wrapper also records timeout exits
 
 Unavailable primary families are deferred without spending an attempt; ready
 families continue. If every family is unavailable the pass reads review
-metadata only and claims nothing. Every enabled pass awaits a metadata-only
-review monitor before and after draining: parked rows stay durable alert
-evidence even if an earlier settlement response or immediate alert was lost.
+metadata only and claims nothing. Every enabled pass checks review metadata
+before and after draining and writes a concise status line. It pages when the
+number of parked rows increases, persisting that count under the worker's
+`$XDG_STATE_HOME/baci/piggyvest-capture-review.json` (or
+`~/.local/state/baci/piggyvest-capture-review.json` when unset). A failed page
+does not advance the saved count, so the next pass retries it.
 
 Replaying is safe to repeat: every downstream ledger is keyed on PiggyVest's
 transaction id. If the job is killed mid-run, the claimed delivery returns

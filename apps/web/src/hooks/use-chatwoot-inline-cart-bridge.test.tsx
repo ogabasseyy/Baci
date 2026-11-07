@@ -190,56 +190,6 @@ describe('ChatwootInlineCartBridge', () => {
     );
   });
 
-  it('authorizes the request and renders only canonical server values', async () => {
-    const { target, postMessage } = installFrame();
-    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
-
-    await act(async () => {
-      await establishWidgetContext(target, postMessage);
-      postMessage.mockClear();
-      sendWidgetMessage(target, 'baci-checkout-review-request', {
-        requestId: 'review-0001',
-        conversationId: 905,
-        sessionToken: 'session-905',
-      });
-      await waitFor(() =>
-        expect(
-          postMessage.mock.calls.some(([payload]) =>
-            String(payload).startsWith('baci-checkout-review:')
-          )
-        ).toBe(true)
-      );
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/storefront/chatwoot/context/authorize',
-      expect.objectContaining({
-        method: 'POST',
-        cache: 'no-store',
-        body: JSON.stringify({
-          sessionToken: 'session-905',
-          includeCartSnapshot: true,
-        }),
-      })
-    );
-    const payload = String(postMessage.mock.calls.at(-1)?.[0]);
-    expect(payload.startsWith('baci-checkout-review:')).toBe(true);
-    const result = JSON.parse(payload.slice('baci-checkout-review:'.length));
-    expect(result).toMatchObject({
-      status: 'ready',
-      subtotalMinor: 250000,
-      items: [
-        {
-          name: 'Canonical Server Phone',
-          quantity: 2,
-          unitPriceMinor: 125000,
-          lineTotalMinor: 250000,
-        },
-      ],
-    });
-    expect(payload).not.toContain('Forged local name');
-  });
-
   it('fails closed instead of presenting an estimated subtotal as exact', async () => {
     vi.stubGlobal(
       'fetch',

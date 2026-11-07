@@ -1,0 +1,2 @@
+supabase/tests/storefront_wallet_phone_update.sql
+supabase/tests/storefront_wallet_profile_update.sql

@@ -24,9 +24,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # TURBO_TOKEN/TURBO_TEAM are Vercel Remote Cache secrets. They are scoped to the
-# individual turbo steps that need them (lint/typecheck/test) rather than the
+# individual hosted turbo test steps that need them rather than the
 # workflow-level env, so they are not exposed to unrelated jobs/steps or the
-# third-party actions they run. TURBO_SCM_BASE is not a secret and stays global
+# third-party actions they run. Lint and typecheck omit these credentials on all
+# runners because either job can run on the persistent private runner.
+# TURBO_SCM_BASE is not a secret and stays global
 # so `turbo --affected` can resolve its base ref everywhere.
 env:
   TURBO_SCM_BASE: origin/main
@@ -143,9 +145,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
-        env:
-          TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
-          TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo lint --affected
@@ -171,9 +170,6 @@ jobs:
       - name: Run isolated builder auth tests
         run: pnpm --dir apps/web/tools/builder-auth test
       - name: Run Typecheck
-        env:
-          TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
-          TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo typecheck --affected

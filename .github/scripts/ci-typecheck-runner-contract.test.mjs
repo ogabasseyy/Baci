@@ -38,14 +38,6 @@ test('typecheck requires explicit private opt-in and trusted repository head', (
   }
 });
 
-test('does not pass remote cache credentials to self-hosted typecheck', () => {
-  const step = job.steps.find((item) => item.name === 'Run Typecheck');
-  for (const name of ['TURBO_TOKEN', 'TURBO_TEAM']) {
-    const expression = step.env[name];
-    for (const [environment, expected] of [['self-hosted', ''], [null, ''], ['github-hosted', 'secret']]) {
-      const source = expression.slice(3, -2).replaceAll('runner.environment', JSON.stringify(environment)).replaceAll(`secrets.${name}`, JSON.stringify('secret'));
-      assert.match(source, /^[\s()'"\w=!&|\-]+$/);
-      assert.equal(Function(`"use strict"; return (${source});`)(), expected);
-    }
-  }
+test('typecheck job does not reference secrets', () => {
+  assert.doesNotMatch(JSON.stringify(job), /\bsecrets\s*(?:\.|\[)/);
 });

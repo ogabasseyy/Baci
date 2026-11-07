@@ -1,4 +1,5 @@
 import {
+  type ProductWithSelectionAxesLike,
   type ResolvedProductVariantSelection,
   resolveDefaultVariantSelection,
   resolveLowestPricedVariantSelection,
@@ -23,17 +24,25 @@ export interface ServerPdpRouteSelectionStatus {
   hasMissingRouteSelection: boolean;
 }
 
+export interface RouteSelectionProductInput {
+  default_variant_id?: string | null;
+  offers?: readonly CriticalRouteOfferInput[] | null;
+  price?: number | null;
+  variant_attributes?: unknown;
+  variants?: Product['variants'];
+}
+
 export function resolveServerPdpRouteSelectionStatus({
   product,
   offers,
   searchParams,
 }: {
-  product: Product;
+  product: RouteSelectionProductInput;
   offers?: readonly CriticalRouteOfferInput[] | null;
   searchParams: CategoryProductRouteSearchParams;
 }): ServerPdpRouteSelectionStatus {
   const selectionResolution = resolveVariantSelectionParamResolution(
-    product,
+    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
     searchParams
   );
   const missingVariantId = selectionResolution.type === 'invalid_variant_id';
@@ -94,7 +103,7 @@ export function getVariantPrimaryImage(
 }
 
 export function shouldRedirectVariantSelectionParams(
-  product: Product,
+  product: RouteSelectionProductInput,
   searchParams: CategoryProductRouteSearchParams
 ) {
   if (!product.variants || product.variants.length === 0) {
@@ -106,7 +115,7 @@ export function shouldRedirectVariantSelectionParams(
   // variant at a different price. The shared client surfaces the dead
   // link as missing instead (routeVariantMissing).
   const selectionResolution = resolveVariantSelectionParamResolution(
-    product,
+    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
     searchParams
   );
 
@@ -172,7 +181,7 @@ export function getInitialCriticalVariantSelection(
   }
 
   const selectionResolution = resolveVariantSelectionParamResolution(
-    product,
+    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
     searchParams
   );
 

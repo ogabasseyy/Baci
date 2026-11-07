@@ -81,7 +81,7 @@ const uncategorizedProduct = {
 describe('products/[productSlug] page route-selection indexing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHeaders.mockReturnValue(new Map());
+    mockHeaders.mockResolvedValue(new Headers());
     mockNormalizeStorefrontProductVariants.mockReturnValue([]);
     mockGetRequestScopedMerchant.mockResolvedValue(baseMerchant);
   });

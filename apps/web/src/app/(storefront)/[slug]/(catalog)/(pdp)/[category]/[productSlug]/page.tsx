@@ -73,7 +73,6 @@ import {
 import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
-  resolveServerPdpRouteSelectionStatus,
   shouldRedirectVariantSelectionParams,
 } from './critical-variant-selection';
 import { OgabasseyPdpRequestScopedSemanticSections } from './ogabassey-pdp-request-scoped-semantic-sections';
@@ -321,6 +320,7 @@ export function generateStaticParams(): Promise<
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: PageProps): Promise<Metadata> {
   const { slug, category, productSlug } = await params;
   if (!isValidMerchantIdentifier(slug)) {
@@ -370,11 +370,21 @@ export async function generateMetadata({
     return CANONICAL_PRODUCT_REDIRECT_METADATA;
   }
 
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
+  if (
+    resolvedSearchParams &&
+    shouldRedirectVariantSelectionParams(product, resolvedSearchParams)
+  ) {
+    return CANONICAL_PRODUCT_REDIRECT_METADATA;
+  }
+
   const baseUrl = buildStoreUrl(merchant);
   return buildCategoryProductMetadata({
     baseUrl,
     merchant,
     product,
+    searchParams: resolvedSearchParams,
     storeSlug: slug,
   });
 }
@@ -693,11 +703,6 @@ export default async function CategoryProductPage({
     commerceProduct,
     resolvedSearchParams
   );
-  const selectionStatus = resolveServerPdpRouteSelectionStatus({
-    product: commerceProduct,
-    offers: commerceProduct.offers,
-    searchParams: resolvedSearchParams,
-  });
   const resolvedSearchParamsPromise = Promise.resolve(resolvedSearchParams);
   const criticalCommerceContext = criticalProduct
     ? (() => {
@@ -739,9 +744,6 @@ export default async function CategoryProductPage({
 
   return (
     <>
-      {selectionStatus.hasMissingRouteSelection ? (
-        <meta name="robots" content="noindex, follow" />
-      ) : null}
       {criticalCommerceContext ? (
         <OgabasseyPdpCriticalCommerceProvider
           cartProduct={criticalCommerceContext.cartProduct}

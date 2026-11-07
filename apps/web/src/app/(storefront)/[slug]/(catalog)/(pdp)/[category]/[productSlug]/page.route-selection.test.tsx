@@ -1,7 +1,5 @@
-import { render } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import CategoryProductPage from './page';
+import { generateMetadata } from './page';
 
 vi.mock('server-only', () => ({}));
 
@@ -20,9 +18,15 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  notFound: vi.fn(),
-  permanentRedirect: vi.fn(),
-  redirect: vi.fn(),
+  notFound: vi.fn(() => {
+    throw new Error('NEXT_NOT_FOUND');
+  }),
+  permanentRedirect: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
+  redirect: vi.fn((url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  }),
 }));
 
 vi.mock('next/server', () => ({
@@ -48,11 +52,7 @@ vi.mock('@/lib/storefront-product-variants', () => ({
 vi.mock(
   '@/components/storefront/ogabassey/pdp/critical-commerce.client',
   () => ({
-    OgabasseyPdpCriticalCommerceProvider: ({
-      children,
-    }: {
-      children: ReactNode;
-    }) => children,
+    OgabasseyPdpCriticalCommerceProvider: () => null,
     OgabasseyPdpCriticalCommerceSummary: () => null,
   })
 );
@@ -67,8 +67,7 @@ vi.mock('@/components/storefront/ogabassey/pdp/critical-commerce', () => ({
 }));
 
 vi.mock('@/components/storefront/ogabassey/pdp/critical-shell', () => ({
-  OgabasseyPdpCriticalShell: ({ children }: { children: ReactNode }) =>
-    children,
+  OgabasseyPdpCriticalShell: () => null,
 }));
 
 vi.mock('@/components/storefront/ogabassey/pdp/server-primary-details', () => ({
@@ -100,8 +99,7 @@ vi.mock('./ogabassey-pdp-request-scoped-semantic-sections', () => ({
 vi.mock(
   '@/components/storefront/ogabassey/seo/semantic-sections-error-boundary',
   () => ({
-    SemanticSectionsErrorBoundary: ({ children }: { children: ReactNode }) =>
-      children,
+    SemanticSectionsErrorBoundary: () => null,
   })
 );
 
@@ -115,7 +113,7 @@ const baseMerchant = {
   country: 'NG',
 };
 
-const categorizedDetailedProduct = {
+const categorizedProduct = {
   id: 'prod-1',
   merchant_id: 'merchant-1',
   name: 'HP Laptop 14-ep0063nia',
@@ -144,11 +142,27 @@ const categorizedDetailedProduct = {
 describe('[category]/[productSlug] page route-selection indexing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    document.head.innerHTML = '';
     mockGetRequestScopedMerchant.mockResolvedValue(baseMerchant);
   });
 
-  it('renders <meta name="robots" content="noindex, follow"> when variant_id or offer_id is invalid/missing, and omits it when valid or absent', async () => {
+  const getMetaRobots = async (searchParams: Record<string, string>) => {
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        slug: 'teststore',
+        category: 'laptops',
+        productSlug: 'hp-laptop-14-ep0063nia',
+      }),
+      searchParams: Promise.resolve(searchParams),
+    });
+    return metadata.robots;
+  };
+
+  it('keeps index: true for a valid variant_id on a published product', async () => {
+    mockGetCachedProductLcpHint.mockResolvedValue({
+      ...categorizedProduct,
+      has_variants: true,
+      product_variants: [{ id: 'variant-valid-1' }],
+    });
     mockNormalizeStorefrontProductVariants.mockReturnValue([
       {
         id: 'variant-valid-1',
@@ -157,75 +171,93 @@ describe('[category]/[productSlug] page route-selection indexing', () => {
         stock_quantity: 5,
       },
     ]);
-    const mockProductData = {
-      ...categorizedDetailedProduct,
+
+    const robots = await getMetaRobots({ variant_id: 'variant-valid-1' });
+    expect(robots).toMatchObject({
+      index: true,
+      follow: true,
+      googleBot: expect.objectContaining({ index: true, follow: true }),
+    });
+  });
+
+  it('preserves index: false for a valid variant_id on a draft/unpublished product', async () => {
+    mockGetCachedProductLcpHint.mockResolvedValue({
+      ...categorizedProduct,
+      status: 'draft',
       has_variants: true,
+      product_variants: [{ id: 'variant-valid-1' }],
+    });
+    mockNormalizeStorefrontProductVariants.mockReturnValue([
+      {
+        id: 'variant-valid-1',
+        attributes: { storage: '256GB' },
+        condition: 'new',
+        stock_quantity: 5,
+      },
+    ]);
+
+    const robots = await getMetaRobots({ variant_id: 'variant-valid-1' });
+    expect(robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: expect.objectContaining({ index: false, follow: true }),
+    });
+  });
+
+  it('returns index: false, follow: true for an unknown variant_id on a product with variants', async () => {
+    mockGetCachedProductLcpHint.mockResolvedValue({
+      ...categorizedProduct,
+      has_variants: true,
+      product_variants: [{ id: 'variant-valid-1' }],
+    });
+    mockNormalizeStorefrontProductVariants.mockReturnValue([
+      {
+        id: 'variant-valid-1',
+        attributes: { storage: '256GB' },
+        condition: 'new',
+        stock_quantity: 5,
+      },
+    ]);
+
+    const robots = await getMetaRobots({ variant_id: 'variant-gone' });
+    expect(robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: expect.objectContaining({ index: false, follow: true }),
+    });
+  });
+
+  it('returns index: false, follow: true when variant_id is supplied on a variantless product', async () => {
+    mockGetCachedProductLcpHint.mockResolvedValue(categorizedProduct);
+    mockNormalizeStorefrontProductVariants.mockReturnValue([]);
+
+    const robots = await getMetaRobots({ variant_id: 'stale-variant-id' });
+    expect(robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: expect.objectContaining({ index: false, follow: true }),
+    });
+  });
+
+  it('returns index: false, follow: true for an unknown offer_id', async () => {
+    mockGetCachedProductLcpHint.mockResolvedValue({
+      ...categorizedProduct,
       product_offers: [
         {
-          id: 'offer-valid-1',
+          id: 'offer-active-1',
           condition: 'used',
-          price: 400000,
-          status: 'active',
+          price: 450000,
           stock_quantity: 2,
+          status: 'active',
         },
       ],
-      product_variants: [
-        {
-          id: 'variant-valid-1',
-          attributes: { storage: '256GB' },
-          condition: 'new',
-          stock_quantity: 5,
-        },
-      ],
-    };
-    mockGetCachedProductLcpHint.mockResolvedValue(mockProductData);
-    mockGetCachedProductWithDetails.mockResolvedValue(mockProductData);
-
-    const renderPage = async (searchParams: Record<string, string>) =>
-      render(
-        (await CategoryProductPage({
-          params: Promise.resolve({
-            slug: 'teststore',
-            category: 'laptops',
-            productSlug: 'hp-laptop-14-ep0063nia',
-          }),
-          searchParams: Promise.resolve(searchParams),
-        })) as React.ReactElement
-      );
-
-    const invalidVariantRender = await renderPage({
-      variant_id: 'variant-gone',
     });
-    expect(
-      document.querySelectorAll(
-        'meta[name="robots"][content="noindex, follow"]'
-      )
-    ).toHaveLength(1);
-    invalidVariantRender.unmount();
-    document.head.innerHTML = '';
 
-    const invalidOfferRender = await renderPage({ offer_id: 'offer-gone' });
-    expect(
-      document.querySelectorAll(
-        'meta[name="robots"][content="noindex, follow"]'
-      )
-    ).toHaveLength(1);
-    invalidOfferRender.unmount();
-    document.head.innerHTML = '';
-
-    const validVariantRender = await renderPage({
-      variant_id: 'variant-valid-1',
+    const robots = await getMetaRobots({ offer_id: 'offer-gone' });
+    expect(robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: expect.objectContaining({ index: false, follow: true }),
     });
-    expect(
-      document.querySelector('meta[name="robots"][content="noindex, follow"]')
-    ).toBeNull();
-    validVariantRender.unmount();
-    document.head.innerHTML = '';
-
-    const cleanRender = await renderPage({});
-    expect(
-      document.querySelector('meta[name="robots"][content="noindex, follow"]')
-    ).toBeNull();
-    cleanRender.unmount();
   });
 });

@@ -1,63 +1,17 @@
 import { usePaymentMethodAvailability } from './usePaymentMethodAvailability';
 
 describe('usePaymentMethodAvailability', () => {
-  it('flags installments unavailable below BNPL minimum', () => {
-    const result = usePaymentMethodAvailability({
-      enabledMethods: ['klump'],
-      methodDisabledReasons: {},
-      orderTotal: 5000,
-      selectedMethod: 'klump',
-      selectedTab: 'installments',
-    });
-
-    const klump = result.filteredMethods.find(
-      (method) => method.id === 'klump'
-    );
-    expect(result.isBNPLEligible).toBe(false);
-    expect(klump?.disabled).toBe(true);
-    expect(klump?.disabledReason).toContain('Minimum order');
-  });
-
-  it('disables klump when wallet credit is active', () => {
+  it('hides Klump even when stale saved settings or selection enable it', () => {
     const result = usePaymentMethodAvailability({
       enabledMethods: ['klump'],
       methodDisabledReasons: {},
       orderTotal: 100000,
       selectedMethod: 'klump',
       selectedTab: 'installments',
-      walletSelection: { amount: 10000, use: true },
     });
-
-    const klump = result.filteredMethods.find(
-      (method) => method.id === 'klump'
-    );
-    expect(klump?.disabled).toBe(true);
-    expect(klump?.disabledReason).toBe(
-      'Wallet credit cannot be combined with Klump'
-    );
-  });
-
-  it('disables klump when savings credit is active', () => {
-    const result = usePaymentMethodAvailability({
-      enabledMethods: ['klump'],
-      methodDisabledReasons: {},
-      orderTotal: 100000,
-      savingsSelection: {
-        amount: 5000,
-        goalId: 'goal-1',
-        use: true,
-      },
-      selectedMethod: 'klump',
-      selectedTab: 'installments',
-    });
-
-    const klump = result.filteredMethods.find(
-      (method) => method.id === 'klump'
-    );
-    expect(klump?.disabled).toBe(true);
-    expect(klump?.disabledReason).toBe(
-      'Device savings cannot be combined with Klump'
-    );
+    expect(result.filteredMethods).toEqual([]);
+    expect(result.hasBNPLMethods).toBe(false);
+    expect(result.availableMethodIds).not.toContain('klump');
   });
 
   it('returns the available method ids across tabs after enabled and hidden filters', () => {
@@ -70,7 +24,7 @@ describe('usePaymentMethodAvailability', () => {
       selectedTab: 'pay_later',
     });
 
-    expect(result.availableMethodIds).toEqual(['klump', 'invoice']);
+    expect(result.availableMethodIds).toEqual(['invoice']);
   });
 
   it('respects explicit methodDisabledReasons overrides', () => {
@@ -87,55 +41,5 @@ describe('usePaymentMethodAvailability', () => {
     );
     expect(paystack?.disabled).toBe(true);
     expect(paystack?.disabledReason).toBe('Temporarily unavailable');
-  });
-
-  it('keeps Klump available at the maximum order amount boundary', () => {
-    const result = usePaymentMethodAvailability({
-      enabledMethods: ['klump'],
-      methodDisabledReasons: {},
-      orderTotal: 1_000_000,
-      selectedMethod: 'klump',
-      selectedTab: 'installments',
-    });
-
-    const klump = result.filteredMethods.find(
-      (method) => method.id === 'klump'
-    );
-    expect(klump).toBeDefined();
-    expect(klump?.disabled).not.toBe(true);
-    expect(result.hasBNPLMethods).toBe(true);
-  });
-
-  it('does not hide Klump from disabled reason wording alone', () => {
-    const result = usePaymentMethodAvailability({
-      enabledMethods: ['klump'],
-      methodDisabledReasons: { klump: 'Maximum order: copy changed' },
-      orderTotal: 1_000_001,
-      selectedMethod: 'klump',
-      selectedTab: 'installments',
-    });
-
-    const klump = result.filteredMethods.find(
-      (method) => method.id === 'klump'
-    );
-    expect(klump).toBeDefined();
-    expect(klump?.disabledReason).toBe('Maximum order: copy changed');
-    expect(result.hasBNPLMethods).toBe(true);
-  });
-
-  it('removes Klump from installment methods above the maximum order amount', () => {
-    const result = usePaymentMethodAvailability({
-      enabledMethods: ['klump'],
-      hiddenMethods: ['klump'],
-      methodDisabledReasons: { klump: 'Maximum order: ₦1,000,000' },
-      orderTotal: 1_000_001,
-      selectedMethod: 'klump',
-      selectedTab: 'installments',
-    });
-
-    expect(result.filteredMethods.some((method) => method.id === 'klump')).toBe(
-      false
-    );
-    expect(result.hasBNPLMethods).toBe(false);
   });
 });

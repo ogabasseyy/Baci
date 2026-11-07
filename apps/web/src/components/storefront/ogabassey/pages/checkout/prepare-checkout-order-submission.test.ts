@@ -113,7 +113,7 @@ describe('prepareCheckoutOrderSubmission', () => {
     expect(result).toEqual({ kind: 'issue', issue: 'paystack-unavailable' });
   });
 
-  it('requires Klump to charge the full order amount before submitting', () => {
+  it('rejects retired Klump before submitting', () => {
     const result = prepareCheckoutOrderSubmission(
       input({
         payment: {

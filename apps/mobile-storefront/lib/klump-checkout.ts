@@ -10,8 +10,6 @@ export interface KlumpPaymentSettings {
   klump_min_amount?: number | null;
 }
 
-const KLUMP_DEFAULT_MAX_AMOUNT = 1_000_000;
-
 interface BuildKlumpInitializePayloadInput {
   customerEmail: string;
   customerName: string;
@@ -37,52 +35,21 @@ export function formatKlumpAmount(amount: number) {
   return `₦${Math.round(amount).toLocaleString('en-US')}`;
 }
 
+/** Retired globally; stale app state must not submit another Klump order. */
 export function getKlumpDisabledReason(
-  settings: KlumpPaymentSettings | undefined | null,
-  orderTotal: number,
-  walletSelection?: WalletSelection,
-  savingsSelection?: SavingsSelection
-): string | undefined {
-  if (walletSelection?.use === true && (walletSelection.amount ?? 0) > 0) {
-    return 'Wallet credit cannot be combined with Klump';
-  }
-
-  if (savingsSelection?.use === true && (savingsSelection.amount ?? 0) > 0) {
-    return 'Savings plan cannot be combined with Klump';
-  }
-
-  if (!settings?.klump_enabled) {
-    return 'Klump is not available for this merchant';
-  }
-
-  const minAmount = settings.klump_min_amount ?? 10_000;
-  if (orderTotal < minAmount) {
-    return `Minimum order: ${formatKlumpAmount(minAmount)}`;
-  }
-
-  const maxAmount = settings.klump_max_amount ?? KLUMP_DEFAULT_MAX_AMOUNT;
-  if (orderTotal > maxAmount) {
-    return `Maximum order: ${formatKlumpAmount(maxAmount)}`;
-  }
-
-  return undefined;
+  _settings: KlumpPaymentSettings | undefined | null,
+  _orderTotal: number,
+  _walletSelection?: WalletSelection,
+  _savingsSelection?: SavingsSelection
+): string {
+  return 'Klump is no longer available. Choose another payment method.';
 }
 
-/**
- * Returns true only when Klump is enabled and the order total exceeds the
- * merchant-configured maximum, falling back to the default max amount when
- * KlumpPaymentSettings does not provide one.
- */
 export function shouldHideKlumpPaymentMethod(
-  settings: KlumpPaymentSettings | undefined | null,
-  orderTotal: number
+  _settings: KlumpPaymentSettings | undefined | null,
+  _orderTotal: number
 ): boolean {
-  if (!settings?.klump_enabled || !Number.isFinite(orderTotal)) {
-    return false;
-  }
-
-  const maxAmount = settings.klump_max_amount ?? KLUMP_DEFAULT_MAX_AMOUNT;
-  return orderTotal > maxAmount;
+  return true;
 }
 
 export function buildKlumpInitializePayload({

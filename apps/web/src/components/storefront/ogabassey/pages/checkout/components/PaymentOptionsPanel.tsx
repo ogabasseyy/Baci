@@ -29,7 +29,7 @@ export function PaymentOptionsPanel({
   korapayCheckoutAvailable,
   bankTransferCheckoutAvailable,
   featureSettings,
-  klumpEligible,
+  creditDirectEligible,
   oxygenEligible = false,
   hasInstallmentOptions,
   currency,
@@ -55,8 +55,7 @@ export function PaymentOptionsPanel({
   };
   // Juicyway, CredPal, and Credit Direct can only ever charge NGN (see
   // resolveChargeCurrency), so their feature flags alone must not surface
-  // them on a non-NGN checkout. Klump is already currency-gated upstream
-  // via `klumpEligible` (isKlumpEligible).
+  // them on a non-NGN checkout.
   const ngnOnlyRailsAvailable = isNgnChargeCurrency(currency);
 
   return (
@@ -200,7 +199,7 @@ export function PaymentOptionsPanel({
                 description="From 25% down payment. Repay the balance monthly."
                 icon={<span className="font-bold text-store-primary">O₂</span>} />
             )}
-            {featureSettings?.credit_direct_enabled === true &&
+            {creditDirectEligible && featureSettings?.credit_direct_enabled === true &&
               ngnOnlyRailsAvailable && (
                 <PaymentOptionCard
                   method="credit_direct"
@@ -215,24 +214,7 @@ export function PaymentOptionsPanel({
                   icon={<CreditDirectLogo className="size-6" />}
                 />
               )}
-            {klumpEligible && (
-              <PaymentOptionCard
-                method="klump"
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                title="Klump"
-                description="Split payment at checkout"
-                badge={{
-                  label: 'Split payments',
-                  className: 'bg-store-primary/10 text-store-primary',
-                }}
-                icon={
-                  <div className="size-8 bg-store-primary/5 rounded-lg flex items-center justify-center text-xs font-black text-store-primary">
-                    K
-                  </div>
-                }
-              />
-            )}
+
           </div>
 
           <PaymentInstallmentDetails paymentMethod={paymentMethod} />

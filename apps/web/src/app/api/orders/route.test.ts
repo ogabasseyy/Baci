@@ -3179,7 +3179,8 @@ describe('POST /api/orders — wallet response shape', () => {
       expect.any(String),
       1000,
       0,
-      300
+      300,
+      expect.objectContaining({ rpc: expect.any(Function) })
     );
   });
 

@@ -35,9 +35,9 @@ export function OxygenMobileOrderSummary({
       deliveryMethod={null}
       giftWrappingCost={0}
       walletBalance={0}
-      payWithWallet={false}
-      walletAmountUsed={0}
-      remainingAmount={order.total}
+      payWithWallet={order.wallet_amount_used > 0}
+      walletAmountUsed={order.wallet_amount_used}
+      remainingAmount={order.total - order.wallet_amount_used}
     />
   );
 }

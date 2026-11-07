@@ -61,11 +61,6 @@ export async function routePlaceOrderPayment(
     setWalletBalance(walletResult.newBalance);
   }
 
-  if (paymentMethod === 'oxygen') {
-    navigateToOxygenOrder(order.id);
-    return;
-  }
-
   // 2. Route to payment gateway
   if (paymentAmount <= 0) {
     clearCheckoutSession();
@@ -73,6 +68,11 @@ export async function routePlaceOrderPayment(
       getHref(`/order-success?orderId=${order.id}&wallet=true${trackingParam}`)
     );
     setTimeout(clearCart, 500);
+    return;
+  }
+
+  if (paymentMethod === 'oxygen') {
+    navigateToOxygenOrder(order.id);
     return;
   }
 

@@ -47,10 +47,7 @@ type PaymentSession = Pick<
 > & {
   payForMe: Pick<FullPaymentSession['payForMe'], 'details' | 'setDetails'>;
   redvault: Pick<FullPaymentSession['redvault'], 'status' | 'summary'>;
-  wallet: Pick<
-    FullPaymentSession['wallet'],
-    'remainingAmount' | 'payWithWallet' | 'setPayWithWallet'
-  >;
+  wallet: Pick<FullPaymentSession['wallet'], 'remainingAmount'>;
 };
 type CheckoutFlowSetters = Pick<
   ReturnType<typeof useCheckoutStepState>,
@@ -234,8 +231,6 @@ export function CheckoutStepComposition({
         oxygenAllowed={payment.oxygenAllowed}
         user={payment.user}
         remainingAmount={paymentSession.wallet.remainingAmount}
-        payWithWallet={paymentSession.wallet.payWithWallet}
-        setPayWithWallet={paymentSession.wallet.setPayWithWallet}
         orderAmount={paymentSession.total}
         currency={payment.currency}
         redvaultAvailable={payment.redvaultAvailable}

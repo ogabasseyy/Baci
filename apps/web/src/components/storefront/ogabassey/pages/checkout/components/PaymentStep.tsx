@@ -20,6 +20,7 @@ import { PaymentOptionsPanel } from './PaymentOptionsPanel';
 import {
   type FeatureSettings,
   hasAnyInstallmentOption,
+  isCreditDirectEligible,
   isKlumpEligible,
   isNgnChargeCurrency,
   isPaymentMethodAvailable,
@@ -70,8 +71,6 @@ interface PaymentStepProps {
   oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
-  payWithWallet?: boolean;
-  setPayWithWallet?: (value: boolean) => void;
   currency?: string;
   redvaultAvailable: boolean;
   redvaultStatus: RedvaultPaymentStatus;
@@ -99,8 +98,6 @@ export function PaymentStep({
   oxygenAllowed = false,
   remainingAmount,
   orderAmount,
-  payWithWallet = false,
-  setPayWithWallet,
   currency = 'NGN',
   redvaultAvailable,
   redvaultStatus,
@@ -151,18 +148,29 @@ export function PaymentStep({
     orderAmount,
     payableAmount: remainingAmount,
   });
+  const creditDirectEligible = isCreditDirectEligible({
+    featureSettings: merchant?.feature_settings,
+    currency,
+    orderAmount,
+    payableAmount: remainingAmount,
+  });
+  const normalizedCurrency = currency.trim().toUpperCase();
+  const balanceLabel =
+    Number.isFinite(remainingAmount) &&
+    remainingAmount >= 0 &&
+    /^[A-Z]{3}$/.test(normalizedCurrency)
+      ? new Intl.NumberFormat('en-NG', {
+          style: 'currency',
+          currency: normalizedCurrency,
+        }).format(remainingAmount)
+      : null;
   const hasInstallmentOptions = hasAnyInstallmentOption({
     oxygenAllowed,
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,
-    payableAmount: payWithWallet ? orderAmount : remainingAmount,
+    payableAmount: remainingAmount,
   });
-
-  const selectPaymentTab = (tab: PaymentTab) => {
-    if (tab === 'installments' && payWithWallet) setPayWithWallet?.(false);
-    setPaymentTab(tab);
-  };
 
   const handlePaymentMethodChange = (method: PaymentMethod) => {
     setPaymentMethod(method);
@@ -186,12 +194,6 @@ export function PaymentStep({
     }
   }, [hasAvailableSelectedPaymentMethod, paymentMethod, setPaymentMethod]);
 
-  useEffect(() => {
-    if (paymentTab === 'installments' && payWithWallet) {
-      setPayWithWallet?.(false);
-    }
-  }, [paymentTab, payWithWallet, setPayWithWallet]);
-
   return (
     <CheckoutStepSection
       id="checkout-payment"
@@ -203,9 +205,16 @@ export function PaymentStep({
       disabled={!completedSteps.delivery}
       onOpen={() => setCurrentStep('payment')}
     >
+      <p className="mb-2 text-sm font-medium">How would you like to pay?</p>
+      {balanceLabel && (
+        <p className="mb-4 text-sm text-store-foreground/70">
+          Remaining balance: {balanceLabel}
+          {remainingAmount < orderAmount ? ' after applied credit.' : '.'}
+        </p>
+      )}
       <PaymentOptionsPanel
         paymentTab={paymentTab}
-        setPaymentTab={selectPaymentTab}
+        setPaymentTab={setPaymentTab}
         paymentMethod={paymentMethod}
         setPaymentMethod={handlePaymentMethodChange}
         paystackCheckoutAvailable={paystackCheckoutAvailable}
@@ -213,6 +222,7 @@ export function PaymentStep({
         bankTransferCheckoutAvailable={bankTransferCheckoutAvailable}
         featureSettings={merchant?.feature_settings}
         klumpEligible={klumpEligible}
+        creditDirectEligible={creditDirectEligible}
         oxygenEligible={oxygenEligible}
         hasInstallmentOptions={hasInstallmentOptions}
         currency={currency}
@@ -220,11 +230,6 @@ export function PaymentStep({
         redvaultStatus={redvaultStatus}
         redvaultSummary={redvaultSummary}
       />
-      {paymentTab === 'installments' && (
-        <p className="mt-3 text-sm text-store-foreground/70">
-          Wallet credit cannot be combined with instalment payments.
-        </p>
-      )}
 
       {/* Mobile/Inline Place Order Button for Payment Step */}
       <div className="pt-4 lg:hidden">
@@ -255,8 +260,7 @@ export function PaymentStep({
           disabled={
             isProcessing ||
             !isDeliveryValid ||
-            ((remainingAmount > 0 || paymentTab === 'installments') &&
-              !hasAvailableSelectedPaymentMethod) ||
+            (remainingAmount > 0 && !hasAvailableSelectedPaymentMethod) ||
             (paymentMethod === 'uba_redvault' &&
               (redvaultStatus === 'pending' || redvaultStatus === 'held')) ||
             (paymentMethod === 'payforme' && !isPayForMeValid)

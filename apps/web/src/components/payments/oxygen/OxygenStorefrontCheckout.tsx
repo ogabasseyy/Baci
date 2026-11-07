@@ -55,7 +55,7 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -119,6 +119,18 @@ export async function OxygenStorefrontCheckout({
           <dt>Order total</dt>
           <dd>{money(order.total)}</dd>
         </div>
+        {order.wallet_amount_used > 0 && (
+          <>
+            <div className="flex justify-between">
+              <dt>Wallet credit</dt>
+              <dd>−{money(order.wallet_amount_used)}</dd>
+            </div>
+            <div className="flex justify-between font-bold">
+              <dt>Amount to finance</dt>
+              <dd>{money(order.total - order.wallet_amount_used)}</dd>
+            </div>
+          </>
+        )}
       </dl>
       <p className="mt-4 text-sm text-gray-600">
         Your order is saved. Complete your Oxygen payment plan to continue.
@@ -146,32 +158,36 @@ export async function OxygenStorefrontCheckout({
             summary="Delivery selection saved with this order"
           />
           <CheckoutStepCard number={3} title="Payment Method" active>
-            <OxygenApplicationDialog
-              orderId={orderId}
-              merchantSlug={merchantSlug}
-              selfieOrigins={selfieOrigins}
-              hostedOrigins={hostedOrigins}
-              prefill={contact}
-              productAmount={order.total}
-              products={order.order_items.map((item) => {
-                const product = Array.isArray(item.products)
-                  ? item.products[0]
-                  : item.products;
-                const images = Array.isArray(product?.images)
-                  ? product.images
-                  : [];
-                return {
-                  ...item,
-                  imageUrl:
-                    item.image_url ||
-                    images.find(
-                      (image): image is string =>
-                        typeof image === 'string' && image.trim().length > 0
-                    ),
-                };
-              })}
-              currency={order.currency}
-            />
+            {order.total - order.wallet_amount_used <= 0 ? (
+              <p>No balance remains to finance.</p>
+            ) : (
+              <OxygenApplicationDialog
+                orderId={orderId}
+                merchantSlug={merchantSlug}
+                selfieOrigins={selfieOrigins}
+                hostedOrigins={hostedOrigins}
+                prefill={contact}
+                productAmount={order.total - order.wallet_amount_used}
+                products={order.order_items.map((item) => {
+                  const product = Array.isArray(item.products)
+                    ? item.products[0]
+                    : item.products;
+                  const images = Array.isArray(product?.images)
+                    ? product.images
+                    : [];
+                  return {
+                    ...item,
+                    imageUrl:
+                      item.image_url ||
+                      images.find(
+                        (image): image is string =>
+                          typeof image === 'string' && image.trim().length > 0
+                      ),
+                  };
+                })}
+                currency={order.currency}
+              />
+            )}
           </CheckoutStepCard>
         </>
       }

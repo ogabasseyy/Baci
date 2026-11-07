@@ -223,6 +223,14 @@ function createMockSupabaseClient() {
 
   return {
     from: vi.fn((_table: string) => mockChain),
+    rpc: vi.fn().mockResolvedValue({
+      data: {
+        grossAmount: 50000,
+        walletAmount: 20000,
+        financedAmount: 30000,
+      },
+      error: null,
+    }),
   };
 }
 
@@ -2653,5 +2661,39 @@ describe('POST /api/payments/credit-direct/webhook', () => {
         error: expect.any(Error),
       });
     });
+  });
+  it.each([
+    customerPaymentPayload,
+    merchantPaymentPayload,
+  ])('holds an unreserved wallet event for review: $eventType', async (payload) => {
+    vi.mocked(parseWebhookPayload).mockReturnValue(payload);
+    const supabaseMock = createMockSupabaseClient();
+    vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+    supabaseMock.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'credit_direct_wallet_reconciliation_required' },
+    } as never);
+    const chain = supabaseMock.from('orders');
+    chain.ilike.mockResolvedValue({
+      data: [{ ...mockOrder, wallet_amount_used: 20000, amount_paid: 20000 }],
+      error: null,
+    } as never);
+    const response = await POST(createMockRequest(payload));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Wallet financing requires payment review',
+      code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+    });
+    expect(chain.update).not.toHaveBeenCalled();
+    expect(chain.insert).not.toHaveBeenCalled();
+    expect(supabaseMock.rpc).toHaveBeenCalledWith(
+      'verify_credit_direct_wallet_event',
+      expect.objectContaining({
+        p_order_id: mockOrder.id,
+        p_reference: payload.checkoutTransactionId,
+        p_merchant_completed:
+          payload.eventType === 'Checkout_Merchant_Payment_Completed',
+      })
+    );
   });
 });

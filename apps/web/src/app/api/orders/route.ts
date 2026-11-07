@@ -3057,7 +3057,8 @@ export async function POST(request: NextRequest) {
         order.id,
         orderTotal,
         savingsAmountUsed,
-        walletAmountUsed
+        walletAmountUsed,
+        supabase
       );
     }
 

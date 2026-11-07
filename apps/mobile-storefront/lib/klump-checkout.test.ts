@@ -1,7 +1,3 @@
-import type {
-  SavingsSelection,
-  WalletSelection,
-} from '@/lib/wallet-payment-helpers';
 import {
   buildKlumpBnplRouteParams,
   buildKlumpInitializePayload,
@@ -16,128 +12,21 @@ const settings = {
 };
 
 describe('klump checkout helpers', () => {
-  it('does not disable eligible Klump orders', () => {
-    expect(getKlumpDisabledReason(settings, 120000)).toBeUndefined();
-  });
-
-  it('disables Klump when wallet credit is active', () => {
-    const walletSelection: WalletSelection = { use: true, amount: 5000 };
-
-    expect(getKlumpDisabledReason(settings, 120000, walletSelection)).toBe(
-      'Wallet credit cannot be combined with Klump'
-    );
-  });
-
-  it('disables Klump when savings plan credit is active', () => {
-    const savingsSelection: SavingsSelection = {
-      amount: 5000,
-      goalId: 'goal-1',
-      use: true,
-    };
-
-    expect(
-      getKlumpDisabledReason(settings, 120000, undefined, savingsSelection)
-    ).toBe('Savings plan cannot be combined with Klump');
-  });
-
-  it('uses merchant configured amount boundaries for disabled reasons', () => {
-    expect(getKlumpDisabledReason(settings, 9000)).toBe(
-      'Minimum order: ₦10,000'
-    );
-    expect(getKlumpDisabledReason(settings, 600000)).toBe(
-      'Maximum order: ₦500,000'
-    );
-  });
-
-  it('uses a one million naira default maximum when merchant limits are missing', () => {
-    expect(
-      getKlumpDisabledReason(
-        {
-          klump_enabled: true,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        1_000_000
-      )
-    ).toBeUndefined();
-  });
-
-  it('disables Klump above the one million naira default maximum', () => {
-    expect(
-      getKlumpDisabledReason(
-        {
-          klump_enabled: true,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        1_000_001
-      )
-    ).toBe('Maximum order: ₦1,000,000');
-  });
-
-  it('hides Klump only when the order exceeds the numeric maximum', () => {
-    expect(shouldHideKlumpPaymentMethod(undefined, 1_000_001)).toBe(false);
-    expect(shouldHideKlumpPaymentMethod(null, 1_000_001)).toBe(false);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: false,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        1_000_001
-      )
-    ).toBe(false);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: true,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        Number.NaN
-      )
-    ).toBe(false);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: true,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        Number.POSITIVE_INFINITY
-      )
-    ).toBe(false);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: true,
-          klump_min_amount: undefined,
-          klump_max_amount: undefined,
-        },
-        1_000_001
-      )
-    ).toBe(true);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: true,
-          klump_min_amount: 10_000,
-          klump_max_amount: 750_000,
-        },
-        750_000
-      )
-    ).toBe(false);
-    expect(
-      shouldHideKlumpPaymentMethod(
-        {
-          klump_enabled: true,
-          klump_min_amount: 10_000,
-          klump_max_amount: 750_000,
-        },
-        750_001
-      )
-    ).toBe(true);
+  it('rejects and hides retired Klump regardless of saved settings, credit or amount', () => {
+    for (const amount of [5000, 120000, 1000001, Number.NaN]) {
+      for (const staleSettings of [undefined, null, settings]) {
+        expect(getKlumpDisabledReason(staleSettings, amount)).toBe(
+          'Klump is no longer available. Choose another payment method.'
+        );
+        expect(
+          getKlumpDisabledReason(staleSettings, amount, {
+            use: true,
+            amount: 5000,
+          })
+        ).toBe('Klump is no longer available. Choose another payment method.');
+        expect(shouldHideKlumpPaymentMethod(staleSettings, amount)).toBe(true);
+      }
+    }
   });
 
   it('builds the initialize payload without trusting a client amount', () => {

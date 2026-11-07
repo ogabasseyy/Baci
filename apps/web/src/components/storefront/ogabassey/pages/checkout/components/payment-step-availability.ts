@@ -1,9 +1,6 @@
 import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { PaymentMethod } from '../types';
-import { isGatewayAmountDifferentFromOrderTotal } from '../utils';
 
-const DEFAULT_KLUMP_MIN_AMOUNT = 10_000;
-const DEFAULT_KLUMP_MAX_AMOUNT = 1_000_000;
 // Mirrors the server-side BNPL bounds enforced by /api/payments/credit-direct/sign
 // so the UI never offers Credit Direct for an amount the gateway will reject.
 const DEFAULT_CREDIT_DIRECT_MIN_AMOUNT = 5_000;
@@ -37,8 +34,12 @@ export function isNgnChargeCurrency(currency?: string | null): boolean {
   );
 }
 
+function isPayableBalance(payable: number, total: number): boolean {
+  return Number.isFinite(payable) && Number.isFinite(total) && payable > 0 && payable <= total;
+}
+
 function isOxygenEligible(input: { oxygenAllowed: boolean; currency?: string | null; orderAmount: number; payableAmount: number }): boolean {
-  return (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) && isNgnChargeCurrency(input.currency) && input.payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(input.payableAmount, input.orderAmount);
+  return (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) && isNgnChargeCurrency(input.currency) && isPayableBalance(input.payableAmount, input.orderAmount);
 }
 
 function toAmountLimit(
@@ -63,39 +64,14 @@ function toAmountLimit(
   return fallback;
 }
 
-export function isKlumpEligible({
-  featureSettings,
-  currency,
-  orderAmount,
-  payableAmount,
-}: {
+/** Retired globally, regardless of stale merchant settings or order amount. */
+export function isKlumpEligible(_input: {
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
   orderAmount: number;
   payableAmount: number;
 }): boolean {
-  if (featureSettings?.klump_enabled !== true) {
-    return false;
-  }
-
-  if (!isNgnChargeCurrency(currency)) {
-    return false;
-  }
-
-  if (isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) {
-    return false;
-  }
-
-  const minAmount = toAmountLimit(
-    featureSettings.klump_min_amount,
-    DEFAULT_KLUMP_MIN_AMOUNT,
-  );
-  const maxAmount = toAmountLimit(
-    featureSettings.klump_max_amount,
-    DEFAULT_KLUMP_MAX_AMOUNT,
-  );
-
-  return payableAmount >= minAmount && payableAmount <= maxAmount;
+  return false;
 }
 
 export function isCreditDirectEligible({
@@ -117,9 +93,11 @@ export function isCreditDirectEligible({
     return false;
   }
 
-  if (isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) {
-    return false;
-  }
+  // The signing RPC derives and locks the remaining balance after wallet credit.
+  if (
+    !Number.isFinite(payableAmount) || !Number.isFinite(orderAmount) ||
+    payableAmount <= 0 || payableAmount > orderAmount
+  ) return false;
 
   const minAmount = toAmountLimit(
     featureSettings.credit_direct_min_amount,

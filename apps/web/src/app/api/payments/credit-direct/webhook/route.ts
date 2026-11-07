@@ -10,6 +10,7 @@ import {
 } from '@/lib/credit-direct';
 import { notifyNewOrder, notifyPaymentReceived } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
+import { verifyCreditDirectWalletEvent } from '@/lib/payments/credit-direct-wallet-event';
 import {
   ensurePaidOrderInventoryConfirmed,
   rollbackOrderStatusAfterInventoryConfirmationFailure,
@@ -406,6 +407,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // A wallet lender obligation survives lost responses and popup closure.
+    // Bind only verified provider evidence to its durable funding reservation.
+    const walletFunding =
+      Number(order.wallet_amount_used) > 0
+        ? await verifyCreditDirectWalletEvent({
+            supabase,
+            orderId: order.id,
+            merchantId: order.merchant_id,
+            reference: payload.checkoutTransactionId,
+            merchantCompleted:
+              payload.eventType === 'Checkout_Merchant_Payment_Completed',
+            providerAmount: getWebhookProductsTotal(payload.products),
+          })
+        : null;
+    if (Number(order.wallet_amount_used) > 0 && walletFunding === null) {
+      logger.warn({
+        message: 'Credit Direct wallet funding requires reconciliation',
+        orderId: order.id,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing requires payment review',
+          code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
+
     const signedAmount =
       typeof parsedNotes.creditDirectSignedAmount === 'number'
         ? parsedNotes.creditDirectSignedAmount
@@ -534,12 +563,14 @@ export async function POST(request: NextRequest) {
         // amount_paid / wallet_amount_used at order creation), so Credit
         // Direct legitimately collects the residual — not always the full
         // order total.
-        const orderTotal = Number(order.total) || 0;
+        const orderTotal =
+          walletFunding?.grossAmount ?? (Number(order.total) || 0);
         const preGatewayPaid = Math.max(
           Number(order.amount_paid) || 0,
           Number(order.wallet_amount_used) || 0
         );
         const expectedAmount =
+          walletFunding?.financedAmount ??
           Math.round((orderTotal - preGatewayPaid) * 100) / 100;
         if (
           signedAmount !== null &&

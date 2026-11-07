@@ -71,15 +71,15 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
 
   if (
     paymentMethod === 'oxygen' &&
+    (!payWithWallet || total - walletAmountUsed > 0) &&
     ((!isOxygenStorefrontStagingEnabled() && !(await checkOxygenStorefrontAvailability(merchant.id))) ||
       currency !== 'NGN' ||
-      !user ||
-      payWithWallet)
+      !user)
   ) {
     toast({
       title: 'Oxygen setup unavailable',
       description:
-        'Sign in and use the full order amount to continue with Oxygen.',
+        'Sign in to continue with Oxygen. This payment plan must be available for your store and currency.',
       variant: 'destructive',
     });
     isOrderInFlightRef.current = false;

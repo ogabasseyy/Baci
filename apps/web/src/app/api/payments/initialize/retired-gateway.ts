@@ -2,10 +2,10 @@
 export function retiredGatewayResponse(
   gateway: string | undefined
 ): Response | null {
-  return gateway === 'credpal'
-    ? Response.json(
-        { error: 'CredPal is unavailable', code: 'GATEWAY_RETIRED' },
-        { status: 410 }
-      )
-    : null;
+  if (gateway !== 'credpal' && gateway !== 'klump') return null;
+  const provider = gateway === 'klump' ? 'Klump' : 'CredPal';
+  return Response.json(
+    { error: `${provider} is unavailable`, code: 'GATEWAY_RETIRED' },
+    { status: 410 }
+  );
 }

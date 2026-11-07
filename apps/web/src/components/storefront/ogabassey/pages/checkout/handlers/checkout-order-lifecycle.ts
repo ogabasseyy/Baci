@@ -226,6 +226,9 @@ export async function runCheckoutOrderLifecycle({
     checkoutFingerprint: fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
+    ...((wallet?.amountUsed ?? reuse.pendingOrder?.walletAmountUsed ?? 0) > 0
+      ? { walletAmountUsed: wallet?.amountUsed ?? reuse.pendingOrder?.walletAmountUsed }
+      : {}),
     createdAt: new Date().toISOString(),
     ...(redvaultReview.enabled &&
     submit.orderRequest.shared_cart &&

@@ -1,3 +1,4 @@
+import { hasWalletCreditDirectOrder, resolveWalletCreditDirectFence, walletCreditDirectFingerprintsMatch } from './pending-checkout-credit-direct-fence';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import {
@@ -68,6 +69,8 @@ export interface PendingCheckoutFingerprintInput {
 
 export interface PendingCheckoutOrderSnapshot {
   paymentMethod?: string;
+  /** Server-confirmed local debit, retained across balance refresh and retries. */
+  walletAmountUsed?: number;
   orderId: string;
   orderNumber?: string;
   trackingToken?: string;
@@ -182,6 +185,8 @@ export async function resolvePendingCheckoutOrder({
     fetchImpl,
   });
   if (oxygenFence) return oxygenFence;
+  const creditDirectFence = await resolveWalletCreditDirectFence({ pendingOrder, merchantId, merchantSlug, customerEmail, checkoutFingerprint, paymentMethod, shippingProvider, selectedQuoteId, shippingRateId, fetchImpl });
+  if (creditDirectFence) return creditDirectFence;
   // REDVAULT entry/exit validates the stored order against the server fence
   // first; a non-REDVAULT submission falls through to the ordinary flow.
   const redvaultFence = await resolveRedvaultCheckoutFence({
@@ -198,17 +203,18 @@ export async function resolvePendingCheckoutOrder({
   }
 
   const oxygenOrder =
-    paymentMethod === 'oxygen' || pendingOrder.paymentMethod === 'oxygen';
+    paymentMethod === 'oxygen' || pendingOrder.paymentMethod === 'oxygen' ||
+    hasWalletCreditDirectOrder({ pendingOrder, merchantId, customerEmail, checkoutFingerprint, paymentMethod, shippingProvider });
 
   if (
     !pendingOrder.trackingToken ||
     pendingOrder.merchantId !== merchantId ||
     normalizeText(pendingOrder.customerEmail) !==
       normalizeText(customerEmail) ||
-    !checkoutFingerprintsMatch(
+    (!checkoutFingerprintsMatch(
       pendingOrder.checkoutFingerprint,
       checkoutFingerprint
-    )
+    ) && !walletCreditDirectFingerprintsMatch({ pendingOrder, merchantId, customerEmail, checkoutFingerprint, paymentMethod, shippingProvider }))
   ) {
     return { reusableOrder: null, clearStoredOrder: true };
   }

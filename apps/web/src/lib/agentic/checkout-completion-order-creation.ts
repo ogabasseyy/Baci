@@ -2,6 +2,10 @@ import { recoverFinalizationOrderWriteFailure } from '@/lib/agentic/checkout-bou
 import { releaseFinalizationClaimSafely as releaseClaim } from '@/lib/agentic/checkout-finalization-compensation';
 import { createAgenticCheckoutOrder } from '@/lib/agentic/checkout-order-dispatch';
 import { recordAgenticOrderFinalizationOrderCreated } from '@/lib/agentic/checkout-order-finalization-claim';
+import {
+  createDvaPostLogoutFinalizerClient,
+  hasDvaPostLogoutFinalizationEvidence,
+} from '@/lib/agentic/dva-postlogout-finalizer-client';
 import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -12,6 +16,7 @@ type CreationInput = Pick<
   'merchantId' | 'metadata' | 'sessionId' | 'supabase'
 > & {
   finalizationClaim: string;
+  dvaAccount: { account_number: string };
   orderPayload: Parameters<typeof createAgenticCheckoutOrder>[0];
   productIds: string[];
   sharedCartBound: boolean;
@@ -35,10 +40,39 @@ export async function createFinalizationOrder(
     input;
   let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
   try {
+    const sharedCart = input.orderPayload.shared_cart;
+    const recoveryBinding =
+      input.sharedCartBound &&
+      isSharedCartBinding(sharedCart) &&
+      input.orderPayload.payment_method === 'bank_transfer' &&
+      input.orderPayload.payment_status === 'pending'
+        ? sharedCart
+        : null;
+    const recoveryAvailable = recoveryBinding
+      ? await hasDvaPostLogoutFinalizationEvidence({
+          accountNumber: input.dvaAccount.account_number,
+          binding: recoveryBinding,
+          finalizationClaim,
+          merchantId,
+          supabase,
+        })
+      : false;
+    const bindingClient =
+      recoveryBinding && recoveryAvailable
+        ? createDvaPostLogoutFinalizerClient({
+            accountNumber: input.dvaAccount.account_number,
+            binding: recoveryBinding,
+            finalizationClaim,
+            merchantId,
+          })
+        : undefined;
     orderResult = await createAgenticCheckoutOrder(
       input.orderPayload,
       supabase,
-      { boundPrincipalId: input.sharedCartPrincipalId ?? null }
+      {
+        bindingClient,
+        boundPrincipalId: input.sharedCartPrincipalId ?? null,
+      }
     );
   } catch (error) {
     await releaseClaim({
@@ -137,4 +171,20 @@ export async function createFinalizationOrder(
     return { error: 'Database error', ok: false, status: 500 };
   }
   return { ok: true, orderId };
+}
+
+function isSharedCartBinding(value: unknown): value is {
+  cart_id: string;
+  cart_version: number;
+  checkout_generation: number;
+  checkout_session_id: string;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  return (
+    typeof binding.cart_id === 'string' &&
+    typeof binding.checkout_session_id === 'string' &&
+    Number.isSafeInteger(binding.cart_version) &&
+    Number.isSafeInteger(binding.checkout_generation)
+  );
 }

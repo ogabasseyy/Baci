@@ -18,7 +18,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/cart', () => ({ useCart: () => mocks.cartState }));
 vi.mock('@/lib/csrf', () => ({ buildCsrfHeaders: mocks.buildCsrfHeaders }));
 
-import { ChatwootInlineCartBridge } from './chatwoot-inline-cart-bridge';
+import { useChatwootInlineCartBridge } from './use-chatwoot-inline-cart-bridge';
+
+function HookHarness({
+  storeSlug,
+  widgetOrigin,
+}: {
+  storeSlug: string;
+  widgetOrigin: string;
+}) {
+  useChatwootInlineCartBridge(storeSlug, widgetOrigin);
+  return null;
+}
 
 const origin = 'https://chatwoot.example.com';
 const snapshot = {
@@ -36,8 +47,11 @@ function installFrame() {
   frame.id = 'chatwoot_live_chat_widget';
   holder.append(frame);
   document.body.append(holder);
-  const target = frame.contentWindow!;
-  const postMessage = vi.spyOn(target, 'postMessage').mockImplementation(() => {});
+  const target = frame.contentWindow;
+  if (!target) throw new Error('Expected the iframe to have a content window');
+  const postMessage = vi
+    .spyOn(target, 'postMessage')
+    .mockImplementation(() => {});
   return { holder, target, postMessage };
 }
 
@@ -65,7 +79,8 @@ function authorizedResponse(conversationId: number) {
 
 function contextResponse(contextToken: string) {
   const conversationId = Number(contextToken.split('-').at(-1));
-  const requestId = conversationId === 906 ? 'context_654321' : 'context_123456';
+  const requestId =
+    conversationId === 906 ? 'context_654321' : 'context_123456';
   return {
     ok: true,
     json: async () => ({
@@ -79,7 +94,8 @@ function contextResponse(contextToken: string) {
 }
 
 async function establishContext(target: Window, conversationId = 905) {
-  const requestId = conversationId === 906 ? 'context_654321' : 'context_123456';
+  const requestId =
+    conversationId === 906 ? 'context_654321' : 'context_123456';
   send(target, 'baci-commerce-context-request', {
     requestId,
     conversationId,
@@ -126,7 +142,9 @@ describe('ChatwootInlineCartBridge async context races', () => {
 
   it('discards an authorization response after the conversation changes', async () => {
     const { target, postMessage } = installFrame();
-    let resolveAuthorize: ((value: ReturnType<typeof authorizedResponse>) => void) | undefined;
+    let resolveAuthorize:
+      | ((value: ReturnType<typeof authorizedResponse>) => void)
+      | undefined;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (path: string, init: RequestInit) => {
@@ -142,13 +160,14 @@ describe('ChatwootInlineCartBridge async context races', () => {
             }),
           };
         }
-        if (path.endsWith('/verify')) return contextResponse(String(body.contextToken));
+        if (path.endsWith('/verify'))
+          return contextResponse(String(body.contextToken));
         return new Promise((resolve) => {
           resolveAuthorize = resolve;
         });
       })
     );
-    render(<ChatwootInlineCartBridge storeSlug="store" widgetOrigin={origin} />);
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
 
     await act(async () => {
       await establishContext(target);
@@ -179,7 +198,9 @@ describe('ChatwootInlineCartBridge async context races', () => {
 
   it('discards an authorization response after iframe navigation or merchant switch', async () => {
     const { holder, target, postMessage } = installFrame();
-    let resolveFetch: ((value: ReturnType<typeof authorizedResponse>) => void) | undefined;
+    let resolveFetch:
+      | ((value: ReturnType<typeof authorizedResponse>) => void)
+      | undefined;
     vi.stubGlobal(
       'fetch',
       vi.fn((path: string, init: RequestInit) => {
@@ -204,7 +225,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
       })
     );
     const view = render(
-      <ChatwootInlineCartBridge storeSlug="store" widgetOrigin={origin} />
+      <HookHarness storeSlug="store" widgetOrigin={origin} />
     );
     await act(async () => {
       await establishContext(target);
@@ -218,7 +239,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
     holder.replaceChildren(document.createElement('iframe'));
     mocks.cartState.merchantSlug = 'another-store';
     view.rerender(
-      <ChatwootInlineCartBridge storeSlug="another-store" widgetOrigin={origin} />
+      <HookHarness storeSlug="another-store" widgetOrigin={origin} />
     );
     await act(async () => {
       resolveFetch?.(authorizedResponse(905));

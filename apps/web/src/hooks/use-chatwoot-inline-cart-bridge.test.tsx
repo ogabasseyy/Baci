@@ -27,7 +27,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/cart', () => ({ useCart: () => mocks.cartState }));
 vi.mock('@/lib/csrf', () => ({ buildCsrfHeaders: mocks.buildCsrfHeaders }));
 
-import { ChatwootInlineCartBridge } from './chatwoot-inline-cart-bridge';
+import { useChatwootInlineCartBridge } from './use-chatwoot-inline-cart-bridge';
+
+function HookHarness({
+  storeSlug,
+  widgetOrigin,
+}: {
+  storeSlug: string;
+  widgetOrigin: string;
+}) {
+  useChatwootInlineCartBridge(storeSlug, widgetOrigin);
+  return null;
+}
 
 const origin = 'https://chatwoot.example.com';
 const canonicalSnapshot = {
@@ -56,8 +67,11 @@ function installFrame() {
   frame.id = 'chatwoot_live_chat_widget';
   holder.append(frame);
   document.body.append(holder);
-  const target = frame.contentWindow!;
-  const postMessage = vi.spyOn(target, 'postMessage').mockImplementation(() => {});
+  const target = frame.contentWindow;
+  if (!target) throw new Error('Expected the iframe to have a content window');
+  const postMessage = vi
+    .spyOn(target, 'postMessage')
+    .mockImplementation(() => {});
   return { holder, frame, target, postMessage };
 }
 
@@ -101,7 +115,8 @@ function challengeResponse(requestId: string) {
 
 function contextResponse(contextToken: string) {
   const conversationId = Number(contextToken.split('-').at(-1));
-  const requestId = conversationId === 906 ? 'context_654321' : 'context_123456';
+  const requestId =
+    conversationId === 906 ? 'context_654321' : 'context_123456';
   return {
     ok: true,
     json: async () => ({
@@ -115,7 +130,8 @@ function contextResponse(contextToken: string) {
 }
 
 async function establishWidgetContext(target: Window, conversationId = 905) {
-  const requestId = conversationId === 906 ? 'context_654321' : 'context_123456';
+  const requestId =
+    conversationId === 906 ? 'context_654321' : 'context_123456';
   sendWidgetMessage(target, 'baci-commerce-context-request', {
     requestId,
     conversationId,
@@ -159,9 +175,7 @@ describe('ChatwootInlineCartBridge', () => {
 
   it('authorizes the request and renders only canonical server values', async () => {
     const { target, postMessage } = installFrame();
-    render(
-      <ChatwootInlineCartBridge storeSlug="store" widgetOrigin={origin} />
-    );
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
 
     await act(async () => {
       await establishWidgetContext(target);
@@ -221,9 +235,7 @@ describe('ChatwootInlineCartBridge', () => {
       })
     );
     const { target, postMessage } = installFrame();
-    render(
-      <ChatwootInlineCartBridge storeSlug="store" widgetOrigin={origin} />
-    );
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
     await act(async () => {
       await establishWidgetContext(target);
       postMessage.mockClear();
@@ -243,9 +255,7 @@ describe('ChatwootInlineCartBridge', () => {
 
   it('rejects quantity changes until a durable shared-cart receipt exists', async () => {
     const { target, postMessage } = installFrame();
-    render(
-      <ChatwootInlineCartBridge storeSlug="store" widgetOrigin={origin} />
-    );
+    render(<HookHarness storeSlug="store" widgetOrigin={origin} />);
     await act(async () => {
       await establishWidgetContext(target);
       sendWidgetMessage(target, 'baci-cart-request', {
@@ -274,11 +284,8 @@ describe('ChatwootInlineCartBridge', () => {
     const quantityPayload = String(postMessage.mock.calls.at(-1)?.[0]);
     expect(quantityPayload.startsWith('baci-cart-quantity-result:')).toBe(true);
     expect(
-      JSON.parse(
-        quantityPayload.slice('baci-cart-quantity-result:'.length)
-      )
+      JSON.parse(quantityPayload.slice('baci-cart-quantity-result:'.length))
     ).toEqual({ requestId: 'quantity-0001', accepted: false });
     expect(mocks.cartState.updateQuantity).not.toHaveBeenCalled();
   });
-
 });

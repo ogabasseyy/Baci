@@ -4,7 +4,15 @@ import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 describe('STOREFRONT_LCP_COPY_CSS', () => {
   it('does not reserve an empty viewport below the IMEI heading', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toMatch(
-      /\[data-imei-lcp-hero\] \[data-cwv-lcp-fold\]\s*\{\s*min-height: 0;/
+      /\[data-imei-lcp-hero\] \[data-cwv-lcp-fold\]/
+    );
+  });
+  it('does not reserve an empty viewport below the compare hub heading', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-compare-hub-chrome\] \[data-cwv-lcp-fold\]/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-compare-hub-intro\] \[data-cwv-lcp-fold\]/
     );
   });
   it('keeps the repair booking form directly beneath its LCP intro', () => {

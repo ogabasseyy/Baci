@@ -3,11 +3,15 @@
 # Prints NUL-delimited tokens. Sections:
 #   ---ENV---      KEY=VALUE pairs the caller must export in its own process
 #   ---TURBO_CMD--- turbo command argv parts
-#   ---FILTERS---   sparse-exclude filter arguments
+#   ---FILTERS---   sparse-exclude filter arguments, plus --affected when scoped
+#
+# Local runs are scoped to packages changed since the origin/main merge base
+# (TURBO_SCM_BASE + --affected) unless QUALITY_GATE_FULL=1 or no base is found.
 #
 # Environment on entry:
-#   ACTIVE_DIR — resolved worktree root (required)
-#   PNPM       — (optional) path to pnpm wrapper; falls back to `pnpm`
+#   ACTIVE_DIR        — resolved worktree root (required)
+#   PNPM              — (optional) path to pnpm wrapper; falls back to `pnpm`
+#   QUALITY_GATE_FULL — (optional) set to 1 to force the full, unscoped gate
 set -euo pipefail
 
 ACTIVE_DIR="${ACTIVE_DIR:?ACTIVE_DIR must be set}"
@@ -30,6 +34,16 @@ if [ -x "$ACTIVE_DIR/ci_scripts/is-dep-less-worktree.sh" ] && sh "$ACTIVE_DIR/ci
     "BACI_REAL_PNPM=${BACI_REAL_PNPM:-$(command -v pnpm)}"
     "PATH=$ACTIVE_DIR/ci_scripts/hook-bin:$PATH"
   )
+fi
+
+# Empty output means "run the full gate" (fail safe). The script is invoked
+# through `sh`, so a checkout that predates it simply stays unscoped.
+AFFECTED_BASE=""
+if [ -f "$ACTIVE_DIR/ci_scripts/quality-gate-affected-base.sh" ]; then
+  AFFECTED_BASE=$(sh "$ACTIVE_DIR/ci_scripts/quality-gate-affected-base.sh" "$ACTIVE_DIR" 2>/dev/null || true)
+fi
+if [ -n "$AFFECTED_BASE" ]; then
+  ENV_TOKENS+=("TURBO_SCM_BASE=$AFFECTED_BASE")
 fi
 
 TURBO_SPARSE_FILTERS=()
@@ -55,4 +69,7 @@ printf '%s\0' "${TURBO_CMD[@]}"
 printf '%s\0' "---FILTERS---"
 if [ ${#TURBO_SPARSE_FILTERS[@]} -gt 0 ]; then
   printf '%s\0' "${TURBO_SPARSE_FILTERS[@]}"
+fi
+if [ -n "$AFFECTED_BASE" ]; then
+  printf '%s\0' "--affected"
 fi

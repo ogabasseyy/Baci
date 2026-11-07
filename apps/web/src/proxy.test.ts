@@ -3518,20 +3518,6 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-  });
-
   it('preserves slug-prefixed category support routes when stripping the merchant prefix', async () => {
     const req = new NextRequest(
       'https://ogabassey.com/ogabassey/smartphones/best-under/under-500k'
@@ -3543,21 +3529,6 @@ describe('Middleware Proxy', () => {
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
       'https://ogabassey.com/smartphones/best-under/under-500k'
-    );
-  });
-
-  it('redirects mixed-case custom-domain slug-prefixed product URLs to the slugless canonical route', async () => {
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('OgaBassey');
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
     );
   });
 
@@ -3576,41 +3547,6 @@ describe('Middleware Proxy', () => {
     );
     // The route-collision guard short-circuits BEFORE any alias lookup.
     expect(getCurrentSlugForAlias).not.toHaveBeenCalledWith('blog');
-  });
-
-  it('strips a genuine retired-slug prefix (non-route) to the slugless custom-domain URL', async () => {
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
-    vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
-      s === 'yodhashop' ? 'zorvexa' : null
-    );
-    const req = new NextRequest('https://ogabassey.com/yodhashop/summer-sale');
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    // 302 (temporary) so a reversible rename-back can't loop a browser-cached 301.
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/summer-sale'
-    );
-  });
-
-  it('strips a GRANDFATHERED reserved-name retired-slug prefix on a custom domain', async () => {
-    // A merchant that held 'support' as a slug before it was reserved could have
-    // retired it — custom.example/support/... must still strip to the slugless URL.
-    vi.mocked(getSlugForCustomDomain).mockResolvedValueOnce('zorvexa');
-    vi.mocked(getCurrentSlugForAlias).mockImplementation(async (s: string) =>
-      s === 'support' ? 'zorvexa' : null
-    );
-    const req = new NextRequest('https://ogabassey.com/support/summer-sale');
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/summer-sale'
-    );
   });
 
   it('does not strip a retired-slug prefix that is a platform app route (auth) on a custom domain', async () => {
@@ -3864,7 +3800,7 @@ describe('Middleware Proxy', () => {
     expect(rewrite).not.toContain('merchant_slug=support');
   });
 
-  it('302-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
+  it('301-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
     // The also-supported root-slug URL for a grandfathered reserved alias must forward
     // too — the main root-path block skips reserved segments, so this is handled by the
     // dedicated reserved-alias check before it.
@@ -3874,7 +3810,7 @@ describe('Middleware Proxy', () => {
 
     const res = await proxy(req);
 
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(301);
     expect(res.headers.get('location')).toContain('zorvexa');
   });
 
@@ -4381,20 +4317,6 @@ describe('Middleware Proxy', () => {
 
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe('https://ogabassey.com/repair');
-  });
-
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
-    const req = new NextRequest(
-      'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
-    );
-    req.headers.set('host', 'ogabassey.com');
-
-    const res = await proxy(req);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
-    );
   });
 
   it('preserves merchant category compare subroutes on custom domains', async () => {

@@ -594,7 +594,7 @@ describe('PaymentStep', () => {
 
       // Assert
       expect(screen.getByText('Credit Direct')).toBeInTheDocument();
-      expect(screen.getByTestId('credit-direct-logo')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
     });
 
     it('shows Klump when enabled in feature settings', () => {

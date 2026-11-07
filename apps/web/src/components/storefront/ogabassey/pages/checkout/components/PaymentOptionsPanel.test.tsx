@@ -34,6 +34,14 @@ function renderPanel(
 }
 
 describe('payment schedule selection', () => {
+  it('shows the Oxygen and Credit Direct logos beside their options', () => {
+    renderPanel('installments', true, true, {
+      oxygenEligible: true,
+      featureSettings: { credit_direct_enabled: true },
+    });
+    expect(screen.getByRole('img', { name: 'Oxygen X Finance Company' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
+  });
   it('hides unavailable REDVAULT and allows selecting it when available', () => {
     const hidden = renderPanel();
     expect(
@@ -103,7 +111,7 @@ describe('payment schedule selection', () => {
     expect(
       screen.queryByRole('button', { name: 'Pay Small Small' })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Proforma Invoice' })).toBeInTheDocument();
   });
 
   describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
@@ -118,16 +126,16 @@ describe('payment schedule selection', () => {
         expect(setPaymentTab).toHaveBeenCalledWith('full');
       });
       expect(setPaymentMethod).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create Proforma Invoice' })).toBeInTheDocument();
     });
   });
   it('offers the invoice option exactly once, on its own tab', () => {
     renderPanel('full');
 
-    // The "Get a Proforma Invoice" tab owns invoice selection: no
+    // The "Create Proforma Invoice" tab owns invoice selection: no
     // duplicate invoice card may appear under Pay in Full.
     expect(
-      screen.getByRole('button', { name: 'Get a Proforma Invoice' })
+      screen.getByRole('button', { name: 'Create Proforma Invoice' })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('radio', { name: /invoice/i })
@@ -137,7 +145,7 @@ describe('payment schedule selection', () => {
   it('offers a proforma invoice without requiring an online payment gateway', () => {
     const { setPaymentMethod } = renderPanel('invoice', false);
 
-    fireEvent.click(screen.getByRole('radio', { name: /get a proforma invoice/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /create proforma invoice/i }));
 
     expect(setPaymentMethod).toHaveBeenCalledWith('invoice');
   });
@@ -146,14 +154,14 @@ describe('payment schedule selection', () => {
     renderPanel('installments');
 
     expect(
-      screen.queryByRole('radio', { name: /get a proforma invoice/i })
+      screen.queryByRole('radio', { name: /create proforma invoice/i })
     ).not.toBeInTheDocument();
   });
 
   it.each([
     ['full', 'Pay in Full', 'Pay Small Small'],
     ['installments', 'Pay Small Small', 'Pay in Full'],
-    ['invoice', 'Get a Proforma Invoice', 'Pay in Full'],
+    ['invoice', 'Create Proforma Invoice', 'Pay in Full'],
   ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
     renderPanel(value);
 

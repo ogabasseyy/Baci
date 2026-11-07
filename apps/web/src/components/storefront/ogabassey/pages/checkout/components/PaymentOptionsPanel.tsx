@@ -1,8 +1,10 @@
 import { FileText, Truck } from 'lucide-react';
+import Image from 'next/image';
+import creditDirectLogo from '@/../public/partners/credit-direct.jpg';
+import oxygenLogo from '@/../public/partners/oxygen-x.png';
 import { useEffect } from 'react';
 import {
   BankTransferLogo,
-  CreditDirectLogo,
   JuicywayLogo,
   KorapayLogo,
   PaystackLogo,
@@ -102,7 +104,7 @@ export function PaymentOptionsPanel({
               : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
           }`}
         >
-          Get a Proforma Invoice
+          Create Proforma Invoice
         </button>
       </div>
 
@@ -110,7 +112,7 @@ export function PaymentOptionsPanel({
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
-            {/* Invoice lives on its own "Get a Proforma Invoice" tab
+            {/* Invoice lives on its own "Create Proforma Invoice" tab
               below: a second invoice card here would duplicate it. */}
             <RedvaultPaymentOption
               available={redvaultAvailable}
@@ -198,7 +200,7 @@ export function PaymentOptionsPanel({
               <PaymentOptionCard method="oxygen" paymentMethod={paymentMethod}
                 setPaymentMethod={setPaymentMethod} title="Oxygen"
                 description="From 25% down payment. Repay the balance monthly."
-                icon={<span className="font-bold text-store-primary">O₂</span>} />
+                icon={<Image src={oxygenLogo} alt="Oxygen X Finance Company" width={64} height={35} className="h-auto w-16 rounded bg-white p-1" />} />
             )}
             {featureSettings?.credit_direct_enabled === true &&
               ngnOnlyRailsAvailable && (
@@ -212,7 +214,7 @@ export function PaymentOptionsPanel({
                     label: 'Salary & Business owners',
                     className: 'bg-store-primary/10 text-store-primary',
                   }}
-                  icon={<CreditDirectLogo className="size-6" />}
+                  icon={<Image src={creditDirectLogo} alt="Credit Direct lending logo" width={40} height={40} className="size-10 rounded-full" />}
                 />
               )}
             {klumpEligible && (
@@ -256,7 +258,7 @@ export function PaymentOptionsPanel({
               method="invoice"
               paymentMethod={paymentMethod}
               setPaymentMethod={setPaymentMethod}
-              title="Get a Proforma Invoice"
+              title="Create Proforma Invoice"
               description="Send it to your company"
               icon={<FileText className="size-6 text-store-foreground" />}
             />

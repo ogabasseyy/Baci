@@ -18,7 +18,7 @@ Actions variable `BACI_PRIVATE_CI_ENABLED` to `true`. The lint job uses Contabo
 only when the repository is private and the variable is enabled. Pull requests
 from a different repository use GitHub-hosted runners. If the private runner is
 offline, matching lint jobs queue instead of silently switching to paid compute.
-The lint job does not receive `TURBO_TOKEN` on a self-hosted runner.
+The lint job does not receive `TURBO_TOKEN` or `TURBO_TEAM` on a self-hosted runner.
 
 To roll back, remove the variable or set it to `false`; subsequently scheduled
 lint jobs use GitHub-hosted runners and may consume included minutes. Already

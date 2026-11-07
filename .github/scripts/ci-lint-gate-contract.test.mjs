@@ -63,23 +63,25 @@ test('routes lint to the private runner only for an opted-in private repository 
   }
 });
 
-test('does not expose the remote-cache token to the private runner', () => {
+test('does not expose remote-cache credentials to the private runner', () => {
   const lint = workflow.jobs['quality-lint'].steps.find(
     (step) => step.name === 'Run Lint'
   );
-  const expression = lint.env.TURBO_TOKEN;
-  assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
-  const evaluate = (environment) => {
-    const source = expression
-      .slice(3, -2)
-      .replaceAll('runner.environment', JSON.stringify(environment))
-      .replaceAll('secrets.TURBO_TOKEN', JSON.stringify('test-token'));
-    assert.match(source, /^[\s()'"\w=!&|\-]+$/);
-    return Function(`"use strict"; return (${source});`)();
-  };
-  assert.equal(evaluate('self-hosted'), '');
-  assert.equal(evaluate(null), '');
-  assert.equal(evaluate('github-hosted'), 'test-token');
+  for (const name of ['TURBO_TOKEN', 'TURBO_TEAM']) {
+    const expression = lint.env[name];
+    assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
+    const evaluate = (environment) => {
+      const source = expression
+        .slice(3, -2)
+        .replaceAll('runner.environment', JSON.stringify(environment))
+        .replaceAll(`secrets.${name}`, JSON.stringify('test-value'));
+      assert.match(source, /^[\s()'"\w=!&|\-]+$/);
+      return Function(`"use strict"; return (${source});`)();
+    };
+    assert.equal(evaluate('self-hosted'), '');
+    assert.equal(evaluate(null), '');
+    assert.equal(evaluate('github-hosted'), 'test-value');
+  }
 });
 
 // GitHub expressions limited to `needs.changes.outputs.*`, quoted strings,

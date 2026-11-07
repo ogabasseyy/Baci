@@ -78,36 +78,7 @@ if [ "$(grep -c "schema_migrations(version, name, statements).*20260713130000" "
   exit 1
 fi
 
-# The production applier owns the transaction boundary for each ordinary
-# migration. Verify the new DVA evidence migration is inside the same boundary
-# as its history insert, with no inner BEGIN/COMMIT that could commit schema
-# changes before the ledger row.
-evidence_atomicity_dir="$fixture_root/evidence-atomicity"
-mkdir -p "$evidence_atomicity_dir"
-cp \
-  "$script_dir/../../supabase/migrations/20261106194000_agentic_dva_provider_success_evidence.sql" \
-  "$evidence_atomicity_dir/20261106194000_agentic_dva_provider_success_evidence.sql"
-evidence_atomicity_log="$fixture_root/evidence-atomicity-queries.log"
-PATH="$fake_bin:$PATH" \
-  MIGRATIONS_DIR="$evidence_atomicity_dir" \
-  SUPABASE_ACCESS_TOKEN=test \
-  SUPABASE_PROJECT_REF=test \
-  FAKE_QUERY_LOG="$evidence_atomicity_log" \
-  FAKE_INITIAL_RESPONSE='[]' \
-  bash "$applier" >"$fixture_root/evidence-atomicity-output.log"
-jq -er \
-  'select(.query | contains("CREATE ROLE agentic_dva_provider_evidence_writer")) | .query' \
-  "$evidence_atomicity_log" >"$fixture_root/evidence-atomicity-query.sql"
-test "$(head -n 1 "$fixture_root/evidence-atomicity-query.sql")" = 'BEGIN;'
-test "$(grep -c '^BEGIN;$' "$fixture_root/evidence-atomicity-query.sql")" -eq 1
-test "$(grep -c '^COMMIT;$' "$fixture_root/evidence-atomicity-query.sql")" -eq 1
-evidence_registration_line="$(grep -n 'INSERT INTO supabase_migrations.schema_migrations' "$fixture_root/evidence-atomicity-query.sql" | cut -d: -f1)"
-evidence_commit_line="$(grep -n '^COMMIT;$' "$fixture_root/evidence-atomicity-query.sql" | cut -d: -f1)"
-if [ -z "$evidence_registration_line" ] || [ "$evidence_registration_line" -ge "$evidence_commit_line" ]; then
-  echo 'DVA evidence migration history must be recorded before the production transaction commits' >&2
-  exit 1
-fi
-
+bash "$script_dir/test-evidence-migration-atomicity.sh" "$script_dir" "$fixture_root" "$fake_bin" "$applier"
 historical_repair_dir="$fixture_root/historical-repair"
 mkdir -p "$historical_repair_dir"
 cp \

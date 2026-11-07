@@ -1,0 +1,168 @@
+{
+  "$comment": "Money-path PR assurance configuration, read from the default branch by .github/workflows/money-pr-assurance.yml. See docs/runbooks/money-pr-assurance.md. Changing this file is itself a money-path change.",
+  "version": 1,
+  "statusContext": "money-pr-assurance",
+  "moneyKeywords": {
+    "$comment": "A changed file is a money path when its path contains one of these words anywhere, ignoring case and treating hyphens and underscores alike. Interface components, screens, hooks, scripts and tests count too: money logic lives in all of them. Only documentation and images (`outside`) never count. SQL files are named freely, so their changed text is searched as well (`contentPaths`) for the keywords and, as whole words or identifier parts, the money verbs in `contentWords`; other code files count when the lines they add or remove call or define a money operation (`money-pr-assurance-detect.mjs`, shared with the contract sweep), and SQL whose changed text GitHub does not return counts as money. `moneyPaths` adds money code whose path has none of the words: checkout code in the apps and shared packages, the orders API, wallet-releasing self-fulfilment, domain payment callbacks, the service-role client that money webhooks use, the hosted staging request gate, PiggyVest staging tools and the VPS cron runner. A contract test finds today's money code from what each file does and fails if any of it is missed.",
+    "outside": [
+      "docs/**",
+      "public/**",
+      "**/*.md",
+      "**/*.mdx",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.webp",
+      "**/*.svg",
+      "**/*.ico"
+    ],
+    "contentPaths": ["**/*.sql"],
+    "contentWords": [
+      "debit",
+      "credit",
+      "settle",
+      "transfer",
+      "balance",
+      "charge"
+    ],
+    "keywords": [
+      "piggyvest",
+      "wallet",
+      "savings",
+      "prefunded",
+      "primary-card",
+      "primary-bank",
+      "primary-inflow",
+      "primary-interest",
+      "primary-restricted",
+      "primary-pending-sources",
+      "plan-transfer",
+      "goal-policy",
+      "cancel-plan",
+      "purchase-preparation",
+      "purchase-pricing",
+      "store-credit",
+      "interest-bridge",
+      "payment",
+      "payout",
+      "refund",
+      "settlement",
+      "ledger",
+      "withdraw",
+      "shipping-charge",
+      "vtu",
+      "airtime",
+      "imei",
+      "petrock",
+      "paystack",
+      "korapay",
+      "juicyway",
+      "credit-direct",
+      "bnpl",
+      "klump",
+      "redvault",
+      "loyalty",
+      "redeem",
+      "utility",
+      "utilities"
+    ]
+  },
+  "moneyPaths": [
+    "apps/**/*checkout*",
+    "apps/**/*checkout*/**",
+    "packages/**/*checkout*",
+    "packages/**/*checkout*/**",
+    "apps/web/src/app/api/orders/**",
+    "apps/web/src/app/api/shipping/self-fulfill/**",
+    "apps/web/src/app/dashboard/domains/callback/**",
+    "apps/web/src/lib/supabase/service.ts",
+    "apps/mobile-storefront/lib/hosted-storefront-app-fetch*",
+    "tools/staging/**",
+    "vps-workers/jobs/run-web-cron*"
+  ],
+  "governancePaths": [
+    ".github/money-path-paths.json",
+    ".github/prompts/money-rules-adversarial-review.md",
+    "docs/piggyvest-change-summaries/TEMPLATE.md",
+    "docs/runbooks/money-pr-assurance.md",
+    ".github/scripts/money-pr-assurance*",
+    ".github/workflows/money-pr-assurance*.yml"
+  ],
+  "summary": {
+    "directory": "docs/piggyvest-change-summaries",
+    "ignoredFiles": ["TEMPLATE.md", "README.md"],
+    "maxWords": 450,
+    "headings": [
+      "What changes",
+      "Why",
+      "What could go wrong and how it is prevented",
+      "How it is tested",
+      "How it stays switched off"
+    ]
+  },
+  "evidence": {
+    "directory": "docs/piggyvest-contract-evidence"
+  },
+  "reviewers": {
+    "$comment": "Never trust github-actions[bot]: every workflow token, including one a pull request controls, posts as it. A Gemini family can return once its verdict comes from an identity pull-request workflows cannot use. Each reviewer's verdict counts only after the latest request, from a `requestedBy` login, that names the main branch's prompt and the full head commit.",
+    "promptPath": ".github/prompts/money-rules-adversarial-review.md",
+    "promptVersion": "money-rules-adversarial-review/v1",
+    "groups": [["codex"], ["claude"]],
+    "families": {
+      "codex": {
+        "kind": "codex-clean-comment",
+        "logins": ["chatgpt-codex-connector[bot]"],
+        "cleanPhrases": [
+          "Didn't find any major issues",
+          "Didn’t find any major issues"
+        ],
+        "requestPhrase": "@codex review",
+        "requestedBy": ["ogabasseyy"]
+      },
+      "claude": {
+        "kind": "verdict-block",
+        "logins": ["claude[bot]"],
+        "requestPhrase": "@claude",
+        "requestedBy": ["ogabasseyy"]
+      }
+    }
+  },
+  "ownerSignoff": {
+    "logins": ["ogabasseyy"],
+    "label": "owner-signoff",
+    "phrase": "summary-approved"
+  },
+  "signoffPaths": {
+    "$comment": "A money-path PR that also changes one of these files needs the owner's sign-off: they define the CI checks the assurance relies on.",
+    "paths": [".github/workflows/ci.yml", ".github/filters/ci.yml"]
+  },
+  "requiredChecks": [
+    {
+      "name": "Quality Gate",
+      "workflow": ".github/workflows/ci.yml"
+    },
+    {
+      "name": "Quality Gate - DB Replay",
+      "workflow": ".github/workflows/ci.yml",
+      "skipAllowedUnlessChanged": [
+        "supabase/migrations/**",
+        "supabase/tests/**",
+        "apps/web/tools/db/replay-registry/**",
+        "apps/web/tools/db/replay-registry.ts",
+        "apps/web/tools/db/replay-sql-check-registry.ts"
+      ]
+    },
+    {
+      "name": "Quality Gate - Disposable SQL Suites",
+      "workflow": ".github/workflows/ci.yml",
+      "skipAllowedUnlessChanged": [
+        "supabase/migrations/**",
+        "supabase/tests/**",
+        "apps/web/tools/db/replay-registry/**",
+        "apps/web/tools/db/replay-registry.ts",
+        "apps/web/tools/db/replay-sql-check-registry.ts"
+      ]
+    }
+  ]
+}

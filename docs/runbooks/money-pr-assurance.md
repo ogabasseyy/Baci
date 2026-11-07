@@ -1,0 +1,191 @@
+# Money PR assurance runbook
+
+The `money-pr-assurance` commit status tells the owner whether a pull request
+that changes how money moves has had the extra checks the PiggyVest program
+requires. It is posted by
+[the Money PR Assurance workflow](../../.github/workflows/money-pr-assurance.yml)
+using [its configuration](../../.github/money-path-paths.json).
+
+The check is **advisory** until the owner explicitly makes it required (see
+[Making the check required](#making-the-check-required)). It does not change
+or replace any existing gate: CI, Codex approval, CodeRabbit, Jules and the
+review-thread rule all still apply.
+
+## Which pull requests it covers
+
+A pull request is a money-path PR when any changed file, including the old
+name of a renamed file:
+
+- has a money word from `moneyKeywords.keywords` anywhere in its path, in
+  any folder and at any depth, ignoring case and treating `-` and `_` alike:
+  PiggyVest, wallet, savings, prefunded and primary card or bank custody,
+  plan transfers, goals, store credit, payments, refunds, payouts,
+  settlements, ledgers, airtime and utilities (VTU), IMEI checks, loyalty
+  and redemptions, and the payment providers by name;
+- matches a pattern in `moneyPaths`, for money code whose path has none of
+  those words: checkout code in the apps and shared packages, the orders
+  API, wallet-releasing self-fulfilment, domain payment callbacks, the
+  service-role client that money webhooks use, the hosted staging request
+  gate, PiggyVest staging tools and the VPS cron runner;
+- is SQL (`moneyKeywords.contentPaths`) whose changed text contains a money
+  word, or one of the money verbs in `moneyKeywords.contentWords` (debit,
+  credit, settle, transfer, balance, charge) as a whole word or identifier
+  part, because database files are named freely. SQL whose changed text
+  GitHub does not return (a very large or renamed file) counts as money;
+- is other runtime code (not tests, fixtures or docs) whose added or removed
+  lines call or define a money operation (a money database function or money
+  API endpoint), whatever the file is called. This uses
+  `money-pr-assurance-detect.mjs`, the same detection as the contract sweep.
+  Runtime code whose diff GitHub does not return is judged by its path
+  alone; or
+- matches `governancePaths`: the assurance check's own files.
+
+Interface components, screens, hooks, scripts and tests count like any other
+code: money logic lives in all of them. Only documentation and images
+(`moneyKeywords.outside`) never count. A contract test finds today's money
+code from what each file does (the database money functions it calls or
+defines and the money endpoints it calls) and fails if the configuration
+misses any of it. Every other pull request gets an immediate success status
+saying it is not a money-path PR.
+
+If GitHub cannot list every changed file, the PR is treated as a money-path PR.
+
+## What a money-path PR needs
+
+All of these must hold on the pull request's **current head commit**, named
+in full (all 40 characters). Any new push starts over: both reviewers must
+be asked again and the owner's sign-off must name the new commit.
+
+1. **Two adversarial reviews from different model families**, both following
+   the main branch's copy of
+   [the money-rules review prompt](../../.github/prompts/money-rules-adversarial-review.md).
+   Each reviewer counts only for its answer to the **latest** request for the
+   head commit: a request from the owner's login, unedited by anyone else and
+   not hidden, that names the prompt and the full head commit. The answer
+   must be posted after that request was last edited; asking again (or
+   editing the request) means waiting for a fresh answer.
+   - **Codex:** comment
+     `@codex review Follow the main branch's .github/prompts/money-rules-adversarial-review.md, not this pull request's copy, for commit <full head commit>.`
+     Codex counts when its clean comment ("Didn't find any major issues")
+     names the head commit and answers that request. Codex's automatic review
+     of each push uses its general rules, so on its own it never counts.
+   - **Claude:** comment
+     `@claude Run the review in the main branch's .github/prompts/money-rules-adversarial-review.md (not this pull request's copy) for commit <full head commit> and post its verdict block.`
+     The verdict counts when it comes from the Claude app in a pull request
+     comment or review body (never an inline comment), names the full commit
+     Claude reviewed and that commit is the head, uses the current prompt
+     version and says PASS. Verdicts are ordered by when their text was last
+     written, so an edited comment or review is judged by its edit.
+   - A reviewer comment that someone else edited, a hidden comment or a
+     dismissed review no longer counts; a dismissed or hidden newest verdict
+     fails the reviewer until it reviews again. If any comment from that
+     reviewer was edited by another login after its verdict, the reviewer
+     fails until it posts a fresh review. A later Codex review on the head
+     (dismissed or not), or a Codex review summary reporting findings on the
+     head, withdraws its clean verdict.
+   - Gemini does not count for now: its workflow posts under the shared
+     GitHub Actions identity, which any pull-request workflow can use.
+2. **Every review thread resolved.** Fix or answer each finding, then resolve
+   its thread.
+3. **CI green on the head commit:** `Quality Gate`, `Quality Gate - DB Replay`
+   and `Quality Gate - Disposable SQL Suites`, each produced by the CI Quality
+   Gate workflow (a same-named job from any other workflow is ignored). The
+   database replay runs the catalog and grant assertions. A skipped database
+   suite only counts when no file that would make CI run it changed (the
+   database entries of the CI change filter).
+4. **Sandbox evidence or a dark-until statement in the PR description:**
+   either a link to a file under `docs/piggyvest-contract-evidence/` that
+   this pull request adds or updates, or a line such as
+   `Dark until: the transfer engine flag is turned on by the owner`.
+5. **An owner-readable summary**, added or updated in this pull request:
+   `docs/piggyvest-change-summaries/<task-id>.md`, copied from
+   [the template](../piggyvest-change-summaries/TEMPLATE.md). It
+   must keep the five headings in order, stay at or under 450 words, and
+   contain no code or SQL.
+6. **Owner sign-off, when required.** If the summary says
+   `Owner sign-off: required`, the PR has the `owner-signoff` label, the PR
+   changes any assurance file (the rules, prompt, configuration or
+   workflows), or it changes the CI workflow or change filter listed in
+   `signoffPaths`, the owner must comment
+   `summary-approved <full 40-character head commit>` on its own line, in a
+   PR comment or a review (the status's workflow run shows the exact line to
+   copy). A hidden comment, a dismissed review, an edit by another login or a
+   later "Request changes" review from the owner withdraws it. The sign-off
+   covers the summary only; it never waives another requirement.
+
+## Rules for agents
+
+- Never post a `summary-approved` comment. Agents share the owner's GitHub
+  login, so the check cannot tell them apart; only the owner may type it.
+- Never post a fake verdict block, and never edit a reviewer's or the
+  owner's comment. Only the reviewer apps' own, unedited comments count.
+- Pushing after reviews or sign-off is fine, but ask for new reviews and a new
+  sign-off on the new head commit.
+- Do not edit the governance files to get a pull request through. Changes to
+  them are money-path changes, need the owner's sign-off, and are reviewed
+  against the main branch's rules.
+
+## Reading and re-running the status
+
+The status description shows the first unmet requirement. Open the workflow
+run linked from the status for the full list. `pending` means only CI is still
+running; `failure` means something needs action; `error` means the check could
+not read GitHub and should be re-run. Every read, and every status post, is
+tried three times. If the pull request itself still cannot be read, the check
+posts `error` on the head commit (taken from the event, or looked up a second
+way) so an earlier success does not stay in place. If the run fails or is
+cancelled any other way (a failed checkout, a crash, a timeout), a final step
+posts `error` the same way. If even that fails, the run fails red and must be
+re-run before the status can be trusted. Hiding a comment and resolving or
+reopening a review thread send no event, so re-run the check after either.
+
+The status refreshes on pushes, PR edits and labels, reviewer and owner
+comments, submitted, edited or dismissed reviews (through the
+[review relay workflow](../../.github/workflows/money-pr-assurance-review-relay.yml)),
+and when CI finishes (for pull requests from forks, only on the first four).
+GitHub has no event for resolving a review thread, so after resolving the last
+thread re-run it from the Actions tab (**Money PR Assurance**, **Run
+workflow**, enter the PR number) or with:
+
+```bash
+gh workflow run money-pr-assurance.yml --ref main -f pr_number=<number>
+```
+
+## Making the check required
+
+Only the owner decides this. Once the owner has approved it in writing:
+
+1. Watch a few money-path PRs and confirm the status matches expectations.
+2. Move the status to an identity that pull-request workflows cannot use. The
+   evaluator posts with the shared GitHub Actions token today, and any
+   workflow in a same-repository pull request can post a status under that
+   same identity, so a required check on it could be faked. Create a
+   dedicated GitHub App with permission to write commit statuses, keep its key
+   in a deployment environment limited to `main`, and have the evaluator post
+   with that App's token.
+3. In the repository settings, open the ruleset that protects `main`, and add
+   the status check `money-pr-assurance` with that App as its required
+   source.
+4. Every pull request then needs the status. Non-money PRs receive success
+   automatically, so they are not slowed down.
+
+To return to advisory mode, remove `money-pr-assurance` from the required
+checks. No code change is needed either way.
+
+## Trust model
+
+- The evaluator runs only on events GitHub takes from the default branch. It
+  checks out the default branch's script and configuration, never the pull
+  request's code, and reads the pull request through the API.
+- Review events would run the pull request's own copy of a workflow, so they
+  reach the evaluator only through a relay with no permissions.
+- Codex and Claude verdicts are accepted only from those apps' logins listed
+  in the configuration, and only while no other login has edited them. The
+  configuration refuses the shared GitHub Actions login for any reviewer or
+  owner.
+- Until step 2 of [Making the check required](#making-the-check-required) is
+  done, a same-repository pull request could post its own status, which is
+  why the check stays advisory.
+- Changing the reviewer logins, the money paths or the rules means changing
+  the governance files, which itself requires full assurance and the owner's
+  sign-off.

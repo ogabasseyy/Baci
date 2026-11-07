@@ -1,7 +1,6 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useAuthSafe } from '@/contexts/auth-context';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -18,6 +17,7 @@ import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-finan
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
+import { useCheckoutUser } from './checkout/hooks/use-checkout-user';
 import { navigateCheckoutResult } from './checkout/navigate-checkout-result';
 import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
@@ -57,8 +57,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const router = useRouter();
   const getHref = (path: string) => checkoutHref(basePath, path);
   const searchParams = useSearchParams();
-  const auth = useAuthSafe();
-  const user = auth?.user;
+  const user = useCheckoutUser();
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {
     form: checkoutFormState,

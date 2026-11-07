@@ -2,8 +2,8 @@
   "schema_version": 1,
   "reviewed_at": "2026-11-07T11:06:01+00:00",
   "source_revision": "16b04284b8bdfe0f02db9d370e4dfc79154b3188",
-  "evidence_digest": "6f81600d7be32011cb8f57086e7ded0bb124e87334781a4a9a24767e011631eb",
-  "claims_digest": "d6a9f6bfebf89928af507e96af75be7d663a0766bcff10ba60a1205df2d0aaec",
+  "evidence_digest": "6261aa1c006bb0cfa798ec5eba53d3abbe3d897265ca1d5bf332e9bc114da474",
+  "claims_digest": "b4216c8b2911cb2f2079b20489e62573fbbb0d9400cd7d0220ea883116317d57",
   "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
@@ -205,7 +205,8 @@
         "apps/web/src/lib/agentic/agentic-line-tax.ts",
         "apps/web/src/lib/agentic/checkout-catalog.ts",
         "apps/web/src/lib/agentic/checkout-order-tax.ts",
-        "apps/web/src/lib/agentic/checkout-completion-payloads.ts"
+        "apps/web/src/lib/agentic/checkout-completion-payloads.ts",
+        "apps/web/src/lib/agentic/checkout-totals.ts"
       ]
     },
     {

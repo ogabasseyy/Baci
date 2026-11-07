@@ -1,8 +1,15 @@
 // @vitest-environment node
 
 import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
-import { describe, expect, it } from 'vitest';
-import { generateReceiptPDF } from '@/lib/receipt-pdf-generator';
+import { describe, expect, it, vi } from 'vitest';
+import { renderHtmlToPdf } from '@/lib/receipt-html-to-pdf';
+import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
+
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi
+    .fn()
+    .mockResolvedValue(new TextEncoder().encode('%PDF-1.7')),
+}));
 
 function createReceiptMerchant(
   overrides: Partial<ReceiptMerchant> = {}
@@ -79,16 +86,16 @@ function createReceiptOrder(
   };
 }
 
-describe('generateReceiptPDF server import', () => {
-  it('creates a server-side PDF with the package jsPDF import', () => {
-    const doc = generateReceiptPDF(
+describe('shared invoice server import', () => {
+  it('exports a PDF blob in Node without browser globals', async () => {
+    const blob = await generateReceiptBlob(
       createReceiptOrder(),
       createReceiptMerchant()
     );
-    const output = doc.output('arraybuffer');
-
-    expect(doc.getNumberOfPages()).toBeGreaterThanOrEqual(1);
-    expect(output).toBeInstanceOf(ArrayBuffer);
-    expect(output.byteLength).toBeGreaterThan(1000);
+    expect(blob.type).toBe('application/pdf');
+    expect(await blob.text()).toBe('%PDF-1.7');
+    expect(vi.mocked(renderHtmlToPdf).mock.calls[0][0]).toContain(
+      'Ogabassey Limited'
+    );
   });
 });

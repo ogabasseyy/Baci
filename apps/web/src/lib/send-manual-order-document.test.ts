@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async (html: string) =>
+    new TextEncoder().encode(`%PDF-TEST\n${html}`)
+  ),
+}));
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
 vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
@@ -26,7 +31,7 @@ describe('send manual order document', () => {
     });
   });
 
-  it('sends a real PDF receipt, a claim link and tenant-scoped email audit metadata', async () => {
+  it('sends the shared receipt PDF attachment, a claim link and tenant-scoped email audit metadata', async () => {
     const db = database();
     const result = await sendManualOrderDocument({ supabase: db.client, row });
     expect(result.status).toBe('sent');
@@ -60,7 +65,7 @@ describe('send manual order document', () => {
     });
     const pdf = Buffer.from(attachment.content, 'base64').toString('latin1');
     expect(pdf.startsWith('%PDF-')).toBe(true);
-    expect(pdf).toContain('RECEIPT');
+    expect(pdf).toContain('Receipt');
     expect(pdf).toContain('28 Sept 2026');
     expect(pdf).toContain('Pixel 10 Pro XL');
     const claimCall = db.rpc.mock.calls.find(
@@ -100,7 +105,7 @@ describe('send manual order document', () => {
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );
-    expect(pdf).toContain('INVOICE');
+    expect(pdf).toContain('Invoice');
     expect(pdf).toContain('26 Sept 2026');
     expect(message.textContent).toMatch(/not.*proof of payment/i);
   });
@@ -121,7 +126,7 @@ describe('send manual order document', () => {
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );
-    expect(pdf).toContain('PROFORMA INVOICE');
+    expect(pdf).toContain('Proforma Invoice');
   });
 
   it('attaches the assigned virtual account to invoice payment instructions', async () => {

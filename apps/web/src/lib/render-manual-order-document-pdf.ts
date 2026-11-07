@@ -11,7 +11,7 @@ import type {
   DispatchTransaction,
 } from '@/lib/mark-manual-document-dispatch-started';
 import {
-  generateReceiptPDF,
+  generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
 import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
@@ -197,7 +197,7 @@ export async function renderManualOrderDocumentPdf({
       )
     : null;
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-  const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
+  const pdf = await generateReceiptBlob(receiptOrder, receiptMerchant, {
     buyerReference: order.buyer_reference,
     documentKind: pdfDocumentKind,
     dueDate: order.payment_due_date,

@@ -91,12 +91,16 @@ export async function GET(
     // explicitly instead of letting the generator infer from the payment
     // flag, which stays non-paid on settled manual balances. Date the same
     // way: the completing payment, not the untouched order dates.
-    const blob = generateReceiptBlob(data.receiptOrder, data.receiptMerchant, {
-      documentKind: 'receipt',
-      documentDate:
-        (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
-        data.receiptOrder.created_at,
-    });
+    const blob = await generateReceiptBlob(
+      data.receiptOrder,
+      data.receiptMerchant,
+      {
+        documentKind: 'receipt',
+        documentDate:
+          (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
+          data.receiptOrder.created_at,
+      }
+    );
 
     return new NextResponse(blob, {
       headers: {

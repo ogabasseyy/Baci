@@ -194,7 +194,7 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
         order_number: 'ORD-1001\r\nSet-Cookie: evil',
       })
     );
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['receipt']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['receipt']));
 
     const response = await requestReceipt();
 

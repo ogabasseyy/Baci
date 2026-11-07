@@ -30,6 +30,8 @@ interface ReceiptMerchantDetails {
   bank_account_name?: string | null;
   bank_account_number?: string | null;
   bank_code?: string | null;
+  bank_name?: string | null;
+  registered_address?: ReceiptMerchant['registered_address'];
   brand_colors?: ReceiptMerchant['brand_colors'];
   business_address?: string | null;
   business_name?: string | null;
@@ -202,6 +204,9 @@ export function createOrderDetailsReceiptActions({
       const receiptMerchant: ReceiptMerchant = {
         bank_account_number: merchant.bank_account_number ?? null,
         bank_code: merchant.bank_code ?? null,
+        bank_name: merchant.bank_name ?? null,
+        bank_account_name: merchant.bank_account_name ?? null,
+        registered_address: merchant.registered_address ?? null,
         brand_colors: merchant.brand_colors ?? undefined,
         business_address: merchant.business_address ?? null,
         business_name: merchant.business_name || 'Baci',

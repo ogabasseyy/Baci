@@ -133,6 +133,8 @@ const nextConfig: NextConfig = {
   // entrypoint without Turbopack bundling fflate's worker path into app code.
   // These packages are only used in specific API routes and should not be bundled into every function.
   serverExternalPackages: [
+    '@sparticuz/chromium',
+    'puppeteer-core',
     'jspdf',
     'jspdf-autotable',
     'sharp',
@@ -187,7 +189,17 @@ const nextConfig: NextConfig = {
 
   // Fix Vercel middleware tracing issue with Next.js 16
   // See: https://github.com/vercel/next.js/issues/71818
+  // Chromium is hoisted to the workspace root by the pnpm linker.
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   outputFileTracingIncludes: {
+    '/api/orders{,/**}': [
+      './node_modules/@sparticuz/chromium/bin/**/*',
+      '../../node_modules/@sparticuz/chromium/bin/**/*',
+    ],
+    '/api/storefront/account/orders/**': [
+      './node_modules/@sparticuz/chromium/bin/**/*',
+      '../../node_modules/@sparticuz/chromium/bin/**/*',
+    ],
     '/middleware': ['./node_modules/@supabase/**/*'],
   },
 

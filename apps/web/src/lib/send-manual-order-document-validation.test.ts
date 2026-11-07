@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async (html: string) =>
+    new TextEncoder().encode(`%PDF-TEST\n${html}`)
+  ),
+}));
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
 vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {

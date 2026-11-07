@@ -140,7 +140,7 @@ export async function GET(
         data.invoiceData.items
       ),
     };
-    const blob = generateReceiptBlob(receiptOrder, data.receiptMerchant, {
+    const blob = await generateReceiptBlob(receiptOrder, data.receiptMerchant, {
       buyerReference: data.invoiceData.buyer_reference,
       documentDate: data.invoiceData.issue_date,
       documentKind:

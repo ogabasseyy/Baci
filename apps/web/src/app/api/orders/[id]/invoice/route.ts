@@ -730,7 +730,7 @@ export async function GET(
       );
     }
 
-    const pdfBlob = generateReceiptBlob(receiptOrder, receiptMerchant, {
+    const pdfBlob = await generateReceiptBlob(receiptOrder, receiptMerchant, {
       buyerReference: invoiceData.buyer_reference,
       complianceNote,
       documentDate: invoiceData.issue_date,

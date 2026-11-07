@@ -3,6 +3,9 @@ import { provisionInvoiceMethodDva } from '@/lib/provision-invoice-method-dva';
 import { buildImmediateInvoiceArtifacts } from './invoice-artifacts';
 import { loadPersistedInvoiceOrderItems } from './persisted-invoice-items';
 
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async () => new TextEncoder().encode('%PDF-TEST')),
+}));
 vi.mock('./persisted-invoice-items', () => ({
   loadPersistedInvoiceOrderItems: vi.fn(),
 }));

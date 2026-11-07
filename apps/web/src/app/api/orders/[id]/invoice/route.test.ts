@@ -236,7 +236,7 @@ describe('GET /api/orders/[id]/invoice', () => {
     vi.clearAllMocks();
     vi.mocked(cookies).mockResolvedValue({ get: vi.fn() } as never);
     vi.mocked(generatePeppolInvoiceXml).mockReturnValue('<Invoice />');
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['invoice']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
     vi.mocked(resolveReceiptLogoDataUri).mockResolvedValue(
       'data:image/png;base64,AA=='
     );

@@ -114,11 +114,19 @@ export function generateReceiptHtml(
   // A proforma is by definition unpaid; a paid order always renders the
   // commercial receipt even if a stale proforma kind travels with it.
   const isProforma = options.documentKind === 'proforma' && !isPaid;
-  const docTitle = isPaid
-    ? 'Receipt'
-    : isProforma
-      ? 'Proforma Invoice'
-      : 'Invoice';
+  const forceInvoice = options.documentKind === 'invoice';
+  const invoiceTitles: Record<string, string> = {
+    '381': 'Credit Note',
+    '383': 'Debit Note',
+    '384': 'Corrected Invoice',
+    '386': 'Prepayment Invoice',
+    '389': 'Self-billed Invoice',
+  };
+  const docTitle = isProforma
+    ? 'Proforma Invoice'
+    : isPaid && !forceInvoice
+      ? 'Receipt'
+      : (invoiceTitles[options.invoiceTypeCode ?? ''] ?? 'Invoice');
 
   const currencyCode = order.currency || 'NGN';
   const formatMoney = createMoneyFormatter(currencyCode);
@@ -163,9 +171,27 @@ export function generateReceiptHtml(
   appendAddressPart(addressParts, addr?.postal_code);
   appendAddressPart(addressParts, addr?.country, { isCountry: true });
 
+  const registeredAddress = merchant.registered_address;
+  const invoiceAddress = registeredAddress
+    ? [
+        registeredAddress.street,
+        registeredAddress.city,
+        registeredAddress.state,
+        registeredAddress.postal_code,
+        registeredAddress.country,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const displayMerchant =
+    docTitle === 'Receipt' || !invoiceAddress
+      ? merchant
+      : { ...merchant, business_address: invoiceAddress };
+
   return renderReceiptDocument({
     order,
-    merchant,
+    merchant: displayMerchant,
+    complianceNote: options.complianceNote,
     addressParts,
     bankDetailsHtml: renderBankDetailsHtml({
       order,
@@ -191,11 +217,15 @@ export function generateReceiptHtml(
     itemRows: renderItemRows(
       order,
       formatMoney,
-      isPaid ? 'receipt' : isProforma ? 'proforma' : 'invoice'
+      isPaid && !forceInvoice ? 'receipt' : isProforma ? 'proforma' : 'invoice'
     ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
-    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid),
-    vatBreakdownHtml: renderVatBreakdownHtml(order, formatMoney, isPaid),
+    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid && !forceInvoice),
+    vatBreakdownHtml: renderVatBreakdownHtml(
+      order,
+      formatMoney,
+      isPaid && !forceInvoice
+    ),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),
     socialItems: buildSocialItems(merchant.social_media),

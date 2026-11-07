@@ -150,6 +150,8 @@ export interface ReceiptOrder {
 export type ReceiptDocumentKind = 'receipt' | 'invoice' | 'proforma';
 
 export interface ReceiptOptions {
+  invoiceTypeCode?: string | null;
+  complianceNote?: string;
   qrCodeDataUri?: string;
   storeUrl?: string;
   paymentLink?: string;

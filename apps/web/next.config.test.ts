@@ -38,6 +38,29 @@ describe('next.config core options', () => {
     vi.unstubAllEnvs();
   });
 
+  it('packages the headless browser for server invoice and receipt exports', () => {
+    expect(nextConfig.serverExternalPackages).toEqual(
+      expect.arrayContaining(['@sparticuz/chromium', 'puppeteer-core'])
+    );
+    expect(nextConfig.outputFileTracingRoot).toBe(resolve(__dirname, '../..'));
+    for (const scope of [
+      '/api/orders{,/**}',
+      '/api/storefront/account/orders/**',
+    ]) {
+      expect(nextConfig.outputFileTracingIncludes?.[scope]).toContain(
+        '../../node_modules/@sparticuz/chromium/bin/**/*'
+      );
+    }
+    expect(
+      existsSync(
+        resolve(
+          __dirname,
+          '../../node_modules/@sparticuz/chromium/bin/chromium.br'
+        )
+      )
+    ).toBe(true);
+  });
+
   it('lets proxy handle legacy Klump webhook trailing slash compatibility', () => {
     expect(nextConfig.skipTrailingSlashRedirect).toBe(true);
   });

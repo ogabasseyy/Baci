@@ -265,7 +265,7 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
     vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(
       createDocumentData('ORD-1001\r\nSet-Cookie: evil')
     );
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['invoice']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
 
     const response = await GET(
       new NextRequest(
@@ -339,7 +339,7 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
     const documentData = createDocumentData('ORD-2002');
     documentData.invoiceData.invoice_type_code = '325';
     vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(documentData);
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['proforma']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['proforma']));
 
     const response = await GET(
       new NextRequest(
@@ -410,7 +410,7 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
       },
     ];
     vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(documentData);
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['invoice']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
 
     const response = await GET(
       new NextRequest(
@@ -452,7 +452,7 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
     mockGeneratePeppolInvoiceXml.mockImplementationOnce(() => {
       throw new Error('missing buyer endpoint');
     });
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['invoice']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
 
     const response = await GET(
       new NextRequest(

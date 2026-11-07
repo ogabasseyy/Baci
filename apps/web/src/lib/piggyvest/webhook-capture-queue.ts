@@ -14,9 +14,9 @@ import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
  * Database-backed queue over the captured deliveries, for the drain. A row
  * is leased for LEASE_SECONDS (a crashed worker's lease simply expires and
  * the row is claimed again) and is only claimable after MIN_AGE_SECONDS, so
- * the receiver's own inline processing normally finishes first. The
- * service-role variant is webhook-capture-service-queue.ts, kept apart so
- * the worker host's import graph never reaches a service client.
+ * the receiver's own inline processing normally finishes first. Queue
+ * operations use the dedicated drain login; the restricted receiver only
+ * captures deliveries and completes its own inline processing.
  */
 export const LEASE_SECONDS = 300;
 export const MIN_AGE_SECONDS = 120;
@@ -47,7 +47,7 @@ export interface CaptureQueue {
 /**
  * The queue over the worker host's dedicated drain login (see
  * webhook-capture-pg-executor.ts), never a service-role client: the same
- * lease, grace period and fenced resolve as the service-role queue. Every response is parsed
+ * lease, grace period and fenced resolve as the stored capture contract. Every response is parsed
  * before it is trusted and every failure is reported without detail.
  */
 export function createPgCaptureQueue(

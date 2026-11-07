@@ -1,23 +1,26 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T20:34:23+00:00",
-  "source_revision": "740122683e1c16979372ce963ca2aabd0b8f3fed",
-  "evidence_digest": "0768371803be406d0d4f5c025f46d9162c68f1769b19f3c3894586c642a76fae",
-  "claims_digest": "55262d91c0adc6264e692c92fb5e8608a885c79e68e215d1a6c8b16251b14f60",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-06T18:25:30.189271+00:00",
+  "source_revision": "4203ba20a5ae7dae548deae0917fde9ef3a904e2",
+  "evidence_digest": "fcff9239ef506c3934bfda82ca6349e972c7dc9e7eaeb5b19f90e9bdd9391c8b",
+  "claims_digest": "f9911d77fee0141e6764db3a5838c11f5a97a4af657c4b01d5577e1f50c75a2b",
+  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
+        "apps/web/src/config/oxygen-storefront-staging.ts",
+        "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts",
+        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql"
       ]
     },
     {

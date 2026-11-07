@@ -6,6 +6,7 @@ import {
   type PiggyvestCaptureDrainRuntime,
   piggyvestCaptureDrainSessionRowSchema,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
+import { primaryDbLink } from './primary-db-link';
 
 /**
  * Database executor of the PiggyVest webhook capture drain (R5), for the
@@ -190,20 +191,23 @@ function sessionFailures(
 }
 
 function clientConfig(
-  database: PiggyvestCaptureDrainRuntime['database']
+  database: PiggyvestCaptureDrainRuntime['database'],
+  link: ReturnType<typeof primaryDbLink>
 ): ClientConfig {
   return {
     host: database.host,
     port: database.port,
     database: database.name,
-    user: database.login,
+    user: link.user,
     password: database.password,
-    ssl: { rejectUnauthorized: true, ca: database.certificateAuthority },
+    ssl: {
+      rejectUnauthorized: true,
+      ca: database.certificateAuthority,
+      ...link.tls,
+    },
     connectionTimeoutMillis: 4000,
     query_timeout: 4000,
-    statement_timeout: 2500,
-    lock_timeout: 1500,
-    options: '-c search_path=pg_catalog',
+    ...link.startup,
     application_name: 'baci-piggyvest-capture-drain',
   };
 }
@@ -220,9 +224,11 @@ export function createCaptureDrainPgExecutor(
   async function withVerifiedSession<T>(
     work: (client: CaptureDrainPgClient) => Promise<T>
   ): Promise<T> {
-    const client = createClient(clientConfig(runtime.database));
+    const link = primaryDbLink(runtime.database.login, runtime.database.port);
+    const client = createClient(clientConfig(runtime.database, link));
     try {
       await client.connect();
+      await link.afterConnect(client);
       const verified = await client.query(CAPTURE_DRAIN_VERIFY_SESSION_SQL, [
         PIGGYVEST_CAPTURE_WORKER_ROLE,
         PIGGYVEST_CAPTURE_DRAIN_LOGIN,

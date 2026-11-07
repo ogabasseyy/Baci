@@ -95,7 +95,7 @@ beforeEach(() => {
 
 describe('runPiggyvestWebhookCaptureDrainCli', () => {
   it('prints the plan without reading configuration or connecting', async () => {
-    await expect(cli(['--plan'], {})).resolves.toBe(0);
+    await expect(cli(['--plan'], { NODE_ENV: 'test' })).resolves.toBe(0);
     expect(output[0]).toContain('Plan only');
     expect(createExecutor).not.toHaveBeenCalled();
   });

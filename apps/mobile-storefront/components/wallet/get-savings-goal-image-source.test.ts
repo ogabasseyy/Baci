@@ -1,4 +1,5 @@
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 
 const goal = {
@@ -6,14 +7,11 @@ const goal = {
   product_image: null,
 } as WalletActiveSavingsGoal;
 
-it('uses a local render only for the synthetic test device in development', () => {
-  expect(getSavingsGoalImageSource(goal, 128)).not.toBeNull();
-  expect(
-    getSavingsGoalImageSource({ ...goal, title: 'Real phone' }, 128)
-  ).toBeNull();
+it('returns no source for a goal without a product image', () => {
+  expect(getSavingsGoalImageSource(goal, 128)).toBeNull();
 });
 
-it('uses the catalog image ahead of the synthetic preview', () => {
+it('uses the catalog image when there is one', () => {
   const source = getSavingsGoalImageSource(
     { ...goal, product_image: 'https://example.com/phone.jpg' },
     128
@@ -21,12 +19,11 @@ it('uses the catalog image ahead of the synthetic preview', () => {
   expect(source).toHaveProperty('uri');
 });
 
-it('never returns the synthetic render in a release build', () => {
-  const originalDev = __DEV__;
-  Object.defineProperty(globalThis, '__DEV__', { value: false });
-  try {
-    expect(getSavingsGoalImageSource(goal, 128)).toBeNull();
-  } finally {
-    Object.defineProperty(globalThis, '__DEV__', { value: originalDev });
-  }
+it('uses device artwork for the catalogue placeholder instead of a No Image tile', () => {
+  expect(
+    getSavingsGoalImageSource(
+      { ...goal, product_image: PRODUCT_PLACEHOLDER_IMAGE },
+      128
+    )
+  ).toBeNull();
 });

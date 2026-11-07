@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   recordQuarantineEvent,
   resolveQuarantineEvent,
@@ -8,7 +8,7 @@ import {
 function mockSupabase(queues: {
   upserts?: Array<{ data: unknown; error: unknown }>;
   updates?: Array<{ data: unknown; error: unknown }>;
-}): { client: PiggyvestIntakeServiceClient; from: ReturnType<typeof vi.fn> } {
+}): { client: PiggyvestIntakeClient; from: ReturnType<typeof vi.fn> } {
   const upsertQueue = [...(queues.upserts ?? [])];
   const updateQueue = [...(queues.updates ?? [])];
   const chain: Record<string, unknown> = {};
@@ -28,7 +28,7 @@ function mockSupabase(queues: {
   });
   const from = vi.fn(() => chain);
   return {
-    client: { from } as unknown as PiggyvestIntakeServiceClient,
+    client: { from } as unknown as PiggyvestIntakeClient,
     from,
   };
 }

@@ -7,6 +7,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('pg', () => ({ Client: vi.fn() }));
 vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
   dispatchPrimaryPiggyvestIntake: mocks.dispatch,
+  isKillSwitchDeferral: () => false,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
   readPrimaryWalletBankInboxSecrets: () => ({

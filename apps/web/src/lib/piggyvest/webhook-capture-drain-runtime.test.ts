@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   pgClient: vi.fn(),
   createServiceClient: vi.fn(),
   createAdminClient: vi.fn(),
-  createIntakeServiceClient: vi.fn(),
+  createIntakeClient: vi.fn(),
   bankKey: '',
 }));
 
@@ -20,10 +20,11 @@ vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mocks.createAdminClient,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: mocks.createIntakeServiceClient,
+  createPiggyvestIntakeClient: mocks.createIntakeClient,
 }));
 vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
   dispatchPrimaryPiggyvestIntake: mocks.dispatch,
+  isKillSwitchDeferral: () => false,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
   readPrimaryWalletBankInboxSecrets: () => ({
@@ -221,7 +222,7 @@ describe('worker-host replay', () => {
     expect(deferral).toContain('PIGGYVEST_WEBHOOK_REPLAY_DEFERRED');
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
     expect(mocks.createAdminClient).not.toHaveBeenCalled();
-    expect(mocks.createIntakeServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createIntakeClient).not.toHaveBeenCalled();
     expect(mocks.pgClient).not.toHaveBeenCalled();
   });
 

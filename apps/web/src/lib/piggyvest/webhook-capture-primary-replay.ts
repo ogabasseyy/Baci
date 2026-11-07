@@ -1,5 +1,8 @@
 import 'server-only';
-import { dispatchPrimaryPiggyvestIntake } from '@/app/api/webhooks/piggyvest/primary-webhook-dispatch';
+import {
+  dispatchPrimaryPiggyvestIntake,
+  isKillSwitchDeferral,
+} from '@/app/api/webhooks/piggyvest/primary-webhook-dispatch';
 import {
   authorizesLegacyHandling,
   primaryOwnerFamily,
@@ -16,7 +19,7 @@ import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
  * which writes through its own dedicated database login. This module never
  * builds or receives a service-role client.
  *
- * Where the receiver would write through the service role, this step
+ * Where the receiver would use its inline-only restricted intake, this step
  * writes nothing and reports a marker instead, so the drain settles the
  * captured row (the row itself is the durable evidence):
  * - unparseable or unknown bytes: content quarantine (parked for review);
@@ -60,7 +63,11 @@ export async function replayPrimaryDelivery(
   }
   if (ownerSkipped) return { status: 503, keySetIncomplete: true };
   if (primary === 'conflict') return { status: 200, conflict: true };
-  if (primary) return { status: primary.status };
+  if (primary) {
+    return isKillSwitchDeferral(primary)
+      ? { status: primary.status, killSwitchDeferred: true }
+      : { status: primary.status };
+  }
 
   // Whether the legacy path may take it is judged on what admission
   // recorded: the worker host holds no legacy key, so its verification

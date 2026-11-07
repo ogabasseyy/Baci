@@ -62,14 +62,60 @@ with tempfile.TemporaryDirectory(prefix='cart-condition-order-') as directory:
         # private replay wrapper and financial/inventory transaction.
         actual=re.search(r'CREATE OR REPLACE FUNCTION private.create_storefront_order\([\s\S]*?\$\$;', (root / 'supabase/migrations/20260828130000_scope_storefront_order_replay_route_context.sql').read_text()).group()
         capture=actual.replace('FUNCTION private.create_storefront_order(','FUNCTION public.create_storefront_order(',1)
-        capture=capture.replace('BEGIN',"BEGIN\n INSERT INTO public.agentic_binding_calls(discount,expected,items) VALUES(p_discount_amount,p_expected_total,p_items);",1)
-        sql += "\nCREATE TABLE public.agentic_binding_calls(discount numeric,expected numeric,items jsonb);\n"+capture
+        # Sequence advancement survives rollback and exposes attempted dispatch.
+        capture=capture.replace('BEGIN',"BEGIN\n PERFORM nextval('public.agentic_binding_dispatch_seq');\n INSERT INTO public.agentic_binding_calls(discount,expected,items) VALUES(p_discount_amount,p_expected_total,p_items);",1)
+        sql += "\nCREATE SEQUENCE public.agentic_binding_dispatch_seq;\nCREATE TABLE public.agentic_binding_calls(discount numeric,expected numeric,items jsonb);\n"+capture
         if '--before-agentic-economics-fix' not in sys.argv:
             sql += (root / 'supabase/migrations/20261015150000_commerce_cart_agentic_checkout_economics.sql').read_text()*2
         if '--before-partial-voucher-binding-fix' not in sys.argv:
             sql += (root / 'supabase/migrations/20261015151000_commerce_cart_partial_voucher_binding.sql').read_text()*2
+        if '--without-price-drift-fix' not in sys.argv:
+            sql += (root / 'supabase/migrations/20261106090000_commerce_cart_bind_validated_price.sql').read_text()*2
+        if '--before-assurance-fix' not in sys.argv:
+            assurance_migration=(root / 'supabase/migrations/20261106220000_commerce_cart_bind_reviewed_assurance.sql').read_text()
+            sql += """
+CREATE TEMP TABLE assurance_binder_backup(definition text);
+INSERT INTO assurance_binder_backup
+SELECT pg_get_functiondef('public.create_storefront_order_with_cart_binding(text,uuid,integer,jsonb)'::regprocedure);
+DO $$
+DECLARE
+  v_definition text;
+  v_old constant text := $old$jsonb_build_array(line->>'id',line->'effectiveUnitPriceMinor',line->'validatedUnitPriceMinor')$old$;
+  v_new constant text := $new$jsonb_build_array(line->>'id',line->'effectiveUnitPriceMinor',line->'validatedUnitPriceMinor',line->'hasAssurance',line->'assuranceRate')$new$;
+BEGIN
+  SELECT definition INTO v_definition FROM assurance_binder_backup;
+  IF (length(v_definition)-length(replace(v_definition,v_old,'')))/length(v_old) <> 2 THEN
+    RAISE EXCEPTION 'unexpected assurance comparison fixture';
+  END IF;
+  v_definition := overlay(v_definition PLACING v_new FROM position(v_old IN v_definition) FOR length(v_old));
+  EXECUTE v_definition;
+END $$;
+"""
+            migration_function=assurance_migration.replace(
+                'DO $$',
+                'CREATE FUNCTION pg_temp.apply_assurance_migration() RETURNS void LANGUAGE plpgsql AS $$',
+                1,
+            ).rstrip()
+            if not migration_function.endswith('END $$;'):
+                raise RuntimeError('Could not extract assurance migration body')
+            migration_function=migration_function[:-len('END $$;')]+'END; $$;'
+            sql += '\n'+migration_function+"""
+DO $$ BEGIN
+  BEGIN
+    PERFORM pg_temp.apply_assurance_migration();
+    RAISE EXCEPTION 'partially applied assurance migration unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'cart binding assurance comparison anchor changed' THEN RAISE; END IF;
+  END;
+END $$;
+DO $$ DECLARE v_definition text; BEGIN
+  SELECT definition INTO v_definition FROM assurance_binder_backup;
+  EXECUTE v_definition;
+END $$;
+"""
+            sql += '\n'+assurance_migration*2
         assertions=(root / 'supabase/tests/commerce_cart_agentic_checkout_economics.sql').read_text()
-        if '--voucher-only' in sys.argv: assertions=assertions.replace('FOR n IN 1..6 LOOP','FOR n IN 2..2 LOOP')
+        if '--voucher-only' in sys.argv: assertions=assertions.replace('FOR n IN 1..11 LOOP','FOR n IN 2..2 LOOP')
         sql += assertions
         sql += (root / 'supabase/tests/commerce_cart_partial_voucher_binding.sql').read_text()+'\nROLLBACK;'
         result = subprocess.run(['psql', '-X', '-v', 'ON_ERROR_STOP=1', '-h', str(socket), '-p', '55492', '-U', 'postgres', '-d', 'postgres'], input=sql, text=True, capture_output=True)

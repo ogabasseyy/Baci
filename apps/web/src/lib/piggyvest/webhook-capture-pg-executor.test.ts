@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
@@ -79,6 +79,7 @@ beforeEach(() => {
   connectError = null;
   clients = [];
 });
+afterEach(() => vi.unstubAllEnvs());
 
 describe('createCaptureDrainPgExecutor', () => {
   it('opens no connection until a statement runs', () => {
@@ -101,6 +102,19 @@ describe('createCaptureDrainPgExecutor', () => {
     });
     expect(clients[0]?.config.statement_timeout).toBeGreaterThan(0);
     expect(clients[0]?.config.connectionTimeoutMillis).toBeGreaterThan(0);
+  });
+
+  it('uses the shared session-pooler login and applies settings before verification', async () => {
+    const ref = 'abcdefghijklmnopqrst';
+    vi.stubEnv('PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF', ref);
+    await executor().query('status', []);
+    expect(clients[0]?.config.user).toBe(
+      `${PIGGYVEST_CAPTURE_DRAIN_LOGIN}.${ref}`
+    );
+    expect(clients[0]?.config.options).toBeUndefined();
+    expect(clients[0]?.config.statement_timeout).toBeUndefined();
+    expect(clients[0]?.calls[0]?.text).toMatch(/^SET search_path/);
+    expect(clients[0]?.calls[1]?.text).toContain('SESSION_USER');
   });
 
   it('verifies the session before running the fixed statement, then closes', async () => {

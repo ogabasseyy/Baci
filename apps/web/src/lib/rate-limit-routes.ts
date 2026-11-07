@@ -70,6 +70,21 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
     windowMs: 3_600_000,
     failClosedWithoutRedis: true,
   },
+  // Each wallet PIN set, change or reset runs a 32 MiB scrypt derivation, so
+  // keep one IP address's budget small and never fall back to a per-instance
+  // memory bucket that scaling would multiply. The database owns the wrong-PIN
+  // lockout; this only bounds hashing cost.
+  '/api/storefront/customer/wallet-pin': {
+    maxRequests: 10,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
+  // Status reads do no hashing; keep them out of the mutation budget above.
+  '/api/storefront/customer/wallet-pin/status': {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },
   '/api/wallet': { maxRequests: 5, windowMs: 60_000 },

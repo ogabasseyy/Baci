@@ -563,6 +563,9 @@ importers:
       '@expo/metro-runtime':
         specifier: ~58.0.15
         version: 58.0.15(@expo/log-box@58.0.13)(expo@58.0.19)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.0(patch_hash=3455dc815738c37de8c09a1fd7b7cbb6391ed0f2ac6664aa093bc3ba7b114048)(@babel/core@7.29.6)(@react-native/metro-config@0.88.0(@babel/core@7.29.6))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+      '@gorhom/bottom-sheet':
+        specifier: ^5.2.14
+        version: 5.2.14(patch_hash=57a6d877f6f6fbd37a76465d2c86d3a57c4a820916a0fe7349de2536434d7264)(76d51d37a9d8f04f8f35773a966ee45a)
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.79.0(react@19.3.0))
@@ -1176,6 +1179,9 @@ importers:
       posthog-node:
         specifier: ^5.39.4
         version: 5.39.4(rxjs@7.8.1)
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -1285,6 +1291,9 @@ importers:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+      '@types/qrcode':
+        specifier: 1.5.6
+        version: 1.5.6
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0
@@ -13586,6 +13595,24 @@ packages:
     resolution: {integrity: sha512-5+3V1wPRx4gvbeLH2jB7n2cKrYJ1q4i3QgjnBUtrDPeqxJSi6BdzKJg4y6aF6bgW8zfntnYJyrkqFMevDhL2NA==}
     peerDependencies:
       '@types/emscripten': '>=1.39.6'
+
+  '@types/qrcode@1.5.6':
+    resolution:
+      integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==
+  dijkstrajs@1.0.3:
+    resolution:
+      integrity: sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA==
+  pngjs@5.0.0:
+    engines:
+      node: '>=10.13.0'
+    resolution:
+      integrity: sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==
+  qrcode@1.5.4:
+    engines:
+      node: '>=10.13.0'
+    hasBin: true
+    resolution:
+      integrity: sha512-1ca71Zgiu6ORjHqFBDpnSMTR2ReToX4l1Au1VFLyVeBTFavzQnv5JxMFr3ukHVKpSrSA2MCk0lNJSykjUfz7Zg==
 
 snapshots:
 
@@ -28312,3 +28339,14 @@ snapshots:
     dependencies:
       '@types/emscripten': 1.41.5
       type-fest: 5.7.0
+
+  '@types/qrcode@1.5.6':
+    dependencies:
+      '@types/node': 24.13.4
+  dijkstrajs@1.0.3: {}
+  pngjs@5.0.0: {}
+  qrcode@1.5.4:
+    dependencies:
+      dijkstrajs: 1.0.3
+      pngjs: 5.0.0
+      yargs: 15.4.1

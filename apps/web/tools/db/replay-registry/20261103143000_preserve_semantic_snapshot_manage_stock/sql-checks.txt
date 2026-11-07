@@ -1,0 +1,1 @@
+supabase/tests/storefront_public_read_snapshots.sql

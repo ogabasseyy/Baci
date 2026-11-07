@@ -211,10 +211,10 @@ export async function prepareAgenticCheckoutPayment({
   if (!paymentAccount.ok) {
     logger.error({
       message: 'DVA Creation Failed',
-      error: sanitizeForLog(paymentAccount.error),
       sessionId: sanitizeForLog(sessionId),
     });
-    await releaseClaim({ payment_error: paymentAccount.errorMessage });
+    // The provider may have created an account before the error arrived.
+    // Retain the claim until that outcome can be reconciled.
     return {
       body: {
         error: 'Failed to generate payment account',
@@ -244,13 +244,10 @@ export async function prepareAgenticCheckoutPayment({
       typeof accountReady.error === 'object' &&
       'code' in accountReady.error &&
       accountReady.error.code === POSTGRES_UNIQUE_VIOLATION;
-    await releaseClaim({
-      payment_account: maskedAccountNumber,
-      payment_error: 'payment_account_state_update_failed',
-    });
+    // The provider returned an account; releasing this claim could issue a
+    // second one even though its persistence outcome is uncertain.
     logger.error({
       message: 'Checkout payment account state update failed',
-      error: sanitizeForLog(accountReady.error),
       paymentAccount: maskedAccountNumber,
       sessionId: sanitizeForLog(sessionId),
     });

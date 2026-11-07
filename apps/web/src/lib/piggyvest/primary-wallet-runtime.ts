@@ -1,6 +1,7 @@
 import 'server-only';
 import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
   return parseRuntime(env, false);
@@ -35,6 +36,12 @@ export function readPrimaryWalletOnboardingRuntime(
  * Only the flag is bypassed; environment binding, credentials, and schema
  * still fail closed, and the reader carries no dispatch handle — callers
  * must only perform lookups with it, never reserve or dispatch.
+ *
+ * The one narrow emergency exception is cancel-to-main of a savings goal: it
+ * returns the customer's own money to their main wallet, so neither this
+ * reader's flag bypass nor the master kill switch ever blocks it. Its only
+ * off switch is PIGGYVEST_GOAL_CANCEL_DISABLED, which refuses NEW cancels
+ * while status, settlement and reconciliation of dispatched cancels continue.
  */
 export function readPrimaryWalletRuntimeDrain(
   env: NodeJS.ProcessEnv = process.env
@@ -43,7 +50,7 @@ export function readPrimaryWalletRuntimeDrain(
 }
 
 function parseRuntime(env: NodeJS.ProcessEnv, drain: boolean) {
-  if (!drain && env.PIGGYVEST_PRIMARY_ENABLED !== 'true') return null;
+  if (!drain && !isPiggyvestFeatureOn('wallet', env)) return null;
   const environment = env.PIGGYVEST_PRIMARY_ENVIRONMENT;
   if (
     (env.VERCEL_ENV === 'production' && environment !== 'production') ||

@@ -1,61 +1,16 @@
-import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
-import { addSavingsContribution } from '@/lib/customer-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
-import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
-import { formatDateInput } from './start-savings.helpers';
-import type { SavingsProductChoice } from './start-savings.types';
-
-type SavingsInputValidation =
-  | {
-      formattedStartDate: string;
-      ok: true;
-      selectedProduct: SavingsProductChoice;
-    }
-  | { error: string; ok: false };
-
-function validateSavingsInput(
-  input: UseStartSavingsSubmitInput
-): SavingsInputValidation {
-  if (!input.selectedProduct) {
-    return { error: 'Select a product to save for.', ok: false };
-  }
-
-  if (
-    input.selectedProduct.requiresVariantSelection !== false ||
-    (input.selectedProduct.variantId !== null &&
-      (typeof input.selectedProduct.variantId !== 'string' ||
-        !input.selectedProduct.variantId.trim()))
-  ) {
-    return {
-      error: 'Select the exact device variant you want to save for.',
-      ok: false,
-    };
-  }
-
-  if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {
-    return { error: 'Select a saved card for auto debit.', ok: false };
-  }
-
-  const formattedStartDate = formatDateInput(input.startDate);
-  if (!formattedStartDate) {
-    return { error: 'Select a valid start date.', ok: false };
-  }
-
-  return {
-    formattedStartDate,
-    ok: true,
-    selectedProduct: input.selectedProduct,
-  };
-}
+import { useWalletPinPrompt } from './use-wallet-pin-prompt';
+import { validateSavingsInput } from './validate-savings-input';
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,6 +19,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const submitInFlightRef = useRef(false);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
   const contextKey = JSON.stringify([
     input.activeMerchantId,
     input.activeMerchantSlug,
@@ -138,50 +94,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
-      const idempotencyKey =
-        input.initialContributionIdempotencyKey ?? Crypto.randomUUID();
-      if (!input.initialContributionIdempotencyKey) {
-        input.setInitialContributionIdempotencyKey(idempotencyKey);
-      }
-      const contributionResult = await addSavingsContribution({
-        amount,
-        goalId,
-        idempotencyKey,
-        merchantId: input.activeMerchantId,
-        merchantSlug: input.activeMerchantSlug,
-      });
-      if (!mountedRef.current) return;
-      // Completion reconciliation for the deferred path: the reminder was
-      // retained at creation because the transfer was unconfirmed — now that
-      // a confirmed contribution completes the goal, cancel it.
-      if (contributionResult.goalStatus === 'completed') {
-        try {
-          await cancelSavingsReminderNotification(goalId);
-        } catch {
-          // Reminder cleanup is best effort after a confirmed contribution.
-        }
-      }
-      input.setInitialContributionIdempotencyKey(null);
-      input.setCreatedGoalId?.(null);
-      input.setShowTransferModal(false);
-      input.setFormError(null);
-      input.setShowSuccessModal(true);
-      try {
-        await input.refetch();
-      } catch {
-        input.setFormError('Plan funded but unable to refresh wallet data.');
-      }
-    } catch (error) {
-      if (!mountedRef.current) return;
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to record the contribution.';
-      input.setFormError(message);
-      showAppAlert({
-        title: 'Contribution not recorded',
-        message,
-        variant: 'error',
+      await runBankTransferContribution(input, goalId, amount, {
+        isMounted: () => mountedRef.current,
+        requestPinProof: requestProof,
       });
     } finally {
       submitInFlightRef.current = false;
@@ -231,6 +146,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     handleCopyFundingAccount,
     isAuthorizingCard,
     isSubmitting,
+    pinSheetProps,
     submitBankTransferContribution,
     openWalletFundingScreen: () => {
       // Fund enough for the first contribution, but never send Paystack below the provider minimum.

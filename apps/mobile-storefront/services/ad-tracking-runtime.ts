@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
+import { isStorefrontTelemetryExcluded } from '@/lib/storefront-telemetry-excluded';
 import {
   getTrackingPermissionStatus,
   requestTrackingPermissionStatus,
@@ -116,6 +117,11 @@ async function initializeAuthorizedAdTracking(): Promise<boolean> {
 }
 
 export async function initAdTracking(): Promise<void> {
+  if (isStorefrontTelemetryExcluded()) {
+    setIsTrackingAllowed(false);
+    setIsInitialized(true);
+    return;
+  }
   if (getIsInitialized()) return;
 
   let didInitializeRuntime = false;
@@ -154,6 +160,11 @@ export async function initAdTracking(): Promise<void> {
 }
 
 export async function requestTrackingPermission(): Promise<string> {
+  if (isStorefrontTelemetryExcluded()) {
+    setIsTrackingAllowed(false);
+    setIsInitialized(true);
+    return 'denied';
+  }
   if (Platform.OS !== 'ios') {
     setIsTrackingAllowed(true);
     setIsInitialized(true);

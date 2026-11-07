@@ -1,4 +1,5 @@
 import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS as NAME_MAX } from '@/lib/piggyvest/provider-wallet-name.constants';
+import { createHouseWallet } from './mock-house-wallet';
 import { interestSettings } from './mock-readback';
 import { visibleBalance } from './mock-sandbox-lag';
 import { MockLedger } from './mock-sandbox-ledger';
@@ -13,12 +14,14 @@ import {
   ulid,
   type Wallet,
 } from './mock-sandbox-types';
+import { walletAccountsReply } from './mock-wallet-accounts';
 
 export type { MockOptions, MockReply } from './mock-sandbox-types';
 export { DEFAULT_MOCK_OPTIONS } from './mock-sandbox-types';
 
 /** Customers and wallets. Transactions live in MockLedger. */
 const CLOCK_BASE_MS = Date.parse('2026-10-30T10:00:00.000Z');
+const CLOCK_START = new Date(CLOCK_BASE_MS).toISOString();
 
 export class MockSandbox {
   readonly options: MockOptions;
@@ -27,6 +30,7 @@ export class MockSandbox {
   readonly ledger = new MockLedger(this);
   /** The Ogabassey business sandbox wallet: exists, owned by no QA customer. */
   readonly businessWalletId = ulid('b', 1);
+  house: Wallet = createHouseWallet(this.businessWalletId, CLOCK_START);
   private clock = 0;
   private counter = 0;
 
@@ -51,6 +55,7 @@ export class MockSandbox {
   adopt(from: MockSandbox): void {
     this.customers = from.customers;
     this.wallets = from.wallets;
+    this.house = from.house;
     this.counter = Math.max(this.counter, from.counter);
     this.clock = Math.max(this.clock, from.clock);
   }
@@ -91,12 +96,15 @@ export class MockSandbox {
   }
 
   wallet(id: unknown): Wallet | undefined {
-    return this.wallets.find((wallet) => wallet.id === id);
+    const found = this.wallets.find((wallet) => wallet.id === id);
+    return found ?? (id === this.house.id ? this.house : undefined);
   }
 
   createCustomer(body: Body, returnIfExist: boolean): MockReply {
     const existing = this.customers.find(
-      (c) => c.bvn === body.bvn || c.email === body.email
+      (c) =>
+        c.email === body.email ||
+        (this.options.customerMatchOn === 'bvn_or_email' && c.bvn === body.bvn)
     );
     if (existing) {
       if (!returnIfExist) return fail('An error occurred creating customer');
@@ -205,19 +213,15 @@ export class MockSandbox {
     ) {
       return fail('Invalid interest payout wallet');
     }
-    const payoutWalletId =
-      explicit ??
-      (this.options.subWalletInheritsPayout ? customer.payoutWalletId : null);
-    return ok(
-      {
-        id: this.addWallet(customer.id, name, {
-          payoutWalletId,
-          interestEnabled: body.enable_interest_accrual === true,
-        }).id,
-      },
-      'Wallet creation is being processed',
-      202
-    );
+    const wallet = this.addWallet(customer.id, name, {
+      payoutWalletId:
+        explicit ??
+        (this.options.subWalletInheritsPayout ? customer.payoutWalletId : null),
+      interestEnabled: body.enable_interest_accrual === true,
+    });
+    if (!explicit && this.options.subWalletPaysItselfWhenUnset)
+      wallet.payoutWalletId = wallet.id;
+    return ok({ id: wallet.id }, 'Wallet creation is being processed', 202);
   }
 
   listWallets(query: URLSearchParams): MockReply {
@@ -264,7 +268,7 @@ export class MockSandbox {
       w.id;
     return ok({
       id: w.id,
-      api_customer_id: w.customerId,
+      api_customer_id: w.customerId || null,
       business_id: 'business-00000001',
       virtual_account_id: `va-${w.id}`,
       currency: 'NGN',
@@ -283,16 +287,6 @@ export class MockSandbox {
   }
 
   walletAccounts(id: string): MockReply {
-    const w = this.wallet(id);
-    if (!w) return fail('Failed to get virtual accounts for wallet');
-    return ok([
-      {
-        account_number: w.account,
-        account_name: w.name,
-        bank_name: 'FAAS (SANDBOX)',
-        paypoint_name: null,
-        paypoint_id: null,
-      },
-    ]);
+    return walletAccountsReply(this.wallet(id));
   }
 }

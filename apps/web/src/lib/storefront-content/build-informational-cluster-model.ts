@@ -54,7 +54,8 @@ function toCategoryInventoryProduct(
     stock: product.stock ?? null,
     is_parent: product.is_parent ?? null,
     parent_product_id: product.parent_product_id ?? null,
-    manage_stock: product.manage_stock ?? null,
+    manage_stock: product.manage_stock,
+    has_condition_offers: product.has_condition_offers ?? false,
   };
 }
 
@@ -137,6 +138,7 @@ export async function buildInformationalClusterModel(
     storeUrl: input.storeUrl,
     categorySlug,
     categoryName,
+    merchantCurrency: input.merchantCurrency,
     products,
     inferredBrands: inferred.brands,
     preferredPriceBandSlugs: inferred.matchedPriceBands,
@@ -163,6 +165,7 @@ export async function buildInformationalClusterModel(
       ? commerceLinks
       : verifyPriceBandLinkAgainstDestination({
           categorySlug,
+          merchantCurrency: input.merchantCurrency,
           links: commerceLinks,
           compareProducts: compareInventory?.products ?? null,
           // Bands verify against the destination's own category-page pool;

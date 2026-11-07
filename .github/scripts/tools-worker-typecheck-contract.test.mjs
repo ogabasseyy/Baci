@@ -72,6 +72,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'tools/events/**/*.ts',
     'tools/db/**/*.ts',
     'tools/cost/**/*.ts',
+    'tools/messaging/**/*.ts',
     'src/scripts/process-domain-events.ts',
     'src/scripts/process-merchant-onboarding-emails.ts',
     'src/scripts/process-merchant-onboarding-emails.test.ts',
@@ -101,6 +102,9 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'src/scripts/verify-gigl-tracking-worker-capability.test.ts',
     'src/scripts/process-quiz-finalization.ts',
     'src/scripts/process-quiz-finalization.test.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.test.ts',
+    'src/scripts/piggyvest-webhook-capture-drain-cli.graph.test.ts',
   ]);
   assert.ok(!toolsTsconfig.include.includes('tools/**/*.ts'));
   assert.ok(

@@ -75,6 +75,18 @@ describe('settleReplayResult', () => {
       'deferred',
       'KEY_SET_INCOMPLETE',
     ],
+    [
+      'a 2xx key-set marker',
+      { status: 200, keySetIncomplete: true },
+      'deferred',
+      'KEY_SET_INCOMPLETE',
+    ],
+    [
+      'a kill-switch marker',
+      { status: 200, killSwitchDeferred: true },
+      'deferred',
+      'KILL_SWITCH_ACTIVE',
+    ],
     ['a plain failure', { status: 503 }, 'pending', 'PROCESSING_INCOMPLETE'],
   ])('never completes %s', async (_label, result, state, error) => {
     const outcome = await settled(result);

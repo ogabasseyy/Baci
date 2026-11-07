@@ -30,6 +30,8 @@ export interface ReplayProcessResult {
   contentQuarantine?: boolean;
   /** Only a complete key set can settle it (a family failed to load). */
   keySetIncomplete?: boolean;
+  /** The master kill switch deferred the delivery without spending an attempt. */
+  killSwitchDeferred?: boolean;
   /** Same event identity, different content: a person must decide. */
   conflict?: boolean;
   /** The row needs a processing path this runtime does not hold. */
@@ -49,6 +51,8 @@ export async function settleReplayResult(
     result.status < 300 &&
     result.authorizationQuarantine !== true &&
     result.contentQuarantine !== true &&
+    result.keySetIncomplete !== true &&
+    result.killSwitchDeferred !== true &&
     result.conflict !== true &&
     result.outOfScope === undefined;
   if (completed) {
@@ -60,6 +64,10 @@ export async function settleReplayResult(
     // Not this runtime's to judge: the key set and attempt count are
     // irrelevant, the path it needs simply is not here.
     return setAsideOutOfScope(deps, row, result.outOfScope);
+  }
+  if (result?.killSwitchDeferred === true) {
+    await settle(deps, row, 'deferred', 'KILL_SWITCH_ACTIVE');
+    return 'retried';
   }
   if (result?.conflict === true) {
     return parkForReview(

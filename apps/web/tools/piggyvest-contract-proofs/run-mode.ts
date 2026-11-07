@@ -5,9 +5,12 @@ import {
   ENV_BANK_CODE,
   ENV_BASE_URL,
   ENV_BUSINESS_WALLET,
+  FULL_RUN_ONLY_PROOFS,
+  PROOF_IDS,
   RUN_MODES,
   type RunMode,
   SANDBOX_ORIGIN,
+  STANDALONE_PROOFS,
 } from './constants';
 import {
   assertNoRecordingAccount,
@@ -15,6 +18,7 @@ import {
   assertTestKey,
   HarnessRefusal,
 } from './safety-guards';
+import type { ProofId } from './types';
 
 export interface RunConfig {
   mode: RunMode;
@@ -28,8 +32,10 @@ export interface RunConfig {
   newAttempt: boolean;
   bankCode: string | null;
   bankAccount: string | null;
-  /** Ogabassey business sandbox wallet (proof 7); mutation mode only. */
+  /** Ogabassey business sandbox wallet (proof 7); live modes only. */
   businessWalletId: string | null;
+  /** Run this proof only (--proof); null runs every proof. */
+  proof: ProofId | null;
   help: boolean;
 }
 
@@ -45,6 +51,7 @@ const VALUE_FLAGS = [
   '--journal',
   '--evidence-dir',
   '--qa-customer',
+  '--proof',
 ] as const;
 const BOOLEAN_FLAGS = ['--new-attempt', '--help'] as const;
 
@@ -84,6 +91,36 @@ function resolveBusinessWallet(env: Env): string | null {
     );
   }
   return id;
+}
+
+function resolveProof(value: string | undefined): ProofId | null {
+  if (value === undefined) return null;
+  const known = PROOF_IDS.find((id) => id === value);
+  return known ?? usage(`--proof must be one of ${PROOF_IDS.join(', ')}`);
+}
+
+/**
+ * What a --proof run may do. A proof that only measures other proofs' work
+ * needs a full run. --new-attempt with a proof that runs the shared scenario
+ * would open an attempt holding only that proof's slots, which the next plain
+ * full run would then complete by sending every other proof's mutations; only
+ * a standalone proof (its slots live under its own keys) may open one alone.
+ */
+export function assertProofScope(
+  proof: ProofId | null,
+  newAttempt: boolean
+): void {
+  if (!proof) return;
+  if (FULL_RUN_ONLY_PROOFS.includes(proof)) {
+    usage(
+      `--proof ${proof} measures what other proofs do in the same run; run it in a full run`
+    );
+  }
+  if (newAttempt && !STANDALONE_PROOFS.includes(proof)) {
+    usage(
+      `--new-attempt with --proof is allowed only for ${STANDALONE_PROOFS.join(', ')}; open a new attempt with a full run`
+    );
+  }
 }
 
 export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
@@ -134,6 +171,8 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     mode === 'live-sandbox-mutations'
       ? resolveBankDestination(env)
       : { bankCode: null, bankAccount: null };
+  const proof = resolveProof(values.get('--proof'));
+  assertProofScope(proof, flags.has('--new-attempt'));
 
   return {
     mode,
@@ -144,9 +183,11 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     evidenceDir: values.get('--evidence-dir') ?? null,
     qaCustomerId: values.get('--qa-customer') ?? null,
     newAttempt: flags.has('--new-attempt'),
+    proof,
     help: flags.has('--help'),
-    businessWalletId:
-      mode === 'live-sandbox-mutations' ? resolveBusinessWallet(env) : null,
+    // Read-only runs may read the binding (a GET); admission withholds
+    // authorization there, so nothing is ever sent to this wallet.
+    businessWalletId: live ? resolveBusinessWallet(env) : null,
     ...bank,
   };
 }

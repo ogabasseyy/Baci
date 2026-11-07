@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({ dispatch: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
   dispatchPrimaryPiggyvestIntake: mocks.dispatch,
+  isKillSwitchDeferral: () => false,
 }));
 
 import type { ReplayDelivery } from './webhook-capture-drain';

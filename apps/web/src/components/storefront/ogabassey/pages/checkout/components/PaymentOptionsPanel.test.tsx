@@ -190,3 +190,11 @@ describe('payment schedule selection', () => {
     expect(setPaymentMethod).toHaveBeenCalledWith('');
   });
 });
+
+it('shows Oxygen only when the parent reports it eligible', () => {
+  const props = { paymentTab: 'installments' as const, setPaymentTab: vi.fn(), paymentMethod: '' as const, setPaymentMethod: vi.fn(), paystackCheckoutAvailable: false, korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false, klumpEligible: false, oxygenEligible: true, redvaultAvailable: false, redvaultStatus: 'idle' as const, redvaultSummary: null, hasInstallmentOptions: true, currency: 'NGN' };
+  const view = render(<PaymentOptionsPanel {...props} />);
+  expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
+  view.rerender(<PaymentOptionsPanel {...props} oxygenEligible={false} />);
+  expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
+});

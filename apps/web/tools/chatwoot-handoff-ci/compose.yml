@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
+    environment:
+      POSTGRES_DB: chatwoot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: synthetic-postgres
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chatwoot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    command: ["redis-server", "--requirepass", "synthetic-redis"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "synthetic-redis", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  rails:
+    image: chatwoot/chatwoot:v4.19.1@sha256:04895c7bd0550d9e74b45b7202787b56f7ee4e891ebbde0c429c8c32901b97cf
+    entrypoint: ["/bin/sh", "-lc"]
+    command: ["bundle exec rails db:chatwoot_prepare && bundle exec rails s -p 3000 -b 0.0.0.0"]
+    environment: &chatwoot-env
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      SECRET_KEY_BASE: synthetic-secret-key-base-for-disposable-ci-only
+      FRONTEND_URL: http://chatwoot.local
+      DEFAULT_LOCALE: en
+      FORCE_SSL: "false"
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      ACTIVE_STORAGE_SERVICE: local
+      POSTGRES_HOST: postgres
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: synthetic-postgres
+      REDIS_URL: redis://:synthetic-redis@redis:6379
+      REDIS_PASSWORD: synthetic-redis
+      MAILER_SENDER_EMAIL: synthetic@example.invalid
+      SMTP_ADDRESS: localhost
+      SMTP_PORT: "1025"
+      SMTP_DOMAIN: example.invalid
+      SMTP_USERNAME: synthetic
+      SMTP_PASSWORD: synthetic
+      SMTP_AUTHENTICATION: plain
+      SMTP_ENABLE_STARTTLS_AUTO: "false"
+      RAILS_LOG_TO_STDOUT: "true"
+      LOG_LEVEL: warn
+      SAFE_FETCH_ALLOW_PRIVATE_NETWORK: "true"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    volumes:
+      - synthetic-data:/run/chatwoot-test
+      - .:/harness:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "ruby -rnet/http -e \"exit(Net::HTTP.get_response(URI('http://localhost:3000/api')).is_a?(Net::HTTPSuccess) ? 0 : 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+  sidekiq:
+    image: chatwoot/chatwoot:v4.19.1@sha256:04895c7bd0550d9e74b45b7202787b56f7ee4e891ebbde0c429c8c32901b97cf
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    environment: *chatwoot-env
+    depends_on:
+      rails: {condition: service_healthy}
+    volumes:
+      - synthetic-data:/run/chatwoot-test
+    networks: [internal]
+  harness:
+    image: node:22-alpine@sha256:025b8e975a61d94e33abeafaad1255ef44e4898cf1a1b6446860009c72e6d284
+    working_dir: /harness
+    environment:
+      CHATWOOT_URL: http://rails:3000
+    depends_on:
+      rails: {condition: service_healthy}
+      sidekiq: {condition: service_started}
+    volumes:
+      - synthetic-data:/run/chatwoot-test
+      - .:/harness:ro
+    networks: [internal]
+    command: ["node", "run.mjs"]
+networks:
+  internal:
+    internal: true
+volumes:
+  synthetic-data:

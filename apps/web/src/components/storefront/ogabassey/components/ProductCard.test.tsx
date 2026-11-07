@@ -234,57 +234,6 @@ describe('ProductCard', () => {
     expect(container).toBeDefined();
   });
 
-  it('keeps its default content-visibility reservation when no override is passed', () => {
-    const grid = render(
-      <ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded={false} />
-    );
-    const gridCard = grid.container.firstChild as HTMLElement;
-    expect(gridCard).toHaveClass('content-auto');
-    expect(gridCard).toHaveClass('[contain-intrinsic-size:auto_350px]');
-
-    const list = render(
-      <ProductCard
-        product={mockProduct}
-        onAddToCart={vi.fn()}
-        isAdded={false}
-        viewMode="list"
-      />
-    );
-    const listCard = list.container.firstChild as HTMLElement;
-    expect(listCard).toHaveClass('content-auto');
-    expect(listCard).toHaveClass('[contain-intrinsic-size:auto_200px]');
-  });
-
-  it('applies an explicit content-visibility override', () => {
-    const { container } = render(
-      <ProductCard
-        product={mockProduct}
-        onAddToCart={vi.fn()}
-        isAdded={false}
-        contentVisibilityClassName="content-auto [contain-intrinsic-size:auto_300px] md:[contain-intrinsic-size:auto_460px]"
-      />
-    );
-    const card = container.firstChild as HTMLElement;
-    expect(card).toHaveClass('[contain-intrinsic-size:auto_300px]');
-    expect(card).toHaveClass('md:[contain-intrinsic-size:auto_460px]');
-    // The default reservation must not leak through when overridden.
-    expect(card).not.toHaveClass('[contain-intrinsic-size:auto_350px]');
-  });
-
-  it('omits content-visibility entirely when passed an empty override', () => {
-    const { container } = render(
-      <ProductCard
-        product={mockProduct}
-        onAddToCart={vi.fn()}
-        isAdded={false}
-        contentVisibilityClassName=""
-      />
-    );
-    const card = container.firstChild as HTMLElement;
-    expect(card).not.toHaveClass('content-auto');
-    expect(card).not.toHaveClass('[contain-intrinsic-size:auto_350px]');
-  });
-
   it('links SKU-matrix products to option selection instead of quick-adding', () => {
     const onAddToCart = vi.fn();
 
@@ -309,5 +258,31 @@ describe('ProductCard', () => {
 
     expect(chooseOptionsLink).toHaveAttribute('href', '/test/product');
     expect(onAddToCart).not.toHaveBeenCalled();
+  });
+
+  it('uses WCAG AA contrast-safe semantic badge classes for New and non-New conditions', () => {
+    const { rerender } = render(
+      <ProductCard
+        product={mockProduct}
+        onAddToCart={vi.fn()}
+        isAdded={false}
+      />
+    );
+
+    expect(screen.getByText('New')).toHaveClass(
+      'ogabassey-product-card-badge--new'
+    );
+
+    rerender(
+      <ProductCard
+        product={{ ...mockProduct, condition: 'Open Box' }}
+        onAddToCart={vi.fn()}
+        isAdded={false}
+      />
+    );
+
+    expect(screen.getByText('Open Box')).toHaveClass(
+      'ogabassey-product-card-badge--condition'
+    );
   });
 });

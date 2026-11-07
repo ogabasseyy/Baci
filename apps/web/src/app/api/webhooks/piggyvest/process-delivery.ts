@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { PiggyvestClientConfig } from '@/lib/piggyvest/client';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import {
   authorizesLegacyHandling,
   primaryOwnerFamily,
@@ -9,10 +10,12 @@ import { recordPiggyvestEvent } from '@/lib/piggyvest/webhook-inbox';
 import type { WebhookKeyScope } from '@/lib/piggyvest/webhook-key-archive';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
 import { piggyvestWebhookCorrelationSchema } from '@/schemas/piggyvest/webhook-correlation';
-import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
+import {
+  dispatchPrimaryPiggyvestIntake,
+  isKillSwitchDeferral,
+} from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 import { toRecordInput } from './record-input';
 
@@ -64,7 +67,7 @@ export interface VerifiedDelivery {
 }
 
 export interface ProcessDeliveryDeps {
-  createClient: () => PiggyvestIntakeServiceClient;
+  createClient: () => PiggyvestIntakeClient;
   getPiggyvestConfig: () => PiggyvestClientConfig | null;
 }
 
@@ -104,6 +107,14 @@ const keySetIncompleteRetries = new WeakSet<Response>();
  * provider's redelivery (it verifies under the full set and is captured on
  * its own row); this row's recorded authority is never widened.
  */
+/**
+ * True when `response` is the retryable answer given because the master kill
+ * switch is on. Replay settles such a row as deferred (no attempt spent).
+ */
+export function isKillSwitchDeferred(response: Response): boolean {
+  return isKillSwitchDeferral(response);
+}
+
 export function isKeySetIncompleteRetry(response: Response): boolean {
   return keySetIncompleteRetries.has(response);
 }

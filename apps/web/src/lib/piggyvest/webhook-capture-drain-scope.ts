@@ -8,9 +8,9 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  * The drain runs on the worker host under its own database login and holds
  * no service-role authority, so it can complete only the deliveries a
  * primary intake owns: each primary intake writes through its own
- * dedicated login. Everything the receiver would hand to the legacy path
+ * dedicated login. Everything the receiver would hand to its inline-only intake
  * (legacy-signed deliveries, record-only events, quarantine writes) needs
- * the service role, so the drain sets it aside for review with an alert
+ * that separate authority, so the drain sets it aside for review with an alert
  * and leaves it to the receiver's own retry path (provider redelivery),
  * which still closes it.
  */

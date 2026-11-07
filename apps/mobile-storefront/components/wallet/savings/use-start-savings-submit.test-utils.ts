@@ -27,6 +27,7 @@ export function createInput(overrides = {}) {
     },
     setFormError: jest.fn(),
     setInitialContributionIdempotencyKey: jest.fn(),
+    setInitialContributionRail: jest.fn(),
     setShowFundingModal: jest.fn(),
     setShowPreviewModal: jest.fn(),
     setShowSuccessModal: jest.fn(),

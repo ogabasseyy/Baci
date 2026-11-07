@@ -85,6 +85,7 @@ export function useWallet(options: UseWalletOptions = {}) {
   // subscribes to the fields consumers actually use.
   const {
     data,
+    dataUpdatedAt,
     error,
     fetchStatus,
     isError,
@@ -244,6 +245,7 @@ export function useWallet(options: UseWalletOptions = {}) {
 
   return {
     data,
+    dataUpdatedAt,
     error,
     fetchStatus,
     getWalletBalance: liveWalletQuery.getBalance,

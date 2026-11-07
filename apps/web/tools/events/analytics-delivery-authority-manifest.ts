@@ -17,7 +17,7 @@ export const analyticsDeliveryAuthorityManifest = {
     'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
       '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
     'apps/web/src/lib/supabase/service.ts':
-      '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
+      'b77e5a0d1024165b8015c3fa015278d8ed39d491bfbe6f74c05b5903cc3dbbb5',
   },
   callerScopedRouteHashes: {
     'apps/web/src/app/api/analytics/ads/route.ts':

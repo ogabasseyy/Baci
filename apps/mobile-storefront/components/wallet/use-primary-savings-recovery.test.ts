@@ -22,6 +22,7 @@ const input = () => ({
   userId: 'user-1',
   goalId: 'goal-1',
   operationRef: { current: null as string | null },
+  railRef: { current: null as 'primary' | 'legacy' | null },
   setAmount: jest.fn(),
 });
 beforeEach(() => {
@@ -41,6 +42,7 @@ it('restores a server-owned pending operation after restarting the screen', asyn
   expect(result.current.ready).toBe(false);
   await waitFor(() => expect(result.current.ready).toBe(true));
   expect(props.operationRef.current).toBe('existing-operation');
+  expect(props.railRef.current).toBe('primary');
   expect(props.setAmount).toHaveBeenCalledWith('125');
 });
 it('keeps submission blocked after recovery fails and supports a read-only retry', async () => {

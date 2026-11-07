@@ -4,14 +4,13 @@
 .header:has(input:focus-visible) { outline:2px solid var(--store-primary, #d62027); outline-offset:-3px; }
 .logoTile { display:flex; align-items:center; justify-content:center; width:48px; height:40px; border-radius:8px; background:#fff; padding:3px; flex-shrink:0; }
 .logo { width:100%; height:100%; object-fit:contain; }
-.oxygenLogo { width:88%; height:88%; }
 .content { min-width:0; flex:1; display:grid; gap:6px; }
 .title { font-size:14px; font-weight:700; }
 .chips { display:flex; gap:6px; flex-wrap:wrap; }
 .chips > span { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:3px 8px; border-radius:999px; background:color-mix(in srgb, var(--store-primary, #d62027) 22%, transparent); color:var(--store-foreground, #111827); font-size:11px; line-height:1.2; }
 .dot { width:20px; height:20px; flex-shrink:0; border-radius:50%; border:2px solid #9ca3af; }
 .selected .dot { border:6px solid var(--store-primary, #d62027); }
-.details summary { list-style:none; display:flex; align-items:center; gap:8px; cursor:pointer; padding:4px 14px 12px; font-size:13px; font-weight:600; }
+.details summary { list-style:none; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0 14px; padding:10px 0 12px; border-top:1px solid color-mix(in srgb, var(--store-border, #d1d5db) 65%, transparent); font-size:13px; font-weight:600; }
 .details summary::-webkit-details-marker { display:none; }
 .details[open] summary svg { transform:rotate(180deg); }
 .scrollHint { margin-left:auto; color:var(--store-primary, #d62027); font-size:11px; }

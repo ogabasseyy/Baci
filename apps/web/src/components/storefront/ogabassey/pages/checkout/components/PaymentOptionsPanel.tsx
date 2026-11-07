@@ -1,7 +1,8 @@
 import { Banknote, CalendarDays, FileText, Truck } from 'lucide-react';
 import Image from 'next/image';
 import creditDirectLogo from '@/../public/partners/credit-direct.jpg';
-import oxygenLogo from '@/../public/partners/oxygen-x.png';
+// Oxygen X Finance's official App Store artwork.
+import oxygenLogo from '@/../public/partners/oxygen-x-app-icon.jpg';
 import { useEffect } from 'react';
 import {
   BankTransferLogo,

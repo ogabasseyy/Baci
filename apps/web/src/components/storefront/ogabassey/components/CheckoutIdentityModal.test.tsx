@@ -52,15 +52,13 @@ describe('CheckoutIdentityModal', () => {
     expect(screen.queryByText('Checkout')).not.toBeInTheDocument();
   });
 
-  it('shows guest checkout and create account options', () => {
+  it('shows email, social sign-in and guest options together', () => {
     render(<CheckoutIdentityModal {...defaultProps} />);
 
-    expect(
-      screen.getByRole('button', { name: /continue as guest/i })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /register now/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Email address' })).toHaveAttribute('placeholder', 'you@example.com');
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with apple/i })).toBeInTheDocument();
   });
 
   it('navigates to checkout on guest click and calls onClose', () => {
@@ -72,27 +70,6 @@ describe('CheckoutIdentityModal', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/checkout');
     expect(defaultProps.onClose).toHaveBeenCalled();
-  });
-
-  it('switches to sign-in tab and shows login form', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    expect(
-      screen.getByRole('textbox', { name: 'Email address' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /send sign-in code/i })
-    ).toBeInTheDocument();
-  });
-
-  it('navigates to signup with encoded redirect on register click', () => {
-    render(<CheckoutIdentityModal {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /register now/i }));
-
-    expect(mockPush).toHaveBeenCalledWith('/signup?redirect=%2Fcheckout');
   });
 
   it('has a close button with proper aria-label', () => {

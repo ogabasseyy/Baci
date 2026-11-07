@@ -8,7 +8,12 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CheckoutCodeSignin } from './checkout-code-signin';
 
-const auth = vi.hoisted(() => ({ sendOtp: vi.fn(), verifyOtp: vi.fn() }));
+const auth = vi.hoisted(() => ({
+  sendOtp: vi.fn(),
+  verifyOtp: vi.fn(),
+  signInWithGoogle: vi.fn(),
+  signInWithApple: vi.fn(),
+}));
 vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => auth,
   useCustomerAuth: () => auth,
@@ -103,4 +108,63 @@ it('keeps the current code entry visible if resending fails', async () => {
   expect(
     screen.getByRole('textbox', { name: 'Verification code' })
   ).toBeInTheDocument();
+});
+it('locks the form while a code resend is pending', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  let finish: ((result: { success: boolean }) => void) | undefined;
+  auth.sendOtp.mockResolvedValueOnce({ success: true }).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    })
+  );
+  render(<CheckoutCodeSignin merchantSlug="shop" onSuccess={vi.fn()} />);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email address' }), {
+    target: { value: 'buyer@example.test' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
+  await screen.findByRole('textbox', { name: 'Verification code' });
+  await screen.findByRole('button', { name: /Resend code in/ });
+  act(() => vi.advanceTimersByTime(61_000));
+  fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+  expect(
+    screen.getByRole('button', { name: 'Use a different email' })
+  ).toBeDisabled();
+  await act(async () => finish?.({ success: true }));
+  vi.useRealTimers();
+});
+
+it.each([
+  'Google',
+  'Apple',
+] as const)('starts %s sign-in with the checkout return path', async (provider) => {
+  const fn =
+    provider === 'Google' ? auth.signInWithGoogle : auth.signInWithApple;
+  fn.mockResolvedValue({ success: true });
+  render(
+    <CheckoutCodeSignin
+      merchantSlug="shop"
+      onSuccess={vi.fn()}
+      socialReturnTo="/shop/checkout?resume=1"
+    />
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: `Continue with ${provider}` })
+  );
+  await waitFor(() =>
+    expect(fn).toHaveBeenCalledWith('/shop/checkout?resume=1')
+  );
+});
+it('shows a useful error if social sign-in unexpectedly fails', async () => {
+  auth.signInWithGoogle.mockRejectedValueOnce(new Error('offline'));
+  render(
+    <CheckoutCodeSignin
+      merchantSlug="shop"
+      onSuccess={vi.fn()}
+      socialReturnTo="/checkout"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Unable to continue with Google.'
+  );
 });

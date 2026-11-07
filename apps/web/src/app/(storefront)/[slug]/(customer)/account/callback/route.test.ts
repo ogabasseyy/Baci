@@ -83,6 +83,26 @@ describe('GET [slug]/(customer)/account/callback', () => {
     expect(locationOf(response)).toBe(`${ORIGIN}/ogabassey/account`);
   });
 
+  it.each([
+    ['/checkout?resume=1', `${ORIGIN}/checkout?resume=1`],
+    ['/ogabassey/checkout', `${ORIGIN}/ogabassey/checkout`],
+    ['https://attacker.example/checkout', `${ORIGIN}/ogabassey/account`],
+    ['/other/checkout', `${ORIGIN}/ogabassey/account`],
+    ['http://[', `${ORIGIN}/ogabassey/account`],
+  ])('only returns to a safe checkout path: %s', async (next, expected) => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: 'user-1' } },
+      error: null,
+    });
+    const response = await GET(
+      request(
+        `/ogabassey/account/callback?code=auth-code&next=${encodeURIComponent(next)}`
+      ),
+      { params: Promise.resolve({ slug: 'ogabassey' }) }
+    );
+    expect(locationOf(response)).toBe(expected);
+  });
+
   it('redirects to login with the exchange failure message', async () => {
     mockExchangeCodeForSession.mockResolvedValue({
       data: {},

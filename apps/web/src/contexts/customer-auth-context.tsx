@@ -74,8 +74,12 @@ interface CustomerAuthContextType {
   // Auth actions
   sendOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   verifyOtp: (code: string) => Promise<{ success: boolean; error?: string }>;
-  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
-  signInWithApple: () => Promise<{ success: boolean; error?: string }>;
+  signInWithGoogle: (
+    returnTo?: string
+  ) => Promise<{ success: boolean; error?: string }>;
+  signInWithApple: (
+    returnTo?: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   // Customer data actions
   refreshCustomer: () => Promise<void>;
@@ -242,7 +246,8 @@ export function CustomerAuthProvider({
   const signInWithOAuth = async (
     endpointPath: string,
     allowedHosts: string[],
-    providerLabel: string
+    providerLabel: string,
+    returnTo?: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
       // Cart authority is NOT retired here: if the endpoint errors or
@@ -262,6 +267,8 @@ export function CustomerAuthProvider({
           redirectPath = `/${merchantSlug}/account/callback`;
         }
       }
+
+      if (returnTo) redirectPath += `?next=${encodeURIComponent(returnTo)}`;
 
       const redirectUrl =
         typeof window !== 'undefined'
@@ -324,7 +331,9 @@ export function CustomerAuthProvider({
   };
 
   // Sign in with Google OAuth
-  const signInWithGoogle = (): Promise<{
+  const signInWithGoogle = (
+    returnTo?: string
+  ): Promise<{
     success: boolean;
     error?: string;
   }> => {
@@ -340,12 +349,15 @@ export function CustomerAuthProvider({
           ? ['127.0.0.1', 'localhost']
           : []),
       ],
-      'Google'
+      'Google',
+      returnTo
     );
   };
 
   // Sign in with Apple OAuth
-  const signInWithApple = (): Promise<{
+  const signInWithApple = (
+    returnTo?: string
+  ): Promise<{
     success: boolean;
     error?: string;
   }> => {
@@ -360,7 +372,8 @@ export function CustomerAuthProvider({
           ? ['127.0.0.1', 'localhost']
           : []),
       ],
-      'Apple'
+      'Apple',
+      returnTo
     );
   };
 

@@ -11,23 +11,25 @@ import {
 interface Props {
   merchantSlug: string;
   onSuccess: () => void;
+  socialReturnTo?: string;
 }
 
 /** Reuse customer OTP authentication, including its merchant-scoped session. */
 export function CheckoutCodeSignin(props: Props) {
   const existing = useOptionalCustomerAuth();
   return existing ? (
-    <CodeForm onSuccess={props.onSuccess} />
+    <CodeForm {...props} />
   ) : (
     <CustomerAuthProvider merchantSlug={props.merchantSlug}>
-      <CodeForm onSuccess={props.onSuccess} />
+      <CodeForm {...props} />
     </CustomerAuthProvider>
   );
 }
 
-function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
+function CodeForm({ onSuccess, socialReturnTo }: Props) {
   const inputId = useId();
-  const { sendOtp, verifyOtp } = useCustomerAuth();
+  const { sendOtp, verifyOtp, signInWithGoogle, signInWithApple } =
+    useCustomerAuth();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -63,7 +65,7 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
       <p className="text-sm text-store-background-text/70">
         {sent
           ? `Enter the code sent to ${email}.`
-          : 'Sign in securely with a code sent to your email. No password needed.'}
+          : 'Enter your email to sign in or create an account. No password needed.'}
       </p>
       {error && (
         <p role="alert" className="text-sm text-store-primary">
@@ -82,12 +84,17 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
           expiryAdvisory
           resendCooldownSeconds={60}
           onResend={async () => {
-            const result = await sendOtp(email.trim());
-            if (!result.success) return false;
-            setCode('');
-            setError('');
-            setSentAt(Date.now());
-            return true;
+            setBusy(true);
+            try {
+              const result = await sendOtp(email.trim());
+              if (!result.success) return false;
+              setCode('');
+              setError('');
+              setSentAt(Date.now());
+              return true;
+            } finally {
+              setBusy(false);
+            }
           }}
         />
       ) : (
@@ -96,6 +103,7 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
           <input
             id={inputId}
             aria-label="Email address"
+            placeholder="you@example.com"
             type="email"
             autoComplete="email"
             required
@@ -118,6 +126,37 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
             ? 'Verify & continue checkout'
             : 'Send sign-in code'}
       </button>
+      {!sent && socialReturnTo && (
+        <div className="grid gap-2">
+          {(['Google', 'Apple'] as const).map((provider) => (
+            <button
+              key={provider}
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError('');
+                try {
+                  const result = await (provider === 'Google'
+                    ? signInWithGoogle(socialReturnTo)
+                    : signInWithApple(socialReturnTo));
+                  if (!result.success)
+                    setError(
+                      result.error || `Unable to continue with ${provider}.`
+                    );
+                } catch {
+                  setError(`Unable to continue with ${provider}.`);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="w-full rounded-xl border border-store-border p-3 font-semibold disabled:opacity-60"
+            >
+              Continue with {provider}
+            </button>
+          ))}
+        </div>
+      )}
       {sent && (
         <button
           type="button"

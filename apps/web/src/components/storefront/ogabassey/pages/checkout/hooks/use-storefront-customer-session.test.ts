@@ -293,3 +293,14 @@ describe('useStorefrontCustomerSession', () => {
     });
   });
 });
+it('refreshes the payment gate after checkout email-code sign-in', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: false }) } as Response)
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ authenticated: true, user: { id: 'buyer-1' } }) } as Response);
+  const { result } = renderHook(() => useStorefrontCustomerSession('test-store'));
+  await waitFor(() => expect(result.current.status).toBe('guest'));
+  act(() => window.dispatchEvent(new Event('storefront:checkout-auth-changed')));
+  await waitFor(() => expect(result.current.status).toBe('authenticated'));
+  expect(result.current.accountId).toBe('buyer-1');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});

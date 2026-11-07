@@ -5,7 +5,7 @@ import {
   getFulfillmentAmount,
   getSubtotalAmount,
 } from '@/lib/agentic/checkout-storage';
-import { getCheckoutGrandTotal } from './checkout-completion-authorization-response';
+import { getCheckoutGrandTotal } from './checkout-totals';
 
 interface CheckoutDvaAccount {
   account_name: string;

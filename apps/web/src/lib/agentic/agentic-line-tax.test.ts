@@ -14,6 +14,30 @@ describe('calculateAgenticLineTax', () => {
     ).toBe(0.24);
   });
 
+  it('rounds PostgreSQL half-cent VAT upward for a 20-unit line', () => {
+    expect(
+      calculateAgenticLineTax({
+        price: 0.41,
+        quantity: 20,
+        vatCategoryCode: 'S',
+        vatRate: 7.5,
+        vatRegistered: true,
+      })
+    ).toBe(0.62);
+  });
+
+  it('retains the full NUMERIC(5,2) VAT rate precision', () => {
+    expect(
+      calculateAgenticLineTax({
+        price: 0.01,
+        quantity: 1,
+        vatCategoryCode: 'S',
+        vatRate: '999.99',
+        vatRegistered: true,
+      })
+    ).toBe(0.1);
+  });
+
   it('returns zero for exempt categories and non-registered merchants', () => {
     const args = {
       price: 100,

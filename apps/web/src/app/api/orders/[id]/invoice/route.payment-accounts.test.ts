@@ -127,7 +127,7 @@ describe('invoice Paystack payment-account history', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cookies).mockResolvedValue({ get: vi.fn() } as never);
-    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['invoice']));
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
     vi.mocked(resolveReceiptLogoDataUri).mockResolvedValue(null);
   });
 

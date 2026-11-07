@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/seo/json-ld';
 import { OgabasseyV2Quiz } from '@/components/storefront/ogabassey/pages/quiz';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
@@ -37,7 +38,7 @@ export async function generateMetadata({
     ? await getCachedMerchantByDomain(lookupKey)
     : await getCachedMerchant(lookupKey);
 
-  if (merchant?.template_id !== 'ogabassey') {
+  if (merchant?.template_id !== OGABASSEY_TEMPLATE_ID) {
     return {
       title: 'Store Not Found',
     };
@@ -68,7 +69,7 @@ export default async function QuizPage({
     ? await getCachedMerchantByDomain(lookupKey)
     : await getCachedMerchant(lookupKey);
 
-  if (merchant?.template_id !== 'ogabassey') {
+  if (merchant?.template_id !== OGABASSEY_TEMPLATE_ID) {
     notFound();
   }
 

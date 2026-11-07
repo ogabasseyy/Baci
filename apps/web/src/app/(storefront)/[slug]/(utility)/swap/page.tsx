@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { OgabasseyV2Swap } from '@/components/storefront/ogabassey/pages/swap';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
@@ -29,11 +30,7 @@ export async function generateMetadata({
     ? await getCachedMerchantByDomain(lookupKey)
     : await getCachedMerchant(lookupKey);
 
-  if (
-    !merchant ||
-    (merchant as unknown as { template_id?: string }).template_id !==
-      'ogabassey'
-  ) {
+  if (!merchant || merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
     return {
       title: 'Store Not Found',
     };
@@ -72,10 +69,7 @@ export default async function SwapPage({
   }
 
   // Only show for Ogabassey template (merchant-specific feature)
-  if (
-    (merchant as unknown as { template_id?: string }).template_id !==
-    'ogabassey'
-  ) {
+  if (merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
     notFound();
   }
 

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getCachedMerchant } from '@/lib/cached-data';
 import { safeJsonLdStringify } from '@/lib/json-ld-script-escape';
 import { isValidMerchantIdentifier } from '@/lib/validation';
@@ -38,7 +39,7 @@ describe('QuizPage', () => {
   it('declares a self-referencing canonical in metadata', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       slug: 'ogabassey',
-      template_id: 'ogabassey',
+      template_id: OGABASSEY_TEMPLATE_ID,
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     const metadata = await generateMetadata({
@@ -55,7 +56,7 @@ describe('QuizPage', () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       slug: 'ogabassey',
       custom_domain: 'ogabassey.com',
-      template_id: 'ogabassey',
+      template_id: OGABASSEY_TEMPLATE_ID,
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     const metadata = await generateMetadata({
@@ -79,7 +80,7 @@ describe('QuizPage', () => {
   it('renders the Ogabassey web quiz route with structured data', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       slug: 'ogabassey',
-      template_id: 'ogabassey',
+      template_id: OGABASSEY_TEMPLATE_ID,
     } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
 
     render(await QuizPage({ params: Promise.resolve({ slug: 'ogabassey' }) }));

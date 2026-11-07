@@ -158,4 +158,30 @@ describe('GadgetDefaultBrowseRail', () => {
       expect(link).toHaveAttribute('rel', 'nofollow');
     }
   });
+
+  it('applies border-gray-200 for standard themes and border-zinc-800 for dark themes', () => {
+    const { rerender } = render(
+      <GadgetDefaultBrowseRail
+        basePath="/techzone"
+        theme={mockTheme}
+        radiusClass="rounded-md"
+      />
+    );
+
+    const standardLink = screen.getByRole('link', { name: /new arrivals/i });
+    expect(standardLink).toHaveClass('border-gray-200');
+    expect(standardLink).not.toHaveClass('border-zinc-800');
+
+    rerender(
+      <GadgetDefaultBrowseRail
+        basePath="/techzone"
+        theme={{ ...mockTheme, id: 'hair-extensions' }}
+        radiusClass="rounded-md"
+      />
+    );
+
+    const darkLink = screen.getByRole('link', { name: /new arrivals/i });
+    expect(darkLink).toHaveClass('border-zinc-800');
+    expect(darkLink).not.toHaveClass('border-gray-200');
+  });
 });

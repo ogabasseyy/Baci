@@ -42,6 +42,8 @@ export function GadgetDefaultBrowseRail({
   radiusClass,
 }: GadgetDefaultBrowseRailProps) {
   const [browseMode, setBrowseMode] = useState<BrowseMode>('category');
+  const isDark = theme.id === 'hair-extensions';
+  const borderClass = isDark ? 'border-zinc-800' : 'border-gray-200';
 
   const brands = new Set<string>();
   for (const product of products) {
@@ -109,6 +111,7 @@ export function GadgetDefaultBrowseRail({
               href={asRoute(getFullHref(cat.href))}
               className={cn(
                 'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',
+                borderClass,
                 radiusClass,
                 theme.layout.categoryRail === 'circle' &&
                   'aspect-square rounded-full',
@@ -118,8 +121,6 @@ export function GadgetDefaultBrowseRail({
               )}
               style={{
                 backgroundColor: theme.colors.card,
-                borderColor:
-                  theme.colors.background === '#09090B' ? '#27272A' : '#E5E7EB',
               }}
             >
               <cat.icon
@@ -141,15 +142,12 @@ export function GadgetDefaultBrowseRail({
                 rel="nofollow"
                 className={cn(
                   'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',
+                  borderClass,
                   radiusClass,
                   'aspect-4/3'
                 )}
                 style={{
                   backgroundColor: theme.colors.card,
-                  borderColor:
-                    theme.colors.background === '#09090B'
-                      ? '#27272A'
-                      : '#E5E7EB',
                 }}
               >
                 <span
@@ -174,13 +172,12 @@ export function GadgetDefaultBrowseRail({
               rel="nofollow"
               className={cn(
                 'group flex flex-col items-center justify-center p-6 transition-all hover:shadow-lg border',
+                borderClass,
                 radiusClass,
                 'aspect-4/3'
               )}
               style={{
                 backgroundColor: theme.colors.card,
-                borderColor:
-                  theme.colors.background === '#09090B' ? '#27272A' : '#E5E7EB',
               }}
             >
               <span

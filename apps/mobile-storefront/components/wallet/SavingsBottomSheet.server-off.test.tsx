@@ -5,10 +5,10 @@ import {
   within,
 } from '@testing-library/react-native';
 import { Modal, Pressable, StyleSheet, Text } from 'react-native';
-import Colors, { palette } from '@/constants/Colors';
+import Colors from '@/constants/Colors';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 
-const colors = { ...Colors.dark, primary: palette.red[600] };
+const colors = { ...Colors.dark, primary: Colors.dark.success };
 const { mockBottomSheetClose } = jest.requireActual('@gorhom/bottom-sheet') as {
   mockBottomSheetClose: jest.Mock;
 };
@@ -35,7 +35,7 @@ it('waits for the slide-down animation before unmounting on an explicit dismissa
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
-it('keeps its heading inside the draggable sheet with a brand outline', () => {
+it('keeps its heading inside the draggable sheet with the supplied themed outline', () => {
   const onClose = jest.fn();
   render(
     <SavingsBottomSheet colors={colors} onClose={onClose} visible>
@@ -51,7 +51,7 @@ it('keeps its heading inside the draggable sheet with a brand outline', () => {
   expect(sheet.props.snapPoints).toEqual(['72%', '92%']);
   expect(sheet.props.index).toBe(0);
   expect(StyleSheet.flatten(sheet.props.backgroundStyle)).toMatchObject({
-    borderColor: palette.red[600],
+    borderColor: colors.primary,
     borderWidth: 1.5,
   });
   expect(sheet.props.keyboardBehavior).toBe('interactive');

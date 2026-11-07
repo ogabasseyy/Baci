@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
+import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { getSavingsProgress } from './get-savings-progress';
@@ -27,15 +27,17 @@ export function WalletSavingsPlanCard({
   onOpen,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
+  // This is the Ogabassey app: savings actions retain its brand across appearance modes.
   const colors = {
     ...themeColors,
-    primary: palette.red[600],
-    primaryForeground: palette.white,
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
   };
   const actionGlowColors = [
-    palette.red[700],
-    palette.red[600],
-    palette.red[700],
+    BRAND.primaryDark,
+    BRAND.primary,
+    BRAND.primaryDark,
   ] as const;
   const { percent: progress } = getSavingsProgress(goal);
   const { colour, details, storage } = getSavingsVariantPresentation(

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet } from 'react-native';
-import Colors, { palette } from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
 
@@ -21,6 +21,28 @@ const goal: WalletActiveSavingsGoal = {
 };
 
 describe('WalletSavingsPlanCard', () => {
+  it('reads its action colour from the central brand configuration', () => {
+    const replacement = jest.replaceProperty(
+      BRAND,
+      'primary',
+      Colors.light.success
+    );
+    try {
+      render(
+        <WalletSavingsPlanCard
+          colors={Colors.dark}
+          goal={goal}
+          onOpen={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
+      ).toHaveStyle({ backgroundColor: Colors.light.success });
+    } finally {
+      replacement.restore();
+    }
+  });
+
   it('shows a created but unfunded plan without claiming progress', () => {
     const onOpen = jest.fn();
     render(
@@ -183,7 +205,7 @@ describe('WalletSavingsPlanCard', () => {
     const rendered = JSON.stringify(toJSON());
     expect(rendered).toContain(Colors.dark.card);
     expect(rendered).toContain(Colors.dark.cardForeground);
-    expect(rendered).toContain(palette.red[600]);
+    expect(rendered).toContain(BRAND.primary);
     expect(rendered).not.toContain(Colors.light.cardForeground);
   });
 
@@ -195,7 +217,7 @@ describe('WalletSavingsPlanCard', () => {
 
     expect(UNSAFE_getByType(LinearGradient).props).toEqual(
       expect.objectContaining({
-        colors: [palette.red[700], palette.red[600], palette.red[700]],
+        colors: [BRAND.primaryDark, BRAND.primary, BRAND.primaryDark],
         start: { x: 0, y: 0.5 },
         end: { x: 1, y: 0.5 },
       })
@@ -205,7 +227,7 @@ describe('WalletSavingsPlanCard', () => {
     });
     fireEvent(button, 'focus');
     expect(StyleSheet.flatten(button.props.style)).toEqual(
-      expect.objectContaining({ borderColor: palette.white, borderWidth: 2 })
+      expect.objectContaining({ borderColor: BRAND.onPrimary, borderWidth: 2 })
     );
     fireEvent.press(button);
     expect(onOpen).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 import type { User } from '@supabase/supabase-js';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import Colors, { palette, withAlpha } from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
@@ -24,6 +24,11 @@ it.each([
   Colors.light,
 ])('covers the underlying wallet behind the keyboard without enabling staging payments', (colors) => {
   const previousMode = process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
+  const brandReplacement = jest.replaceProperty(
+    BRAND,
+    'primary',
+    Colors.light.success
+  );
   process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
   try {
     useAuthStore.setState({ user: authUser, merchantId: 'merchant-a' });
@@ -66,12 +71,12 @@ it.each([
     ).toBeOnTheScreen();
     expect(
       screen.UNSAFE_getByType(SavingsBottomSheet).props.colors.primary
-    ).toBe(palette.red[600]);
+    ).toBe(BRAND.primary);
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress details' })
-    ).toHaveStyle({ backgroundColor: withAlpha(palette.red[600], 0.12) });
+    ).toHaveStyle({ backgroundColor: BRAND.primaryAlpha12 });
     expect(screen.getByText('Every naira counts')).toHaveStyle({
-      color: palette.red[600],
+      color: BRAND.primary,
     });
     expect(
       screen.getByText(
@@ -81,6 +86,7 @@ it.each([
     fireEvent.press(payment);
     expect(onFundWallet).not.toHaveBeenCalled();
   } finally {
+    brandReplacement.restore();
     if (previousMode === undefined)
       delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
     else process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = previousMode;

@@ -2,7 +2,7 @@ import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { palette, withAlpha } from '@/constants/Colors';
+import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
@@ -53,9 +53,9 @@ export function WalletSavingsProgressModal({
 }: WalletSavingsProgressModalProps) {
   const colors = {
     ...themeColors,
-    primary: palette.red[600],
-    primaryForeground: palette.white,
-    primaryLowOpacity: withAlpha(palette.red[600], 0.12),
+    primary: BRAND.primary,
+    primaryForeground: BRAND.onPrimary,
+    primaryLowOpacity: BRAND.primaryAlpha12,
   };
   if (!goal) {
     return null;

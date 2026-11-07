@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 import {
-  palette,
+  BRAND,
   RADIUS,
   SPACING,
   TYPOGRAPHY,
@@ -115,7 +115,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: palette.red[600],
+    backgroundColor: BRAND.primary,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
     minHeight: 48,

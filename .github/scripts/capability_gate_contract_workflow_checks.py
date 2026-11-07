@@ -4,7 +4,9 @@ Companion to capability_gate_contract_check.py, executed base-owned via the
 archived extraction alongside it. Everything here reads candidate text as
 data; nothing here executes PR code.
 """
+import hashlib
 import re
+from pathlib import Path
 
 from capability_gate_contract_ci_checks import (
     CHECKER,
@@ -16,6 +18,9 @@ from capability_gate_contract_ci_checks import (
     _strip_comment,
     _without_block_scalars,
 )
+
+def sha256_of(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 # The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
 # Keep inline ${{ }} out of bare run arguments and avoid case-pattern alternations: the SAST Pro rules parse run snippets as Bash and fail the required check on PartialParsing warnings. Resolve dynamic values via GITHUB_EVENT_PATH instead.
@@ -30,6 +35,13 @@ EXPECTED_RUN = [
     "CHECKER=.github/scripts/capability_gate_contract_check.py",
     "fi",
     'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
+]
+EXPECTED_RUN_WITH_COMPANION = [
+    line.replace(
+        "capability_gate_contract_workflow_checks.py | tar",
+        "capability_gate_contract_workflow_checks.py vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py | tar",
+    )
+    for line in EXPECTED_RUN
 ]
 
 # The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
@@ -251,7 +263,7 @@ def workflow_failures(workflow_text):
         if len(line) - len(line.lstrip()) <= indent:
             break
         body.append(stripped)
-    if body != EXPECTED_RUN:
+    if body not in (EXPECTED_RUN, EXPECTED_RUN_WITH_COMPANION):
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
     # Startup env preloads PR code before the checker starts: job env carries only the pin, steps none.
     for line in block:

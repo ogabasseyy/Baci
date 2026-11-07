@@ -142,4 +142,33 @@ describe('Chatwoot commerce messages', () => {
     expect(readChatwootCommerceMessage(event('https://widget.test', frame, valid), 'https://widget.test', frame)).toEqual(valid);
     expect(readChatwootCommerceMessage(event('https://widget.test', frame, { ...valid, data: { requestId: 'review-1', cartId: 'caller-selected' } }), 'https://widget.test', frame)).toBeNull();
   });
+
+  it('accepts a full-size supported signed session token envelope', () => {
+    const largeTokenMessage = {
+      event: 'baci-cart-request',
+      data: {
+        requestId: 'request-1',
+        conversationId: 905,
+        sessionToken: 't'.repeat(2_380),
+      },
+    };
+    expect(
+      readChatwootCommerceMessage(
+        event('https://widget.test', frame, largeTokenMessage),
+        'https://widget.test',
+        frame
+      )
+    ).toEqual(largeTokenMessage);
+    expect(
+      readChatwootCommerceMessage(
+        {
+          origin: 'https://widget.test',
+          source: frame,
+          data: `baci-cart-request:${'x'.repeat(24_001)}`,
+        } as MessageEvent,
+        'https://widget.test',
+        frame
+      )
+    ).toBeNull();
+  });
 });

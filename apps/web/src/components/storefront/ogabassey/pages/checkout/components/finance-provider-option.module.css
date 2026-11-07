@@ -31,3 +31,5 @@
 .bankLogo:is([data-bank='Standard Chartered'],[data-bank='Fidelity Bank'],[data-bank='Opay']) { background:#d6f4e6; }
 .bankLogo:is([data-bank='Zenith Bank'],[data-bank='UBA'],[data-bank='Sterling Bank']) { background:#ffe1e1; }
 .bankLogo[data-bank='Palmpay'] { background:#e9dcff; }
+.bankLogo[data-bank='AltBank'] { background:#000; }
+.bankLogo[data-bank='AltBank'] > img { mix-blend-mode:normal; }

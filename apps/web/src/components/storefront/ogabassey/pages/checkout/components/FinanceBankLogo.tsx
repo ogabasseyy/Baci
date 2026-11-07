@@ -1,4 +1,5 @@
 import Image, { type StaticImageData } from 'next/image';
+import altbank from '@/../public/partners/bank-icons/altbank-generated.png';
 import citi from '@/../public/partners/bank-icons/citibank.png';
 import heritage from '@/../public/partners/bank-icons/heritage.png';
 import jaiz from '@/../public/partners/bank-icons/jaiz.png';
@@ -18,7 +19,7 @@ const images: Readonly<Record<string, StaticImageData>> = {
   'citi bank': citi, 'heritage bank': heritage, 'jaiz bank': jaiz,
   'premium trust bank': premium, 'standard chartered': standard,
   'suntrust bank': suntrust, 'coronation merchant bank': coronation,
-  palmpay, kongapay, piggyvest, cowrywise, risevest, trove,
+  altbank, palmpay, kongapay, piggyvest, cowrywise, risevest, trove,
 };
 export function FinanceBankLogo({ name, code }: { name: string; code: string }) {
   const image = images[name.trim().toLowerCase()];

@@ -30,10 +30,10 @@ export async function settle(
 ): Promise<boolean> {
   try {
     return await deps.resolve(row.capture_id, row.claim_token, state, error);
-  } catch (error) {
+  } catch (caughtError) {
     console.warn('[PiggyVest Webhook] Failed to resolve captured delivery', {
       captureId: row.capture_id,
-      ...captureFailureDetail(error, 'settle'),
+      ...captureFailureDetail(caughtError, 'settle'),
     });
     return false;
   }

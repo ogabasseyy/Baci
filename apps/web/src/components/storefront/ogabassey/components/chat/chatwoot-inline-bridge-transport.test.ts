@@ -7,6 +7,7 @@ vi.mock('@/lib/csrf', () => ({
 import {
   authorizeChatwootBridgeSession,
   isCurrentChatwootBridgeTarget,
+  postChatwootBridgeJson,
 } from './chatwoot-inline-bridge-transport';
 
 const snapshot = {
@@ -37,19 +38,40 @@ describe('Chatwoot inline bridge transport', () => {
     document.body.innerHTML = '';
   });
 
+  it('adds the path-store merchant hint to challenge and verification routes', async () => {
+    const fetchMock = vi.fn(async () => response({ requestId: 'request-1' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await postChatwootBridgeJson(
+      '/api/storefront/chatwoot/context/challenge',
+      { requestId: 'request-1' },
+      'store-a'
+    );
+    await postChatwootBridgeJson(
+      '/api/storefront/chatwoot/context/verify',
+      { challengeToken: 'challenge-1' },
+      'store-a'
+    );
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/storefront/chatwoot/context/challenge?merchantSlug=store-a',
+      '/api/storefront/chatwoot/context/verify?merchantSlug=store-a',
+    ]);
+  });
+
   it('returns a validated server authorization and cart snapshot', async () => {
     const fetchMock = vi.fn(async () => response(validAuthorization()));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(
-      authorizeChatwootBridgeSession('signed-session-token')
+      authorizeChatwootBridgeSession('signed-session-token', 'store-a')
     ).resolves.toEqual({
       conversationId: 905,
       sessionExpiresAt: expect.any(Number),
       snapshot,
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/storefront/chatwoot/context/authorize',
+      '/api/storefront/chatwoot/context/authorize?merchantSlug=store-a',
       expect.objectContaining({
         method: 'POST',
         credentials: 'same-origin',
@@ -75,7 +97,7 @@ describe('Chatwoot inline bridge transport', () => {
     vi.stubGlobal('fetch', vi.fn(async () => result));
 
     await expect(
-      authorizeChatwootBridgeSession('signed-session-token')
+      authorizeChatwootBridgeSession('signed-session-token', 'store-a')
     ).resolves.toBeNull();
   });
 

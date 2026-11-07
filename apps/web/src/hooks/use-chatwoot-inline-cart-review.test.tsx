@@ -176,10 +176,12 @@ describe('ChatwootInlineCartBridge', () => {
       'fetch',
       vi.fn(async (path: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (path.endsWith('/challenge')) {
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/challenge')
+        ) {
           return challengeResponse(String(body.requestId));
         }
-        if (path.endsWith('/verify')) {
+        if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return contextResponse(String(body.contextToken));
         }
         const conversationId = Number(
@@ -212,7 +214,7 @@ describe('ChatwootInlineCartBridge', () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/storefront/chatwoot/context/authorize',
+      '/api/storefront/chatwoot/context/authorize?merchantSlug=store',
       expect.objectContaining({
         method: 'POST',
         cache: 'no-store',

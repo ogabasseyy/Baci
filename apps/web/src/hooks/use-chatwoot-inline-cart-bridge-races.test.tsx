@@ -141,7 +141,9 @@ describe('ChatwootInlineCartBridge async context races', () => {
       'fetch',
       vi.fn(async (path: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (path.endsWith('/challenge')) {
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/challenge')
+        ) {
           return {
             ok: true,
             json: async () => ({
@@ -152,7 +154,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
             }),
           };
         }
-        if (path.endsWith('/verify')) {
+        if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return contextResponse(String(body.contextToken));
         }
         return authorizedResponse(905);
@@ -170,7 +172,9 @@ describe('ChatwootInlineCartBridge async context races', () => {
       'fetch',
       vi.fn(async (path: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (path.endsWith('/challenge')) {
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/challenge')
+        ) {
           return {
             ok: true,
             json: async () => ({
@@ -181,7 +185,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
             }),
           };
         }
-        if (path.endsWith('/verify'))
+        if (new URL(path, 'https://store.test').pathname.endsWith('/verify'))
           return contextResponse(String(body.contextToken));
         return new Promise((resolve) => {
           resolveAuthorize = resolve;
@@ -224,7 +228,9 @@ describe('ChatwootInlineCartBridge async context races', () => {
       'fetch',
       vi.fn((path: string, init: RequestInit) => {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        if (path.endsWith('/challenge')) {
+        if (
+          new URL(path, 'https://store.test').pathname.endsWith('/challenge')
+        ) {
           return Promise.resolve({
             ok: true,
             json: async () => ({
@@ -235,7 +241,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
             }),
           });
         }
-        if (path.endsWith('/verify')) {
+        if (new URL(path, 'https://store.test').pathname.endsWith('/verify')) {
           return Promise.resolve(contextResponse(String(body.contextToken)));
         }
         return new Promise((resolve) => {
@@ -256,7 +262,7 @@ describe('ChatwootInlineCartBridge async context races', () => {
       });
       await waitFor(() =>
         expect(fetch).toHaveBeenCalledWith(
-          '/api/storefront/chatwoot/context/authorize',
+          '/api/storefront/chatwoot/context/authorize?merchantSlug=store',
           expect.anything()
         )
       );

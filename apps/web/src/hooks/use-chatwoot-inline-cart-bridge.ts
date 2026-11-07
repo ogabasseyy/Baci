@@ -88,7 +88,8 @@ export function useChatwootInlineCartBridge(
         try {
           challenge = await postChatwootBridgeJson(
             '/api/storefront/chatwoot/context/challenge',
-            contextMessage.data
+            contextMessage.data,
+            storeSlug
           );
         } catch {
           challenge = null;
@@ -138,7 +139,8 @@ export function useChatwootInlineCartBridge(
         try {
           verified = await postChatwootBridgeJson(
             '/api/storefront/chatwoot/context/verify',
-            { challengeToken: matchingChallenge, contextToken }
+            { challengeToken: matchingChallenge, contextToken },
+            storeSlug
           );
         } catch {
           verified = null;
@@ -211,7 +213,10 @@ export function useChatwootInlineCartBridge(
         ReturnType<typeof authorizeChatwootBridgeSession>
       >;
       try {
-        authorized = await authorizeChatwootBridgeSession(messageSessionToken);
+        authorized = await authorizeChatwootBridgeSession(
+          messageSessionToken,
+          storeSlug
+        );
       } catch {
         authorized = null;
       }

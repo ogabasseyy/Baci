@@ -1,4 +1,5 @@
 import { buildCsrfHeaders } from '@/lib/csrf';
+import { cartRoute } from '@/hooks/cart/shared-cart-client-support';
 import { chatwootCartReviewSnapshotSchema } from '@/schemas/chatwoot-commerce-context';
 
 export type ChatwootBridgeCartState = {
@@ -9,9 +10,10 @@ export type ChatwootBridgeCartState = {
 
 export async function postChatwootBridgeJson(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  storeSlug: string
 ): Promise<Record<string, unknown> | null> {
-  const response = await fetch(path, {
+  const response = await fetch(cartRoute(path, storeSlug), {
     method: 'POST',
     credentials: 'same-origin',
     cache: 'no-store',
@@ -25,10 +27,14 @@ export async function postChatwootBridgeJson(
     : null;
 }
 
-export async function authorizeChatwootBridgeSession(sessionToken: string) {
+export async function authorizeChatwootBridgeSession(
+  sessionToken: string,
+  storeSlug: string
+) {
   const value = await postChatwootBridgeJson(
     '/api/storefront/chatwoot/context/authorize',
-    { sessionToken, includeCartSnapshot: true }
+    { sessionToken, includeCartSnapshot: true },
+    storeSlug
   );
   if (!value) return null;
   const snapshot = chatwootCartReviewSnapshotSchema.safeParse(

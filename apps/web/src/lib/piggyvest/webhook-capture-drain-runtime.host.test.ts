@@ -125,6 +125,11 @@ describe('rows the worker host cannot finish', () => {
   it('rediscovers a durable review after its settlement response and alert were lost', async () => {
     const model = store();
     const legacy = model.add('lost-review-response', legacyKey, ['legacy']);
+    const reviewAlerts = await import('./webhook-alerts');
+    const sendAlert = vi
+      .spyOn(reviewAlerts, 'sendPiggyvestWebhookAlertDelivered')
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
     const query = model.executor.query.bind(model.executor);
     model.executor.query = async (statement, parameters) => {
       const rows = await query(statement, parameters);
@@ -135,6 +140,7 @@ describe('rows the worker host cannot finish', () => {
     now += 121 * SECOND;
     await model.run();
     expect(legacy.processing_state).toBe('needs_review');
+    expect(sendAlert).toHaveBeenCalledTimes(1);
     alerts.mockClear();
     await model.run();
     expect(
@@ -142,7 +148,9 @@ describe('rows the worker host cannot finish', () => {
         line.includes('captured deliveries remain in needs_review')
       )
     ).toBe(true);
+    expect(sendAlert).toHaveBeenCalledTimes(2);
     expect(mocks.dispatch).not.toHaveBeenCalled();
+    sendAlert.mockRestore();
   });
   it('never claims a set-aside row again, so a later primary deposit is claimed on the next pass', async () => {
     const model = store();

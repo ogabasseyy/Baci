@@ -2,7 +2,7 @@
 .selected { border-color: var(--store-primary, #d62027); }
 .header { display:flex; align-items:center; gap:12px; min-height:76px; padding:12px 14px; cursor:pointer; }
 .header:has(input:focus-visible) { outline:2px solid var(--store-primary, #d62027); outline-offset:-3px; }
-.logoTile { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:50%; background:#fff; padding:3px; flex-shrink:0; }
+.logoTile { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:#fff; padding:3px; flex-shrink:0; }
 .logo { width:100%; height:100%; object-fit:contain; }
 .oxygenLogoTile { background:#00534c; padding:0; overflow:hidden; }
 .creditLogoTile { background:#077dbb; padding:0; overflow:hidden; }

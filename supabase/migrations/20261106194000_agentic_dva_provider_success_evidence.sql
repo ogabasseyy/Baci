@@ -20,9 +20,6 @@ BEGIN
 END;
 $roles$;
 
-ALTER ROLE agentic_dva_provider_evidence_writer
-  NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
-  NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1 PASSWORD NULL;
 
 GRANT USAGE ON SCHEMA public TO agentic_dva_provider_evidence_writer;
 -- Deliberately do not grant this role to authenticator. The existing

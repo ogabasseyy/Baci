@@ -7,6 +7,7 @@ import {
   getProductDetailsSchema,
   getRecommendationsSchema,
   searchProductsSchema,
+  TOOL_DESCRIPTIONS,
 } from './chat-tools';
 
 describe('searchProductsSchema', () => {
@@ -107,6 +108,19 @@ describe('createVirtualAccountSchema', () => {
       amount: 50000,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('createVirtualAccount tool description', () => {
+  it('does not promise account creation or direct customers to card payment', () => {
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).toContain(
+      'creation is not available in this chat yet'
+    );
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).not.toContain('Generate');
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).not.toContain('card');
+    expect(TOOL_DESCRIPTIONS.createVirtualAccount).toContain(
+      'Do not collect or submit customer or payment details'
+    );
   });
 });
 

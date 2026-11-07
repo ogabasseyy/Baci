@@ -124,7 +124,7 @@ export const TOOL_DESCRIPTIONS = {
   getProductDetails:
     'Get full details for a specific product including description, specifications, stock, and images.',
   createVirtualAccount:
-    'Generate a bank account number for the customer to pay via bank transfer. Use this when the customer is ready to pay.',
+    'Virtual account creation is not available in this chat yet. Do not collect or submit customer or payment details, and do not claim an account was created. Direct customers to support for help completing a virtual-account payment.',
   checkPaymentStatus:
     'Check if payment has been received for a pending order. Use this when customer says they have paid.',
   cancelOrder:

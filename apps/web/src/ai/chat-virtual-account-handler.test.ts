@@ -23,7 +23,11 @@ it('does not create a pending order when virtual-account payments are unavailabl
   );
 
   expect(result.success).toBe(false);
-  expect(result.error).toContain('temporarily unavailable');
+  expect(result.error).toContain(
+    'Virtual account setup is not available in this chat yet'
+  );
+  expect(result.error).toContain('contact support');
+  expect(result.error).not.toContain('card');
   expect(result.orderId).toBeUndefined();
   expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
 });

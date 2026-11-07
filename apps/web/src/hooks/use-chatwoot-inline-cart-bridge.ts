@@ -54,7 +54,11 @@ export function useChatwootInlineCartBridge(
         conversationId,
         activeConversationId,
         activeContextRequestId,
-        cartState: latestState.current,
+        cartState: {
+          isHydrated: latestState.current.isHydrated,
+          merchantSlug: latestState.current.merchantSlug,
+          sharedCartEnabled: latestState.current.sharedCartEnabled === true,
+        },
       });
 
     async function onMessage(event: MessageEvent) {
@@ -203,7 +207,9 @@ export function useChatwootInlineCartBridge(
         return;
       }
       const actionTarget = target;
-      let authorized: Awaited<ReturnType<typeof authorize>>;
+      let authorized: Awaited<
+        ReturnType<typeof authorizeChatwootBridgeSession>
+      >;
       try {
         authorized = await authorizeChatwootBridgeSession(messageSessionToken);
       } catch {

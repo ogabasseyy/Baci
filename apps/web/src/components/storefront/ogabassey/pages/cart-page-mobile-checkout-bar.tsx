@@ -38,7 +38,7 @@ export function CartPageMobileCheckoutBar({
       <button
         type="button"
         onClick={onCheckoutClick}
-        className="flex-1 bg-black hover:bg-gray-900 active:bg-gray-900 active:scale-[0.98] text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
+        className={`flex-1 active:scale-[0.98] font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg ${styles.checkoutAction}`}
       >
         <span>Checkout</span>
         <span className="opacity-50 mx-1">•</span>

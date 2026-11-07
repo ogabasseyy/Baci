@@ -95,6 +95,11 @@ test('cart keeps the compact checkout action visible at tablet widths', async ({
   ).toBeHidden();
   const checkout = page.getByRole('button', { name: /^Checkout • ₦100,000$/ });
   await expect(checkout).toBeVisible();
+  await expect(checkout).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--store-checkout-button-bg', '#123456');
+  });
+  await expect(checkout).toHaveCSS('background-color', 'rgb(18, 52, 86)');
   await checkout.click();
   await expect(page).toHaveURL(/\/checkout$/);
 });

@@ -21,7 +21,7 @@ describe('CartPageMobileCheckoutBar', () => {
   it('keeps the black checkout action available until the desktop summary appears', () => {
     renderMobileBar();
     const checkout = screen.getByRole('button', { name: /checkout/i });
-    expect(checkout).toHaveClass('bg-black');
+    expect(checkout.className).toContain('checkoutAction');
     expect(checkout.parentElement).toHaveClass('lg:hidden');
     expect(checkout.parentElement).not.toHaveClass('md:hidden');
   });

@@ -39,7 +39,6 @@ Every later PR is guarded base-owned from merge on.
 """
 import ast
 import fnmatch
-import hashlib
 import re
 import sys
 from pathlib import Path
@@ -60,7 +59,7 @@ from capability_gate_contract_ci_checks import (
     _strip_comment,
     ci_failures,
 )
-from capability_gate_contract_workflow_checks import workflow_failures
+from capability_gate_contract_workflow_checks import sha256_of, workflow_failures
 
 BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_gate_contract_archive_companion.py": "23db2eaa4e4636151784c68eb5b615abc6096f6832eea50c3a8831e9351a1864",
@@ -71,7 +70,7 @@ BASE_PINS = {
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "f8a3fc7989435f4e84b0278ffbb3f6f1d1a9213b9ac22acdfe2fc781fcd86f64",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "a7422abdc21a45d150e985b2e4251922c2a8a2de61b806dd7a15f1086246dd89",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "b7b9488e9e81b9d52eddc6b6d055e39cd9199105a011524413231aeb934121e1",
     ".github/workflows/capability-register-freshness.yml": "60eec995bf4da241c8aac1c3ba01fa052fb314feff547f66e423faf86aa9340e",
     "vps-workers/baci-editorial-context/capability_gate.py": "ee08cb0c94e2b0a5ee33d5250831692904168a9f241dd066638cc07aba6d6bf5",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -97,10 +96,6 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
-
-def sha256_of(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
 
 def declared_pins(checker_path):
     """Read the BASE_PINS declaration without executing it (exactly one assignment: Python runs the last)."""

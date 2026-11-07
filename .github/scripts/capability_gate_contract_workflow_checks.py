@@ -4,7 +4,9 @@ Companion to capability_gate_contract_check.py, executed base-owned via the
 archived extraction alongside it. Everything here reads candidate text as
 data; nothing here executes PR code.
 """
+import hashlib
 import re
+from pathlib import Path
 
 from capability_gate_contract_ci_checks import (
     CHECKER,
@@ -16,6 +18,9 @@ from capability_gate_contract_ci_checks import (
     _strip_comment,
     _without_block_scalars,
 )
+
+def sha256_of(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 # The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
 # Keep inline ${{ }} out of bare run arguments and avoid case-pattern alternations: the SAST Pro rules parse run snippets as Bash and fail the required check on PartialParsing warnings. Resolve dynamic values via GITHUB_EVENT_PATH instead.

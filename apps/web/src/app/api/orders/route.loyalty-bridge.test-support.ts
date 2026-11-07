@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import {
   authenticateApiRequest,
   mockCreateAdminClient,
+  mockCreateAnonClient,
   mockCreateLoyaltyResolverServiceClient,
   NextRequest,
 } from './route.loyalty-bridge.mocks.test-support';
@@ -22,6 +23,7 @@ export function buildLoyaltyMockSupabase(
     id: MERCHANT_ID,
     business_name: 'Test Merchant',
     country: 'NG',
+    payout_currency: 'NGN',
     slug: 'test-merchant',
     support_email: 'support@example.com',
     email_sender_name: 'Test Store',
@@ -148,6 +150,9 @@ export async function setupLoyaltyBridge(
     rpc: vi.fn(async () => ({ data: null, error: null })),
   });
   const supabase = buildLoyaltyMockSupabase(overrides, PRODUCT_ROWS);
+  mockCreateAnonClient.mockReturnValue(
+    buildLoyaltyMockSupabase(overrides, PRODUCT_ROWS)
+  );
   const supabaseMod = await import('@/lib/supabase/server');
   vi.mocked(supabaseMod.createClient).mockImplementation(
     () => supabase as unknown as never

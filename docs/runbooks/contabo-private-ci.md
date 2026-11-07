@@ -25,3 +25,10 @@ lint jobs use GitHub-hosted runners and may consume included minutes. Already
 queued jobs do not change runners; cancel and rerun them if needed. Keep the
 account's spending limit in place. Check that the required Quality Gate reports
 lint failures and that pending jobs complete after a runner outage or cancellation.
+
+Typechecking has a separate opt-in. After the complete production typecheck
+sequence passes on Contabo, set `BACI_PRIVATE_TYPECHECK_ENABLED` to `true` in
+addition to the existing private CI switch. Fork PRs remain GitHub-hosted and
+self-hosted typechecks receive no remote-cache credentials. With one runner,
+lint and typecheck queue behind each other. Remove the typecheck variable to
+route subsequently scheduled typechecks back to GitHub-hosted runners.

@@ -157,8 +157,8 @@ jobs:
     name: Quality Gate - Typecheck
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 30 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -172,8 +172,8 @@ jobs:
         run: pnpm --dir apps/web/tools/builder-auth test
       - name: Run Typecheck
         env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
+          TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo typecheck --affected

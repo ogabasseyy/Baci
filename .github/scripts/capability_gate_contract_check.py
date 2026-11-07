@@ -62,7 +62,7 @@ from capability_gate_contract_ci_checks import (
 from capability_gate_contract_workflow_checks import declared_checker_pin, sha256_of, workflow_failures
 
 BASE_PINS = {
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_private_fetch.py": "64b621007c17b40520bf01c6c6bf52ddaf82c159b8b278cfa4c718b2048cab78",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_private_fetch.py": "6a65b7af808c202c6a5f63abeb4c92d078765f0c2bd5977b6ff413c2a5757205",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_companion_origin.py": "0c1279adab6caffb5cd6db6f6f216e5f0134909093227f0d191408a7df9eb702",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_archive_companion.py": "23db2eaa4e4636151784c68eb5b615abc6096f6832eea50c3a8831e9351a1864",
     "vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py": "fb027c19a8e17efcb1606d72fe336ee0f6abb7087b15b52a8b93b3fd870e9cc7",
@@ -72,7 +72,7 @@ BASE_PINS = {
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "f8a3fc7989435f4e84b0278ffbb3f6f1d1a9213b9ac22acdfe2fc781fcd86f64",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "acb6cfb116b96864211d1c3e1245e4d525bb7c7e7b51497417d86504695b95fb",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "a3ef086a61abeb5e1df99db204d920d73574f1825578fa2709027dadf5028150",
     ".github/workflows/capability-register-freshness.yml": "60eec995bf4da241c8aac1c3ba01fa052fb314feff547f66e423faf86aa9340e",
     "vps-workers/baci-editorial-context/capability_gate.py": "ee08cb0c94e2b0a5ee33d5250831692904168a9f241dd066638cc07aba6d6bf5",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",

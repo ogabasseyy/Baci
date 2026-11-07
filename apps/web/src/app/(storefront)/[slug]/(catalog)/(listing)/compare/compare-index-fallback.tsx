@@ -15,11 +15,15 @@ export function CompareIndexFallback({
     return (
       <div
         role="status"
-        aria-label="Loading compare products"
+        aria-labelledby="compare-loading-status"
         aria-live="polite"
+        aria-busy="true"
         className="space-y-6 pt-4"
       >
-        <div className="space-y-6">
+        <span id="compare-loading-status" className="sr-only">
+          Loading compare products
+        </span>
+        <div aria-hidden="true" className="space-y-6">
           {[1, 2].map((idx) => (
             <div
               key={idx}

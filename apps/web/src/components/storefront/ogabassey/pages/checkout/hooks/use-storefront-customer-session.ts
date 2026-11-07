@@ -148,9 +148,7 @@ export function useStorefrontCustomerSession(
           return;
         }
         setStatus(authenticated ? 'authenticated' : 'guest');
-        if (resolvedAccountId || !authenticated) {
-          setAccountId(resolvedAccountId);
-        }
+        setAccountId(resolvedAccountId);
       });
     };
 

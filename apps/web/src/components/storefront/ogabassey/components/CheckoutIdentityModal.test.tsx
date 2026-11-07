@@ -25,6 +25,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 vi.mock('@/lib/routes', () => ({ asRoute: vi.fn((p: string) => p) }));
 vi.mock('@/lib/utils', () => ({ cn: vi.fn((...args: string[]) => args.filter(Boolean).join(' ')) }));
 
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { CheckoutIdentityModal } from './CheckoutIdentityModal';
 
 describe('CheckoutIdentityModal', () => {
@@ -70,6 +71,14 @@ describe('CheckoutIdentityModal', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/checkout');
     expect(defaultProps.onClose).toHaveBeenCalled();
+  });
+
+  it('offers guest checkout if merchant identity is unavailable', () => {
+    vi.mocked(useMerchantSafe).mockReturnValueOnce(null);
+    render(<CheckoutIdentityModal {...defaultProps} />);
+    expect(screen.getByText(/sign-in is currently unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
   });
 
   it('has a close button with proper aria-label', () => {

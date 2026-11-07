@@ -92,6 +92,8 @@ function CodeForm({ onSuccess, socialReturnTo }: Props) {
               setError('');
               setSentAt(Date.now());
               return true;
+            } catch {
+              return false;
             } finally {
               setBusy(false);
             }
@@ -140,13 +142,14 @@ function CodeForm({ onSuccess, socialReturnTo }: Props) {
                   const result = await (provider === 'Google'
                     ? signInWithGoogle(socialReturnTo)
                     : signInWithApple(socialReturnTo));
-                  if (!result.success)
+                  if (!result.success) {
                     setError(
                       result.error || `Unable to continue with ${provider}.`
                     );
+                    setBusy(false);
+                  }
                 } catch {
                   setError(`Unable to continue with ${provider}.`);
-                } finally {
                   setBusy(false);
                 }
               }}

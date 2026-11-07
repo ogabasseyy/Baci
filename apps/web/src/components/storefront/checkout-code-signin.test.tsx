@@ -168,3 +168,37 @@ it('shows a useful error if social sign-in unexpectedly fails', async () => {
     'Unable to continue with Google.'
   );
 });
+
+it('keeps controls disabled while a successful social redirect is pending', async () => {
+  auth.signInWithGoogle.mockResolvedValueOnce({ success: true });
+  render(
+    <CheckoutCodeSignin
+      merchantSlug="shop"
+      onSuccess={vi.fn()}
+      socialReturnTo="/checkout"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+  await waitFor(() => expect(auth.signInWithGoogle).toHaveBeenCalled());
+  expect(
+    screen.getByRole('button', { name: 'Continue with Google' })
+  ).toBeDisabled();
+});
+it('shows a retry message if the resend request throws', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  auth.sendOtp
+    .mockResolvedValueOnce({ success: true })
+    .mockRejectedValueOnce(new Error('offline'));
+  render(<CheckoutCodeSignin merchantSlug="shop" onSuccess={vi.fn()} />);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Email address' }), {
+    target: { value: 'buyer@example.test' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
+  await screen.findByRole('button', { name: /Resend code in/ });
+  act(() => vi.advanceTimersByTime(61_000));
+  fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+  vi.useRealTimers();
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'We could not send a new code'
+  );
+});

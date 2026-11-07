@@ -83,11 +83,15 @@ export function CheckoutIdentityModal({
         </div>
 
         <div className="space-y-5 p-6">
-          <CheckoutCodeSignin
-            merchantSlug={_merchant?.slug ?? ''}
-            onSuccess={handleGuestCheckout}
-            socialReturnTo={normalizedCheckoutUrl}
-          />
+          {_merchant?.slug ? (
+            <CheckoutCodeSignin
+              merchantSlug={_merchant.slug}
+              onSuccess={handleGuestCheckout}
+              socialReturnTo={normalizedCheckoutUrl}
+            />
+          ) : (
+            <p role="status">Sign-in is currently unavailable. You can continue as a guest.</p>
+          )}
           <div className="flex items-center gap-3 text-xs text-gray-500">
             <span className="h-px flex-1 bg-gray-200" />
             or

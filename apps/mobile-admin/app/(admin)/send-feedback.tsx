@@ -223,12 +223,16 @@ export default function SendFeedbackScreen() {
                     <Ionicons
                       name={category.icon}
                       size={16}
-                      color={isSelected ? '#FFFFFF' : colors.text}
+                      color={isSelected ? colors.textOnPrimary : colors.text}
                     />
                     <Text
                       style={[
                         styles.categoryChipText,
-                        { color: isSelected ? '#FFFFFF' : colors.text },
+                        {
+                          color: isSelected
+                            ? colors.textOnPrimary
+                            : colors.text,
+                        },
                       ]}
                     >
                       {category.label}
@@ -275,11 +279,22 @@ export default function SendFeedbackScreen() {
             disabled={isSending}
           >
             {isSending ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
               <>
-                <Ionicons name="paper-plane" size={20} color="#FFFFFF" />
-                <Text style={styles.submitButtonText}>Submit Feedback</Text>
+                <Ionicons
+                  name="paper-plane"
+                  size={20}
+                  color={colors.textOnPrimary}
+                />
+                <Text
+                  style={[
+                    styles.submitButtonText,
+                    { color: colors.textOnPrimary },
+                  ]}
+                >
+                  Submit Feedback
+                </Text>
               </>
             )}
           </Pressable>
@@ -367,7 +382,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   submitButtonText: {
-    color: '#FFFFFF',
     fontSize: TYPOGRAPHY.size.md,
     fontFamily: TYPOGRAPHY.fontFamily.bold,
   },

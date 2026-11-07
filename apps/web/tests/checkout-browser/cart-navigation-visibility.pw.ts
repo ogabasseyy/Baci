@@ -96,6 +96,7 @@ test('cart keeps the compact checkout action visible at tablet widths', async ({
   const checkout = page.getByRole('button', { name: /^Checkout • ₦100,000$/ });
   await expect(checkout).toBeVisible();
   await expect(checkout).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(checkout).toHaveCSS('color', 'rgb(255, 255, 255)');
   await page.evaluate(() => {
     document.documentElement.style.setProperty('--store-checkout-button-bg', '#123456');
   });
@@ -103,3 +104,27 @@ test('cart keeps the compact checkout action visible at tablet widths', async ({
   await checkout.click();
   await expect(page).toHaveURL(/\/checkout$/);
 });
+
+for (const width of [1023, 1024]) {
+  test(`cart checkout handoff works at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript((item) => {
+      localStorage.setItem('baci-cart-ogabassey-guest', JSON.stringify([item]));
+    }, cartItem);
+    await page.goto('/cart-navigation-start');
+    await page.getByRole('link', { name: 'View test phone' }).click();
+    await page.getByRole('link', { name: 'View cart' }).click();
+    const compact = page.getByRole('button', { name: /^Checkout • ₦100,000$/ });
+    const desktop = page.getByRole('button', { name: /Proceed to Checkout/ });
+    if (width === 1023) {
+      await expect(compact).toBeVisible();
+      await expect(desktop).toBeHidden();
+      await compact.click();
+    } else {
+      await expect(compact).toBeHidden();
+      await expect(desktop).toBeVisible();
+      await desktop.click();
+    }
+    await expect(page).toHaveURL(/\/checkout$/);
+  });
+}

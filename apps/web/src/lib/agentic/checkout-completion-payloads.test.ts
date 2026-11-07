@@ -75,10 +75,47 @@ describe('agentic checkout completion payloads', () => {
       ],
       subtotal: 500000,
       shipping_fee: 2500,
+      expected_total: 502500,
       payment_provider_reference: '1234567890',
     });
     expect(payload.notes).toContain('****7890');
     expect(payload.notes).not.toContain('1234567890');
+  });
+
+  it('passes the customer-authorized VAT-inclusive quote total to order creation', () => {
+    const payload = buildAgenticCheckoutOrderPayload({
+      buyer,
+      dvaAccount,
+      session: {
+        merchant_id: 'merchant-1',
+        session_id: 'agentic_session_1',
+        shipping_address: { city: 'Lagos' },
+      },
+      sessionCalc: {
+        ...sessionCalc,
+        lineItems: [
+          {
+            ...sessionCalc.lineItems[0],
+            base_amount: 3.15,
+            subtotal: 3.15,
+            tax: 0.24,
+            total: 3.39,
+          },
+        ],
+        totals: [
+          { type: 'items_base_amount', display_text: 'Items', amount: 3.15 },
+          { type: 'fulfillment', display_text: 'Delivery', amount: 2500 },
+          { type: 'tax', display_text: 'Tax', amount: 0.24 },
+          { type: 'total', display_text: 'Total', amount: 2503.39 },
+        ],
+      },
+    });
+
+    expect(payload.shipping_fee).toBe(2500);
+    expect(payload.expected_total).toBe(2503.39);
+    expect(payload.discount_amount).toBe(0);
+    expect(payload.gift_wrapping_fee).toBe(0);
+    expect(payload.tax_basis).toBe('exclusive');
   });
 
   it('sends unit prices and the purchased condition for multi-quantity lines', () => {

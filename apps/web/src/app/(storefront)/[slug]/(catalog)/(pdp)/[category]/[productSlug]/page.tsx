@@ -454,16 +454,10 @@ async function CategoryProductPageContent({
   searchParams,
   productResultPromise,
 }: CategoryProductPageContentProps) {
-  const { merchant, product, resolvedSearchParams } =
-    await getRenderableCategoryProductResult({
-      slug,
-      searchParams,
-      productResultPromise,
-    });
-  const selectionStatus = resolveServerPdpRouteSelectionStatus({
-    product,
-    offers: product.offers,
-    searchParams: resolvedSearchParams,
+  const { merchant, product } = await getRenderableCategoryProductResult({
+    slug,
+    searchParams,
+    productResultPromise,
   });
 
   const baseUrl = buildStoreUrl(merchant);
@@ -540,9 +534,6 @@ async function CategoryProductPageContent({
 
   return (
     <>
-      {renderMode === 'full' && selectionStatus.hasMissingRouteSelection ? (
-        <meta name="robots" content="noindex, follow" />
-      ) : null}
       <JsonLd data={productSchema} />
       <JsonLd data={breadcrumbSchema} />
       {genericRouteSummary}
@@ -748,7 +739,7 @@ export default async function CategoryProductPage({
 
   return (
     <>
-      {criticalCommerceContext && selectionStatus.hasMissingRouteSelection ? (
+      {selectionStatus.hasMissingRouteSelection ? (
         <meta name="robots" content="noindex, follow" />
       ) : null}
       {criticalCommerceContext ? (

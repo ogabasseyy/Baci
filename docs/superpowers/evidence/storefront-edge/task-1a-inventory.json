@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "c06c4808d9de0ba9d8884c8e8512aa93d0ef8f04",
+  "originMainSha": "8828ed24384078f449287010bc2d1045090c9082",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "9817b2b7cd6f6e91c505fb3923818dfdaaa00f8935300ec19885b18e26900f1e",
-  "routingProxyInputSha256": "319f931e9b63ea0c728a061612ac6b03293edfcef7e93b9c62785f514e86280c",
+  "routingProxyInputSha256": "dcd5fd96e5f15508ff6d57df9deefd3fefaa93b4d47a142b2c27b417afbfd6db",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1303,6 +1303,42 @@
       "routePattern": "/api/storefront/cart/session/revoke",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/cart/session/revoke/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/authorize/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/authorize",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/authorize/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/challenge/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/challenge",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/challenge/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/context/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/context/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -9080,5 +9116,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "c1ee5bd15bb5c22ae69d3a376711562d15b268b04fbb215fa299658b339d97a1"
+  "inventorySha256": "90bee417eb3131248a842ddfa6212f95818e8291cfc2ad53641251a0775784cb"
 }

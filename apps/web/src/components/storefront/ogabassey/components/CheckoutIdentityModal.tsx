@@ -43,14 +43,9 @@ export function CheckoutIdentityModal({
     <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Portal>
     <div className={`fixed inset-0 z-100 flex justify-center ${styles.overlay}`}>
-      <Dialog.Overlay asChild>
-      <button
-        type="button"
-        aria-label="Dismiss checkout modal backdrop"
-        tabIndex={-1}
+      <Dialog.Overlay
         className="absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs animate-in fade-in duration-200"
       />
-      </Dialog.Overlay>
       <Dialog.Content className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-store-border bg-[var(--store-surface,var(--store-background))] shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-2xl sm:zoom-in-95">
 
         <div className="px-6 pt-6 sm:px-8 sm:pt-8">

@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { notifyCheckoutAuthChanged } from './checkout-auth-notification';
+import { supportsCheckoutSocialSignIn } from './ogabassey/components/checkout-social-support';
 
 interface CheckoutAuthModalProps {
   isOpen: boolean;
@@ -23,6 +24,14 @@ export function CheckoutAuthModal({
   onSuccess,
 }: CheckoutAuthModalProps) {
   const slug = useMerchantSafe()?.merchant?.slug;
+  const socialReturnTo =
+    typeof window !== 'undefined' &&
+    supportsCheckoutSocialSignIn(
+      window.location.hostname,
+      process.env.NODE_ENV === 'production'
+    )
+      ? `${window.location.pathname}${window.location.search}`
+      : undefined;
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[400px]">
@@ -35,6 +44,7 @@ export function CheckoutAuthModal({
         {slug ? (
           <CheckoutCodeSignin
             merchantSlug={slug}
+            socialReturnTo={socialReturnTo}
             onSuccess={() => {
               notifyCheckoutAuthChanged();
               onSuccess();

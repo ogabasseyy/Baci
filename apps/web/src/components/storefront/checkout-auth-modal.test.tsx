@@ -10,17 +10,32 @@ vi.mock('@/components/storefront/checkout-code-signin', () => ({
   CheckoutCodeSignin: ({
     merchantSlug,
     onSuccess,
+    socialReturnTo,
   }: {
     merchantSlug: string;
     onSuccess: () => void;
+    socialReturnTo?: string;
   }) => (
-    <button type="button" onClick={onSuccess}>
-      Email code for {merchantSlug}
-    </button>
+    <>
+      <button type="button" onClick={onSuccess}>
+        Email code for {merchantSlug}
+      </button>
+      {socialReturnTo && <span>Social return: {socialReturnTo}</span>}
+    </>
   ),
 }));
 
 describe('CheckoutAuthModal', () => {
+  it('offers social sign-in with the current checkout return on a supported host', () => {
+    window.history.replaceState({}, '', '/checkout?step=delivery');
+    render(
+      <CheckoutAuthModal isOpen onOpenChange={vi.fn()} onSuccess={vi.fn()} />
+    );
+    expect(
+      screen.getByText('Social return: /checkout?step=delivery')
+    ).toBeInTheDocument();
+    window.history.replaceState({}, '', '/');
+  });
   it('uses email-code sign-in and closes after success', () => {
     const success = vi.fn();
     const change = vi.fn();

@@ -161,6 +161,13 @@ describe('ImageZoomModal', () => {
       ).toBeTruthy();
     });
 
+    it('does not initialize zoom gestures while the viewer is closed', () => {
+      const spy = jest.spyOn(imageZoomHook, 'useImageZoom');
+      renderModal({ visible: false });
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
     it('does not render close button when visible is false', () => {
       renderModal({ visible: false });
       expect(

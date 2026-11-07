@@ -1,5 +1,14 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { SearchDropdown } from './SearchDropdown';
+
+jest.mock('@/components/ui/dismiss-keyboard-for-navigation', () => ({
+  dismissKeyboardForNavigation: () => Promise.resolve(),
+}));
 
 const mockPush = jest.fn();
 const mockUseProducts = jest.fn();
@@ -195,7 +204,7 @@ describe('SearchDropdown', () => {
     expect(screen.queryByLabelText(/see all results/i)).toBeNull();
   });
 
-  it('keeps product taps as direct-product shortcuts', () => {
+  it('keeps product taps as direct-product shortcuts', async () => {
     const onClose = jest.fn();
     mockUseProducts.mockReturnValue({
       isLoading: false,
@@ -224,7 +233,9 @@ describe('SearchDropdown', () => {
     );
 
     fireEvent.press(screen.getByLabelText(/iPhone 16/));
-    expect(mockPush).toHaveBeenCalledWith('/product/iphone-16');
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/product/iphone-16')
+    );
     expect(onClose).toHaveBeenCalled();
   });
 

@@ -41,7 +41,11 @@ const loadNativeModules = async () => {
 
 const notificationsReady = loadNativeModules();
 
-export function usePushNotifications(): UsePushNotificationsReturn {
+export function usePushNotifications({
+  navigationReady = true,
+}: {
+  navigationReady?: boolean;
+} = {}): UsePushNotificationsReturn {
   const { customer, user, merchantId } = useAuthStore(
     useShallow((state) => ({
       customer: state.customer,
@@ -96,14 +100,29 @@ export function usePushNotifications(): UsePushNotificationsReturn {
       if (cancelledRef.current || !Notifications) return;
 
       notificationListener.current?.remove();
-      responseListener.current?.remove();
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           log.info('Notification received');
           receiveSavingsNotification(notification.request.content.data);
         });
+    });
+
+    return () => {
+      cancelledRef.current = true;
+      notificationListener.current?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!navigationReady) return;
+    const cancelledRef = { current: false };
+
+    notificationsReady.then(() => {
+      if (cancelledRef.current || !Notifications) return;
+      responseListener.current?.remove();
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
+          if (cancelledRef.current) return;
           log.info('Notification tapped');
           processPushNotificationResponse(
             response,
@@ -128,10 +147,9 @@ export function usePushNotifications(): UsePushNotificationsReturn {
 
     return () => {
       cancelledRef.current = true;
-      notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, [activeMerchantId]);
+  }, [activeMerchantId, navigationReady]);
 
   return registration;
 }

@@ -1,0 +1,1339 @@
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt b/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
+index c071a5e..0e925a6 100644
+--- a/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/HybridSplashMotion.kt
+@@ -17,5 +17,11 @@ class HybridSplashMotion : HybridSplashMotionModuleSpec() {
+     return promise
+   }
+ 
++  override fun waitForIntro(): Promise<Boolean> {
++    val promise = Promise<Boolean>()
++    SplashMotionController.waitForIntro { promise.resolve(it) }
++    return promise
++  }
++
+   override fun isVisible(): Boolean = SplashMotionController.isVisible()
+ }
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt b/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt
+new file mode 100644
+index 0000000..eebe7aa
+--- /dev/null
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/IntroLatch.kt
+@@ -0,0 +1,20 @@
++package com.margelo.nitro.splashmotion
++
++/** Access on the main thread; retain the first terminal result. */
++internal class IntroLatch {
++  private var result: Boolean? = null
++  private val waiters = mutableListOf<(Boolean) -> Unit>()
++
++  fun wait(done: (Boolean) -> Unit) {
++    val value = result
++    if (value != null) done(value) else waiters += done
++  }
++
++  fun finish(value: Boolean) {
++    if (result != null) return
++    result = value
++    val callbacks = waiters.toList()
++    waiters.clear()
++    callbacks.forEach { it(value) }
++  }
++}
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
+index 9ce48d6..3ef00be 100644
+--- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt
+@@ -21,6 +21,7 @@ import com.margelo.nitro.splashmotion.players.LottieSplashPlayer
+  */
+ internal object SplashMotionController {
+   private const val TAG = "SplashMotion"
++  private const val WATCHDOG_MS = 60_000L
+   private val main = Handler(Looper.getMainLooper())
+ 
+   @Volatile private var visible = false
+@@ -29,6 +30,8 @@ internal object SplashMotionController {
+ 
+   // Main-thread state
+   private var installed = false
++  // Terminal after any hide, parse failure or watchdog; never attach afterward.
++  private var terminated = false
+   private var overlay: SplashOverlay? = null
+   private var player: SplashPlayer? = null
+   private var window: Window? = null
+@@ -36,6 +39,17 @@ internal object SplashMotionController {
+   private var shownAt = 0L
+   private var hiding = false
+   private val pending = mutableListOf<() -> Unit>()
++  private val intro = IntroLatch()
++
++  fun waitForIntro(done: (Boolean) -> Unit) {
++    main.post {
++      intro.wait(done)
++      // Also settle if no Activity installs the overlay at all.
++      main.postDelayed({ intro.finish(false) }, WATCHDOG_MS)
++    }
++  }
++
++  private fun finishIntro(result: Boolean) = intro.finish(result)
+ 
+   fun isVisible() = visible
+ 
+@@ -70,6 +84,15 @@ internal object SplashMotionController {
+     // splash screen to switch to its post-splash theme; skipping it crashes
+     // AppCompat ("You need to use a Theme.AppCompat theme").
+     val splash = activity.installSplashScreen()
++    if (terminated) return
++    // Every Activity gets its own system-splash exit callback. A recreated
++    // Activity can replace the original before the original exit fires.
++    splash.setKeepOnScreenCondition { !overlayReady }
++    splash.setOnExitAnimationListener {
++      it.remove()
++      splashGone = true
++      if (!terminated) player?.play { finishIntro(it) }
++    }
+     if (installed) {
+       // A later Activity in the same process: reopened after Back (React Native is
+       // already running, so no animation) or recreated while the splash is up.
+@@ -81,27 +104,23 @@ internal object SplashMotionController {
+     val config = preloadedConfig ?: SplashConfig.load(activity)
+     if (config == null) {
+       Log.w(TAG, "No config found. Run `npx splash-motion generate <file>` and rebuild.")
++      terminated = true
++      finishIntro(false)
+       return
+     }
+ 
+     visible = true
+     shownAt = SystemClock.uptimeMillis()
+-    splash.setKeepOnScreenCondition { !overlayReady }
+-    // Start the animation only once it's visible, so it picks up exactly
+-    // where the launch-screen still leaves off.
+-    splash.setOnExitAnimationListener {
+-      it.remove()
+-      splashGone = true
+-      player?.play()
+-    }
+-
+     // Runs right after onCreate(), once React Native has set its content view.
+     main.post { attachOverlay(activity, config) }
+     // Safety net: never block the launch if the animation fails to load.
+     main.postDelayed({ overlayReady = true }, 1500)
++    // JS timeouts cannot run if JS never starts. Bound the native overlay too.
++    main.postDelayed({ if (!terminated) abort() }, WATCHDOG_MS)
+   }
+ 
+   private fun attachOverlay(activity: Activity, config: SplashConfig) {
++    if (terminated) return
+     val bytes = preloadedBytes ?: readAnimation(activity, config) ?: return abort()
+     preloadedConfig = null
+     preloadedBytes = null
+@@ -130,9 +149,15 @@ internal object SplashMotionController {
+ 
+     this.overlay = overlay
+     this.player = player
+-    player.load(bytes, config) {
+-      overlayReady = true
+-      if (splashGone) player.play()
++    player.load(bytes, config) { success ->
++      if (!terminated) {
++        if (!success) {
++          abort()
++        } else {
++          overlayReady = true
++          if (splashGone) player.play { finishIntro(it) }
++        }
++      }
+     }
+   }
+ 
+@@ -151,7 +176,9 @@ internal object SplashMotionController {
+ 
+   private fun abort() {
+     overlayReady = true
+-    visible = false
++    // End any fade and always remove the touch-blocking native overlay.
++    overlay?.animate()?.cancel()
++    finishDismiss()
+   }
+ 
+   // endregion
+@@ -167,10 +194,14 @@ internal object SplashMotionController {
+   ) {
+     main.post {
+       if (overlay == null) {
++        finishIntro(false)
++        terminated = true
++        overlayReady = true
+         visible = false
+         done()
+         return@post
+       }
++      finishIntro(false)
+       pending += done
+       if (hiding) return@post
+       hiding = true
+@@ -184,8 +215,10 @@ internal object SplashMotionController {
+   }
+ 
+   private fun runExit(fade: Long, waitForLoop: Boolean, outro: String?) {
++    if (terminated) return
+     val player = this.player ?: return dismiss(fade)
+     val afterLoop = Runnable {
++      if (terminated) return@Runnable
+       val playing = outro != null && player.playOutro(outro) { dismiss(fade) }
+       if (!playing) dismiss(fade)
+     }
+@@ -198,17 +231,7 @@ internal object SplashMotionController {
+ 
+   private fun dismiss(fade: Long) {
+     val overlay = this.overlay ?: return flush()
+-    val finish = Runnable {
+-      (overlay.parent as? ViewGroup)?.removeView(overlay)
+-      window?.setBackgroundDrawable(windowBackground)
+-      window = null
+-      windowBackground = null
+-      player?.stop()
+-      player = null
+-      this.overlay = null
+-      visible = false
+-      flush()
+-    }
++    val finish = Runnable { finishDismiss() }
+     if (fade > 0) {
+       overlay.animate().alpha(0f).setDuration(fade).withEndAction(finish).start()
+     } else {
+@@ -216,6 +239,22 @@ internal object SplashMotionController {
+     }
+   }
+ 
++  private fun finishDismiss() {
++    if (terminated) return
++    finishIntro(false)
++    terminated = true
++    overlayReady = true
++    (overlay?.parent as? ViewGroup)?.removeView(overlay)
++    window?.setBackgroundDrawable(windowBackground)
++    window = null
++    windowBackground = null
++    player?.stop()
++    player = null
++    overlay = null
++    visible = false
++    flush()
++  }
++
+   private fun flush() {
+     val callbacks = pending.toList()
+     pending.clear()
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt b/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
+index bf4aea7..b6370d7 100644
+--- a/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/SplashPlayer.kt
+@@ -6,9 +6,9 @@ import android.view.View
+ internal interface SplashPlayer {
+   val view: View
+   /** Prepares the animation, showing its first frame. */
+-  fun load(bytes: ByteArray, config: SplashConfig, onReady: () -> Unit)
++  fun load(bytes: ByteArray, config: SplashConfig, onReady: (Boolean) -> Unit)
+   /** Starts playing; called once the system splash is gone. */
+-  fun play()
++  fun play(onIntroFinished: (Boolean) -> Unit)
+   /** Milliseconds left before the current loop ends (0 if not looping). */
+   fun remainingLoopMs(): Long
+   /** Plays the outro marker. Returns `false` if this animation has no such marker. */
+diff --git a/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt b/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
+index bc9a02f..544faeb 100644
+--- a/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
++++ b/android/src/main/java/com/margelo/nitro/splashmotion/players/LottieSplashPlayer.kt
+@@ -21,9 +21,12 @@ internal class LottieSplashPlayer(context: Context) : SplashPlayer {
+     asyncUpdates = AsyncUpdates.DISABLED
+   }
+ 
++  private var started = false
++  private var loops = false
++
+   override val view: View get() = lottie
+ 
+-  override fun load(bytes: ByteArray, config: SplashConfig, onReady: () -> Unit) {
++  override fun load(bytes: ByteArray, config: SplashConfig, onReady: (Boolean) -> Unit) {
+     // Synchronous on purpose: usually a cache hit thanks to preload(). The async
+     // API would deliver the result through the main thread's queue, behind
+     // React Native's startup work, leaving the overlay empty for a while.
+@@ -31,20 +34,36 @@ internal class LottieSplashPlayer(context: Context) : SplashPlayer {
+     val composition = result.value
+     if (composition == null) {
+       Log.e("SplashMotion", "Could not parse the Lottie animation.", result.exception)
+-      return onReady()
++      return onReady(false)
+     }
+     lottie.setComposition(composition)
+     config.loopMarker?.let { marker ->
+       if (composition.getMarker(marker) != null) lottie.setMinAndMaxFrame(marker)
+     }
++    loops = config.loop
+     lottie.repeatCount = if (config.loop) LottieDrawable.INFINITE else 0
+     // Hold the first frame (it matches the launch-screen still) until play().
+     lottie.frame = lottie.minFrame.toInt()
+-    onReady()
++    onReady(true)
+   }
+ 
+-  override fun play() {
+-    if (lottie.composition != null && !lottie.isAnimating) lottie.playAnimation()
++  override fun play(onIntroFinished: (Boolean) -> Unit) {
++    if (started) return
++    started = true
++    if (lottie.composition == null) return onIntroFinished(false)
++    if (loops) {
++      onIntroFinished(false)
++    } else {
++      lottie.addAnimatorListener(object : AnimatorListenerAdapter() {
++        private var cancelled = false
++        override fun onAnimationCancel(animation: Animator) { cancelled = true }
++        override fun onAnimationEnd(animation: Animator) {
++          lottie.removeAnimatorListener(this)
++          onIntroFinished(!cancelled)
++        }
++      })
++    }
++    lottie.playAnimation()
+   }
+ 
+   override fun remainingLoopMs(): Long {
+diff --git a/ios/HybridSplashMotion.swift b/ios/HybridSplashMotion.swift
+index 35c24ea..fec3f91 100644
+--- a/ios/HybridSplashMotion.swift
++++ b/ios/HybridSplashMotion.swift
+@@ -15,6 +15,12 @@ class HybridSplashMotion: HybridSplashMotionModuleSpec {
+     return promise
+   }
+ 
++  func waitForIntro() throws -> Promise<Bool> {
++    let promise = Promise<Bool>()
++    SplashMotionController.shared.waitForIntro { promise.resolve(withResult: $0) }
++    return promise
++  }
++
+   func isVisible() throws -> Bool {
+     SplashMotionController.shared.isVisible
+   }
+diff --git a/ios/IntroLatch.swift b/ios/IntroLatch.swift
+new file mode 100644
+index 0000000..6a3c429
+--- /dev/null
++++ b/ios/IntroLatch.swift
+@@ -0,0 +1,19 @@
++import Foundation
++
++/// Called only on the main thread; retains the first terminal result.
++final class IntroLatch {
++  private var result: Bool?
++  private var waiters: [(Bool) -> Void] = []
++
++  func wait(_ callback: @escaping (Bool) -> Void) {
++    if let result { callback(result) } else { waiters.append(callback) }
++  }
++
++  func finish(_ value: Bool) {
++    guard result == nil else { return }
++    result = value
++    let callbacks = waiters
++    waiters.removeAll()
++    callbacks.forEach { $0(value) }
++  }
++}
+diff --git a/ios/LottieSplashPlayer.swift b/ios/LottieSplashPlayer.swift
+index 2c16d08..6cb15ce 100644
+--- a/ios/LottieSplashPlayer.swift
++++ b/ios/LottieSplashPlayer.swift
+@@ -32,12 +32,25 @@ final class LottieSplashPlayer: SplashPlayer {
+     return (start, start + duration)
+   }
+ 
+-  func play() {
++  func play(onIntroFinished: @escaping (Bool) -> Void) {
++    let looping = config.loop ?? true
+     if let marker = config.loopMarker, let loop = range(of: marker) {
+-      animationView.play(fromFrame: loop.start, toFrame: loop.end, loopMode: .loop)
++      if looping {
++        onIntroFinished(false)
++        animationView.play(fromFrame: loop.start, toFrame: loop.end, loopMode: .loop)
++      } else {
++        animationView.play(fromFrame: loop.start, toFrame: loop.end, loopMode: .playOnce) { finished in
++          onIntroFinished(finished)
++        }
++      }
+     } else {
+-      animationView.loopMode = (config.loop ?? true) ? .loop : .playOnce
+-      animationView.play()
++      animationView.loopMode = looping ? .loop : .playOnce
++      if looping {
++        onIntroFinished(false)
++        animationView.play()
++      } else {
++        animationView.play { finished in onIntroFinished(finished) }
++      }
+     }
+   }
+ 
+diff --git a/ios/SplashMotionController.swift b/ios/SplashMotionController.swift
+index 9665941..0e87e05 100644
+--- a/ios/SplashMotionController.swift
++++ b/ios/SplashMotionController.swift
+@@ -6,17 +6,32 @@ final class SplashMotionController {
+   static let shared = SplashMotionController()
+   /// Keep in sync with `MAX_SCREEN_FRACTION` (Android) and the CLI's launch storyboard.
+   static let maxScreenFraction: CGFloat = 0.9
++  private static let watchdogSeconds: TimeInterval = 60
+ 
+   private let lock = NSLock()
+   private var _visible = false
+ 
+   // Main-thread state
+   private var attached = false
++  private var terminated = false
+   private var container: UIView?
+   private var player: SplashPlayer?
+   private var shownAt = Date()
+   private var hiding = false
+   private var pending: [() -> Void] = []
++  private let intro = IntroLatch()
++
++  func waitForIntro(_ completion: @escaping (Bool) -> Void) {
++    DispatchQueue.main.async {
++      self.intro.wait(completion)
++      // Also settle if no suitable window ever attaches the overlay.
++      DispatchQueue.main.asyncAfter(deadline: .now() + Self.watchdogSeconds) {
++        self.finishIntro(false)
++      }
++    }
++  }
++
++  private func finishIntro(_ result: Bool) { intro.finish(result) }
+ 
+   var isVisible: Bool {
+     lock.lock(); defer { lock.unlock() }
+@@ -32,15 +47,17 @@ final class SplashMotionController {
+   /// Returns `true` once the overlay is attached (or definitively skipped).
+   @discardableResult
+   func attach(to window: UIWindow) -> Bool {
+-    guard !attached else { return true }
++    guard !attached, !terminated else { return true }
+     attached = true
+ 
+     guard let config = SplashMotionConfig.load() else {
+       NSLog("[SplashMotion] No config found. Run `npx splash-motion generate <file>` and rebuild.")
++      finishIntro(false)
+       return true
+     }
+     guard let data = SplashMotionConfig.animationData(),
+           let player = LottieSplashPlayer(data: data, config: config) else {
++      finishIntro(false)
+       return true
+     }
+ 
+@@ -71,7 +88,13 @@ final class SplashMotionController {
+     self.player = player
+     shownAt = Date()
+     setVisible(true)
+-    player.play()
++    player.play { [weak self] result in self?.finishIntro(result) }
++    // A JS-only timeout cannot dismiss an overlay if the JS runtime fails.
++    DispatchQueue.main.asyncAfter(deadline: .now() + Self.watchdogSeconds) { [weak self] in
++      guard let self, !self.terminated else { return }
++      self.container?.layer.removeAllAnimations()
++      self.finishDismiss()
++    }
+     return true
+   }
+ 
+@@ -86,9 +109,12 @@ final class SplashMotionController {
+   ) {
+     DispatchQueue.main.async {
+       guard self.container != nil else {
++        self.finishIntro(false)
++        self.terminated = true
+         completion()
+         return
+       }
++      self.finishIntro(false)
+       self.pending.append(completion)
+       if self.hiding { return }
+       self.hiding = true
+@@ -102,12 +128,13 @@ final class SplashMotionController {
+   }
+ 
+   private func runExit(fade: Double, waitForLoop: Bool, outro: String?) {
++    guard !terminated else { return }
+     guard let player else {
+       dismiss(fade: fade)
+       return
+     }
+     let afterLoop = { [weak self] in
+-      guard let self else { return }
++      guard let self, !self.terminated else { return }
+       if let outro,
+          player.playOutro(outro, completion: { [weak self] in
+            self?.dismiss(fade: fade)
+@@ -131,12 +158,7 @@ final class SplashMotionController {
+     }
+     let finish = { [weak self] in
+       guard let self else { return }
+-      container.removeFromSuperview()
+-      self.player?.stop()
+-      self.player = nil
+-      self.container = nil
+-      self.setVisible(false)
+-      self.flush()
++      self.finishDismiss()
+     }
+     if fade > 0 {
+       UIView.animate(withDuration: fade / 1000, delay: 0, options: [.curveEaseOut]) {
+@@ -149,6 +171,18 @@ final class SplashMotionController {
+     }
+   }
+ 
++  private func finishDismiss() {
++    guard !terminated else { return }
++    finishIntro(false)
++    terminated = true
++    container?.removeFromSuperview()
++    player?.stop()
++    player = nil
++    container = nil
++    setVisible(false)
++    flush()
++  }
++
+   private func flush() {
+     let callbacks = pending
+     pending.removeAll()
+diff --git a/ios/SplashPlayer.swift b/ios/SplashPlayer.swift
+index aee4f71..0159fe3 100644
+--- a/ios/SplashPlayer.swift
++++ b/ios/SplashPlayer.swift
+@@ -4,7 +4,7 @@ import UIKit
+ /// Implemented by `LottieSplashPlayer`.
+ protocol SplashPlayer: AnyObject {
+   var view: UIView { get }
+-  func play()
++  func play(onIntroFinished: @escaping (Bool) -> Void)
+   /// Seconds left before the current loop ends (0 if not looping).
+   func remainingLoopTime() -> TimeInterval
+   /// Plays the outro marker. Returns `false` if this animation has no such marker.
+diff --git a/lib/module/index.js b/lib/module/index.js
+index 37c20a7..0dd3f01 100644
+--- a/lib/module/index.js
++++ b/lib/module/index.js
+@@ -16,6 +16,10 @@ function hide(options = {}) {
+   return native.hide(options);
+ }
+ 
++function waitForIntro() {
++  return native.waitForIntro();
++}
++
+ /** `true` while the splash is on screen. */
+ function isVisible() {
+   return native.isVisible();
+@@ -39,8 +43,9 @@ export function useHideSplash(ready = true, options) {
+ }
+ const SplashMotion = {
+   hide,
+-  isVisible
++  isVisible,
++  waitForIntro
+ };
+-export { hide, isVisible };
++export { hide, isVisible, waitForIntro };
+ export default SplashMotion;
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/lib/module/native.web.js b/lib/module/native.web.js
+index 5f9110a..3ce51f5 100644
+--- a/lib/module/native.web.js
++++ b/lib/module/native.web.js
+@@ -2,6 +2,7 @@
+ 
+ // No native splash on web: every call is a harmless no-op.
+ export const native = {
++  waitForIntro: () => Promise.resolve(false),
+   hide: _config => Promise.resolve(),
+   isVisible: () => false
+ };
+diff --git a/lib/typescript/src/SplashMotion.nitro.d.ts b/lib/typescript/src/SplashMotion.nitro.d.ts
+index a0c3fe3..28b36c8 100644
+--- a/lib/typescript/src/SplashMotion.nitro.d.ts
++++ b/lib/typescript/src/SplashMotion.nitro.d.ts
+@@ -17,6 +17,7 @@ export interface SplashMotionModule extends HybridObject<{
+     ios: 'swift';
+     android: 'kotlin';
+ }> {
++    waitForIntro(): Promise<boolean>;
+     hide(config: HideConfig): Promise<void>;
+     isVisible(): boolean;
+ }
+diff --git a/lib/typescript/src/index.d.ts b/lib/typescript/src/index.d.ts
+index f9679d5..07bf9bc 100644
+--- a/lib/typescript/src/index.d.ts
++++ b/lib/typescript/src/index.d.ts
+@@ -12,6 +12,7 @@ export type HideOptions = HideConfig;
+  */
+ declare function hide(options?: HideOptions): Promise<void>;
+ /** `true` while the splash is on screen. */
++declare function waitForIntro(): Promise<boolean>;
+ declare function isVisible(): boolean;
+ /**
+  * Hide the splash as soon as `ready` becomes `true`.
+@@ -24,7 +25,8 @@ export declare function useHideSplash(ready?: boolean, options?: HideOptions): v
+ declare const SplashMotion: {
+     hide: typeof hide;
+     isVisible: typeof isVisible;
++    waitForIntro: typeof waitForIntro;
+ };
+-export { hide, isVisible };
++export { hide, isVisible, waitForIntro };
+ export default SplashMotion;
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/lib/typescript/src/native.web.d.ts b/lib/typescript/src/native.web.d.ts
+index 4e730b1..f55c8a2 100644
+--- a/lib/typescript/src/native.web.d.ts
++++ b/lib/typescript/src/native.web.d.ts
+@@ -1,5 +1,6 @@
+ import type { HideConfig } from './SplashMotion.nitro.js';
+ export declare const native: {
++    waitForIntro: () => Promise<boolean>;
+     hide: (_config: HideConfig) => Promise<void>;
+     isVisible: () => boolean;
+ };
+diff --git a/nitrogen/generated/.gitattributes b/nitrogen/generated/.gitattributes
+new file mode 100644
+index 0000000..fb7a0d5
+--- /dev/null
++++ b/nitrogen/generated/.gitattributes
+@@ -0,0 +1 @@
++** linguist-generated=true
+diff --git a/nitrogen/generated/android/c++/JHideConfig.hpp b/nitrogen/generated/android/c++/JHideConfig.hpp
+index 3a49ae9..877c987 100644
+--- a/nitrogen/generated/android/c++/JHideConfig.hpp
++++ b/nitrogen/generated/android/c++/JHideConfig.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// JHideConfig.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
+index f113380..eea672f 100644
+--- a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
++++ b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.cpp
+@@ -1,7 +1,7 @@
+ ///
+ /// JHybridSplashMotionModuleSpec.cpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -51,6 +51,22 @@ namespace margelo::nitro::splashmotion {
+   
+ 
+   // Methods
++  std::shared_ptr<Promise<bool>> JHybridSplashMotionModuleSpec::waitForIntro() {
++    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>()>("waitForIntro");
++    auto __result = method(_javaPart);
++    return [&]() {
++      auto __promise = Promise<bool>::create();
++      __result->cthis()->addOnResolvedListener([=](const jni::alias_ref<jni::JObject>& __boxedResult) {
++        auto __result = jni::static_ref_cast<jni::JBoolean>(__boxedResult);
++        __promise->resolve(static_cast<bool>(__result->value()));
++      });
++      __result->cthis()->addOnRejectedListener([=](const jni::alias_ref<jni::JThrowable>& __throwable) {
++        jni::JniException __jniError(__throwable);
++        __promise->reject(std::make_exception_ptr(__jniError));
++      });
++      return __promise;
++    }();
++  }
+   std::shared_ptr<Promise<void>> JHybridSplashMotionModuleSpec::hide(const HideConfig& config) {
+     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JPromise::javaobject>(jni::alias_ref<JHideConfig> /* config */)>("hide");
+     auto __result = method(_javaPart, JHideConfig::fromCpp(config));
+diff --git a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
+index 5955311..54fe937 100644
+--- a/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
++++ b/nitrogen/generated/android/c++/JHybridSplashMotionModuleSpec.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -54,6 +54,7 @@ namespace margelo::nitro::splashmotion {
+ 
+   public:
+     // Methods
++    std::shared_ptr<Promise<bool>> waitForIntro() override;
+     std::shared_ptr<Promise<void>> hide(const HideConfig& config) override;
+     bool isVisible() override;
+ 
+diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
+index e2fd305..0e57e21 100644
+--- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
++++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HideConfig.kt
+@@ -1,7 +1,7 @@
+ ///
+ /// HideConfig.kt
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
+index c9a0666..d1d220c 100644
+--- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
++++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/HybridSplashMotionModuleSpec.kt
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec.kt
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -30,6 +30,10 @@ abstract class HybridSplashMotionModuleSpec: HybridObject() {
+   
+ 
+   // Methods
++  @DoNotStrip
++  @Keep
++  abstract fun waitForIntro(): Promise<Boolean>
++  
+   @DoNotStrip
+   @Keep
+   abstract fun hide(config: HideConfig): Promise<Unit>
+diff --git a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
+index 17a5ac9..d8cda64 100644
+--- a/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
++++ b/nitrogen/generated/android/kotlin/com/margelo/nitro/splashmotion/splashmotionOnLoad.kt
+@@ -1,7 +1,7 @@
+ ///
+ /// splashmotionOnLoad.kt
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/android/splashmotion+autolinking.cmake b/nitrogen/generated/android/splashmotion+autolinking.cmake
+index 3076c6e..d730835 100644
+--- a/nitrogen/generated/android/splashmotion+autolinking.cmake
++++ b/nitrogen/generated/android/splashmotion+autolinking.cmake
+@@ -1,7 +1,7 @@
+ #
+ # splashmotion+autolinking.cmake
+ # This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-# https://github.com/mrousavy/nitro
++# https://github.com/margelo/nitro
+ # Copyright © Marc Rousavy @ Margelo
+ #
+ 
+diff --git a/nitrogen/generated/android/splashmotion+autolinking.gradle b/nitrogen/generated/android/splashmotion+autolinking.gradle
+index 2306875..ab4fd78 100644
+--- a/nitrogen/generated/android/splashmotion+autolinking.gradle
++++ b/nitrogen/generated/android/splashmotion+autolinking.gradle
+@@ -1,7 +1,7 @@
+ ///
+ /// splashmotion+autolinking.gradle
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/android/splashmotionOnLoad.cpp b/nitrogen/generated/android/splashmotionOnLoad.cpp
+index 44a286a..d9a06ff 100644
+--- a/nitrogen/generated/android/splashmotionOnLoad.cpp
++++ b/nitrogen/generated/android/splashmotionOnLoad.cpp
+@@ -1,7 +1,7 @@
+ ///
+ /// splashmotionOnLoad.cpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/android/splashmotionOnLoad.hpp b/nitrogen/generated/android/splashmotionOnLoad.hpp
+index 6759a7e..60d3874 100644
+--- a/nitrogen/generated/android/splashmotionOnLoad.hpp
++++ b/nitrogen/generated/android/splashmotionOnLoad.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// splashmotionOnLoad.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/RNSplashMotion+autolinking.rb b/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
+index e6e208b..5094166 100644
+--- a/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
++++ b/nitrogen/generated/ios/RNSplashMotion+autolinking.rb
+@@ -1,7 +1,7 @@
+ #
+ # RNSplashMotion+autolinking.rb
+ # This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-# https://github.com/mrousavy/nitro
++# https://github.com/margelo/nitro
+ # Copyright © Marc Rousavy @ Margelo
+ #
+ 
+diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
+index cd8b4bb..114b500 100644
+--- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
++++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.cpp
+@@ -1,7 +1,7 @@
+ ///
+ /// RNSplashMotion-Swift-Cxx-Bridge.cpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -14,11 +14,11 @@
+ 
+ namespace margelo::nitro::splashmotion::bridge::swift {
+ 
+-  // pragma MARK: std::function<void()>
+-  Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept {
+-    auto swiftClosure = RNSplashMotion::Func_void::fromUnsafe(swiftClosureWrapper);
+-    return [swiftClosure = std::move(swiftClosure)]() mutable -> void {
+-      swiftClosure.call();
++  // pragma MARK: std::function<void(bool /* result */)>
++  Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept {
++    auto swiftClosure = RNSplashMotion::Func_void_bool::fromUnsafe(swiftClosureWrapper);
++    return [swiftClosure = std::move(swiftClosure)](bool result) mutable -> void {
++      swiftClosure.call(result);
+     };
+   }
+   
+@@ -30,6 +30,14 @@ namespace margelo::nitro::splashmotion::bridge::swift {
+     };
+   }
+   
++  // pragma MARK: std::function<void()>
++  Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept {
++    auto swiftClosure = RNSplashMotion::Func_void::fromUnsafe(swiftClosureWrapper);
++    return [swiftClosure = std::move(swiftClosure)]() mutable -> void {
++      swiftClosure.call();
++    };
++  }
++  
+   // pragma MARK: std::shared_ptr<HybridSplashMotionModuleSpec>
+   std::shared_ptr<HybridSplashMotionModuleSpec> create_std__shared_ptr_HybridSplashMotionModuleSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+     RNSplashMotion::HybridSplashMotionModuleSpec_cxx swiftPart = RNSplashMotion::HybridSplashMotionModuleSpec_cxx::fromUnsafe(swiftUnsafePointer);
+diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
+index f2477c3..b902066 100644
+--- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
++++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Bridge.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// RNSplashMotion-Swift-Cxx-Bridge.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -32,38 +32,38 @@ namespace RNSplashMotion { class HybridSplashMotionModuleSpec_cxx; }
+  */
+ namespace margelo::nitro::splashmotion::bridge::swift {
+ 
+-  // pragma MARK: std::shared_ptr<Promise<void>>
++  // pragma MARK: std::shared_ptr<Promise<bool>>
+   /**
+-   * Specialized version of `std::shared_ptr<Promise<void>>`.
++   * Specialized version of `std::shared_ptr<Promise<bool>>`.
+    */
+-  using std__shared_ptr_Promise_void__ = std::shared_ptr<Promise<void>>;
+-  inline std::shared_ptr<Promise<void>> create_std__shared_ptr_Promise_void__() noexcept {
+-    return Promise<void>::create();
++  using std__shared_ptr_Promise_bool__ = std::shared_ptr<Promise<bool>>;
++  inline std::shared_ptr<Promise<bool>> create_std__shared_ptr_Promise_bool__() noexcept {
++    return Promise<bool>::create();
+   }
+-  inline PromiseHolder<void> wrap_std__shared_ptr_Promise_void__(std::shared_ptr<Promise<void>> promise) noexcept {
+-    return PromiseHolder<void>(std::move(promise));
++  inline PromiseHolder<bool> wrap_std__shared_ptr_Promise_bool__(std::shared_ptr<Promise<bool>> promise) noexcept {
++    return PromiseHolder<bool>(std::move(promise));
+   }
+   
+-  // pragma MARK: std::function<void()>
++  // pragma MARK: std::function<void(bool /* result */)>
+   /**
+-   * Specialized version of `std::function<void()>`.
++   * Specialized version of `std::function<void(bool)>`.
+    */
+-  using Func_void = std::function<void()>;
++  using Func_void_bool = std::function<void(bool /* result */)>;
+   /**
+-   * Wrapper class for a `std::function<void()>`, this can be used from Swift.
++   * Wrapper class for a `std::function<void(bool / * result * /)>`, this can be used from Swift.
+    */
+-  class Func_void_Wrapper final {
++  class Func_void_bool_Wrapper final {
+   public:
+-    explicit Func_void_Wrapper(std::function<void()>&& func): _function(std::make_unique<std::function<void()>>(std::move(func))) {}
+-    inline void call() const noexcept {
+-      _function->operator()();
++    explicit Func_void_bool_Wrapper(std::function<void(bool /* result */)>&& func): _function(std::make_unique<std::function<void(bool /* result */)>>(std::move(func))) {}
++    inline void call(bool result) const noexcept {
++      _function->operator()(result);
+     }
+   private:
+-    std::unique_ptr<std::function<void()>> _function;
++    std::unique_ptr<std::function<void(bool /* result */)>> _function;
+   } SWIFT_NONCOPYABLE;
+-  Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept;
+-  inline Func_void_Wrapper wrap_Func_void(Func_void value) noexcept {
+-    return Func_void_Wrapper(std::move(value));
++  Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept;
++  inline Func_void_bool_Wrapper wrap_Func_void_bool(Func_void_bool value) noexcept {
++    return Func_void_bool_Wrapper(std::move(value));
+   }
+   
+   // pragma MARK: std::function<void(const std::exception_ptr& /* error */)>
+@@ -88,6 +88,40 @@ namespace margelo::nitro::splashmotion::bridge::swift {
+     return Func_void_std__exception_ptr_Wrapper(std::move(value));
+   }
+   
++  // pragma MARK: std::shared_ptr<Promise<void>>
++  /**
++   * Specialized version of `std::shared_ptr<Promise<void>>`.
++   */
++  using std__shared_ptr_Promise_void__ = std::shared_ptr<Promise<void>>;
++  inline std::shared_ptr<Promise<void>> create_std__shared_ptr_Promise_void__() noexcept {
++    return Promise<void>::create();
++  }
++  inline PromiseHolder<void> wrap_std__shared_ptr_Promise_void__(std::shared_ptr<Promise<void>> promise) noexcept {
++    return PromiseHolder<void>(std::move(promise));
++  }
++  
++  // pragma MARK: std::function<void()>
++  /**
++   * Specialized version of `std::function<void()>`.
++   */
++  using Func_void = std::function<void()>;
++  /**
++   * Wrapper class for a `std::function<void()>`, this can be used from Swift.
++   */
++  class Func_void_Wrapper final {
++  public:
++    explicit Func_void_Wrapper(std::function<void()>&& func): _function(std::make_unique<std::function<void()>>(std::move(func))) {}
++    inline void call() const noexcept {
++      _function->operator()();
++    }
++  private:
++    std::unique_ptr<std::function<void()>> _function;
++  } SWIFT_NONCOPYABLE;
++  Func_void create_Func_void(void* NON_NULL swiftClosureWrapper) noexcept;
++  inline Func_void_Wrapper wrap_Func_void(Func_void value) noexcept {
++    return Func_void_Wrapper(std::move(value));
++  }
++  
+   // pragma MARK: std::optional<double>
+   /**
+    * Specialized version of `std::optional<double>`.
+@@ -145,6 +179,15 @@ namespace margelo::nitro::splashmotion::bridge::swift {
+   using std__weak_ptr_HybridSplashMotionModuleSpec_ = std::weak_ptr<HybridSplashMotionModuleSpec>;
+   inline std__weak_ptr_HybridSplashMotionModuleSpec_ weakify_std__shared_ptr_HybridSplashMotionModuleSpec_(const std::shared_ptr<HybridSplashMotionModuleSpec>& strong) noexcept { return strong; }
+   
++  // pragma MARK: Result<std::shared_ptr<Promise<bool>>>
++  using Result_std__shared_ptr_Promise_bool___ = Result<std::shared_ptr<Promise<bool>>>;
++  inline Result_std__shared_ptr_Promise_bool___ create_Result_std__shared_ptr_Promise_bool___(const std::shared_ptr<Promise<bool>>& value) noexcept {
++    return Result<std::shared_ptr<Promise<bool>>>::withValue(value);
++  }
++  inline Result_std__shared_ptr_Promise_bool___ create_Result_std__shared_ptr_Promise_bool___(const std::exception_ptr& error) noexcept {
++    return Result<std::shared_ptr<Promise<bool>>>::withError(error);
++  }
++  
+   // pragma MARK: Result<std::shared_ptr<Promise<void>>>
+   using Result_std__shared_ptr_Promise_void___ = Result<std::shared_ptr<Promise<void>>>;
+   inline Result_std__shared_ptr_Promise_void___ create_Result_std__shared_ptr_Promise_void___(const std::shared_ptr<Promise<void>>& value) noexcept {
+diff --git a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
+index 8598543..1ec1f89 100644
+--- a/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
++++ b/nitrogen/generated/ios/RNSplashMotion-Swift-Cxx-Umbrella.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// RNSplashMotion-Swift-Cxx-Umbrella.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/RNSplashMotionAutolinking.mm b/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
+index 730bc95..78d6b4f 100644
+--- a/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
++++ b/nitrogen/generated/ios/RNSplashMotionAutolinking.mm
+@@ -1,7 +1,7 @@
+ ///
+ /// RNSplashMotionAutolinking.mm
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/RNSplashMotionAutolinking.swift b/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
+index ed66923..870ec6f 100644
+--- a/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
++++ b/nitrogen/generated/ios/RNSplashMotionAutolinking.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// RNSplashMotionAutolinking.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -19,8 +19,4 @@ public final class RNSplashMotionAutolinking {
+       return __cxxWrapped.getCxxPart()
+     }()
+   }
+-  
+-  public static func isSplashMotionModuleRecyclable() -> Bool {
+-    return HybridSplashMotion.self is any RecyclableView.Type
+-  }
+ }
+diff --git a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
+index 47cc538..8ac98ac 100644
+--- a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
++++ b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.cpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpecSwift.cpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
+index 023a018..c065c77 100644
+--- a/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
++++ b/nitrogen/generated/ios/c++/HybridSplashMotionModuleSpecSwift.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpecSwift.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -70,6 +70,14 @@ namespace margelo::nitro::splashmotion {
+ 
+   public:
+     // Methods
++    inline std::shared_ptr<Promise<bool>> waitForIntro() override {
++      auto __result = _swiftPart.waitForIntro();
++      if (__result.hasError()) [[unlikely]] {
++        std::rethrow_exception(__result.error());
++      }
++      auto __value = std::move(__result.value());
++      return __value;
++    }
+     inline std::shared_ptr<Promise<void>> hide(const HideConfig& config) override {
+       auto __result = _swiftPart.hide(std::forward<decltype(config)>(config));
+       if (__result.hasError()) [[unlikely]] {
+diff --git a/nitrogen/generated/ios/swift/Func_void.swift b/nitrogen/generated/ios/swift/Func_void.swift
+index a3cead4..22a86a9 100644
+--- a/nitrogen/generated/ios/swift/Func_void.swift
++++ b/nitrogen/generated/ios/swift/Func_void.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// Func_void.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/swift/Func_void_bool.swift b/nitrogen/generated/ios/swift/Func_void_bool.swift
+new file mode 100644
+index 0000000..b317ab1
+--- /dev/null
++++ b/nitrogen/generated/ios/swift/Func_void_bool.swift
+@@ -0,0 +1,46 @@
++///
++/// Func_void_bool.swift
++/// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
++/// https://github.com/margelo/nitro
++/// Copyright © Marc Rousavy @ Margelo
++///
++
++import NitroModules
++
++/**
++ * Wraps a Swift `(_ value: Bool) -> Void` as a class.
++ * This class can be used from C++, e.g. to wrap the Swift closure as a `std::function`.
++ */
++public final class Func_void_bool {
++  public typealias bridge = margelo.nitro.splashmotion.bridge.swift
++
++  private let closure: (_ value: Bool) -> Void
++
++  public init(_ closure: @escaping (_ value: Bool) -> Void) {
++    self.closure = closure
++  }
++
++  @inline(__always)
++  public func call(value: Bool) -> Void {
++    self.closure(value)
++  }
++
++  /**
++   * Casts this instance to a retained unsafe raw pointer.
++   * This acquires one additional strong reference on the object!
++   */
++  @inline(__always)
++  public func toUnsafe() -> UnsafeMutableRawPointer {
++    return Unmanaged.passRetained(self).toOpaque()
++  }
++
++  /**
++   * Casts an unsafe pointer to a `Func_void_bool`.
++   * The pointer has to be a retained opaque `Unmanaged<Func_void_bool>`.
++   * This removes one strong reference from the object!
++   */
++  @inline(__always)
++  public static func fromUnsafe(_ pointer: UnsafeMutableRawPointer) -> Func_void_bool {
++    return Unmanaged<Func_void_bool>.fromOpaque(pointer).takeRetainedValue()
++  }
++}
+diff --git a/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift b/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
+index 094144b..a491c02 100644
+--- a/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
++++ b/nitrogen/generated/ios/swift/Func_void_std__exception_ptr.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// Func_void_std__exception_ptr.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/swift/HideConfig.swift b/nitrogen/generated/ios/swift/HideConfig.swift
+index ddad8de..a402f25 100644
+--- a/nitrogen/generated/ios/swift/HideConfig.swift
++++ b/nitrogen/generated/ios/swift/HideConfig.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// HideConfig.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
+index da8070c..e7c9762 100644
+--- a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
++++ b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -13,6 +13,7 @@ public protocol HybridSplashMotionModuleSpec_protocol: HybridObject {
+   
+ 
+   // Methods
++  func waitForIntro() throws -> Promise<Bool>
+   func hide(config: HideConfig) throws -> Promise<Void>
+   func isVisible() throws -> Bool
+ }
+diff --git a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
+index 1071611..952963d 100644
+--- a/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
++++ b/nitrogen/generated/ios/swift/HybridSplashMotionModuleSpec_cxx.swift
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec_cxx.swift
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -27,7 +27,7 @@ open class HybridSplashMotionModuleSpec_cxx {
+   /**
+    * Holds an instance of the `HybridSplashMotionModuleSpec` Swift protocol.
+    */
+-  private var __implementation: any HybridSplashMotionModuleSpec
++  private let __implementation: any HybridSplashMotionModuleSpec
+ 
+   /**
+    * Holds a weak pointer to the C++ class that wraps the Swift class.
+@@ -75,7 +75,7 @@ open class HybridSplashMotionModuleSpec_cxx {
+    */
+   public func getCxxPart() -> bridge.std__shared_ptr_HybridSplashMotionModuleSpec_ {
+     let cachedCxxPart = self.__cxxPart.lock()
+-    if Bool(fromCxx: cachedCxxPart) {
++    if cachedCxxPart.use_count() > 0 {
+       return cachedCxxPart
+     } else {
+       let newCxxPart = bridge.create_std__shared_ptr_HybridSplashMotionModuleSpec_(self.toUnsafe())
+@@ -124,6 +124,25 @@ open class HybridSplashMotionModuleSpec_cxx {
+   
+ 
+   // Methods
++  @inline(__always)
++  public final func waitForIntro() -> bridge.Result_std__shared_ptr_Promise_bool___ {
++    do {
++      let __result = try self.__implementation.waitForIntro()
++      let __resultCpp = { () -> bridge.std__shared_ptr_Promise_bool__ in
++        let __promise = bridge.create_std__shared_ptr_Promise_bool__()
++        let __promiseHolder = bridge.wrap_std__shared_ptr_Promise_bool__(__promise)
++        __result
++          .then({ __result in __promiseHolder.resolve(__result) })
++          .catch({ __error in __promiseHolder.reject(__error.toCpp()) })
++        return __promise
++      }()
++      return bridge.create_Result_std__shared_ptr_Promise_bool___(__resultCpp)
++    } catch (let __error) {
++      let __exceptionPtr = __error.toCpp()
++      return bridge.create_Result_std__shared_ptr_Promise_bool___(__exceptionPtr)
++    }
++  }
++  
+   @inline(__always)
+   public final func hide(config: HideConfig) -> bridge.Result_std__shared_ptr_Promise_void___ {
+     do {
+diff --git a/nitrogen/generated/shared/c++/HideConfig.hpp b/nitrogen/generated/shared/c++/HideConfig.hpp
+index dc97920..dc955ac 100644
+--- a/nitrogen/generated/shared/c++/HideConfig.hpp
++++ b/nitrogen/generated/shared/c++/HideConfig.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HideConfig.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+diff --git a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
+index 706a0b7..ee21ad2 100644
+--- a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
++++ b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.cpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec.cpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -14,6 +14,7 @@ namespace margelo::nitro::splashmotion {
+     HybridObject::loadHybridMethods();
+     // load custom methods/properties
+     registerHybrids(this, [](Prototype& prototype) {
++      prototype.registerHybridMethod("waitForIntro", &HybridSplashMotionModuleSpec::waitForIntro);
+       prototype.registerHybridMethod("hide", &HybridSplashMotionModuleSpec::hide);
+       prototype.registerHybridMethod("isVisible", &HybridSplashMotionModuleSpec::isVisible);
+     });
+diff --git a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
+index cb0fd8a..ca71fc6 100644
+--- a/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
++++ b/nitrogen/generated/shared/c++/HybridSplashMotionModuleSpec.hpp
+@@ -1,7 +1,7 @@
+ ///
+ /// HybridSplashMotionModuleSpec.hpp
+ /// This file was generated by nitrogen. DO NOT MODIFY THIS FILE.
+-/// https://github.com/mrousavy/nitro
++/// https://github.com/margelo/nitro
+ /// Copyright © Marc Rousavy @ Margelo
+ ///
+ 
+@@ -50,6 +50,7 @@ namespace margelo::nitro::splashmotion {
+ 
+     public:
+       // Methods
++      virtual std::shared_ptr<Promise<bool>> waitForIntro() = 0;
+       virtual std::shared_ptr<Promise<void>> hide(const HideConfig& config) = 0;
+       virtual bool isVisible() = 0;
+ 
+diff --git a/src/SplashMotion.nitro.ts b/src/SplashMotion.nitro.ts
+index 563d544..a01b574 100644
+--- a/src/SplashMotion.nitro.ts
++++ b/src/SplashMotion.nitro.ts
+@@ -19,6 +19,8 @@ export interface SplashMotionModule extends HybridObject<{
+   ios: 'swift';
+   android: 'kotlin';
+ }> {
++  /** True when a non-looping intro completed; false when unavailable or interrupted. */
++  waitForIntro(): Promise<boolean>;
+   hide(config: HideConfig): Promise<void>;
+   isVisible(): boolean;
+ }
+diff --git a/src/index.tsx b/src/index.tsx
+index 33710c4..41322b6 100644
+--- a/src/index.tsx
++++ b/src/index.tsx
+@@ -18,6 +18,11 @@ function hide(options: HideOptions = {}): Promise<void> {
+   return native.hide(options);
+ }
+ 
++/** Resolves true after a non-looping intro finishes; false when interrupted or unavailable. */
++function waitForIntro(): Promise<boolean> {
++  return native.waitForIntro();
++}
++
+ /** `true` while the splash is on screen. */
+ function isVisible(): boolean {
+   return native.isVisible();
+@@ -44,7 +49,7 @@ export function useHideSplash(
+   }, [ready]);
+ }
+ 
+-const SplashMotion = { hide, isVisible };
++const SplashMotion = { hide, isVisible, waitForIntro };
+ 
+-export { hide, isVisible };
++export { hide, isVisible, waitForIntro };
+ export default SplashMotion;
+diff --git a/src/native.web.ts b/src/native.web.ts
+index dd78f45..292740d 100644
+--- a/src/native.web.ts
++++ b/src/native.web.ts
+@@ -2,6 +2,7 @@ import type { HideConfig } from './SplashMotion.nitro';
+ 
+ // No native splash on web: every call is a harmless no-op.
+ export const native = {
++  waitForIntro: () => Promise.resolve(false),
+   hide: (_config: HideConfig) => Promise.resolve(),
+   isVisible: () => false,
+ };

@@ -43,10 +43,15 @@ export function derivePlatformRootDomain(
 
 export function redirectSystemPath({
   path,
+  initial,
 }: {
   path: string;
   initial: boolean;
 }): string {
+  // Expo Router synthesizes this exact URL for a launcher start with no link.
+  // All other URLs still pass through the pairing-link validation boundary.
+  if (initial && path === 'ogabassey:///') return '/';
+
   let apiHostname = '';
   try {
     apiHostname = new URL(EXPO_PUBLIC_API_URL).hostname;

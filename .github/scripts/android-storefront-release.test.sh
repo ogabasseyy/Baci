@@ -149,11 +149,31 @@ printf '%s\n' "$@" > "$GRADLE_CAPTURE"
 exit "${GRADLE_EXIT_CODE:-0}"
 GRADLE
 chmod +x "$fixture_root/gradle/gradlew"
+mkdir -p "$fixture_root/gradle/app/build/outputs/bundle/release"
+python3 - "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab" <<'PYTHON'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w') as archive:
+    for abi, machine, elf_class in [('armeabi-v7a', 40, 1), ('arm64-v8a', 183, 2), ('x86', 3, 1), ('x86_64', 62, 2)]:
+        for library in ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libsplashmotion.so'):
+            header = bytearray(20)
+            header[:6] = b'\x7fELF' + bytes((elf_class, 1))
+            header[18:20] = machine.to_bytes(2, 'little')
+            archive.writestr(f'base/lib/{abi}/{library}', header)
+PYTHON
 (
   cd "$fixture_root/gradle"
   GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
-  GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
+  GRADLE_CAPTURE="$fixture_root/bundle-args" GITHUB_WORKSPACE="$(dirname "$script_dir")/.." bash "$script" build
 )
+rm "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab"
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/missing-bundle-args" GITHUB_WORKSPACE="$(dirname "$script_dir")/.." bash "$script" build
+) >"$fixture_root/missing-bundle-log" 2>&1; then
+  echo 'Expected missing bundle to block release' >&2
+  exit 1
+fi
+grep -q 'Native library ABI check failed' "$fixture_root/missing-bundle-log"
 grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
 grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
 if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi

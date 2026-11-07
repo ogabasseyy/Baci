@@ -16,9 +16,9 @@ import Colors, { BRAND, SHADOWS } from '@/constants/Colors';
 import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { type Category, useCategories, useProducts } from '@/hooks';
 import { useSearchStorage } from '@/hooks/use-search-storage';
-import type { Product } from '@/types/product';
 import { searchDropdownStyles as styles } from './search/SearchDropdown.styles';
 import { SearchDropdownList } from './search/SearchDropdownList';
+import { useProductSearchNavigation } from './search/use-product-search-navigation';
 import { useSearchDropdownState } from './search/useSearchDropdownState';
 
 const MAX_RESULTS = 6;
@@ -94,11 +94,13 @@ export function SearchDropdown({
     }
   }, [hideInput, isControlled, isVisible, setInternalQuery]);
 
-  const handleProductPress = (product: Product) => {
-    saveSearch(activeQuery.trim() || product.name);
-    onClose();
-    router.push(`/product/${product.slug}`);
-  };
+  const handleProductPress = useProductSearchNavigation({
+    isVisible,
+    query: activeQuery,
+    saveSearch,
+    onClose,
+    onNavigate: (product) => router.push(`/product/${product.slug}`),
+  });
 
   const handleSuggestionPress = (term: string) => {
     setQuery(term);

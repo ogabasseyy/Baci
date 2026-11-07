@@ -63,6 +63,29 @@ describe('RouteResumeController', () => {
     });
   });
 
+  it('logs a coarse resume category without checkout parameters', async () => {
+    const log = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      mockPathname = '/cart';
+      mockSearchParams = { secret: 'private-value' };
+      const firstRender = render(
+        <RouteResumeController shouldResume={false} />
+      );
+      firstRender.unmount();
+      mockPathname = '/';
+      mockSearchParams = {};
+      render(<RouteResumeController shouldResume />);
+      await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+      expect(log).toHaveBeenCalledWith(
+        '[StartupRoute]',
+        'navigation_resume_requested'
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-value');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('preserves payment route query params when restoring', async () => {
     mockPathname = '/payment-gateway';
     mockSearchParams = {

@@ -66,3 +66,28 @@ test('production dotenv and asset paths remain rooted at the app after factory e
   assert.equal(config.ios.googleServicesFile, './GoogleService-Info.plist');
   assert.equal(config.android.googleServicesFile, './google-services.json');
 });
+
+test('splash motion native generation has a distinct OTA runtime on both platforms', () => {
+  const config = resolveHostedStagingPushConfig(
+    {
+      NODE_ENV: 'development',
+      STOREFRONT_FACEBOOK_APP_ID: 'synthetic-id',
+      STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'synthetic-token',
+      EXPO_PUBLIC_POSTHOG_API_KEY: 'synthetic-key',
+    },
+    {}
+  );
+  assert.equal(
+    config.runtimeVersion,
+    `${config.version}-ios-sdk58-rn0880-splashmotion1`
+  );
+  assert.equal(
+    config.android.runtimeVersion,
+    `${config.version}-android-sdk58-rn0880-splashmotion1`
+  );
+  assert.notEqual(config.runtimeVersion, `${config.version}-ios-sdk58-rn0880`);
+  assert.notEqual(
+    config.android.runtimeVersion,
+    `${config.version}-android-sdk58-rn0880`
+  );
+});

@@ -101,6 +101,7 @@ import {
   renderHook,
   screen,
 } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useSharedValue } from 'react-native-reanimated';
 import Colors from '@/constants/Colors';
 import { findHostElement } from '@/test-support/find-host-element';
@@ -161,6 +162,53 @@ describe('UtilityPanel', () => {
     });
     jest.useRealTimers();
     jest.restoreAllMocks();
+  });
+
+  it('pauses utility auto-rotation during search and resumes when visible', () => {
+    const interval = jest.spyOn(global, 'setInterval');
+    const view = render(
+      <UtilityPanel
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        autoplayPaused
+      />
+    );
+    expect(interval).not.toHaveBeenCalled();
+    view.rerender(
+      <UtilityPanel
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+        autoplayPaused={false}
+      />
+    );
+    expect(interval).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not rotate utility slogans while its route is unfocused', () => {
+    mockUseIsFocused.mockReturnValue(false);
+    const interval = jest.spyOn(global, 'setInterval');
+    render(
+      <UtilityPanel selectedCategoryId={null} onCategorySelect={jest.fn()} />
+    );
+    expect(interval).not.toHaveBeenCalled();
+  });
+
+  it('clears utility auto-rotation in background', () => {
+    let listener: ((state: AppStateStatus) => void) | undefined;
+    jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, callback) => {
+        listener = callback as (state: AppStateStatus) => void;
+        return { remove: jest.fn() };
+      });
+    const clear = jest.spyOn(global, 'clearInterval');
+    render(
+      <UtilityPanel selectedCategoryId={null} onCategorySelect={jest.fn()} />
+    );
+    act(() => {
+      listener?.('background');
+    });
+    expect(clear).toHaveBeenCalled();
   });
 
   it('applies light and dark theme tokens to promo and selected icon backgrounds', () => {

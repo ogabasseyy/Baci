@@ -20,6 +20,8 @@ UPDATE public.customers SET total_orders = 7, total_spent = 700 WHERE id = '1000
 -- row and later suites keep their preconditions.
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
 VALUES ('10000000-0000-4000-8000-000000000096', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000010', 'stale@example.com', 'Paid', 100);
+INSERT INTO public.orders (id, merchant_id, customer_id, customer_email, payment_status, shipping_status, total, amount_paid)
+VALUES ('6a000000-0000-4000-8000-000000000197', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', 'stale@example.com', 'paid', 'cancelled', 300, 300);
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000031', 'fresh@example.com', now(), null);
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000031', true);
 SELECT set_config('request.jwt.claims', '{"email":"fresh@example.com"}', true);
@@ -33,7 +35,7 @@ SELECT pg_temp.assert_true((SELECT user_id IS NULL FROM public.customers WHERE i
 SELECT pg_temp.assert_true((SELECT user_id = '10000000-0000-4000-8000-000000000031' FROM public.customers WHERE merchant_id = '10000000-0000-4000-8000-000000000001' AND email = 'fresh@example.com'), 'recipient row links to the verified user');
 SELECT pg_temp.assert_true((SELECT o.customer_id = (SELECT c.id FROM public.customers AS c WHERE c.merchant_id = '10000000-0000-4000-8000-000000000001' AND c.email = 'fresh@example.com') FROM public.orders AS o WHERE o.id = '10000000-0000-4000-8000-000000000013'), 'claimed order re-points at the recipient row');
 SELECT pg_temp.assert_true((SELECT rc.customer_id = (SELECT o.customer_id FROM public.orders AS o WHERE o.id = '10000000-0000-4000-8000-000000000013') FROM public.receipt_claims AS rc WHERE rc.token_hash = repeat('f', 64)), 'claim follows the re-pointed order');
-SELECT pg_temp.assert_true((SELECT total_orders = 1 AND total_spent = 100 FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000012'), 'relink refresh keeps the legacy Paid order in the previous customer aggregates');
+SELECT pg_temp.assert_true((SELECT total_orders = 2 AND total_spent = 100 FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000012'), 'relink retains the paid order but excludes the cancelled paid order from spending');
 
 -- A second recipient on the same stale row gets their own row and their own
 -- order: row takeover is impossible because mismatched redeems never write

@@ -234,6 +234,43 @@ describe('buildUcpOrderResponse', () => {
     });
   });
 
+  it('reports order VAT once while keeping the order line price pre-tax', () => {
+    const response = buildUcpOrderResponse({
+      currency: 'NGN',
+      id: 'order_vat',
+      order_items: [
+        {
+          id: 'item_vat',
+          line_extension_amount: 2_000,
+          name: 'Laptop',
+          price: 1_000,
+          product_id: 'product_1',
+          quantity: 2,
+          vat_amount: 150,
+        },
+      ],
+      shipping_fee: 0,
+      subtotal: 2_000,
+      tax_amount: 150,
+      total: 2_150,
+    });
+
+    expect(response).toMatchObject({
+      line_items: [
+        {
+          item: { id: 'product_1', price: 1_000, title: 'Laptop' },
+          quantity: { total: 2 },
+          totals: [{ amount: 2_000, type: 'total' }],
+        },
+      ],
+      totals: [
+        { amount: 2_000, type: 'subtotal' },
+        { amount: 150, type: 'tax' },
+        { amount: 2_150, type: 'total' },
+      ],
+    });
+  });
+
   it('falls back to the order id when checkout linkage is absent', () => {
     const response = buildUcpOrderResponse({
       checkout_id: null,

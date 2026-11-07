@@ -46,6 +46,7 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
       piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
+      private_ci_trusted: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,7 +137,7 @@ jobs:
     # Opt in only after the repository is private and its dedicated runner is
     # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -156,8 +157,8 @@ jobs:
     name: Quality Gate - Typecheck
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 30 || 15 }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && 30 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -264,8 +265,8 @@ jobs:
     # Only the full-affected plan runs the complete web suite; targeted plans
     # keep their narrow vitest invocations inside quality-test.
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 45 || 25 }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
     strategy:
       fail-fast: false
       matrix:
@@ -285,12 +286,7 @@ jobs:
       - name: Run web vitest shard
         env:
           VITEST_SHARD: ${{ matrix.shard }}
-        run: |
-          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
-            pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6" --maxWorkers=4
-          else
-            pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
-          fi
+        run: bash .github/scripts/run-ci-web-shard.sh
 
   quality-db-replay:
     name: Quality Gate - DB Replay
@@ -805,11 +801,11 @@ jobs:
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.
     needs: [changes]
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Bounded build-time storefront reads can extend page-data collection past
     # 30 minutes on a cold runner. Keep enough headroom for that safe pressure
     # control plus setup and post-job cache/checkout cleanup.
-    timeout-minutes: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 75 || 45 }}
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && 75 || 45 }}
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -819,11 +815,7 @@ jobs:
           persist-credentials: false
       - name: Reclaim unused hosted-runner SDK space
         if: runner.environment == 'github-hosted' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        run: |
-          df -h .
-          # This web-only hosted job does not use .NET, Android, or Haskell.
-          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          df -h .
+        run: bash .github/scripts/reclaim-hosted-build-space.sh
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache

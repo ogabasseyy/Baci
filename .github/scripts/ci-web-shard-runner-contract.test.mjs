@@ -3,26 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import YAML from 'yaml';
+import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const job = workflow.jobs['quality-test-web'];
 
 function route({ privateRepo = true, enabled = 'true', webEnabled = 'true', event = 'pull_request', head = 'owner/repo' } = {}, field = 'runs-on') {
-  let source = job[field].slice(3, -2);
-  const values = {
-    'github.event.repository.private': privateRepo,
-    'vars.BACI_PRIVATE_CI_ENABLED': enabled,
-    'vars.BACI_PRIVATE_WEB_TEST_ENABLED': webEnabled,
-    'github.event_name': event,
-    'github.event.pull_request.head.repo.full_name': head,
-    'github.repository': 'owner/repo',
-  };
-  for (const [key, value] of Object.entries(values)) {
-    source = source.replace(new RegExp(`${key.replaceAll('.', '\\.')}(?![\\w.])`, 'g'), JSON.stringify(value));
-  }
-  source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) => JSON.stringify(JSON.parse(json)));
-  assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
-  return Function(`"use strict"; return (${source});`)();
+  return privateRunnerRoute(workflow, 'quality-test-web', { 'github.event.repository.private': privateRepo, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'vars.BACI_PRIVATE_WEB_TEST_ENABLED': webEnabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': head, 'github.repository': 'owner/repo' }, field);
 }
 
 test('web shards require private opt-in and trusted non-merge-group source', () => {
@@ -35,6 +22,9 @@ test('web shards require private opt-in and trusted non-merge-group source', () 
   for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(route({ event, head: '' }), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
   }
+  for (const event of ['pull_request_target', 'issue_comment']) {
+    assert.equal(route({ event }), 'ubuntu-24.04');
+  }
 });
 
 test('web shards do not reference secrets and hydrate their full history', () => {
@@ -45,13 +35,12 @@ test('web shards do not reference secrets and hydrate their full history', () =>
   assert.equal(job.steps[0].with['fetch-depth'], 0);
   assert.equal(job.steps[0].with.filter, '');
   assert.equal(job.steps[0].with['persist-credentials'], false);
-  assert.match(job.steps.at(-1).run, /--maxWorkers=4/);
+  assert.equal(job.steps.at(-1).run, 'bash .github/scripts/run-ci-web-shard.sh');
 });
 
 test('only self-hosted shards receive the four-worker limit', () => {
-  const run = job.steps.at(-1).run;
   for (const environment of ['self-hosted', 'github-hosted']) {
-    const result = spawnSync('bash', ['-c', `pnpm() { printf '%s\\n' "$*"; }\n${run}`], {
+    const result = spawnSync('bash', ['-c', 'pnpm() { printf "%s\\n" "$*"; }; source .github/scripts/run-ci-web-shard.sh'], {
       encoding: 'utf8',
       env: { ...process.env, RUNNER_ENVIRONMENT: environment, VITEST_SHARD: '3' },
     });

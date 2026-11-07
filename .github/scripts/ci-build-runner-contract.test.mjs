@@ -1,27 +1,15 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import YAML from 'yaml';
+import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const job = workflow.jobs.build;
 
 function route({ privateRepo = true, enabled = 'true', buildEnabled = 'true', event = 'pull_request', head = 'owner/repo' } = {}, field = 'runs-on') {
-  let source = job[field].slice(3, -2);
-  const values = {
-    'github.event.repository.private': privateRepo,
-    'vars.BACI_PRIVATE_CI_ENABLED': enabled,
-    'vars.BACI_PRIVATE_BUILD_ENABLED': buildEnabled,
-    'github.event_name': event,
-    'github.event.pull_request.head.repo.full_name': head,
-    'github.repository': 'owner/repo',
-  };
-  for (const [key, value] of Object.entries(values)) {
-    source = source.replace(new RegExp(`${key.replaceAll('.', '\\.')}(?![\\w.])`, 'g'), JSON.stringify(value));
-  }
-  source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) => JSON.stringify(JSON.parse(json)));
-  assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
-  return Function(`"use strict"; return (${source});`)();
+  return privateRunnerRoute(workflow, 'build', { 'github.event.repository.private': privateRepo, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'vars.BACI_PRIVATE_BUILD_ENABLED': buildEnabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': head, 'github.repository': 'owner/repo' }, field);
 }
 
 test('build requires private opt-in and trusted non-merge-group source', () => {
@@ -34,6 +22,9 @@ test('build requires private opt-in and trusted non-merge-group source', () => {
   for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(route({ event, head: '' }), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
   }
+  for (const event of ['pull_request_target', 'issue_comment']) {
+    assert.equal(route({ event }), 'ubuntu-24.04');
+  }
 });
 
 test('self-hosted build references no configured secrets and never runs hosted SDK deletion', () => {
@@ -41,7 +32,7 @@ test('self-hosted build references no configured secrets and never runs hosted S
   assert.doesNotMatch(JSON.stringify(workflow.env), /\bsecrets\b/);
   const reclaim = job.steps.find((step) => step.name === 'Reclaim unused hosted-runner SDK space');
   assert.match(reclaim.if, /runner\.environment\s*==\s*'github-hosted'/);
-  assert.match(reclaim.run, /sudo rm -rf/);
+  assert.equal(reclaim.run, 'bash .github/scripts/reclaim-hosted-build-space.sh');
   for (const environment of ['github-hosted', 'self-hosted', '']) {
     const condition = reclaim.if
       .replaceAll('runner.environment', JSON.stringify(environment))
@@ -49,5 +40,17 @@ test('self-hosted build references no configured secrets and never runs hosted S
       .replaceAll('needs.changes.outputs.test_plan_mode', "'full-affected'");
     assert.match(condition, /^[\s()'"\w=!&|.\-]+$/);
     assert.equal(Function(`"use strict"; return (${condition});`)(), environment === 'github-hosted');
+  }
+});
+
+test('SDK cleanup refuses non-hosted runners before invoking sudo', () => {
+  const run = 'sudo() { printf "sudo called\\n"; }; df() { :; }; source .github/scripts/reclaim-hosted-build-space.sh';
+  for (const environment of ['github-hosted', 'self-hosted', '']) {
+    const result = spawnSync('bash', ['-c', run], {
+      encoding: 'utf8',
+      env: { ...process.env, RUNNER_ENVIRONMENT: environment },
+    });
+    assert.equal(result.status === 0, environment === 'github-hosted');
+    assert.equal(result.stdout.includes('sudo called'), environment === 'github-hosted');
   }
 });

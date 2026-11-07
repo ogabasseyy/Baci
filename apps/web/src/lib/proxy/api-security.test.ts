@@ -22,6 +22,20 @@ import { getApiSecurityContext, runApiSecurityStage } from './api-security';
 type HostModule = typeof import('./host');
 
 describe('API security stage', () => {
+  it('rate limits public chat product detail reads by endpoint before routing', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockClear();
+    const pathname = '/api/storefront/store/chat-product/phone';
+    const request = new NextRequest(`https://shop.example${pathname}`);
+
+    await runApiSecurityStage(
+      request,
+      getApiSecurityContext(pathname, 'shop.example', 'GET')
+    );
+
+    expect(checkRateLimit).toHaveBeenCalledWith(request, pathname);
+  });
+
   it('blocks foreign browser origins for sessionless search assistance', async () => {
     const request = new NextRequest('https://usebaci.com/api/search/assist', {
       method: 'POST',

@@ -49,10 +49,18 @@ vi.mock('@/lib/supabase/server', () => ({
 // a bare `{}` mock breaks seven tests (500s where 400s expected), and so
 // does a faithful rejecting-maybeSingle fake — the suite depends on the
 // real client's full method surface in ways implicit to its fixtures.
-// Construction uses env-mocked URL/key material and the suite runs in
-// 17ms with no network traffic, so the real factory is benign here.
 vi.mock('@/lib/loyalty/server-resolver-client', () => ({
   createLoyaltyResolverServiceClient: mockCreateLoyaltyResolverServiceClient,
+}));
+
+// The one anon read on this path is the fixed-code currency preview, a
+// real `merchants` fetch to the mocked URL: it fails, postgrest-js retries
+// after 1s+2s+4s, and the preview then counts the code as current. That
+// cost 7s per test (10s timeouts in CI). Answer "current" directly, the
+// same outcome, with no network; the order wrapper's currency gate stays
+// covered by the error-mapping cases.
+vi.mock('@/lib/checkout/is-loyalty-code-currency-current', () => ({
+  isLoyaltyCodeCurrencyCurrent: vi.fn(async () => true),
 }));
 
 vi.mock('@/lib/logger', () => ({

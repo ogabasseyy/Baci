@@ -70,6 +70,8 @@ interface PaymentStepProps {
   oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
+  payWithWallet?: boolean;
+  setPayWithWallet?: (value: boolean) => void;
   currency?: string;
   redvaultAvailable: boolean;
   redvaultStatus: RedvaultPaymentStatus;
@@ -97,6 +99,8 @@ export function PaymentStep({
   oxygenAllowed = false,
   remainingAmount,
   orderAmount,
+  payWithWallet = false,
+  setPayWithWallet,
   currency = 'NGN',
   redvaultAvailable,
   redvaultStatus,
@@ -152,8 +156,13 @@ export function PaymentStep({
     featureSettings: merchant?.feature_settings,
     currency,
     orderAmount,
-    payableAmount: remainingAmount,
+    payableAmount: payWithWallet ? orderAmount : remainingAmount,
   });
+
+  const selectPaymentTab = (tab: PaymentTab) => {
+    if (tab === 'installments' && payWithWallet) setPayWithWallet?.(false);
+    setPaymentTab(tab);
+  };
 
   const handlePaymentMethodChange = (method: PaymentMethod) => {
     setPaymentMethod(method);
@@ -177,6 +186,12 @@ export function PaymentStep({
     }
   }, [hasAvailableSelectedPaymentMethod, paymentMethod, setPaymentMethod]);
 
+  useEffect(() => {
+    if (paymentTab === 'installments' && payWithWallet) {
+      setPayWithWallet?.(false);
+    }
+  }, [paymentTab, payWithWallet, setPayWithWallet]);
+
   return (
     <CheckoutStepSection
       id="checkout-payment"
@@ -190,7 +205,7 @@ export function PaymentStep({
     >
       <PaymentOptionsPanel
         paymentTab={paymentTab}
-        setPaymentTab={setPaymentTab}
+        setPaymentTab={selectPaymentTab}
         paymentMethod={paymentMethod}
         setPaymentMethod={handlePaymentMethodChange}
         paystackCheckoutAvailable={paystackCheckoutAvailable}
@@ -205,6 +220,11 @@ export function PaymentStep({
         redvaultStatus={redvaultStatus}
         redvaultSummary={redvaultSummary}
       />
+      {paymentTab === 'installments' && (
+        <p className="mt-3 text-sm text-store-foreground/70">
+          Wallet credit cannot be combined with instalment payments.
+        </p>
+      )}
 
       {/* Mobile/Inline Place Order Button for Payment Step */}
       <div className="pt-4 lg:hidden">
@@ -235,7 +255,8 @@ export function PaymentStep({
           disabled={
             isProcessing ||
             !isDeliveryValid ||
-            (remainingAmount > 0 && !hasAvailableSelectedPaymentMethod) ||
+            ((remainingAmount > 0 || paymentTab === 'installments') &&
+              !hasAvailableSelectedPaymentMethod) ||
             (paymentMethod === 'uba_redvault' &&
               (redvaultStatus === 'pending' || redvaultStatus === 'held')) ||
             (paymentMethod === 'payforme' && !isPayForMeValid)

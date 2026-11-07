@@ -1,3 +1,4 @@
+import type { NextResponse } from 'next/server';
 import { getStorefrontContentSegments } from '@/lib/proxy/routing-policy';
 
 type StorefrontBlogListingRouteKind = 'root' | 'category' | 'author';
@@ -82,4 +83,50 @@ export function shouldSetStorefrontBlogQueryNoIndexHeader(
   const hasRootCategoryQuery = routeKind === 'root' && rawCategory.length > 0;
 
   return hasPaginatedQuery || hasSearchQuery || hasRootCategoryQuery;
+}
+
+export function applyBlogQueryNoindexHeader(
+  target: NextResponse | Response | { headers: Headers } | Headers,
+  pathname: string,
+  hostname?: string,
+  routeType: 'admin' | 'auth' | 'storefront' | 'api' = 'storefront',
+  searchParams?: URLSearchParams
+): boolean {
+  let cleanPath = pathname;
+  let params = searchParams;
+  if (pathname.includes('?')) {
+    const [base, query] = pathname.split('?', 2);
+    cleanPath = base;
+    const queryParams = new URLSearchParams(query);
+    if (!params) {
+      params = queryParams;
+    } else {
+      const merged = new URLSearchParams(params);
+      queryParams.forEach((value, key) => {
+        if (!merged.has(key)) {
+          merged.set(key, value);
+        }
+      });
+      params = merged;
+    }
+  }
+
+  const headers = 'headers' in target ? target.headers : target;
+  if (headers.has('X-Robots-Tag')) {
+    return false;
+  }
+
+  if (
+    shouldSetStorefrontBlogQueryNoIndexHeader(
+      cleanPath,
+      hostname,
+      routeType,
+      params
+    )
+  ) {
+    headers.set('X-Robots-Tag', 'noindex, follow');
+    return true;
+  }
+
+  return false;
 }

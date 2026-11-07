@@ -12,7 +12,30 @@ describe('getGadgetHeroImage', () => {
     [null, 'photo-1498049794561-7780e7231661'],
     [undefined, 'photo-1498049794561-7780e7231661'],
     ['UNKNOWN', 'photo-1498049794561-7780e7231661'],
-  ])('returns expected image URL for %s', (businessType, expectedSnippet) => {
+  ])('returns default hero image URL for businessType %s', (businessType, expectedSnippet) => {
     expect(getGadgetHeroImage(businessType)).toContain(expectedSnippet);
+  });
+
+  it('returns custom hero image when provided', () => {
+    const customUrl = 'https://cdn.example.com/custom-hero.jpg';
+    expect(getGadgetHeroImage('ELECTRONICS', customUrl)).toBe(customUrl);
+    expect(getGadgetHeroImage('FOOD_BEVERAGE', `  ${customUrl}  `)).toBe(
+      customUrl
+    );
+  });
+
+  it('falls back to default hero image when custom hero image is null, undefined, or empty', () => {
+    expect(getGadgetHeroImage('FOOD_BEVERAGE', null)).toContain(
+      'photo-1504674900247-0877df9cc836'
+    );
+    expect(getGadgetHeroImage('FOOD_BEVERAGE', undefined)).toContain(
+      'photo-1504674900247-0877df9cc836'
+    );
+    expect(getGadgetHeroImage('FOOD_BEVERAGE', '')).toContain(
+      'photo-1504674900247-0877df9cc836'
+    );
+    expect(getGadgetHeroImage('FOOD_BEVERAGE', '   ')).toContain(
+      'photo-1504674900247-0877df9cc836'
+    );
   });
 });

@@ -1,4 +1,10 @@
-export function getGadgetHeroImage(businessType?: string | null): string {
+export function getGadgetHeroImage(
+  businessType?: string | null,
+  customHeroImage?: string | null
+): string {
+  if (customHeroImage && customHeroImage.trim().length > 0) {
+    return customHeroImage.trim();
+  }
   switch (businessType) {
     case 'ELECTRONICS':
       return 'https://images.unsplash.com/photo-1498049794561-7780e7231661?q=80&w=2070&auto=format&fit=crop';

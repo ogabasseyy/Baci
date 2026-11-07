@@ -122,6 +122,25 @@ describe('Chatwoot challenge configuration and issuance', () => {
     expect(payload).not.toHaveProperty('cart_session_proof');
   });
 
+  it('accepts the bounded principal format used by linked customer carts', async () => {
+    const linkedPrincipal =
+      'customer-device:6df442af-4d21-4f4f-9f0b-607400000099';
+    const token = await makeChallenge({ principalId: linkedPrincipal });
+    const { payload } = await jwtVerify(token, challengePublicKey, {
+      algorithms: ['RS256'],
+      audience: `${CHATWOOT_CHALLENGE_SCOPE}:${state.websiteToken}`,
+      issuer: 'https://baci.example',
+      currentDate: fixedTime,
+    });
+
+    expect(payload.principal_id).toBe(linkedPrincipal);
+    await expect(
+      makeChallenge({ principalId: 'x'.repeat(129) })
+    ).rejects.toMatchObject({
+      code: 'invalid_challenge',
+    });
+  });
+
   it('refuses request-selected widget credentials and cross-tenant substitution', async () => {
     await expect(
       makeChallenge({ websiteToken: 'attacker-selected-widget-token' })

@@ -22,7 +22,9 @@ function validateChallengeInput(input: ChatwootCommerceChallengeInput) {
     !UUID_PATTERN.test(input.merchantId) ||
     !UUID_PATTERN.test(input.cartId) ||
     !UUID_PATTERN.test(input.grantId) ||
-    !UUID_PATTERN.test(input.principalId) ||
+    typeof input.principalId !== 'string' ||
+    input.principalId.length < 1 ||
+    input.principalId.length > 128 ||
     !normalizeHttpsOrigin(input.origin) ||
     !WEBSITE_TOKEN_PATTERN.test(input.websiteToken) ||
     !Number.isSafeInteger(input.inboxId) ||

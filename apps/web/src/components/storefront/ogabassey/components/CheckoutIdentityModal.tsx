@@ -105,7 +105,7 @@ export function CheckoutIdentityModal({
         </div>
 
         <div className="flex items-center justify-center gap-2 border-t border-store-border px-6 py-4 text-xs text-store-background-text/55">
-          <ShieldCheck aria-hidden="true" className="size-4" />
+          <ShieldCheck aria-hidden="true" className="size-4 text-store-primary" />
           Secure checkout
         </div>
       </div>

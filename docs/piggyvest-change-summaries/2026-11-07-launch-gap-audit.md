@@ -63,3 +63,10 @@ processing attempt. Durable capture alone is not unattended recovery.
 SQL tests and import-graph checks do not prove a deployed schedule. Any later
 production provisioning, activation or financial acceptance remains a
 separate owner-controlled step. The recording account is excluded.
+
+CI follow-up: the worker schedule renderer is extracted from `deploy.sh` so
+the deployment entry point stays within its existing size limit. The
+kill-switch source sweep now excludes comments when deciding whether code
+constructs an enable flag; it retains its existing literal/construction
+detection and separately checks real environment reads. A readiness error
+code alongside a documentation-only flag name is not a bypass.

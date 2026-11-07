@@ -13,9 +13,14 @@ const wrapper = join(
   'process-piggyvest-webhook-capture-drain.sh'
 );
 const script = 'src/scripts/piggyvest-webhook-capture-drain-cli.ts';
+const renderer = join(
+  workerRoot,
+  'lib',
+  'render-piggyvest-capture-drain-cron.sh'
+);
 
 function cronLines() {
-  return readFileSync(join(workerRoot, 'deploy.sh'), 'utf8')
+  return readFileSync(renderer, 'utf8')
     .split('\n')
     .filter((line) => line.includes('piggyvest-webhook-capture-drain'));
 }
@@ -37,11 +42,27 @@ describe('PiggyVest webhook capture drain schedule', () => {
       deployScript.indexOf('$CRON_BLOCK_END\n')
     );
     assert.ok(
-      block.includes('process-piggyvest-webhook-capture-drain.sh --once')
+      block.includes(
+        '$(bash "$WORKER_ROOT/lib/render-piggyvest-capture-drain-cron.sh" "$REMOTE_DIR")'
+      )
     );
     // The release refuses a schedule with variables it cannot resolve.
     const variables = cronLines()[0].match(/\$\{?[A-Z_]+/g) ?? [];
     assert.deepEqual([...new Set(variables)], ['$REMOTE_DIR']);
+  });
+
+  it('renders the bound directory without installing or starting the worker', () => {
+    const rendered = spawnSync('bash', [renderer, '/srv/qa-workers'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+    });
+    assert.equal(rendered.status, 0, rendered.stderr);
+    assert.equal(
+      rendered.stdout.trim(),
+      cronLines()[0].replaceAll('$REMOTE_DIR', '/srv/qa-workers')
+    );
+    assert.doesNotMatch(rendered.stdout, /\$[A-Z_]+/);
   });
 
   it('never carries a credential, a web cron hop or a URL', () => {

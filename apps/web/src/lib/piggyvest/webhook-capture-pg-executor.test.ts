@@ -203,7 +203,8 @@ describe('createCaptureDrainPgExecutor', () => {
       .query('status', [])
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
-    expect(String((failure as Error).message)).not.toContain(PASSWORD);
+    if (!(failure instanceof Error)) throw new Error('Expected an Error');
+    expect(failure.message).not.toContain(PASSWORD);
     expect(clients[0]?.ended).toBe(true);
   });
 
@@ -227,8 +228,10 @@ describe('createCaptureDrainPgExecutor', () => {
       .query('status', [])
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(CaptureDrainDatabaseError);
-    expect((failure as CaptureDrainDatabaseError).sqlState).toBe('42883');
-    expect((failure as Error).message).toBe(
+    if (!(failure instanceof CaptureDrainDatabaseError))
+      throw new Error('Expected a capture drain database error');
+    expect(failure.sqlState).toBe('42883');
+    expect(failure.message).toBe(
       'PiggyVest capture drain database unavailable'
     );
 
@@ -236,7 +239,9 @@ describe('createCaptureDrainPgExecutor', () => {
     const unsafe = await executor()
       .query('status', [])
       .catch((error: unknown) => error);
-    expect((unsafe as CaptureDrainDatabaseError).sqlState).toBeNull();
+    if (!(unsafe instanceof CaptureDrainDatabaseError))
+      throw new Error('Expected a capture drain database error');
+    expect(unsafe.sqlState).toBeNull();
   });
 
   it('still reports the original failure when closing the connection fails', async () => {

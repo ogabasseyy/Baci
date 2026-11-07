@@ -18,6 +18,13 @@ function renderMobileBar(overrides = {}) {
 }
 
 describe('CartPageMobileCheckoutBar', () => {
+  it('keeps the black checkout action available until the desktop summary appears', () => {
+    renderMobileBar();
+    const checkout = screen.getByRole('button', { name: /checkout/i });
+    expect(checkout).toHaveClass('bg-black');
+    expect(checkout.parentElement).toHaveClass('lg:hidden');
+    expect(checkout.parentElement).not.toHaveClass('md:hidden');
+  });
   it('wires mobile negotiation and checkout actions', () => {
     const props = renderMobileBar();
 

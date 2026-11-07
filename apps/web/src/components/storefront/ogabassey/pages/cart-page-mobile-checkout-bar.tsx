@@ -18,7 +18,7 @@ export function CartPageMobileCheckoutBar({
   onOpenTotalNegotiation,
 }: CartPageMobileCheckoutBarProps) {
   return (
-    <div className="fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 flex items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] md:hidden z-40">
+    <div className="fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 flex items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] lg:hidden z-40">
       {hasPriceNegotiation && !hasNonNegotiableCartItem && (
         <button
           type="button"
@@ -37,7 +37,7 @@ export function CartPageMobileCheckoutBar({
       <button
         type="button"
         onClick={onCheckoutClick}
-        className="flex-1 bg-store-primary hover:bg-store-primary/90 active:bg-store-primary/90 active:scale-[0.98] text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
+        className="flex-1 bg-black hover:bg-gray-900 active:bg-gray-900 active:scale-[0.98] text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg"
       >
         <span>Checkout</span>
         <span className="opacity-50 mx-1">•</span>

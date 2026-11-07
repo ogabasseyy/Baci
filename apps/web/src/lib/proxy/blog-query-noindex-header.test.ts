@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { describe, expect, it } from 'vitest';
-import {
-  applyBlogQueryNoindexHeader,
-  shouldSetStorefrontBlogQueryNoIndexHeader,
-} from './blog-query-noindex-header';
+import { applyBlogQueryNoindexHeader } from './blog-query-noindex-header';
 
 describe('blog-query-noindex-header', () => {
   describe('applyBlogQueryNoindexHeader', () => {
@@ -24,6 +21,16 @@ describe('blog-query-noindex-header', () => {
       expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
     });
 
+    it('sets noindex header for /blog?category=reviews', () => {
+      const response = NextResponse.next();
+      const applied = applyBlogQueryNoindexHeader(
+        response,
+        '/blog?category=reviews'
+      );
+      expect(applied).toBe(true);
+      expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+    });
+
     it('sets noindex header for /blog?page=2', () => {
       const response = NextResponse.next();
       const applied = applyBlogQueryNoindexHeader(response, '/blog?page=2');
@@ -36,6 +43,16 @@ describe('blog-query-noindex-header', () => {
       const applied = applyBlogQueryNoindexHeader(
         response,
         '/ogabassey/blog/category/reviews?page=2'
+      );
+      expect(applied).toBe(true);
+      expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+    });
+
+    it('sets noindex header for /blog/author/john?page=2', () => {
+      const response = NextResponse.next();
+      const applied = applyBlogQueryNoindexHeader(
+        response,
+        '/blog/author/john?page=2'
       );
       expect(applied).toBe(true);
       expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
@@ -68,38 +85,45 @@ describe('blog-query-noindex-header', () => {
       expect(applied).toBe(true);
       expect(headers.get('X-Robots-Tag')).toBe('noindex, follow');
     });
-  });
 
-  describe('shouldSetStorefrontBlogQueryNoIndexHeader', () => {
-    it('returns false for non-storefront route types', () => {
-      const searchParams = new URLSearchParams('page=2');
+    it('does not set header for non-storefront route types', () => {
+      const adminResponse = NextResponse.next();
       expect(
-        shouldSetStorefrontBlogQueryNoIndexHeader(
+        applyBlogQueryNoindexHeader(
+          adminResponse,
           '/blog',
           'ogabassey.com',
           'admin',
-          searchParams
+          new URLSearchParams('page=2')
         )
       ).toBe(false);
+      expect(adminResponse.headers.get('X-Robots-Tag')).toBeNull();
+
+      const apiResponse = NextResponse.next();
       expect(
-        shouldSetStorefrontBlogQueryNoIndexHeader(
+        applyBlogQueryNoindexHeader(
+          apiResponse,
           '/blog',
           'ogabassey.com',
           'api',
-          searchParams
+          new URLSearchParams('page=2')
         )
       ).toBe(false);
+      expect(apiResponse.headers.get('X-Robots-Tag')).toBeNull();
     });
 
-    it('returns false when searchParams is undefined', () => {
+    it('does not set header when searchParams is undefined', () => {
+      const response = NextResponse.next();
       expect(
-        shouldSetStorefrontBlogQueryNoIndexHeader(
+        applyBlogQueryNoindexHeader(
+          response,
           '/blog',
           'ogabassey.com',
           'storefront',
           undefined
         )
       ).toBe(false);
+      expect(response.headers.get('X-Robots-Tag')).toBeNull();
     });
 
     it.each([
@@ -108,15 +132,18 @@ describe('blog-query-noindex-header', () => {
       ['/blog/category/smartphones', ''],
       ['/blog/category/smartphones', 'page=1'],
       ['/blog/some-post-slug', 'page=2'],
-    ])('returns false for clean blog route %s with query "%s"', (pathname, query) => {
+    ])('does not set header for clean blog route %s with query "%s"', (pathname, query) => {
+      const response = NextResponse.next();
       expect(
-        shouldSetStorefrontBlogQueryNoIndexHeader(
+        applyBlogQueryNoindexHeader(
+          response,
           pathname,
           'ogabassey.com',
           'storefront',
           new URLSearchParams(query)
         )
       ).toBe(false);
+      expect(response.headers.get('X-Robots-Tag')).toBeNull();
     });
   });
 });

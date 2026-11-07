@@ -51,7 +51,7 @@ function getStorefrontBlogListingRouteKind(
   return null;
 }
 
-export function shouldSetStorefrontBlogQueryNoIndexHeader(
+function shouldSetStorefrontBlogQueryNoIndexHeader(
   pathname: string,
   hostname: string | undefined,
   routeType: 'admin' | 'auth' | 'storefront' | 'api',

@@ -3,6 +3,7 @@ import {
   chatwootCommerceChallengeRequestSchema,
   chatwootCommerceContextVerifyRequestSchema,
   chatwootCommerceSessionAuthorizeRequestSchema,
+  chatwootCartReviewSnapshotSchema,
 } from './chatwoot-commerce-context';
 
 const validChallenge = {
@@ -79,5 +80,43 @@ describe('Chatwoot commerce request schemas', () => {
         merchantId: 'caller-selected',
       }).success
     ).toBe(false);
+  });
+});
+
+describe('chatwootCartReviewSnapshotSchema', () => {
+  const snapshot = {
+    cartVersion: 1,
+    currency: 'NGN',
+    estimatedTotals: false,
+    items: [
+      {
+        lineId: 'line-1',
+        name: 'Phone',
+        productId: 'product-1',
+        variantId: null,
+        condition: null,
+        quantity: 2,
+        unitPriceMinor: 100,
+        lineTotalMinor: 200,
+      },
+    ],
+    itemsSubtotalMinor: 200,
+  };
+
+  it('accepts a bounded canonical cart snapshot', () => {
+    expect(chatwootCartReviewSnapshotSchema.safeParse(snapshot).success).toBe(true);
+  });
+
+  it.each([
+    ['unsupported currency format', { ...snapshot, currency: 'NG' }],
+    ['negative version', { ...snapshot, cartVersion: -1 }],
+    ['unknown field', { ...snapshot, checkoutSessionId: 'secret' }],
+    [
+      'invalid nullable field type',
+      { ...snapshot, items: [{ ...snapshot.items[0], variantId: 42 }] },
+    ],
+    ['too many cart lines', { ...snapshot, items: Array(21).fill(snapshot.items[0]) }],
+  ])('rejects %s', (_label, value) => {
+    expect(chatwootCartReviewSnapshotSchema.safeParse(value).success).toBe(false);
   });
 });

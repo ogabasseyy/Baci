@@ -2,12 +2,16 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { readCartJsonBody } from '@/lib/cart/request-context';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
+import { projectChatwootCartReview } from '@/lib/chatwoot/cart-review-projection';
 import {
   ChatwootCommerceContextError,
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { chatwootCommerceSessionAuthorizeRequestSchema } from '@/schemas/chatwoot-commerce-context';
+import {
+  chatwootCartReviewSnapshotSchema,
+  chatwootCommerceSessionAuthorizeRequestSchema,
+} from '@/schemas/chatwoot-commerce-context';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
@@ -28,8 +32,11 @@ export async function POST(request: NextRequest) {
     rawBody.body
   );
   if (!parsed.success) return unavailable(400, 'invalid_request');
+  const includeCartSnapshot = parsed.data.includeCartSnapshot === true;
 
-  const cartContext = await loadChatwootCartContext(request);
+  const cartContext = await loadChatwootCartContext(request, {
+    includeProductNames: includeCartSnapshot,
+  });
   if (!cartContext.ok) {
     return unavailable(cartContext.status, cartContext.code);
   }
@@ -40,10 +47,24 @@ export async function POST(request: NextRequest) {
       sessionToken: parsed.data.sessionToken,
       state: cartContext.state,
     });
-    return NextResponse.json(
-      { authorized: true, ...authorized },
-      { headers: NO_STORE_HEADERS }
-    );
+    const response = { authorized: true, ...authorized };
+    if (includeCartSnapshot) {
+      const projectedCartSnapshot = projectChatwootCartReview(
+        cartContext.cart,
+        cartContext.productNames
+      );
+      const parsedCartSnapshot = chatwootCartReviewSnapshotSchema.safeParse(
+        projectedCartSnapshot
+      );
+      if (!parsedCartSnapshot.success) {
+        return unavailable(503, 'temporarily_unavailable');
+      }
+      return NextResponse.json(
+        { ...response, cartSnapshot: parsedCartSnapshot.data },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
+    return NextResponse.json(response, { headers: NO_STORE_HEADERS });
   } catch (error) {
     if (error instanceof ChatwootCommerceContextError) {
       const status = error.code === 'invalid_config' ? 503 : 403;

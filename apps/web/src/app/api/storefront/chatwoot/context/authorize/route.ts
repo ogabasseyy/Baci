@@ -22,17 +22,17 @@ export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid) return csrf.response ?? unavailable(403, 'forbidden');
 
-  const cartContext = await loadChatwootCartContext(request);
-  if (!cartContext.ok) {
-    return unavailable(cartContext.status, cartContext.code);
-  }
-
   const rawBody = await readCartJsonBody(request);
   if (!rawBody.ok) return unavailable(400, 'invalid_request');
   const parsed = chatwootCommerceSessionAuthorizeRequestSchema.safeParse(
     rawBody.body
   );
   if (!parsed.success) return unavailable(400, 'invalid_request');
+
+  const cartContext = await loadChatwootCartContext(request);
+  if (!cartContext.ok) {
+    return unavailable(cartContext.status, cartContext.code);
+  }
 
   try {
     const authorized = await verifyChatwootSessionCapability({

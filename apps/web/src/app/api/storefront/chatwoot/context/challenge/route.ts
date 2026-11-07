@@ -26,15 +26,15 @@ export async function POST(request: NextRequest) {
     return csrf.response ?? unavailable(403, 'forbidden');
   }
 
-  const cartContext = await loadChatwootCartContext(request);
-  if (!cartContext.ok) {
-    return unavailable(cartContext.status, cartContext.code);
-  }
-
   const rawBody = await readCartJsonBody(request);
   if (!rawBody.ok) return unavailable(400, 'invalid_request');
   const parsed = chatwootCommerceChallengeRequestSchema.safeParse(rawBody.body);
   if (!parsed.success) return unavailable(400, 'invalid_request');
+
+  const cartContext = await loadChatwootCartContext(request);
+  if (!cartContext.ok) {
+    return unavailable(cartContext.status, cartContext.code);
+  }
 
   const { conversationId, requestId, visitorTokenSha256, websiteToken } =
     parsed.data;

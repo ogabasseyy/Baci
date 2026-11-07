@@ -117,6 +117,13 @@ describe('Chatwoot context challenge route', () => {
     expect(mocks.issueChatwootCommerceChallenge).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed input before resolving a cart context', async () => {
+    mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: { ...state } });
+
+    expect((await POST(request())).status).toBe(400);
+    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
+  });
+
   it('rejects tenant A widget credentials on same-origin tenant B cart context', async () => {
     const tenantB = {
       inboxId: 75,
@@ -148,7 +155,16 @@ describe('Chatwoot context challenge route', () => {
     expect(mocks.issueChatwootCommerceChallenge).not.toHaveBeenCalled();
   });
 
-  it('requires CSRF and a resolved cart context before reading body credentials', async () => {
+  it('requires CSRF before reading input and validates input before resolving the cart', async () => {
+    mocks.readCartJsonBody.mockResolvedValue({
+      ok: true,
+      body: {
+        conversationId: 905,
+        requestId: 'request_7d3bd0e2',
+        visitorTokenSha256: 'b'.repeat(64),
+        websiteToken: binding.websiteToken,
+      },
+    });
     mocks.checkCsrfProtection.mockResolvedValueOnce({ valid: false });
     expect((await POST(request())).status).toBe(403);
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
@@ -160,6 +176,6 @@ describe('Chatwoot context challenge route', () => {
       code: 'disabled',
     });
     expect((await POST(request())).status).toBe(404);
-    expect(mocks.readCartJsonBody).not.toHaveBeenCalled();
+    expect(mocks.readCartJsonBody).toHaveBeenCalledOnce();
   });
 });

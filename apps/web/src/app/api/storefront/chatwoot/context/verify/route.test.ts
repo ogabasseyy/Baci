@@ -122,7 +122,7 @@ describe('Chatwoot context verification route', () => {
       code: 'invalid_proof',
     });
     expect((await POST(request())).status).toBe(401);
-    expect(mocks.readCartJsonBody).toHaveBeenCalledTimes(2);
+    expect(mocks.readCartJsonBody).toHaveBeenCalledTimes(3);
   });
 
   it('requires CSRF before cart resolution or token parsing', async () => {
@@ -130,5 +130,13 @@ describe('Chatwoot context verification route', () => {
     expect((await POST(request())).status).toBe(403);
     expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
     expect(mocks.readCartJsonBody).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed input before resolving a cart context', async () => {
+    mocks.readCartJsonBody.mockResolvedValue({ ok: true, body: { ...state } });
+
+    expect((await POST(request())).status).toBe(400);
+    expect(mocks.loadChatwootCartContext).not.toHaveBeenCalled();
+    expect(mocks.verifyChatwootCommerceContext).not.toHaveBeenCalled();
   });
 });

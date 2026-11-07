@@ -121,6 +121,11 @@ describe('BlogAuthorPageContent robots meta', () => {
         searchParams: Promise.resolve({ page: '2' }),
       })
     );
+    expect(mockGetCachedBlogAuthor).toHaveBeenCalledWith(
+      'ogabassey.com',
+      'Bassey John',
+      { page: 2 }
+    );
     expect(document.querySelector('meta[name="robots"]')).toHaveAttribute(
       'content',
       'noindex, follow'

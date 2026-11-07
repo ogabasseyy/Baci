@@ -92,12 +92,12 @@ export function applyBlogQueryNoindexHeader(
   routeType: 'admin' | 'auth' | 'storefront' | 'api' = 'storefront',
   searchParams?: URLSearchParams
 ): boolean {
-  let cleanPath = pathname;
+  const qIndex = pathname.indexOf('?');
+  const cleanPathname = qIndex >= 0 ? pathname.slice(0, qIndex) : pathname;
+  const embeddedQuery = qIndex >= 0 ? pathname.slice(qIndex + 1) : '';
   let params = searchParams;
-  if (pathname.includes('?')) {
-    const [base, query] = pathname.split('?', 2);
-    cleanPath = base;
-    const queryParams = new URLSearchParams(query);
+  if (qIndex >= 0) {
+    const queryParams = new URLSearchParams(embeddedQuery);
     if (!params) {
       params = queryParams;
     } else {
@@ -118,7 +118,7 @@ export function applyBlogQueryNoindexHeader(
 
   if (
     shouldSetStorefrontBlogQueryNoIndexHeader(
-      cleanPath,
+      cleanPathname,
       hostname,
       routeType,
       params

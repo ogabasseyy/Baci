@@ -21,6 +21,16 @@ describe('blog-query-noindex-header', () => {
       expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
     });
 
+    it('sets noindex header for /ogabassey/blog?search=? preserving question marks in query', () => {
+      const response = NextResponse.next();
+      const applied = applyBlogQueryNoindexHeader(
+        response,
+        '/ogabassey/blog?search=?'
+      );
+      expect(applied).toBe(true);
+      expect(response.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+    });
+
     it('sets noindex header for /blog?category=reviews', () => {
       const response = NextResponse.next();
       const applied = applyBlogQueryNoindexHeader(

@@ -71,7 +71,7 @@ export function CheckoutIdentityModal({
             <CheckoutCodeSignin
               merchantSlug={_merchant.slug}
               onSuccess={handleGuestCheckout}
-              socialReturnTo={socialAvailable ? normalizedCheckoutUrl : undefined}
+              socialReturnTo={socialAvailable ? String(normalizedCheckoutUrl) : undefined}
             />
           ) : (
             <p role="status">Sign-in is currently unavailable. You can continue as a guest.</p>

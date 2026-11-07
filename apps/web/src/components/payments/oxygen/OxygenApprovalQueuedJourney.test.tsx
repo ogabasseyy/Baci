@@ -137,8 +137,17 @@ it('resumes an unclaimed approval with its original key and no second OTP reques
       files: [new File(['signature'], 'signature.png', { type: 'image/png' })],
     },
   });
+  await screen.findByText('Signature ready');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('checkbox', { name: /I accept this payment plan/ })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('checkbox', { name: /I accept this payment plan/ })
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^Continue$/ })).toBeEnabled()
   );
   fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
   await waitFor(() =>

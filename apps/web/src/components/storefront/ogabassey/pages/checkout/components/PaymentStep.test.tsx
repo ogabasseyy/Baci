@@ -168,7 +168,7 @@ describe('PaymentStep', () => {
           <PaymentStep {...defaultProps} paymentTab="installments" />,
         );
         expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
-        expect(screen.getByText('From 25% down payment. Repay the balance monthly.')).toBeInTheDocument();
+        expect(screen.getByText(/From 25% down/)).toBeInTheDocument();
         view.rerender(
           <PaymentStep
             {...defaultProps}
@@ -874,8 +874,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('How Credit Direct works')).toBeInTheDocument();
-      expect(screen.getByText(/instant approval decision/i)).toBeInTheDocument();
+      expect(screen.getByText('24 supported banks')).toBeInTheDocument();
+      expect(screen.queryByText(/instant approval decision/i)).not.toBeInTheDocument();
     });
 
     it('shows Klump info when Klump is selected', () => {

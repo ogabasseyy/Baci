@@ -1,4 +1,4 @@
-import { FileText, Truck } from 'lucide-react';
+import { Banknote, CalendarDays, FileText, Truck } from 'lucide-react';
 import Image from 'next/image';
 import creditDirectLogo from '@/../public/partners/credit-direct.jpg';
 import oxygenLogo from '@/../public/partners/oxygen-x.png';
@@ -13,6 +13,8 @@ import type { PaymentTab } from '../types';
 import type { PaymentOptionsPanelProps } from './payment-options-panel.types';
 import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 import { PaymentOptionCard } from './PaymentOptionCard';
+import { PaymentScheduleCard } from './PaymentScheduleCard';
+import { FinanceProviderOption } from './FinanceProviderOption';
 import {
   RedvaultPaymentOption,
 } from './redvault/RedvaultPaymentOption';
@@ -52,6 +54,7 @@ export function PaymentOptionsPanel({
       ? 'full'
       : paymentTab;
   const selectPaymentTab = (nextTab: PaymentTab) => {
+    if (nextTab === visiblePaymentTab) return;
     setPaymentTab(nextTab);
     setPaymentMethod('');
   };
@@ -62,53 +65,8 @@ export function PaymentOptionsPanel({
   const ngnOnlyRailsAvailable = isNgnChargeCurrency(currency);
 
   return (
-    <>
-      <div
-        role="group"
-        aria-label="Payment schedule"
-        className="flex gap-1 rounded-xl border border-store-border bg-store-foreground/5 p-1"
-      >
-        <button
-          type="button"
-          onClick={() => selectPaymentTab('full')}
-          aria-pressed={visiblePaymentTab === 'full'}
-          className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
-            visiblePaymentTab === 'full'
-              ? 'bg-store-primary text-store-primary-text shadow-sm'
-              : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
-          }`}
-        >
-          Pay in Full
-        </button>
-        {hasInstallmentOptions && (
-          <button
-            type="button"
-            onClick={() => selectPaymentTab('installments')}
-            aria-pressed={visiblePaymentTab === 'installments'}
-            className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
-              visiblePaymentTab === 'installments'
-                ? 'bg-store-primary text-store-primary-text shadow-sm'
-                : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
-            }`}
-          >
-            Pay Small Small
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => selectPaymentTab('invoice')}
-          aria-pressed={visiblePaymentTab === 'invoice'}
-          className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-store-primary ${
-            visiblePaymentTab === 'invoice'
-              ? 'bg-store-primary text-store-primary-text shadow-sm'
-              : 'text-store-foreground/75 hover:bg-store-foreground/10 hover:text-store-foreground'
-          }`}
-        >
-          Create Proforma Invoice
-        </button>
-      </div>
-
-      {visiblePaymentTab === 'full' && (
+    <div role="group" aria-label="Payment schedule" className="grid gap-3">
+      <PaymentScheduleCard title="Pay in Full" subtitle="Pay now — we start processing your order right away" icon={Banknote} selected={visiblePaymentTab === 'full'} onSelect={() => selectPaymentTab('full')}>
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Choose how you'd like to pay:</p>
           <div className="grid grid-cols-1 gap-3">
@@ -190,33 +148,17 @@ export function PaymentOptionsPanel({
             )}
           </div>
         </div>
-      )}
-
-      {visiblePaymentTab === 'installments' && (
+      </PaymentScheduleCard>
+      {hasInstallmentOptions && <PaymentScheduleCard title="Pay Small Small" subtitle="Split your payment into monthly installments" icon={CalendarDays} selected={visiblePaymentTab === 'installments'} onSelect={() => selectPaymentTab('installments')}>
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Flexible payment options:</p>
           <div className="grid grid-cols-1 gap-3">
             {oxygenEligible && (
-              <PaymentOptionCard method="oxygen" paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod} title="Oxygen"
-                description="From 25% down payment. Repay the balance monthly."
-                icon={<Image src={oxygenLogo} alt="Oxygen X Finance Company" width={64} height={35} className="h-auto w-16 rounded bg-white p-1" />} />
+              <FinanceProviderOption provider="oxygen" selected={paymentMethod === 'oxygen'} onSelect={setPaymentMethod} logo={oxygenLogo} />
             )}
-            {featureSettings?.credit_direct_enabled === true &&
-              ngnOnlyRailsAvailable && (
-                <PaymentOptionCard
-                  method="credit_direct"
-                  paymentMethod={paymentMethod}
-                  setPaymentMethod={setPaymentMethod}
-                  title="Credit Direct"
-                  description="Pay in 3-6 monthly installments"
-                  badge={{
-                    label: 'Salary & Business owners',
-                    className: 'bg-store-primary/10 text-store-primary',
-                  }}
-                  icon={<Image src={creditDirectLogo} alt="Credit Direct lending logo" width={40} height={40} className="size-10 rounded-full" />}
-                />
-              )}
+            {featureSettings?.credit_direct_enabled === true && ngnOnlyRailsAvailable && (
+              <FinanceProviderOption provider="credit_direct" selected={paymentMethod === 'credit_direct'} onSelect={setPaymentMethod} logo={creditDirectLogo} />
+            )}
             {klumpEligible && (
               <PaymentOptionCard
                 method="klump"
@@ -237,18 +179,10 @@ export function PaymentOptionsPanel({
             )}
           </div>
 
-          <PaymentInstallmentDetails paymentMethod={paymentMethod} />
-          {!hasInstallmentOptions && (
-            <div className="text-center py-6 bg-store-background rounded-xl border border-dashed border-store-background-text/25">
-              <p className="text-sm text-store-background-text/60">
-                No installment options are currently available.
-              </p>
-            </div>
-          )}
+          {paymentMethod !== 'credit_direct' && <PaymentInstallmentDetails paymentMethod={paymentMethod} />}
         </div>
-      )}
-
-      {visiblePaymentTab === 'invoice' && (
+      </PaymentScheduleCard>}
+      <PaymentScheduleCard title="Create Proforma Invoice" subtitle="Send it to your company" icon={FileText} selected={visiblePaymentTab === 'invoice'} onSelect={() => selectPaymentTab('invoice')}>
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">
             Need a document for your company or procurement team?
@@ -264,7 +198,7 @@ export function PaymentOptionsPanel({
             />
           </div>
         </div>
-      )}
-    </>
+      </PaymentScheduleCard>
+    </div>
   );
 }

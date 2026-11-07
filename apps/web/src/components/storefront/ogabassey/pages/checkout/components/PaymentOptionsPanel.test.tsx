@@ -39,8 +39,23 @@ describe('payment schedule selection', () => {
       oxygenEligible: true,
       featureSettings: { credit_direct_enabled: true },
     });
+    expect(screen.getByText('Oxygen Finance')).toBeInTheDocument();
+    expect(screen.getByText(/From 25% down/)).toBeInTheDocument();
+    expect(screen.getByText(/From 30% down/)).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Oxygen X Finance Company' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
+  });
+  it('shows expandable payment cards and keeps crypto under Pay in Full', () => {
+    renderPanel('full', true, true, { featureSettings: { juicyway_enabled: true } });
+    expect(screen.getByText('Pay now — we start processing your order right away')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Pay in Full' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('radio', { name: /juicyway/i })).toBeVisible();
+  });
+  it('shows Credit Direct terms and its bank list only when selected', () => {
+    renderPanel('installments', true, true, { paymentMethod: 'credit_direct', featureSettings: { credit_direct_enabled: true } });
+    expect(screen.getByText('From 30% down')).toBeVisible();
+    expect(screen.getByText('3–6 months')).toBeVisible();
+    expect(screen.getByText('24 supported banks')).toBeVisible();
   });
   it('hides unavailable REDVAULT and allows selecting it when available', () => {
     const hidden = renderPanel();
@@ -172,17 +187,12 @@ describe('payment schedule selection', () => {
       'aria-pressed',
       'true'
     );
-    expect(screen.getByRole('button', { name: selected })).toHaveClass(
-      'bg-store-primary',
-      'text-store-primary-text'
-    );
+    expect(screen.getByRole('button', { name: selected }).closest('section')).toHaveClass('border-store-primary');
     expect(screen.getByRole('button', { name: inactive })).toHaveAttribute(
       'aria-pressed',
       'false'
     );
-    expect(screen.getByRole('button', { name: inactive })).not.toHaveClass(
-      'bg-store-primary'
-    );
+    expect(screen.getByRole('button', { name: inactive }).closest('section')).not.toHaveClass('border-store-primary');
   });
 
   it.each([

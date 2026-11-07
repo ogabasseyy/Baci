@@ -45,9 +45,13 @@ describe('CompareIndexFallback', () => {
   it('omits the hub chrome when the parent already committed the compare shell', () => {
     render(<CompareIndexFallback hideChrome />);
 
-    expect(
-      screen.getByRole('status', { name: 'Loading compare products' })
-    ).toBeInTheDocument();
+    const status = screen.getByRole('status', {
+      name: 'Loading compare products',
+    });
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveAttribute('aria-labelledby', 'compare-loading-status');
+    expect(status).not.toHaveAttribute('aria-label');
+    expect(status).toHaveTextContent('Loading compare products');
     expect(
       screen.queryByRole('heading', { name: 'Compare products' })
     ).not.toBeInTheDocument();

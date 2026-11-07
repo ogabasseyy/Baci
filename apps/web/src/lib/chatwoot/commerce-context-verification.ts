@@ -185,7 +185,7 @@ export async function verifyChatwootCommerceContext(input: {
     throw new ChatwootCommerceContextError('invalid_context');
   }
 
-  const ttl = Math.min(challenge.exp, contextExp) - nowSeconds;
+  const ttl = challenge.exp - nowSeconds;
   await (input.consume ?? consumeNonce)(
     input.state.merchantId,
     challenge.nonce,

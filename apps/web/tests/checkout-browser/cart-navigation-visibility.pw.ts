@@ -98,7 +98,10 @@ test('cart keeps the compact checkout action visible at tablet widths', async ({
   await expect(checkout).toHaveCSS('background-color', 'rgb(0, 0, 0)');
   await expect(checkout).toHaveCSS('color', 'rgb(255, 255, 255)');
   await page.evaluate(() => {
-    document.documentElement.style.setProperty('--store-checkout-button-bg', '#123456');
+    document.documentElement.style.setProperty(
+      '--store-checkout-button-bg',
+      '#123456'
+    );
   });
   await expect(checkout).toHaveCSS('background-color', 'rgb(18, 52, 86)');
   await checkout.click();

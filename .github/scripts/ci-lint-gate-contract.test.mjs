@@ -68,6 +68,7 @@ test('lint job does not reference secrets', () => {
   const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
   assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
   assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(workflow.env);
   noSecrets(workflow.jobs['quality-lint']);
 });
 

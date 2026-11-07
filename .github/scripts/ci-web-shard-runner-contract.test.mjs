@@ -40,6 +40,7 @@ test('web shards require private opt-in and trusted non-merge-group source', () 
 test('web shards do not reference secrets and hydrate their full history', () => {
   const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
   assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  noSecrets(workflow.env);
   noSecrets(job);
   assert.equal(job.steps[0].with['fetch-depth'], 0);
   assert.equal(job.steps[0].with.filter, '');

@@ -38,6 +38,7 @@ test('build requires private opt-in and trusted non-merge-group source', () => {
 
 test('self-hosted build references no configured secrets and never runs hosted SDK deletion', () => {
   assert.doesNotMatch(JSON.stringify(job), /\bsecrets\b/);
+  assert.doesNotMatch(JSON.stringify(workflow.env), /\bsecrets\b/);
   const reclaim = job.steps.find((step) => step.name === 'Reclaim unused hosted-runner SDK space');
   assert.match(reclaim.if, /runner\.environment\s*==\s*'github-hosted'/);
   assert.match(reclaim.run, /sudo rm -rf/);

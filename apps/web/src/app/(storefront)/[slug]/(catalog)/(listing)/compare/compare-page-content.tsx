@@ -146,7 +146,6 @@ export async function ComparePageContent({
               <Link
                 href={asRoute(`${pathPrefix}/${section.categorySlug}`)}
                 prefetch={false}
-                aria-label={`Shop ${section.categoryName}`}
                 className="inline-flex items-center gap-1 text-sm font-semibold text-store-primary underline-offset-4 transition-colors hover:underline"
               >
                 <span>Shop {section.categoryName}</span>

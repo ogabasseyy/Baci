@@ -63,7 +63,6 @@ export function CompareIndexPageContent({
               <div>
                 <div className="flex items-start justify-between gap-3">
                   <Link
-                    aria-label={link.label}
                     className="text-base font-semibold text-store-primary transition-colors group-hover:underline after:absolute after:inset-0"
                     href={asRoute(
                       resolveStorefrontPathHref(pathPrefix, link.href)

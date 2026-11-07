@@ -241,7 +241,7 @@ describe('compare index page runtime', () => {
       'utf8'
     );
     const hubChrome = source.indexOf('data-compare-hub-chrome');
-    const hubChromeClose = source.indexOf('</div>', hubChrome);
+    const hubChromeClose = source.indexOf('</header>', hubChrome);
     const runtime = source.indexOf('<CompareIndexRuntime');
 
     expect(hubChrome).toBeGreaterThan(-1);

@@ -13,6 +13,16 @@ const workflow = await readFile(
 );
 const seed = await readFile(new URL('seed.rb', directory), 'utf8');
 const trigger = await readFile(new URL('trigger.rb', directory), 'utf8');
+const lostAck = await readFile(new URL('lost-ack.mjs', directory), 'utf8');
+const messageLookup = await readFile(
+  new URL('message-lookup.mjs', directory),
+  'utf8'
+);
+const ambiguousReconciliation = await readFile(
+  new URL('ambiguous-send-reconciliation.mjs', directory),
+  'utf8'
+);
+const runner = await readFile(new URL('run.mjs', directory), 'utf8');
 
 test('pins service images and keeps the Compose network unpublished and internal', () => {
   assert.match(
@@ -55,4 +65,20 @@ test('workflow uses read-only permissions, bounded runs, pull-first and uncondit
 
 test('seed uses a disposable account password accepted by Chatwoot', () => {
   assert.match(seed, /user\.password = 'Synthetic-password-123'/);
+});
+
+test('lost-ack integration drops only after a complete upstream response and reconciles through Chatwoot API', () => {
+  assert.match(lostAck, /providerResponse\.once\('end'/);
+  assert.match(
+    lostAck,
+    /resolveProviderOutcome\(\{ status: providerStatus \}\)/
+  );
+  assert.match(lostAck, /clientResponse\.destroy\(\)/);
+  assert.match(lostAck, /outcome\.status >= 200 && outcome\.status < 300/);
+  assert.match(messageLookup, /url\.searchParams\.set\('before', before\)/);
+  assert.match(messageLookup, /AbortSignal\.timeout/);
+  assert.match(ambiguousReconciliation, /reconcileAmbiguousSend\(/);
+  assert.match(ambiguousReconciliation, /request was not retried/);
+  assert.match(lostAck, /assert\.equal\(postCount, 1/);
+  assert.match(runner, /verifyLostAckMessageReconciliation/);
 });

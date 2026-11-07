@@ -3518,7 +3518,7 @@ describe('Middleware Proxy', () => {
     );
   });
 
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
+  it('redirects slug-prefixed legacy category product URLs to the slugless route', async () => {
     const req = new NextRequest(
       'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
     );
@@ -3528,7 +3528,7 @@ describe('Middleware Proxy', () => {
 
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
+      'https://ogabassey.com/dell/dell-alienware-m16-r3-rtx-5070-ti'
     );
   });
 
@@ -3557,7 +3557,7 @@ describe('Middleware Proxy', () => {
 
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
+      'https://ogabassey.com/dell/dell-alienware-m16-r3-rtx-5070-ti'
     );
   });
 
@@ -3588,8 +3588,7 @@ describe('Middleware Proxy', () => {
 
     const res = await proxy(req);
 
-    // 302 (temporary) so a reversible rename-back can't loop a browser-cached 301.
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
       'https://ogabassey.com/summer-sale'
     );
@@ -3607,7 +3606,7 @@ describe('Middleware Proxy', () => {
 
     const res = await proxy(req);
 
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
       'https://ogabassey.com/summer-sale'
     );
@@ -3864,7 +3863,7 @@ describe('Middleware Proxy', () => {
     expect(rewrite).not.toContain('merchant_slug=support');
   });
 
-  it('302-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
+  it('301-redirects a RESERVED-name retired alias on the ROOT-DOMAIN path (usebaci.com/support/...)', async () => {
     // The also-supported root-slug URL for a grandfathered reserved alias must forward
     // too — the main root-path block skips reserved segments, so this is handled by the
     // dedicated reserved-alias check before it.
@@ -3874,7 +3873,7 @@ describe('Middleware Proxy', () => {
 
     const res = await proxy(req);
 
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(301);
     expect(res.headers.get('location')).toContain('zorvexa');
   });
 
@@ -4383,7 +4382,7 @@ describe('Middleware Proxy', () => {
     expect(res.headers.get('location')).toBe('https://ogabassey.com/repair');
   });
 
-  it('redirects slug-prefixed legacy category product URLs to /products/{slug}', async () => {
+  it('redirects slug-prefixed legacy category product URLs to the slugless route', async () => {
     const req = new NextRequest(
       'https://ogabassey.com/ogabassey/dell/dell-alienware-m16-r3-rtx-5070-ti'
     );
@@ -4393,7 +4392,7 @@ describe('Middleware Proxy', () => {
 
     expect(res.status).toBe(301);
     expect(res.headers.get('location')).toBe(
-      'https://ogabassey.com/products/dell-alienware-m16-r3-rtx-5070-ti'
+      'https://ogabassey.com/dell/dell-alienware-m16-r3-rtx-5070-ti'
     );
   });
 

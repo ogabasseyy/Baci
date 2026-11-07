@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "fde4934f1dcc2dccf2be88dd85efbaf9f0e9e310",
+  "originMainSha": "e5a19163609e73341fac9d911098afc9d0461330",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "ea81545f50f6e43afb223e496edc021031cae20a5c692fae5eeffc240eaa77d3",
-  "routingProxyInputSha256": "28e6ac2ae8ef375be042a8f9baa77422c6c27bde11895dbcf7cb035084c44550",
+  "routeTreeSha256": "2420f72cf91ac494025356138be1e0bca4e444298ee9fb32cfc0965840580857",
+  "routingProxyInputSha256": "319f931e9b63ea0c728a061612ac6b03293edfcef7e93b9c62785f514e86280c",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -5952,6 +5952,18 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(customer)/account/checkout-return/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/account/checkout-return",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(customer)/account/checkout-return/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(customer)/account/login/page.tsx",
       "methods": [
         "GET",
@@ -7527,6 +7539,22 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(customer)/account/checkout-return/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/account/checkout-return",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(customer)/account/checkout-return/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(customer)/account/login/page.tsx:slug-prefixed",
       "methods": [
         "GET",
@@ -9052,5 +9080,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "b2050ff90a744bcedda161735e6ea74dcaa32596670551a6501208735cb2fa75"
+  "inventorySha256": "995bc5a02217352146c7c8700fdc89ba96a82f74718d04b6f336037fa6d36ade"
 }

@@ -2,6 +2,10 @@
 
 **Baci** enables merchants to create complete e-commerce stores in minutes using Google Gemini for logo analysis, product descriptions, and store auto-configuration.
 
+## Authorized use of repository material
+
+Baci repository material is for work authorized by Baci's owner or maintainers. Agents may inspect, modify, test, and reference it to perform those tasks, including explicitly authorized or configured code review. Do not reuse, repurpose, publish, or distribute repository material for another project or outside an authorized task. Do not disclose secrets or private data. Third-party components remain subject to their own licenses, and applicable platform terms and legal rights continue to apply.
+
 ## Tech Stack
 
 | Category | Technology |

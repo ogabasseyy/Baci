@@ -47,7 +47,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: 176f32352c0cb7adc3da3825da0bc1816c0a0895aec291080bae9ce92bdbe5b8
+  PINNED_CHECKER_SHA256: f180ad08a3c51a04b24f569f00de25eae7b80b36fce3ba3ee65444e01a0c11dd
 
 jobs:
   gate-contract:
@@ -74,7 +74,7 @@ jobs:
             rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check
             base_ref=$(jq -r .pull_request.base.ref "$GITHUB_EVENT_PATH")
             git fetch --no-tags --depth 1 origin "$base_ref"
-            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check
+            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py | tar -x -C /tmp/cg-check
             CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py
           else
             CHECKER=.github/scripts/capability_gate_contract_check.py

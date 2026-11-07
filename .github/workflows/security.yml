@@ -435,7 +435,7 @@ jobs:
         with:
           visibility: ${{ toJSON(github.event.repository.private) }}
           sarif-exists: ${{ steps.verify-sarif.outputs.sarif_exists }}
-          retention-days: ${{ (job.status == 'failure' || steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure') && 7 || 1 }}
+          retention-days: ${{ (job.status == 'failure' || steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure' || steps.pg_diagnostic.outcome == 'failure' || steps.pg_diagnostic_upload.outcome == 'failure') && 7 || 1 }}
 
       - name: Retain diagnostics after a security job failure
         if: always() && (github.event_name != 'pull_request' || steps.semgrep_pr.outputs.scanned != 'false') && (job.status == 'failure' || steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')

@@ -4,6 +4,7 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatProductConditionDisplay } from '@/types/product';
 import { SavingsGoalArtwork } from './SavingsGoalArtwork';
 
+/** Overlay only the recorded device condition; legacy goals do not receive an invented badge. */
 export function SavingsGoalConditionArtwork({
   colors,
   goal,

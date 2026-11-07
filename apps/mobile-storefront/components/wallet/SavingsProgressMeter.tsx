@@ -65,7 +65,6 @@ export function SavingsProgressMeter({
       {MILESTONES.map((mark) => (
         <View
           key={mark}
-          pointerEvents="none"
           style={[
             styles.tick,
             {
@@ -83,5 +82,12 @@ export function SavingsProgressMeter({
 const styles = StyleSheet.create({
   track: { borderRadius: RADIUS.full, overflow: 'hidden' },
   fill: { borderRadius: RADIUS.full, height: '100%' },
-  tick: { bottom: 2, position: 'absolute', top: 2, width: 2, opacity: 0.55 },
+  tick: {
+    bottom: 2,
+    position: 'absolute',
+    top: 2,
+    width: 2,
+    opacity: 0.55,
+    pointerEvents: 'none',
+  },
 });

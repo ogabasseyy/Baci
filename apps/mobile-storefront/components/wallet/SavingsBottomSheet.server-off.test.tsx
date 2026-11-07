@@ -4,11 +4,36 @@ import {
   screen,
   within,
 } from '@testing-library/react-native';
-import { Modal, StyleSheet, Text } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text } from 'react-native';
 import Colors, { palette } from '@/constants/Colors';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 
 const colors = { ...Colors.dark, primary: palette.red[600] };
+const { mockBottomSheetClose } = jest.requireActual('@gorhom/bottom-sheet') as {
+  mockBottomSheetClose: jest.Mock;
+};
+
+beforeEach(() => mockBottomSheetClose.mockClear());
+
+it('waits for the slide-down animation before unmounting on an explicit dismissal', () => {
+  const onClose = jest.fn();
+  render(
+    <SavingsBottomSheet colors={colors} onClose={onClose} visible>
+      {(dismiss) => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close test sheet"
+          onPress={dismiss}
+        />
+      )}
+    </SavingsBottomSheet>
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Close test sheet' }));
+  expect(mockBottomSheetClose).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent(screen.getByTestId('gorhom-bottom-sheet'), 'close');
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
 
 it('keeps its heading inside the draggable sheet with a brand outline', () => {
   const onClose = jest.fn();
@@ -44,6 +69,9 @@ it('handles Android back and mounts no sheet when hidden', () => {
     </SavingsBottomSheet>
   );
   fireEvent(screen.UNSAFE_getByType(Modal), 'requestClose');
+  expect(mockBottomSheetClose).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent(screen.getByTestId('gorhom-bottom-sheet'), 'close');
   expect(onClose).toHaveBeenCalledTimes(1);
   view.rerender(
     <SavingsBottomSheet colors={colors} onClose={onClose} visible={false}>

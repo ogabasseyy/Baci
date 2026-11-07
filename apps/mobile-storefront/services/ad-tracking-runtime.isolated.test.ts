@@ -8,7 +8,19 @@ import {
 } from '@jest/globals';
 
 let mockPlatformOS: 'ios' | 'android' | 'web' = 'android';
-let mockTelemetryExcluded = true;
+const originalEnvironment = { ...process.env };
+const mockGetTrackingPermissionStatus = jest.fn(async () => ({
+  status: 'granted' as const,
+}));
+const mockRequestTrackingPermissionStatus = jest.fn(async () => ({
+  status: 'granted' as const,
+}));
+const mockLoadAdTrackingNativeModules = jest.fn(async () => ({
+  AEMReporterIOS: null,
+  AppEventsLogger: null,
+  FBSettings: null,
+  TikTokBusiness: null,
+}));
 
 jest.mock('react-native', () => ({
   Platform: {
@@ -38,23 +50,12 @@ jest.mock('@/lib/logger', () => ({
 }));
 
 jest.mock('@/lib/tracking-transparency', () => ({
-  getTrackingPermissionStatus: jest.fn(async () => ({
-    status: 'undetermined',
-  })),
-  requestTrackingPermissionStatus: jest.fn(async () => ({ status: 'granted' })),
-}));
-
-jest.mock('@/lib/storefront-telemetry-excluded', () => ({
-  isStorefrontTelemetryExcluded: () => mockTelemetryExcluded,
+  getTrackingPermissionStatus: mockGetTrackingPermissionStatus,
+  requestTrackingPermissionStatus: mockRequestTrackingPermissionStatus,
 }));
 
 jest.mock('./ad-tracking-native-modules', () => ({
-  loadAdTrackingNativeModules: jest.fn(async () => ({
-    AEMReporterIOS: null,
-    AppEventsLogger: null,
-    FBSettings: null,
-    TikTokBusiness: null,
-  })),
+  loadAdTrackingNativeModules: mockLoadAdTrackingNativeModules,
 }));
 
 describe('isolated storefront ad-tracking runtime', () => {
@@ -62,14 +63,18 @@ describe('isolated storefront ad-tracking runtime', () => {
     jest.resetModules();
     jest.clearAllMocks();
     mockPlatformOS = 'android';
-    mockTelemetryExcluded = true;
+    delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
+    delete process.env.EXPO_PUBLIC_LOCAL_STOREFRONT;
+    delete process.env.EXPO_PUBLIC_API_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
   });
 
   afterEach(() => {
-    mockTelemetryExcluded = false;
+    process.env = { ...originalEnvironment };
   });
 
   it('keeps tracking disabled and initialization settled on isolated Android', async () => {
+    process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
     const runtime = await import('./ad-tracking-runtime');
     const state = await import('./ad-tracking-state');
 
@@ -80,14 +85,23 @@ describe('isolated storefront ad-tracking runtime', () => {
     await expect(runtime.requestTrackingPermission()).resolves.toBe('denied');
     expect(state.getIsTrackingAllowed()).toBe(false);
     expect(state.getIsInitialized()).toBe(true);
+    expect(mockGetTrackingPermissionStatus).not.toHaveBeenCalled();
+    expect(mockRequestTrackingPermissionStatus).not.toHaveBeenCalled();
+    expect(mockLoadAdTrackingNativeModules).not.toHaveBeenCalled();
   });
 
   it.each([
     'hosted',
     'local',
-  ])('keeps tracking disabled in isolated iOS %s mode', async () => {
+  ])('keeps tracking disabled in isolated iOS %s mode', async (mode) => {
     mockPlatformOS = 'ios';
-    mockTelemetryExcluded = true;
+    if (mode === 'hosted') {
+      process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
+    } else {
+      process.env.EXPO_PUBLIC_LOCAL_STOREFRONT = '1';
+      process.env.EXPO_PUBLIC_API_URL = 'http://192.168.1.2:3100';
+      process.env.EXPO_PUBLIC_SUPABASE_URL = 'http://192.168.1.2:54321';
+    }
     const runtime = await import('./ad-tracking-runtime');
     const state = await import('./ad-tracking-state');
 
@@ -98,5 +112,8 @@ describe('isolated storefront ad-tracking runtime', () => {
     await expect(runtime.requestTrackingPermission()).resolves.toBe('denied');
     expect(state.getIsTrackingAllowed()).toBe(false);
     expect(state.getIsInitialized()).toBe(true);
+    expect(mockGetTrackingPermissionStatus).not.toHaveBeenCalled();
+    expect(mockRequestTrackingPermissionStatus).not.toHaveBeenCalled();
+    expect(mockLoadAdTrackingNativeModules).not.toHaveBeenCalled();
   });
 });

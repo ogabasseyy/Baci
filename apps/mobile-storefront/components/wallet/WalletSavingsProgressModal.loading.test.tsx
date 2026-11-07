@@ -1,5 +1,5 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { render, screen } from '@testing-library/react-native';
-import { ScrollView } from 'react-native';
 import Colors from '@/constants/Colors';
 import { SavingsBottomSheet } from './SavingsBottomSheet';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
@@ -58,7 +58,9 @@ it('keeps one bounded, scrollable sheet as its asynchronous body grows', () => {
   expect(
     screen.getByTestId('gorhom-bottom-sheet').props.enableDynamicSizing
   ).toBe(false);
-  expect(screen.UNSAFE_getByType(ScrollView).props.style).toEqual({ flex: 1 });
+  expect(screen.UNSAFE_getByType(BottomSheetScrollView).props.style).toEqual({
+    flex: 1,
+  });
   expect(screen.getByText('Checking savings wallet…')).toBeOnTheScreen();
 
   view.rerender(

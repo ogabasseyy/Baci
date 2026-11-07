@@ -26,3 +26,26 @@ it('handles a goal with no variant label', () => {
     storage: null,
   });
 });
+
+it('preserves colour-like product details and selects the exact colour', () => {
+  expect(
+    getSavingsVariantPresentation('Red Label · Blue · Storage: 256GB')
+  ).toEqual({
+    colour: { name: 'Blue', hex: resolveColorSwatchValue('Blue') },
+    details: 'Red Label',
+    storage: '256GB',
+  });
+});
+
+it('allows an explicitly labelled colour and preserves other details', () => {
+  expect(
+    getSavingsVariantPresentation('Colour: Midnight Black · Limited Edition')
+  ).toEqual({
+    colour: {
+      name: 'Midnight Black',
+      hex: resolveColorSwatchValue('Midnight Black'),
+    },
+    details: 'Limited Edition',
+    storage: null,
+  });
+});

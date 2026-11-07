@@ -97,7 +97,7 @@ describe('WalletSavingsContributionFlow', () => {
         )
       ).toBeOnTheScreen();
       const payment = screen.getByRole('button', {
-        name: 'Continue to payment',
+        name: 'Wallet funding unavailable',
       });
       expect(payment).toHaveAccessibilityState({ disabled: true });
       fireEvent.press(payment);

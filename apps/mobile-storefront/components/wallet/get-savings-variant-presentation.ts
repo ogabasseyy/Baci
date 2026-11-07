@@ -1,5 +1,6 @@
 import { resolveColorSwatchValue } from '@/lib/cart-display';
 
+/** Preserve device details while extracting only labelled or exact known colours. */
 export function getSavingsVariantPresentation(
   label: string | null | undefined
 ) {
@@ -19,8 +20,9 @@ export function getSavingsVariantPresentation(
       storage = capacity[1].replace(/\s+/g, '').toUpperCase();
       continue;
     }
+    const explicitColour = /^colou?r:\s*/i.test(part);
     const name = part.replace(/^colou?r:\s*/i, '');
-    const hex = resolveColorSwatchValue(name);
+    const hex = resolveColorSwatchValue(name, { exact: !explicitColour });
     if (!colour && hex) {
       colour = { name, hex };
     } else {

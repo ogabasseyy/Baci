@@ -11,6 +11,7 @@ import { SavingsSheetContext } from './SavingsSheetContext';
 
 const SNAP_POINTS = ['72%', '92%'];
 
+/** Let Gorhom own backdrop dismissal so closing retains its exit animation. */
 function SavingsBackdrop(props: BottomSheetBackdropProps) {
   return (
     <BottomSheetBackdrop
@@ -23,19 +24,21 @@ function SavingsBackdrop(props: BottomSheetBackdropProps) {
   );
 }
 
+/** Own sheet gestures and defer parent dismissal until the exit animation completes. */
 export function SavingsBottomSheet({
   children,
   colors,
   onClose,
   visible,
 }: {
-  children: ReactNode;
+  children: ReactNode | ((dismiss: () => void) => ReactNode);
   colors: (typeof Colors)['light'];
   onClose: () => void;
   visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const sheet = useRef<BottomSheet>(null);
+  const dismiss = () => sheet.current?.close();
   if (!visible) return null;
   return (
     <Modal
@@ -43,7 +46,7 @@ export function SavingsBottomSheet({
       visible
       animationType="none"
       presentationStyle="overFullScreen"
-      onRequestClose={onClose}
+      onRequestClose={dismiss}
     >
       <GestureHandlerRootView style={styles.root}>
         <SavingsSheetContext.Provider value={true}>
@@ -79,7 +82,7 @@ export function SavingsBottomSheet({
                 { paddingBottom: Math.max(insets.bottom, 16) },
               ]}
             >
-              {children}
+              {typeof children === 'function' ? children(dismiss) : children}
             </View>
           </BottomSheet>
         </SavingsSheetContext.Provider>

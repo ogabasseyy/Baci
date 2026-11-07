@@ -1,46 +1,36 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { CheckoutAuthModal } from './checkout-auth-modal';
 
-const mocks = vi.hoisted(() => ({
-  signInWithPassword: vi.fn(),
+vi.mock('@/hooks/use-merchant-client', () => ({
+  useMerchantSafe: () => ({ merchant: { slug: 'ogabassey' } }),
 }));
-
-vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({
-    auth: {
-      signInWithPassword: mocks.signInWithPassword,
-    },
-  }),
+vi.mock('@/components/storefront/checkout-code-signin', () => ({
+  CheckoutCodeSignin: ({
+    merchantSlug,
+    onSuccess,
+  }: {
+    merchantSlug: string;
+    onSuccess: () => void;
+  }) => (
+    <button type="button" onClick={onSuccess}>
+      Email code for {merchantSlug}
+    </button>
+  ),
 }));
 
 describe('CheckoutAuthModal', () => {
-  beforeEach(() => {
-    mocks.signInWithPassword.mockReset();
-  });
-
-  it('keeps a live region mounted and marks the action busy while signing in', async () => {
-    mocks.signInWithPassword.mockReturnValue(new Promise(() => undefined));
-
+  it('uses email-code sign-in and closes after success', () => {
+    const success = vi.fn();
+    const change = vi.fn();
     render(
-      <CheckoutAuthModal isOpen onOpenChange={vi.fn()} onSuccess={vi.fn()} />
+      <CheckoutAuthModal isOpen onOpenChange={change} onSuccess={success} />
     );
-
-    const submitButton = screen.getByRole('button', { name: 'Sign In' });
-    expect(submitButton).toHaveAttribute('aria-busy', 'false');
-    expect(screen.getByRole('status')).toHaveTextContent('');
-
-    fireEvent.change(screen.getByLabelText('Email'), {
-      target: { value: 'customer@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText('Password'), {
-      target: { value: 'secure-password' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    await waitFor(() => {
-      expect(submitButton).toHaveAttribute('aria-busy', 'true');
-      expect(screen.getByRole('status')).toHaveTextContent('Signing in.');
-    });
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Email code for ogabassey' })
+    );
+    expect(success).toHaveBeenCalledOnce();
+    expect(change).toHaveBeenCalledWith(false);
   });
 });

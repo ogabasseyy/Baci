@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { OtpVerificationField } from '@/components/ui/otp-verification';
 import {
   CustomerAuthProvider,
   useCustomerAuth,
@@ -30,6 +31,7 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
+  const [sentAt, setSentAt] = useState<number>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function submit(event: React.FormEvent) {
@@ -42,7 +44,10 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
       if (!result.success)
         setError(result.error || 'Unable to sign in. Please try again.');
       else if (sent) onSuccess();
-      else setSent(true);
+      else {
+        setSent(true);
+        setSentAt(Date.now());
+      }
     } catch {
       setError('Unable to sign in. Please try again.');
     } finally {
@@ -65,22 +70,29 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
           {error}
         </p>
       )}
-      <label htmlFor={inputId} className="grid gap-2 text-sm font-medium">
-        {sent ? 'Verification code' : 'Email address'}
-        {sent ? (
-          <input
-            id={inputId}
-            aria-label="Verification code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            maxLength={6}
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            className="w-full rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
-          />
-        ) : (
+      {sent ? (
+        <OtpVerificationField
+          id={inputId}
+          label="Verification code"
+          value={code}
+          onChange={setCode}
+          pending={busy}
+          hidePendingMessage
+          sentAt={sentAt}
+          expiryAdvisory
+          resendCooldownSeconds={60}
+          onResend={async () => {
+            const result = await sendOtp(email.trim());
+            if (!result.success) return false;
+            setCode('');
+            setError('');
+            setSentAt(Date.now());
+            return true;
+          }}
+        />
+      ) : (
+        <label htmlFor={inputId} className="grid gap-2 text-sm font-medium">
+          Email address
           <input
             id={inputId}
             aria-label="Email address"
@@ -91,8 +103,8 @@ function CodeForm({ onSuccess }: Pick<Props, 'onSuccess'>) {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
           />
-        )}
-      </label>
+        </label>
+      )}
       <button
         type="submit"
         disabled={busy || (sent && code.length !== 6)}

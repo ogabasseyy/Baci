@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { selfieLinkExpired } from './selfie-link-expired';
+import { selfieLinkExpiration, selfieLinkExpired } from './selfie-link-expired';
 
 afterEach(() => vi.useRealTimers());
 
@@ -27,4 +27,9 @@ it.each([
 
 it('does not accept a nonnumeric expiry', () => {
   expect(selfieLinkExpired(link({ exp: '1' }))).toBe(false);
+});
+
+it.each([0, 1.25, -1])('accepts finite NumericDate %s', (exp) => {
+  const url = `https://selfie.example/?securityToken=a.${btoa(JSON.stringify({ exp }))}.c`;
+  expect(selfieLinkExpiration(url)).toBe(exp * 1000);
 });

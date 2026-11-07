@@ -2,6 +2,10 @@
 
 This file gives Gemini the repository constraints it must follow when reviewing pull requests in Baci.
 
+## Authorized use of repository material
+
+Use Baci repository material only for work authorized by Baci's owner or maintainers, including explicitly authorized or configured code review. Do not reuse, repurpose, publish, or distribute it for another project or outside an authorized task. Protect secrets and private data. Third-party licenses, applicable platform terms, and legal rights continue to apply.
+
 ## Review focus
 
 - Prioritize correctness, regressions, security, data safety, and missing tests.

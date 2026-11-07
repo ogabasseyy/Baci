@@ -131,7 +131,10 @@ jobs:
     # Biome gate. `turbo lint --affected` keeps the run scoped to the changed
     # packages.
     if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
+    # Opt in only after the repository is private and its dedicated runner is
+    # registered. Fork PRs stay on hosted runners; no hosted fallback is
+    # silently substituted when the private runner is offline.
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,8 +144,8 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
         env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
+          TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo lint --affected
@@ -329,6 +332,16 @@ jobs:
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
+      - name: Test reviewed commerce cart checkout product names
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
+      - name: Test shared cart validated-price order binding
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_remaining_review.py
+      - name: Test shared cart reviewed assurance binding
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_agentic_checkout_economics.py
+      - name: Test agentic shared-cart provider dispatch fence
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_cart_provider_dispatch_fence.py
+      - name: Test agentic DVA provider-success evidence boundary
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_agentic_dva_provider_success_evidence.py
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
       - name: Test loyalty checkout replay fixture against PostgreSQL

@@ -22,7 +22,7 @@ exports[`BlogPostPageFallback > renders skeleton structure 1`] = `
       class="max-w-6xl mx-auto bg-card text-card-foreground rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-border overflow-hidden"
     >
       <div
-        class="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted"
+        class="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted ogabassey-blog-post-hero-frame"
       >
         <div
           class="absolute inset-0 animate-pulse bg-muted/30"

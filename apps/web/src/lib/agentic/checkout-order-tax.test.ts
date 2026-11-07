@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  calculateAgenticLineTax,
   computeAgenticOrderTax,
   isTaxComputeUuidError,
   TaxComputeError,
@@ -73,6 +74,87 @@ function buildSupabaseMock(handlers: {
 }
 
 describe('computeAgenticOrderTax', () => {
+  it('shares cent rounding and VAT category behavior with checkout quotes', () => {
+    expect(
+      calculateAgenticLineTax({
+        price: 1.05,
+        quantity: 3,
+        vatCategoryCode: 'S',
+        vatRate: 7.5,
+        vatRegistered: true,
+      })
+    ).toBe(0.24);
+    expect(
+      calculateAgenticLineTax({
+        price: 1.05,
+        quantity: 3,
+        vatCategoryCode: 'Z',
+        vatRate: 7.5,
+        vatRegistered: true,
+      })
+    ).toBe(0);
+    expect(
+      calculateAgenticLineTax({
+        price: 1.05,
+        quantity: 3,
+        vatCategoryCode: 'S',
+        vatRate: 7.5,
+        vatRegistered: false,
+      })
+    ).toBe(0);
+  });
+
+  it('matches SQL numeric per-line rounding for large totals and quantity', () => {
+    // Product/variant prices are NUMERIC(10,2), and session creation bounds
+    // quantity at 20. Keep the production bound in this SQL-parity fixture.
+    expect(
+      calculateAgenticLineTax({
+        price: 99_999_999.99,
+        quantity: 20,
+        vatCategoryCode: 'S',
+        vatRate: 7.5,
+        vatRegistered: true,
+      })
+    ).toBe(149_999_999.99);
+  });
+
+  it('matches PostgreSQL half-up rounding at sub-cent VAT ties', () => {
+    expect(
+      calculateAgenticLineTax({
+        price: 0.1,
+        quantity: 1,
+        vatCategoryCode: 'S',
+        vatRate: 5,
+        vatRegistered: true,
+      })
+    ).toBe(0.01);
+    expect(
+      calculateAgenticLineTax({
+        price: 0.14,
+        quantity: 1,
+        vatCategoryCode: 'S',
+        vatRate: 3.5,
+        vatRegistered: true,
+      })
+    ).toBe(0);
+  });
+
+  it('rounds each SQL order line before summing tax', () => {
+    const taxForTwoLines = [0.1, 0.1].reduce(
+      (sum, price) =>
+        sum +
+        calculateAgenticLineTax({
+          price,
+          quantity: 1,
+          vatCategoryCode: 'S',
+          vatRate: 5,
+          vatRegistered: true,
+        }),
+      0
+    );
+    expect(taxForTwoLines).toBe(0.02);
+  });
+
   it('returns 0 when the merchant is not VAT-registered', async () => {
     const supabase = buildSupabaseMock({
       merchant: { vat_registration_status: 'not_registered' },

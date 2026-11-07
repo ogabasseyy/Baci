@@ -1,5 +1,6 @@
 import { preconnect, prefetchDNS, preload } from 'react-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BLOG_POST_HERO_IMAGE_SIZES } from '@/components/storefront/ogabassey/config/blog-media';
 import { preloadOgabasseyBlogPostHeroResources } from './blog-post-hero-resource-hints';
 
 vi.mock('server-only', () => ({}));
@@ -67,8 +68,7 @@ describe('preloadOgabasseyBlogPostHeroResources', () => {
       expect.objectContaining({
         as: 'image',
         fetchPriority: 'high',
-        imageSizes:
-          '(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1200px',
+        imageSizes: BLOG_POST_HERO_IMAGE_SIZES,
         imageSrcSet: expect.stringContaining(
           'https://cdn.ogabassey.com/image/width=1200,quality=50,format=avif/core-assets/blog/post/hero.jpg 1200w'
         ),

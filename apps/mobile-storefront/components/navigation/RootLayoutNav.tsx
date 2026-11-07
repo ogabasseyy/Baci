@@ -17,6 +17,7 @@ import { DrawerMenu } from '@/components/navigation/DrawerMenu';
 import { NavigationBarStyleProvider } from '@/components/navigation/NavigationBarStyleProvider';
 import { renderRootStackScreens } from '@/components/navigation/RootStackScreens';
 import { RouteResumeController } from '@/components/navigation/RouteResumeController';
+import { getRootStackScreenOptions } from '@/components/navigation/root-stack-screen-options';
 import AppKeyboardProvider from '@/components/ui/AppKeyboardProvider';
 import { StartupMotionProvider } from '@/components/ui/StartupMotionContext';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
@@ -140,27 +141,10 @@ export function RootLayoutNav({
                          * without triggering the inset reservation.
                          */}
                         <Stack
-                          screenOptions={{
-                            // Suspend older covered routes without discarding
-                            // state. Native-stack keeps transition-adjacent
-                            // Fabric screens live until it is safe to freeze.
-                            freezeOnBlur: true,
-                            headerStyle: {
-                              backgroundColor: colors.background,
-                            },
-                            headerTintColor: colors.text,
-                            headerTitleStyle: {
-                              fontWeight: '600',
-                            },
-                            headerShadowVisible: false,
-                            contentStyle: {
-                              backgroundColor: colors.background,
-                            },
-                            animation: 'slide_from_right',
-                            gestureEnabled: true,
-                            gestureDirection: 'horizontal',
-                            headerBackTitle: '',
-                          }}
+                          screenOptions={getRootStackScreenOptions({
+                            background: colors.background,
+                            text: colors.text,
+                          })}
                         >
                           {renderRootStackScreens({
                             mutedContentBackgroundColor: colors.muted,

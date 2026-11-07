@@ -83,6 +83,16 @@ it('drops the pending key when the scope changes so no foreign operation is quer
   expect(idempotencyKeyRef.current).toBeNull();
   expect(operationRailRef.current).toBeNull();
 });
+it('hands the PiggyVest verdict and Add money callback to the savings actions', () => {
+  mockReady = true;
+  const onAddMoney = jest.fn();
+  renderHook(() =>
+    useWalletSavingsController({ ...input, onAddMoney, primaryReady: true })
+  );
+  expect(mockCreateActions).toHaveBeenCalledWith(
+    expect.objectContaining({ onAddMoney, primaryReady: true })
+  );
+});
 
 describe('goalAwaitingSettlement', () => {
   const funded = { id: 'g', status: 'completed', current_amount: 5000 };
@@ -134,6 +144,21 @@ describe('goalAwaitingSettlement', () => {
     renderHook(() => useWalletSavingsController({ ...input, goal } as never));
     expect(mockCreateActions).toHaveBeenLastCalledWith(
       expect.objectContaining({ goalSettlementChecking: false })
+    );
+  });
+
+  it('keeps a funded completed goal blocked after a transient gate error', () => {
+    const goal = { id: 'g', status: 'completed', current_amount: 5000 };
+    mockGate.mockReturnValue('error');
+    const { result } = renderHook(() =>
+      useWalletSavingsController({ ...input, goal } as never)
+    );
+    expect(result.current.goalAwaitingSettlement).toBe(false);
+    expect(mockCreateActions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        goalAwaitingSettlement: false,
+        goalSettlementChecking: true,
+      })
     );
   });
 

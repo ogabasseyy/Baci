@@ -1,11 +1,16 @@
-import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import {
   isHostedStagingTestPaymentsEnabled,
   isHostedStagingWalletTopUpBlocked,
 } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { getDefaultContributionAmount } from './get-default-contribution-amount';
+import { getQuickAmountOptions } from './get-quick-amount-options';
+import { SavingsQuickAmounts } from './SavingsQuickAmounts';
+import { SavingsSheetTextInput } from './SavingsSheetTextInput';
+import { useWalletPrimaryReady } from './WalletPrimaryContext';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
@@ -32,8 +37,30 @@ export function WalletSavingsContributionFlow({
   remainingAmount,
   walletBalance,
 }: WalletSavingsContributionFlowProps) {
+  const primaryReady = useWalletPrimaryReady();
   const [isFundFocused, setIsFundFocused] = useState(false);
+  const [hasSeededAmount, setHasSeededAmount] = useState(false);
+  const defaultAmount = getDefaultContributionAmount({
+    available: walletBalance,
+    remaining: remainingAmount,
+  });
+  // Start from a sensible amount (never more than the wallet holds or the
+  // goal still needs). Only an empty field is filled, and only once, so
+  // nothing the customer typed or a returning top-up amount is overwritten.
+  useEffect(() => {
+    if (hasSeededAmount) return;
+    if (addAmount.trim().length > 0) {
+      setHasSeededAmount(true);
+    } else if (defaultAmount > 0) {
+      setHasSeededAmount(true);
+      onAddAmountChange(String(defaultAmount));
+    }
+  }, [addAmount, defaultAmount, hasSeededAmount, onAddAmountChange]);
   const amount = Number(addAmount);
+  const quickAmounts = getQuickAmountOptions({
+    available: walletBalance,
+    remaining: remainingAmount,
+  });
   const hasAmount = addAmount.trim().length > 0;
   const invalidAmount =
     hasAmount &&
@@ -42,18 +69,24 @@ export function WalletSavingsContributionFlow({
   const needsFunding =
     walletBalance <= 0 || (validAmount && amount > walletBalance);
   const isBusy = isAdding || isFundPending;
-  const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
-  const topUpBlocked = !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
+  // PiggyVest main wallet: money arrives by bank transfer into the wallet,
+  // never through a card payment, so the staging card-top-up switches
+  // do not apply.
+  const usesPlanFunding = !primaryReady && isHostedStagingTestPaymentsEnabled();
+  const topUpBlocked =
+    !primaryReady && !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
   const guidance = invalidAmount
     ? amount > remainingAmount
       ? `This plan only needs ${formatNgnCurrency(remainingAmount)} more. Enter a smaller amount.`
       : 'Enter an amount greater than zero.'
     : needsFunding
-      ? usesPlanFunding
-        ? 'Fund your wallet to add this amount to savings. This is a staging preview, so do not send real money.'
-        : topUpBlocked
-          ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
-          : 'Fund your wallet to add this amount to savings.'
+      ? primaryReady
+        ? 'Add money to your wallet to save this amount.'
+        : usesPlanFunding
+          ? 'Add money to your wallet to save this amount. This is a staging preview, so do not send real money.'
+          : topUpBlocked
+            ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
+            : 'Add money to your wallet to save this amount.'
       : validAmount
         ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
         : 'Enter an amount to move from your wallet into this plan.';
@@ -67,25 +100,40 @@ export function WalletSavingsContributionFlow({
         style={[
           styles.amountInput,
           {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
+            backgroundColor: validAmount
+              ? colors.primaryLowOpacity
+              : colors.card,
+            borderColor: validAmount ? colors.primary : colors.border,
           },
         ]}
       >
         <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
-        <TextInput
+        <SavingsSheetTextInput
           accessibilityLabel="Savings top-up amount"
           value={addAmount
             .replace(/\D/g, '')
             .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
           editable={!isBusy}
-          onChangeText={(text) => onAddAmountChange(text.replace(/\D/g, ''))}
+          onChangeText={(text) => {
+            setHasSeededAmount(true);
+            onAddAmountChange(text.replace(/\D/g, ''));
+          }}
           keyboardType="number-pad"
           placeholder="0"
           placeholderTextColor={colors.placeholder}
           style={[styles.amountInputField, { color: colors.text }]}
         />
       </View>
+      <SavingsQuickAmounts
+        colors={colors}
+        disabled={isBusy}
+        onSelect={(value) => {
+          setHasSeededAmount(true);
+          onAddAmountChange(String(value));
+        }}
+        options={quickAmounts}
+        selectedAmount={amount}
+      />
       <Text style={[styles.walletHint, { color: colors.textSecondary }]}>
         Available in wallet: {formatNgnCurrency(walletBalance)}
       </Text>
@@ -103,9 +151,13 @@ export function WalletSavingsContributionFlow({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              usesPlanFunding
-                ? 'Fund wallet for savings'
-                : 'Continue to payment'
+              topUpBlocked
+                ? 'Wallet funding unavailable'
+                : primaryReady
+                  ? 'Add money to wallet'
+                  : usesPlanFunding
+                    ? 'Add money for savings'
+                    : 'Continue to payment'
             }
             accessibilityState={{
               disabled: !validAmount || isBusy || topUpBlocked,
@@ -118,7 +170,7 @@ export function WalletSavingsContributionFlow({
             style={[
               styles.primaryButton,
               {
-                backgroundColor: colors.primary,
+                backgroundColor: topUpBlocked ? colors.muted : colors.primary,
               },
               isFundFocused && {
                 borderColor: colors.primaryForeground,
@@ -131,21 +183,28 @@ export function WalletSavingsContributionFlow({
               style={[
                 styles.primaryButtonText,
                 {
-                  color: colors.primaryForeground,
+                  color: topUpBlocked
+                    ? colors.textSecondary
+                    : colors.primaryForeground,
                 },
               ]}
             >
-              {isFundPending
-                ? usesPlanFunding
-                  ? 'Opening wallet funding...'
-                  : 'Opening payment...'
-                : usesPlanFunding
-                  ? 'Fund wallet'
-                  : 'Continue to payment'}
+              {topUpBlocked
+                ? 'Wallet funding unavailable'
+                : primaryReady
+                  ? 'Add money'
+                  : isFundPending
+                    ? usesPlanFunding
+                      ? 'Opening wallet funding...'
+                      : 'Opening payment...'
+                    : usesPlanFunding
+                      ? 'Add money'
+                      : 'Continue to payment'}
             </Text>
           </Pressable>
         ) : (
           <WalletSavingsContributionButton
+            colors={colors}
             disabled={!validAmount}
             isAdding={isAdding}
             onPress={onAddSavings}

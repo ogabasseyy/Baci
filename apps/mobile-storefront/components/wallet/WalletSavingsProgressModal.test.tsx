@@ -1,8 +1,15 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
+
+import { setWalletTestCustomer } from './wallet-auth.test-support';
+
+let restoreCustomer: () => void;
+beforeEach(() => {
+  restoreCustomer = setWalletTestCustomer();
+});
+afterEach(() => restoreCustomer());
 
 jest.mock('expo-image', () => {
   const { View } = jest.requireActual(
@@ -117,123 +124,6 @@ describe('WalletSavingsProgressModal', () => {
     expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
   });
 
-  it('renders progress and wires manual contribution actions', () => {
-    const onAddAmountChange = jest.fn();
-    const onAddSavings = jest.fn();
-    const onChangeDevice = jest.fn();
-    const onClose = jest.fn();
-    const onFundWallet = jest.fn();
-
-    render(
-      <WalletSavingsProgressModal
-        addAmount="500"
-        colors={Colors.light}
-        goal={goal}
-        isAdding={false}
-        onAddAmountChange={onAddAmountChange}
-        onAddSavings={onAddSavings}
-        onChangeDevice={onChangeDevice}
-        onClose={onClose}
-        onFundWallet={onFundWallet}
-        visible
-        walletBalance={125000}
-      />
-    );
-
-    expect(screen.getAllByText('Add to savings').length).toBeGreaterThan(0);
-    expect(screen.getByText('50%')).toBeOnTheScreen();
-    expect(screen.getByText('₦50,000 left')).toBeOnTheScreen();
-    expect(screen.getByText('Condition: Used')).toBeOnTheScreen();
-    expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
-
-    fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Confirm savings top-up' })
-    );
-    expect(
-      screen.queryByRole('button', {
-        name: 'Continue to wallet payment for savings',
-      })
-    ).toBeNull();
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Change savings device' })
-    );
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Close savings progress' })
-    );
-
-    expect(onAddAmountChange).toHaveBeenCalledWith('500');
-    expect(onAddSavings).toHaveBeenCalledTimes(1);
-    expect(onFundWallet).not.toHaveBeenCalled();
-    expect(onChangeDevice).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the saved device condition legibly on the dark Add to savings sheet', () => {
-    render(
-      <WalletSavingsProgressModal
-        addAmount=""
-        colors={Colors.dark}
-        goal={{ ...goal, current_amount: 0, product_condition: 'new' }}
-        isAdding={false}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={0}
-      />
-    );
-
-    expect(screen.getByText('Your plan is ready')).toBeOnTheScreen();
-    const condition = screen.getByText('Condition: New');
-    expect(StyleSheet.flatten(condition.props.style)).toEqual(
-      expect.objectContaining({
-        backgroundColor: Colors.dark.muted,
-        color: Colors.dark.text,
-      })
-    );
-    expect(
-      screen.getByRole('button', {
-        name: 'Continue to payment',
-      })
-    ).toHaveAccessibilityState({ disabled: true });
-    expect(
-      screen.queryByRole('button', { name: 'Confirm savings top-up' })
-    ).toBeNull();
-    expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
-    ).toBeOnTheScreen();
-  });
-
-  it('shows funding guidance when a contribution exceeds the spendable wallet balance', () => {
-    const onAddSavings = jest.fn();
-    render(
-      <WalletSavingsProgressModal
-        addAmount="500"
-        colors={Colors.dark}
-        goal={goal}
-        isAdding={false}
-        onAddAmountChange={jest.fn()}
-        onAddSavings={onAddSavings}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={100}
-      />
-    );
-
-    expect(
-      screen.getByText('Fund your wallet to add this amount to savings.')
-    ).toBeOnTheScreen();
-    expect(
-      screen.queryByRole('button', { name: 'Confirm savings top-up' })
-    ).toBeNull();
-    expect(onAddSavings).not.toHaveBeenCalled();
-  });
-
   describe('bugfix: animated wallet product images', () => {
     it('does not autoplay savings goal product images', () => {
       render(
@@ -279,29 +169,6 @@ describe('WalletSavingsProgressModal', () => {
     );
 
     expect(screen.queryByText('Add to savings')).toBeNull();
-  });
-
-  it('disables the confirm action while a contribution is pending', () => {
-    render(
-      <WalletSavingsProgressModal
-        addAmount="500"
-        colors={Colors.light}
-        goal={goal}
-        isAdding
-        onAddAmountChange={jest.fn()}
-        onAddSavings={jest.fn()}
-        onChangeDevice={jest.fn()}
-        onClose={jest.fn()}
-        onFundWallet={jest.fn()}
-        visible
-        walletBalance={125000}
-      />
-    );
-
-    expect(screen.getByText('Adding...')).toBeOnTheScreen();
-    expect(
-      screen.getByRole('button', { name: 'Confirm savings top-up' })
-    ).toHaveAccessibilityState({ disabled: true, busy: true });
   });
 
   it('shows the auto-debit hint instead of manual controls for auto-debit goals', () => {

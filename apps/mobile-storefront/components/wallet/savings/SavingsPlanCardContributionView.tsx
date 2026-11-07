@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SavingsSheetTextInput } from '../SavingsSheetTextInput';
 import { SavingsCardContributionReview } from './SavingsCardContributionReview';
 import { SavingsCardContributionStatus } from './SavingsCardContributionStatus';
 import { SavingsCardMethodPicker } from './SavingsCardMethodPicker';
@@ -83,7 +84,7 @@ export function SavingsPlanCardContributionView({
             ]}
           >
             <Text style={[styles.currency, { color: colors.text }]}>₦</Text>
-            <TextInput
+            <SavingsSheetTextInput
               accessibilityLabel="Card contribution amount"
               editable={canStart && !hasSnapshot}
               value={amount}

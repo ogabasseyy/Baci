@@ -1,4 +1,3 @@
-import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import { FileText, Truck } from 'lucide-react';
 import { useEffect } from 'react';
 import {
@@ -195,7 +194,7 @@ export function PaymentOptionsPanel({
         <div className="space-y-3 animate-in fade-in">
           <p className="text-xs text-store-background-text/60">Flexible payment options:</p>
           <div className="grid grid-cols-1 gap-3">
-            {oxygenEligible && isOxygenStorefrontStagingEnabled() && (
+            {oxygenEligible && (
               <PaymentOptionCard method="oxygen" paymentMethod={paymentMethod}
                 setPaymentMethod={setPaymentMethod} title="Oxygen"
                 description="From 25% down payment. Repay the balance monthly."

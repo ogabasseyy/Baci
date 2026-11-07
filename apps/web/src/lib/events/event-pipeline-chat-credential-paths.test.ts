@@ -3,7 +3,7 @@ import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credenti
 
 describe('eventPipelineChatCredentialPaths', () => {
   it('allows only the audited consolidated chat credential paths', () => {
-    expect(eventPipelineChatCredentialPaths).toHaveLength(10);
+    expect(eventPipelineChatCredentialPaths).toHaveLength(14);
     expect(eventPipelineChatCredentialPaths).toContainEqual([
       'apps/web/src/lib/agentic/agentic-chat-tenant.ts',
       'apps/web/src/lib/storefront-merchant.ts',

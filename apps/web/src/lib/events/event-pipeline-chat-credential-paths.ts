@@ -60,4 +60,31 @@ export const eventPipelineChatCredentialPaths = [
     ...scopedJwtTail,
   ],
   [chatTenant, ...merchantTail],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/context/authorize/route.ts',
+    'apps/web/src/lib/chatwoot/cart-context.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/context/challenge/route.ts',
+    'apps/web/src/lib/chatwoot/cart-context.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts',
+    'apps/web/src/lib/chatwoot/cart-context.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/chatwoot/cart-context.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
 ] as const;

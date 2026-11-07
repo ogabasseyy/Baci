@@ -241,11 +241,12 @@ describe('compare index page runtime', () => {
       'utf8'
     );
     const hubChrome = source.indexOf('data-compare-hub-chrome');
-    const hubMainClose = source.indexOf('</main>', hubChrome);
+    const hubChromeClose = source.indexOf('</header>', hubChrome);
     const runtime = source.indexOf('<CompareIndexRuntime');
 
     expect(hubChrome).toBeGreaterThan(-1);
-    expect(runtime).toBeGreaterThan(hubMainClose);
+    expect(hubChromeClose).toBeGreaterThan(hubChrome);
+    expect(runtime).toBeGreaterThan(hubChromeClose);
 
     vi.mocked(getCachedCategories).mockResolvedValue([
       {

@@ -7,6 +7,7 @@ import {
   useCustomerAuth,
   useOptionalCustomerAuth,
 } from '@/contexts/customer-auth-context';
+import { AppleMark, GoogleMark } from './social-provider-icons';
 
 interface Props {
   merchantSlug: string;
@@ -62,11 +63,13 @@ function CodeForm({ onSuccess, socialReturnTo }: Props) {
       className="space-y-4 text-store-background-text"
       aria-label="Sign in with email code"
     >
-      <p className="text-sm text-store-background-text/70">
-        {sent
-          ? `Enter the code sent to ${email}.`
-          : 'Enter your email to sign in or create an account. No password needed.'}
-      </p>
+      {(sent || !socialReturnTo) && (
+        <p className="text-sm leading-6 text-store-background-text/70">
+          {sent
+            ? `Enter the code sent to ${email}.`
+            : 'Enter your email to sign in or create an account. No password needed.'}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-store-primary">
           {error}
@@ -111,14 +114,14 @@ function CodeForm({ onSuccess, socialReturnTo }: Props) {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-store-border bg-store-background p-3 text-store-background-text"
+            className="h-12 w-full rounded-xl border border-store-border bg-store-background px-4 text-base text-store-background-text outline-none placeholder:text-store-background-text/40 focus:border-store-primary focus:ring-2 focus:ring-store-primary/15"
           />
         </label>
       )}
       <button
         type="submit"
         disabled={busy || (sent && code.length !== 6)}
-        className="w-full rounded-xl bg-store-primary p-3 font-bold text-store-primary-text disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-xl bg-store-primary px-4 text-sm font-semibold text-store-primary-text transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {busy
           ? sent
@@ -126,38 +129,49 @@ function CodeForm({ onSuccess, socialReturnTo }: Props) {
             : 'Sending code…'
           : sent
             ? 'Verify & continue checkout'
-            : 'Send sign-in code'}
+            : socialReturnTo
+              ? 'Continue with email'
+              : 'Send sign-in code'}
       </button>
       {!sent && socialReturnTo && (
-        <div className="grid gap-2">
-          {(['Google', 'Apple'] as const).map((provider) => (
-            <button
-              key={provider}
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  const result = await (provider === 'Google'
-                    ? signInWithGoogle(socialReturnTo)
-                    : signInWithApple(socialReturnTo));
-                  if (!result.success) {
-                    setError(
-                      result.error || `Unable to continue with ${provider}.`
-                    );
+        <div className="space-y-4 pt-1">
+          <div className="flex items-center gap-3 text-xs text-store-background-text/50">
+            <span className="h-px flex-1 bg-store-border" />
+            <span>or continue with</span>
+            <span className="h-px flex-1 bg-store-border" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {(['Google', 'Apple'] as const).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                disabled={busy}
+                aria-label={`Continue with ${provider}`}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  try {
+                    const result = await (provider === 'Google'
+                      ? signInWithGoogle(socialReturnTo)
+                      : signInWithApple(socialReturnTo));
+                    if (!result.success) {
+                      setError(
+                        result.error || `Unable to continue with ${provider}.`
+                      );
+                      setBusy(false);
+                    }
+                  } catch {
+                    setError(`Unable to continue with ${provider}.`);
                     setBusy(false);
                   }
-                } catch {
-                  setError(`Unable to continue with ${provider}.`);
-                  setBusy(false);
-                }
-              }}
-              className="w-full rounded-xl border border-store-border p-3 font-semibold disabled:opacity-60"
-            >
-              Continue with {provider}
-            </button>
-          ))}
+                }}
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-3 text-sm font-semibold text-store-background-text transition-colors hover:bg-store-background-text/5 disabled:opacity-60"
+              >
+                {provider === 'Google' ? <GoogleMark /> : <AppleMark />}
+                {provider}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {sent && (

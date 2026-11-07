@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { ArrowRight, ShieldCheck, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { CheckoutCodeSignin } from '@/components/storefront/checkout-code-signin';
 import { useEffect } from 'react';
@@ -68,21 +68,22 @@ export function CheckoutIdentityModal({
         className="absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs animate-in fade-in duration-200"
         onClick={onClose}
       />
-      <div className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-2xl sm:zoom-in-95">
+      <div className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-store-border bg-[var(--store-surface,var(--store-background))] shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-2xl sm:zoom-in-95">
 
-        {/* Header */}
-        <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-b border-gray-100">
-          <h3 className="font-bold text-lg text-gray-900">Checkout</h3>
-          <button type="button"
-            onClick={onClose}
-            className="size-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-colors"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
+        <div className="px-6 pt-6 sm:px-8 sm:pt-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-store-primary">Checkout</p>
+              <h3 className="text-2xl font-bold tracking-tight text-store-background-text">Let’s get you started</h3>
+              <p className="mt-2 text-sm leading-6 text-store-background-text/65">Sign in or create an account for a faster checkout.</p>
+            </div>
+            <button type="button" onClick={onClose} className="flex size-10 shrink-0 items-center justify-center rounded-full text-store-background-text/60 transition-colors hover:bg-store-background-text/5 hover:text-store-background-text" aria-label="Close">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-5 p-6">
+        <div className="space-y-5 px-6 pb-6 pt-6 sm:px-8">
           {_merchant?.slug ? (
             <CheckoutCodeSignin
               merchantSlug={_merchant.slug}
@@ -92,25 +93,19 @@ export function CheckoutIdentityModal({
           ) : (
             <p role="status">Sign-in is currently unavailable. You can continue as a guest.</p>
           )}
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            <span className="h-px flex-1 bg-gray-200" />
-            or
-            <span className="h-px flex-1 bg-gray-200" />
-          </div>
           <button
             type="button"
             onClick={handleGuestCheckout}
-            className="w-full rounded-xl border border-gray-300 py-3 font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200"
+            className="group flex min-h-11 w-full items-center justify-center gap-2 text-sm font-semibold text-store-background-text/70 transition-colors hover:text-store-primary"
           >
             Continue as Guest
+            <ArrowRight aria-hidden="true" className="size-4 transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
 
-        {/* Footer */}
-        <div className="bg-gray-50 px-6 py-3 text-center border-t border-gray-100">
-          <p className="text-[10px] text-gray-400 font-medium">
-            🔒 Your security is our priority. All transactions are encrypted.
-          </p>
+        <div className="flex items-center justify-center gap-2 border-t border-store-border px-6 py-4 text-xs text-store-background-text/55">
+          <ShieldCheck aria-hidden="true" className="size-4" />
+          Secure checkout
         </div>
       </div>
     </div>

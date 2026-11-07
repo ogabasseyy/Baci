@@ -99,6 +99,11 @@ it('keeps the current code entry visible if resending fails', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
   await screen.findByRole('textbox', { name: 'Verification code' });
   await screen.findByRole('button', { name: /Resend code in/ });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Use a different email' })
+    ).toBeEnabled()
+  );
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
   vi.useRealTimers();
@@ -124,6 +129,11 @@ it('locks the form while a code resend is pending', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
   await screen.findByRole('textbox', { name: 'Verification code' });
   await screen.findByRole('button', { name: /Resend code in/ });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Use a different email' })
+    ).toBeEnabled()
+  );
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
   expect(
@@ -195,6 +205,11 @@ it('shows a retry message if the resend request throws', async () => {
   });
   fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
   await screen.findByRole('button', { name: /Resend code in/ });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Use a different email' })
+    ).toBeEnabled()
+  );
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
   vi.useRealTimers();

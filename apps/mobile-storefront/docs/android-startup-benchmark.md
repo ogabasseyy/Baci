@@ -17,3 +17,10 @@ The APK uses real production client settings and can contact production services
 If Firebase has only the existing application package, `pnpm android:benchmark --use-installed-debug-package` explicitly builds with that package and debug signing. Before manually installing, verify the new APK and installed debug app have matching signing certificate digests. Do not uninstall the app or clear its data. This mode updates the existing app if installed, so its startup measurements include its existing data.
 
 For an explicitly authorized Sentry receipt check, set `EXPO_PUBLIC_STARTUP_DIAGNOSTIC_ID` in the build process environment to a unique, non-identifying label containing only letters, numbers, underscores, or hyphens. The benchmark app sends one non-crashing info-level event after splash handoff, tagged with that label and `verification_kind=startup_receipt`. A local marker records only the attempt and suppresses repeat sends for the same label on subsequent launches. A successful SDK flush is not proof of receipt; verify the tag in the configured Sentry project. Ordinary builds without the opt-in and builds outside the benchmark Sentry environment send nothing.
+
+Benchmark JS is rebuilt with Metro's cache reset on each invocation. React
+Native's Gradle bundle task does not declare environment-only client settings as
+inputs, so leaving that task up-to-date can silently package the previous JS.
+Only the JS bundle task bypasses the up-to-date check; native compilation keeps
+its normal cache. A small Gradle regression fixture exercises this behavior when
+the wrapper's Gradle distribution is already cached, without downloading one.

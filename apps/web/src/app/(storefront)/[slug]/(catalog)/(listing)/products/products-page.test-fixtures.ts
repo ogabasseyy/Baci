@@ -26,3 +26,28 @@ export const mockProductIndex = {
   totalCount: 21,
   totalPages: 2,
 };
+
+export const mockMerchant = {
+  id: 'merchant-1',
+  business_name: 'Ogabassey',
+  slug: 'test-store',
+  custom_domain: null,
+  payout_currency: 'NGN',
+  site_description: 'Store description',
+};
+
+export const mockCategories = [
+  {
+    id: 'cat-1',
+    name: 'Smartphones',
+    slug: 'smartphones',
+    description: null,
+    image_url: null,
+    is_active: true,
+    parent_id: null,
+  },
+];
+
+export const mockStorefrontMerchant = mockMerchant as unknown as Awaited<
+  ReturnType<typeof import('@/lib/cached-data').getRequestScopedMerchant>
+>;

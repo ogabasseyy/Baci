@@ -24,8 +24,8 @@ interface LinkModuleInput {
 }
 
 interface BuildCatalogLinkModulesInput {
-  productBasePath: string;
-  productTotalPages: number;
+  productBasePath?: string;
+  productTotalPages?: number;
   categories: CategoryModuleInput[];
   compareLinks: LinkModuleInput[];
   editorialLinks: LinkModuleInput[];
@@ -51,8 +51,6 @@ function buildPaginationItems(
 }
 
 export function buildCatalogLinkModules({
-  productBasePath,
-  productTotalPages,
   categories,
   compareLinks,
   editorialLinks,
@@ -78,14 +76,6 @@ export function buildCatalogLinkModules({
       title: 'Shop by category',
       description: 'Browse maintained Ogabassey category hubs.',
       items: dedupeLinkModuleItems(categoryItems),
-    },
-    {
-      id: 'catalog-pages',
-      title: 'Browse product pages',
-      description: 'Jump through the maintained product index.',
-      items: dedupeLinkModuleItems(
-        buildPaginationItems(productBasePath, 'Products', productTotalPages)
-      ),
     },
     {
       id: 'category-pages',

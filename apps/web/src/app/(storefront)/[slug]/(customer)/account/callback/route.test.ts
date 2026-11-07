@@ -84,8 +84,14 @@ describe('GET [slug]/(customer)/account/callback', () => {
   });
 
   it.each([
-    ['/checkout?resume=1', `${ORIGIN}/checkout?resume=1`],
-    ['/ogabassey/checkout', `${ORIGIN}/ogabassey/checkout`],
+    [
+      '/checkout?resume=1',
+      `${ORIGIN}/ogabassey/account/checkout-return?next=%2Fcheckout%3Fresume%3D1`,
+    ],
+    [
+      '/ogabassey/checkout',
+      `${ORIGIN}/ogabassey/account/checkout-return?next=%2Fogabassey%2Fcheckout`,
+    ],
     ['https://attacker.example/checkout', `${ORIGIN}/ogabassey/account`],
     ['/other/checkout', `${ORIGIN}/ogabassey/account`],
     ['http://[', `${ORIGIN}/ogabassey/account`],

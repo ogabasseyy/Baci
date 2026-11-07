@@ -1,12 +1,13 @@
 'use client';
 
+import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowRight, ShieldCheck, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { CheckoutCodeSignin } from '@/components/storefront/checkout-code-signin';
-import { useEffect } from 'react';
 import { buildCheckoutIdentityRoutes } from '@/components/storefront/checkout-route';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import styles from './CheckoutIdentityModal.module.css';
+import { supportsCheckoutSocialSignIn } from './checkout-social-support';
 
 interface CheckoutIdentityModalProps {
   isOpen: boolean;
@@ -29,31 +30,9 @@ export function CheckoutIdentityModal({
   const router = useRouter();
   const merchantContext = useMerchantSafe();
   const _merchant = merchantContext?.merchant;
+  const socialAvailable = typeof window !== 'undefined' && supportsCheckoutSocialSignIn(window.location.hostname, process.env.NODE_ENV === 'production');
   const { checkoutUrl: normalizedCheckoutUrl } =
     buildCheckoutIdentityRoutes(checkoutUrl);
-
-  // 2026 Best Practice: Lock body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      // Store current scroll position and lock body
-      const scrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
-
-      return () => {
-        // Restore scroll position when modal closes
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, scrollY);
-      };
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleGuestCheckout = () => {
     router.push(normalizedCheckoutUrl);
@@ -61,22 +40,25 @@ export function CheckoutIdentityModal({
   };
 
   return (
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
     <div className={`fixed inset-0 z-100 flex justify-center ${styles.overlay}`}>
+      <Dialog.Overlay asChild>
       <button
         type="button"
         aria-label="Dismiss checkout modal backdrop"
         tabIndex={-1}
         className="absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs animate-in fade-in duration-200"
-        onClick={onClose}
       />
-      <div className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-store-border bg-[var(--store-surface,var(--store-background))] shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-2xl sm:zoom-in-95">
+      </Dialog.Overlay>
+      <Dialog.Content className="relative z-10 max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-store-border bg-[var(--store-surface,var(--store-background))] shadow-2xl animate-in slide-in-from-bottom-4 duration-300 sm:rounded-2xl sm:zoom-in-95">
 
         <div className="px-6 pt-6 sm:px-8 sm:pt-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-store-primary">Checkout</p>
-              <h3 className="text-2xl font-bold tracking-tight text-store-background-text">Let’s get you started</h3>
-              <p className="mt-2 text-sm leading-6 text-store-background-text/65">Sign in or create an account for a faster checkout.</p>
+              <Dialog.Title className="text-2xl font-bold tracking-tight text-store-background-text">Let’s get you started</Dialog.Title>
+              <Dialog.Description className="mt-2 text-sm leading-6 text-store-background-text/65">Sign in or create an account for a faster checkout.</Dialog.Description>
             </div>
             <button type="button" onClick={onClose} className="flex size-10 shrink-0 items-center justify-center rounded-full text-store-background-text/60 transition-colors hover:bg-store-background-text/5 hover:text-store-background-text" aria-label="Close">
               <X size={20} />
@@ -89,7 +71,7 @@ export function CheckoutIdentityModal({
             <CheckoutCodeSignin
               merchantSlug={_merchant.slug}
               onSuccess={handleGuestCheckout}
-              socialReturnTo={normalizedCheckoutUrl}
+              socialReturnTo={socialAvailable ? normalizedCheckoutUrl : undefined}
             />
           ) : (
             <p role="status">Sign-in is currently unavailable. You can continue as a guest.</p>
@@ -108,7 +90,9 @@ export function CheckoutIdentityModal({
           <ShieldCheck aria-hidden="true" className="size-4 text-store-primary" />
           Secure checkout
         </div>
-      </div>
+      </Dialog.Content>
     </div>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

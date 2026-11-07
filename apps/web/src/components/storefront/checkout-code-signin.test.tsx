@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -18,8 +19,13 @@ vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => auth,
   useCustomerAuth: () => auth,
 }));
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  cleanup();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -72,7 +78,6 @@ it('keeps an unsuccessful verification open without navigating', async () => {
   expect(done).not.toHaveBeenCalled();
 });
 it('offers resend after its cooldown and requests another code', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
   render(<CheckoutCodeSignin merchantSlug="shop" onSuccess={vi.fn()} />);
   fireEvent.change(screen.getByRole('textbox', { name: 'Email address' }), {
     target: { value: 'buyer@example.test' },
@@ -84,11 +89,9 @@ it('offers resend after its cooldown and requests another code', async () => {
   ).toBeDisabled();
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
-  vi.useRealTimers();
   await waitFor(() => expect(auth.sendOtp).toHaveBeenCalledTimes(2));
 });
 it('keeps the current code entry visible if resending fails', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
   auth.sendOtp
     .mockResolvedValueOnce({ success: true })
     .mockResolvedValueOnce({ success: false });
@@ -97,25 +100,24 @@ it('keeps the current code entry visible if resending fails', async () => {
     target: { value: 'buyer@example.test' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
-  await screen.findByRole('textbox', { name: 'Verification code' });
+  const codeInput = await screen.findByRole('textbox', {
+    name: 'Verification code',
+  });
   await screen.findByRole('button', { name: /Resend code in/ });
   await waitFor(() =>
     expect(
       screen.getByRole('button', { name: 'Use a different email' })
     ).toBeEnabled()
   );
+  fireEvent.change(codeInput, { target: { value: '123' } });
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
-  vi.useRealTimers();
   expect(
     await screen.findByText(/could not send a new code/i)
   ).toBeInTheDocument();
-  expect(
-    screen.getByRole('textbox', { name: 'Verification code' })
-  ).toBeInTheDocument();
+  expect(codeInput).toHaveValue('123');
 });
 it('locks the form while a code resend is pending', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
   let finish: ((result: { success: boolean }) => void) | undefined;
   auth.sendOtp.mockResolvedValueOnce({ success: true }).mockReturnValueOnce(
     new Promise((resolve) => {
@@ -140,7 +142,6 @@ it('locks the form while a code resend is pending', async () => {
     screen.getByRole('button', { name: 'Use a different email' })
   ).toBeDisabled();
   await act(async () => finish?.({ success: true }));
-  vi.useRealTimers();
 });
 
 it.each([
@@ -195,7 +196,6 @@ it('keeps controls disabled while a successful social redirect is pending', asyn
   ).toBeDisabled();
 });
 it('shows a retry message if the resend request throws', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
   auth.sendOtp
     .mockResolvedValueOnce({ success: true })
     .mockRejectedValueOnce(new Error('offline'));
@@ -212,7 +212,6 @@ it('shows a retry message if the resend request throws', async () => {
   );
   act(() => vi.advanceTimersByTime(61_000));
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
-  vi.useRealTimers();
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'We could not send a new code'
   );

@@ -48,7 +48,7 @@ describe('CheckoutIdentityModal', () => {
 
   it('uses the responsive overlay rather than a competing bottom-alignment utility', () => {
     render(<CheckoutIdentityModal {...defaultProps} />);
-    const overlay = screen.getByRole('button', { name: 'Dismiss checkout modal backdrop' }).parentElement;
+    const overlay = screen.getByRole('dialog', { name: 'Let’s get you started' }).parentElement;
     expect(overlay?.className).toContain('overlay');
     expect(overlay).not.toHaveClass('items-end');
   });
@@ -86,6 +86,23 @@ describe('CheckoutIdentityModal', () => {
     expect(screen.getByText(/sign-in is currently unavailable/i)).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Email address' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
+  });
+
+  it('offers guest checkout when the merchant has no slug', () => {
+    const merchant = vi.mocked(useMerchantSafe)();
+    if (!merchant?.merchant) throw new Error('Expected merchant fixture');
+    vi.mocked(useMerchantSafe).mockReturnValueOnce({ ...merchant, merchant: { ...merchant.merchant, slug: '' } });
+    render(<CheckoutIdentityModal {...defaultProps} />);
+    expect(screen.getByText(/sign-in is currently unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue as guest/i })).toBeInTheDocument();
+  });
+
+  it('closes with Escape and exposes an accessible dialog', () => {
+    const onClose = vi.fn();
+    render(<CheckoutIdentityModal {...defaultProps} onClose={onClose} />);
+    expect(screen.getByRole('dialog', { name: 'Let’s get you started' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it('has a close button with proper aria-label', () => {

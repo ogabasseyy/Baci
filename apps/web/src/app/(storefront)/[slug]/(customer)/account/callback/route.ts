@@ -97,7 +97,8 @@ export async function GET(
         (parsed.pathname === '/checkout' ||
           parsed.pathname === `/${slug}/checkout`)
       ) {
-        destination = `${parsed.pathname}${parsed.search}`;
+        const checkoutPath = `${parsed.pathname}${parsed.search}`;
+        destination = `/${slug}/account/checkout-return?next=${encodeURIComponent(checkoutPath)}`;
       }
     }
 

@@ -14,7 +14,8 @@
 .selected .dot { border:6px solid var(--store-primary, #d62027); }
 .details summary { list-style:none; display:flex; align-items:center; gap:8px; cursor:pointer; margin:0 14px; padding:10px 0 12px; border-top:1px solid color-mix(in srgb, var(--store-border, #d1d5db) 65%, transparent); font-size:13px; font-weight:600; }
 .details summary::-webkit-details-marker { display:none; }
-.details[open] summary svg { transform:rotate(180deg); }
+.bankBadge { display:inline-flex; align-items:center; gap:7px; border-radius:6px; padding:4px 7px; font-size:12px; line-height:1.2; background:color-mix(in srgb, var(--store-primary, #d62027) 14%, transparent); color:var(--store-foreground, #111827); }
+.details[open] summary svg:last-child { transform:rotate(180deg); }
 .scrollHint { margin-left:auto; color:var(--store-primary, #d62027); font-size:11px; }
 .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; max-height:250px; overflow:auto; margin:0 14px 14px; scrollbar-width:thin; scrollbar-color:var(--store-primary, #d62027) transparent; }
 .grid::-webkit-scrollbar { width:7px; }

@@ -87,10 +87,27 @@ export function PostHogPageviewTracker() {
       }
     }
 
+    function captureAfterConsentChange() {
+      if (
+        isPublicBlogPathname(currentPathname, { hostname }) &&
+        !hasPostHogBrowserInitialized()
+      ) {
+        void capturePageview();
+      }
+    }
+
+    window.addEventListener(
+      'cookie-consent-updated',
+      captureAfterConsentChange
+    );
     void capturePageview();
 
     return () => {
       cancelled = true;
+      window.removeEventListener(
+        'cookie-consent-updated',
+        captureAfterConsentChange
+      );
     };
   }, [pathname, searchParamString]);
 

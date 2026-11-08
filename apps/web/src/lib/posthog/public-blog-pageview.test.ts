@@ -11,10 +11,23 @@ function parseFetchBody(fetch: ReturnType<typeof vi.fn>, index = 0) {
 }
 
 function stubStorage(initialEntries: Record<string, string> = {}) {
-  const storage = new Map(Object.entries(initialEntries));
+  const fullConsent = JSON.stringify({
+    necessary: true,
+    analytics: true,
+    marketing: false,
+    functional: false,
+  });
+  const storage = new Map(
+    Object.entries({
+      'baci-cookie-consent': fullConsent,
+      ...initialEntries,
+    })
+  );
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
   });
   return storage;
 }
@@ -145,6 +158,7 @@ describe('capturePublicBlogPageview transport', () => {
   });
 
   it('does not send likely bot pageviews through the direct capture path', () => {
+    stubStorage();
     const sendBeacon = vi.fn<typeof navigator.sendBeacon>(() => true);
 
     vi.stubGlobal('navigator', {

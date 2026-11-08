@@ -655,7 +655,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variants[1].image).toEqual(['https://cdn.example.com/parent.avif']);
   });
 
-  it('includes shippingDetails and returnPolicy on variant Offers (2026 best practice)', () => {
+  it('omits unknown optional shipping and return objects on variant offers', () => {
     const product = makeProduct({
       variants: [
         {
@@ -675,21 +675,8 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     // priceValidUntil is a YYYY-MM-DD string
     expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
-    // shippingDetails
-    const shipping = offer.shippingDetails as Record<string, unknown>;
-    expect(shipping['@type']).toBe('OfferShippingDetails');
-    const dest = shipping.shippingDestination as Record<string, unknown>;
-    expect(dest.addressCountry).toBe('NG');
-
-    // returnPolicy
-    const returnPolicy = offer.hasMerchantReturnPolicy as Record<
-      string,
-      unknown
-    >;
-    expect(returnPolicy['@type']).toBe('MerchantReturnPolicy');
-    expect(returnPolicy.applicableCountry).toBe('NG');
-    expect(returnPolicy.returnPolicyCountry).toBe('NG');
-    expect(returnPolicy.merchantReturnDays).toBe(7);
+    expect(offer).not.toHaveProperty('shippingDetails');
+    expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
   });
 
   it('defines shared offer policies once and references them from later variants', () => {
@@ -709,7 +696,25 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       'NGN',
       'NG',
       undefined,
-      undefined,
+      makeTrustProfile({
+        returnPolicy: {
+          summary: 'Returns accepted within 14 days.',
+          windowDays: 14,
+          returnMethod: 'mail',
+          returnFees: 'customer_pays',
+          localRoute: '/returns',
+        },
+        shippingPolicy: {
+          summary: 'Ships across Nigeria.',
+          regions: ['NG'],
+          handlingDaysMin: 2,
+          handlingDaysMax: 4,
+          transitDaysMin: 6,
+          transitDaysMax: 8,
+          shippingFeeType: 'free',
+          localRoute: '/shipping',
+        },
+      }),
       { productUrl: 'https://shop.example/phones/test-product' }
     );
     const offers = (schema.hasVariant as Record<string, unknown>[]).map(
@@ -783,6 +788,11 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const handlingTime = deliveryTime.handlingTime as Record<string, unknown>;
     const transitTime = deliveryTime.transitTime as Record<string, unknown>;
 
+    expect(shipping.shippingRate).toEqual({
+      '@type': 'MonetaryAmount',
+      value: 0,
+      currency: 'NGN',
+    });
     expect(handlingTime.minValue).toBe(2);
     expect(handlingTime.maxValue).toBe(4);
     expect(transitTime.minValue).toBe(6);

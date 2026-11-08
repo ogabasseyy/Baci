@@ -8,6 +8,10 @@ import {
   type ClusterFeaturedInventoryProduct,
 } from './build-cluster-featured-products';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
+import {
+  annotateCommerceBridgeLinks,
+  buildClusterContextSummary,
+} from './build-contextual-commerce-bridge';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
@@ -223,7 +227,15 @@ export async function buildInformationalClusterModel(
       href: `${input.storeUrl}/${categorySlug}`,
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
-    commerceLinks: finalCommerceLinks.slice(0, 5),
+    contextSummary: buildClusterContextSummary({
+      categoryName,
+      kind: inferred.kind,
+      brands: inferred.brands,
+    }),
+    commerceLinks: annotateCommerceBridgeLinks(
+      finalCommerceLinks.slice(0, 5),
+      categoryName
+    ),
     featuredProducts: buildClusterFeaturedProducts(
       input.storeUrl,
       categorySlug,

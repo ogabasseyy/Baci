@@ -19,67 +19,15 @@ export interface ClusterFeaturedInventoryProduct {
   has_condition_offers?: boolean | null;
 }
 
-const GENERIC_CLUSTER_TOKENS = new Set([
-  'a',
-  'an',
-  'and',
-  'are',
-  'at',
-  'best',
-  'buy',
-  'buying',
-  'by',
-  'for',
-  'from',
-  'galaxy',
-  'guide',
-  'how',
-  'in',
-  'ipad',
-  'iphone',
-  'is',
-  'it',
-  'laptop',
-  'laptops',
-  'macbook',
-  'nigeria',
-  'of',
-  'on',
-  'or',
-  'phone',
-  'phones',
-  'pixel',
-  'playstation',
-  'price',
-  'prices',
-  'redmi',
-  'review',
-  'smartphone',
-  'smartphones',
-  'specs',
-  'the',
-  'to',
-  'vs',
-  'with',
-  '2024',
-  '2025',
-  '2026',
-  '2027',
-]);
+const GENERIC_CLUSTER_TOKENS = new Set(
+  'a an and are at best buy buying by for from galaxy guide how in ipad iphone is it laptop laptops macbook nigeria of on or phone phones pixel playstation price prices redmi review smartphone smartphones specs the to vs with 2024 2025 2026 2027'.split(
+    ' '
+  )
+);
 
-const TIER_MODIFIER_TOKENS = new Set([
-  'air',
-  'fe',
-  'flip',
-  'fold',
-  'lite',
-  'max',
-  'mini',
-  'plus',
-  'pro',
-  'slim',
-  'ultra',
-]);
+const TIER_MODIFIER_TOKENS = new Set(
+  'air fe flip fold lite max mini plus pro slim ultra'.split(' ')
+);
 
 const CAPACITY_TOKEN_REGEX = /^\d+(?:gb|tb)$/i;
 
@@ -147,6 +95,55 @@ function scoreProductModelAffinity(
     : 0;
 }
 
+const SPEC_HIGHLIGHTS = [
+  { key: 'ram_gb', format: (v: string | number) => `${v}GB RAM` },
+  { key: 'storage_gb', format: (v: string | number) => `${v}GB storage` },
+  { key: 'battery_mah', format: (v: string | number) => `${v}mAh battery` },
+] as const;
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function getPositiveNumericValue(raw: unknown): string | number | null {
+  if (typeof raw === 'number')
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed && /^\d+(\.\d+)?$/.test(trimmed) && Number(trimmed) > 0)
+      return trimmed;
+  }
+  return null;
+}
+
+function buildFeaturedProductDescription(
+  product: ClusterFeaturedInventoryProduct,
+  countryCode?: string | null
+): string {
+  const segments: string[] = [product.brand ?? 'Storefront pick'];
+  const condition = product.condition?.trim();
+  if (condition) segments.push(toTitleCase(condition));
+  segments.push(formatCurrencyCompact(product.price, countryCode || 'NG'));
+
+  const specs = product.product_key_specs;
+  if (specs && typeof specs === 'object') {
+    const highlights: string[] = [];
+    for (const def of SPEC_HIGHLIGHTS) {
+      const val = getPositiveNumericValue(specs[def.key]);
+      if (val !== null) {
+        highlights.push(def.format(val));
+        if (highlights.length === 2) break;
+      }
+    }
+    if (highlights.length > 0) segments.push(highlights.join(', '));
+  }
+  return segments.join(' • ');
+}
+
 export function buildClusterFeaturedProducts(
   storeUrl: string,
   categorySlug: string,
@@ -199,6 +196,6 @@ export function buildClusterFeaturedProducts(
     .map((product) => ({
       href: buildProductHref(storeUrl, product),
       title: product.name,
-      description: `${product.brand ?? 'Storefront pick'} • ${formatCurrencyCompact(product.price, countryCode || 'NG')}`,
+      description: buildFeaturedProductDescription(product, countryCode),
     }));
 }

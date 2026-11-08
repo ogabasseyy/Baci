@@ -1,8 +1,8 @@
 import { getProductSemanticSupport } from '@/config/product-semantic-support';
-import { formatCurrencyCompact } from '@/lib/currency';
 import { buildProductCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 import { buildCanonicalProductCompareSlug } from '@/lib/storefront-compare/compare-slugs';
 import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { buildProductCardDescription } from './build-product-card-description';
 import { buildProductHref } from './build-product-semantic-compare-support';
 import type {
   BuildProductSemanticModelInput,
@@ -10,14 +10,6 @@ import type {
   ProductSemanticCard,
   ProductSemanticSection,
 } from './product-semantic-types';
-
-function toTitleCase(value: string) {
-  return value
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
 
 function isInStock(product: ProductSemanticCandidate) {
   return product.stock == null || product.stock > 0;
@@ -83,15 +75,6 @@ function buildDirectCompareCta(input: {
   };
 }
 
-function buildCardDescription(
-  product: ProductSemanticCandidate,
-  countryCode?: string | null
-) {
-  const details = product.condition ? [toTitleCase(product.condition)] : [];
-  details.push(formatCurrencyCompact(product.price, countryCode || 'NG'));
-  return details.join(' • ');
-}
-
 export const MAX_SEMANTIC_SECTION_CARDS = 6;
 
 function buildSectionCards(
@@ -103,7 +86,11 @@ function buildSectionCards(
     (product) =>
       ({
         title: product.name,
-        description: buildCardDescription(product, input.countryCode),
+        description: buildProductCardDescription({
+          candidate: product,
+          currentProduct: input.currentProduct,
+          countryCode: input.countryCode,
+        }),
         href: buildProductHref(input.storeUrl, product),
         ...buildDirectCompareCta({
           approvedCompareSlugs,

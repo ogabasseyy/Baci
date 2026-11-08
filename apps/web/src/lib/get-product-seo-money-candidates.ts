@@ -106,7 +106,7 @@ function parseAmount(raw: string): number | null {
     .toLowerCase();
   const suffix = normalized.match(/[km]$/)?.[0] ?? '';
   let amount = suffix ? normalized.slice(0, -1) : normalized;
-  if (/^\\.\\d/.test(amount)) amount = `0${amount}`;
+  if (/^\.\d/.test(amount)) amount = `0${amount}`;
   if (usesArabicDecimalSeparator) {
     const parts = amount.split('.');
     if (parts.length !== 2) return null;

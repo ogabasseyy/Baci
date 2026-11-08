@@ -116,6 +116,16 @@ describe('getProductSeoMoneyCandidates', () => {
     ]);
   });
 
+  it('normalizes fractional amounts with no leading zero', () => {
+    expect(getProductSeoMoneyCandidates('$.99')).toMatchObject([
+      {
+        marker: '$',
+        rawAmount: '.99',
+        amount: 0.99,
+      },
+    ]);
+  });
+
   it('ignores malformed long runs without a timing-dependent assertion', () => {
     expect(getProductSeoMoneyCandidates(`${'1,'.repeat(4_000)}x`)).toEqual([]);
   });

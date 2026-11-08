@@ -1,4 +1,4 @@
-import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '../config/product-schema';
+import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '@/config/product-schema';
 import { getDurableProductSeoText } from './get-durable-product-seo-text';
 import { generateMetaDescription } from './meta-description';
 import type { Product } from './products';

@@ -69,6 +69,12 @@ describe('buildProductSemanticModel', () => {
             brand: 'Yodha',
             price: 5000,
           }),
+          makeCandidate({
+            slug: 'saree-set',
+            name: 'Saree Set',
+            brand: 'Anokhi',
+            price: 2600,
+          }),
         ],
       })
     );

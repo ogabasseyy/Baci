@@ -161,6 +161,7 @@ export interface BuildInformationalClusterModelInput {
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
   merchantCurrency?: string | null;
+  excludedProductSlugs?: ReadonlySet<string>;
 }
 
 export interface BlogClusterCollection {

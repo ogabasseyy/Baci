@@ -132,6 +132,18 @@ async function renderBlogPostContent({
     postUrl,
   });
 
+  const displayedRelatedProductSlugs = new Set(
+    relatedProducts
+      .filter(
+        (p) =>
+          typeof p.name === 'string' &&
+          p.name.trim().length > 0 &&
+          typeof p.slug === 'string' &&
+          p.slug.trim().length > 0
+      )
+      .slice(0, 8)
+      .map((p) => (p.slug ?? '').trim())
+  );
   const [clusterPost] = await loadClassifiedClusterPosts(merchant.id, [post]);
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const clusterModel = await buildInformationalClusterModel({
@@ -141,6 +153,7 @@ async function renderBlogPostContent({
     countryCode: merchant.country,
     merchantCurrency,
     post: clusterPost,
+    excludedProductSlugs: displayedRelatedProductSlugs,
   });
 
   const beforeChrome = (

@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PublicAdvertisedVariantLoader } from './advertised-phone-price-projection';
-import {
-  checkRefinedPhoneMatches,
-  hasPositiveWifiOnlyIntent,
-} from './check-refined-phone-matches';
+import { checkRefinedPhoneMatches } from './check-refined-phone-matches';
 
 const products = new Map([
   [
@@ -31,16 +28,6 @@ const load = () =>
   vi.fn<PublicAdvertisedVariantLoader>().mockResolvedValue({ phone: [wifi] });
 
 describe('exact refined phone match policy', () => {
-  it.each([
-    'not Wi-Fi Only',
-    'without Wi-Fi Only',
-    'avoid Wi-Fi Only',
-    'exclude Wi-Fi Only',
-    "don't show Wi-Fi Only",
-  ])('does not infer positive intent from %s', (query) => {
-    expect(hasPositiveWifiOnlyIntent(query)).toBe(false);
-  });
-
   it('preserves explicit restricted identity and reports disclosure facts without substituting an offer', async () => {
     const loader = load();
     const [checked] = await checkRefinedPhoneMatches(
@@ -53,6 +40,26 @@ describe('exact refined phone match policy', () => {
     expect(checked.match).toBe(match);
     expect(checked.restrictedVariant).toEqual(wifi);
     expect(loader).toHaveBeenCalledExactlyOnceWith('merchant', ['phone']);
+  });
+
+  it('preserves an exact unrestricted cellular match', async () => {
+    const cellular = {
+      ...wifi,
+      id: 'cellular',
+      attributes: { sim_type: 'Physical + eSIM', storage: '128GB' },
+    };
+    const cellularMatch = { ...match, variantId: 'cellular' };
+    const loader = load().mockResolvedValue({ phone: [cellular] });
+
+    expect(
+      await checkRefinedPhoneMatches(
+        'merchant',
+        'iPhone',
+        [cellularMatch],
+        products,
+        loader
+      )
+    ).toEqual([{ match: cellularMatch, verifiedVariant: cellular }]);
   });
 
   it('drops a stale or missing matched phone SKU without selecting its sibling', async () => {

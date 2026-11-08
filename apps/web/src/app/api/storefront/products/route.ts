@@ -523,16 +523,17 @@ export async function GET(request: NextRequest) {
           (order.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
       );
       const visibleOffset = usesInMemoryFilters ? (offset ?? 0) : 0;
-      const visibleProducts = (
-        await projectStandardListingRows(
-          merchantId,
-          filteredRows.slice(visibleOffset, visibleOffset + requestedLimit),
-          { condition, minPrice: min_price, maxPrice: max_price }
-        )
-      ).map(storefrontProductsRouteData.mapProduct);
+      const projectedRows = await projectStandardListingRows(
+        merchantId,
+        filteredRows,
+        { condition, minPrice: min_price, maxPrice: max_price }
+      );
+      const visibleProducts = projectedRows
+        .slice(visibleOffset, visibleOffset + requestedLimit)
+        .map(storefrontProductsRouteData.mapProduct);
       const responseCount = usesInMemoryFilters
-        ? filteredRows.length
-        : (dbCount ?? filteredRows.length);
+        ? projectedRows.length
+        : (dbCount ?? projectedRows.length);
       const effectiveOffset = offset ?? 0;
       const hasMore = effectiveOffset + requestedLimit < responseCount;
 

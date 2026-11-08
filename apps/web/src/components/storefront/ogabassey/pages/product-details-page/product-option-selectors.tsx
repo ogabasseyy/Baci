@@ -1,5 +1,10 @@
 import type { CSSProperties } from 'react';
 import { Info, MapPin } from 'lucide-react';
+import {
+  type ProductWithSelectionAxesLike,
+  resolveVariantSelection,
+} from '@baci/shared/lib';
+import type { ProductVariant } from '@/lib/products';
 import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import type { NormalizedProductDetails } from './product-details-helpers';
 import { ProductOptionAxisGroup } from './product-option-axis-group';
@@ -21,6 +26,7 @@ interface ProductOptionSelectorsProps {
   secondaryColor: number | null;
   selectedAttributes: Record<string, string>;
   selectedColor: number | null;
+  selectedVariant?: ProductVariant | null;
   showColorToast: boolean;
 }
 
@@ -45,12 +51,29 @@ export function ProductOptionSelectors({
   secondaryColor,
   selectedAttributes,
   selectedColor,
+  selectedVariant,
   showColorToast,
 }: ProductOptionSelectorsProps) {
-  const connectivityDisclosure = getVariantConnectivityDisclosure({
-    id: '',
-    attributes: selectedAttributes,
-  });
+  const resolvedVariant =
+    selectedVariant ??
+    (productData.variants && productData.variants.length > 0
+      ? resolveVariantSelection(
+          productData as unknown as ProductWithSelectionAxesLike<ProductVariant>,
+          { attributes: selectedAttributes }
+        )?.variant ??
+        productData.variants.find((variant) =>
+          Object.entries(selectedAttributes).every(
+            ([key, value]) => !value || variant.attributes?.[key] === value
+          )
+        )
+      : null);
+
+  const connectivityDisclosure = getVariantConnectivityDisclosure(
+    resolvedVariant ?? {
+      id: '',
+      attributes: selectedAttributes,
+    }
+  );
   return (
     <>
       {connectivityDisclosure ? (

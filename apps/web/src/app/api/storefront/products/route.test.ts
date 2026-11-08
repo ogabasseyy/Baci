@@ -490,6 +490,11 @@ describe('standard listing cellular phone prices', () => {
     );
     const body = await response.json();
     expect(response.status).toBe(200);
+    expect(
+      storefrontProductsRouteTestHarness.mockProductsQuery.current?.select
+    ).toHaveBeenCalledWith(
+      expect.stringMatching(/\bhas_variants\b[\s\S]*\bvariant_model\b/)
+    );
     expect(body.products[0]).toMatchObject({
       price: 900000,
       condition: 'new',

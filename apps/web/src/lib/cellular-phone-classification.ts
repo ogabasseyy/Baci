@@ -17,13 +17,13 @@ export interface StorefrontVariantProductContext {
 export type ProductClassificationContext = StorefrontVariantProductContext;
 
 const NON_HANDSET_PRODUCT_PATTERN =
-  /\b(?:cases?|covers?|chargers?|cables?|protectors?|accessor(?:y|ies)|headphones?|earphones?|earbuds?|microphones?|screen protectors?|tempered glass)\b/i;
+  /\b(?:cases?|covers?|chargers?|cables?|protectors?|accessor(?:y|ies)|headphones?|earphones?|earbuds?|microphones?|screen protectors?|tempered glass|batter(?:y|ies)|replacements?|parts?|spare parts?)\b/i;
 
 const TABLET_OR_COMPUTER_PRODUCT_PATTERN =
   /\b(?:tablets?|ipads?|galaxy tab|redmi pad|xiaomi pad|lenovo tab|laptops?|notebooks?|computers?|macbooks?)\b/i;
 
 const EXPLICIT_HANDSET_PATTERN =
-  /\b(?:iphones?|google pixel|pixel \d|galaxy [sazmf]\d)/i;
+  /\b(?:iphones?|google pixel|pixel \d+|galaxy [sazmf]\d+|motorola|moto [ge]\d+|edge \d+|tecno|infinix|redmi|xiaomi|oneplus|oppo|vivo|nokia|xperia)/i;
 
 const PHONE_CATEGORY_PATTERN =
   /(?:^|[\s/_-])(?:smartphones?|phones?|feature[\s_-]*phones?|mobile[\s_-]*phones?|cell[\s_-]*phones?)(?:$|[\s/_-])/i;

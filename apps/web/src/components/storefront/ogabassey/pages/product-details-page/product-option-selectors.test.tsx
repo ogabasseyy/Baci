@@ -35,24 +35,9 @@ function buildProductData(
 type ProductVariantFixture = NonNullable<NormalizedProductDetails['variants']>;
 
 const s22Variants: ProductVariantFixture = [
-  {
-    id: 'v1',
-    attributes: { ram: '8GB', storage: '128GB' },
-    price_override: 500000,
-    stock_quantity: 9999,
-  },
-  {
-    id: 'v2',
-    attributes: { ram: '12GB', storage: '256GB' },
-    price_override: 550000,
-    stock_quantity: 9999,
-  },
-  {
-    id: 'v3',
-    attributes: { ram: '12GB', storage: '512GB' },
-    price_override: 600000,
-    stock_quantity: 9999,
-  },
+  { id: 'v1', attributes: { ram: '8GB', storage: '128GB' }, price_override: 500000, stock_quantity: 9999 },
+  { id: 'v2', attributes: { ram: '12GB', storage: '256GB' }, price_override: 550000, stock_quantity: 9999 },
+  { id: 'v3', attributes: { ram: '12GB', storage: '512GB' }, price_override: 600000, stock_quantity: 9999 },
 ];
 
 function renderSelectors({

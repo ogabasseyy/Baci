@@ -60,6 +60,39 @@ describe('cellular-phone-classification', () => {
         category: 'Mobile Phones & Accessories',
       })
     ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Motorola Edge 50',
+        category: 'Phones & Tablets',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Tecno Camon 30',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBe(true);
+  });
+
+  it('excludes replacement parts and batteries even with phone branding', () => {
+    expect(
+      isCellularPhoneProduct({
+        name: 'iPhone 15 Replacement Battery',
+        category: 'Accessories',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Samsung Galaxy S24 Battery Replacement',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Google Pixel 8 Spare Parts Screen',
+        category: 'Smartphones',
+      })
+    ).toBe(false);
   });
 
   it('excludes phone accessories and cases', () => {

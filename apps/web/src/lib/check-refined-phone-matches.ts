@@ -7,6 +7,7 @@ import {
   isCellularPhoneProduct,
   type StorefrontVariantProductContext,
 } from './cellular-phone-classification';
+import { hasPositiveWifiOnlyIntent } from './has-positive-wifi-only-intent';
 import { isRestrictedWifiOnlyVariant } from './restricted-wifi-variant';
 
 interface Match {
@@ -17,17 +18,6 @@ interface PhoneProduct extends StorefrontVariantProductContext {
   id: string;
   has_variants?: boolean | null;
   variant_model?: string | null;
-}
-
-export function hasPositiveWifiOnlyIntent(query: string): boolean {
-  // A conservative opt-in: conflicting or negated requests are not permission
-  // to recommend restricted devices. No filter or price bound is relaxed.
-  return (
-    /\bwi[\s-]*fi[\s-]*only\b/i.test(query) &&
-    !/\b(?:not|no|without|avoid|exclude|excluding|except|non|never|neither|don'?t|doesn'?t)\b/i.test(
-      query
-    )
-  );
 }
 
 /** Verify only the exact phone selections returned in this SQL result window. */

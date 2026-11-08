@@ -1,6 +1,8 @@
 import {
+  type ProductWithSelectionAxesLike,
   resolveDefaultVariantSelection,
   resolveLowestPricedVariantSelection,
+  resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
 import { normalizeProductCondition } from '@/components/storefront/ogabassey/types';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
@@ -8,13 +10,18 @@ import type { CachedProductLcpHint } from '@/lib/cached-data';
 import { getCachedProductLcpHintPrimaryImage } from '@/lib/cached-product-lcp-hint-primary-image';
 import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import { getEffectiveStock } from '@/lib/product-stock';
-import type { Product, ProductCondition } from '@/lib/products';
+import type { Product, ProductCondition, ProductVariant } from '@/lib/products';
 import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import {
+  type CategoryProductRouteSearchParams,
   getVariantPrimaryImage,
   normalizeRouteProductVariants,
 } from './critical-variant-selection';
+import {
+  getLcpRouteLegacyPrices,
+  parseRouteProductNumber,
+} from './lcp-route-legacy-prices';
 import { buildLcpRouteProductProjection } from './lcp-route-product-projection';
 
 export interface LcpRouteProduct {
@@ -54,6 +61,12 @@ export interface LcpRouteProduct {
     stock_quantity: number;
   }>;
   price?: number | null;
+  product_categories?: Array<{
+    categories?:
+      | { name?: string | null; slug?: string | null }
+      | Array<{ name?: string | null; slug?: string | null }>
+      | null;
+  }> | null;
   sale_price?: number | null;
   schema_markup?: Product['schema_markup'];
   slug?: string;
@@ -69,76 +82,52 @@ type CategorizedPdpLcpHint = CachedProductLcpHint & {
   status?: string | null;
 };
 
-function parseRouteProductNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.replace(/,/g, '').trim();
-    if (!normalized) {
-      return null;
-    }
-
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
-}
-
-function getLcpRouteLegacyPrices(cachedProduct: CachedProductLcpHint) {
-  const price = parseRouteProductNumber(cachedProduct.price);
-  const compareAtPrice = parseRouteProductNumber(
-    cachedProduct.compare_at_price
-  );
-  const hasSale =
-    price !== null && compareAtPrice !== null && compareAtPrice > price;
-
-  return {
-    basePrice: hasSale ? compareAtPrice : (price ?? compareAtPrice),
-    compareAtPrice,
-    price: price ?? compareAtPrice,
-    salePrice: hasSale ? price : null,
-  };
-}
-
-function getRouteVariantResolutionProduct(
-  cachedProduct: CachedProductLcpHint,
-  variants: NonNullable<Product['variants']>
-) {
-  const legacyPrices = getLcpRouteLegacyPrices(cachedProduct);
-  const normalizedVariants = normalizeRouteProductVariants(variants);
-
-  return {
-    compare_at_price: legacyPrices.compareAtPrice,
-    condition: normalizeProductCondition(cachedProduct.condition),
-    manage_stock: cachedProduct.manage_stock,
-    price: legacyPrices.price ?? legacyPrices.basePrice ?? 0,
-    variants: normalizedVariants,
-  };
-}
-
 function getInitialRouteVariant(
   cachedProduct: CachedProductLcpHint,
-  variants: NonNullable<Product['variants']>
+  variants: NonNullable<Product['variants']>,
+  searchParams?: CategoryProductRouteSearchParams
 ) {
-  const resolutionProduct = getRouteVariantResolutionProduct(
-    cachedProduct,
-    filterDefaultAdvertisedVariants(variants, cachedProduct)
-  );
+  const normalizedVariants = normalizeRouteProductVariants(variants);
+  const resolutionProduct = {
+    compare_at_price: parseRouteProductNumber(cachedProduct.compare_at_price),
+    condition: normalizeProductCondition(cachedProduct.condition),
+    manage_stock: cachedProduct.manage_stock,
+    price: parseRouteProductNumber(cachedProduct.price) ?? 0,
+    variants: normalizedVariants,
+  };
 
-  // Keep the early preload aligned with the PDP's global cheapest-variant default.
+  if (searchParams) {
+    const selectionResolution = resolveVariantSelectionParamResolution(
+      resolutionProduct as unknown as ProductWithSelectionAxesLike<ProductVariant>,
+      searchParams
+    );
+    if (selectionResolution.type !== 'none') {
+      const match = selectionResolution.matches[0];
+      if (match) {
+        return match;
+      }
+    }
+  }
+
+  const advertisedResolutionProduct = {
+    ...resolutionProduct,
+    variants: filterDefaultAdvertisedVariants(
+      normalizedVariants,
+      cachedProduct
+    ),
+  };
+
   return (
-    resolveLowestPricedVariantSelection(resolutionProduct)?.variant ??
-    resolveDefaultVariantSelection(resolutionProduct)?.variant ??
+    resolveLowestPricedVariantSelection(advertisedResolutionProduct)?.variant ??
+    resolveDefaultVariantSelection(advertisedResolutionProduct)?.variant ??
     null
   );
 }
 
 export function getCachedProductRoutePrimaryImage(
   cachedProduct: CachedProductLcpHint | null,
-  variants?: NonNullable<Product['variants']>
+  variants?: NonNullable<Product['variants']>,
+  searchParams?: CategoryProductRouteSearchParams
 ) {
   if (!cachedProduct) {
     return null;
@@ -153,7 +142,8 @@ export function getCachedProductRoutePrimaryImage(
     });
   const initialVariant = getInitialRouteVariant(
     cachedProduct,
-    normalizedVariants
+    normalizedVariants,
+    searchParams
   );
 
   return (
@@ -205,7 +195,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     brand: cachedProduct.brand ?? '',
     canonical_url: cachedProduct.canonical_url ?? undefined,
     categories: primaryCategory,
-    category: primaryCategory?.name ?? cachedProduct.category ?? undefined,
+    category: cachedProduct.category ?? primaryCategory?.name ?? undefined,
     category_slug: primaryCategory?.slug,
     color: cachedProduct.color ?? undefined,
     condition: productCondition,
@@ -234,6 +224,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     name: cachedProduct.name,
     offers,
     price: legacyPrices.price,
+    product_categories: cachedProduct.product_categories,
     sale_price: legacyPrices.salePrice,
     schema_markup: cachedProduct.schema_markup as Product['schema_markup'],
     slug: cachedProduct.slug ?? cachedProduct.id,
@@ -256,5 +247,5 @@ export function buildCriticalCommerceRouteProduct(
     max_variant_price: product.max_variant_price ?? undefined,
     min_variant_price: product.min_variant_price ?? undefined,
     price: product.price ?? 0,
-  };
+  } as Product;
 }

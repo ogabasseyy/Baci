@@ -18,4 +18,13 @@ describe('storefront-variant-url', () => {
     expect(parsed.searchParams.get('storage')).toBe('128GB');
     expect(parsed.searchParams.get('condition')).toBe('brand_new');
   });
+
+  it('safely handles relative URLs without throwing TypeError', () => {
+    const url = buildStorefrontVariantUrl('/products/iphone-16', {
+      id: 'var-456',
+      attributes: { storage: '256GB' },
+    });
+
+    expect(url).toBe('/products/iphone-16?variantId=var-456&storage=256GB');
+  });
 });

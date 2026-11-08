@@ -153,4 +153,46 @@ describe('cached category PDP projection', () => {
       price: 0,
     });
   });
+
+  it('selects cellular variant image by default for phones and respects explicit variant searchParams', () => {
+    const mixedPhoneHint = cachedHint({
+      name: 'iPhone 15',
+      category: 'Phones',
+      categories: { id: 'cat-elec', name: 'Electronics', slug: 'electronics' },
+      product_variants: [
+        {
+          id: 'variant-wifi',
+          status: 'active',
+          is_active: true,
+          price_override: 900_000,
+          stock_quantity: 5,
+          primary_image: 'https://cdn.example/wifi.avif',
+          attributes: { connectivity: 'Wi-Fi only', storage: '128GB' },
+        },
+        {
+          id: 'variant-cellular',
+          status: 'active',
+          is_active: true,
+          price_override: 1_100_000,
+          stock_quantity: 5,
+          primary_image: 'https://cdn.example/cellular.avif',
+          attributes: { connectivity: 'Cellular', storage: '128GB' },
+        },
+      ],
+    });
+
+    expect(getCachedProductRoutePrimaryImage(mixedPhoneHint)).toBe(
+      'https://cdn.example/cellular.avif'
+    );
+
+    expect(
+      getCachedProductRoutePrimaryImage(mixedPhoneHint, undefined, {
+        variantId: 'variant-wifi',
+      })
+    ).toBe('https://cdn.example/wifi.avif');
+
+    const product = mapCachedProductLcpHintToRouteProduct(mixedPhoneHint);
+    expect(product.category).toBe('Phones');
+    expect(product.image).toBe('https://cdn.example/cellular.avif');
+  });
 });

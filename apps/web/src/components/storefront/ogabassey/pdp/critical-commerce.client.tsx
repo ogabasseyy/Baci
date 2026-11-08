@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { Route } from 'next';
 import { useState } from 'react';
+import { resolveVariantSelection } from '@baci/shared/lib';
 import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { Product as CartProduct } from '@/lib/products';
@@ -109,10 +110,24 @@ export function OgabasseyPdpCriticalCommerceSummary() {
     variantAxisOptions,
     variants,
   } = useOgabasseyPdpCriticalCommerce();
-  const connectivityDisclosure = getVariantConnectivityDisclosure({
-    id: '',
-    attributes: selectedAttributes,
-  });
+  const selectedVariant =
+    (variants && variants.length > 0
+      ? resolveVariantSelection(
+          { ...productForCart, variants },
+          { attributes: selectedAttributes }
+        )?.variant ??
+        variants.find((variant) =>
+          Object.entries(selectedAttributes).every(
+            ([key, value]) => !value || variant.attributes?.[key] === value
+          )
+        )
+      : null);
+  const connectivityDisclosure = getVariantConnectivityDisclosure(
+    selectedVariant ?? {
+      id: '',
+      attributes: selectedAttributes,
+    }
+  );
 
   return (
     <>

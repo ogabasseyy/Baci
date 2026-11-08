@@ -36,18 +36,18 @@ function isListingRow(value: unknown): value is ListingRow {
       'condition',
       'variant_model',
       'advertised_condition',
+      'availability',
     ].every((key) => optionalString(value[key]))
   )
     return false;
   if (
-    !['price', 'stock', 'stock_quantity'].every((key) =>
+    !['price', 'compare_at_price', 'stock', 'stock_quantity'].every((key) =>
       optionalNumericScalar(value[key])
     )
   )
     return false;
   if (
     ![
-      'compare_at_price',
       'advertised_price',
       'advertised_compare_at_price',
       'advertised_min_variant_price',

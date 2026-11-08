@@ -1,6 +1,6 @@
 export interface AdvertisedVariantImageCandidate {
   primary_image?: string | null;
-  images?: string[] | readonly string[] | null;
+  images?: unknown;
 }
 
 /** Prefer only actual selected-variant imagery; never infer it from a filename. */

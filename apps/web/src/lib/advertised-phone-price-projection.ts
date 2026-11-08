@@ -36,6 +36,7 @@ export interface AdvertisedPhoneProduct
   manage_stock?: boolean | null;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
+  availability?: string | null;
 }
 export type PublicAdvertisedVariant = NonNullable<
   Parameters<typeof normalizeStorefrontProductVariants>[0]
@@ -122,28 +123,43 @@ export async function projectAdvertisedPhonePrices<
         option.price > 0
       );
     });
+    const requestedCondition = normalizeCanonicalProductCondition(
+      constraints.condition
+    );
+    const constrainedEligible = eligible.filter((variant) => {
+      const option = resolvePublicProductOption(parent, { variant });
+      if (typeof option.price !== 'number') return false;
+      if (
+        constraints.minPrice !== undefined &&
+        option.price < constraints.minPrice
+      ) {
+        return false;
+      }
+      if (
+        constraints.maxPrice !== undefined &&
+        option.price > constraints.maxPrice
+      ) {
+        return false;
+      }
+      if (
+        ['new', 'used', 'open_box', 'refurbished'].includes(
+          requestedCondition
+        ) &&
+        option.condition !== requestedCondition
+      ) {
+        return false;
+      }
+      return true;
+    });
+
     const selected = resolveDefaultAdvertisedVariantSelection(
-      { ...parent, variants: eligible },
+      { ...parent, variants: constrainedEligible },
       product
     );
     if (!selected) return [];
     const selectedOption = resolvePublicProductOption(parent, {
       variant: selected.variant,
     });
-    const requestedCondition = normalizeCanonicalProductCondition(
-      constraints.condition
-    );
-    if (
-      (constraints.minPrice !== undefined &&
-        selected.price < constraints.minPrice) ||
-      (constraints.maxPrice !== undefined &&
-        selected.price > constraints.maxPrice) ||
-      (['new', 'used', 'open_box', 'refurbished'].includes(
-        requestedCondition
-      ) &&
-        selectedOption.condition !== requestedCondition)
-    )
-      return [];
 
     const prices = eligible
       .map((variant) => resolvePublicProductOption(parent, { variant }).price)
@@ -163,6 +179,9 @@ export async function projectAdvertisedPhonePrices<
           : {}),
         advertised_min_variant_price: Math.min(...prices),
         advertised_max_variant_price: Math.max(...prices),
+        ...(product.manage_stock === true && selected.variant.is_purchasable
+          ? { availability: 'InStock' }
+          : {}),
       },
     ];
   });

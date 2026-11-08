@@ -6,6 +6,8 @@ import type { Metadata } from 'next';
 const STOREFRONT_FILTER_SEARCH_PARAMS: ReadonlyMap<string, string> = new Map([
   ['brand', 'brand'],
   ['brands', 'brand'],
+  ['categories', 'category'],
+  ['category', 'category'],
   ['color', 'color'],
   ['colors', 'color'],
   ['condition', 'condition'],
@@ -40,7 +42,11 @@ const STOREFRONT_CANONICAL_FILTER_QUERY_KEYS = [
   ['storage', ['storage']],
 ] as const satisfies readonly [string, readonly string[]][];
 
-const NON_INDEXABLE_CANONICAL_FILTER_KEYS = new Set(['graphicsHub', 'sort']);
+const NON_INDEXABLE_CANONICAL_FILTER_KEYS = new Set([
+  'category',
+  'graphicsHub',
+  'sort',
+]);
 
 export type StorefrontRobotsSearchParams = Record<
   string,

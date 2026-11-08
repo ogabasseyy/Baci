@@ -80,6 +80,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(report.checks.map((check) => check.gate)).toEqual([
       'key_configuration',
       'primary_intake',
+      'legacy_replay',
       'migration_and_table',
       'storage',
       'drain_login',
@@ -139,6 +140,39 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(notReadyGates(ready)).toEqual([
       'drain_schedule:DRAIN_CRON_NOT_INSTALLED',
     ]);
+  });
+
+  it('checks only the legacy key and restricted intake runtime for the opt-in legacy lane', () => {
+    primary.bank = '';
+    primary.custody = '';
+    primary.interest = '';
+    ready.env = {
+      ...ready.env,
+      PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
+    };
+    ready.drain = {
+      login: { ok: true },
+      schedule: { enabled: true, cron: 'installed' },
+      legacyReplayRuntimeReady: true,
+      primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
+      alerts: { configured: true },
+    };
+    expect(inspectPiggyvestWebhookCaptureReadiness(ready)).toMatchObject({
+      status: 'ready',
+      readyToAttest: true,
+      notReady: [],
+    });
+
+    primary.bank = freshKey();
+    expect(notReadyGates(ready)).toContain(
+      'primary_intake:PRIMARY_INTAKE_NOT_READY:bank'
+    );
+    primary.bank = '';
+
+    if (ready.drain) ready.drain.legacyReplayRuntimeReady = false;
+    expect(notReadyGates(ready)).toContain(
+      'legacy_replay:LEGACY_INTAKE_RUNTIME_NOT_READY'
+    );
   });
 
   it('is never ready to attest on the web app, where worker-host evidence cannot be collected', () => {
@@ -244,16 +278,22 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     const attested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(attested.processingFailureReply).toBe('200-deferred');
     expect(attested.notes).toEqual([
-      expect.stringContaining('replays only deliveries a primary intake owns'),
+      expect.stringContaining(
+        'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+      ),
     ]);
-    expect(attested.notes[0]).toContain('legacy-family webhook key');
+    expect(attested.notes[0]).toContain(
+      'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+    );
 
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
     const unattested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(unattested.processingFailureReply).toBe('503-retry');
     expect(unattested.notes).toEqual([
       expect.stringContaining('deferred 200 reply'),
-      expect.stringContaining('replays only deliveries a primary intake owns'),
+      expect.stringContaining(
+        'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+      ),
     ]);
     expect(unattested.notes[0]).toContain('is only active once the drain');
     expect(unattested.notes[0]).toContain(

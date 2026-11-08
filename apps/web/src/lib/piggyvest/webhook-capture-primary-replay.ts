@@ -7,30 +7,31 @@ import {
   authorizesLegacyHandling,
   primaryOwnerFamily,
 } from './primary-event-owner';
+import { isPiggyvestCaptureLegacyReplayEnabled } from './webhook-capture-attestation';
 import type {
   ReplayDelivery,
   ReplayProcessResult,
 } from './webhook-capture-drain';
+import { replayLegacyDelivery } from './webhook-capture-legacy-replay';
 import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 
 /**
- * Processing step of the worker-host capture drain (R5): the receiver's
- * pipeline (process-delivery.ts) restricted to the primary intakes, each of
- * which writes through its own dedicated database login. This module never
- * builds or receives a service-role client.
+ * Processing step of the worker-host capture drain (R5): primary intakes
+ * use their dedicated logins; optional legacy replay reuses the receiver's
+ * restricted webhook-intake client. This module never builds or receives a
+ * service-role client.
  *
- * Where the receiver would use its inline-only restricted intake, this step
- * writes nothing and reports a marker instead, so the drain settles the
- * captured row (the row itself is the durable evidence):
+ * Where a legacy path is disabled, this step writes nothing and reports a
+ * marker instead, so the drain settles the captured row (the row itself is
+ * durable evidence):
  * - unparseable or unknown bytes: content quarantine (parked for review);
  * - a delivery no primary intake owns and no legacy path may take:
  *   authorization quarantine (parked), or a key-set retry while the key
  *   set is incomplete;
  * - an inflow redelivery conflict: conflict (parked for review);
- * - anything only the legacy path could finish (a record-only event, a
- *   legacy-authorized delivery no primary intake claimed): out of scope,
- *   set aside for review with an alert; a provider redelivery the
- *   receiver completes inline still closes it.
+ * - anything only the disabled legacy path could finish (a record-only
+ *   event, a legacy-authorized delivery no primary intake claimed): out of
+ *   scope and set aside for review with an alert.
  */
 export async function replayPrimaryDelivery(
   delivery: ReplayDelivery,
@@ -71,15 +72,17 @@ export async function replayPrimaryDelivery(
       : { status: primary.status };
   }
 
-  // Whether the legacy path may take it is judged on what admission
-  // recorded: the worker host holds no legacy key, so its verification
-  // never reports the legacy family even for a secret the web app also
-  // holds as the legacy key. Setting a row aside grants nothing, so the
-  // wider recorded set cannot widen authority; processing above used only
-  // the narrowed `families`.
-  if (authorizesLegacyHandling(event.eventType, delivery.recordedFamilies)) {
+  // Both current replay verification and immutable admission evidence must
+  // authorize the legacy handler. The recorded set is never authority by
+  // itself.
+  if (
+    isPiggyvestCaptureLegacyReplayEnabled(env) &&
+    authorizesLegacyHandling(event.eventType, families) &&
+    authorizesLegacyHandling(event.eventType, delivery.recordedFamilies)
+  )
+    return replayLegacyDelivery(delivery, env);
+  if (authorizesLegacyHandling(event.eventType, delivery.recordedFamilies))
     return { status: 503, outOfScope: 'LEGACY_PATH' };
-  }
   return incompleteKeySet === true
     ? { status: 503, keySetIncomplete: true }
     : { status: 200, authorizationQuarantine: true };

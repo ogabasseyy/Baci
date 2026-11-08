@@ -24,9 +24,11 @@ import { readPiggyvestWebhookIntakeRuntime } from './webhook-intake-runtime';
  * One client = one database connection (opened lazily, verified once, reused
  * by every operation of the delivery). The caller disposes it in a `finally`.
  */
-export function createPiggyvestIntakeClient(): PiggyvestIntakeClient {
+export function createPiggyvestIntakeClient(
+  env: NodeJS.ProcessEnv = process.env
+): PiggyvestIntakeClient {
   return createPiggyvestIntakeClientFromExecutor(
-    createPiggyvestWebhookIntakeExecutor(readPiggyvestWebhookIntakeRuntime())
+    createPiggyvestWebhookIntakeExecutor(readPiggyvestWebhookIntakeRuntime(env))
   );
 }
 

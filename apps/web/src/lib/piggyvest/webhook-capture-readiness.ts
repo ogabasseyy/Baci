@@ -1,6 +1,9 @@
 import 'server-only';
 import type { PiggyvestCaptureStatus } from '@/schemas/piggyvest/webhook-capture';
-import { isPiggyvestCaptureDrainScheduled } from './webhook-capture-attestation';
+import {
+  isPiggyvestCaptureDrainScheduled,
+  isPiggyvestCaptureLegacyReplayEnabled,
+} from './webhook-capture-attestation';
 import {
   type CaptureDrainEvidence,
   drainAlertReason,
@@ -26,7 +29,7 @@ const STALE_BACKLOG_MS = 15 * 60_000;
 // The attestation turns every failed processing attempt into a deferred
 // 200, but the worker-host drain cannot finish legacy-path deliveries.
 const SCOPE_NOTE =
-  'The worker-host drain replays only deliveries a primary intake owns; legacy-family deliveries and record-only events (such as interest accruals) are set aside there for review with an alert and rely on provider redelivery. Attest the drain only while the web app holds no legacy-family webhook key, and accept that a failed record-only event then waits in review.';
+  'Legacy-family and record-only deliveries are set aside for review unless PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED=true is explicitly set on the worker. That lane requires the restricted webhook intake runtime and complete stored-signature verification; it reuses the receiver handler. Readiness does not claim legacy replay while the lane is off.';
 const WORKER_HOST_NOTE =
   'Run on the worker host: the attestation (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED) is set on the web app and cannot be read here, so the reply a processing failure gets is not reported. A stale backlog is reported whenever the drain is enabled on this host.';
 
@@ -41,6 +44,7 @@ const DRAIN_REPLAY_FAMILIES: readonly PiggyvestWebhookKeyFamily[] = [
 export type CaptureReadinessGate =
   | 'key_configuration'
   | 'primary_intake'
+  | 'legacy_replay'
   | 'migration_and_table'
   | 'storage'
   | 'drain_login'
@@ -115,6 +119,14 @@ function keyConfiguration(evidence: WebhookCaptureEvidence) {
   }
   if (current.length === 0) return { details, reason: 'NO_CURRENT_KEY' };
   if (!evidence.drain) return { details, reason: null };
+  if (isPiggyvestCaptureLegacyReplayEnabled(evidence.env)) {
+    return {
+      details,
+      reason: current.some((key) => key.family === 'legacy')
+        ? null
+        : 'DRAIN_FAMILY_KEY_MISSING:legacy',
+    };
+  }
   const missing = DRAIN_REPLAY_FAMILIES.filter(
     (family) => !current.some((key) => key.family === family)
   );
@@ -124,6 +136,30 @@ function keyConfiguration(evidence: WebhookCaptureEvidence) {
       ? `DRAIN_FAMILY_KEY_MISSING:${missing.join(',')}`
       : null,
   };
+}
+
+function primaryReadinessReason(
+  evidence: WebhookCaptureEvidence
+): string | null {
+  const primary = evidence.drain?.primaryIntake;
+  if (!isPiggyvestCaptureLegacyReplayEnabled(evidence.env))
+    return primaryIntakeReason(primary);
+  if (!primary) return 'PRIMARY_INTAKE_NOT_CHECKED';
+  const keys = collectPiggyvestWebhookSecretsWithStatus(
+    evidence.env,
+    evidence.now
+  );
+  const configured = new Set(
+    keys.secrets
+      .filter((key) => key.family !== 'legacy')
+      .map((key) => key.family)
+  );
+  const unavailable = primary.notReady.filter((family) =>
+    configured.has(family)
+  );
+  return unavailable.length
+    ? `PRIMARY_INTAKE_NOT_READY:${unavailable.join(',')}`
+    : null;
 }
 
 function storageReasons(storage: CaptureStorageEvidence): {
@@ -172,9 +208,17 @@ export function inspectPiggyvestWebhookCaptureReadiness(
 ): WebhookCaptureReadinessReport {
   const keys = keyConfiguration(evidence);
   const storage = storageReasons(evidence.storage);
+  const legacyEnabled = isPiggyvestCaptureLegacyReplayEnabled(evidence.env);
+  const legacyRuntimeReady = evidence.drain?.legacyReplayRuntimeReady === true;
+  const legacyReplayReason = legacyEnabled
+    ? legacyRuntimeReady
+      ? null
+      : 'LEGACY_INTAKE_RUNTIME_NOT_READY'
+    : null;
   const results: [CaptureReadinessGate, string | null][] = [
     ['key_configuration', keys.reason],
-    ['primary_intake', primaryIntakeReason(evidence.drain?.primaryIntake)],
+    ['primary_intake', primaryReadinessReason(evidence)],
+    ['legacy_replay', legacyReplayReason],
     ['migration_and_table', storage.migration],
     ['storage', storage.storage],
     ['drain_login', drainLoginReason(evidence.drain)],

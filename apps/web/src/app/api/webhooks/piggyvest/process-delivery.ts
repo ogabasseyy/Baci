@@ -44,9 +44,8 @@ import { toRecordInput } from './record-input';
  * - Inbox/quarantine write fails, or a specialized intake is unavailable
  *   -> 503.
  *
- * The service-client factory and provider config are injected: the
- * event-pipeline boundary permits the API route to reach those authorities
- * directly, not through this importer.
+ * The restricted-intake client factory and provider config are injected;
+ * this function does not construct a service-role client.
  */
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -82,6 +81,19 @@ const authorizationQuarantines = new WeakSet<Response>();
 // processable, and a processed capture would swallow the resend as a
 // duplicate.
 const contentQuarantines = new WeakSet<Response>();
+const conflictQuarantines = new WeakSet<Response>();
+
+export function isConflictQuarantine(response: Response): boolean {
+  return conflictQuarantines.has(response);
+}
+
+async function quarantineConflict(
+  ...args: Parameters<typeof quarantineAndAck>
+): Promise<Response> {
+  const response = await quarantineAndAck(...args);
+  if (response.ok) conflictQuarantines.add(response);
+  return response;
+}
 
 export function isContentQuarantine(response: Response): boolean {
   return contentQuarantines.has(response);
@@ -200,7 +212,7 @@ export async function processVerifiedDelivery(
     // idempotent on redelivery) does not end the provider's retries.
     if (ownerIntakeSkipped) return retryUntilKeySetComplete();
     if (primary === 'conflict') {
-      return quarantineAndAck(
+      return quarantineConflict(
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
@@ -246,7 +258,7 @@ export async function processVerifiedDelivery(
       console.warn(
         '[PiggyVest Webhook] Same-identity conflicting delivery quarantined'
       );
-      return quarantineAndAck(
+      return quarantineConflict(
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },

@@ -158,10 +158,13 @@ describe('products index page metadata', () => {
     });
   });
 
-  it('noindexes category query permutations and canonicalizes to clean /products', async () => {
+  it.each([
+    { category: 'Smartphones' },
+    { categories: 'Smartphones' },
+  ])('noindexes category query permutations (%j) and canonicalizes to clean /products', async (searchParams) => {
     const metadata = await generateMetadata({
       params: Promise.resolve({ slug: 'test-store' }),
-      searchParams: Promise.resolve({ category: 'Smartphones' }),
+      searchParams: Promise.resolve(searchParams),
     });
 
     expect(metadata.alternates?.canonical).toBe(

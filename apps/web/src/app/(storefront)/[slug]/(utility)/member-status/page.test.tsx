@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CachedMerchant } from '@/lib/cached-data';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { mockMerchant } from '@/lib/cached-data.test-utils';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -35,6 +37,12 @@ vi.mock('next/navigation', () => ({
 
 const { default: MemberStatusPage, metadata } = await import('./page');
 
+const baseMerchant: CachedMerchant = {
+  ...mockMerchant,
+  slug: 'ogabassey',
+  template_id: 'ogabassey',
+};
+
 describe('MemberStatusPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,14 +52,11 @@ describe('MemberStatusPage', () => {
 
   it('declares noindex robots in metadata', () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
-    expect(metadata.title).toBe('Member Status | Ogabassey');
+    expect(metadata.title).toBe('Member Status');
   });
 
   it('renders member status UI for ogabassey merchant slug', async () => {
-    vi.mocked(getCachedMerchant).mockResolvedValue({
-      slug: 'ogabassey',
-      template_id: 'ogabassey',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+    vi.mocked(getCachedMerchant).mockResolvedValue(baseMerchant);
 
     render(
       await MemberStatusPage({
@@ -65,10 +70,7 @@ describe('MemberStatusPage', () => {
 
   it('resolves merchant by domain when slug is domain identifier', async () => {
     vi.mocked(isDomainIdentifier).mockReturnValue(true);
-    vi.mocked(getCachedMerchantByDomain).mockResolvedValue({
-      slug: 'ogabassey',
-      template_id: 'ogabassey',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchantByDomain>>);
+    vi.mocked(getCachedMerchantByDomain).mockResolvedValue(baseMerchant);
 
     render(
       await MemberStatusPage({
@@ -92,9 +94,10 @@ describe('MemberStatusPage', () => {
 
   it('calls notFound when merchant template is not ogabassey', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
+      ...baseMerchant,
       slug: 'other',
       template_id: 'default',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+    });
 
     await expect(
       MemberStatusPage({

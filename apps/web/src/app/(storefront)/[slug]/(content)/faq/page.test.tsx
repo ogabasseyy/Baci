@@ -183,7 +183,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(notFound).not.toHaveBeenCalled();
   });
@@ -220,7 +220,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/faq');
     expect(notFound).not.toHaveBeenCalled();
   });
@@ -238,7 +238,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(notFound).not.toHaveBeenCalled();
   });
 
@@ -259,7 +259,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/faq');
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/faq');
     expect(metadata.robots).toEqual({ index: true, follow: true });

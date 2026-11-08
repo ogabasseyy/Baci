@@ -113,6 +113,9 @@ test('accepts the exact bank worker capability and rejects grant drift', async (
   assert.equal(prepared.activationAuthorized, false);
   for (const [name, change] of [
     ['other-parent', (db) => { db.readiness_reader_restricted = false; }],
+    ['no-parent', (db) => { db.capability_parent_memberships = 0; }],
+    ['multiple-parents', (db) => { db.capability_parent_memberships = 2; }],
+    ['duplicate-rpc', (db) => { db.effective_primary_rpcs[1] = db.effective_primary_rpcs[0]; }],
     ['missing-rpc', (db) => { db.effective_primary_rpcs.pop(); }],
     ['overload', (db) => { db.effective_primary_rpcs[0] = 'bank_inbox_readiness(p_scope jsonb)'; }],
     ['extra-rpc', (db) => { db.effective_primary_rpcs.push('unexpected()'); }],

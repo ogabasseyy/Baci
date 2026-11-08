@@ -4,6 +4,7 @@ DECLARE
   capability name;
 BEGIN
   FOREACH routine IN ARRAY ARRAY[
+    'piggyvest_primary_card.assert_scope(jsonb,boolean)'::regprocedure,
     'piggyvest_primary_card.assert_scope(jsonb,boolean,boolean)'::regprocedure,
     'piggyvest_primary_card.block_unsettled_customer_deletion()'::regprocedure
   ] LOOP

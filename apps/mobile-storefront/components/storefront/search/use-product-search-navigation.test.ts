@@ -16,6 +16,7 @@ function setup() {
     })
   );
   const onClose = jest.fn();
+  const onSelectionStart = jest.fn();
   const onNavigate = jest.fn();
   const saveSearch = jest.fn();
   const hook = renderHook(
@@ -25,11 +26,19 @@ function setup() {
         query: query ?? ' phone ',
         saveSearch,
         onClose,
+        onSelectionStart,
         onNavigate,
       }),
     { initialProps: { isVisible: true } }
   );
-  return { ...hook, release, onClose, onNavigate, saveSearch };
+  return {
+    ...hook,
+    release,
+    onClose,
+    onNavigate,
+    saveSearch,
+    onSelectionStart,
+  };
 }
 beforeEach(() => {
   jest.clearAllMocks();
@@ -48,6 +57,10 @@ it('keeps results visible and ignores duplicate taps until keyboard layout settl
   expect(h.onClose).not.toHaveBeenCalled();
   expect(h.onNavigate).not.toHaveBeenCalled();
   expect(h.saveSearch).toHaveBeenCalledTimes(1);
+  expect(h.onSelectionStart).toHaveBeenCalledTimes(1);
+  expect(h.onSelectionStart.mock.invocationCallOrder[0]).toBeLessThan(
+    mockDismiss.mock.invocationCallOrder[0]
+  );
   await act(async () => {
     h.release();
     await navigation;

@@ -16,7 +16,38 @@ test('client environment changes refresh the JS bundle while unrelated native ou
   try {
     writeFileSync(join(dir, 'settings.gradle'), "rootProject.name = 'app'\n");
     writeFileSync(join(dir, 'benchmark.gradle'), createAndroidBenchmarkGradleInit({ suffix: '' }));
+    for (const [name, suffix] of [['installed', ''], ['isolated', '.benchmark']]) {
+      writeFileSync(join(dir, name + '.gradle'), createAndroidBenchmarkGradleInit({ suffix }));
+    }
     writeFileSync(join(dir, 'build.gradle'), `
+['installed', 'isolated'].each { identity ->
+  def release = [applicationIdSuffix: null, signingConfig: null]
+  def debugSigning = new Object()
+  def packagerArgs = ['--existing']
+  def androidDsl = [
+    buildTypes: [getByName: { name -> assert name == 'release'; release }],
+    signingConfigs: [getByName: { name -> assert name == 'debug'; debugSigning }]
+  ]
+  def extensions = [
+    androidComponents: [finalizeDsl: { callback -> callback(androidDsl) }],
+    react: [extraPackagerArgs: packagerArgs]
+  ]
+  def fakeProject = [
+    name: 'app',
+    pluginManager: [withPlugin: { id, callback ->
+      assert id in ['com.android.application', 'com.facebook.react']
+      callback()
+    }],
+    extensions: [getByName: { name -> extensions[name] }],
+    tasks: [configureEach: { callback -> }]
+  ]
+  def binding = new Binding([gradle: [beforeProject: { callback -> callback(fakeProject) }]])
+  new GroovyShell(binding).evaluate(file(identity + '.gradle'))
+  assert release.applicationIdSuffix == (identity == 'isolated' ? '.benchmark' : null)
+  assert release.signingConfig.is(debugSigning)
+  assert packagerArgs == ['--existing', '--max-workers', '2', '--reset-cache']
+}
+
 tasks.register('nativeCompile') {
   outputs.file('native-count.txt')
   doLast { file('native-count.txt').text = (file('native-count.txt').exists() ? file('native-count.txt').text.toInteger() + 1 : 1).toString() }

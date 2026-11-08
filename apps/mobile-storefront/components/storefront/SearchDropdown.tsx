@@ -27,6 +27,7 @@ interface SearchDropdownProps {
   hideInput?: boolean;
   isVisible: boolean;
   onClose: () => void;
+  onProductSelectionStart?: () => void;
   onQueryChange?: (text: string) => void;
   /**
    * Full-search submission for the "See all results" action and the
@@ -45,6 +46,7 @@ export function SearchDropdown({
   hideInput = false,
   isVisible,
   onClose,
+  onProductSelectionStart,
   onQueryChange: onExternalQueryChange,
   onSeeAllResults,
   query: externalQuery,
@@ -99,6 +101,7 @@ export function SearchDropdown({
     query: activeQuery,
     saveSearch,
     onClose,
+    onSelectionStart: onProductSelectionStart,
     onNavigate: (product) => router.push(`/product/${product.slug}`),
   });
 

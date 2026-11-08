@@ -1414,6 +1414,7 @@ export {
 } from './seo-meta-title-platform-compaction';
 
 import { stripRedundantPlatformParentheticals } from './seo-meta-title-platform-compaction';
+import { truncateMetaTitle } from './truncate-meta-title';
 
 /**
  * Generates a normalized SEO title with optional suffix and length cap.
@@ -1424,6 +1425,7 @@ export function generateMetaTitle(
     maxLength?: number;
     suffix?: string;
     fallback?: string;
+    dropSuffixWhenTooLong?: boolean;
   }
 ): string {
   const maxLength = validateMaxLength(
@@ -1470,7 +1472,7 @@ export function generateMetaTitle(
         if (!compactBaseTitle) {
           return normalizedSuffix.length <= maxLength
             ? normalizedSuffix
-            : `${normalizedSuffix.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+            : truncateMetaTitle(normalizedSuffix, undefined, maxLength);
         }
         if (compactBaseTitle.length + suffixFragment.length <= maxLength) {
           return `${compactBaseTitle}${suffixFragment}`;
@@ -1478,12 +1480,11 @@ export function generateMetaTitle(
       }
 
       const effectiveBaseTitle = isCompacted ? compactBaseTitle : baseTitle;
-      const allowedBaseLength =
-        maxLength - suffixFragment.length - ELLIPSIS_LENGTH;
+      const effectiveTitle = `${effectiveBaseTitle}${suffixFragment}`;
 
-      if (allowedBaseLength > 0) {
-        return `${effectiveBaseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
-      }
+      return truncateMetaTitle(effectiveTitle, suffix, maxLength, {
+        dropSuffixWhenTooLong: options?.dropSuffixWhenTooLong,
+      });
     }
   }
 
@@ -1501,10 +1502,14 @@ export function generateMetaTitle(
     }
 
     const effectiveTitle = isCompacted ? compactTitle : normalizedTitle;
-    return `${effectiveTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+    return truncateMetaTitle(effectiveTitle, undefined, maxLength, {
+      dropSuffixWhenTooLong: options?.dropSuffixWhenTooLong,
+    });
   }
 
-  return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+  return truncateMetaTitle(normalizedTitle, suffix, maxLength, {
+    dropSuffixWhenTooLong: options?.dropSuffixWhenTooLong,
+  });
 }
 
 export {

@@ -1,4 +1,5 @@
 import { generateSlug } from '@/lib/seo-utils';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { isAvailableProduct } from './is-available-product';
@@ -89,21 +90,24 @@ export function resolveEligibleCategoryHubDestinations(
     );
   });
 
-  const eligibleBrandEntries = brandAuthorityTaxonomy.getEligibleEntries(
-    categorySlug,
-    availableProducts
-  );
+  const brandEntries = brandAuthorityTaxonomy.getEntries(categorySlug);
 
   const brandHubs: EligibleHubItem[] = [];
   const familyHubs: EligibleHubItem[] = [];
 
-  for (const brandEntry of eligibleBrandEntries) {
+  for (const brandEntry of brandEntries) {
+    const brandEligibility =
+      authorityHubEligibility.resolveAvailableBrandAuthorityEligibility(
+        availableProducts,
+        brandEntry
+      );
+    if (!brandEligibility.eligible) continue;
     brandHubs.push({
       href: `${baseUrl}/${categorySlug}/brands/${brandEntry.brandKey}`,
       label: `Explore ${brandEntry.displayName}`,
       category_slug: categorySlug,
       brand_key: brandEntry.brandKey,
-      product_count: brandEntry.productCount,
+      product_count: brandEligibility.productCount,
     });
 
     const familyEntries = modelFamilyAuthorityTaxonomy.getEntries(
@@ -111,23 +115,23 @@ export function resolveEligibleCategoryHubDestinations(
       brandEntry.brandKey
     );
 
-    const brandProducts = availableProducts.filter((product) =>
-      brandAuthorityTaxonomy.matchesBrand(brandEntry, product.brand ?? null)
-    );
+    const brandProducts = brandEligibility.products;
 
     for (const familyEntry of familyEntries) {
-      const matchingProducts = brandProducts.filter((product) =>
-        modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, product.name)
-      );
+      const familyEligibility =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          brandProducts,
+          familyEntry
+        );
 
-      if (matchingProducts.length >= familyEntry.minimumProducts) {
+      if (familyEligibility.eligible) {
         familyHubs.push({
           href: `${baseUrl}/${categorySlug}/brands/${brandEntry.brandKey}/families/${familyEntry.familyKey}`,
           label: `Explore ${familyEntry.displayName}`,
           category_slug: categorySlug,
           brand_key: brandEntry.brandKey,
           family_key: familyEntry.familyKey,
-          product_count: matchingProducts.length,
+          product_count: familyEligibility.productCount,
         });
       }
     }

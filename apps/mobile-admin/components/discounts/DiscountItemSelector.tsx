@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
-  Platform,
   Pressable,
   Text,
   TextInput,
@@ -15,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
 import SafeImage from '@/components/ui/SafeImage';
 import { getVirtualizedListProps } from '@/components/ui/virtualized-list-props';
+import { isRuntimePlatform } from '@/config/runtime-platform';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 import type { SelectableItem } from '@/lib/discount-items';
@@ -117,7 +117,7 @@ export function DiscountItemSelector({
   }, [visible, merchant?.id, type]);
 
   useEffect(() => {
-    if (_fetchError && Platform.OS === 'ios') {
+    if (_fetchError && isRuntimePlatform('ios')) {
       AccessibilityInfo.announceForAccessibility(_fetchError);
     }
   }, [_fetchError]);

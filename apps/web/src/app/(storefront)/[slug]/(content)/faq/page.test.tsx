@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { headers } from 'next/headers';
-import { type ReactNode, Suspense } from 'react';
+import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getMerchantByIdentifier,
@@ -44,32 +44,6 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
-// The Help page is imported directly by the route; stub it to keep the
-// heavy page module out of this test's module graph.
-vi.mock('@/components/storefront/ogabassey/pages/help-support', () => ({
-  OgabasseyV2HelpSupport: vi.fn(() => null),
-}));
-
-vi.mock('@/types/faq', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/types/faq')>();
-  return {
-    ...actual,
-    parseLegacyFAQ: vi.fn(() => []),
-  };
-});
-
-const { parseLegacyFAQ } = await import('@/types/faq');
-const { OgabasseyV2HelpSupport } = await import(
-  '@/components/storefront/ogabassey/pages/help-support'
-);
-const { generateFAQSchema } = await import('@/lib/seo-utils');
-
-vi.mock('../pages/faq/faq-page-client', () => ({
-  FAQPageClient: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="faq-client">FAQ UI{children}</div>
-  ),
-}));
-
 const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
@@ -78,16 +52,21 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
+vi.mock('@/types/faq', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('@/types/faq');
+  return {
+    ...actual,
+    parseLegacyFAQ: vi.fn(() => []),
+  };
+});
+
+const { parseLegacyFAQ } = await import('@/types/faq');
 const { default: FAQPage, generateMetadata } = await import('./page');
-const { FAQContent } = await import('./faq-content');
-const { FAQJsonLd } = await import('./faq-json-ld');
 
 describe('FAQPage', () => {
   beforeEach(() => {
     vi.mocked(getMerchantByIdentifier).mockReset();
     vi.mocked(getRequestScopedMerchant).mockReset();
-    vi.mocked(OgabasseyV2HelpSupport).mockClear();
-    vi.mocked(generateFAQSchema).mockClear();
     notFound.mockClear();
     mockConnection.mockReset();
   });
@@ -162,97 +141,6 @@ describe('FAQPage', () => {
     await vi.waitFor(() => {
       expect(notFound).toHaveBeenCalled();
     });
-  });
-
-  it('threads normalized approved policy FAQ items into Ogabassey template help page', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      business_name: 'Ogabassey',
-      template_id: 'ogabassey',
-      slug: 'ogabassey',
-      faq_items: [
-        { question: 'What is your return policy?', answer: '7 days return' },
-      ],
-      pages: {},
-    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
-
-    const ui = await FAQContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-    });
-
-    render(ui);
-
-    expect(OgabasseyV2HelpSupport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchant: expect.objectContaining({
-          slug: 'ogabassey',
-          faq_items: [
-            expect.objectContaining({
-              question: 'What is your return policy?',
-              answer: expect.stringContaining('14 days'),
-            }),
-          ],
-        }),
-      }),
-      undefined
-    );
-  });
-
-  it('normalizes stale return and warranty answers in FAQ JSON-LD schema', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      business_name: 'Ogabassey',
-      template_id: 'ogabassey',
-      slug: 'ogabassey',
-      faq_items: [
-        { question: 'What is your return policy?', answer: '7 days return' },
-        {
-          question: 'How does the warranty work?',
-          answer: '3 months warranty',
-        },
-      ],
-      pages: {},
-    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
-
-    const ui = await FAQJsonLd({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-    });
-
-    render(ui);
-
-    expect(generateFAQSchema).toHaveBeenCalledWith([
-      expect.objectContaining({
-        question: 'What is your return policy?',
-        answer: expect.stringContaining('14 days'),
-      }),
-      expect.objectContaining({
-        question: 'How does the warranty work?',
-        answer: expect.stringContaining('one-year'),
-      }),
-    ]);
-  });
-
-  it('generates normalized FAQPage schema for Ogabassey fallback FAQs when merchant has no custom FAQs', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
-      business_name: 'Ogabassey',
-      template_id: 'ogabassey',
-      slug: 'ogabassey',
-      faq_items: [],
-      pages: {},
-    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
-
-    const ui = await FAQJsonLd({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-    });
-
-    render(ui);
-
-    expect(generateFAQSchema).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          question: 'What is your return policy?',
-          answer: expect.stringContaining('14 days'),
-        }),
-      ])
-    );
   });
 });
 

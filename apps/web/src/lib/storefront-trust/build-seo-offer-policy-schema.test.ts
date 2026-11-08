@@ -8,6 +8,35 @@ import {
   mapReturnMethodToSchemaUrl,
   toDeliveryDayRange,
 } from './build-seo-offer-policy-schema';
+import type { MerchantTrustProfile } from './merchant-trust-profile-types';
+
+const emptyProfile: MerchantTrustProfile = {
+  socialLinks: {},
+  derivedLinks: {},
+};
+
+const makeReturnProfile = (
+  returnPolicy: NonNullable<MerchantTrustProfile['returnPolicy']>
+): MerchantTrustProfile => ({
+  ...emptyProfile,
+  returnPolicy,
+});
+
+const makeShippingProfile = (
+  overrides?: Partial<NonNullable<MerchantTrustProfile['shippingPolicy']>>
+): MerchantTrustProfile => ({
+  ...emptyProfile,
+  shippingPolicy: {
+    localRoute: '/shipping',
+    regions: ['NG'],
+    shippingFeeType: 'free',
+    handlingDaysMin: 0,
+    handlingDaysMax: 1,
+    transitDaysMin: 1,
+    transitDaysMax: 3,
+    ...overrides,
+  },
+});
 
 describe('build-seo-offer-policy-schema', () => {
   describe('return schema mapping', () => {
@@ -39,44 +68,35 @@ describe('build-seo-offer-policy-schema', () => {
 
     it('returns undefined when windowDays is missing, non-integer, or negative', () => {
       expect(buildMerchantReturnPolicy('NG', undefined)).toBeUndefined();
+      expect(buildMerchantReturnPolicy('NG', emptyProfile)).toBeUndefined();
       expect(
-        buildMerchantReturnPolicy('NG', {
-          socialLinks: {},
-          derivedLinks: {},
-        })
+        buildMerchantReturnPolicy(
+          'NG',
+          makeReturnProfile({ localRoute: '/returns', windowDays: -1 })
+        )
       ).toBeUndefined();
       expect(
-        buildMerchantReturnPolicy('NG', {
-          socialLinks: {},
-          derivedLinks: {},
-          returnPolicy: { localRoute: '/returns', windowDays: -1 },
-        })
-      ).toBeUndefined();
-      expect(
-        buildMerchantReturnPolicy('NG', {
-          socialLinks: {},
-          derivedLinks: {},
-          returnPolicy: { localRoute: '/returns', windowDays: 1.5 },
-        })
+        buildMerchantReturnPolicy(
+          'NG',
+          makeReturnProfile({ localRoute: '/returns', windowDays: 1.5 })
+        )
       ).toBeUndefined();
     });
 
     it('returns undefined when country cannot be normalized', () => {
       expect(
-        buildMerchantReturnPolicy('Atlantis', {
-          socialLinks: {},
-          derivedLinks: {},
-          returnPolicy: { localRoute: '/returns', windowDays: 14 },
-        })
+        buildMerchantReturnPolicy(
+          'Atlantis',
+          makeReturnProfile({ localRoute: '/returns', windowDays: 14 })
+        )
       ).toBeUndefined();
     });
 
     it('normalizes country name to ISO 3166-1 alpha-2 code in return policy', () => {
-      const policy = buildMerchantReturnPolicy('Nigeria', {
-        socialLinks: {},
-        derivedLinks: {},
-        returnPolicy: { localRoute: '/returns', windowDays: 14 },
-      });
+      const policy = buildMerchantReturnPolicy(
+        'Nigeria',
+        makeReturnProfile({ localRoute: '/returns', windowDays: 14 })
+      );
       expect(policy).toEqual(
         expect.objectContaining({
           applicableCountry: 'NG',
@@ -86,11 +106,10 @@ describe('build-seo-offer-policy-schema', () => {
     });
 
     it('returns MerchantReturnNotPermitted when windowDays is 0', () => {
-      const policy = buildMerchantReturnPolicy('NG', {
-        socialLinks: {},
-        derivedLinks: {},
-        returnPolicy: { localRoute: '/returns', windowDays: 0 },
-      });
+      const policy = buildMerchantReturnPolicy(
+        'NG',
+        makeReturnProfile({ localRoute: '/returns', windowDays: 0 })
+      );
       expect(policy).toEqual({
         '@type': 'MerchantReturnPolicy',
         applicableCountry: 'NG',
@@ -100,16 +119,15 @@ describe('build-seo-offer-policy-schema', () => {
     });
 
     it('returns MerchantReturnFiniteReturnWindow with days, fees, and methods when windowDays > 0', () => {
-      const policy = buildMerchantReturnPolicy('NG', {
-        socialLinks: {},
-        derivedLinks: {},
-        returnPolicy: {
+      const policy = buildMerchantReturnPolicy(
+        'NG',
+        makeReturnProfile({
           localRoute: '/returns',
           windowDays: 14,
           returnMethod: 'mail',
           returnFees: 'free',
-        },
-      });
+        })
+      );
       expect(policy).toEqual({
         '@type': 'MerchantReturnPolicy',
         applicableCountry: 'NG',
@@ -152,90 +170,50 @@ describe('build-seo-offer-policy-schema', () => {
 
     it('returns undefined if shipping is not free', () => {
       expect(
-        buildOfferShippingDetails('NG', 'NGN', {
-          socialLinks: {},
-          derivedLinks: {},
-          shippingPolicy: {
-            localRoute: '/shipping',
-            regions: ['NG'],
-            shippingFeeType: 'calculated',
-            handlingDaysMin: 0,
-            handlingDaysMax: 1,
-            transitDaysMin: 1,
-            transitDaysMax: 3,
-          },
-        })
+        buildOfferShippingDetails(
+          'NG',
+          'NGN',
+          makeShippingProfile({ shippingFeeType: 'calculated' })
+        )
       ).toBeUndefined();
     });
 
     it('returns undefined if region does not match target country', () => {
       expect(
-        buildOfferShippingDetails('US', 'USD', {
-          socialLinks: {},
-          derivedLinks: {},
-          shippingPolicy: {
-            localRoute: '/shipping',
-            regions: ['NG'],
-            shippingFeeType: 'free',
-            handlingDaysMin: 0,
-            handlingDaysMax: 1,
-            transitDaysMin: 1,
-            transitDaysMax: 3,
-          },
-        })
+        buildOfferShippingDetails(
+          'US',
+          'USD',
+          makeShippingProfile({ regions: ['NG'] })
+        )
       ).toBeUndefined();
     });
 
     it('rejects city-only regions that do not resolve to country level', () => {
       expect(
-        buildOfferShippingDetails('NG', 'NGN', {
-          socialLinks: {},
-          derivedLinks: {},
-          shippingPolicy: {
-            localRoute: '/shipping',
-            regions: ['Lagos'],
-            shippingFeeType: 'free',
-            handlingDaysMin: 0,
-            handlingDaysMax: 1,
-            transitDaysMin: 1,
-            transitDaysMax: 3,
-          },
-        })
+        buildOfferShippingDetails(
+          'NG',
+          'NGN',
+          makeShippingProfile({ regions: ['Lagos'] })
+        )
       ).toBeUndefined();
     });
 
     it('matches country name to ISO-2 code across policy regions and target country', () => {
-      const detailsFromName = buildOfferShippingDetails('NG', 'NGN', {
-        socialLinks: {},
-        derivedLinks: {},
-        shippingPolicy: {
-          localRoute: '/shipping',
-          regions: ['Nigeria'],
-          shippingFeeType: 'free',
-          handlingDaysMin: 0,
-          handlingDaysMax: 1,
-          transitDaysMin: 1,
-          transitDaysMax: 3,
-        },
-      });
+      const detailsFromName = buildOfferShippingDetails(
+        'NG',
+        'NGN',
+        makeShippingProfile({ regions: ['Nigeria'] })
+      );
       expect(detailsFromName?.shippingDestination).toEqual({
         '@type': 'DefinedRegion',
         addressCountry: 'NG',
       });
 
-      const detailsToName = buildOfferShippingDetails('Nigeria', 'NGN', {
-        socialLinks: {},
-        derivedLinks: {},
-        shippingPolicy: {
-          localRoute: '/shipping',
-          regions: ['NG'],
-          shippingFeeType: 'free',
-          handlingDaysMin: 0,
-          handlingDaysMax: 1,
-          transitDaysMin: 1,
-          transitDaysMax: 3,
-        },
-      });
+      const detailsToName = buildOfferShippingDetails(
+        'Nigeria',
+        'NGN',
+        makeShippingProfile({ regions: ['NG'] })
+      );
       expect(detailsToName?.shippingDestination).toEqual({
         '@type': 'DefinedRegion',
         addressCountry: 'NG',
@@ -244,36 +222,20 @@ describe('build-seo-offer-policy-schema', () => {
 
     it('returns undefined if handling or transit day ranges are invalid', () => {
       expect(
-        buildOfferShippingDetails('NG', 'NGN', {
-          socialLinks: {},
-          derivedLinks: {},
-          shippingPolicy: {
-            localRoute: '/shipping',
-            regions: ['NG'],
-            shippingFeeType: 'free',
-            handlingDaysMin: 2,
-            handlingDaysMax: 1,
-            transitDaysMin: 1,
-            transitDaysMax: 3,
-          },
-        })
+        buildOfferShippingDetails(
+          'NG',
+          'NGN',
+          makeShippingProfile({ handlingDaysMin: 2, handlingDaysMax: 1 })
+        )
       ).toBeUndefined();
     });
 
     it('builds full OfferShippingDetails when shipping is free with matching region and valid timing', () => {
-      const details = buildOfferShippingDetails('NG', 'NGN', {
-        socialLinks: {},
-        derivedLinks: {},
-        shippingPolicy: {
-          localRoute: '/shipping',
-          regions: ['Nigeria', 'NG'],
-          shippingFeeType: 'free',
-          handlingDaysMin: 0,
-          handlingDaysMax: 1,
-          transitDaysMin: 1,
-          transitDaysMax: 4,
-        },
-      });
+      const details = buildOfferShippingDetails(
+        'NG',
+        'NGN',
+        makeShippingProfile({ regions: ['Nigeria', 'NG'], transitDaysMax: 4 })
+      );
 
       expect(details).toEqual({
         '@type': 'OfferShippingDetails',

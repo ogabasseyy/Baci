@@ -3,11 +3,13 @@ import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-ind
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import { annotateCommerceBridgeLinks } from './annotate-commerce-bridge-links';
 import {
   buildClusterFeaturedProducts,
   type ClusterFeaturedInventoryProduct,
 } from './build-cluster-featured-products';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
+import { buildClusterContextSummary } from './build-contextual-commerce-bridge';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
@@ -223,7 +225,15 @@ export async function buildInformationalClusterModel(
       href: `${input.storeUrl}/${categorySlug}`,
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
-    commerceLinks: finalCommerceLinks.slice(0, 5),
+    contextSummary: buildClusterContextSummary({
+      categoryName,
+      kind: inferred.kind,
+      brands: inferred.brands,
+    }),
+    commerceLinks: annotateCommerceBridgeLinks(
+      finalCommerceLinks.slice(0, 5),
+      categoryName
+    ),
     featuredProducts: buildClusterFeaturedProducts(
       input.storeUrl,
       categorySlug,

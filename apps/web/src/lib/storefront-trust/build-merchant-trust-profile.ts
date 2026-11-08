@@ -1,7 +1,5 @@
 import type { RegisteredAddress } from '@baci/shared';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { normalizeGooglePlaceId } from '@/lib/google-place-id-normalization';
-import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
 import type {
   MerchantTrustProfile,
@@ -34,12 +32,7 @@ function buildDerivedLink(
 
 function hasMeaningfulContent(value: unknown): boolean {
   if (typeof value === 'string') {
-    return (
-      value
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/&nbsp;|&#160;/gi, ' ')
-        .trim().length > 0
-    );
+    return value.trim().length > 0;
   }
 
   if (Array.isArray(value)) {
@@ -140,7 +133,10 @@ function buildDerivedLinks(
   profile: MerchantTrustProfile
 ): MerchantTrustProfileRouteLinks {
   const derivedLinks: MerchantTrustProfileRouteLinks = {};
-  const templateHasPolicyPage = merchant.template_id === OGABASSEY_TEMPLATE_ID;
+  const hasTemplatePolicyPages =
+    !!merchant.template_id &&
+    merchant.template_id !== 'default' &&
+    merchant.template_id !== 'puck';
 
   if (hasMeaningfulContent(merchant.about_page)) {
     derivedLinks.about = buildDerivedLink(normalizedBaseUrl, '/about');
@@ -150,15 +146,15 @@ function buildDerivedLinks(
     derivedLinks.contact = buildDerivedLink(normalizedBaseUrl, '/contact');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.privacy) || templateHasPolicyPage) {
+  if (hasMeaningfulContent(merchant.pages?.privacy) || hasTemplatePolicyPages) {
     derivedLinks.privacy = buildDerivedLink(normalizedBaseUrl, '/privacy');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.terms) || templateHasPolicyPage) {
+  if (hasMeaningfulContent(merchant.pages?.terms) || hasTemplatePolicyPages) {
     derivedLinks.terms = buildDerivedLink(normalizedBaseUrl, '/terms');
   }
 
-  if (hasPublishableFaqContent(merchant)) {
+  if (hasMeaningfulContent(merchant.pages?.faq)) {
     derivedLinks.faq = buildDerivedLink(normalizedBaseUrl, '/faq');
   }
 

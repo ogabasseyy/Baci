@@ -124,9 +124,8 @@ export interface BuildCommercialGuideLinksInput {
 export interface InformationalClusterModel {
   heading: string;
   primaryCategoryLink: { href: string; label: string } | null;
-  commerceLinks: { href: string; label: string; description?: string }[];
+  commerceLinks: { href: string; label: string }[];
   featuredProducts: { href: string; title: string; description: string }[];
-  contextSummary?: string;
 }
 
 export interface InformationalClusterCategoryData {
@@ -162,7 +161,6 @@ export interface BuildInformationalClusterModelInput {
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
   merchantCurrency?: string | null;
-  excludedProductSlugs?: ReadonlySet<string>;
 }
 
 export interface BlogClusterCollection {

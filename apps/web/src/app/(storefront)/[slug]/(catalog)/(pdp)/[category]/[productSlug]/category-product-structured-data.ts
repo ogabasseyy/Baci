@@ -44,7 +44,7 @@ export function buildCategoryProductStructuredData({
     merchant.country || 'NG',
     merchant.logo_url,
     trustProfile,
-    { acceptedPaymentMethods, merchantBaseUrl: baseUrl, productUrl }
+    { acceptedPaymentMethods, productUrl }
   );
   const categorySlug =
     product.categories?.slug ||

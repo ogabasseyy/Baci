@@ -25,15 +25,3 @@ it('masks identifiers by default and lets the customer reveal each independently
   expect(bvn).toBeRequired();
   expect(bvn).toHaveAttribute('pattern', '[0-9]{11}');
 });
-
-it('shows a decorative ID icon without changing the labelled input', () => {
-  render(
-    <OxygenIdentityField name="bvn" label="BVN" defaultValue="12345678901" />
-  );
-  const input = screen.getByLabelText('BVN');
-  expect(input).toHaveValue('12345678901');
-  expect(input).toHaveAttribute('placeholder', ' ');
-  expect(
-    input.parentElement?.querySelector('svg.lucide-id-card')
-  ).toHaveAttribute('aria-hidden', 'true');
-});

@@ -5,15 +5,18 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { continueWithSignature } from './approval-test-helpers';
 import { OxygenApprovalCode } from './OxygenApprovalCode';
-import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
-
-installOxygenOtpTestEnvironment();
 
 const mock = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mock.fetch }));
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+  vi.unstubAllGlobals();
+});
 const workflow = '60000000-0000-4000-8000-000000000001';
 const reference = '70000000-0000-4000-8000-000000000025';
 const state = {
@@ -29,6 +32,14 @@ const state = {
   ],
 };
 function setup(expiresAt: number) {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  );
   mock.fetch.mockResolvedValue(
     Response.json({
       window: {

@@ -320,7 +320,6 @@ export function generateStaticParams(): Promise<
 
 export async function generateMetadata({
   params,
-  searchParams,
 }: PageProps): Promise<Metadata> {
   const { slug, category, productSlug } = await params;
   if (!isValidMerchantIdentifier(slug)) {
@@ -370,21 +369,11 @@ export async function generateMetadata({
     return CANONICAL_PRODUCT_REDIRECT_METADATA;
   }
 
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
-
-  if (
-    resolvedSearchParams &&
-    shouldRedirectVariantSelectionParams(product, resolvedSearchParams)
-  ) {
-    return CANONICAL_PRODUCT_REDIRECT_METADATA;
-  }
-
   const baseUrl = buildStoreUrl(merchant);
   return buildCategoryProductMetadata({
     baseUrl,
     merchant,
     product,
-    searchParams: resolvedSearchParams,
     storeSlug: slug,
   });
 }
@@ -431,7 +420,7 @@ async function getRenderableCategoryProductResult({
 
   redirectInvalidVariantSelectionParams(slug, product, resolvedSearchParams);
 
-  return { merchant, product, resolvedSearchParams };
+  return { merchant, product };
 }
 
 async function getRequestScopedCategoryProductBasePath(

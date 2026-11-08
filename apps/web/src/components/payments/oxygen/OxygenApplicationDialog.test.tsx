@@ -69,11 +69,6 @@ beforeEach(() => {
   };
 });
 
-it('lets storefront dark mode theme the dialog surface', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
-  expect(screen.getByRole('dialog').className).toContain('bg-white');
-});
-
 it('keeps the close icon actionable above the content while loading', () => {
   loading.active = true;
   render(

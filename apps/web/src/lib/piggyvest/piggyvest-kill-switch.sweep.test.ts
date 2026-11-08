@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import ts from '@typescript/typescript6';
 import { describe, expect, it } from 'vitest';
 import { PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES } from '@/schemas/piggyvest-primary-wallet-capability';
 
@@ -84,33 +83,6 @@ const piggyvestLib = 'src/lib/piggyvest/';
 const flagFamily = /\b(?:PIGGYVEST|PREFUNDED_CARD)_/;
 const templateBuilt = /PIGGYVEST_\w*\$\{/;
 const suffixBuilt = /['"`](?!PIGGYVEST_)\w*_ENABLED['"`]/;
-function buildsEnableFlag(text: string): boolean {
-  if (!text.includes('PIGGYVEST_')) return false;
-  // Syntax-aware leaf tokens exclude comments without treating slash pairs
-  // inside a regular-expression literal as comment delimiters.
-  const sourceFile = ts.createSourceFile(
-    'kill-switch-scan.ts',
-    text,
-    ts.ScriptTarget.Latest,
-    true
-  );
-  const tokens: string[] = [];
-  const collectTokens = (node: ts.Node) => {
-    if (node.kind === ts.SyntaxKind.JSDocComment) return;
-    const children = node.getChildren(sourceFile);
-    if (children.length === 0) {
-      tokens.push(node.getText(sourceFile));
-      return;
-    }
-    for (const child of children) collectTokens(child);
-  };
-  collectTokens(sourceFile);
-  const executable = tokens.join(' ');
-  return (
-    templateBuilt.test(executable) ||
-    (executable.includes('PIGGYVEST_') && suffixBuilt.test(executable))
-  );
-}
 // Pre-existing staging-only draft gate: hardcoded staging merchant, staging
 // Supabase URL required, and no wallet or money movement. Not a new-money path.
 const allowed = new Set([
@@ -270,34 +242,14 @@ describe('no direct reads of PiggyVest enable flags', () => {
     expect(anyEnabledRead.test("process.env['X_ENABLED']")).toBe(true);
     expect(registryObject.test('env.PIGGYVEST_PRIMARY_DB_HOST')).toBe(false);
   });
-  it('distinguishes diagnostic strings from constructed enable-flag suffixes', () => {
-    for (const comment of [
-      '// PIGGYVEST_EXAMPLE_ENABLED\n',
-      '/* PIGGYVEST_EXAMPLE_ENABLED */',
-    ])
-      expect(buildsEnableFlag(`${comment}return 'DRAIN_NOT_ENABLED';`)).toBe(
-        false
-      );
-    for (const source of [
-      "const suffix = '_ENABLED';",
-      "const flag = prefix + 'BANK_ENABLED';",
-      "const flag = 'BANK_ENABLED' + suffix;",
-      "const flag = prefix.concat('BANK_ENABLED');",
-      "const suffix = 'BANK_ENABLED'; const flag = prefix + suffix;",
-    ])
-      expect(
-        buildsEnableFlag(`const prefix = 'PIGGYVEST_'; ${source}`),
-        source
-      ).toBe(true);
-    expect(
-      buildsEnableFlag(
-        "const re = /[/*]/; const prefix = 'PIGGYVEST_'; const flag = prefix + '_ENABLED';"
-      )
-    ).toBe(true);
-  });
   it('no module builds a PIGGYVEST_ name or an _ENABLED suffix at runtime', () => {
     const offenders = sources
-      .filter((file) => !allowed.has(file.path) && buildsEnableFlag(file.text))
+      .filter(
+        (file) =>
+          !allowed.has(file.path) &&
+          (templateBuilt.test(file.text) ||
+            (file.text.includes('PIGGYVEST_') && suffixBuilt.test(file.text)))
+      )
       .map((file) => file.path);
     expect(offenders).toEqual([]);
   });

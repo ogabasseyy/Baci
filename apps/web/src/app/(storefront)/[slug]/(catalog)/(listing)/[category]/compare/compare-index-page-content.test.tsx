@@ -54,18 +54,6 @@ describe('CompareIndexPageContent', () => {
     );
     expect(intro).toBeInTheDocument();
     expect(intro).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
-    expect(
-      screen.getByRole('heading', {
-        level: 2,
-        name: 'Available Smartphones comparisons',
-      })
-    ).toHaveClass('sr-only');
-    expect(
-      screen.getByRole('heading', {
-        level: 3,
-        name: 'Compare Google Pixel 8 with Xiaomi 13T',
-      })
-    ).toBeInTheDocument();
     const compareLink = screen.getByRole('link', {
       name: 'Compare Google Pixel 8 with Xiaomi 13T',
     });

@@ -95,9 +95,6 @@ it.each([
   expect(mocks.intake).toHaveBeenCalledWith({
     rawBody: Buffer.from(rawBody),
     signature: expect.any(String),
-    env: expect.objectContaining({
-      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
-    }),
   });
   expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
@@ -130,9 +127,6 @@ it.each([
   expect(mocks.dispatch).toHaveBeenCalledWith({
     rawBody: Buffer.from(rawBody),
     signature: expect.any(String),
-    env: expect.objectContaining({
-      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
-    }),
   });
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });

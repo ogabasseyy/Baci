@@ -168,7 +168,7 @@ describe('PaymentStep', () => {
           <PaymentStep {...defaultProps} paymentTab="installments" />,
         );
         expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
-        expect(screen.getByText(/From 25% down/)).toBeInTheDocument();
+        expect(screen.getByText('From 25% down payment. Repay the balance monthly.')).toBeInTheDocument();
         view.rerender(
           <PaymentStep
             {...defaultProps}
@@ -556,7 +556,7 @@ describe('PaymentStep', () => {
     );
   });
 
-  describe('Pay Small Small Options', () => {
+  describe('Pay in Installments Options', () => {
     it('hides retired CredPal even when enabled in feature settings', () => {
       // Arrange
       const merchant = {
@@ -594,7 +594,7 @@ describe('PaymentStep', () => {
 
       // Assert
       expect(screen.getByText('Credit Direct')).toBeInTheDocument();
-      expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
+      expect(screen.getByTestId('credit-direct-logo')).toBeInTheDocument();
     });
 
     it('shows Klump when enabled in feature settings', () => {
@@ -635,7 +635,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay Small Small' }),
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
       ).not.toBeInTheDocument();
     });
 
@@ -682,7 +682,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay Small Small' }),
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
       ).not.toBeInTheDocument();
     });
 
@@ -750,7 +750,7 @@ describe('PaymentStep', () => {
 
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
       expect(
-        screen.queryByRole('button', { name: 'Pay Small Small' }),
+        screen.queryByRole('button', { name: 'Pay in Installments' }),
       ).not.toBeInTheDocument();
     });
 
@@ -833,7 +833,7 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
     });
 
     it('does not show retired CredPal instructions for a stale selection', () => {
@@ -854,7 +854,7 @@ describe('PaymentStep', () => {
 
       // Assert
       expect(screen.queryByText('How CredPal works')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Pay Small Small' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct info when Credit Direct is selected', () => {
@@ -874,8 +874,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('24 supported banks')).toBeInTheDocument();
-      expect(screen.queryByText(/instant approval decision/i)).not.toBeInTheDocument();
+      expect(screen.getByText('How Credit Direct works')).toBeInTheDocument();
+      expect(screen.getByText(/instant approval decision/i)).toBeInTheDocument();
     });
 
     it('shows Klump info when Klump is selected', () => {

@@ -164,9 +164,9 @@ export function HeroMobileCarousel({
                         Just launched
                       </span>
                       <Suspense fallback={null}>
-                        <p className={HERO_MOBILE_TITLE_CLASSES}>
+                        <h2 className={HERO_MOBILE_TITLE_CLASSES}>
                           {slide.name}
-                        </p>
+                        </h2>
                         <p className={HERO_MOBILE_PRICE_CLASSES}>
                           {slide.priceLabel}
                         </p>

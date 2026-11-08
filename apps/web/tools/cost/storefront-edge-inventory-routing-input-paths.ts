@@ -20,7 +20,6 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/lib/proxy/api-alias.ts',
   'apps/web/src/lib/proxy/api-security.ts',
   'apps/web/src/lib/proxy/blog-preflight.ts',
-  'apps/web/src/lib/proxy/blog-query-noindex-header.ts',
   'apps/web/src/lib/proxy/compare-preflight.ts',
   'apps/web/src/lib/proxy/csp.ts',
   'apps/web/src/lib/proxy/custom-domain-alias-routing.ts',

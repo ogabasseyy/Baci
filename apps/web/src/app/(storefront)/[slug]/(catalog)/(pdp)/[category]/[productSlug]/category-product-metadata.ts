@@ -20,19 +20,16 @@ import {
 } from '@/lib/storefront-seo-defaults';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import type { LcpRouteProduct } from './category-product-lcp-projection';
-import { resolveServerPdpRouteSelectionStatus } from './critical-variant-selection';
 
 export function buildCategoryProductMetadata({
   baseUrl,
   merchant,
   product,
-  searchParams,
   storeSlug,
 }: {
   baseUrl: string;
   merchant: CachedMerchant;
   product: LcpRouteProduct;
-  searchParams?: Record<string, string | string[] | undefined>;
   storeSlug: string;
 }): Metadata {
   const canonicalUrl = getValidatedProductUrl(product, baseUrl, merchant.slug);
@@ -109,14 +106,6 @@ export function buildCategoryProductMetadata({
       canonicalUrl,
     })
   );
-  const selectionStatus = searchParams
-    ? resolveServerPdpRouteSelectionStatus({
-        product,
-        offers: product.offers,
-        searchParams,
-      })
-    : { hasMissingRouteSelection: false };
-  const shouldIndex = robots.index && !selectionStatus.hasMissingRouteSelection;
   const baseRobots = getIndexableRobotsMetadata();
   const baseGoogleBot =
     typeof baseRobots === 'object' &&
@@ -132,9 +121,9 @@ export function buildCategoryProductMetadata({
     alternates: { canonical: canonicalUrl },
     robots: {
       ...(typeof baseRobots === 'object' ? baseRobots : {}),
-      index: shouldIndex,
+      index: robots.index,
       follow: true,
-      googleBot: { ...baseGoogleBot, index: shouldIndex, follow: true },
+      googleBot: { ...baseGoogleBot, index: robots.index, follow: true },
     },
     openGraph: {
       title: metadataTitleText,

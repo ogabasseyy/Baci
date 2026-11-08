@@ -1,5 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -8,9 +22,24 @@ vi.mock('@/lib/posthog/capture-client-event', () => ({
 }));
 
 import { OxygenProviderFlow } from './OxygenProviderFlow';
-import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
 
-installOxygenOtpTestEnvironment();
+beforeAll(() =>
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  )
+);
+afterAll(() => vi.unstubAllGlobals());
+// input-otp schedules selection synchronization up to 50ms after input changes.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+});
 beforeEach(() => {
   mocks.fetch.mockReset();
 });

@@ -3,7 +3,6 @@ import {
   readdir,
   readFile,
   rename as realRename,
-  stat,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -25,7 +24,7 @@ async function prepareAndBind(dir) {
     tool: 'browsertime',
     viewport: '375x667',
   });
-  const writeHar = (name, startedDateTime) =>
+  const writeHar = (name) =>
     writeFile(
       name,
       JSON.stringify({
@@ -34,21 +33,19 @@ async function prepareAndBind(dir) {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime,
-              title: `u run 1 ${name}`,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
             },
           ],
         },
       })
     );
   const shotPath = join(dir, 'shot.png');
-  // Pair each navigation with the actual screenshot mtime so the
-  // ordering remains deterministic on coarse-resolution filesystems.
-  const capture = async (harPath) => {
-    await writeFile(shotPath, await pngBuffer(750, 1334));
-    const shotMtimeMs = (await stat(shotPath)).mtimeMs;
-    await writeHar(harPath, new Date(shotMtimeMs - 1_000).toISOString());
-  };
+  // Capture AFTER the HAR it binds: finish refuses captures that
+  // predate the navigation, so each (re)finish re-captures after
+  // writing its HAR. Sampling startedDateTime before the capture
+  // write keeps the ordering deterministic (no same-millisecond race).
+  const capture = async () => writeFile(shotPath, await pngBuffer(750, 1334));
   const outDir = join(dir, 'bound');
   const base = {
     browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
@@ -56,7 +53,7 @@ async function prepareAndBind(dir) {
     runJson: join(dir, 'run', 'run.json'),
     screenshot: shotPath,
   };
-  return { base, capture, outDir };
+  return { base, capture, outDir, writeHar };
 }
 
 async function boundBytes(outDir) {
@@ -93,7 +90,7 @@ describe('merchant-image-pilot-runner finish restore', () => {
     // even with a usable resetAt, the runId/profileDir/tool binding
     // refuses before anything publishes.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-reset-'));
-    const { base, capture } = await prepareAndBind(dir);
+    const { base, capture, writeHar } = await prepareAndBind(dir);
     const resetPath = join(dir, 'run', 'profile-reset.json');
     const reset = JSON.parse(await readFile(resetPath, 'utf8'));
     await writeFile(
@@ -101,7 +98,8 @@ describe('merchant-image-pilot-runner finish restore', () => {
       JSON.stringify({ ...reset, runId: 'another-run' })
     );
     const har = join(dir, 'foreign.har');
-    await capture(har);
+    await writeHar(har);
+    await capture();
     await expect(finishRun({ ...base, har })).rejects.toThrow(
       /belongs to a different run \(runId mismatch\)/
     );
@@ -112,13 +110,15 @@ describe('merchant-image-pilot-runner finish restore', () => {
     // set is restored live, the partial staging is cleaned, and no
     // debris sibling survives beside the destination.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-swap-'));
-    const { base, capture, outDir } = await prepareAndBind(dir);
+    const { base, capture, outDir, writeHar } = await prepareAndBind(dir);
     const firstHar = join(dir, 'first.har');
-    await capture(firstHar);
+    await writeHar(firstHar);
+    await capture();
     await finishRun({ ...base, har: firstHar });
     const before = await boundBytes(outDir);
     const secondHar = join(dir, 'second.har');
-    await capture(secondHar);
+    await writeHar(secondHar);
+    await capture();
     let renames = 0;
     const io = {
       rename(from, to) {
@@ -144,13 +144,15 @@ describe('merchant-image-pilot-runner finish restore', () => {
     // Failure before the swap begins: the destination is untouched
     // (the old set never moved aside) and the staging dir is cleaned.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-stage-'));
-    const { base, capture, outDir } = await prepareAndBind(dir);
+    const { base, capture, outDir, writeHar } = await prepareAndBind(dir);
     const firstHar = join(dir, 'first.har');
-    await capture(firstHar);
+    await writeHar(firstHar);
+    await capture();
     await finishRun({ ...base, har: firstHar });
     const before = await boundBytes(outDir);
     const secondHar = join(dir, 'second.har');
-    await capture(secondHar);
+    await writeHar(secondHar);
+    await capture();
     const { writeFile: realWriteFile } = await import('node:fs/promises');
     const io = {
       writeFile(path, ...rest) {
@@ -172,14 +174,16 @@ describe('merchant-image-pilot-runner finish restore', () => {
     // otherwise sweep them into the replaced set's backup and delete
     // operator data finish did not write.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-foreign-'));
-    const { base, capture, outDir } = await prepareAndBind(dir);
+    const { base, capture, outDir, writeHar } = await prepareAndBind(dir);
     const firstHar = join(dir, 'first.har');
-    await capture(firstHar);
+    await writeHar(firstHar);
+    await capture();
     await finishRun({ ...base, har: firstHar });
     const before = await boundBytes(outDir);
     await writeFile(join(outDir, 'notes.txt'), 'operator notes');
     const secondHar = join(dir, 'second.har');
-    await capture(secondHar);
+    await writeHar(secondHar);
+    await capture();
     await expect(finishRun({ ...base, har: secondHar })).rejects.toThrow(
       /outside the bound set \(notes\.txt\)/
     );
@@ -195,9 +199,10 @@ describe('merchant-image-pilot-runner finish restore', () => {
     // not a bound artifact, so the swap would delete the run handle
     // the finish just read.
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-samedir-'));
-    const { base, capture } = await prepareAndBind(dir);
+    const { base, capture, writeHar } = await prepareAndBind(dir);
     const harPath = join(dir, 'raw.har');
-    await capture(harPath);
+    await writeHar(harPath);
+    await capture();
     await expect(
       finishRun({ ...base, har: harPath, outDir: join(dir, 'run') })
     ).rejects.toThrow(/outside the bound set \(run\.json\)/);

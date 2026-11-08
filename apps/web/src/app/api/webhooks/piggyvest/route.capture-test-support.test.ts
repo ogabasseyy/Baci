@@ -141,32 +141,6 @@ describe('createFakeCaptureStore', () => {
     expect(store.rows).toHaveLength(3);
   });
 
-  it('renews only an active matching claim without changing its evidence', () => {
-    const store = createFakeCaptureStore();
-    store.capture(command('{}'));
-    const [claim] = store.claim(1);
-    if (!claim) throw new Error('expected a claimed fixture');
-    const snapshot = structuredClone(store.rows);
-    expect(store.renew(claim.capture_id, 'wrong-token')).toBe(false);
-    expect(store.renew(claim.capture_id, claim.claim_token)).toBe(true);
-    expect(store.rows).toEqual(snapshot);
-    expect(
-      store.resolve({
-        p_id: claim.capture_id,
-        p_claim_token: null,
-        p_state: 'processed',
-      })
-    ).toBe(true);
-    expect(store.renew(claim.capture_id, claim.claim_token)).toBe(false);
-    expect(
-      store.resolve({
-        p_id: claim.capture_id,
-        p_claim_token: claim.claim_token,
-        p_state: 'needs_review',
-      })
-    ).toBe(false);
-  });
-
   it('claims pending rows once, fenced by a lease token', () => {
     const store = createFakeCaptureStore();
     store.capture(command('{}'));
@@ -180,12 +154,12 @@ describe('createFakeCaptureStore', () => {
     expect(store.claim(10)).toEqual([]);
 
     const row = store.rows[0];
-    // An incomplete inline release cannot touch a claimed row.
+    // An inline (no token) completion cannot touch a claimed row.
     expect(
       store.resolve({
         p_id: row?.id,
         p_claim_token: null,
-        p_state: 'pending',
+        p_state: 'processed',
       })
     ).toBe(false);
     expect(

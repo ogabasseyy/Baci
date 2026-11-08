@@ -119,7 +119,7 @@ describe('merchant-image-pilot-runner finish binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
-    const writeHar = (name, startedDateTime) =>
+    const writeHar = (name) =>
       writeFile(
         name,
         JSON.stringify({
@@ -128,21 +128,19 @@ describe('merchant-image-pilot-runner finish binding', () => {
             pages: [
               {
                 _url: ROUTE,
-                startedDateTime,
-                title: `u run 1 ${name}`,
+                startedDateTime: new Date().toISOString(),
+                title: 'u run 1',
               },
             ],
           },
         })
       );
+    // HAR first, screenshot second: the capture must not predate the
+    // navigation it binds.
     const firstHar = join(dir, 'first.har');
+    await writeHar(firstHar);
     const shotPath = join(dir, 'shot.png');
     await writeFile(shotPath, await pngBuffer(750, 1334));
-    const shotMtime = (await stat(shotPath)).mtime;
-    await writeHar(
-      firstHar,
-      new Date(shotMtime.getTime() - 1_000).toISOString()
-    );
     const outDir = join(dir, 'bound');
     const base = {
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
@@ -155,14 +153,9 @@ describe('merchant-image-pilot-runner finish binding', () => {
     const shotBefore = await readFile(join(outDir, 'screenshot.png'));
     // New navigation, valid HAR — but a wrong-geometry screenshot.
     const secondHar = join(dir, 'second.har');
+    await writeHar(secondHar);
     const badShot = join(dir, 'bad.png');
     await writeFile(badShot, await pngBuffer(100, 100));
-    const badShotMtime = (await stat(badShot)).mtime;
-    await writeHar(
-      secondHar,
-      new Date(badShotMtime.getTime() - 1_000).toISOString()
-    );
-    expect(await readFile(secondHar)).not.toEqual(await readFile(firstHar));
     await expect(
       finishRun({ ...base, har: secondHar, screenshot: badShot })
     ).rejects.toThrow(/requires 750x1334/);

@@ -18,10 +18,7 @@ export function currentCheckoutShippingRequestKey(
     | 'newAddressState'
     | 'addresses'
     | 'selectedAddressId'
-  > & {
-    deliveryPreference: 'door' | 'pickup_station';
-    merchantRatesOnly?: boolean;
-  }
+  > & { deliveryPreference: 'door' | 'pickup_station' }
 ): string {
   if (!options.isHydrated || !options.merchantId) return '';
   let address = options.newAddressStreet;
@@ -45,7 +42,6 @@ export function currentCheckoutShippingRequestKey(
       state,
       merchantId: options.merchantId,
       deliveryPreference: options.deliveryPreference,
-      merchantRatesOnly: options.merchantRatesOnly,
       latitude: options.deliveryCoordinates?.latitude,
       longitude: options.deliveryCoordinates?.longitude,
       country: getCountryByCode(options.merchantCountry)?.name ?? 'Nigeria',

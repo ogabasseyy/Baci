@@ -123,7 +123,7 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     fireEvent.click(
-      await screen.findByRole('button', { name: /pay small small/i })
+      await screen.findByRole('button', { name: /pay in installments/i })
     );
     fireEvent.click(
       await screen.findByRole('radio', { name: /credit direct/i })

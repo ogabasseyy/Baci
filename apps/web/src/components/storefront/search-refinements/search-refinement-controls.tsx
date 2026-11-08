@@ -267,10 +267,7 @@ export function SearchRefinementControls({
           />
           {error && panel === null && <p role="alert">{error}</p>}
         </aside>
-        <div className="min-w-0 flex-1">
-          <h2 className="sr-only">Matching products</h2>
-          {children}
-        </div>
+        <div className="min-w-0 flex-1">{children}</div>
       </div>
       <SearchRefinementSheet
         restoreFocus={() => trigger.current?.focus()}

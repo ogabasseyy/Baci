@@ -96,7 +96,6 @@ export interface MerchantTrustProfileSource {
   legal_entity_name?: string | null;
   tax_identification_number?: string | null;
   about_page?: unknown;
-  faq_items?: unknown;
   pages?: {
     about?: string | null;
     contact?: string | null;

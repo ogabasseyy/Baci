@@ -14,7 +14,6 @@ import {
 export const metadata: Metadata = {
   title: 'My Reviews | Ogabassey',
   description: 'Manage your product reviews and ratings',
-  robots: { index: false, follow: false },
 };
 
 export default async function ReviewsPage({

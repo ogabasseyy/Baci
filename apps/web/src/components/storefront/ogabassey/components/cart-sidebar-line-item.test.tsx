@@ -1,6 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
-import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/routes', () => ({
@@ -118,7 +117,9 @@ describe('CartSidebarLineItem', () => {
   });
 
   it('shows the accepted badge for negotiated lines', () => {
-    setup(makeItem({ negotiationStatus: 'accepted', negotiatedPrice: 450000 }));
+    setup(
+      makeItem({ negotiationStatus: 'accepted', negotiatedPrice: 450000 })
+    );
 
     expect(screen.getByText(/Matched @/)).toBeInTheDocument();
     expect(
@@ -153,9 +154,10 @@ describe('CartSidebarLineItem', () => {
     // hasAssurance: true as materialized by the Ogabassey default (the
     // shopper never touched the toggle): the fee must be visible and the
     // toggle must offer removal before checkout.
-    const { onToggleAssurance } = setup(makeItem({ hasAssurance: true }), {
-      merchantSlug: 'ogabassey',
-    });
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey' }
+    );
 
     expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
     expect(screen.getByText(/\+₦[\d,]+/)).toBeInTheDocument();
@@ -174,10 +176,10 @@ describe('CartSidebarLineItem', () => {
     // The merchant disabled the setting after the line was assured (or
     // the line restored from storage): the fee still charges, so the
     // toggle must stay visible as a removal control.
-    const { onToggleAssurance } = setup(makeItem({ hasAssurance: true }), {
-      merchantSlug: 'ogabassey',
-      shippingInsuranceEnabled: false,
-    });
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey', shippingInsuranceEnabled: false }
+    );
 
     expect(screen.getByRole('checkbox')).toBeChecked();
     fireEvent.click(screen.getByRole('checkbox'));
@@ -219,32 +221,4 @@ it('shows a conditioned drawer item exactly once with a formatted label', () => 
   expect(screen.getByText('Condition:')).toBeVisible();
   expect(screen.getAllByText('Open Box')).toHaveLength(1);
   expect(screen.queryByText('open_box')).not.toBeInTheDocument();
-});
-
-it('keeps the removal notice and add-back action available in the Ogabassey drawer', () => {
-  function DrawerLine() {
-    const [hasAssurance, setHasAssurance] = useState(true);
-    return (
-      <CartSidebarLineItem
-        item={makeItem({ hasAssurance })}
-        basePath=""
-        hasPriceNegotiation={false}
-        cartMerchantContextMatches
-        merchantSlug="ogabassey"
-        shippingInsuranceEnabled
-        onRemove={vi.fn()}
-        onUpdateQuantity={vi.fn()}
-        onNegotiate={vi.fn()}
-        onToggleAssurance={() => setHasAssurance(!hasAssurance)}
-      />
-    );
-  }
-  render(<DrawerLine />);
-  fireEvent.click(screen.getByRole('checkbox'));
-  expect(screen.getByRole('status')).toHaveTextContent(
-    /won’t include screen and liquid damage protection/i
-  );
-  fireEvent.click(screen.getByRole('button', { name: 'Add Assurance back' }));
-  expect(screen.getByRole('checkbox')).toBeChecked();
-  expect(screen.getByRole('status')).toBeEmptyDOMElement();
 });

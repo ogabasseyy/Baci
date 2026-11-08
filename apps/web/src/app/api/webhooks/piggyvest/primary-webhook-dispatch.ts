@@ -70,16 +70,14 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
    * gated on `families`, and each runtime only merges its own family.
    */
   keyScope?: WebhookKeyScope;
-  env?: NodeJS.ProcessEnv;
 }): Promise<Response | 'conflict' | null> {
   const { keyScope } = input;
-  const env = input.env ?? process.env;
   // Under the master kill switch every money-in delivery is deferred, not
   // dropped: the retryable 503 makes PiggyVest redeliver, and the deposit is
   // recorded exactly once after the switch is lifted. Without this, a
   // legacy-signed delivery would fall through to the legacy credit path.
   if (
-    isPiggyvestKilled(env) &&
+    isPiggyvestKilled(process.env) &&
     isMoneyInDelivery(input.event.eventType, input.families)
   ) {
     const deferred = retryable(
@@ -94,7 +92,6 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const custody = await dispatchPrimaryCardSignedCustodyIntake({
         rawBody: input.rawBody,
         signature: input.signature,
-        environment: env,
         keyScope,
       });
       if (custody.response) return custody.response;
@@ -110,7 +107,6 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const primary = await primaryInterestWebhookResponse({
         rawBody: input.rawBody,
         signature: input.signature,
-        env,
         keyScope,
       });
       if (primary === 'disabled')
@@ -127,7 +123,6 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const bank = await dispatchPrimaryWalletBankInboxIntake({
         rawBody: input.rawBody,
         signature: input.signature,
-        env,
         keyScope,
       });
       if (bank.response) return bank.response;
@@ -138,7 +133,6 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       signature: input.signature,
       secret: input.matchedSecret,
       families: input.families,
-      env,
     });
     if (primary === 'credited' || primary === 'duplicate') {
       return NextResponse.json(

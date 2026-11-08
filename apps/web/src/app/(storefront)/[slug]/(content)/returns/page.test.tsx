@@ -107,7 +107,6 @@ describe('returns page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/returns'
     );
-    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 
   it('renders when the return summary exists', async () => {
@@ -196,7 +195,6 @@ describe('returns page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/returns'
     );
-    expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(mockNotFound).not.toHaveBeenCalled();
   });
 

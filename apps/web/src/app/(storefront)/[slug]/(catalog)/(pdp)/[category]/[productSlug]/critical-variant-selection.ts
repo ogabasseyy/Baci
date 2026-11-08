@@ -1,5 +1,4 @@
 import {
-  type ProductWithSelectionAxesLike,
   type ResolvedProductVariantSelection,
   resolveDefaultVariantSelection,
   resolveLowestPricedVariantSelection,
@@ -8,55 +7,11 @@ import {
 } from '@baci/shared/lib';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import type { Product, ProductVariant } from '@/lib/products';
-import {
-  type CriticalRouteOfferInput,
-  resolveCriticalRouteOffer,
-} from './critical-route-offer';
 
 export type CategoryProductRouteSearchParams = Record<
   string,
   string | string[] | undefined
 >;
-
-export interface ServerPdpRouteSelectionStatus {
-  missingVariantId: boolean;
-  missingOfferId: boolean;
-  hasMissingRouteSelection: boolean;
-}
-
-export interface RouteSelectionProductInput {
-  default_variant_id?: string | null;
-  offers?: readonly CriticalRouteOfferInput[] | null;
-  price?: number | null;
-  variant_attributes?: unknown;
-  variants?: Product['variants'];
-}
-
-export function resolveServerPdpRouteSelectionStatus({
-  product,
-  offers,
-  searchParams,
-}: {
-  product: RouteSelectionProductInput;
-  offers?: readonly CriticalRouteOfferInput[] | null;
-  searchParams: CategoryProductRouteSearchParams;
-}): ServerPdpRouteSelectionStatus {
-  const selectionResolution = resolveVariantSelectionParamResolution(
-    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
-    searchParams
-  );
-  const missingVariantId = selectionResolution.type === 'invalid_variant_id';
-  const missingOfferId = resolveCriticalRouteOffer({
-    offers: offers ?? product.offers,
-    searchParams,
-  }).missing;
-
-  return {
-    missingVariantId,
-    missingOfferId,
-    hasMissingRouteSelection: missingVariantId || missingOfferId,
-  };
-}
 
 export function normalizeRouteSelectionValue(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : '';
@@ -103,7 +58,7 @@ export function getVariantPrimaryImage(
 }
 
 export function shouldRedirectVariantSelectionParams(
-  product: RouteSelectionProductInput,
+  product: Product,
   searchParams: CategoryProductRouteSearchParams
 ) {
   if (!product.variants || product.variants.length === 0) {
@@ -115,7 +70,7 @@ export function shouldRedirectVariantSelectionParams(
   // variant at a different price. The shared client surfaces the dead
   // link as missing instead (routeVariantMissing).
   const selectionResolution = resolveVariantSelectionParamResolution(
-    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
+    product,
     searchParams
   );
 
@@ -181,7 +136,7 @@ export function getInitialCriticalVariantSelection(
   }
 
   const selectionResolution = resolveVariantSelectionParamResolution(
-    product as unknown as ProductWithSelectionAxesLike<ProductVariant>,
+    product,
     searchParams
   );
 

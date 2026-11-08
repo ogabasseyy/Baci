@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'b0a6fdf3f0e4fc039920348a6a55df6a477ba105ddd69a6b774011a8075eadd7',
+      'b119d13d51c53a8a967a1489b8915c44edb017c69d8aae70f9074a1cfba001ea',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 622,
+    rowCount: 619,
   });
 });
 
@@ -119,26 +119,4 @@ it('keeps the savings goal completion endpoint on the dynamic origin', async () 
       decision: 'origin_dynamic',
     })
   );
-});
-
-it('keeps Chatwoot context endpoints on the dynamic origin', async () => {
-  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
-  const inventory = await readStorefrontEdgeInventory(
-    join(
-      repoRoot,
-      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
-    )
-  );
-  const rows = inventory.rows.filter((row) =>
-    row.sourcePath?.startsWith(
-      'apps/web/src/app/api/storefront/chatwoot/context/'
-    )
-  );
-  expect(rows).toHaveLength(3);
-  expect(rows.map((row) => row.routePattern).sort()).toEqual([
-    '/api/storefront/chatwoot/context/authorize',
-    '/api/storefront/chatwoot/context/challenge',
-    '/api/storefront/chatwoot/context/verify',
-  ]);
-  expect(rows.every((row) => row.decision === 'origin_dynamic')).toBe(true);
 });

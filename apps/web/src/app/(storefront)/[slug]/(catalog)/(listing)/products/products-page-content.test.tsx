@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT } from '@/lib/storefront-pagination';
 
 const {
   mockGenerateBreadcrumbSchema,
@@ -20,21 +21,32 @@ const {
   mockStorefrontPagination: vi.fn((_props: Record<string, unknown>) => null),
 }));
 
-vi.mock('next/headers', () => ({ headers: () => mockHeaders() }));
+vi.mock('next/headers', () => ({
+  headers: () => mockHeaders(),
+}));
+
 vi.mock('next/link', () => ({
   default: ({
     children,
     href,
-  }: {
-    children: React.ReactNode;
+    prefetch: _prefetch,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
-  }) => <a href={href}>{children}</a>,
+    prefetch?: boolean;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
+
 vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND');
   },
 }));
+
 vi.mock(
   '@/components/storefront/ogabassey/components/StorefrontPagination',
   () => ({
@@ -42,6 +54,7 @@ vi.mock(
       mockStorefrontPagination(props),
   })
 );
+
 vi.mock('@/lib/cached-data', () => ({
   getCachedCategories: (...args: unknown[]) => mockGetCachedCategories(...args),
   getStorefrontCategories: async (...args: unknown[]) => {
@@ -57,20 +70,33 @@ vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant: (...args: unknown[]) =>
     mockGetRequestScopedMerchant(...args),
 }));
+
 vi.mock('@/lib/cached-storefront-product-index', () => ({
   getCachedStorefrontProductIndex: (...args: unknown[]) =>
     mockGetCachedStorefrontProductIndex(...args),
 }));
-vi.mock('@/lib/routes', () => ({ asRoute: (path: string) => path }));
-vi.mock('@/components/seo/json-ld', () => ({ JsonLd: () => null }));
+
+vi.mock('@/lib/routes', () => ({
+  asRoute: (path: string) => path,
+}));
+
+vi.mock('@/components/seo/json-ld', () => ({
+  JsonLd: () => null,
+}));
+
 vi.mock('@/lib/seo-utils', () => ({
   generateBreadcrumbSchema: mockGenerateBreadcrumbSchema,
   generateCollectionPageSchema: mockGenerateCollectionPageSchema,
 }));
+
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://store.example.com',
 }));
-vi.mock('@/lib/validation', () => ({ isValidMerchantIdentifier: () => true }));
+
+vi.mock('@/lib/validation', () => ({
+  isValidMerchantIdentifier: () => true,
+}));
+
 vi.mock('./product-index-card', () => ({
   ProductIndexCard: ({
     formattedPrice,
@@ -88,21 +114,11 @@ vi.mock('./product-index-card', () => ({
 
 const { ProductsPageContent } = await import('./products-page-content');
 
-const defaultMerchant = {
-  id: 'merchant-1',
-  business_name: 'Demo Store',
-  slug: 'demo-store',
-  country: 'NG',
-  payout_currency: 'NGN',
-  site_description: 'Browse products',
-};
-
 describe('ProductsPageContent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockHeaders.mockResolvedValue(new Headers());
     mockGetCachedCategories.mockResolvedValue([]);
-    mockGetRequestScopedMerchant.mockResolvedValue(defaultMerchant);
     mockGetCachedStorefrontProductIndex.mockResolvedValue({
       hasError: false,
       products: [],
@@ -113,9 +129,12 @@ describe('ProductsPageContent', () => {
 
   it('passes the merchant payout currency into collection schema generation', async () => {
     mockGetRequestScopedMerchant.mockResolvedValue({
-      ...defaultMerchant,
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
       country: 'GH',
       payout_currency: 'GHS',
+      site_description: 'Browse products',
     });
 
     await ProductsPageContent({
@@ -129,12 +148,25 @@ describe('ProductsPageContent', () => {
   });
 
   it('preserves distinct merchant-defined category slugs without alias remapping', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
     mockGetCachedCategories.mockResolvedValue([
+      // Prior to the fix, both `samsung` and `phones` were remapped to
+      // `smartphones` and deduped into a single entry, hiding the Samsung
+      // category link. After the fix, each stored slug should stand on its
+      // own.
       { id: 'cat-samsung', name: 'Samsung', slug: 'samsung' },
       { id: 'cat-phones', name: 'Phones', slug: 'phones' },
       { id: 'cat-smartphones', name: 'Smartphones', slug: 'smartphones' },
       { id: 'cat-macbook', name: 'Macbook', slug: 'macbook' },
       { id: 'cat-laptops', name: 'Laptops', slug: 'laptops' },
+      // Pure case/whitespace duplicate — should still collapse.
       { id: 'cat-laptops-dup', name: 'Laptops (dup)', slug: ' Laptops ' },
     ]);
 
@@ -145,6 +177,9 @@ describe('ProductsPageContent', () => {
 
     render(result as React.ReactElement);
 
+    // Each merchant-defined distinct slug should render its own link. Assert
+    // against the actual rendered anchors so we don't couple to React element
+    // internals or `JSON.stringify` shape.
     expect(screen.getByRole('link', { name: 'Samsung' })).toHaveAttribute(
       'href',
       '/demo-store/samsung'
@@ -162,16 +197,24 @@ describe('ProductsPageContent', () => {
       '/demo-store/macbook'
     );
 
-    const laptopLinks = screen.getAllByRole('link', { name: /^Laptops/ });
+    // Pure case/whitespace duplicates should still collapse — exactly one
+    // "Laptops*" link should render, pointing at the canonical lowercased
+    // slug and never the raw ` Laptops ` variant.
+    const laptopLinks = screen.getAllByRole('link', {
+      name: /^Laptops/,
+    });
     expect(laptopLinks).toHaveLength(1);
     expect(laptopLinks[0]).toHaveAttribute('href', '/demo-store/laptops');
   });
 
   it("falls back to 'NGN' when merchant payout currency is missing", async () => {
     mockGetRequestScopedMerchant.mockResolvedValue({
-      ...defaultMerchant,
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
       country: null,
       payout_currency: null,
+      site_description: 'Browse products',
     });
 
     await ProductsPageContent({
@@ -186,9 +229,12 @@ describe('ProductsPageContent', () => {
 
   it('renders product cards with the merchant payout currency', async () => {
     mockGetRequestScopedMerchant.mockResolvedValue({
-      ...defaultMerchant,
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
       country: 'IN',
       payout_currency: 'INR',
+      site_description: 'Browse products',
     });
     mockGetCachedStorefrontProductIndex.mockResolvedValue({
       hasError: false,
@@ -218,6 +264,14 @@ describe('ProductsPageContent', () => {
   });
 
   it('keeps rendering products when optional category navigation is unavailable', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
     mockGetCachedCategories.mockRejectedValueOnce(
       new Error('category timeout')
     );
@@ -250,6 +304,14 @@ describe('ProductsPageContent', () => {
   });
 
   it('enables crawl discovery pagination for the product index', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
     mockGetCachedStorefrontProductIndex.mockResolvedValue({
       hasError: false,
       totalCount: 1280,
@@ -277,13 +339,115 @@ describe('ProductsPageContent', () => {
       expect.objectContaining({
         ariaLabel: 'Products pagination',
         basePath: '/demo-store/products',
-        crawlDiscoveryAllPagesThreshold: 20,
+        crawlDiscoveryAllPagesThreshold:
+          STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT,
         crawlDiscoveryLabel: 'Browse product index pages',
-        crawlDiscoveryMaxLinks: 24,
         crawlDiscoveryPageLabel: 'Products page',
         currentPage: 1,
         totalPages: 64,
       })
     );
+  });
+
+  it('omits Popular Product Links on page 1 to prevent duplication of current grid items', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
+    mockGetCachedStorefrontProductIndex.mockResolvedValue({
+      hasError: false,
+      totalCount: 40,
+      totalPages: 2,
+      products: [
+        {
+          id: 'prod-1',
+          name: 'Galaxy S25',
+          slug: 'galaxy-s25',
+          price: 2500,
+          images: [],
+          categories: [{ name: 'Smartphones', slug: 'smartphones' }],
+        },
+      ],
+    });
+
+    const result = await ProductsPageContent({
+      params: Promise.resolve({ slug: 'demo-store' }),
+      searchParams: Promise.resolve({ page: '1' }),
+    });
+
+    render(result as React.ReactElement);
+
+    expect(
+      screen.queryByRole('heading', { name: 'Popular Product Links' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders Popular Product Links on page 2+ linking to top products', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
+    mockGetCachedStorefrontProductIndex.mockImplementation(
+      (_merchantId, options: { page?: number } | number) => {
+        const page =
+          typeof options === 'object' && options !== null
+            ? options.page
+            : options;
+        if (page === 1) {
+          return Promise.resolve({
+            hasError: false,
+            totalCount: 40,
+            totalPages: 2,
+            products: [
+              {
+                id: 'prod-page1',
+                name: 'First Page Product',
+                slug: 'first-page-product',
+                price: 2500,
+                images: [],
+                category_slug: 'smartphones',
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          hasError: false,
+          totalCount: 40,
+          totalPages: 2,
+          products: [
+            {
+              id: 'prod-page2',
+              name: 'Second Page Product',
+              slug: 'second-page-product',
+              price: 3000,
+              images: [],
+              category_slug: 'smartphones',
+            },
+          ],
+        });
+      }
+    );
+
+    const result = await ProductsPageContent({
+      params: Promise.resolve({ slug: 'demo-store' }),
+      searchParams: Promise.resolve({ page: '2' }),
+    });
+
+    render(result as React.ReactElement);
+
+    expect(
+      screen.getByRole('heading', { name: 'Popular Product Links' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'First Page Product' })
+    ).toHaveAttribute('href', '/demo-store/smartphones/first-page-product');
   });
 });

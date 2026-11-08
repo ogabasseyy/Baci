@@ -6,7 +6,7 @@ import { BlogContentRenderer } from '@/components/blog/renderer/BlogContentRende
 import { TableOfContents } from '@/components/blog/table-of-contents';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewriting';
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
 import { BlogLegacyContent } from './BlogLegacyContent';
@@ -236,9 +236,9 @@ export async function BlogPostBody({
                         {related.category}
                       </Badge>
                     )}
-                    <h3 className="line-clamp-2 text-lg font-semibold leading-none tracking-tight transition-colors group-hover:text-primary">
+                    <CardTitle className="line-clamp-2 text-lg transition-colors group-hover:text-primary">
                       {related.title}
-                    </h3>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">

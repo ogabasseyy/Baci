@@ -1,4 +1,4 @@
-import { stat, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { prepareRun } from './merchant-image-pilot-runner.mjs';
@@ -83,11 +83,8 @@ export async function finishBase(
     tool: 'browsertime',
     viewport,
   });
-  // The navigation timestamp must precede the filesystem-recorded shot
-  // time, including on filesystems with coarse mtime resolution.
-  const shotPath = join(dir, 'shot.png');
-  await writeFile(shotPath, await pngBuffer(750, 1334));
-  const shotMtimeMs = (await stat(shotPath)).mtimeMs;
+  // HAR first, screenshot second: finish refuses captures that predate
+  // the navigation, so the shot mtime must not precede startedDateTime.
   const harPath = join(dir, 'raw.har');
   await writeFile(
     harPath,
@@ -97,13 +94,15 @@ export async function finishBase(
         pages: [
           {
             _url: ROUTE,
-            startedDateTime: new Date(shotMtimeMs - 1_000).toISOString(),
+            startedDateTime: new Date().toISOString(),
             title: 'u run 1',
           },
         ],
       },
     })
   );
+  const shotPath = join(dir, 'shot.png');
+  await writeFile(shotPath, await pngBuffer(750, 1334));
   return {
     base: {
       har: harPath,

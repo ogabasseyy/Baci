@@ -3,13 +3,11 @@ import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-ind
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
-import { annotateCommerceBridgeLinks } from './annotate-commerce-bridge-links';
 import {
   buildClusterFeaturedProducts,
   type ClusterFeaturedInventoryProduct,
 } from './build-cluster-featured-products';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
-import { buildClusterContextSummary } from './build-contextual-commerce-bridge';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
@@ -101,13 +99,6 @@ export async function buildInformationalClusterModel(
       toCategoryInventoryProduct(categorySlug, product)
     );
   }
-
-  const featuredProductPool =
-    input.excludedProductSlugs && input.excludedProductSlugs.size > 0
-      ? products.filter(
-          (product) => !input.excludedProductSlugs?.has(product.slug)
-        )
-      : products;
 
   const destinationVerified =
     input.categoryDataOverride?.destinationVerified === true;
@@ -225,20 +216,12 @@ export async function buildInformationalClusterModel(
       href: `${input.storeUrl}/${categorySlug}`,
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
-    contextSummary: buildClusterContextSummary({
-      categoryName,
-      kind: inferred.kind,
-      brands: inferred.brands,
-    }),
-    commerceLinks: annotateCommerceBridgeLinks(
-      finalCommerceLinks.slice(0, 5),
-      categoryName
-    ),
+    commerceLinks: finalCommerceLinks.slice(0, 5),
     featuredProducts: buildClusterFeaturedProducts(
       input.storeUrl,
       categorySlug,
       inferred.brands,
-      featuredProductPool,
+      products,
       input.countryCode,
       `${input.post.title} ${input.post.slug}`
     ),

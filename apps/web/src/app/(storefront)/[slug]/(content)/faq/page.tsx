@@ -9,16 +9,36 @@ import {
   getMerchantByIdentifier,
   getRequestScopedMerchant,
 } from '@/lib/cached-data';
-import { extractFaqItems } from '@/lib/extract-faq-items';
-import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import { generateFAQSchema, getIndexableRobotsMetadata } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
+import { type FAQItem, parseLegacyFAQ } from '@/types/faq';
 import { ContentPageCrawlSummary } from '../content-page-crawl-summary';
 import { FAQPageClient } from '../pages/faq/faq-page-client';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+/**
+ * Extracts FAQ items from merchant data, checking both structured faq_items
+ * and legacy FAQ content. Returns an empty array when no valid items exist.
+ */
+function extractFaqItems(merchant: {
+  faq_items?: unknown;
+  pages?: { faq?: string };
+}): FAQItem[] {
+  if (
+    merchant.faq_items &&
+    Array.isArray(merchant.faq_items) &&
+    merchant.faq_items.length > 0
+  ) {
+    return merchant.faq_items as FAQItem[];
+  }
+  if (merchant.pages?.faq) {
+    return parseLegacyFAQ(merchant.pages.faq);
+  }
+  return [];
 }
 
 export async function generateMetadata({
@@ -46,9 +66,7 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: hasPublishableFaqContent(merchant)
-      ? getIndexableRobotsMetadata()
-      : { index: false, follow: true },
+    robots: getIndexableRobotsMetadata(),
   };
 }
 
@@ -119,7 +137,7 @@ async function FAQContent({ params }: PageProps) {
     <FAQPageClient
       merchant={merchant}
       faqItems={faqItems}
-      legacyContent={merchant.pages?.faq}
+      legacyContent={!merchant.faq_items ? merchant.pages?.faq : undefined}
     >
       <ContentPageCrawlSummary
         kind="faq"

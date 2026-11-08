@@ -13,7 +13,6 @@ import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
 import { OxygenFormProgress } from './OxygenFormProgress';
 import { OxygenIdentityField } from './OxygenIdentityField';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
-import { OxygenStepHeading } from './OxygenStepHeading';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { OxygenVerificationTrust } from './OxygenVerificationTrust';
 import { parseOxygenCustomerForm } from './oxygen-customer-form-payload';
@@ -87,6 +86,11 @@ export function CustomerFormFields({
     if (formError)
       formRef.current?.querySelector<HTMLElement>('[role=alert]')?.focus();
   }, [formError]);
+  const titles = [
+    'Verify your identity',
+    'Verify your bank account',
+    'Employment and consent',
+  ];
   function validateSection(form: HTMLFormElement): boolean {
     const controls = form.querySelectorAll<
       HTMLInputElement | HTMLSelectElement
@@ -193,9 +197,7 @@ export function CustomerFormFields({
       <fieldset disabled={busy} className="grid min-w-0 gap-5">
         <legend className="sr-only">Customer verification</legend>
         <OxygenFormProgress step={step} />
-        <OxygenStepHeading
-          step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
-        />
+        <h3 className="text-lg font-bold text-gray-900">{titles[step]}</h3>
         {formError && (
           <p
             role="alert"

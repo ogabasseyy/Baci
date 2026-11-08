@@ -1,4 +1,3 @@
-/* biome-ignore-all lint/correctness/noUnknownPseudoClass: CSS Modules uses :global for the storefront theme boundary. */
 .dialog {
   position: fixed;
   inset: 0;
@@ -12,6 +11,7 @@
   border: 0;
   border-radius: 1.5rem;
   outline: none;
+  background: white;
   color: #111827;
   box-shadow: 0 24px 80px rgb(0 0 0 / 18%);
 }
@@ -38,15 +38,6 @@
 .close {
   z-index: 20;
   isolation: isolate;
-}
-
-.dialog input:focus {
-  border-color: var(--store-primary, #dc2626);
-}
-
-.dialog input:focus-visible {
-  outline: 2px solid var(--store-primary, #dc2626);
-  outline-offset: 2px;
 }
 
 /* Rotate only the arc; the close target and its icon stay stationary. */
@@ -115,38 +106,6 @@
 .step[data-state="complete"] .number {
   background: var(--store-primary, #dc2626);
   color: white;
-}
-
-@media (prefers-color-scheme: dark) {
-  :global(.storefront-variant-ogabassey.storefront-mode-system) .dialog {
-    color: var(--storefront-dark-foreground);
-  }
-
-  :global(.storefront-variant-ogabassey.storefront-mode-system) .step {
-    border-color: var(--storefront-dark-border);
-    color: var(--storefront-dark-muted-foreground);
-  }
-
-  :global(.storefront-variant-ogabassey.storefront-mode-system)
-    .step[data-state="current"],
-  :global(.storefront-variant-ogabassey.storefront-mode-system)
-    .step[data-state="complete"] {
-    border-color: var(--store-primary, #dc2626);
-    color: var(--storefront-dark-foreground);
-  }
-
-  :global(.storefront-variant-ogabassey.storefront-mode-system) .number {
-    color: var(--storefront-dark-background);
-  }
-
-  :global(.storefront-variant-ogabassey.storefront-mode-system)
-    .step[data-state="current"]
-    .number,
-  :global(.storefront-variant-ogabassey.storefront-mode-system)
-    .step[data-state="complete"]
-    .number {
-    color: var(--store-primary-text, white);
-  }
 }
 
 @media (max-width: 639px) {

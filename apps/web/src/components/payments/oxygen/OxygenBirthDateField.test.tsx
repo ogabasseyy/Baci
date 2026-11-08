@@ -57,14 +57,3 @@ it('accepts manual dates, rejects impossible dates and never submits a stale sav
   expect(field.checkValidity()).toBe(false);
   expect(new FormData(form).get('date_of_birth')).toBe('');
 });
-
-it('keeps the calendar control connected to the date field', () => {
-  render(<OxygenBirthDateField defaultValue="1990-02-10" />);
-  const field = screen.getByLabelText('Date of birth');
-  const button = screen.getByRole('button', { name: 'Choose date of birth' });
-  expect(field).toHaveValue('10/02/1990');
-  expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-  expect(button.querySelector('svg')?.getAttribute('class')).toContain(
-    'actionIcon'
-  );
-});

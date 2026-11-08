@@ -1,39 +1,16 @@
+import { existsSync } from 'node:fs';
 import { fireEvent, render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { OxygenBankLogo } from './OxygenBankLogo';
 import { oxygenBankLogo } from './oxygen-bank-logos';
 
-function logoPath(code: string): string | undefined {
-  // Vitest resolves static image imports to asset URLs, while a Next.js
-  // production build resolves the same imports to StaticImageData objects.
-  const logo: unknown = oxygenBankLogo(code);
-  if (typeof logo === 'string') return logo;
-  if (logo && typeof logo === 'object' && 'src' in logo) {
-    return typeof logo.src === 'string' ? logo.src : undefined;
-  }
-  return undefined;
-}
-
-describe('bugfix: bank logos on custom domains', () => {
-  it('returns a bundled asset instead of the runtime /bank-logos URL', () => {
-    const path = logoPath('058');
-
-    expect(path).toBeDefined();
-    expect(path).toMatch(/058[^/]*\.png$/);
-    expect(path).not.toMatch(/^\/bank-logos\//);
-  });
-
-  it('keeps every alias on the same bundled asset', () => {
-    expect(oxygenBankLogo('000013')).toBe(oxygenBankLogo('058'));
-  });
-});
-
 it('matches exact Oxygen codes and aliases without guessing or normalizing unknown codes', () => {
-  expect(oxygenBankLogo('058')).toBeDefined();
-  expect(oxygenBankLogo('000013')).toBe(oxygenBankLogo('058'));
-  expect(oxygenBankLogo('999992')).toBeDefined();
+  expect(oxygenBankLogo('058')).toBe('/bank-logos/058.png');
+  expect(oxygenBankLogo('000013')).toBe('/bank-logos/058.png');
+  expect(oxygenBankLogo('999992')).toBe('/bank-logos/999992.png');
   for (const code of ['58', 'unknown', '', '__proto__'])
     expect(oxygenBankLogo(code)).toBeUndefined();
+  expect(existsSync(`public${oxygenBankLogo('058')}`)).toBe(true);
 });
 
 it('falls back for unknown codes and broken images, and recovers when the bank changes', () => {

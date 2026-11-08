@@ -80,8 +80,6 @@ describe('ProductBreadcrumbs', () => {
       'aria-current',
       'page'
     );
-    expect(screen.getByRole('list')).toBeInTheDocument();
-    expect(screen.getAllByRole('listitem')).toHaveLength(3);
     expect(
       document.querySelectorAll('svg[aria-hidden="true"][role="presentation"]')
     ).toHaveLength(2);

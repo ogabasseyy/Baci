@@ -98,14 +98,13 @@ async function runRootSlugRedirect(
         : null;
     }
     const stripped = pathname.replace(`/${slug}`, '') || '/';
-    // resolveRetiredSlugRedirect only redirects GET/HEAD requests, so 301 matches custom-domain redirects.
     const redirect = await resolveRetiredSlugRedirect(
       slug,
       normalizeStorefrontTermsAliasPath(stripped),
       request.nextUrl.search,
       request.method
     );
-    return redirect ? NextResponse.redirect(redirect, 301) : null;
+    return redirect ? NextResponse.redirect(redirect, 302) : null;
   }
 
   if (!PLATFORM_ROOT_ROUTE_SEGMENTS.has(slug.toLowerCase())) {
@@ -129,7 +128,7 @@ async function runRootSlugRedirect(
         request.nextUrl.search,
         request.method
       );
-      if (redirect) return NextResponse.redirect(redirect, 301);
+      if (redirect) return NextResponse.redirect(redirect, 302);
     }
   }
 

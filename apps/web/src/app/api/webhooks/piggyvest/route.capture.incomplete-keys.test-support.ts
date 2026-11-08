@@ -69,7 +69,6 @@ export function replayDrain(store: ReturnType<typeof createFakeCaptureStore>) {
   const client = store.client();
   return drainPiggyvestWebhookCaptures({
     claim: () => Promise.resolve(store.claim(10)),
-    renew: async (id, token) => store.renew(id, token),
     resolve: async (id, token, state, error) => {
       const result = await client.rpc('resolve_piggyvest_webhook_capture', {
         p_id: id,

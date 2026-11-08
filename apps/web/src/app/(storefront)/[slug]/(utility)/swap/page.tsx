@@ -1,50 +1,20 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { OgabasseyV2Swap } from '@/components/storefront/ogabassey/pages/swap';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
-import { buildStoreUrl } from '@/lib/store-url';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-
-  if (!isValidMerchantIdentifier(slug)) {
-    return {
-      title: 'Store Not Found',
-    };
-  }
-
-  const lookupKey = slug.toLowerCase();
-  const merchant = isDomainIdentifier(slug)
-    ? await getCachedMerchantByDomain(lookupKey)
-    : await getCachedMerchant(lookupKey);
-
-  if (!merchant || merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
-    return {
-      title: 'Store Not Found',
-    };
-  }
-
-  const baseUrl = buildStoreUrl(merchant);
-
-  return {
-    title: 'Swap Your Device',
-    description:
-      'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
-    alternates: { canonical: `${baseUrl}/swap` },
-  };
-}
+export const metadata: Metadata = {
+  title: 'Swap Your Device',
+  description:
+    'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
+};
 
 export default async function SwapPage({
   params,
@@ -69,7 +39,10 @@ export default async function SwapPage({
   }
 
   // Only show for Ogabassey template (merchant-specific feature)
-  if (merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
+  if (
+    (merchant as unknown as { template_id?: string }).template_id !==
+    'ogabassey'
+  ) {
     notFound();
   }
 

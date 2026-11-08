@@ -21,7 +21,6 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/checkout-shared',
     '/crypto-payment-modal',
     '/dva-modal',
-    '/oxygen-theme',
     '/payment-handoff',
     '/products/test-phone',
     '/unlock-orders',

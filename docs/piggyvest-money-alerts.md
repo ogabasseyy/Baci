@@ -68,7 +68,6 @@ with `[Filtered]`.
 | `PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED` | A stored delivery failed processing and is kept for retry | Worker logs for the capture |
 | `PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE` | A stored delivery could not be re-verified on replay and was parked | Key archive for that key version |
 | `PIGGYVEST_WEBHOOK_NEEDS_REVIEW` | A stored delivery was parked for a person to review | The capture's review reason |
-| `PIGGYVEST_WEBHOOK_REPLAY_DEFERRED` | The worker-host capture drain set a stored delivery aside for review because only the legacy path can finish it. A successful PiggyVest redelivery still closes it | Whether PiggyVest redelivered it; see docs/piggyvest-webhook-capture-drain-runbook.md |
 | `PIGGYVEST_TRANSFER_NEEDS_REVIEW` | A transfer is still unconfirmed past its retry window. It is held, never resent or released. Also used for any stale unconfirmed transfer | Transfer status at PiggyVest for the operation |
 | `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` | A new main wallet's interest routing was contradicted, at onboarding or on a later recheck. It is kept rejected and never usable; its settings are fixed at creation | The intent's wallet routing at PiggyVest |
 | `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` | A retried onboarding found a PiggyVest customer it could not prove ours: several customers under our identifier, a duplicate, or an existing customer not listed under it. Nothing is adopted | Customers carrying the intent's identifier |

@@ -50,13 +50,9 @@ vi.mock('@/components/storefront/ogabassey/pages/help-support', () => ({
   OgabasseyV2HelpSupport: vi.fn(() => null),
 }));
 
-vi.mock('@/types/faq', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/types/faq')>();
-  return {
-    ...actual,
-    parseLegacyFAQ: vi.fn(() => []),
-  };
-});
+vi.mock('@/types/faq', () => ({
+  parseLegacyFAQ: vi.fn(() => []),
+}));
 
 const { parseLegacyFAQ } = await import('@/types/faq');
 
@@ -184,23 +180,7 @@ describe('generateMetadata', () => {
     });
 
     expect(metadata.title).toBe('FAQ | Test Store');
-    expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(notFound).not.toHaveBeenCalled();
-  });
-
-  it('returns indexable metadata for Ogabassey template even when faq_items is empty', async () => {
-    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
-      business_name: 'Ogabassey',
-      template_id: 'ogabassey',
-      faq_items: [],
-      pages: {},
-    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
-
-    const metadata = await generateMetadata({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-    });
-
-    expect(metadata.robots).toEqual({ index: true, follow: true });
   });
 
   it('returns metadata for the advertised FAQ page when no FAQ items exist', async () => {
@@ -262,6 +242,5 @@ describe('generateMetadata', () => {
     expect(metadata.title).toBe('FAQ | Test Store');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/faq');
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/faq');
-    expect(metadata.robots).toEqual({ index: true, follow: true });
   });
 });

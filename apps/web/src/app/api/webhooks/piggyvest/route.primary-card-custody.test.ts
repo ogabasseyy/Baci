@@ -84,9 +84,6 @@ it.each([
   expect(mocks.intake).toHaveBeenCalledWith({
     rawBody: fixture.rawBody,
     signature: fixture.signature,
-    environment: expect.objectContaining({
-      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
-    }),
   });
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });

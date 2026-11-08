@@ -2,10 +2,6 @@ import type { CategoryNavItem } from '@/lib/cached-categories';
 import type { JsonLdGraphData, JsonLdGraphNode } from '@/lib/json-ld-types';
 import type { Product } from '@/lib/products';
 import { getProductUrl } from '@/lib/seo-utils';
-import {
-  normalizeStorefrontBaseUrl,
-  buildStorefrontEntityId as schemaId,
-} from '@/lib/storefront-entity-id';
 
 const DEFAULT_CATEGORY_LIMIT = 12;
 const DEFAULT_PRODUCT_LINK_LIMIT = 8;
@@ -37,20 +33,35 @@ function stripContext(
   const { '@context': _context, ...rest } = schema;
   return rest;
 }
+function normalizeBaseUrl(baseUrl: string): string {
+  try {
+    const parsedUrl = new URL(baseUrl);
+    const path = parsedUrl.pathname.replace(/\/+$/g, '');
+    return `${parsedUrl.origin}${path === '/' ? '' : path}`;
+  } catch {
+    return baseUrl.replace(/\/+$/g, '');
+  }
+}
 function storeUrl(baseUrl: string, path = ''): string {
-  const normalizedBaseUrl = normalizeStorefrontBaseUrl(baseUrl);
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const normalizedPath = path.trim();
   if (!normalizedPath || normalizedPath === '/') {
     return normalizedBaseUrl;
   }
   if (/^https?:\/\//i.test(normalizedPath)) {
     try {
-      return new URL(normalizedPath).toString().replace(/\/+$/g, '');
+      const parsedUrl = new URL(normalizedPath);
+      return parsedUrl.toString().replace(/\/+$/g, '');
     } catch {
       return normalizedPath;
     }
   }
+
   return `${normalizedBaseUrl}/${normalizedPath.replace(/^\/+/, '')}`;
+}
+
+function schemaId(baseUrl: string, fragment: string): string {
+  return `${storeUrl(baseUrl)}/#${fragment}`;
 }
 
 function getIdentityGraphNodes(
@@ -81,6 +92,7 @@ function withIdentityIds(
     if (type === 'OnlineStore') {
       return { ...node, '@id': onlineStoreId };
     }
+
     if (type === 'Store') {
       return {
         ...node,
@@ -88,9 +100,11 @@ function withIdentityIds(
         parentOrganization: { '@id': onlineStoreId },
       };
     }
+
     if (type === 'WebSite') {
       return { ...node, '@id': websiteId };
     }
+
     return node;
   });
 }
@@ -168,16 +182,14 @@ function buildNavigationNode(
   input: StorefrontHomeSemanticGraphInput,
   categories: CategoryNavItem[]
 ): Record<string, unknown> {
-  const navigationEntries: Record<string, unknown>[] = [
+  const navigationEntries = [
     {
       '@type': 'CollectionPage',
-      '@id': `${storeUrl(input.baseUrl, 'products')}#collection`,
       name: 'All products',
       url: storeUrl(input.baseUrl, 'products'),
     },
     ...categories.map((category) => ({
       '@type': 'CollectionPage',
-      '@id': `${storeUrl(input.baseUrl, category.slug)}#collection`,
       name: category.name,
       url: storeUrl(input.baseUrl, category.slug),
     })),
@@ -185,7 +197,7 @@ function buildNavigationNode(
 
   if (input.blogEnabled) {
     navigationEntries.push({
-      '@id': `${storeUrl(input.baseUrl, 'blog')}#blog`,
+      '@type': 'Blog',
       name: `${input.merchantName} blog`,
       url: storeUrl(input.baseUrl, 'blog'),
     });
@@ -269,6 +281,7 @@ function buildBlogNode(
     url: storeUrl(input.baseUrl, 'blog'),
     isPartOf: { '@id': schemaId(input.baseUrl, 'website') },
     publisher: { '@id': schemaId(input.baseUrl, 'online-store') },
+    about: buildAboutTopics(input),
   };
 }
 

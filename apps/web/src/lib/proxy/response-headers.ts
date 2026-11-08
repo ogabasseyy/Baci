@@ -6,7 +6,6 @@ import {
 import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-cache-kind';
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from '@/config/storefront-metadata-cache-bots';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
-import { applyBlogQueryNoindexHeader } from '@/lib/proxy/blog-query-noindex-header';
 import { generateCSP } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import {
@@ -143,13 +142,6 @@ export function applySecurityHeaders(
     // overwrite Vary later, so product-like rewrites also carry the internal
     // metadata bucket query param set before Next renders the route.
     appendVaryHeader(response, STOREFRONT_METADATA_CACHE_BUCKET_HEADER);
-    applyBlogQueryNoindexHeader(
-      response,
-      pathname,
-      hostname,
-      routeType,
-      request?.nextUrl.searchParams
-    );
   }
 
   // HSTS: Enforce HTTPS with subdomains and preload (Lighthouse Best Practice)

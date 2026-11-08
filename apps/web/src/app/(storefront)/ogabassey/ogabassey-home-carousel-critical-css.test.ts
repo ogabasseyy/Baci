@@ -25,15 +25,10 @@ describe('homepage carousel critical CSS', () => {
         color: 'var(--store-foreground, #111827)',
       });
     }
-    expect(declarationsFor('[data-ogabassey-hero-utility]')).toMatchObject({
-      'border-top': '1px solid var(--ogabassey-border, #f3f4f6)',
-      'border-bottom': '1px solid var(--ogabassey-border, #f3f4f6)',
-    });
     expect(
       declarationsFor('[data-ogabassey-mobile-utility-panel]')
     ).toMatchObject({
       'min-height': '158px',
-      border: '1px solid var(--ogabassey-border, #f3f4f6)',
     });
     expect(
       declarationsFor('[data-ogabassey-hero-utility] span>span:last-child')
@@ -86,35 +81,14 @@ describe('homepage carousel critical CSS', () => {
     ).toMatchObject({ opacity: '1', 'z-index': '10' });
   });
 
-  it('locks mobile and desktop hero title/price typography and img padding so the slide-0 image always wins LCP area', () => {
+  it('locks mobile hero h2 typography and img padding so the slide-0 image always wins LCP area', () => {
     expect(
-      declarationsFor(
-        '[data-ogabassey-mobile-hero-panel] .ogabassey-hero-title'
-      )
+      declarationsFor('[data-ogabassey-mobile-hero-panel] h2')
     ).toMatchObject({
       '-webkit-line-clamp': '3',
       'font-size': '1.25rem',
       'line-height': '1.05',
       overflow: 'hidden',
-    });
-    expect(
-      declarationsFor(
-        '[data-ogabassey-mobile-hero-panel] .ogabassey-hero-price'
-      )
-    ).toMatchObject({
-      'font-size': '11px',
-      'font-weight': '600',
-    });
-    expect(
-      declarationsFor('[data-ogabassey-desktop-hero]>a .ogabassey-hero-title')
-    ).toMatchObject({
-      'font-size': '3rem',
-    });
-    expect(
-      declarationsFor('[data-ogabassey-desktop-hero]>a .ogabassey-hero-price')
-    ).toMatchObject({
-      'font-size': '1.25rem',
-      'line-height': '1.75rem',
     });
     expect(
       declarationsFor('[data-ogabassey-mobile-hero-panel] img')

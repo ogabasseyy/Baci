@@ -108,7 +108,7 @@ export function OxygenApplicationDialog({
         ref={dialog}
         aria-labelledby="oxygen-application-title"
         aria-describedby="oxygen-application-description"
-        className={`${styles.dialog} bg-white ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''}`}
+        className={`${styles.dialog} ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''}`}
         onCancel={(event) => {
           event.preventDefault();
           if (selfieUrl) {

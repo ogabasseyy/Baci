@@ -180,15 +180,13 @@ describe('primary and legacy processing', () => {
     const response = await run(restriction, ['legacy', 'interest']);
 
     expect(response).toBe(claimed);
-    expect(mocks.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        rawBody: Buffer.from(JSON.stringify(restriction)),
-        signature,
-        matchedSecret: 'matched-secret',
-        event: expect.objectContaining({ eventId: restriction.eventId }),
-        families: ['legacy', 'interest'],
-      })
-    );
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      rawBody: Buffer.from(JSON.stringify(restriction)),
+      signature,
+      matchedSecret: 'matched-secret',
+      event: expect.objectContaining({ eventId: restriction.eventId }),
+      families: ['legacy', 'interest'],
+    });
     expect(mocks.record).not.toHaveBeenCalled();
   });
 

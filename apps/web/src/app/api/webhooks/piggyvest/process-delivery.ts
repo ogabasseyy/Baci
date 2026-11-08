@@ -44,8 +44,9 @@ import { toRecordInput } from './record-input';
  * - Inbox/quarantine write fails, or a specialized intake is unavailable
  *   -> 503.
  *
- * The restricted-intake client factory and provider config are injected;
- * this function does not construct a service-role client.
+ * The service-client factory and provider config are injected: the
+ * event-pipeline boundary permits the API route to reach those authorities
+ * directly, not through this importer.
  */
 
 const noStore = { 'Cache-Control': 'no-store' };
@@ -68,7 +69,6 @@ export interface VerifiedDelivery {
 export interface ProcessDeliveryDeps {
   createClient: () => PiggyvestIntakeClient;
   getPiggyvestConfig: () => PiggyvestClientConfig | null;
-  env?: NodeJS.ProcessEnv;
 }
 
 // Responses where the delivery was set aside for authorization (the wrong
@@ -82,19 +82,6 @@ const authorizationQuarantines = new WeakSet<Response>();
 // processable, and a processed capture would swallow the resend as a
 // duplicate.
 const contentQuarantines = new WeakSet<Response>();
-const conflictQuarantines = new WeakSet<Response>();
-
-export function isConflictQuarantine(response: Response): boolean {
-  return conflictQuarantines.has(response);
-}
-
-async function quarantineConflict(
-  ...args: Parameters<typeof quarantineAndAck>
-): Promise<Response> {
-  const response = await quarantineAndAck(...args);
-  if (response.ok) conflictQuarantines.add(response);
-  return response;
-}
 
 export function isContentQuarantine(response: Response): boolean {
   return contentQuarantines.has(response);
@@ -207,14 +194,13 @@ export async function processVerifiedDelivery(
       event: parsed.data,
       families,
       keyScope,
-      env: deps.env ?? process.env,
     });
     // Not completed: the owning intake did not run, so whatever else
     // answered (a legacy path's successful no-op, or an inflow credit that is
     // idempotent on redelivery) does not end the provider's retries.
     if (ownerIntakeSkipped) return retryUntilKeySetComplete();
     if (primary === 'conflict') {
-      return quarantineConflict(
+      return quarantineAndAck(
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
@@ -260,7 +246,7 @@ export async function processVerifiedDelivery(
       console.warn(
         '[PiggyVest Webhook] Same-identity conflicting delivery quarantined'
       );
-      return quarantineConflict(
+      return quarantineAndAck(
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },

@@ -126,7 +126,9 @@ it('tracks payment failures from Credit Direct callbacks', async () => {
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     if (tab === 'installments')
-      fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /pay in installments/i })
+      );
     const paymentLabel = method.replace('_', ' ');
     const paymentRadio = screen
       .getAllByRole('radio', { name: new RegExp(paymentLabel, 'i') })

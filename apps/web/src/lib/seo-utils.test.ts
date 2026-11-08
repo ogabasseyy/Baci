@@ -13,7 +13,9 @@ import {
   generateOrganizationSchema,
   generateProductSchema,
   generateSlug,
+  getCanonicalStorefrontFilterSearchParams,
   getEffectiveProductStock,
+  getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
   isRedundantPlatformListParenthetical,
@@ -1036,6 +1038,241 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(JSON.parse(safeJsonLdStringify(schema))).toMatchObject({
       description: 'broken �...',
     });
+  });
+});
+
+describe('getIndexableRobotsMetadata', () => {
+  it('returns large-preview directives for indexable storefront pages', () => {
+    expect(getIndexableRobotsMetadata()).toEqual({
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+        'max-video-preview': -1,
+      },
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    });
+  });
+
+  it('keeps focused single-filter listing URLs indexable when filters affect results', () => {
+    expect(getIndexableRobotsMetadata({ brand: 'Dell' })).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+
+    expect(
+      getIndexableRobotsMetadata(
+        { brand: 'Dell' },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    });
+  });
+
+  it('deduplicates legacy singular and plural keys for the same listing filter', () => {
+    expect(
+      getIndexableRobotsMetadata(
+        {
+          brand: 'Dell',
+          brands: 'Dell',
+        },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    });
+  });
+
+  it('treats price bounds as one listing filter', () => {
+    expect(
+      getIndexableRobotsMetadata(
+        {
+          minPrice: '100000',
+          maxPrice: '500000',
+        },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+      },
+    });
+  });
+
+  it('noindexes multi-filter listing URLs while preserving follow directives', () => {
+    expect(
+      getIndexableRobotsMetadata({
+        brand: 'Dell',
+        minPrice: '100000',
+      })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+  });
+
+  it('ignores the hub transition token in robots and canonical decisions', () => {
+    expect(
+      getIndexableRobotsMetadata({
+        graphics: 'NVIDIA RTX 4070',
+        graphicsHub: 'rtx-4070',
+      })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
+  });
+
+  it('treats graphics as a storefront filter for faceted listing URLs', () => {
+    expect(
+      getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })
+    ).toMatchObject({
+      index: false,
+      follow: true,
+    });
+
+    expect(
+      getIndexableRobotsMetadata(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      )
+    ).toMatchObject({
+      index: true,
+      follow: true,
+    });
+  });
+
+  it('noindexes storefront search query URLs while preserving follow directives', () => {
+    expect(getIndexableRobotsMetadata({ q: 'acc6.top' })).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+
+    expect(getIndexableRobotsMetadata({ query: 'iphone 16' })).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+
+    expect(getIndexableRobotsMetadata({ search: 'pixel 10' })).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+  });
+});
+
+describe('getCanonicalStorefrontFilterSearchParams', () => {
+  it('preserves a focused single listing filter in canonical query params', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { brand: 'Dell' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('brand=Dell');
+  });
+
+  it('keeps price range bounds together as one canonical listing filter', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        {
+          minPrice: '100000',
+          maxPrice: '500000',
+        },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('minPrice=100000&maxPrice=500000');
+  });
+
+  it('normalizes search aliases to the canonical search query param', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { q: 'iphone 16' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('search=iphone+16');
+
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { query: 'pixel 10' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('search=pixel+10');
+
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { search: 'redmi pad' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('search=redmi+pad');
+  });
+
+  it('preserves a focused graphics filter in canonical query params', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams(
+        { graphics: 'NVIDIA RTX 4070' },
+        { filtersAffectResults: true }
+      ).toString()
+    ).toBe('graphics=NVIDIA+RTX+4070');
+  });
+
+  it('drops canonical filter params until filters affect listing results', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams({ brand: 'Dell' }).toString()
+    ).toBe('');
+  });
+
+  it('drops canonical filter params for multi-filter listing URLs', () => {
+    expect(
+      getCanonicalStorefrontFilterSearchParams({
+        brand: 'Dell',
+        minPrice: '100000',
+      }).toString()
+    ).toBe('');
   });
 });
 

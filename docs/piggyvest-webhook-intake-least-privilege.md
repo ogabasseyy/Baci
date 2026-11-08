@@ -44,15 +44,6 @@ back to a broader credential.
   login already exists). Keep the login `NOSUPERUSER NOBYPASSRLS NOCREATEROLE
   NOCREATEDB NOREPLICATION`.
 
-The capture drain uses its separate restricted drain login for claim and
-settlement; the intake login cannot claim or settle capture rows. An optional
-legacy replay call graph is authorized only from
-`webhook-capture-primary-replay.ts` through
-`webhook-capture-legacy-replay.ts` to the existing
-`processVerifiedDelivery` handler, and only when
-`PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED=true` on the worker. This
-adapter creates one lazy intake client for the delivery and disposes it in a
-`finally` block. It does not introduce a service-role client, another intake
-RPC, or broader database grants. Readiness requires the legacy signing key
-and the existing restricted intake runtime for this lane; primary families
-are required only when their keys are configured.
+The capture drain (`webhook-capture-drain`) is not wired to a runtime in this
+repository yet. It claims rows with lease tokens, which the intake group
+deliberately cannot do; whoever wires it needs its own restricted authority.

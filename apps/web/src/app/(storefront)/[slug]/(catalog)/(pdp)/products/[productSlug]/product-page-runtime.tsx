@@ -83,7 +83,6 @@ export async function ProductPageRuntime({
         paystackConfigured: isPaystackConfigured(),
         currency,
       }),
-      merchantBaseUrl: baseUrl,
       productUrl,
     }
   );

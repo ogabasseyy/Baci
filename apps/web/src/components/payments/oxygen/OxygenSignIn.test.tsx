@@ -1,6 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const m = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -23,9 +37,6 @@ vi.mock('@/contexts/customer-auth-context', () => ({
 }));
 
 import { OxygenSignIn } from './OxygenSignIn';
-import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
-
-installOxygenOtpTestEnvironment();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -36,6 +47,22 @@ beforeEach(() => {
     isAuthenticated: false,
     sendOtp: m.send,
     verifyOtp: m.verify,
+  });
+});
+beforeAll(() =>
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  )
+);
+afterAll(() => vi.unstubAllGlobals());
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
   });
 });
 async function sendCode() {

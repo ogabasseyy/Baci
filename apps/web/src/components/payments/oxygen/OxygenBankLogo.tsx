@@ -6,8 +6,8 @@ import { useState } from 'react';
 import { oxygenBankLogo } from './oxygen-bank-logos';
 
 export function OxygenBankLogo({ code }: { code: string }) {
+  const [failedSource, setFailedSource] = useState<string>();
   const source = oxygenBankLogo(code);
-  const [failedSource, setFailedSource] = useState<typeof source>();
   return (
     <span
       aria-hidden="true"

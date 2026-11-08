@@ -14,7 +14,6 @@ import {
 export const metadata: Metadata = {
   title: 'Member Status | Ogabassey',
   description: 'Check your membership tier and benefits',
-  robots: { index: false, follow: false },
 };
 
 export default async function MemberStatusPage({

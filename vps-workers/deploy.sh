@@ -2,6 +2,7 @@
 # Deploy VPS workers to bassey@82.29.190.219
 # Usage: bash vps-workers/deploy.sh
 set -euo pipefail
+
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/prepare-worker-release.sh
 source "$WORKER_ROOT/lib/prepare-worker-release.sh"
@@ -25,6 +26,7 @@ CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # auto-releasing it for a clean retry. Every other failure (including
 # a clean rollback that just needs a rerun) exits 1.
 WORKER_UNRECONCILED_EXIT=42
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "Refusing worker deployment from a dirty tracked checkout." >&2
   exit 1
@@ -168,7 +170,6 @@ $CRON_BLOCK_START
 0 10   * * * flock -n $REMOTE_DIR/locks/storefront-update-nudge.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/storefront-update-nudge' >> $REMOTE_DIR/logs/storefront-update-nudge.log 2>&1
 30 9   * * * flock -n $REMOTE_DIR/locks/ios-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/ios-live-build-sync' >> $REMOTE_DIR/logs/ios-live-build-sync.log 2>&1
 45 9   * * * flock -n $REMOTE_DIR/locks/android-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/android-live-build-sync' >> $REMOTE_DIR/logs/android-live-build-sync.log 2>&1
-* * * * * flock -n $REMOTE_DIR/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd $REMOTE_DIR && timeout --verbose --signal=TERM --kill-after=10s 50s $REMOTE_DIR/bin/process-piggyvest-webhook-capture-drain.sh --once' >> $REMOTE_DIR/logs/piggyvest-webhook-capture-drain.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/quiz-finalize.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s $REMOTE_DIR/bin/process-quiz-finalization.sh --once' >> $REMOTE_DIR/logs/quiz-finalize.log 2>&1
 15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
 $CRON_BLOCK_END

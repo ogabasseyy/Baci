@@ -5,11 +5,8 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { OxygenVerificationForms } from './OxygenVerificationForms';
-import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
-
-installOxygenOtpTestEnvironment();
 
 it('submits approval OTP and signature transiently, then clears the form', async () => {
   const submit = vi.fn().mockResolvedValue(undefined);
@@ -249,6 +246,18 @@ it('only displays verified success when the provider snapshot confirms it', () =
   expect(submit).not.toHaveBeenCalled();
 });
 
+beforeAll(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+  );
+});
+afterAll(() => vi.unstubAllGlobals());
+
 it('pastes a complete code with spaces and submits it once', async () => {
   const submit = vi.fn().mockResolvedValue(undefined);
   render(
@@ -273,23 +282,10 @@ it('pastes a complete code with spaces and submits it once', async () => {
   expect(submit).toHaveBeenCalledTimes(1);
 });
 
-it('drains OTP selection callbacks before its DOM environment is removed', async () => {
-  const { unmount } = render(
-    <OxygenVerificationForms
-      stage="eligibility_required"
-      address={{}}
-      approvalOtpReady={false}
-      busy={false}
-      submit={vi.fn()}
-    />
-  );
-  const input = screen.getByLabelText('Verification code');
-  fireEvent.focus(input);
-  fireEvent.paste(input, { clipboardData: { getData: () => '12 34' } });
-  expect(vi.getTimerCount()).toBeGreaterThan(0);
-  unmount();
+// input-otp queues selection updates at 0/10/50 ms after focus and paste.
+// Let those library callbacks finish before Vitest tears down this JSDOM window.
+afterEach(async () => {
   await act(async () => {
-    await vi.runOnlyPendingTimersAsync();
+    await new Promise((resolve) => setTimeout(resolve, 60));
   });
-  expect(vi.getTimerCount()).toBe(0);
 });

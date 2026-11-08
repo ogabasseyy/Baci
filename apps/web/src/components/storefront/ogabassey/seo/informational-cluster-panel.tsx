@@ -22,11 +22,6 @@ export function InformationalClusterPanel({
       >
         {model.heading}
       </h2>
-      {model.contextSummary ? (
-        <p className="mt-2 text-sm text-store-background-text/75">
-          {model.contextSummary}
-        </p>
-      ) : null}
       {model.primaryCategoryLink ? (
         <p className="mt-3">
           <a
@@ -48,11 +43,6 @@ export function InformationalClusterPanel({
               >
                 {link.label}
               </a>
-              {link.description ? (
-                <span className="block text-xs text-store-background-text/65">
-                  {link.description}
-                </span>
-              ) : null}
             </li>
           ))}
         </ul>

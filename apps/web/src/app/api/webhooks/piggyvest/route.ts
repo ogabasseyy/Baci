@@ -110,11 +110,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     return await handleVerifiedBody(request, rawBody, createClient);
   } finally {
-    try {
-      await intakeClient?.dispose?.();
-    } catch {
-      // Cleanup must not replace the delivery's processing response.
-    }
+    await Promise.resolve(intakeClient?.dispose?.()).catch(() => undefined);
   }
 }
 

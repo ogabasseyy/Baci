@@ -98,7 +98,9 @@ describe('HeroMobileCarousel without window.matchMedia', () => {
 
     const { unmount } = render(<HeroMobileCarousel slides={SLIDES} />);
 
-    expect(screen.getByText('Samsung Galaxy A27 5G')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /play auto-rotation/i })
     ).toBeInTheDocument();

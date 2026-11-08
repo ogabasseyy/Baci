@@ -88,4 +88,12 @@ describe('lightweight blog consent lifecycle', () => {
     consent(true);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+  it('does not send a second pageview when consent is withdrawn and re-granted on the same route', () => {
+    render(<PostHogPageviewTracker />);
+    consent(true);
+    expect(fetch).toHaveBeenCalledOnce();
+    consent(false);
+    consent(true);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });

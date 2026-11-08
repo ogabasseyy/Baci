@@ -12,6 +12,9 @@ describe('RepairsRecyclingSection', () => {
     expect(
       screen.getByText(/contact support before bringing/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/remove personal data before handing over a device/i)
+    ).toBeInTheDocument();
     expect(screen.queryByText('Glass Recycling')).not.toBeInTheDocument();
   });
 });

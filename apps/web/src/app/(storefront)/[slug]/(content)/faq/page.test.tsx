@@ -62,6 +62,7 @@ const { parseLegacyFAQ } = await import('@/types/faq');
 const { OgabasseyV2HelpSupport } = await import(
   '@/components/storefront/ogabassey/pages/help-support'
 );
+const { generateFAQSchema } = await import('@/lib/seo-utils');
 
 vi.mock('../pages/faq/faq-page-client', () => ({
   FAQPageClient: ({ children }: { children?: ReactNode }) => (
@@ -77,17 +78,16 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const {
-  default: FAQPage,
-  FAQContent,
-  generateMetadata,
-} = await import('./page');
+const { default: FAQPage, generateMetadata } = await import('./page');
+const { FAQContent } = await import('./faq-content');
+const { FAQJsonLd } = await import('./faq-json-ld');
 
 describe('FAQPage', () => {
   beforeEach(() => {
     vi.mocked(getMerchantByIdentifier).mockReset();
     vi.mocked(getRequestScopedMerchant).mockReset();
     vi.mocked(OgabasseyV2HelpSupport).mockClear();
+    vi.mocked(generateFAQSchema).mockClear();
     notFound.mockClear();
     mockConnection.mockReset();
   });
@@ -194,6 +194,64 @@ describe('FAQPage', () => {
         }),
       }),
       undefined
+    );
+  });
+
+  it('normalizes stale return and warranty answers in FAQ JSON-LD schema', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      business_name: 'Ogabassey',
+      template_id: 'ogabassey',
+      slug: 'ogabassey',
+      faq_items: [
+        { question: 'What is your return policy?', answer: '7 days return' },
+        {
+          question: 'How does the warranty work?',
+          answer: '3 months warranty',
+        },
+      ],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+
+    const ui = await FAQJsonLd({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    render(ui);
+
+    expect(generateFAQSchema).toHaveBeenCalledWith([
+      expect.objectContaining({
+        question: 'What is your return policy?',
+        answer: expect.stringContaining('14 days'),
+      }),
+      expect.objectContaining({
+        question: 'How does the warranty work?',
+        answer: expect.stringContaining('one-year'),
+      }),
+    ]);
+  });
+
+  it('generates normalized FAQPage schema for Ogabassey fallback FAQs when merchant has no custom FAQs', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      business_name: 'Ogabassey',
+      template_id: 'ogabassey',
+      slug: 'ogabassey',
+      faq_items: [],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+
+    const ui = await FAQJsonLd({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    render(ui);
+
+    expect(generateFAQSchema).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          question: 'What is your return policy?',
+          answer: expect.stringContaining('14 days'),
+        }),
+      ])
     );
   });
 });

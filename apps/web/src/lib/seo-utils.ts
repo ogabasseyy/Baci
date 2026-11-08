@@ -34,6 +34,7 @@ import type {
   ProductVariant,
   Review,
 } from './products';
+import { resolveVariantSeoImages } from './resolve-variant-seo-images';
 // Import from sanitize-core to avoid loading jsdom on server components
 import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
@@ -915,22 +916,7 @@ export function generateProductSchema(
         : '';
       const variantName = attrValues ? `${safeName} - ${attrValues}` : safeName;
 
-      // Variant images: use variant-specific images if available, fall back to parent images
-      let variantImages: string[] | undefined;
-      if (variant.images && variant.images.length > 0) {
-        const filtered = variant.images.filter((img) => img.trim() !== '');
-        if (filtered.length > 0) variantImages = filtered;
-      }
-
-      if (variant.primary_image?.trim()) {
-        variantImages = [
-          ...new Set([variant.primary_image, ...(variantImages ?? [])]),
-        ];
-      }
-
-      if (!variantImages) {
-        variantImages = finalImages;
-      }
+      const variantImages = resolveVariantSeoImages(variant, finalImages);
 
       return {
         '@type': 'Product',

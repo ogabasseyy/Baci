@@ -4,6 +4,7 @@ import type {
   ReturnFeesEnumeration,
   ReturnMethodEnumeration,
 } from 'schema-dts';
+import { normalizeCountryCode } from '@/lib/normalize-country-code';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -43,6 +44,10 @@ export function buildMerchantReturnPolicy(
   country: string,
   trustProfile?: MerchantTrustProfile
 ): MerchantReturnPolicy | undefined {
+  const normalizedCountry = normalizeCountryCode(country);
+  if (!normalizedCountry) {
+    return undefined;
+  }
   const returnPolicy = trustProfile?.returnPolicy;
   const windowDays = returnPolicy?.windowDays;
   if (
@@ -55,16 +60,16 @@ export function buildMerchantReturnPolicy(
   if (windowDays === 0) {
     return {
       '@type': 'MerchantReturnPolicy',
-      applicableCountry: country,
-      returnPolicyCountry: country,
+      applicableCountry: normalizedCountry,
+      returnPolicyCountry: normalizedCountry,
       returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
     };
   }
 
   return {
     '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
+    applicableCountry: normalizedCountry,
+    returnPolicyCountry: normalizedCountry,
     returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
     merchantReturnDays: windowDays,
     ...(returnPolicy?.returnMethod && {
@@ -107,6 +112,10 @@ export function buildOfferShippingDetails(
   currency: string,
   trustProfile?: MerchantTrustProfile
 ): OfferShippingDetails | undefined {
+  const normalizedCountry = normalizeCountryCode(country);
+  if (!normalizedCountry) {
+    return undefined;
+  }
   const shippingPolicy = trustProfile?.shippingPolicy;
   // This projection has no numeric shipping charge. Only an explicitly free,
   // exact country policy with complete confirmed timings can form this object.
@@ -114,7 +123,7 @@ export function buildOfferShippingDetails(
   if (
     shippingPolicy?.shippingFeeType !== 'free' ||
     !shippingPolicy.regions.some(
-      (region) => region.trim().toUpperCase() === country.toUpperCase()
+      (region) => normalizeCountryCode(region) === normalizedCountry
     )
   ) {
     return undefined;
@@ -126,6 +135,8 @@ export function buildOfferShippingDetails(
   const transitMax = shippingPolicy.transitDaysMax;
 
   if (
+    handlingMax === undefined ||
+    transitMax === undefined ||
     !isValidShippingDayRange(handlingMin, handlingMax) ||
     !isValidShippingDayRange(transitMin, transitMax)
   ) {
@@ -137,12 +148,12 @@ export function buildOfferShippingDetails(
     shippingRate: { '@type': 'MonetaryAmount', value: 0, currency },
     shippingDestination: {
       '@type': 'DefinedRegion',
-      addressCountry: country,
+      addressCountry: normalizedCountry,
     },
     deliveryTime: {
       '@type': 'ShippingDeliveryTime',
-      handlingTime: toDeliveryDayRange(handlingMin, handlingMax as number),
-      transitTime: toDeliveryDayRange(transitMin, transitMax as number),
+      handlingTime: toDeliveryDayRange(handlingMin, handlingMax),
+      transitTime: toDeliveryDayRange(transitMin, transitMax),
     },
   };
 }

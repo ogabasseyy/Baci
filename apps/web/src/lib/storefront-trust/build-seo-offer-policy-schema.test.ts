@@ -61,6 +61,30 @@ describe('build-seo-offer-policy-schema', () => {
       ).toBeUndefined();
     });
 
+    it('returns undefined when country cannot be normalized', () => {
+      expect(
+        buildMerchantReturnPolicy('Atlantis', {
+          socialLinks: {},
+          derivedLinks: {},
+          returnPolicy: { localRoute: '/returns', windowDays: 14 },
+        })
+      ).toBeUndefined();
+    });
+
+    it('normalizes country name to ISO 3166-1 alpha-2 code in return policy', () => {
+      const policy = buildMerchantReturnPolicy('Nigeria', {
+        socialLinks: {},
+        derivedLinks: {},
+        returnPolicy: { localRoute: '/returns', windowDays: 14 },
+      });
+      expect(policy).toEqual(
+        expect.objectContaining({
+          applicableCountry: 'NG',
+          returnPolicyCountry: 'NG',
+        })
+      );
+    });
+
     it('returns MerchantReturnNotPermitted when windowDays is 0', () => {
       const policy = buildMerchantReturnPolicy('NG', {
         socialLinks: {},
@@ -160,6 +184,62 @@ describe('build-seo-offer-policy-schema', () => {
           },
         })
       ).toBeUndefined();
+    });
+
+    it('rejects city-only regions that do not resolve to country level', () => {
+      expect(
+        buildOfferShippingDetails('NG', 'NGN', {
+          socialLinks: {},
+          derivedLinks: {},
+          shippingPolicy: {
+            localRoute: '/shipping',
+            regions: ['Lagos'],
+            shippingFeeType: 'free',
+            handlingDaysMin: 0,
+            handlingDaysMax: 1,
+            transitDaysMin: 1,
+            transitDaysMax: 3,
+          },
+        })
+      ).toBeUndefined();
+    });
+
+    it('matches country name to ISO-2 code across policy regions and target country', () => {
+      const detailsFromName = buildOfferShippingDetails('NG', 'NGN', {
+        socialLinks: {},
+        derivedLinks: {},
+        shippingPolicy: {
+          localRoute: '/shipping',
+          regions: ['Nigeria'],
+          shippingFeeType: 'free',
+          handlingDaysMin: 0,
+          handlingDaysMax: 1,
+          transitDaysMin: 1,
+          transitDaysMax: 3,
+        },
+      });
+      expect(detailsFromName?.shippingDestination).toEqual({
+        '@type': 'DefinedRegion',
+        addressCountry: 'NG',
+      });
+
+      const detailsToName = buildOfferShippingDetails('Nigeria', 'NGN', {
+        socialLinks: {},
+        derivedLinks: {},
+        shippingPolicy: {
+          localRoute: '/shipping',
+          regions: ['NG'],
+          shippingFeeType: 'free',
+          handlingDaysMin: 0,
+          handlingDaysMax: 1,
+          transitDaysMin: 1,
+          transitDaysMax: 3,
+        },
+      });
+      expect(detailsToName?.shippingDestination).toEqual({
+        '@type': 'DefinedRegion',
+        addressCountry: 'NG',
+      });
     });
 
     it('returns undefined if handling or transit day ranges are invalid', () => {

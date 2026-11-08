@@ -175,7 +175,6 @@ export function capturePublicBlogPageview(
     hasPostHogOptedOut(projectToken)
   ) {
     resetPublicBlogAttribution();
-    resetPublicBlogPageviewDedupe();
     return;
   }
 

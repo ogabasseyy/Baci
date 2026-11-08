@@ -141,6 +141,8 @@ describe('legacy replay runtime lane', () => {
 
   it.each([
     'bank-transfer.inflow.success',
+    'wallet-transfer.outflow.success',
+    'interest-payout.success',
     'interest-accrued.success',
   ])('processes ready primary captures and defers legacy %s when its intake is unavailable', async (eventType) => {
     const model = makeStore();

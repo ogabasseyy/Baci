@@ -1,6 +1,5 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   FeedbackRatingSelector,
@@ -8,93 +7,11 @@ import {
   RATING_LABELS,
 } from './FeedbackRatingSelector';
 
-type StyleInput =
-  | React.CSSProperties
-  | readonly StyleInput[]
-  | null
-  | undefined
-  | false;
-
-type NativeProps = {
-  accessibilityLabel?: string;
-  accessibilityRole?: string;
-  accessibilityState?: { disabled?: boolean; selected?: boolean };
-  children?: React.ReactNode;
-  disabled?: boolean;
-  onPress?: () => void;
-  style?: StyleInput;
-  testID?: string;
-};
-
-function isStyleList(style: StyleInput): style is readonly StyleInput[] {
-  return Array.isArray(style);
-}
-
-function flattenStyle(style: StyleInput): React.CSSProperties {
-  if (!style) return {};
-  if (isStyleList(style)) {
-    const merged: React.CSSProperties = {};
-    for (const item of style) {
-      Object.assign(merged, flattenStyle(item));
-    }
-    return merged;
-  }
-
-  return style;
-}
-
 vi.mock('react-native', async () => {
-  const React = await import('react');
-
-  return {
-    Pressable: ({
-      accessibilityLabel,
-      accessibilityRole,
-      accessibilityState,
-      children,
-      disabled,
-      onPress,
-      style,
-      testID,
-    }: NativeProps) => {
-      const isDisabled = Boolean(disabled || accessibilityState?.disabled);
-      const flattenedStyle = flattenStyle(style);
-      return React.createElement(
-        'button',
-        {
-          'aria-disabled': isDisabled,
-          'aria-label': accessibilityLabel,
-          'aria-pressed': accessibilityState?.selected,
-          'data-border-color': flattenedStyle.borderColor,
-          'data-opacity': flattenedStyle.opacity,
-          'data-selected': accessibilityState?.selected ? 'true' : undefined,
-          'data-testid': testID,
-          disabled: isDisabled,
-          onClick: isDisabled ? undefined : onPress,
-          role: accessibilityRole,
-          style: flattenedStyle,
-          type: 'button',
-        },
-        children
-      );
-    },
-    StyleSheet: {
-      create: <T,>(styles: T) => styles,
-    },
-    Text: ({ children, style }: NativeProps) => {
-      const flattenedStyle = flattenStyle(style);
-      return React.createElement(
-        'span',
-        {
-          'data-style-color': flattenedStyle.color,
-          style: flattenedStyle,
-        },
-        children
-      );
-    },
-    View: ({ children, style }: NativeProps) =>
-      React.createElement('div', { style: flattenStyle(style) }, children),
-  };
+  const { createFeedbackReactNativeMock } = await import(
+    './feedback-test-helpers'
+  );
+  return createFeedbackReactNativeMock();
 });
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -110,7 +27,7 @@ describe('FeedbackRatingSelector', () => {
   it('renders all rating emoji buttons and hides rating label when unselected', () => {
     const onSelectRating = vi.fn();
     render(
-      <FeedbackRatingSelector rating={null} onSelectRating={onSelectRating} />
+      <FeedbackRatingSelector onSelectRating={onSelectRating} rating={null} />
     );
 
     for (const emoji of RATING_EMOJIS) {
@@ -125,7 +42,7 @@ describe('FeedbackRatingSelector', () => {
   it('renders selected rating styling, label, and accessible state', () => {
     const onSelectRating = vi.fn();
     render(
-      <FeedbackRatingSelector rating={4} onSelectRating={onSelectRating} />
+      <FeedbackRatingSelector onSelectRating={onSelectRating} rating={4} />
     );
 
     const goodLabel = screen.getByText('Good');
@@ -151,7 +68,7 @@ describe('FeedbackRatingSelector', () => {
   it('invokes onSelectRating callback with corresponding 1-based rating index', () => {
     const onSelectRating = vi.fn();
     render(
-      <FeedbackRatingSelector rating={null} onSelectRating={onSelectRating} />
+      <FeedbackRatingSelector onSelectRating={onSelectRating} rating={null} />
     );
 
     fireEvent.click(screen.getByText('😍'));
@@ -164,8 +81,8 @@ describe('FeedbackRatingSelector', () => {
     render(
       <FeedbackRatingSelector
         disabled={true}
-        rating={2}
         onSelectRating={onSelectRating}
+        rating={2}
       />
     );
 

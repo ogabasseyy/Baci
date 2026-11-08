@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { searchPageTotalPages } from './search-page-total-pages';
 
 it('bounds pages and handles failed or empty results', () => {
@@ -17,5 +18,5 @@ it('bounds pages and handles failed or empty results', () => {
   ).toBe(0);
   expect(
     searchPageTotalPages({ ...result, totalCount: 1000000000 }, false)
-  ).toBeLessThan(1000000);
+  ).toBe(STOREFRONT_SEARCH_MAX_PAGE);
 });

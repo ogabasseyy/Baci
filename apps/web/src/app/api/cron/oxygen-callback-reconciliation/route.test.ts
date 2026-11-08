@@ -204,7 +204,10 @@ describe('Oxygen bank-list refresh task', () => {
       'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
       { headers: { authorization: 'Bearer secret' } }
     );
-    const cache = { set: vi.fn().mockResolvedValue('OK') };
+    const cache = {
+      set: vi.fn().mockResolvedValue('OK'),
+      eval: vi.fn().mockResolvedValue(1),
+    };
     mocks.getRedis.mockReturnValue(cache);
     mocks.readBanks.mockResolvedValueOnce([
       { name: 'Access Bank', code: '044' },
@@ -215,10 +218,47 @@ describe('Oxygen bank-list refresh task', () => {
     expect((await GET(ensure)).status).toBe(200);
     expect(cache.set).toHaveBeenCalledWith(
       expect.stringMatching(/^oxygen:supported-banks-recovery:production:/),
-      '1',
+      expect.any(String),
       { nx: true, ex: 300 }
     );
     expect(mocks.refreshBanks).toHaveBeenCalledOnce();
+  });
+
+  it('returns 503 when the cache read or lock operation fails', async () => {
+    const ensure = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
+      { headers: { authorization: 'Bearer secret' } }
+    );
+    mocks.readBanks.mockRejectedValueOnce(new Error('redis down'));
+    expect((await GET(ensure)).status).toBe(503);
+    mocks.readBanks.mockResolvedValueOnce(null);
+    mocks.getRedis.mockReturnValueOnce({
+      set: vi.fn().mockRejectedValue(new Error('redis down')),
+    });
+    expect((await GET(ensure)).status).toBe(503);
+    expect(mocks.refreshBanks).not.toHaveBeenCalled();
+  });
+
+  it('releases only its own lock after a failed provider refresh', async () => {
+    const ensure = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
+      { headers: { authorization: 'Bearer secret' } }
+    );
+    const cache = {
+      set: vi.fn().mockResolvedValue('OK'),
+      eval: vi.fn().mockResolvedValue(1),
+    };
+    mocks.getRedis.mockReturnValue(cache);
+    mocks.readBanks.mockResolvedValue(null);
+    mocks.refreshBanks.mockRejectedValueOnce(new Error('provider down'));
+    expect((await GET(ensure)).status).toBe(503);
+    const [key, token] = cache.set.mock.calls[0];
+    expect(cache.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('get', KEYS[1]) == ARGV[1]"),
+      [key],
+      [token]
+    );
+    expect((await GET(ensure)).status).toBe(200);
   });
 
   it('rejects unauthenticated cache recovery before inspecting Redis', async () => {

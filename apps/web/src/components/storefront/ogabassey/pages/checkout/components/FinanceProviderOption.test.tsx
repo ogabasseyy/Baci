@@ -143,6 +143,31 @@ describe('finance provider option', () => {
     expect(screen.getByRole('button', { name: /retry bank list/i })).toBeDisabled();
   });
 
+  it('retains the cooldown on reselection and expires it when the page resumes', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }) }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    rerender(<FinanceProviderOption provider="oxygen" selected={false} onSelect={vi.fn()} logo={logo} />);
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /retry bank list/i })).toBeDisabled();
+    clock.mockReturnValue(now + 31_000);
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent.click(screen.getByRole('button', { name: /retry bank list/i }));
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    clock.mockRestore();
+  });
+
+  it('asks guests to sign in rather than offering an ineffective retry', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 401 });
+    renderOption('oxygen', true);
+    expect(await screen.findByText('Sign in to view supported banks.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retry bank list/i })).toBeNull();
+  });
+
   it('does not keep stale banks when selecting Oxygen again fails', async () => {
     fetchMock.mockResolvedValueOnce(bankResponse(oxygenBanks)).mockResolvedValueOnce(failureResponse());
     const { rerender } = renderOption('oxygen', true);

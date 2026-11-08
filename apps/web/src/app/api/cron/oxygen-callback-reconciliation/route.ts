@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { readOxygenCallbackBacklog } from '@/lib/payments/oxygen/runtime-callback-backlog';
 import { readOxygenRuntimeConfiguration } from '@/lib/payments/oxygen/runtime-configuration';
@@ -22,6 +22,13 @@ const ENSURE_BANKS_TASK = 'ensure-banks';
  * the list current; hourly recovery contacts Oxygen only when the cache is missing.
  */
 async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
+  let heldLock:
+    | {
+        cache: NonNullable<ReturnType<typeof getRedis>>;
+        key: string;
+        token: string;
+      }
+    | undefined;
   try {
     const config = readOxygenRuntimeConfiguration();
     const cache = getRedis();
@@ -36,13 +43,12 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
       const partnerHash = createHash('sha256')
         .update(config.reference)
         .digest('hex');
-      const lock = await cache.set(
-        `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`,
-        '1',
-        { nx: true, ex: 300 }
-      );
+      const lockKey = `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`;
+      const token = randomUUID();
+      const lock = await cache.set(lockKey, token, { nx: true, ex: 300 });
       if (lock !== 'OK')
         return Response.json({ status: 'recovery_in_progress' }, { headers });
+      heldLock = { cache, key: lockKey, token };
       if (await readSupportedBanks(cache, config.environment, config.reference))
         return Response.json({ status: 'available' }, { headers });
     }
@@ -61,6 +67,18 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
       { error: 'Bank list refresh unavailable' },
       { status: 503, headers }
     );
+  } finally {
+    if (heldLock) {
+      try {
+        await heldLock.cache.eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          [heldLock.key],
+          [heldLock.token]
+        );
+      } catch {
+        // The short TTL still bounds recovery if Redis is unavailable.
+      }
+    }
   }
 }
 

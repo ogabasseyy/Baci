@@ -3,6 +3,7 @@ import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import {
   getCachedBrandAuthorityInventory,
+  isExpectedBrandAuthorityInventoryRejection,
   OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS,
 } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
@@ -69,12 +70,14 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
           : null,
     }));
   } catch (error) {
-    console.warn('Failed to load PDP brand hub eligibility inventory', {
-      merchantId: input.merchantId,
-      categorySlug: input.categorySlug,
-      productBrand: rawBrand,
-      error,
-    });
+    if (!isExpectedBrandAuthorityInventoryRejection(error)) {
+      console.warn('Failed to load PDP brand hub eligibility inventory', {
+        merchantId: input.merchantId,
+        categorySlug: input.categorySlug,
+        productBrand: rawBrand,
+        error,
+      });
+    }
     return [];
   }
 }

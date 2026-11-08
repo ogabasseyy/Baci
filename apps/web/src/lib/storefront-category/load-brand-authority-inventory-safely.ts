@@ -1,6 +1,7 @@
 import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 import {
   getCachedBrandAuthorityInventory,
+  isExpectedBrandAuthorityInventoryRejection,
   OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS,
 } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 
@@ -27,11 +28,13 @@ export async function loadBrandAuthorityInventorySafely(args: {
       }
     );
   } catch (error) {
-    console.warn('Failed to load brand authority inventory for hub check', {
-      categorySlug: args.categorySlug,
-      merchantId: args.merchantId,
-      error,
-    });
+    if (!isExpectedBrandAuthorityInventoryRejection(error)) {
+      console.warn('Failed to load brand authority inventory for hub check', {
+        categorySlug: args.categorySlug,
+        merchantId: args.merchantId,
+        error,
+      });
+    }
     return null;
   }
 }

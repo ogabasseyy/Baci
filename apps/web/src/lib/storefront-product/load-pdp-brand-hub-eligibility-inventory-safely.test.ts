@@ -1,15 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import { loadPdpBrandHubEligibilityInventorySafely as load } from './load-pdp-brand-hub-eligibility-inventory-safely';
 
 const read = vi.fn();
 vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-inventory',
-  () => ({
-    getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),
-    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
-  })
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('@/lib/storefront-category/get-cached-brand-authority-inventory')
+      >();
+    return {
+      ...actual,
+      getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),
+      OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
+    };
+  }
 );
 const input = {
   merchantId: 'merchant-1',
@@ -66,6 +74,23 @@ describe('PDP hub eligibility adapter', () => {
       read.mockRejectedValueOnce(new Error(message));
       expect(await load(input)).toEqual([]);
     }
+    warn.mockRestore();
+  });
+  it('suppresses console.warn on expected fail-closed verdicts', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    read.mockRejectedValueOnce(
+      new ExpectedBrandAuthorityInventoryRejectionError(
+        'Brand authority category unavailable'
+      )
+    );
+    expect(await load(input)).toEqual([]);
+    read.mockRejectedValueOnce(
+      new ExpectedBrandAuthorityInventoryRejectionError(
+        'Brand authority inventory exceeds complete-pool budget'
+      )
+    );
+    expect(await load(input)).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
   it('uses the destination threshold for available products', async () => {

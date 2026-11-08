@@ -86,6 +86,35 @@ export interface BrandAuthorityInventoryBudget {
   timeoutMs: number;
 }
 
+export async function getCachedBrandAuthorityCategory(
+  merchantId: string,
+  categorySlug: string,
+  timeoutMs = 3_000
+) {
+  'use cache';
+
+  try {
+    cacheLife('storefront-page');
+    cacheTag('categories', `categories-${merchantId}`);
+  } catch {
+    // Unit tests run without Cache Components enabled.
+  }
+
+  const deadline = createStorefrontReadDeadline(timeoutMs);
+  try {
+    return await Promise.race([
+      brandAuthorityPublicData.readCategory(
+        merchantId,
+        categorySlug,
+        deadline.signal
+      ),
+      deadline.promise,
+    ]);
+  } finally {
+    deadline.cleanup();
+  }
+}
+
 async function readCachedBrandAuthorityInventory(
   merchantId: string,
   categorySlug: string,
@@ -151,10 +180,10 @@ async function readInventory(
     throw new Error('Invalid brand authority inventory budget');
   }
   if (budget) {
-    const category = await brandAuthorityPublicData.readCategory(
+    const category = await getCachedBrandAuthorityCategory(
       merchantId,
       categorySlug,
-      signal
+      budget.timeoutMs
     );
     signal?.throwIfAborted();
     // Deterministic inactive/missing category resolves inside 'use cache' so
@@ -270,6 +299,28 @@ async function readInventory(
   };
 }
 
+export class ExpectedBrandAuthorityInventoryRejectionError extends Error {
+  readonly isExpectedRejection = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExpectedBrandAuthorityInventoryRejectionError';
+  }
+}
+
+export function isExpectedBrandAuthorityInventoryRejection(
+  error: unknown
+): error is ExpectedBrandAuthorityInventoryRejectionError {
+  if (!error || typeof error !== 'object') return false;
+  if (error instanceof ExpectedBrandAuthorityInventoryRejectionError) {
+    return true;
+  }
+  return (
+    'isExpectedRejection' in error &&
+    (error as { isExpectedRejection?: unknown }).isExpectedRejection === true
+  );
+}
+
 export async function getCachedBrandAuthorityInventory(
   merchantId: string,
   categorySlug: string,
@@ -282,6 +333,10 @@ export async function getCachedBrandAuthorityInventory(
     entry,
     budget
   );
-  if (!result.ok) throw new Error(result.errorMessage);
+  if (!result.ok) {
+    throw new ExpectedBrandAuthorityInventoryRejectionError(
+      result.errorMessage
+    );
+  }
   return result.value;
 }

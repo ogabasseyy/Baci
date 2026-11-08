@@ -1,7 +1,12 @@
 import { cacheLife } from 'next/cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
-import { getCachedBrandAuthorityInventory as read } from './get-cached-brand-authority-inventory';
+import {
+  ExpectedBrandAuthorityInventoryRejectionError,
+  getCachedBrandAuthorityCategory,
+  isExpectedBrandAuthorityInventoryRejection,
+  getCachedBrandAuthorityInventory as read,
+} from './get-cached-brand-authority-inventory';
 
 const hydrate = vi.fn();
 const category = vi.fn();
@@ -68,7 +73,7 @@ describe('shared brand inventory work budget', () => {
       maxProducts: 100,
       timeoutMs,
     });
-    expect(cacheLife).toHaveBeenCalledExactlyOnceWith('storefront-page');
+    expect(cacheLife).toHaveBeenCalledWith('storefront-page');
     category.mockResolvedValueOnce(null);
     await expect(
       read('merchant-1', 'smartphones', entry, { maxProducts: 100, timeoutMs })
@@ -213,5 +218,61 @@ describe('shared brand inventory work budget', () => {
     });
     await expect(load()).rejects.toThrow('db error');
     expect(hydrate).not.toHaveBeenCalled();
+  });
+  it('identifies expected fail-closed rejection errors', () => {
+    const error = new ExpectedBrandAuthorityInventoryRejectionError(
+      'Category unavailable'
+    );
+    expect(error.isExpectedRejection).toBe(true);
+    expect(isExpectedBrandAuthorityInventoryRejection(error)).toBe(true);
+    expect(
+      isExpectedBrandAuthorityInventoryRejection({
+        isExpectedRejection: true,
+      })
+    ).toBe(true);
+    expect(
+      isExpectedBrandAuthorityInventoryRejection(new Error('db error'))
+    ).toBe(false);
+    expect(isExpectedBrandAuthorityInventoryRejection(null)).toBe(false);
+    expect(isExpectedBrandAuthorityInventoryRejection(undefined)).toBe(false);
+  });
+  it('throws ExpectedBrandAuthorityInventoryRejectionError for oversized pool and unavailable category', async () => {
+    category.mockResolvedValueOnce(null);
+    let caught: unknown;
+    try {
+      await load();
+    } catch (err) {
+      caught = err;
+    }
+    expect(isExpectedBrandAuthorityInventoryRejection(caught)).toBe(true);
+    expect(caught).toBeInstanceOf(
+      ExpectedBrandAuthorityInventoryRejectionError
+    );
+
+    query.range.mockResolvedValueOnce({
+      data: Array.from({ length: 101 }, () => rows[0]),
+      count: 101,
+      error: null,
+    });
+    caught = undefined;
+    try {
+      await load();
+    } catch (err) {
+      caught = err;
+    }
+    expect(isExpectedBrandAuthorityInventoryRejection(caught)).toBe(true);
+    expect(caught).toBeInstanceOf(
+      ExpectedBrandAuthorityInventoryRejectionError
+    );
+  });
+  it('scopes category read caching to merchant categories', async () => {
+    category.mockResolvedValueOnce({ id: 'cat-1', name: 'Smartphones' });
+    const result = await getCachedBrandAuthorityCategory(
+      'merchant-1',
+      'smartphones',
+      1000
+    );
+    expect(result).toEqual({ id: 'cat-1', name: 'Smartphones' });
+    expect(cacheLife).toHaveBeenCalledWith('storefront-page');
   });
 });

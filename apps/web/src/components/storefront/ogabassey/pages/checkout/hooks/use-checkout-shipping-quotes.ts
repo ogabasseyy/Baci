@@ -103,6 +103,11 @@ export function useCheckoutShippingQuotes({
             email,
             merchantId: merchantId,
             deliveryPreference,
+            merchantRatesOnly:
+              deliveryPreference === 'pickup_station' &&
+              deliveryMethod !== 'pickup_station'
+                ? true
+                : undefined,
             latitude: deliveryCoordinates?.latitude,
             longitude: deliveryCoordinates?.longitude,
             countryCode: merchantCountry,
@@ -143,6 +148,9 @@ export function useCheckoutShippingQuotes({
           deliveryMethod,
           isStreetReady: !isNewAddressMode || isNewDeliveryAddressReady,
         });
+  const isMerchantOnlyPickupCheck =
+    currentDeliveryPreference === 'pickup_station' &&
+    deliveryMethod !== 'pickup_station';
   const currentRequestKey = currentCheckoutShippingRequestKey({
     isHydrated,
     merchantId,
@@ -157,6 +165,7 @@ export function useCheckoutShippingQuotes({
     addresses,
     selectedAddressId,
     deliveryPreference: currentDeliveryPreference,
+    merchantRatesOnly: isMerchantOnlyPickupCheck ? true : undefined,
   });
 
   // Refresh is keyed by address/cart inputs; callback identities must not trigger new quotes.

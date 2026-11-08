@@ -130,15 +130,16 @@ describe('useCheckoutShippingQuotes', () => {
     expect(result.current.hasResolvedQuotes).toBe(true);
     expect(result.current.isLoadingQuotes).toBe(false);
 
+    mockFetch.mockResolvedValueOnce(response('pickup-station'));
     rerender({ ...restoredInput, deliveryMethod: 'pickup_station' });
-    expect(result.current.hasResolvedQuotes).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
   it.each([
-    ['pickup', 'pickup_station'],
-    ['pickup_station', 'pickup_station'],
-    ['door', 'door'],
-  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference) => {
+    ['pickup', 'pickup_station', true],
+    ['pickup_station', 'pickup_station', false],
+    ['door', 'door', false],
+  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference, merchantRatesOnly) => {
     mockFetch.mockImplementation(async () => response('saved-address'));
     const input = options();
     input.isNewAddressMode = false;
@@ -162,7 +163,7 @@ describe('useCheckoutShippingQuotes', () => {
     );
     expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({
       deliveryPreference,
-      merchant_rates_only: false,
+      merchant_rates_only: merchantRatesOnly,
       receiver: { latitude: 6.6, longitude: 3.3 },
     });
   });

@@ -49,6 +49,10 @@ describe('redirectSystemPath', () => {
       { path: 'ogabassey:///', initial: false },
     ]) {
       expect(redirectSystemPath(value)).toBe('/cart');
+      expect(mockCapture).toHaveBeenLastCalledWith(
+        value.path,
+        expect.anything()
+      );
     }
     expect(mockCapture).toHaveBeenCalledTimes(3);
   });

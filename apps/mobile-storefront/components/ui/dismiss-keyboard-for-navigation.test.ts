@@ -38,6 +38,8 @@ it('waits for the controller hide event and a layout frame before allowing navig
   expect(Keyboard.dismiss).toHaveBeenCalledTimes(1);
   expect(done).toBe(false);
   mockEvents.get('keyboardDidHide')?.();
+  await Promise.resolve();
+  expect(done).toBe(false);
   jest.advanceTimersByTime(16);
   await promise;
   expect(done).toBe(true);

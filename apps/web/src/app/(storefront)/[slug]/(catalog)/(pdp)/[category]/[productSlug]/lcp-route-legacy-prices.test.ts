@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getLcpRouteLegacyPrices,
-  parseRouteProductNumber,
-} from './lcp-route-legacy-prices';
+import { getLcpRouteLegacyPrices } from './lcp-route-legacy-prices';
 
 describe('lcp-route-legacy-prices', () => {
-  it('parses numeric and string prices with comma formatting', () => {
-    expect(parseRouteProductNumber(100)).toBe(100);
-    expect(parseRouteProductNumber(' 1,250.50 ')).toBe(1250.5);
-    expect(parseRouteProductNumber('invalid')).toBeNull();
-    expect(parseRouteProductNumber(null)).toBeNull();
-    expect(parseRouteProductNumber(undefined)).toBeNull();
-  });
-
   it('calculates legacy prices correctly when sale exists', () => {
     const prices = getLcpRouteLegacyPrices({
       price: '800',

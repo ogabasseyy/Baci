@@ -1,22 +1,5 @@
 import type { CachedProductLcpHint } from '@/lib/cached-data';
-
-export function parseRouteProductNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.replace(/,/g, '').trim();
-    if (!normalized) {
-      return null;
-    }
-
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
-}
+import { parseRouteProductNumber } from './parse-route-product-number';
 
 export function getLcpRouteLegacyPrices(
   cachedProduct: Pick<CachedProductLcpHint, 'price' | 'compare_at_price'>

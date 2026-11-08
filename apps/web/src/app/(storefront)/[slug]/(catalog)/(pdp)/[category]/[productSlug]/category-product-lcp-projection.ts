@@ -18,11 +18,9 @@ import {
   getVariantPrimaryImage,
   normalizeRouteProductVariants,
 } from './critical-variant-selection';
-import {
-  getLcpRouteLegacyPrices,
-  parseRouteProductNumber,
-} from './lcp-route-legacy-prices';
+import { getLcpRouteLegacyPrices } from './lcp-route-legacy-prices';
 import { buildLcpRouteProductProjection } from './lcp-route-product-projection';
+import { parseRouteProductNumber } from './parse-route-product-number';
 
 export interface LcpRouteProduct {
   base_price?: number | null;

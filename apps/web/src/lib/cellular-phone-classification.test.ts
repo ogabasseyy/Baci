@@ -145,4 +145,58 @@ describe('cellular-phone-classification', () => {
       })
     ).toBe(false);
   });
+
+  it('excludes tablets such as Nokia T-series and Tecno Megapad with or without category', () => {
+    expect(
+      isCellularPhoneProduct({
+        name: 'Nokia T21',
+        category: 'Tablets',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Nokia T10 3GB 32GB',
+        category: 'Tablets',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Tecno Megapad 10 4GB 128GB',
+        category: 'Tablets',
+      })
+    ).toBe(false);
+
+    expect(isCellularPhoneProduct({ name: 'Nokia T21' })).toBe(false);
+    expect(isCellularPhoneProduct({ name: 'Nokia T10 3GB 32GB' })).toBe(false);
+    expect(isCellularPhoneProduct({ name: 'Tecno Megapad 10 4GB 128GB' })).toBe(
+      false
+    );
+  });
+
+  it('preserves phone classification in mixed categories like Tablets & Phones', () => {
+    expect(
+      isCellularPhoneProduct({
+        name: 'Samsung Galaxy S24',
+        category: 'Tablets & Phones',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'iPhone 15',
+        category: 'Tablets & Phones',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Tecno Camon 30',
+        category: 'Tablets & Phones',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Motorola Edge 50',
+        category: 'Tablets & Phones',
+      })
+    ).toBe(true);
+  });
 });

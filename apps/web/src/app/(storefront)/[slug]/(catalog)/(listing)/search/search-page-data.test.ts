@@ -223,6 +223,27 @@ describe('loadSearchPageData', () => {
     expect(data.redirectHref).toBe('/ogabassey/search?q=iphon&page=1');
   });
 
+  it('preserves an in-range intermediate page whose matches were policy-filtered', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce(
+      searchPage({
+        count: 0,
+        totalCount: 45,
+        products: [],
+        productIds: [],
+      }) as never
+    );
+
+    const data = await loadSearch({ q: 'iphone', page: '2' });
+
+    expect(data.page).toBe(2);
+    expect(data.redirectHref).toBeNull();
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
+    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 20 })
+    );
+  });
+
   it('clamps overbound pages on the unadjusted probe total', async () => {
     mockStorefrontContext();
     // One first-page row vanished mid-read: the visible count is a full

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Info, MapPin } from 'lucide-react';
+import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import type { NormalizedProductDetails } from './product-details-helpers';
 import { ProductOptionAxisGroup } from './product-option-axis-group';
 
@@ -46,8 +47,17 @@ export function ProductOptionSelectors({
   selectedColor,
   showColorToast,
 }: ProductOptionSelectorsProps) {
+  const connectivityDisclosure = getVariantConnectivityDisclosure({
+    id: '',
+    attributes: selectedAttributes,
+  });
   return (
     <>
+      {connectivityDisclosure ? (
+        <p role="note" className="mb-4 text-sm">
+          {connectivityDisclosure}
+        </p>
+      ) : null}
       <div className="mb-6 flex items-start justify-between rounded-xl border border-gray-100 bg-gray-50 p-3">
         <div className="flex gap-3">
           <div className="mt-1 text-gray-400">

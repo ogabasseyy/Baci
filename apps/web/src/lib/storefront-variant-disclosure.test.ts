@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getProductPriceRange } from './storefront-product-price-seo';
 import {
   filterDefaultAdvertisedVariants,
+  isCellularPhoneProduct,
+  isPhoneLikeProduct,
   isRestrictedWifiOnlyVariant,
   resolveDefaultAdvertisedVariantSelection,
 } from './storefront-variant-disclosure';
@@ -79,5 +81,19 @@ describe('restricted connectivity defaults', () => {
         variants,
       })
     ).toEqual({ min: 900000, max: 900000, hasRange: false });
+  });
+  it('classifies phones with category: null and joined product_categories', () => {
+    const product = {
+      name: 'Motorola Edge 50',
+      category: null,
+      product_categories: [
+        { categories: { name: 'Smartphones', slug: 'smartphones' } },
+      ],
+    };
+    expect(isCellularPhoneProduct(product)).toBe(true);
+    expect(isPhoneLikeProduct(product)).toBe(true);
+    expect(
+      filterDefaultAdvertisedVariants(variants, product).map((v) => v.id)
+    ).toEqual(['cellular']);
   });
 });

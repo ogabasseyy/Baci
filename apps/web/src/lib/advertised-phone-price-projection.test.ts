@@ -252,4 +252,39 @@ describe('bounded advertised phone-price projection', () => {
       projectAdvertisedPhonePrices('merchant', [phone], loader)
     ).rejects.toThrow('Public variants unavailable');
   });
+
+  it('advertises the cellular variant for phones categorized through product_categories with null legacy category', async () => {
+    const phoneWithProductCategories = {
+      id: 'moto-edge-50',
+      name: 'Motorola Edge 50',
+      price: 600000,
+      category: null,
+      product_categories: [
+        { categories: { name: 'Smartphones', slug: 'smartphones' } },
+      ],
+      slug: 'motorola-edge-50',
+      condition: 'used',
+      has_variants: true,
+      variant_model: 'sku_matrix' as const,
+      manage_stock: false,
+      stock: 0,
+    };
+    const loader = vi.fn<PublicAdvertisedVariantLoader>().mockResolvedValue({
+      [phoneWithProductCategories.id]: variants.map((v) => ({
+        ...v,
+        product_id: phoneWithProductCategories.id,
+      })),
+    });
+
+    const [projected] = await projectAdvertisedPhonePrices(
+      'merchant',
+      [phoneWithProductCategories],
+      loader
+    );
+
+    expect(projected).toMatchObject({
+      advertised_price: 900000,
+      advertised_condition: 'new',
+    });
+  });
 });

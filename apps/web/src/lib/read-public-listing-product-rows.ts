@@ -18,6 +18,13 @@ function isCategory(value: unknown): boolean {
     isRecord(value) && optionalString(value.name) && optionalString(value.slug)
   );
 }
+function isProductCategoryRelation(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.categories == null) return true;
+  return Array.isArray(value.categories)
+    ? value.categories.every(isCategory)
+    : isCategory(value.categories);
+}
 function isListingRow(value: unknown): value is ListingRow {
   if (!isRecord(value) || typeof value.id !== 'string' || !value.id.trim())
     return false;
@@ -69,6 +76,12 @@ function isListingRow(value: unknown): value is ListingRow {
         value[key] !== undefined &&
         (typeof value[key] !== 'number' || !Number.isFinite(value[key]))
     )
+  )
+    return false;
+  if (
+    value.product_categories != null &&
+    (!Array.isArray(value.product_categories) ||
+      !value.product_categories.every(isProductCategoryRelation))
   )
     return false;
   return (

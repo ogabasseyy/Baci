@@ -91,7 +91,15 @@ export interface StorefrontVariantProductContext {
     | { name?: string | null; slug?: string | null }
     | Array<{ name?: string | null; slug?: string | null }>
     | null;
+  product_categories?: Array<{
+    categories?:
+      | { name?: string | null; slug?: string | null }
+      | Array<{ name?: string | null; slug?: string | null }>
+      | null;
+  }> | null;
 }
+
+export type ProductClassificationContext = StorefrontVariantProductContext;
 
 const NON_HANDSET_PATTERN =
   /\b(?:cases?|covers?|chargers?|cables?|protectors?|accessor(?:y|ies)|headphones?|earphones?|earbuds?|microphones?)\b/i;
@@ -99,13 +107,25 @@ const NON_HANDSET_PATTERN =
 export function isCellularPhoneProduct(
   product: StorefrontVariantProductContext
 ): boolean {
-  const joinedCategories = Array.isArray(product.categories)
+  const directCategories = Array.isArray(product.categories)
     ? product.categories
-    : [product.categories];
+    : product.categories
+      ? [product.categories]
+      : [];
+  const joinedProductCategories = Array.isArray(product.product_categories)
+    ? product.product_categories.flatMap((pc) => {
+        if (!pc?.categories) return [];
+        return Array.isArray(pc.categories) ? pc.categories : [pc.categories];
+      })
+    : [];
   const categories = [
     product.category,
     product.category_slug,
-    ...joinedCategories.flatMap((category) => [category?.name, category?.slug]),
+    ...directCategories.flatMap((category) => [category?.name, category?.slug]),
+    ...joinedProductCategories.flatMap((category) => [
+      category?.name,
+      category?.slug,
+    ]),
   ]
     .filter(Boolean)
     .join(' ');
@@ -124,6 +144,8 @@ export function isCellularPhoneProduct(
     )
   );
 }
+
+export const isPhoneLikeProduct = isCellularPhoneProduct;
 
 /** Phone defaults exclude restricted units; normal Wi-Fi tablets stay eligible. */
 export function filterDefaultAdvertisedVariants<

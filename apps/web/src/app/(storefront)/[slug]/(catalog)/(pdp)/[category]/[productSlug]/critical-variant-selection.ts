@@ -8,6 +8,7 @@ import {
 } from '@baci/shared/lib';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import type { Product, ProductVariant } from '@/lib/products';
+import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
 import {
   type CriticalRouteOfferInput,
   resolveCriticalRouteOffer,
@@ -150,7 +151,10 @@ function toInitialCriticalVariantSelection(
 function getPriceFirstCriticalVariantSelection(product: Product) {
   const normalizedProduct = {
     ...product,
-    variants: normalizeRouteProductVariants(product.variants || []),
+    variants: filterDefaultAdvertisedVariants(
+      normalizeRouteProductVariants(product.variants || []),
+      product
+    ),
   };
 
   return toInitialCriticalVariantSelection(

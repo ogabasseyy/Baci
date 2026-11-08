@@ -1,9 +1,9 @@
 import { buildOgabasseyProductSpecData } from '@/components/storefront/ogabassey/product-spec-data';
 import type { CachedMerchant } from '@/lib/cached-data';
+import { generateStorefrontProductSchema } from '@/lib/generate-storefront-product-schema';
 import type { Product } from '@/lib/products';
 import {
   generateBreadcrumbSchema,
-  generateProductSchema,
   generateSlug,
   getValidatedProductUrl,
 } from '@/lib/seo-utils';
@@ -37,7 +37,7 @@ export function buildCategoryProductStructuredData({
       ? { ...product, specifications: derivedSpecData.detailedSpecs }
       : product;
   const productUrl = getValidatedProductUrl(product, baseUrl, merchant.slug);
-  const productSchema = generateProductSchema(
+  const productSchema = generateStorefrontProductSchema(
     schemaProduct,
     merchant.business_name || 'Baci Store',
     currency,

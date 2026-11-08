@@ -55,14 +55,15 @@ export async function loadProductsPageLinkModules(input: {
       categoryName: category.name,
       products: category.products,
       productsAreKnownActive: true,
-    })
+      maxLinks: 6,
+    }).map((entry) => ({
+      href: entry.href,
+      label: entry.label,
+    }))
   );
 
   return buildCatalogLinkModules({
-    compareLinks: compareLinks.map((link) => ({
-      href: link.href.replace(input.baseUrl, ''),
-      label: link.label,
-    })),
+    compareLinks,
     editorialLinks: [],
   });
 }

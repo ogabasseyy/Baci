@@ -12,6 +12,13 @@ interface DeferredShellFeatureProps {
   activateOnInteraction?: boolean;
   deferInteractionActivationUntilNextPaint?: boolean;
   /**
+   * When true, touch pointer gestures (`pointerType === 'touch'`, `touchstart`,
+   * and the synthesized `focusin` that mobile browsers dispatch on a tapped
+   * control) do not activate the feature, while fine-pointer (`mouse`/`pen`)
+   * and keyboard interactions still do.
+   */
+  ignoreTouchInteraction?: boolean;
+  /**
    * Scopes interaction activation to a specific element. When set, pointer,
    * keyboard, and `focusin` (tab-entry) activity inside this element activates
    * the feature. When omitted — or if the ref is still null when listeners
@@ -27,6 +34,7 @@ export function useDeferredActivation({
   activateOnIdle = true,
   activateOnInteraction = true,
   deferInteractionActivationUntilNextPaint = false,
+  ignoreTouchInteraction = false,
   interactionTargetRef,
 }: Omit<DeferredShellFeatureProps, 'children'>) {
   const [isActivated, setIsActivated] = useState(false);
@@ -57,6 +65,9 @@ export function useDeferredActivation({
     let interactionTimeoutId: number | undefined;
     let interactionActivationScheduled = false;
     let loadListenerAttached = false;
+    let lastPointerWasTouch = false;
+    let interactionListenerTarget: HTMLElement | Window | undefined;
+
     const activate = () => {
       if (!cancelled) {
         setIsActivated(true);
@@ -102,13 +113,64 @@ export function useDeferredActivation({
         activateAsTransition();
       }, 0);
     };
+    const removeInteractionListeners = () => {
+      if (interactionListenerTarget === undefined) {
+        return;
+      }
+
+      interactionListenerTarget.removeEventListener(
+        'touchstart',
+        handleTouchStart
+      );
+      interactionListenerTarget.removeEventListener(
+        'pointerdown',
+        handlePointerDown
+      );
+      interactionListenerTarget.removeEventListener('keydown', handleKeyDown);
+      interactionListenerTarget.removeEventListener('focusin', handleFocusIn);
+    };
     const handleInteraction = () => {
+      removeInteractionListeners();
       if (deferInteractionActivationUntilNextPaint) {
         schedulePostPaintInteractionActivation();
         return;
       }
 
       activate();
+    };
+    const handleTouchStart = () => {
+      lastPointerWasTouch = true;
+    };
+    const handlePointerDown = (event: Event) => {
+      const pointerType =
+        'pointerType' in event
+          ? (event as PointerEvent).pointerType
+          : undefined;
+      if (pointerType === 'touch') {
+        lastPointerWasTouch = true;
+        if (ignoreTouchInteraction) {
+          return;
+        }
+      } else if (pointerType === 'mouse' || pointerType === 'pen') {
+        lastPointerWasTouch = false;
+      }
+
+      if (ignoreTouchInteraction && lastPointerWasTouch) {
+        return;
+      }
+
+      handleInteraction();
+    };
+    const handleKeyDown = () => {
+      lastPointerWasTouch = false;
+      handleInteraction();
+    };
+    const handleFocusIn = () => {
+      if (ignoreTouchInteraction && lastPointerWasTouch) {
+        return;
+      }
+
+      handleInteraction();
     };
 
     const scheduleIdleActivation = () => {
@@ -144,28 +206,26 @@ export function useDeferredActivation({
       }
     }
 
-    let interactionListenerTarget: HTMLElement | Window | undefined;
-
     if (activateOnInteraction) {
       interactionListenerTarget = interactionTargetRef?.current ?? window;
+      if (ignoreTouchInteraction) {
+        interactionListenerTarget.addEventListener(
+          'touchstart',
+          handleTouchStart,
+          { passive: true }
+        );
+      }
       interactionListenerTarget.addEventListener(
         'pointerdown',
-        handleInteraction,
+        handlePointerDown,
         {
-          once: true,
           passive: true,
         }
       );
-      interactionListenerTarget.addEventListener('keydown', handleInteraction, {
-        once: true,
-      });
+      interactionListenerTarget.addEventListener('keydown', handleKeyDown);
 
       if (interactionListenerTarget !== window) {
-        interactionListenerTarget.addEventListener(
-          'focusin',
-          handleInteraction,
-          { once: true }
-        );
+        interactionListenerTarget.addEventListener('focusin', handleFocusIn);
       }
     }
 
@@ -196,26 +256,14 @@ export function useDeferredActivation({
         window.removeEventListener('load', handleWindowLoad);
       }
 
-      if (interactionListenerTarget !== undefined) {
-        interactionListenerTarget.removeEventListener(
-          'pointerdown',
-          handleInteraction
-        );
-        interactionListenerTarget.removeEventListener(
-          'keydown',
-          handleInteraction
-        );
-        interactionListenerTarget.removeEventListener(
-          'focusin',
-          handleInteraction
-        );
-      }
+      removeInteractionListeners();
     };
   }, [
     activateOnIdle,
     activateOnInteraction,
     deferInteractionActivationUntilNextPaint,
     enabled,
+    ignoreTouchInteraction,
     interactionTargetRef,
     isActivated,
     timeoutMs,

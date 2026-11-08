@@ -1,7 +1,7 @@
 'use client';
 
 import { ShoppingBag, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
@@ -77,7 +77,25 @@ export const CartSidebar: React.FC = () => {
 
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const lastPathnameRef = useRef(pathname);
   const scheduleTimeout = useSafeTimeout();
+
+  useEffect(() => {
+    if (lastPathnameRef.current !== pathname) {
+      lastPathnameRef.current = pathname;
+      setIsCheckoutLoading(false);
+      if (isCartOpen) {
+        setIsCartOpen(false);
+      }
+    }
+  }, [pathname, isCartOpen, setIsCartOpen]);
+
+  useEffect(() => {
+    if (!isCartOpen) {
+      setIsCheckoutLoading(false);
+    }
+  }, [isCartOpen]);
 
   const {
     negotiationState,
@@ -145,20 +163,19 @@ export const CartSidebar: React.FC = () => {
 
   if (!isCartOpen) return null;
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     setIsCheckoutLoading(true);
-    // Close the sidebar first to prevent it staying open
-    setIsCartOpen(false);
-    // Navigate to checkout
+    // Keep the drawer visible in its loading state while Next.js navigates
+    // so the underlying page does not flash before /checkout mounts.
+    // The pathname effect above closes the drawer once the route commits.
     router.push(asRoute(getHref('/checkout')));
-    // Reset loading state after a delay (in case user comes back).
-    // The reset is dropped when navigation unmounted the sidebar.
     scheduleTimeout(() => {
       setIsCheckoutLoading(false);
-    }, 2000);
+    }, 4000);
   };
 
   const handleClose = () => {
+    setIsCheckoutLoading(false);
     setIsCartOpen(false);
   };
 
@@ -179,7 +196,7 @@ export const CartSidebar: React.FC = () => {
         <div className="absolute inset-y-0 right-0 max-w-full flex">
           <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                 <ShoppingBag className="text-store-primary" />
                 Your Cart
@@ -198,7 +215,7 @@ export const CartSidebar: React.FC = () => {
 
             {/* Cart Items List */}
             <div
-              className={`flex-1 overflow-y-auto p-6 ${displayCart.length === 0 ? 'flex flex-col' : 'space-y-6'}`}
+              className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/60 ${displayCart.length === 0 ? 'flex flex-col' : 'space-y-4'}`}
             >
               {displayCart.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">

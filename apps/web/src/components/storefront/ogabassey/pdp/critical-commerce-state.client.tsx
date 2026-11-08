@@ -209,7 +209,6 @@ export function OgabasseyPdpCriticalCommerceProvider({
     });
   }
 
-  const isAtMaxQuantity = maxQuantity !== null && quantity >= maxQuantity;
   const canAddToCart =
     hasRequiredVariantSelection &&
     hasRequiredHiddenVariantSelection &&
@@ -250,13 +249,22 @@ export function OgabasseyPdpCriticalCommerceProvider({
     setSelectedAttributes(nextSelection);
   }
 
-  const { handleAddToCart, quantityInCart } = useCriticalCommerceCartActions({
+  const {
+    handleAddToCart,
+    handleDecrementCartQuantity,
+    handleIncrementCartQuantity,
+    quantityInCart,
+  } = useCriticalCommerceCartActions({
     activeRouteOffer,
     canAddToCart,
     effectivePurchasableVariantSelection,
+    maxQuantity,
     productForCart,
     quantity,
   });
+  const activeQuantity = quantityInCart > 0 ? quantityInCart : quantity;
+  const isAtMaxQuantity =
+    maxQuantity !== null && activeQuantity >= maxQuantity;
 
   return (
     <OgabasseyPdpCriticalCommerceContext.Provider
@@ -266,6 +274,8 @@ export function OgabasseyPdpCriticalCommerceProvider({
         explicitSelectedAxes,
         handleAddToCart,
         handleAttributeSelection,
+        handleDecrementCartQuantity,
+        handleIncrementCartQuantity,
         isAtMaxQuantity,
         maxQuantity,
         productForCart,

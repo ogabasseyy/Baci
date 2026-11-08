@@ -89,8 +89,12 @@ vi.mock('@/lib/routes', () => ({
   asRoute: (path: string) => path,
 }));
 
+let mockPathname = '/test-store';
+const mockRouterPush = vi.fn();
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => mockPathname,
+  useRouter: () => ({ push: mockRouterPush }),
 }));
 
 vi.mock('next/image', () => ({
@@ -167,7 +171,8 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsCartOpen=true;
+    mockIsCartOpen = true;
+    mockPathname = '/test-store';
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
     mockCartItems = [
@@ -184,6 +189,22 @@ describe('CartSidebar', () => {
         negotiationStatus: 'accepted' as const,
       },
     ];
+  });
+
+  it('keeps the drawer open in loading state when Proceed to Checkout is clicked and closes once pathname changes', () => {
+    const view = render(<CartSidebar />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /proceed to checkout/i })
+    );
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/test-store/checkout');
+    expect(mockSetIsCartOpen).not.toHaveBeenCalledWith(false);
+
+    mockPathname = '/test-store/checkout';
+    view.rerender(<CartSidebar />);
+
+    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
 
   it('shows cart totals without the shipping placeholder', () => {

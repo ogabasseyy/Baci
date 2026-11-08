@@ -123,6 +123,13 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
                   href={`${basePath}/cart` as `/${string}`}
                   prefetch={false}
                   onClick={(e) => {
+                    if (
+                      typeof window !== 'undefined' &&
+                      typeof window.matchMedia === 'function' &&
+                      window.matchMedia('(max-width: 767px)').matches
+                    ) {
+                      return;
+                    }
                     e.preventDefault();
                     setIsCartOpen(true);
                   }}

@@ -10,13 +10,19 @@ import {
 
 const cartMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
+  cart: [] as Array<Record<string, unknown>>,
+  removeFromCart: vi.fn(),
   setIsCartOpen: vi.fn(),
+  updateQuantity: vi.fn(),
 }));
 
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
     addToCart: cartMocks.addToCart,
+    cart: cartMocks.cart,
+    removeFromCart: cartMocks.removeFromCart,
     setIsCartOpen: cartMocks.setIsCartOpen,
+    updateQuantity: cartMocks.updateQuantity,
   }),
 }));
 
@@ -39,7 +45,10 @@ vi.mock('next/link', () => ({
 
 beforeEach(() => {
   cartMocks.addToCart.mockClear();
+  cartMocks.removeFromCart.mockClear();
   cartMocks.setIsCartOpen.mockClear();
+  cartMocks.updateQuantity.mockClear();
+  cartMocks.cart = [];
 });
 
 const cartProduct: CartProduct = {
@@ -84,8 +93,8 @@ const variantCartProduct: CartProduct = {
 };
 
 describe('OgabasseyPdpCriticalCommerceClient', () => {
-  it('adds simple products with the selected quantity', () => {
-    render(
+  it('renders only Add to cart initially and transforms into the In Cart stepper with View cart beside it once in cart', () => {
+    const { rerender } = render(
       <OgabasseyPdpCriticalCommerceClient
         cartHref="/cart"
         cartProduct={cartProduct}
@@ -94,16 +103,62 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
+    expect(
+      screen.queryByRole('link', { name: /view cart/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('In Cart')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
 
-    expect(cartMocks.addToCart).toHaveBeenCalledWith(cartProduct, 2, {
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(cartProduct, 1, {
       condition: 'used',
     });
-    expect(cartMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
+
+    cartMocks.cart = [
+      {
+        cartItemId: 'product-1::condition=used',
+        condition: 'used',
+        id: 'product-1',
+        quantity: 1,
+      },
+    ];
+    rerender(
+      <OgabasseyPdpCriticalCommerceClient
+        cartHref="/cart"
+        cartProduct={cartProduct}
+        productName={cartProduct.name}
+        variantCount={1}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /add to cart/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('In Cart')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /view cart/i })).toHaveAttribute(
+      'href',
+      '/cart'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
+    expect(cartMocks.updateQuantity).toHaveBeenCalledWith(
+      'product-1::condition=used',
+      2,
+      undefined
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /remove .* from cart/i })
+    );
+    expect(cartMocks.removeFromCart).toHaveBeenCalledWith(
+      'product-1::condition=used',
+      undefined
+    );
   });
 
-  it('omits the variant hint without renderable selectors and disables decrement at the default quantity', () => {
+  it('omits the variant hint without renderable selectors', () => {
     render(
       <OgabasseyPdpCriticalCommerceClient
         cartHref="/cart"
@@ -116,9 +171,6 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
     expect(
       screen.queryByText('Choose options below before checkout.')
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /decrease quantity/i })
-    ).toBeDisabled();
   });
 
   it('adds the selected variant identity, attributes, price, and stock to cart', () => {
@@ -163,7 +215,7 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
         variantId: 'variant-256-8',
       })
     );
-    expect(cartMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
   });
 
   it('omits cart condition options when the cart product has no condition', () => {
@@ -181,17 +233,24 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
 
     expect(cartMocks.addToCart).toHaveBeenCalledWith(
       cartProductWithoutCondition,
-      2,
+      1,
       undefined
     );
   });
 
-  it('caps quantity increments at managed stock', () => {
+  it('caps in-cart quantity increments at managed stock', () => {
+    cartMocks.cart = [
+      {
+        cartItemId: 'product-1::condition=used',
+        condition: 'used',
+        id: 'product-1',
+        quantity: 2,
+      },
+    ];
     render(
       <OgabasseyPdpCriticalCommerceClient
         cartHref="/cart"
@@ -207,10 +266,19 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
     const increaseButton = screen.getByRole('button', {
       name: /increase quantity/i,
     });
-    fireEvent.click(increaseButton);
+    const decreaseButton = screen.getByRole('button', {
+      name: /decrease quantity/i,
+    });
 
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(increaseButton).toBeDisabled();
+
+    fireEvent.click(decreaseButton);
+    expect(cartMocks.updateQuantity).toHaveBeenCalledWith(
+      'product-1::condition=used',
+      1,
+      undefined
+    );
   });
 
   it('blocks cart additions when managed stock is exhausted', () => {
@@ -226,16 +294,9 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       />
     );
 
-    const increaseButton = screen.getByRole('button', {
-      name: /increase quantity/i,
-    });
     const addButton = screen.getByRole('button', { name: /add to cart/i });
-
-    expect(screen.getByText('0')).toBeInTheDocument();
-    expect(increaseButton).toBeDisabled();
     expect(addButton).toBeDisabled();
 
-    fireEvent.click(increaseButton);
     fireEvent.click(addButton);
 
     expect(cartMocks.addToCart).not.toHaveBeenCalled();
@@ -258,13 +319,12 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
 
-    expect(cartMocks.addToCart).toHaveBeenCalledWith(unmanagedProduct, 2, {
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(unmanagedProduct, 1, {
       condition: 'used',
     });
-    expect(cartMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+    expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
   });
 
   it('renders the live summary price in NGN by default', () => {
@@ -294,5 +354,4 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
     expect(screen.getByText('GH₵7,098,000')).toBeInTheDocument();
     expect(screen.queryByText(/₦/)).not.toBeInTheDocument();
   });
-
 });

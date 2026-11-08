@@ -137,4 +137,27 @@ describe('GET [slug]/(customer)/account/callback', () => {
       `${ORIGIN}/ogabassey/account/login?error=An%20unexpected%20error%20occurred`
     );
   });
+
+  it('omits the domain slug prefix on custom domains and reads the fallback baci_oauth_next cookie', async () => {
+    const mockDeleteCookie = vi.fn();
+    mockCookies.mockResolvedValue({
+      delete: mockDeleteCookie,
+      get: vi.fn((name: string) =>
+        name === 'baci_oauth_next' ? { value: '/checkout' } : undefined
+      ),
+    });
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: 'user-1' } },
+      error: null,
+    });
+
+    const response = await GET(request('/account/callback?code=auth-code'), {
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    });
+
+    expect(mockDeleteCookie).toHaveBeenCalledWith('baci_oauth_next');
+    expect(locationOf(response)).toBe(
+      `${ORIGIN}/account/checkout-return?next=%2Fcheckout`
+    );
+  });
 });

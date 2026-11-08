@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveTrustedStorefrontRedirectUrl } from './oauth-redirect';
+import {
+  extractStorefrontOAuthCallbackNext,
+  resolveTrustedStorefrontRedirectUrl,
+} from './oauth-redirect';
 
 vi.mock('@/env', () => ({
   getAppUrl: () => 'https://usebaci.com',
@@ -36,13 +39,30 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
     ).toBe('https://ogabassey.usebaci.com/account/callback');
   });
 
-  it('allows the merchant configured custom-domain origin', () => {
+  it('allows the merchant configured custom-domain origin and its www variant', () => {
     expect(
       resolveTrustedStorefrontRedirectUrl(
         'https://ogabassey.com/account/callback',
         merchant
       )
     ).toBe('https://ogabassey.com/account/callback');
+    expect(
+      resolveTrustedStorefrontRedirectUrl(
+        'https://www.ogabassey.com/account/callback',
+        merchant
+      )
+    ).toBe('https://www.ogabassey.com/account/callback');
+  });
+
+  it('extracts ?next= from /account/callback so Supabase receives an exact callback URL', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://ogabassey.com/account/callback?next=%2Fcheckout'
+      )
+    ).toEqual({
+      redirectTo: 'https://ogabassey.com/account/callback',
+      nextTarget: '/checkout',
+    });
   });
 
   it('rejects unrelated absolute origins', () => {

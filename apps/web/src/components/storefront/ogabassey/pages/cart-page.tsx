@@ -198,7 +198,7 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
+      <div className="max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 w-full flex-1 flex flex-col">
         <CartPageHeader cartCount={displayCart.length} />
 
         {displayCart.length === 0 ? (

@@ -177,134 +177,157 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                 return (
                   <div
                     key={item.cartItemId}
-                    className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation"
+                    className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation"
                   >
-                    {/* Top Row: Image & Basic Info */}
-                    <div className="flex gap-4">
+                    {/* Top Section: Image & Info + Quantity + Negotiate/Price */}
+                    <div className="flex gap-3.5 md:gap-4 items-start">
                       {/* Image */}
-                      <Link
-                        href={asRoute(productHref)}
-                        className="ogabassey-product-card-image-surface w-20 h-20 md:w-28 md:h-28 bg-gray-50 rounded-xl border border-gray-100 p-2 shrink-0 flex items-center justify-center"
-                      >
-                        <CdnFormatImage
-                          src={item.image || '/placeholder.png'}
-                          alt={item.name}
-                          width={112}
-                          height={112}
-                          sizes="(max-width: 768px) 80px, 112px"
-                          className="w-full h-full object-contain mix-blend-multiply"
-                        />
-                      </Link>
+                      <div className="relative shrink-0">
+                        {item.condition && (
+                          <span
+                            className={`pointer-events-none absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-[7.5px] leading-none font-bold uppercase tracking-wider shadow-2xs text-white ${
+                              item.condition.toLowerCase() === 'new'
+                                ? 'bg-gray-900'
+                                : item.condition.toLowerCase() === 'open box'
+                                  ? 'bg-indigo-600'
+                                  : 'bg-stone-500'
+                            }`}
+                          >
+                            {item.condition}
+                          </span>
+                        )}
+                        <Link
+                          href={asRoute(productHref)}
+                          className="ogabassey-product-card-image-surface relative w-[72px] h-[72px] md:w-28 md:h-28 bg-gray-50 rounded-xl border border-gray-100 p-1.5 shrink-0 flex items-center justify-center overflow-hidden"
+                        >
+                          <CdnFormatImage
+                            src={item.image || '/placeholder.png'}
+                            alt={item.name}
+                            width={112}
+                            height={112}
+                            sizes="(max-width: 768px) 72px, 112px"
+                            className="w-full h-full object-contain mix-blend-multiply"
+                          />
+                        </Link>
+                      </div>
 
                       {/* Content */}
-                      <div className="flex-1 min-w-0 pr-8">
-                        <Link href={asRoute(productHref)}>
-                          <h3 className="font-bold text-gray-900 text-sm md:text-base line-clamp-2 leading-tight mb-2 hover:text-red-600 transition-colors">
-                            {item.name}
-                          </h3>
-                        </Link>
+                      <div className="flex-1 min-w-0">
+                        <div className="pr-7">
+                          <Link
+                            href={asRoute(productHref)}
+                            className="group/title"
+                          >
+                            <h3 className="font-bold text-gray-900 text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-red-600 transition-colors">
+                              {item.name}
+                            </h3>
+                          </Link>
 
-                        <CartVariantDetails item={item} />
+                          <CartVariantDetails
+                            item={item}
+                            presentation="chips"
+                          />
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="mt-2.5 flex items-center">
+                          <div className="inline-flex items-center border border-gray-200 rounded-md h-7 md:h-8 bg-gray-50/80">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateQuantity(item.cartItemId, item.quantity - 1)
+                              }
+                              className="px-2 h-full hover:bg-white text-gray-500 rounded-l-md transition-colors border-r border-gray-200 active:bg-gray-200 disabled:opacity-40"
+                              disabled={item.quantity <= 1}
+                              aria-label="Decrease quantity"
+                            >
+                              <Minus size={11} />
+                            </button>
+                            <span className="w-6 text-center text-[11px] font-semibold text-gray-900">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateQuantity(item.cartItemId, item.quantity + 1)
+                              }
+                              className="px-2 h-full hover:bg-white text-gray-500 rounded-r-md transition-colors border-l border-gray-200 active:bg-gray-200"
+                              aria-label="Increase quantity"
+                            >
+                              <Plus size={11} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Negotiate (left) + Price (right) */}
+                        <div className="mt-2.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center shrink-0">
+                            {item.negotiationStatus === 'accepted' ? (
+                              <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                                <Check size={11} strokeWidth={3} />
+                                <span>
+                                  Matched @ ₦
+                                  {item.negotiatedPrice?.toLocaleString()}
+                                </span>
+                              </div>
+                            ) : isProductNegotiable({
+                                brand: item.brand,
+                                name: item.name,
+                              }) ? (
+                              <button
+                                type="button"
+                                onClick={() => openItemNegotiation(item)}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:opacity-80 py-0.5 transition-opacity active:scale-95 whitespace-nowrap"
+                              >
+                                <HandCoins size={12} />
+                                <span>Negotiate</span>
+                              </button>
+                            ) : (
+                              <div className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 whitespace-nowrap">
+                                <Check size={11} strokeWidth={2.5} />
+                                <span>Best price</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="shrink-0 ml-auto text-right">
+                            {item.negotiatedPrice ? (
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[10px] text-gray-400 line-through decoration-red-400 whitespace-nowrap">
+                                  ₦{(item.price * item.quantity).toLocaleString()}
+                                </span>
+                                <span className="font-bold text-green-600 text-sm md:text-lg whitespace-nowrap">
+                                  ₦{itemTotal.toLocaleString()}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="font-bold text-gray-900 text-sm md:text-lg whitespace-nowrap">
+                                ₦{itemTotal.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       {/* Remove Button - Absolute Top Right */}
-                      <button type="button"
+                      <button
+                        type="button"
                         onClick={() => removeFromCart(item.cartItemId)}
-                        className="absolute top-4 right-4 text-red-600 md:hover:text-red-700 p-1.5 md:hover:bg-red-50 rounded-full transition-colors active:bg-red-50"
+                        className="absolute top-3.5 right-3.5 text-gray-400 hover:text-red-600 p-1 md:hover:bg-red-50 rounded-full transition-colors active:bg-red-50"
                         aria-label="Remove item"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
 
-                    {/* Separator */}
-                    <div className="my-3 border-t border-dashed border-gray-100" />
-
-                    {/* Middle Row: Controls & Price */}
-                    <div className="flex items-center justify-between gap-3">
-                      {/* Quantity */}
-                      <div className="flex items-center border border-gray-200 rounded-lg h-9 md:h-10 bg-gray-50">
-                        <button type="button"
-                          onClick={() =>
-                            updateQuantity(item.cartItemId, item.quantity - 1)
-                          }
-                          className="px-3 h-full hover:bg-white text-gray-500 rounded-l-lg transition-colors border-r border-gray-200 active:bg-gray-200"
-                          disabled={item.quantity <= 1}
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus size={14} />
-                        </button>
-                        <span className="w-8 text-center text-xs md:text-sm font-bold text-gray-900">
-                          {item.quantity}
-                        </span>
-                        <button type="button"
-                          onClick={() =>
-                            updateQuantity(item.cartItemId, item.quantity + 1)
-                          }
-                          className="px-3 h-full hover:bg-white text-gray-500 rounded-r-lg transition-colors border-l border-gray-200 active:bg-gray-200"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus size={14} />
-                        </button>
-                      </div>
-
-                      {/* Price */}
-                      <div className="text-right">
-                        {item.negotiatedPrice ? (
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-gray-400 line-through decoration-red-400">
-                              ₦{(item.price * item.quantity).toLocaleString()}
-                            </span>
-                            <span className="font-bold text-green-600 text-base md:text-xl">
-                              ₦{itemTotal.toLocaleString()}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="font-bold text-gray-900 text-base md:text-xl">
-                            ₦{itemTotal.toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Bottom Row: Actions */}
-                    <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 justify-between items-center">
-                      {/* Assurance Toggle */}
+                    {/* Bottom Section: Full-width Assurance */}
+                    <div className="mt-3 pt-3 border-t border-gray-100">
                       <CartAssuranceRow
                         hasAssurance={item.hasAssurance}
                         assuranceCost={assuranceCost}
                         cartItemId={item.cartItemId}
                         onToggle={toggleAssurance}
                       />
-
-                      {/* Negotiate Button */}
-                      <div className="flex items-center gap-2">
-                        {item.negotiationStatus === 'accepted' ? (
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
-                            <Check size={12} strokeWidth={3} />
-                            <span>
-                              Matched @ ₦
-                              {item.negotiatedPrice?.toLocaleString()}
-                            </span>
-                          </div>
-                        ) : isProductNegotiable({
-                            brand: item.brand,
-                            name: item.name,
-                          }) ? (
-                          <button type="button"
-                            onClick={() => openItemNegotiation(item)}
-                            className="flex items-center gap-1.5 text-xs font-bold text-red-600 md:hover:bg-red-50 px-2 py-1.5 rounded-lg transition-colors border border-red-100 md:hover:border-red-200 active:bg-red-50 active:scale-95"
-                          >
-                            <HandCoins size={14} />
-                            <span>Negotiate</span>
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-                            <Check size={12} strokeWidth={3} />
-                            <span>Best price</span>
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </div>
                 );

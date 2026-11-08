@@ -50,6 +50,7 @@ describe('homepage carousel critical CSS', () => {
       declarationsFor('.ogabassey-home-product-card__media')
     ).toMatchObject({
       position: 'relative',
+      background: '#f9fafb',
       overflow: 'hidden',
       'aspect-ratio': '1 / 1',
     });

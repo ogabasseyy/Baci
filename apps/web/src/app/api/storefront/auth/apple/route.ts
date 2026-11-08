@@ -4,7 +4,11 @@ import z from 'zod';
 import type { CachedMerchant } from '@/lib/cached-data';
 import { getMerchantByIdentifierOrAlias } from '@/lib/get-merchant-by-identifier-or-alias';
 import { createClient } from '@/lib/supabase/server';
-import { resolveTrustedStorefrontRedirectUrl } from '../oauth-redirect';
+import {
+  extractStorefrontOAuthCallbackNext,
+  resolveTrustedStorefrontRedirectUrl,
+  STOREFRONT_OAUTH_NEXT_COOKIE,
+} from '../oauth-redirect';
 
 const appleAuthSchema = z.object({
   merchantSlug: z.string().min(1, 'Merchant slug is required'),
@@ -65,12 +69,24 @@ export async function POST(request: Request) {
       );
     }
 
+    const { redirectTo, nextTarget } =
+      extractStorefrontOAuthCallbackNext(trustedRedirectUrl);
+    if (nextTarget && typeof cookieStore.set === 'function') {
+      cookieStore.set(STOREFRONT_OAUTH_NEXT_COOKIE, nextTarget, {
+        httpOnly: true,
+        maxAge: 600,
+        path: '/',
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+      });
+    }
+
     // Initiate Apple OAuth
     // 2026 Best Practice: Using Supabase's built-in OAuth for Apple
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: trustedRedirectUrl,
+        redirectTo,
       },
     });
 

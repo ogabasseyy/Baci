@@ -18,10 +18,9 @@ describe('CartAssuranceRow', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.getByText('Screen & Liquid Damage')).toBeInTheDocument();
     expect(screen.getByText('+₦2,000')).toBeInTheDocument();
-    const disclosure = screen.getByText(
-      'Optional. Included in total; uncheck to remove.'
-    );
-    expect(disclosure).toHaveClass('text-store-background-text/55');
+    expect(
+      screen.queryByText('Optional. Included in total; uncheck to remove.')
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
     expect(onToggle).toHaveBeenCalledWith('ci-1');
   });
@@ -37,7 +36,9 @@ describe('CartAssuranceRow', () => {
 
     expect(screen.getByRole('checkbox')).not.toBeChecked();
     expect(screen.getByText('Device Protection (+5%)')).toBeInTheDocument();
-    expect(screen.getByText('Optional. Check to add.')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Optional. Check to add.')
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/\+₦/)).not.toBeInTheDocument();
   });
   it('explains lost protection only after removal and lets the shopper restore it', () => {

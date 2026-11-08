@@ -14,11 +14,13 @@ export const RATING_LABELS = [
 interface FeedbackRatingSelectorProps {
   rating: number | null;
   onSelectRating: (rating: number) => void;
+  disabled?: boolean;
 }
 
 export function FeedbackRatingSelector({
   rating,
   onSelectRating,
+  disabled = false,
 }: FeedbackRatingSelectorProps) {
   const { colors } = useTheme();
 
@@ -30,6 +32,10 @@ export function FeedbackRatingSelector({
           return (
             <Pressable
               key={emoji}
+              accessibilityLabel={`${RATING_LABELS[index]}, rating ${index + 1} of ${RATING_EMOJIS.length}`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled, selected: isSelected }}
+              disabled={disabled}
               style={[
                 styles.ratingButton,
                 {
@@ -38,6 +44,7 @@ export function FeedbackRatingSelector({
                     : colors.cardHover,
                   borderColor: isSelected ? colors.primary : 'transparent',
                   borderWidth: isSelected ? 2 : 0,
+                  opacity: disabled ? 0.5 : 1,
                 },
               ]}
               onPress={() => onSelectRating(index + 1)}

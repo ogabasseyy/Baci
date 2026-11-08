@@ -11,6 +11,7 @@ import {
   type PrimaryIntakeEvidence,
 } from './webhook-capture-primary-intake-readiness';
 import type { WebhookCaptureEvidence } from './webhook-capture-readiness';
+import { isPiggyvestWebhookIntakeRuntimeReady } from './webhook-intake-runtime';
 
 /**
  * Evidence the worker host collects before the owner attests the capture
@@ -37,6 +38,8 @@ export interface CaptureDrainEvidence {
   schedule: { enabled: boolean; cron: CaptureDrainCronState };
   /** Which primary intakes can finish a replayed delivery on this host. */
   primaryIntake: PrimaryIntakeEvidence;
+  /** Restricted legacy intake runtime is configured when its lane is enabled. */
+  legacyReplayRuntimeReady?: boolean;
   /**
    * Whether the drain's alerts leave this host. The console line only
    * reaches a local log file here, so paging relies on the server-side
@@ -153,6 +156,7 @@ export async function collectCaptureDrainEvidence(input: {
         cron: captureDrainCronState(crontab),
       },
       primaryIntake: collectPrimaryIntakeEvidence(env, now),
+      legacyReplayRuntimeReady: isPiggyvestWebhookIntakeRuntimeReady(env),
       alerts: { configured: isPostHogServerConfigured(env) },
     },
   };

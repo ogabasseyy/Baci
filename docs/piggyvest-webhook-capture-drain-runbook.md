@@ -41,7 +41,9 @@ entry point; a stale token, expired lease or late renewal response prevents
 replay. GNU timeout uses `--verbose`, and the wrapper also records timeout exits.
 
 Unavailable primary families are deferred without spending an attempt; ready
-families continue. If every family is unavailable the pass reads review
+families continue. A mixed-family delivery that a ready primary intake declines
+also waits without spending attempts if its authorized legacy fallback is
+unconfigured; primary successes do not wait for that fallback. If every family is unavailable the pass reads review
 metadata only and claims nothing. Every enabled pass checks review metadata
 before and after draining and writes a concise status line. It pages when the
 number of parked rows increases, persisting that count under the worker's
@@ -137,13 +139,24 @@ pass except `drain_schedule: DRAIN_NOT_ENABLED`. Fix anything else first:
 
 - `DRAIN_LOGIN_UNSAFE` lists which session check failed;
 - `DRAIN_FAMILY_KEY_MISSING:<families>`: the host lacks the current key of
-  those families;
+  those families. With the default legacy lane off, readiness requires the
+  primary families. With `PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED=true`,
+  readiness requires the legacy key; primary keys are required only for
+  primary families also configured on the host;
 - `PRIMARY_INTAKE_NOT_READY:<families>`: the primary intake of those
   families (bank, custody, interest) is switched off or not fully configured
   on this host, so the drain would answer every replay of that family with a
   retry and, once the attempt budget ran out, leave it for review. Enable and
   configure the intake in the worker env file first. A signing key alone is
   not enough;
+- `LEGACY_INTAKE_RUNTIME_NOT_READY`: the optional lane is enabled but the
+  existing restricted webhook-intake login settings are missing or malformed.
+  The drain still monitors review metadata and processes ready primary-owned
+  captures. Legacy-dependent captures are deferred without spending replay
+  attempts. If every primary intake is unavailable, the pass reports
+  `legacy_intake_not_ready` without claiming rows. The runtime uses
+  `PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD` and shared verified TLS database
+  settings; it does not use service-role credentials;
 - `DRAIN_ALERTS_NOT_CONFIGURED`: `POSTHOG_PROJECT_TOKEN` is missing.
 
 The worker host cannot see the web app's setting from Step 5, so the
@@ -171,14 +184,13 @@ so PiggyVest stops redelivering and the drain finishes the delivery.
 Only set it when **all** of these hold:
 
 - the readiness check exits 0 (`"readyToAttest": true`);
-- the web app holds **no legacy-family webhook key**: `PIGGYVEST_SECRET_KEY`
-  and `PVB_SECRET_KEY` are empty and `PIGGYVEST_WEBHOOK_KEY_ARCHIVE` has no
-  legacy entry still inside its overlap window. The drain does not replay
-  legacy-family deliveries, so for those the provider's redelivery must stay
-  the retry;
-- you accept that a record-only event (an interest accrual notice) whose
-  processing fails is then not redelivered: the drain sets it aside for
-  review instead. No money moves on these events.
+- either leave legacy replay off and keep current or overlapping legacy keys
+  off the web app, or explicitly enable
+  `PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED=true` on the worker and
+  pass readiness with the legacy key and restricted intake runtime present;
+- when legacy replay is off, accept that record-only events (such as interest
+  accrual notices) whose processing fails are set aside for review and are
+  not redelivered. No money moves on those events.
 
 Without this step the drain still finishes primary deliveries; the receiver
 simply keeps asking PiggyVest to redeliver as well.
@@ -208,3 +220,13 @@ All alerts reach PostHog as `piggyvest_money_alert` once
 - `PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED`: the host's key set is incomplete
   or out of date (for example a rotation not copied over); affected
   deliveries wait without using up their retries.
+
+## Captures already parked before enabling legacy replay
+
+Enabling the legacy lane does not release `needs_review` rows. Before rollout,
+count rows whose state is `needs_review` and whose exact last error is
+`REPLAY_OUT_OF_SCOPE_LEGACY_FAMILY`. The production metadata check on
+2026-11-08 found zero such rows. A nonzero count requires a separate, audited
+recovery of those specific captures after signature and ownership verification.
+Do not broaden the worker login or release unrelated quarantines. A verified
+provider redelivery still settles its matching capture through the receiver.

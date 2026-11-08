@@ -142,6 +142,25 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
     });
   });
 
+  it('fails closed without claiming when the enabled legacy intake is unconfigured', async () => {
+    mocks.intakesNotReady = ['bank', 'custody', 'interest'];
+    const claims: unknown[] = [];
+    createExecutor.mockImplementation(() => {
+      const executor = scriptedCaptureExecutor([]);
+      return { ...executor, query: async (statement, parameters) => {
+        if (statement === 'claim') claims.push(parameters);
+        return executor.query(statement, parameters);
+      } };
+    });
+    await expect(cli(['--once'], {
+      ...ENV,
+      PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
+    })).resolves.toBe(1);
+    expect(output).toEqual(['{"status":"legacy_intake_not_ready"}']);
+    expect(createExecutor).toHaveBeenCalledOnce();
+    expect(claims).toEqual([]);
+  });
+
   it('does not claim anything while all primary intakes are not ready', async () => {
     mocks.intakesNotReady = ['bank', 'custody', 'interest'];
     await expect(cli(['--once'])).resolves.toBe(1);

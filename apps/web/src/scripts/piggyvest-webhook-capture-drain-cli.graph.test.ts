@@ -50,13 +50,15 @@ describe('capture drain CLI import graph', () => {
     for (const reached of [
       'apps/web/src/lib/piggyvest/webhook-capture-drain-runtime.ts',
       'apps/web/src/lib/piggyvest/webhook-capture-primary-replay.ts',
+      'apps/web/src/lib/piggyvest/webhook-capture-legacy-replay.ts',
+      'apps/web/src/lib/piggyvest/server-intake-client.ts',
+      'apps/web/src/lib/piggyvest/webhook-intake-executor.ts',
       'apps/web/src/app/api/webhooks/piggyvest/primary-webhook-dispatch.ts',
     ])
       expect(closure.has(reached), reached).toBe(true);
     for (const forbidden of [
       'apps/web/src/lib/supabase/service.ts',
       'apps/web/src/lib/supabase/admin.ts',
-      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/env.ts',
     ])
       expect(closure.has(forbidden), forbidden).toBe(false);

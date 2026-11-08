@@ -28,9 +28,15 @@ requires finishing it automatically.
 - **The job using too much power.** Before every action it checks it is its
   own login, in one role only, with no special rights, over an encrypted
   connection. A database test runs that exact check.
-- **Old-style notifications.** These need the admin key, which the job does
-  not have. It sets them aside for review with an alert, so they never hold
-  up other work; PiggyVest's resend still closes them.
+- **Old-style notifications.** By default the worker sets these aside for
+  review with an alert; it does not claim to replay them. An optional,
+  default-off lane uses
+  `PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED=true`. It requires the
+  existing restricted `baci_piggyvest_webhook_intake` runtime and calls the
+  receiver's `processVerifiedDelivery` path over the exact stored bytes and
+  signature. Authority stays at the family intersection recorded at capture.
+  It does not require primary bank, custody or interest keys solely for this
+  lane; readiness checks the legacy key and restricted intake configuration.
 - **A missing or outdated key on the VPS.** The notification waits instead of
   being treated as forged, and readiness names the missing key.
 - **Alerts nobody sees.** VPS alerts go to PostHog; readiness fails without it.
@@ -51,3 +57,9 @@ its password is put on the VPS, and `PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED`
 is set to `true` there. Until then the job wakes each minute and exits
 immediately, and the website keeps answering "try again" so PiggyVest keeps
 resending.
+
+Legacy replay stays off unless the worker setting above is exactly `true`.
+With it enabled, primary-owner readiness defers only rows whose recorded
+families include that owner. A legacy-signed bank row without recorded bank
+authority may use only the existing legacy handler. Incomplete key sets and
+wrong-family signatures never widen replay authority.

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -35,6 +35,9 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
     const pngBytes = await pngBuffer(750, 1334);
     const shotPath = join(dir, 'shot.png');
     await writeFile(shotPath, pngBytes);
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -44,7 +47,7 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
@@ -89,6 +92,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -98,15 +106,13 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, await pngBuffer(750, 1334));
     const twoLaunchLog = join(dir, 'two-launch.log');
     await writeFile(
       twoLaunchLog,
@@ -141,6 +147,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -150,15 +161,13 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, await pngBuffer(750, 1334));
     const twoNavLog = join(dir, 'two-nav.log');
     await writeFile(
       twoNavLog,
@@ -193,6 +202,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -203,15 +217,13 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, await pngBuffer(750, 1334));
     const markerlessLog = join(dir, 'markerless.log');
     await writeFile(
       markerlessLog,
@@ -243,6 +255,11 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
+    const shotPath = join(dir, 'shot.png');
+    await writeFile(shotPath, await pngBuffer(750, 1334));
+    const navigationBeforeShot = new Date(
+      (await stat(shotPath)).mtimeMs - 1_000
+    ).toISOString();
     const harPath = join(dir, 'raw.har');
     await writeFile(
       harPath,
@@ -252,15 +269,13 @@ describe('merchant-image-pilot-runner finish launch binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: navigationBeforeShot,
               title: 'u run 1',
             },
           ],
         },
       })
     );
-    const shotPath = join(dir, 'shot.png');
-    await writeFile(shotPath, await pngBuffer(750, 1334));
     const bound = await finishRun({
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
       har: harPath,

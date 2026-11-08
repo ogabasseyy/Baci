@@ -80,6 +80,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(report.checks.map((check) => check.gate)).toEqual([
       'key_configuration',
       'primary_intake',
+      'legacy_replay',
       'migration_and_table',
       'storage',
       'drain_login',
@@ -244,16 +245,22 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     const attested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(attested.processingFailureReply).toBe('200-deferred');
     expect(attested.notes).toEqual([
-      expect.stringContaining('replays only deliveries a primary intake owns'),
+      expect.stringContaining(
+        'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+      ),
     ]);
-    expect(attested.notes[0]).toContain('legacy-family webhook key');
+    expect(attested.notes[0]).toContain(
+      'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+    );
 
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
     const unattested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(unattested.processingFailureReply).toBe('503-retry');
     expect(unattested.notes).toEqual([
       expect.stringContaining('deferred 200 reply'),
-      expect.stringContaining('replays only deliveries a primary intake owns'),
+      expect.stringContaining(
+        'PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED'
+      ),
     ]);
     expect(unattested.notes[0]).toContain('is only active once the drain');
     expect(unattested.notes[0]).toContain(

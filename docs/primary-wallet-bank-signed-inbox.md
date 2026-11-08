@@ -95,17 +95,10 @@ The intake never holds the reader. The rules live in
 `bank_role_violations(login, worker)`, which lists each violation so the SQL
 suite can test them without logging in as the worker.
 
-Two activation inventories still expect the old role shape and reject the new
-one, so both must be updated with the enforcing readiness check, before either
-worker is activated. Until then neither worker can be prepared for activation,
-which fails closed (no money moves):
-
-- `tools/staging/primary-wallet-bank-inbox/` expects no capability membership
-  and five RPCs; the worker capability now holds the reader and `engine_ready`.
-- `tools/staging/primary-wallet-paid-interest-inbox/` runs as the evidence
-  login and expects no capability membership and nine RPCs; the evidence
-  capability now holds the reader, so it sees one membership and ten RPCs
-  (`engine_ready(p_surface text)` added).
+The bank activation inventory verifies the restricted reader membership and
+the worker's exact six RPC signatures, including `engine_ready(p_surface text)`.
+The paid-interest inventory uses the shared evidence login and has a separate
+grant contract. See [paid-interest preparation](piggyvest-primary-interest-activation-preparation.md).
 
 ## Stable SHA-256 values
 

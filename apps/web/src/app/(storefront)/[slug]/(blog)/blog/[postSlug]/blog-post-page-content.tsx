@@ -141,6 +141,7 @@ async function renderBlogPostContent({
     countryCode: merchant.country,
     merchantCurrency,
     post: clusterPost,
+    excludedProductSlugs: new Set(relatedProducts.map((p) => p.slug)),
   });
 
   const beforeChrome = (

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildCatalogLinkModules } from './build-catalog-link-modules';
 
 describe('buildCatalogLinkModules', () => {
-  it('builds maintained category, pagination, compare, and editorial modules', () => {
+  it('builds maintained compare and editorial modules, omitting category hubs and category pagination', () => {
     const modules = buildCatalogLinkModules({
       productBasePath: '/products',
       productTotalPages: 6,
@@ -25,77 +25,6 @@ describe('buildCatalogLinkModules', () => {
     });
 
     expect(modules).toEqual([
-      {
-        id: 'catalog-categories',
-        title: 'Shop by category',
-        description: 'Browse maintained Ogabassey category hubs.',
-        items: [
-          { href: '/smartphones', label: 'Smartphones', source: 'category' },
-          { href: '/laptops', label: 'Laptops', source: 'category' },
-        ],
-      },
-      {
-        id: 'category-pages',
-        title: 'Browse category pages',
-        description: 'Jump to maintained category listing pages.',
-        items: [
-          {
-            href: '/smartphones?page=2',
-            label: 'Smartphones page 2',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=3',
-            label: 'Smartphones page 3',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=4',
-            label: 'Smartphones page 4',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=5',
-            label: 'Smartphones page 5',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=6',
-            label: 'Smartphones page 6',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=7',
-            label: 'Smartphones page 7',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=8',
-            label: 'Smartphones page 8',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/smartphones?page=9',
-            label: 'Smartphones page 9',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/laptops?page=2',
-            label: 'Laptops page 2',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/laptops?page=3',
-            label: 'Laptops page 3',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/laptops?page=4',
-            label: 'Laptops page 4',
-            source: 'catalog-pagination',
-          },
-        ],
-      },
       {
         id: 'compare-modules',
         title: 'Compare products',
@@ -124,16 +53,22 @@ describe('buildCatalogLinkModules', () => {
     ]);
   });
 
-  it('omits catalog-pages module to avoid duplicating StorefrontPagination', () => {
+  it('omits catalog-pages, catalog-categories, and category-pages modules', () => {
     const modules = buildCatalogLinkModules({
       productBasePath: '/products',
       productTotalPages: 10,
-      categories: [],
-      compareLinks: [],
+      categories: [{ slug: 'smartphones', name: 'Smartphones', totalPages: 9 }],
+      compareLinks: [{ href: '/smartphones/compare/a-vs-b', label: 'A vs B' }],
       editorialLinks: [],
     });
 
     expect(modules.some((module) => module.id === 'catalog-pages')).toBe(false);
+    expect(modules.some((module) => module.id === 'catalog-categories')).toBe(
+      false
+    );
+    expect(modules.some((module) => module.id === 'category-pages')).toBe(
+      false
+    );
   });
 
   it('does not create direct PDP shortcut modules from product slugs', () => {

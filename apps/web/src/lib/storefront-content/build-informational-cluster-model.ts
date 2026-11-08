@@ -100,6 +100,12 @@ export async function buildInformationalClusterModel(
     );
   }
 
+  if (input.excludedProductSlugs && input.excludedProductSlugs.size > 0) {
+    products = products.filter(
+      (product) => !input.excludedProductSlugs?.has(product.slug)
+    );
+  }
+
   const destinationVerified =
     input.categoryDataOverride?.destinationVerified === true;
   const [

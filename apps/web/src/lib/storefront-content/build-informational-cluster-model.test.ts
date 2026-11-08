@@ -264,4 +264,21 @@ describe('buildInformationalClusterModel', () => {
       'https://ogabassey.com/smartphones/iphone-17-pro-max'
     );
   });
+
+  it('excludes products specified in excludedProductSlugs from featured picks', async () => {
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: smartphoneGuidePost,
+      categoryDataOverride: smartphoneCategoryData,
+      excludedProductSlugs: new Set(['galaxy-a56']),
+    });
+
+    const featuredHrefs = model?.featuredProducts.map((p) => p.href) ?? [];
+    expect(featuredHrefs.some((href) => href.includes('galaxy-a56'))).toBe(
+      false
+    );
+    expect(featuredHrefs.length).toBeGreaterThan(0);
+  });
 });

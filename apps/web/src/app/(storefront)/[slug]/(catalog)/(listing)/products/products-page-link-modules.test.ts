@@ -27,7 +27,7 @@ describe('loadProductsPageLinkModules', () => {
     mockedCategoryProductCounts.mockResolvedValue({});
   });
 
-  it('builds category, pagination, and maintained compare modules', async () => {
+  it('builds maintained compare modules while omitting category and pagination modules', async () => {
     mockedInventory.mockResolvedValue([
       {
         slug: 'xiaomi-13t',
@@ -74,12 +74,12 @@ describe('loadProductsPageLinkModules', () => {
       ],
     });
 
-    expect(modules.map((module) => module.id)).toEqual(
-      expect.arrayContaining([
-        'catalog-categories',
-        'category-pages',
-        'compare-modules',
-      ])
+    expect(modules.map((module) => module.id)).toEqual(['compare-modules']);
+    expect(modules.some((module) => module.id === 'catalog-categories')).toBe(
+      false
+    );
+    expect(modules.some((module) => module.id === 'category-pages')).toBe(
+      false
     );
     expect(modules.some((module) => module.id === 'catalog-pages')).toBe(false);
     expect(
@@ -87,7 +87,7 @@ describe('loadProductsPageLinkModules', () => {
     ).toContain('/smartphones/compare/samsung-galaxy-s24-ultra-vs-xiaomi-13t');
   });
 
-  it('uses fetched category product counts for pagination modules', async () => {
+  it('omits category pagination modules even when categories have multiple pages', async () => {
     mockedInventory.mockResolvedValue([]);
     mockedCategoryProductCounts.mockResolvedValue({ 'cat-1': 49 });
 
@@ -109,14 +109,12 @@ describe('loadProductsPageLinkModules', () => {
       ],
     });
 
-    expect(
-      modules
-        .find((module) => module.id === 'category-pages')
-        ?.items.map((item) => item.href)
-    ).toEqual(['/smartphones?page=2', '/smartphones?page=3']);
+    expect(modules.some((module) => module.id === 'category-pages')).toBe(
+      false
+    );
   });
 
-  it('keeps category modules when category product count loading fails', async () => {
+  it('handles category product count loading failure gracefully without emitting catalog-categories', async () => {
     const consoleSpy = vi
       .spyOn(console, 'warn')
       .mockImplementation(() => undefined);
@@ -143,7 +141,7 @@ describe('loadProductsPageLinkModules', () => {
       });
 
       expect(modules.some((module) => module.id === 'catalog-categories')).toBe(
-        true
+        false
       );
       expect(modules.some((module) => module.id === 'category-pages')).toBe(
         false
@@ -157,7 +155,7 @@ describe('loadProductsPageLinkModules', () => {
     }
   });
 
-  it('keeps non-compare modules when category inventory loading fails', async () => {
+  it('returns empty modules when category inventory loading fails and no compare links are formed', async () => {
     mockedInventory.mockRejectedValue(new Error('inventory unavailable'));
 
     const modules = await loadProductsPageLinkModules({
@@ -183,11 +181,11 @@ describe('loadProductsPageLinkModules', () => {
       false
     );
     expect(modules.some((module) => module.id === 'catalog-categories')).toBe(
-      true
+      false
     );
   });
 
-  it('caps compare inventory loading while keeping all category links', async () => {
+  it('caps compare inventory loading while keeping categories safe', async () => {
     mockedInventory.mockResolvedValue([]);
     const categories = Array.from(
       { length: PRODUCTS_PAGE_COMPARE_MODULE_CATEGORY_LIMIT + 2 },
@@ -204,7 +202,7 @@ describe('loadProductsPageLinkModules', () => {
       })
     );
 
-    const modules = await loadProductsPageLinkModules({
+    await loadProductsPageLinkModules({
       baseUrl: 'https://ogabassey.com',
       merchantId: 'merchant-1',
       productTotalPages: 1,
@@ -214,8 +212,5 @@ describe('loadProductsPageLinkModules', () => {
     expect(mockedInventory).toHaveBeenCalledTimes(
       PRODUCTS_PAGE_COMPARE_MODULE_CATEGORY_LIMIT
     );
-    expect(
-      modules.find((module) => module.id === 'catalog-categories')?.items
-    ).toHaveLength(PRODUCTS_PAGE_COMPARE_MODULE_CATEGORY_LIMIT + 2);
   });
 });

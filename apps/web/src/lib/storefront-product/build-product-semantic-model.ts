@@ -18,13 +18,7 @@ import type {
   ProductSemanticSection,
 } from './product-semantic-types';
 
-function getSupportCopy(categorySlug: string) {
-  return getProductSemanticSupport(categorySlug);
-}
-
 function toTitleCase(value: string) {
-  // Humanize machine values like "open_box" / "like-new" into "Open Box" /
-  // "Like New" by splitting on whitespace, underscores, and hyphens.
   return value
     .split(/[\s_-]+/)
     .filter(Boolean)
@@ -36,13 +30,17 @@ function isInStock(product: ProductSemanticCandidate) {
   return product.stock == null || product.stock > 0;
 }
 
+function normalizeText(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
 function conditionBucketMatches(
   currentProduct: ProductSemanticCandidate,
   candidate: ProductSemanticCandidate
 ) {
   return (
-    (currentProduct.condition ?? '').trim().toLowerCase() ===
-    (candidate.condition ?? '').trim().toLowerCase()
+    normalizeText(currentProduct.condition) ===
+    normalizeText(candidate.condition)
   );
 }
 
@@ -148,11 +146,10 @@ function rankAlternatives(currentProduct: ProductSemanticCandidate) {
 }
 
 function rankSamePrice(currentProduct: ProductSemanticCandidate) {
+  const currentNormalizedBrand = normalizeText(currentProduct.brand);
   return (left: ProductSemanticCandidate, right: ProductSemanticCandidate) =>
-    Number((right.brand ?? '').trim() !== (currentProduct.brand ?? '').trim()) -
-      Number(
-        (left.brand ?? '').trim() !== (currentProduct.brand ?? '').trim()
-      ) ||
+    Number(normalizeText(right.brand) !== currentNormalizedBrand) -
+      Number(normalizeText(left.brand) !== currentNormalizedBrand) ||
     Number(isInStock(right)) - Number(isInStock(left)) ||
     Math.abs(left.price - currentProduct.price) -
       Math.abs(right.price - currentProduct.price) ||
@@ -163,53 +160,20 @@ function findContainingBand(input: BuildProductSemanticModelInput) {
   return getCuratedPriceBands(input.categorySlug, {
     merchantCurrency: input.merchantCurrency,
   }).find(
-    (band) =>
-      input.currentProduct.price <= band.ceiling &&
-      (band.floor ? input.currentProduct.price > band.floor : true)
+    (b) =>
+      input.currentProduct.price <= b.ceiling &&
+      (!b.floor || input.currentProduct.price > b.floor)
   );
 }
 
-function buildAlternativesSection(
-  input: BuildProductSemanticModelInput,
-  approvedCompareSlugs: ReadonlySet<string>
-) {
-  return buildSection(
-    input,
-    getSupportCopy(input.categorySlug).alternativesHeading,
-    input.inventory
-      .filter(
-        (product) =>
-          product.slug !== input.currentProduct.slug &&
-          product.category_slug === input.categorySlug
-      )
-      .sort(rankAlternatives(input.currentProduct)),
-    approvedCompareSlugs
-  );
-}
-
-function buildSameBrandSection(
-  input: BuildProductSemanticModelInput,
-  approvedCompareSlugs: ReadonlySet<string>
-) {
-  const currentBrand = input.currentProduct.brand?.trim();
-
-  if (!currentBrand) {
-    return null;
-  }
-
-  return buildSection(
-    input,
-    getSupportCopy(input.categorySlug).sameBrandHeading,
-    input.inventory
-      .filter(
-        (product) =>
-          product.slug !== input.currentProduct.slug &&
-          product.category_slug === input.categorySlug &&
-          product.brand?.trim() === currentBrand
-      )
-      .sort(rankAlternatives(input.currentProduct)),
-    approvedCompareSlugs
-  );
+function buildAlternativesCandidates(input: BuildProductSemanticModelInput) {
+  return input.inventory
+    .filter(
+      (product) =>
+        product.slug !== input.currentProduct.slug &&
+        product.category_slug === input.categorySlug
+    )
+    .sort(rankAlternatives(input.currentProduct));
 }
 
 function buildSamePriceCandidates(input: BuildProductSemanticModelInput) {
@@ -238,16 +202,85 @@ function buildSamePriceCandidates(input: BuildProductSemanticModelInput) {
   return selectedPool.sort(rankSamePrice(input.currentProduct));
 }
 
-function buildSamePriceSection(
-  input: BuildProductSemanticModelInput,
+function selectSectionCards(
+  products: ProductSemanticCandidate[],
+  seenSlugs: Set<string>,
+  excludeSlugs?: ReadonlySet<string>
+) {
+  const selected = products
+    .filter((p) => !seenSlugs.has(p.slug) && !excludeSlugs?.has(p.slug))
+    .slice(0, MAX_SEMANTIC_SECTION_CARDS);
+  for (const product of selected) {
+    seenSlugs.add(product.slug);
+  }
+  return selected;
+}
+
+function buildRecommendationSections(
+  normalizedInput: BuildProductSemanticModelInput,
   approvedCompareSlugs: ReadonlySet<string>
 ) {
-  return buildSection(
-    input,
-    getSupportCopy(input.categorySlug).samePriceHeading,
-    buildSamePriceCandidates(input),
+  const seenSlugs = new Set<string>([normalizedInput.currentProduct.slug]);
+  const currentBrand = normalizedInput.currentProduct.brand?.trim();
+  const normalizedCurrentBrand = normalizeText(currentBrand);
+  const allAlternatives = buildAlternativesCandidates(normalizedInput);
+  const sameBrandPool = currentBrand
+    ? allAlternatives.filter(
+        (p) => normalizeText(p.brand) === normalizedCurrentBrand
+      )
+    : [];
+  const nonSameBrandAlternatives = currentBrand
+    ? allAlternatives.filter(
+        (p) => normalizeText(p.brand) !== normalizedCurrentBrand
+      )
+    : allAlternatives;
+
+  const reservedSameBrandSlugs =
+    nonSameBrandAlternatives.length >= 1 && sameBrandPool.length >= 1
+      ? new Set(
+          sameBrandPool
+            .slice(0, Math.min(2, sameBrandPool.length))
+            .map((p) => p.slug)
+        )
+      : new Set<string>();
+
+  const supportCopy = getProductSemanticSupport(normalizedInput.categorySlug);
+  const selectedAlternatives = selectSectionCards(
+    allAlternatives,
+    seenSlugs,
+    reservedSameBrandSlugs
+  );
+  const alternatives = buildSection(
+    normalizedInput,
+    supportCopy.alternativesHeading,
+    selectedAlternatives,
     approvedCompareSlugs
   );
+
+  const selectedSameBrand = currentBrand
+    ? selectSectionCards(sameBrandPool, seenSlugs)
+    : [];
+  const sameBrand = currentBrand
+    ? buildSection(
+        normalizedInput,
+        supportCopy.sameBrandHeading,
+        selectedSameBrand,
+        approvedCompareSlugs
+      )
+    : null;
+
+  const selectedSamePrice = selectSectionCards(
+    buildSamePriceCandidates(normalizedInput),
+    seenSlugs
+  );
+  const samePrice = buildSection(
+    normalizedInput,
+    supportCopy.samePriceHeading,
+    selectedSamePrice,
+    approvedCompareSlugs
+  );
+
+  return { alternatives, sameBrand, samePrice };
 }
 
 export function buildProductSemanticModel(
@@ -258,17 +291,18 @@ export function buildProductSemanticModel(
     input: normalizedInput,
     supportLinks,
   } = buildProductSemanticCompareSupport(input);
+  const { alternatives, sameBrand, samePrice } = buildRecommendationSections(
+    normalizedInput,
+    approvedCompareSlugs
+  );
 
   return {
     contextParagraphs: buildProductContextParagraphs(normalizedInput),
     trustBullets: buildProductTrustBullets(normalizedInput),
     supportLinks,
     guideLinks: buildProductGuideLinks(normalizedInput),
-    alternatives: buildAlternativesSection(
-      normalizedInput,
-      approvedCompareSlugs
-    ),
-    sameBrand: buildSameBrandSection(normalizedInput, approvedCompareSlugs),
-    samePrice: buildSamePriceSection(normalizedInput, approvedCompareSlugs),
+    alternatives,
+    sameBrand,
+    samePrice,
   };
 }

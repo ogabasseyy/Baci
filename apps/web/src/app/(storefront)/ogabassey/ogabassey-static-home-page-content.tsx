@@ -10,6 +10,8 @@ import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
 import { peekSettledCanonicalOgabasseyHomeState } from './ogabassey-home-settled-state';
 import { OgabasseyHomeStaticShellHead } from './ogabassey-home-static-shell-head';
 
+export { ogabasseyStaticHomepageSchema } from './ogabassey-home-static-shell-head';
+
 interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */

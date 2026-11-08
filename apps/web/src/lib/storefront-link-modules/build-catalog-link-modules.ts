@@ -4,21 +4,12 @@ import {
   pruneEmptyLinkModules,
 } from './link-module-utils';
 
-interface CategoryModuleInput {
-  slug: string;
-  name: string;
-  totalPages?: number;
-}
-
 interface LinkModuleInput {
   href: string;
   label: string;
 }
 
 export interface BuildCatalogLinkModulesInput {
-  productBasePath?: string;
-  productTotalPages?: number;
-  categories?: CategoryModuleInput[];
   compareLinks: LinkModuleInput[];
   editorialLinks: LinkModuleInput[];
 }

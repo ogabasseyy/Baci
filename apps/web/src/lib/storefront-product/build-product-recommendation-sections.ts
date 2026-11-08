@@ -200,11 +200,16 @@ function selectSectionCards(
   seenSlugs: Set<string>,
   excludeSlugs?: ReadonlySet<string>
 ) {
-  const selected = products
-    .filter((p) => !seenSlugs.has(p.slug) && !excludeSlugs?.has(p.slug))
-    .slice(0, MAX_SEMANTIC_SECTION_CARDS);
-  for (const product of selected) {
+  const selected: ProductSemanticCandidate[] = [];
+  for (const product of products) {
+    if (seenSlugs.has(product.slug) || excludeSlugs?.has(product.slug)) {
+      continue;
+    }
+    selected.push(product);
     seenSlugs.add(product.slug);
+    if (selected.length === MAX_SEMANTIC_SECTION_CARDS) {
+      break;
+    }
   }
   return selected;
 }

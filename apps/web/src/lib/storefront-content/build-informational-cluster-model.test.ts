@@ -272,12 +272,19 @@ describe('buildInformationalClusterModel', () => {
       storeUrl: 'https://ogabassey.com',
       post: smartphoneGuidePost,
       categoryDataOverride: smartphoneCategoryData,
-      excludedProductSlugs: new Set(['galaxy-a56', 'iphone-17-pro-max']),
+      excludedProductSlugs: new Set([
+        'galaxy-a56',
+        'iphone-15',
+        'iphone-17-pro-max',
+      ]),
     });
 
     const featuredHrefs = model?.featuredProducts.map((p) => p.href) ?? [];
-    expect(featuredHrefs.some((href) => href.includes('galaxy-a56'))).toBe(
-      false
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/galaxy-a56'
+    );
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/iphone-15'
     );
     expect(featuredHrefs.length).toBeGreaterThan(0);
     expect(model?.commerceLinks.map((link) => link.href)).toEqual(

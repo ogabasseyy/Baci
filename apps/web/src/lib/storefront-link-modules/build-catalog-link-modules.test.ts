@@ -4,12 +4,6 @@ import { buildCatalogLinkModules } from './build-catalog-link-modules';
 describe('buildCatalogLinkModules', () => {
   it('builds maintained compare and editorial modules, omitting category hubs and category pagination', () => {
     const modules = buildCatalogLinkModules({
-      productBasePath: '/products',
-      productTotalPages: 6,
-      categories: [
-        { slug: 'smartphones', name: 'Smartphones', totalPages: 9 },
-        { slug: 'laptops', name: 'Laptops', totalPages: 4 },
-      ],
       compareLinks: [
         {
           href: '/smartphones/compare/iphone-12-vs-xiaomi-13t',
@@ -55,9 +49,6 @@ describe('buildCatalogLinkModules', () => {
 
   it('omits catalog-pages, catalog-categories, and category-pages modules', () => {
     const modules = buildCatalogLinkModules({
-      productBasePath: '/products',
-      productTotalPages: 10,
-      categories: [{ slug: 'smartphones', name: 'Smartphones', totalPages: 9 }],
       compareLinks: [{ href: '/smartphones/compare/a-vs-b', label: 'A vs B' }],
       editorialLinks: [],
     });
@@ -73,9 +64,6 @@ describe('buildCatalogLinkModules', () => {
 
   it('does not create direct PDP shortcut modules from product slugs', () => {
     const modules = buildCatalogLinkModules({
-      productBasePath: '/products',
-      productTotalPages: 1,
-      categories: [],
       compareLinks: [],
       editorialLinks: [],
     });

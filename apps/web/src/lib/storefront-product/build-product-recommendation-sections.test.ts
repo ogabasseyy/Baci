@@ -256,4 +256,43 @@ describe('buildRecommendationSections', () => {
       expect(alternativeSlugs.has(href)).toBe(false);
     }
   });
+
+  it('deduplicates repeated slugs within a single rail before applying the 6-card cap', () => {
+    const currentProduct = makeCandidate({
+      slug: 'anchor',
+      name: 'Anchor',
+      brand: undefined,
+      price: 500_000,
+    });
+    const duplicateCandidate = makeCandidate({
+      slug: 'dup-phone',
+      name: 'Dup Phone',
+      brand: 'Xiaomi',
+      price: 510_000,
+    });
+    const distinctCandidates = Array.from({ length: 6 }, (_, i) =>
+      makeCandidate({
+        slug: `distinct-${i + 1}`,
+        name: `Distinct ${i + 1}`,
+        brand: 'Samsung',
+        price: 520_000 + i * 5_000,
+      })
+    );
+
+    const model = buildRecommendationSections(
+      makeInput({
+        currentProduct,
+        inventory: [
+          currentProduct,
+          duplicateCandidate,
+          duplicateCandidate,
+          ...distinctCandidates,
+        ],
+      }),
+      NO_COMPARE_SLUGS
+    );
+
+    expect(model.alternatives?.cards).toHaveLength(6);
+    expect(new Set(model.alternatives?.cards.map((c) => c.href)).size).toBe(6);
+  });
 });

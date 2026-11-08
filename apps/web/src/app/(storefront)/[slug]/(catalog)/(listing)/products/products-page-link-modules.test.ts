@@ -1,14 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCachedCategoryProductCounts } from '@/lib/cached-category-product-counts';
 import { getCachedProductSemanticInventory } from '@/lib/storefront-product/get-cached-product-semantic-inventory';
 import {
   loadProductsPageLinkModules,
   PRODUCTS_PAGE_COMPARE_MODULE_CATEGORY_LIMIT,
 } from './products-page-link-modules';
-
-vi.mock('@/lib/cached-category-product-counts', () => ({
-  getCachedCategoryProductCounts: vi.fn(),
-}));
 
 vi.mock(
   '@/lib/storefront-product/get-cached-product-semantic-inventory',
@@ -18,13 +13,10 @@ vi.mock(
 );
 
 const mockedInventory = vi.mocked(getCachedProductSemanticInventory);
-const mockedCategoryProductCounts = vi.mocked(getCachedCategoryProductCounts);
 
 describe('loadProductsPageLinkModules', () => {
   beforeEach(() => {
     mockedInventory.mockReset();
-    mockedCategoryProductCounts.mockReset();
-    mockedCategoryProductCounts.mockResolvedValue({});
   });
 
   it('builds maintained compare modules while omitting category and pagination modules', async () => {
@@ -85,74 +77,6 @@ describe('loadProductsPageLinkModules', () => {
     expect(
       modules.flatMap((module) => module.items).map((item) => item.href)
     ).toContain('/smartphones/compare/samsung-galaxy-s24-ultra-vs-xiaomi-13t');
-  });
-
-  it('omits category pagination modules even when categories have multiple pages', async () => {
-    mockedInventory.mockResolvedValue([]);
-    mockedCategoryProductCounts.mockResolvedValue({ 'cat-1': 49 });
-
-    const modules = await loadProductsPageLinkModules({
-      baseUrl: 'https://ogabassey.com',
-      merchantId: 'merchant-1',
-      productTotalPages: 1,
-      categories: [
-        {
-          id: 'cat-1',
-          slug: 'smartphones',
-          canonicalSlug: 'smartphones',
-          name: 'Smartphones',
-          description: null,
-          image_url: null,
-          is_active: true,
-          parent_id: null,
-        },
-      ],
-    });
-
-    expect(modules.some((module) => module.id === 'category-pages')).toBe(
-      false
-    );
-  });
-
-  it('handles category product count loading failure gracefully without emitting catalog-categories', async () => {
-    const consoleSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-    try {
-      mockedInventory.mockResolvedValue([]);
-      mockedCategoryProductCounts.mockRejectedValue(new Error('count failed'));
-
-      const modules = await loadProductsPageLinkModules({
-        baseUrl: 'https://ogabassey.com',
-        merchantId: 'merchant-1',
-        productTotalPages: 1,
-        categories: [
-          {
-            id: 'cat-1',
-            slug: 'smartphones',
-            canonicalSlug: 'smartphones',
-            name: 'Smartphones',
-            description: null,
-            image_url: null,
-            is_active: true,
-            parent_id: null,
-          },
-        ],
-      });
-
-      expect(modules.some((module) => module.id === 'catalog-categories')).toBe(
-        false
-      );
-      expect(modules.some((module) => module.id === 'category-pages')).toBe(
-        false
-      );
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Failed to load category product counts',
-        expect.objectContaining({ merchantId: 'merchant-1' })
-      );
-    } finally {
-      consoleSpy.mockRestore();
-    }
   });
 
   it('returns empty modules when category inventory loading fails and no compare links are formed', async () => {

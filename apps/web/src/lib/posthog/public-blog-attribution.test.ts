@@ -96,6 +96,8 @@ describe('lightweight blog acquisition payload', () => {
     'https://example.com/private',
     'a'.repeat(81),
     'campaign-08012345678',
+    '080-123-4567',
+    '080_123_4567',
   ])('drops unsafe campaign value %s', (value) => {
     capturePublicBlogPageview(
       env,

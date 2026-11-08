@@ -10,7 +10,7 @@ export interface PublicBlogAttribution {
 const CAMPAIGN_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign'] as const;
 // Campaign taxonomy tokens only; exclude free text, URLs, emails and phone-like values.
 const CAMPAIGN_TOKEN = /^[a-z0-9][a-z0-9_-]{0,79}$/i;
-const PHONE_LIKE = /\d{7}/;
+const PHONE_LIKE = /\d(?:[-_]*\d){6,}/;
 let documentAttribution:
   | { origin: string; properties: PublicBlogAttribution }
   | undefined;

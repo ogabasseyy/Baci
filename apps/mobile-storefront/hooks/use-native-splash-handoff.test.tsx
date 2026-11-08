@@ -145,3 +145,16 @@ it('ignores late intro completion after unmount', async () => {
   expect(markStartupTiming).not.toHaveBeenCalledWith('native_intro_completed');
   expect(mockHide).not.toHaveBeenCalled();
 });
+
+it('records only the first layout even when callbacks arrive in the same batch', () => {
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: false, ready: true })
+  );
+  act(() => {
+    result.current.onFirstLayout();
+    result.current.onFirstLayout();
+  });
+  act(() => result.current.onFirstLayout());
+  expect(markStartupTiming).toHaveBeenCalledTimes(1);
+  expect(markStartupTiming).toHaveBeenCalledWith('root_first_layout');
+});

@@ -16,6 +16,7 @@ export function useNativeSplashHandoff({
   const [showSplash, setShowSplash] = useState(initialVisible);
   const [timedOut, setTimedOut] = useState(false);
   const [hasLayout, setHasLayout] = useState(false);
+  const firstLayoutRecorded = useRef(false);
   const hidePromiseRef = useRef<Promise<void> | null>(null);
   const intro = useNativeSplashIntro(initialVisible);
 
@@ -59,7 +60,8 @@ export function useNativeSplashHandoff({
   }, [showSplash, timedOut, ready, hasLayout, intro.settled, intro.completed]);
 
   const onFirstLayout = () => {
-    if (!intro.settled) return;
+    if (!intro.settled || firstLayoutRecorded.current) return;
+    firstLayoutRecorded.current = true;
     markStartupTiming('root_first_layout');
     setHasLayout(true);
   };

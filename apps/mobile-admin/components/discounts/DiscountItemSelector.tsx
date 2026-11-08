@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -116,7 +117,7 @@ export function DiscountItemSelector({
   }, [visible, merchant?.id, type]);
 
   useEffect(() => {
-    if (_fetchError) {
+    if (_fetchError && Platform.OS === 'ios') {
       AccessibilityInfo.announceForAccessibility(_fetchError);
     }
   }, [_fetchError]);

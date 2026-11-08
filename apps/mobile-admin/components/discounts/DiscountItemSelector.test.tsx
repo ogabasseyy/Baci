@@ -193,7 +193,8 @@ describe('DiscountItemSelector', () => {
     expect(mocks.listProps.removeClippedSubviews).toBe(true);
   });
 
-  it('renders error feedback when selectable items fetch fails', async () => {
+  it('renders error feedback and announces for VoiceOver on iOS when fetch fails', async () => {
+    mocks.platform.OS = 'ios';
     mocks.fetchSelectableItems.mockRejectedValue(new Error('fetch failed'));
 
     render(
@@ -214,6 +215,29 @@ describe('DiscountItemSelector', () => {
       expect(mocks.announceForAccessibility).toHaveBeenCalledWith(
         'Failed to load items'
       );
+    });
+  });
+
+  it('renders error feedback without duplicate announcement on Android when fetch fails', async () => {
+    mocks.platform.OS = 'android';
+    mocks.fetchSelectableItems.mockRejectedValue(new Error('fetch failed'));
+
+    render(
+      <DiscountItemSelector
+        initialIds={[]}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+        type="product"
+        visible={true}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load items')).toBeInTheDocument();
+      const alertElement = screen.getByRole('alert');
+      expect(alertElement).toBeInTheDocument();
+      expect(alertElement).toHaveAttribute('aria-live', 'assertive');
+      expect(mocks.announceForAccessibility).not.toHaveBeenCalled();
     });
   });
 });

@@ -8,17 +8,7 @@
 \ir ../../../../../supabase/migrations/20261008093600_primary_bank_inbox_expiry_drain.sql
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093700_primary_bank_inbox_unsettled_deletion_block.sql
-\ir ../../../../../supabase/migrations/20261108153000_restrict_piggyvest_card_internal_routines.sql
-\ir ../../../../../supabase/tests/piggyvest_card_internal_routine_grants.sql
-SET SESSION AUTHORIZATION baci_primary_card_authorizer;
-DO $$ DECLARE fixture record; BEGIN
- FOR fixture IN SELECT * FROM public.custody_fixture LOOP
-  IF (piggyvest_primary_card.read_operation(fixture.scope,fixture.operation_id)->>'operationId') IS DISTINCT FROM fixture.operation_id::text THEN
-   RAISE EXCEPTION 'card operation unreadable after internal ACL change';
-  END IF;
- END LOOP;
-END $$;
-RESET SESSION AUTHORIZATION;
+\ir primary-wallet-bank-card-acl.inc.sql
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
 CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
 CREATE ROLE baci_primary_bank_worker LOGIN VALID UNTIL '2099-01-01T00:00:00Z';

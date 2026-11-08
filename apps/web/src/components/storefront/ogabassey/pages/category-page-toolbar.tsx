@@ -41,7 +41,7 @@ export function CategoryPageToolbar({
         <ol className="flex items-center">
           <li>
             <Link
-              href={asRoute(basePath || '')}
+              href={asRoute(basePath || '/')}
               className="transition-colors hover:text-store-primary"
             >
               Home

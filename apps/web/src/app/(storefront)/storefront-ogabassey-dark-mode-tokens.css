@@ -51,11 +51,26 @@
        every OgaBassey route, not only the home hero. */
     body:has(.storefront-variant-ogabassey.storefront-mode-system),
     body:has([data-ogabassey-home-lcp-shell]),
+    body:has([data-ogabassey-home-hero-reserve-fallback]),
     .storefront-ppr-static-shell:has(
         .storefront-variant-ogabassey.storefront-mode-system
       ),
-    .storefront-ppr-static-shell:has([data-ogabassey-home-lcp-shell]) {
+    .storefront-ppr-static-shell:has([data-ogabassey-home-lcp-shell]),
+    .storefront-ppr-static-shell:has(
+        [data-ogabassey-home-hero-reserve-fallback]
+      ) {
       background-color: #0a0a0a;
+      color-scheme: dark;
+      --store-background: #0a0a0a !important;
+      --store-background-text: #f9fafb !important;
+      --store-foreground: #f9fafb !important;
+      --store-secondary: #1a1a1a !important;
+      --store-secondary-text: #ffffff !important;
+      --store-border: #1f2937 !important;
+      --store-surface: #1a1a1a !important;
+      --ogabassey-surface: #1a1a1a !important;
+      --ogabassey-surface-text: #f9fafb !important;
+      --ogabassey-border: #1f2937 !important;
     }
 
     .storefront-variant-ogabassey.storefront-mode-system,

@@ -1292,7 +1292,7 @@ describe('Middleware Proxy', () => {
       );
     });
 
-    it('does not hard-404 query-param product URLs even when the slug is reported missing', async () => {
+    it('hard-404s query-param product URLs when the slug is reported missing', async () => {
       mockMissing(true);
       const req = new NextRequest(
         'https://ogabassey.com/smartphones/totally-made-up?utm_source=email'
@@ -1301,7 +1301,8 @@ describe('Middleware Proxy', () => {
 
       const res = await proxy(req);
 
-      expect(res.status).not.toBe(404);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('X-Robots-Tag')).toBe('noindex, follow');
     });
 
     it('falls through (rewrite, not 404) when the product slug exists', async () => {
@@ -1533,7 +1534,7 @@ describe('Middleware Proxy', () => {
       );
     });
 
-    it('does not hard-404 an empty hub on param URLs and skips the status lookup entirely', async () => {
+    it('hard-404s an empty hub on param URLs', async () => {
       compareHubStatusMock.mockResolvedValue({ kind: 'empty' });
       const req = new NextRequest(
         'https://ogabassey.com/printers/compare?utm_source=email'
@@ -1542,8 +1543,9 @@ describe('Middleware Proxy', () => {
 
       const res = await proxy(req);
 
-      expect(res.status).not.toBe(404);
-      expect(compareHubStatusMock).not.toHaveBeenCalled();
+      expect(res.status).toBe(404);
+      expect(res.headers.get('X-Robots-Tag')).toBe('noindex, follow');
+      expect(compareHubStatusMock).toHaveBeenCalled();
     });
 
     it('falls through when the hub status is renderable-or-unknown (fail-open default)', async () => {

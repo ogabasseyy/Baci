@@ -1,7 +1,33 @@
 import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
+import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
 import { resolveRouteIdentifier } from '@/lib/storefront-route-identifier';
+
+export const STOREFRONT_DISALLOWED_PATHS = [
+  '/api/',
+  '/checkout/',
+  '/account/login/',
+  '/cart',
+  '/wishlist',
+  '/account/',
+  '/my-account/',
+  '/delete-account',
+  '/receipts',
+  '/wallet',
+  '/order-success',
+  '/track-order',
+  '/unlock-orders',
+  '/member-status',
+  '/reviews',
+  '/repair/status',
+  '/pages/rewards',
+  '/blog/shopdetail/',
+  '/blog/zhHant/',
+  '/blog/product/',
+  '/*?*wc-ajax=*',
+  '/*?*add-to-cart=*',
+] as const;
 
 function parseHostHeader(hostHeader: string) {
   try {
@@ -43,7 +69,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     normalizedHost === 'localhost' ||
     normalizedHost === '127.0.0.1';
 
-  // Merchant storefronts only need minimal disallows (no admin routes exist)
+  // Merchant storefronts block private/account/commerce endpoints and legacy traps
   // Platform domain needs full protection of admin/auth routes
   const disallowedPaths = isPlatformDomain
     ? [
@@ -57,22 +83,17 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         '/blog/shopdetail/',
         '/blog/zhHant/',
         '/blog/product/',
-        '/blog/category/',
         '/*?*wc-ajax=*',
         '/*?*add-to-cart=*',
       ]
-    : [
-        // Merchant subdomains/custom domains: only block API and internal paths
-        '/api/',
-        '/checkout/',
-        '/account/login/',
-      ];
+    : [...STOREFRONT_DISALLOWED_PATHS];
 
   // For storefront domains, only advertise /blog/sitemap.xml when the merchant
-  // has the blog feature enabled. Otherwise robots.txt points crawlers at a
-  // 404 route (all /blog/* pages short-circuit on !blog_enabled), wasting
-  // crawl budget and creating SEO trust issues.
+  // has the blog feature enabled, and /sitemap/repairs.xml when the repairs
+  // catalogue is enabled. Otherwise robots.txt points crawlers at a 404 route,
+  // wasting crawl budget and creating SEO trust issues.
   let blogEnabled = false;
+  let repairsEnabled = false;
   if (!isPlatformDomain) {
     try {
       const routeIdentifier =
@@ -81,6 +102,11 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         const merchant = await getMerchantByIdentifier(routeIdentifier);
         if (merchant?.id) {
           blogEnabled = Boolean(merchant.feature_settings?.blog_enabled);
+          repairsEnabled = isRepairsCatalogEnabled({
+            businessType: merchant.business_type,
+            repairsCatalogEnabled:
+              merchant.feature_settings?.repairs_catalog_enabled,
+          });
         }
       }
     } catch (error) {
@@ -90,23 +116,20 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
 
   const sitemap = isPlatformDomain
     ? `${storeUrl}/sitemap.xml`
-    : blogEnabled
-      ? [
-          `${storeUrl}/sitemap/static.xml`,
-          `${storeUrl}/sitemap/products.xml`,
-          `${storeUrl}/sitemap/categories.xml`,
-          `${storeUrl}/sitemap/brand-authority.xml`,
-          `${storeUrl}/sitemap/commercial-support.xml`,
-          `${storeUrl}/blog/sitemap.xml`,
-          `${storeUrl}/blog/news-sitemap.xml`,
-        ]
-      : [
-          `${storeUrl}/sitemap/static.xml`,
-          `${storeUrl}/sitemap/products.xml`,
-          `${storeUrl}/sitemap/categories.xml`,
-          `${storeUrl}/sitemap/brand-authority.xml`,
-          `${storeUrl}/sitemap/commercial-support.xml`,
-        ];
+    : [
+        `${storeUrl}/sitemap/static.xml`,
+        `${storeUrl}/sitemap/products.xml`,
+        `${storeUrl}/sitemap/categories.xml`,
+        `${storeUrl}/sitemap/brand-authority.xml`,
+        `${storeUrl}/sitemap/commercial-support.xml`,
+        ...(repairsEnabled ? [`${storeUrl}/sitemap/repairs.xml`] : []),
+        ...(blogEnabled
+          ? [
+              `${storeUrl}/blog/sitemap.xml`,
+              `${storeUrl}/blog/news-sitemap.xml`,
+            ]
+          : []),
+      ];
 
   return {
     rules: [

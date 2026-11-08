@@ -179,3 +179,11 @@
 **Learning:** React Native views used as error banners need both `accessibilityRole="alert"` and `accessibilityLiveRegion="polite"` to ensure screen readers announce dynamic error messages when they appear.
 **Action:** Always add `accessibilityRole="alert"` and `accessibilityLiveRegion="polite"` to dynamic error banner views in React Native, and verify with a role-based test `getByRole('alert')`.
 **Source:** Codebase standards for dynamic error feedback
+## 2025-02-23 — Fix accessibilityRole conflict with LiveRegion
+**Learning:** Using `accessibilityRole="alert"` inherently implies an assertive live region. To implement a non-interruptive ("polite") announcement, `accessibilityRole="status"` should be used alongside `accessibilityLiveRegion="polite"`.
+**Action:** Always match `accessibilityRole="status"` with `accessibilityLiveRegion="polite"` when building non-interruptive dynamic banners, and map `accessibilityLiveRegion` to `aria-live` in test mocks to verify both attributes.
+**Source:** Codebase standards for dynamic error feedback
+## 2025-02-23 — Use assertive live regions for React Native alert roles
+**Learning:** In React Native, `accessibilityRole="alert"` corresponds to the assertive live region behavior. The value `"status"` is not a valid `accessibilityRole`.
+**Action:** When adding error feedback banners, use `accessibilityRole="alert"` and `accessibilityLiveRegion="assertive"`. Do not use `"status"`.
+**Source:** Codebase standards for dynamic error feedback

@@ -167,11 +167,22 @@ vi.mock('react-native', () => {
     ),
     View: ({
       children,
+      accessibilityLiveRegion,
       accessibilityRole,
     }: {
       children?: ReactNode;
+      accessibilityLiveRegion?: 'assertive' | 'none' | 'polite';
       accessibilityRole?: string;
-    }) => <div role={accessibilityRole}>{children}</div>,
+    }) => (
+      <div
+        aria-live={
+          accessibilityLiveRegion === 'none' ? 'off' : accessibilityLiveRegion
+        }
+        role={accessibilityRole}
+      >
+        {children}
+      </div>
+    ),
   };
 });
 
@@ -285,7 +296,9 @@ describe('DiscountItemSelector', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load items')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toBeInTheDocument();
+      const alertElement = screen.getByRole('alert');
+      expect(alertElement).toBeInTheDocument();
+      expect(alertElement).toHaveAttribute('aria-live', 'assertive');
     });
   });
 });

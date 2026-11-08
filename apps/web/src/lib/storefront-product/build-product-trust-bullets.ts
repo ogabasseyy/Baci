@@ -40,14 +40,10 @@ export function buildProductTrustBullets(
   }
 
   if (
-    input.currentProduct.stock !== undefined &&
-    input.currentProduct.stock !== null
+    typeof input.currentProduct.stock === 'number' &&
+    input.currentProduct.stock > 0
   ) {
-    bullets.push(
-      input.currentProduct.stock > 0
-        ? 'In stock for immediate dispatch'
-        : 'Currently out of stock'
-    );
+    bullets.push('In stock for immediate dispatch');
   }
 
   const specHighlights = formatVerifiedProductSpecHighlights({

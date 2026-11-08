@@ -47,16 +47,22 @@ describe('buildProductTrustBullets', () => {
     expect(bullets).toEqual(['Available in Brand New condition']);
   });
 
-  it('adds in-stock bullet when stock > 0 and out-of-stock when stock <= 0', () => {
+  it('adds in-stock bullet when stock > 0 and omits stock claim when parent stock <= 0 (so option-backed products are not falsely marked out of stock)', () => {
     expect(buildProductTrustBullets(makeInput({ stock: 4 }))).toContain(
       'In stock for immediate dispatch'
     );
 
-    expect(buildProductTrustBullets(makeInput({ stock: 0 }))).toContain(
+    expect(buildProductTrustBullets(makeInput({ stock: 0 }))).not.toContain(
       'Currently out of stock'
     );
 
-    expect(buildProductTrustBullets(makeInput({ stock: -1 }))).toContain(
+    expect(
+      buildProductTrustBullets(
+        makeInput({ stock: 0, has_condition_offers: true })
+      )
+    ).not.toContain('Currently out of stock');
+
+    expect(buildProductTrustBullets(makeInput({ stock: -1 }))).not.toContain(
       'Currently out of stock'
     );
   });

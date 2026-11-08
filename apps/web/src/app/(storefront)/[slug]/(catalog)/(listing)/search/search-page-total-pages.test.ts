@@ -4,6 +4,7 @@ import { searchPageTotalPages } from './search-page-total-pages';
 it('bounds pages and handles failed or empty results', () => {
   const result = {
     count: 45,
+    didYouMean: null,
     totalCount: 45,
     products: [],
     productIds: [],

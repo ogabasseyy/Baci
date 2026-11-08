@@ -7,11 +7,18 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
+import { resolveAdvertisedVariantImage } from './advertised-phone-price-projection';
+import { getPublicProductVariantsByProductIds } from './cached-data';
+import { checkRefinedPhoneMatches } from './check-refined-phone-matches';
 import { normalizeProduct } from './normalize-product';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
 import type { StorefrontSearchSupabase } from './storefront-search';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';
 import type { StorefrontSearchProductsPage } from './storefront-search-products';
+import {
+  buildStorefrontVariantTitle,
+  getVariantConnectivityDisclosure,
+} from './storefront-variant-disclosure';
 import { createClient } from './supabase/server';
 
 async function findRefinedDidYouMean({
@@ -121,32 +128,63 @@ export async function getStorefrontRefinedSearchProducts(args: {
   // (deactivated, unpublished, or RLS-filtered mid-request). Skip it and
   // render the surviving matches: failing the whole page over one stale
   // id is worse than a self-healing off-by-one count.
-  const products = matches.flatMap((match) => {
-    const row = rows.get(match.productId);
-    if (!row) return [];
-    const product = normalizeProduct(row as never);
-    // Keep price and option identity aligned with global SQL price sorting;
-    // unconstrained browsing still advertises every available condition.
-    return [
-      {
-        ...product,
-        price: match.price ?? product.price,
-        condition: match.condition ?? product.condition,
-        // Collapse the choice set only for an explicit condition filter.
-        // A price-only refinement matches the single SQL-ranked best price,
-        // but sibling conditions of the same product can also satisfy the
-        // bound: collapsing would hide them from the card/PDP choice set.
-        available_conditions:
-          match.condition && args.refinements.condition !== undefined
-            ? [match.condition]
-            : product.available_conditions,
-        searchMatch: match,
-      },
-    ];
-  });
+  const checkedMatches = await checkRefinedPhoneMatches(
+    args.merchantId,
+    args.query,
+    matches,
+    rows,
+    getPublicProductVariantsByProductIds
+  );
+  const products = checkedMatches.flatMap(
+    ({ match, restrictedVariant, verifiedVariant }) => {
+      const row = rows.get(match.productId);
+      if (!row) return [];
+      const product = normalizeProduct(row as never);
+      const selectedImage = verifiedVariant
+        ? resolveAdvertisedVariantImage(verifiedVariant)
+        : undefined;
+      // Keep price and option identity aligned with global SQL price sorting;
+      // unconstrained browsing still advertises every available condition.
+      return [
+        {
+          ...product,
+          ...(match.variantId ? { compare_at_price: null } : {}),
+          ...(selectedImage
+            ? {
+                image: selectedImage,
+                imageLarge: selectedImage,
+                images: [selectedImage],
+              }
+            : {}),
+          ...(restrictedVariant
+            ? {
+                name: buildStorefrontVariantTitle(
+                  product.name,
+                  restrictedVariant
+                ),
+                description:
+                  getVariantConnectivityDisclosure(restrictedVariant) ??
+                  product.description,
+              }
+            : {}),
+          price: match.price ?? product.price,
+          condition: match.condition ?? product.condition,
+          // Collapse the choice set only for an explicit condition filter.
+          // A price-only refinement matches the single SQL-ranked best price,
+          // but sibling conditions of the same product can also satisfy the
+          // bound: collapsing would hide them from the card/PDP choice set.
+          available_conditions:
+            match.condition && args.refinements.condition !== undefined
+              ? [match.condition]
+              : product.available_conditions,
+          searchMatch: match,
+        },
+      ];
+    }
+  );
   return {
-    // Total minus rows that vanished mid-read: the RPC snapshot total
-    // overcounts the visible page by exactly the skipped rows.
+    // The SQL total includes stale or policy-excluded matches. Subtract only
+    // known current-window omissions; this is not a new eligible global count.
     count: Math.max(0, matches[0].total - (matches.length - products.length)),
     // Skipped rows stay ranked, so page arithmetic uses the raw total.
     totalCount: matches[0].total,

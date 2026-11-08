@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { getPrimaryProductImage } from '@/lib/product-image';
+import { projectStandardListingRows } from '@/lib/project-standard-listing-rows';
 import { storefrontProductFilters } from '@/lib/storefront-product-filters';
 import {
   buildStorefrontProductsCacheKeyParts,
@@ -220,13 +221,27 @@ function createCachedProductsFetcher(
 
           offset += requestedCandidateCount;
         }
-        return filteredProducts
-          .slice(0, targetProductCount)
-          .map(storefrontProductsRouteData.mapProduct);
+        return (
+          await projectStandardListingRows(
+            merchantId,
+            filteredProducts.slice(0, targetProductCount),
+            {
+              condition: filters.condition,
+              minPrice: filters.min_price,
+              maxPrice: filters.max_price,
+            }
+          )
+        ).map(storefrontProductsRouteData.mapProduct);
       }
 
       const products = await fetchProductRows();
-      return products.map(storefrontProductsRouteData.mapProduct);
+      return (
+        await projectStandardListingRows(merchantId, products, {
+          condition: filters.condition,
+          minPrice: filters.min_price,
+          maxPrice: filters.max_price,
+        })
+      ).map(storefrontProductsRouteData.mapProduct);
     },
     cacheKeyParts,
     {
@@ -243,7 +258,9 @@ async function fetchProductsByIds(
 ) {
   const products = await fetchProductRowsByIds(merchantId, ids, options);
 
-  return products.map(storefrontProductsRouteData.mapProduct);
+  return (await projectStandardListingRows(merchantId, products)).map(
+    storefrontProductsRouteData.mapProduct
+  );
 }
 
 async function fetchProductRowsByIds(
@@ -500,9 +517,13 @@ export async function GET(request: NextRequest) {
           (order.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
       );
       const visibleOffset = usesInMemoryFilters ? (offset ?? 0) : 0;
-      const visibleProducts = filteredRows
-        .slice(visibleOffset, visibleOffset + requestedLimit)
-        .map(storefrontProductsRouteData.mapProduct);
+      const visibleProducts = (
+        await projectStandardListingRows(
+          merchantId,
+          filteredRows.slice(visibleOffset, visibleOffset + requestedLimit),
+          { condition, minPrice: min_price, maxPrice: max_price }
+        )
+      ).map(storefrontProductsRouteData.mapProduct);
       const responseCount = usesInMemoryFilters
         ? filteredRows.length
         : (dbCount ?? filteredRows.length);

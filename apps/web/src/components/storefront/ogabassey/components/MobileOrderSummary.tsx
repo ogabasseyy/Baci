@@ -10,6 +10,7 @@ import type { CartItem } from '@/hooks/cart';
 import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { useCurrency } from '@/hooks/use-currency';
 import type { DeliveryMethod } from '../pages/checkout/types';
+import { useMobileKeyboardOpen } from './use-mobile-keyboard-open';
 
 export interface MobileOrderSummaryProps {
     cart: CartItem[];
@@ -18,6 +19,9 @@ export interface MobileOrderSummaryProps {
     deliveryMethod: DeliveryMethod | null;
     giftWrappingCost: number;
     walletBalance: number;
+    showWalletControl?: boolean;
+    walletSelected?: boolean;
+    setPayWithWallet?: (value: boolean) => void;
     payWithWallet: boolean;
     walletAmountUsed: number;
     remainingAmount: number;
@@ -31,7 +35,10 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
     deliveryCost,
     deliveryMethod,
     giftWrappingCost,
-    walletBalance: _walletBalance,
+    walletBalance,
+    showWalletControl = false,
+    walletSelected,
+    setPayWithWallet,
     payWithWallet,
     walletAmountUsed,
     remainingAmount,
@@ -39,27 +46,29 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
     discountAmount = 0,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const keyboardOpen = useMobileKeyboardOpen();
     const orderSummaryId = useId();
     const { formatCurrencyAuto, currencyCode } = useCurrency();
 
     return (
-        <div className="lg:hidden bg-store-background border-b border-store-background-text/15">
-            <div className="max-w-[1400px] mx-auto px-4">
+        <aside aria-label="Order summary" hidden={keyboardOpen} className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-store-background border-t border-store-background-text/15 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)]">
+            <div className="max-w-[1400px] mx-auto px-4 flex flex-col-reverse">
                 {/* Toggle Header */}
                 <button
                     type="button"
                     aria-expanded={isExpanded}
                     aria-controls={orderSummaryId}
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="w-full py-4 flex items-center justify-between text-sm"
+                    className="w-full py-3 flex items-center justify-between text-sm"
                 >
                     <div className="flex items-center gap-2 text-store-primary font-medium">
                         <ShoppingBag size={18} />
-                        <span>{isExpanded ? 'Hide' : 'Show'} order summary</span>
+                        <span>{isExpanded ? 'Hide' : 'View'} summary</span>
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </div>
-                    <span className="font-bold text-store-background-text text-lg">
-                        {formatCurrencyAuto(remainingAmount)}
+                    <span className="text-right text-store-background-text">
+                        <span className="block font-bold text-lg">{formatCurrencyAuto(remainingAmount)}</span>
+                        {payWithWallet && walletAmountUsed > 0 && <span className="block text-xs text-store-background-text/60">Wallet credit applied</span>}
                     </span>
                 </button>
 
@@ -100,6 +109,13 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                     </div>
 
                     <div className="border-t border-dashed border-store-background-text/15 my-4" />
+
+                    {showWalletControl && setPayWithWallet && (
+                        <div className="flex items-center justify-between gap-4 pb-4 text-store-background-text">
+                            <div><p className="text-sm font-semibold">Use wallet credit</p><p className="text-xs text-store-background-text/70">{formatCurrencyAuto(walletBalance)} available</p></div>
+                            <button type="button" role="switch" aria-label="Use wallet credit" aria-checked={walletSelected ?? payWithWallet} onClick={() => setPayWithWallet(!(walletSelected ?? payWithWallet))} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${(walletSelected ?? payWithWallet) ? 'bg-store-primary' : 'bg-store-background-text/30'}`}><span className={`absolute left-1 top-1 size-5 rounded-full bg-white transition-transform ${(walletSelected ?? payWithWallet) ? 'translate-x-5' : ''}`} /></button>
+                        </div>
+                    )}
 
                     {/* Cost Breakdown */}
                     <div className="space-y-2 text-sm">
@@ -152,6 +168,6 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                     </div>
                 </div>
             </div>
-        </div>
+        </aside>
     );
 };

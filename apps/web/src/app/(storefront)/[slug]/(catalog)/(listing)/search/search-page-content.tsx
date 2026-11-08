@@ -152,28 +152,30 @@ export async function SearchPageContent({
               {/* Keyed by route query so client-side navigation remounts the
           form and draft session, resetting the controlled input and any
           validation error for the new results. */}
-              <SearchPageForm
-                key={query}
-                action={searchBasePath}
-                defaultQuery={query}
-                pathPrefix={pathPrefix}
-                currency={merchantCurrency}
-                assistEnabled={
-                  process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
-                  merchant.is_published &&
-                  merchant.slug === getConfiguredAgenticMerchantSlug()
-                }
-                refinements={refinements}
-                suggestionProducts={
-                  !searchFailed && merchant.slug === 'ogabassey'
-                    ? effectiveResult.products.map((product) => ({
-                        price: product.price,
-                        condition:
-                          product.searchMatch?.condition ?? product.condition,
-                      }))
-                    : []
-                }
-              />
+              {merchant.slug !== 'ogabassey' && (
+                <SearchPageForm
+                  key={query}
+                  action={searchBasePath}
+                  defaultQuery={query}
+                  pathPrefix={pathPrefix}
+                  currency={merchantCurrency}
+                  assistEnabled={
+                    process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
+                    merchant.is_published &&
+                    merchant.slug === getConfiguredAgenticMerchantSlug()
+                  }
+                  refinements={refinements}
+                  suggestionProducts={
+                    !searchFailed && merchant.slug === 'ogabassey'
+                      ? effectiveResult.products.map((product) => ({
+                          price: product.price,
+                          condition:
+                            product.searchMatch?.condition ?? product.condition,
+                        }))
+                      : []
+                  }
+                />
+              )}
 
               {!searchFailed && effectiveResult.didYouMean && (
                 <p className="mt-4 text-sm text-store-background-text/55">

@@ -124,6 +124,15 @@ describe('finance provider option', () => {
     expect(screen.queryByRole('region')).toBeNull();
   });
 
+  it('recovers from a temporary bank-list failure without reselecting the provider', async () => {
+    fetchMock.mockResolvedValueOnce(failureResponse()).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    renderOption('oxygen', true);
+    expect(await screen.findByText('Bank list is temporarily unavailable.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Supported banks'));
+    fireEvent.click(screen.getByRole('button', { name: /retry bank list/i }));
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+  });
+
   it('reports the bank list as unavailable when the payload fails validation', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

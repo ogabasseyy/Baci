@@ -81,6 +81,34 @@ function createSearchProducts(count: number): NormalizedProduct[] {
 }
 
 describe('SearchPageContent', () => {
+  it('does not render a duplicate results search on Ogabassey', async () => {
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'ogabassey.com'],
+        ['x-pathname', '/search'],
+      ])
+    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_name: 'Shop',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 1,
+      products: createSearchProducts(1),
+      query: 'iphone',
+    } as never);
+    render(
+      (await SearchPageContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+        searchParams: Promise.resolve({ q: 'iphone' }),
+      })) as React.ReactElement
+    );
+    expect(
+      screen.queryByRole('form', { name: 'Edit search' })
+    ).not.toBeInTheDocument();
+  });
   it.each([
     'ogabassey',
     'another-store',
@@ -141,7 +169,7 @@ describe('SearchPageContent', () => {
     );
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       id: 'merchant-1',
-      slug: 'ogabassey',
+      slug: 'another-store',
       custom_domain: 'shop.example.ng',
       business_name: 'Ogabassey',
       payout_currency: 'NGN',
@@ -156,7 +184,7 @@ describe('SearchPageContent', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(
       (await SearchPageContent({
-        params: Promise.resolve({ slug: 'ogabassey' }),
+        params: Promise.resolve({ slug: 'another-store' }),
         searchParams: Promise.resolve({ q: 'iphnoe' }),
       })) as React.ReactElement
     );
@@ -167,16 +195,16 @@ describe('SearchPageContent', () => {
     fireEvent.submit(input.closest('form') as HTMLFormElement);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       query: 'ipad',
-      pathPrefix: '/ogabassey',
+      pathPrefix: '/another-store',
       source: 'results-form',
     });
     const suggestion = screen.getByRole('link', { name: 'iphone' });
-    expect(suggestion).toHaveAttribute('href', '/ogabassey/search?q=iphone');
+    expect(suggestion).toHaveAttribute('href', '/another-store/search?q=iphone');
     suggestion.addEventListener('click', (event) => event.preventDefault());
     fireEvent.click(suggestion);
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
       query: 'iphone',
-      pathPrefix: '/ogabassey',
+      pathPrefix: '/another-store',
       source: 'did-you-mean',
     });
   });

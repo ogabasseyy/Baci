@@ -2,6 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+let mockUser: { id: string } | null = null;
+const mockPush = vi.fn();
+vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
+vi.mock('./CheckoutIdentityModal', () => ({ CheckoutIdentityModal: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div role="dialog">Sign in or continue as guest</div> : null }));
+
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('@/env', () => ({
@@ -90,7 +95,7 @@ vi.mock('@/lib/routes', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('next/image', () => ({
@@ -167,6 +172,7 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null;
     mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
@@ -184,6 +190,20 @@ describe('CartSidebar', () => {
         negotiationStatus: 'accepted' as const,
       },
     ];
+  });
+
+  it('shows the identity choice from the drawer for a guest', () => {
+    render(<CartSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Sign in or continue as guest');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('takes a signed-in customer directly to checkout', () => {
+    mockUser = { id: 'user-1' };
+    render(<CartSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
+    expect(mockPush).toHaveBeenCalledWith('/test-store/checkout');
   });
 
   it('shows cart totals without the shipping placeholder', () => {

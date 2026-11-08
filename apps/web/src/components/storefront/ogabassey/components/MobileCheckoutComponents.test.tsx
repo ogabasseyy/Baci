@@ -33,16 +33,32 @@ vi.mock('@/hooks/use-currency', () => ({
 }));
 
 describe('MobileOrderSummary', () => {
+  it('keeps the summary at the bottom and hides it while typing', () => {
+    render(<><input aria-label="Email" /><MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={0} deliveryMethod="pickup" giftWrappingCost={0} payWithWallet={false} remainingAmount={7000} walletAmountUsed={0} walletBalance={0} /></>);
+    const bar = screen.getByRole('button', { name: /view summary/i }).closest('aside');
+    expect(bar).toHaveClass('fixed', 'bottom-0');
+    fireEvent.focusIn(screen.getByRole('textbox', { name: 'Email' }));
+    expect(bar).not.toBeVisible();
+    fireEvent.focusOut(screen.getByRole('textbox', { name: 'Email' }));
+    expect(bar).toBeVisible();
+  });
+  it('lets a customer turn wallet credit off in the mobile summary', () => {
+    const setPayWithWallet = vi.fn();
+    render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={0} deliveryMethod="pickup" giftWrappingCost={0} payWithWallet remainingAmount={6500} walletAmountUsed={500} walletBalance={500} showWalletControl setPayWithWallet={setPayWithWallet} />);
+    fireEvent.click(screen.getByRole('button', { name: /view summary/i }));
+    fireEvent.click(screen.getByRole('switch', { name: /use wallet credit/i }));
+    expect(setPayWithWallet).toHaveBeenCalledWith(false);
+  });
   it('itemizes the tax included in the Home Makeover payable total', () => {
     render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={3522} deliveryMethod="door" giftWrappingCost={0} payWithWallet={false} remainingAmount={11047} walletAmountUsed={0} walletBalance={0} taxAmount={525} />);
-    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    fireEvent.click(screen.getByRole('button', { name: /view summary/i }));
     expect(screen.getByText('Tax')).toBeVisible();
     expect(screen.getByText('₦525')).toBeVisible();
   });
 
   it('itemizes discounts and wallet credit separately from tax and delivery', () => {
     render(<MobileOrderSummary cart={[]} cartTotal={7000} deliveryCost={2201} deliveryMethod="door" giftWrappingCost={100} payWithWallet remainingAmount={8826} walletAmountUsed={500} walletBalance={500} taxAmount={525} discountAmount={500} />);
-    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    fireEvent.click(screen.getByRole('button', { name: /view summary/i }));
     expect(screen.getByText('Discount')).toBeVisible();
     expect(screen.getByText('Wallet Credit')).toBeVisible();
     expect(screen.getAllByText('-₦500')).toHaveLength(2);
@@ -64,7 +80,7 @@ describe('MobileOrderSummary', () => {
     );
 
     fireEvent.click(
-      screen.getByRole('button', { name: /show order summary/i })
+      screen.getByRole('button', { name: /view summary/i })
     );
 
     expect(screen.getByAltText('Baci Phone').parentElement).toHaveClass(

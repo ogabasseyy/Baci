@@ -4,6 +4,7 @@ import { ShoppingBag, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { useAuthSafe } from '@/contexts/auth-context';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useSafeTimeout } from '@/hooks/use-safe-timeout';
@@ -13,6 +14,7 @@ import { AdUnit } from './AdUnit';
 // import { ActionTooltip } from './Tooltip';
 import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
 import { CartSidebarFooter } from './cart-sidebar-footer';
+import { CheckoutIdentityModal } from './CheckoutIdentityModal';
 import { CartSidebarLineItem } from './cart-sidebar-line-item';
 import { EmptyState } from './empty-state';
 import {
@@ -76,6 +78,8 @@ export const CartSidebar: React.FC = () => {
     path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
 
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [isIdentityOpen, setIsIdentityOpen] = useState(false);
+  const auth = useAuthSafe();
   const router = useRouter();
   const scheduleTimeout = useSafeTimeout();
 
@@ -146,6 +150,10 @@ export const CartSidebar: React.FC = () => {
   if (!isCartOpen) return null;
 
   const handleCheckout = async () => {
+    if (!auth?.user) {
+      setIsIdentityOpen(true);
+      return;
+    }
     setIsCheckoutLoading(true);
     // Close the sidebar first to prevent it staying open
     setIsCartOpen(false);
@@ -256,6 +264,7 @@ export const CartSidebar: React.FC = () => {
         </div>
       </div>
 
+      <CheckoutIdentityModal isOpen={isIdentityOpen} onClose={() => setIsIdentityOpen(false)} checkoutUrl={getHref('/checkout')} onProceed={() => setIsCartOpen(false)} />
       {/* Negotiation Modal — only render when merchant context is available */}
       {negotiationState && cartMerchantContextMatches && merchant?.id && (
         <NegotiationModal

@@ -938,12 +938,16 @@ jobs:
             }
             {
               if (pending != "") {
-                if ($0 !~ /^[-*] /) print pending
+                if ($0 ~ /^[[:space:]]*$/) { blanks = blanks $0 "\n"; next }
+                if ($0 !~ /^[-*] / && $0 != "## Suggested next steps") print pending
+                printf "%s", blanks
+                blanks = ""
                 pending = ""
               }
               if (empty_finding($0)) { pending = $0; next }
               print
             }
+            END { printf "%s", blanks }
           ' "${body_file}" > "${findings_file}"
 
           if grep -qiE "${any_severity_re}" "${findings_file}" || \

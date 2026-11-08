@@ -16,9 +16,9 @@ const UNLABELLED_PRICE_RANGE =
   /^\s*[–—-]?\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[–—-]\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[.!?]?\s*$/;
 const FORM_FACTOR_SPECIFICATION = /^\s*[-‑]?\s*in\s*[-‑]?\s*[0-9٠-٩۰-۹]+\b/i;
 const LIFESPAN_QUANTITY_UNIT =
-  /^\s+(?:[\p{L}-]+\s+){0,2}(?:years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/iu;
+  /^\s+(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|every|an?|the|and|or|plus|including|warranty|guarantee|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b)[\p{L}-]+\s+){0,2}(?:years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/iu;
 const PER_DURATION_UNIT =
-  /^\s+per\s+(?:years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/i;
+  /^\s*(?:\/|\b(?:per|each|every|an?)\b\s+)(?:years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/i;
 const MODIFIED_COUNT_UNIT =
   /^\s+(?:[\p{L}-]+\s+){1,2}(?:models?|colou?rs?|options?|sizes?|picks?)\b/iu;
 // These ISO spellings are also ordinary words, unlike unambiguous usd/ngn.
@@ -229,10 +229,7 @@ export function isDurableSeoPrice(
     candidate.marker.toUpperCase() === 'PHP' &&
     /^\s+(?:and\s+)?(?:MySQL|runtime|version)\b/i.test(tail) &&
     !relation.cue &&
-    !relation.strong &&
-    !relation.commercial &&
-    !relation.predicate &&
-    !relation.purchase
+    !hasExplicitRetailContext
   )
     return false;
   // Heat-pump / HVAC coefficient of performance specifications are not Colombian pesos.
@@ -240,10 +237,7 @@ export function isDurableSeoPrice(
     candidate.marker.toUpperCase() === 'COP' &&
     /^\s+(?:efficiency|performance|coefficient)\b/i.test(tail) &&
     !relation.cue &&
-    !relation.strong &&
-    !relation.commercial &&
-    !relation.predicate &&
-    !relation.purchase &&
+    !hasExplicitRetailContext &&
     (candidate.amount === null || candidate.amount < 20)
   )
     return false;

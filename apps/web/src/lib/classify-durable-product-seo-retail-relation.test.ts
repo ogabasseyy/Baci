@@ -119,4 +119,10 @@ describe('retailRelation', () => {
     expect(second.strong).toBe(false);
     expect(second.cue).not.toBe('paired');
   });
+
+  it('avoids catastrophic backtracking on long words following price of without copulas', () => {
+    const input = `The price of ${'a'.repeat(80)} 900`;
+    const start = input.indexOf('900');
+    expect(retailRelation(input, start).predicate).toBe(false);
+  });
 });

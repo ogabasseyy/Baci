@@ -86,6 +86,8 @@ describe('getDurableProductSeoText price classification', () => {
   it.each([
     'Price: 900, 128GB storage',
     'Buy for 350000, 2-year warranty',
+    'Rental costs 900 a month.',
+    'Buy for 900 with two years warranty.',
   ])('rejects stale prices preceding comma-separated specifications: %s', (text) => {
     expect(
       getDurableProductSeoText({ text, product: { name: 'Device' } })

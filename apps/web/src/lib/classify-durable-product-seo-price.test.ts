@@ -179,4 +179,14 @@ describe('isDurableSeoPrice', () => {
     if (!candidate) throw new Error('Expected candidate');
     expect(isDurableSeoPrice(candidate, text)).toBe(true);
   });
+
+  it.each([
+    'Rental costs 900 a month.',
+    'Buy for 900 with two years warranty.',
+  ])('classifies amounts followed by billing or warranty clauses as prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
 });

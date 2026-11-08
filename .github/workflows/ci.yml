@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   # Required so the quality gate runs on merge-queue integration commits.
   # Without this, an enabled merge queue would deadlock waiting for checks
   # that never start. See the `changes` job for merge_group handling.
@@ -33,6 +34,12 @@ env:
 
 jobs:
   changes:
+    # Defer the downstream CI jobs only on the draft pilot branch.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository ||
+      github.head_ref != 'codex/draft-review-pilot' ||
+      !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     outputs:
       mobile_admin: ${{ steps.gate.outputs.mobile_admin }}
@@ -732,6 +739,13 @@ jobs:
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
+
+          # A skipped job can satisfy a required check. Keep this gate
+          # blocking until ready_for_review runs the actual checks.
+          if [[ "$CHANGES_RESULT" == "skipped" ]]; then
+            echo "::notice::CI is deferred until this pilot PR is marked ready for review."
+            exit 1
+          fi
 
           if [[ "$CHANGES_RESULT" != "success" ]]; then
             echo "changes job result: $CHANGES_RESULT"

@@ -95,7 +95,7 @@ function evaluateJobCondition(condition, outputs) {
   return Function(`"use strict"; return (${source});`)();
 }
 
-function runAggregator({ lintResult, outputs }) {
+function runAggregator({ changesResult = 'success', lintResult, outputs }) {
   const step = workflow.jobs.quality.steps.find(
     (candidate) => candidate.name === 'Verify split quality gate results'
   );
@@ -109,6 +109,7 @@ function runAggregator({ lintResult, outputs }) {
     env: {
       PATH: process.env.PATH,
       ...results,
+      CHANGES_RESULT: changesResult,
       LINT_RESULT: lintResult,
       QUIZ_DB_CHANGED: outputs.quiz_db,
       WEB_CHANGED: outputs.web,
@@ -234,4 +235,14 @@ test('stays wired into the CI contract run', async () => {
         step.run.includes('.github/scripts/resolve-ci-test-plan-config.test.mjs')
     )
   );
+});
+
+test('blocks the required Quality Gate while the pilot change detection is deferred', () => {
+  const result = runAggregator({
+    changesResult: 'skipped',
+    lintResult: 'skipped',
+    outputs: NO_CHANGES,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /CI is deferred until this pilot PR is marked ready/);
 });

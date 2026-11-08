@@ -36,7 +36,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
       <span className={styles.dot} aria-hidden="true" />
     </label>
     {selected && <details className={styles.details}><summary><span className={styles.bankBadge}><Landmark size={13} aria-hidden="true" />{items ? `${items.length} supported banks` : 'Supported banks'}</span> {items && items.length > 8 && <span className={styles.scrollHint}>Scroll ↓</span>}<ChevronDown size={17} aria-hidden="true" /></summary>
-      {items ? <div className={styles.grid} role="region" tabIndex={0} aria-label={`${title} supported banks`}>{items.map(({name,code}) => <div className={styles.bank} key={`${name}-${code}`}><FinanceBankLogo name={name} code={code}/><span>{name}</span></div>)}</div> : <div className={styles.message}>{unavailable ? <>Bank list is temporarily unavailable. <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry bank list</button></> : 'Loading supported banks…'}</div>}
+      {items ? <div className={styles.grid} role="region" tabIndex={0} aria-label={`${title} supported banks`}>{items.map(({name,code}) => <div className={styles.bank} key={`${name}-${code}`}><FinanceBankLogo name={name} code={code}/><span>{name}</span></div>)}</div> : <div className={styles.message}>{unavailable ? <>Bank list is temporarily unavailable. <button type="button" onClick={() => { setUnavailable(false); setRetry((value) => value + 1); }}>Retry bank list</button></> : 'Loading supported banks…'}</div>}
     </details>}
   </div>;
 }

@@ -926,11 +926,31 @@ jobs:
           any_severity_re='(^|\n)[[:space:]]*[-*][[:space:]]+(high|critical|major|medium|low|minor)\b[[:space:]]*:'
           any_severity_bold='(^|\n)[[:space:]]*[-*][[:space:]]+\*\*(Severity[: ]*)?(High|Critical|Major|Medium|Low|Minor)([: ]|\s+severity)?\*\*[[:space:]:]*'
 
-          if grep -qiE "${any_severity_re}" "${body_file}" || \
-             grep -qiE "${any_severity_bold}" "${body_file}"; then
+          # Jules sometimes labels an explicit absence of findings as a severity bullet.
+          # Remove only its exact standalone sentences, never arbitrary negations.
+          findings_file="${RUNNER_TEMP}/jules-findings-filtered.md"
+          # Retain a sentinel if the next line could continue its bullet.
+          awk '
+            function empty_finding(line) {
+              return line == "- **High:** No high-severity issues found." ||
+                     line == "- **Medium:** No medium-severity issues found." ||
+                     line == "- **Low:** No low-severity issues found."
+            }
+            {
+              if (pending != "") {
+                if ($0 !~ /^[-*] /) print pending
+                pending = ""
+              }
+              if (empty_finding($0)) { pending = $0; next }
+              print
+            }
+          ' "${body_file}" > "${findings_file}"
+
+          if grep -qiE "${any_severity_re}" "${findings_file}" || \
+             grep -qiE "${any_severity_bold}" "${findings_file}"; then
             echo "::error::Jules flagged findings on this PR. All findings must be addressed before merge, or add the 'bypass-ai-gate' label."
             echo "------- Flagged Findings -------"
-            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}" "${body_file}" | head -80 || true
+            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}" "${findings_file}" | head -80 || true
             exit 1
           fi
 

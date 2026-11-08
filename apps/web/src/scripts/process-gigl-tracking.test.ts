@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCli } from './process-gigl-tracking';
 
-const { mockCreateClient, mockRunMonitorBatch } = vi.hoisted(() => ({
+const {
+  mockCreateClient,
+  mockRunMonitorBatch,
+  mockCreateCache,
+  mockRunWithCache,
+} = vi.hoisted(() => ({
   mockCreateClient: vi.fn(() => ({ rpc: vi.fn() })),
   mockRunMonitorBatch: vi.fn(),
+  mockCreateCache: vi.fn(),
+  mockRunWithCache: vi.fn(),
 }));
 
 vi.mock('@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch', () => ({
@@ -11,6 +18,12 @@ vi.mock('@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch', () => ({
 }));
 vi.mock('@/lib/gigl-tracking-worker-client', () => ({
   createGiglTrackingWorkerClient: mockCreateClient,
+}));
+vi.mock('@/lib/shipping/providers/gigl-tracking-token-cache', () => ({
+  createGiglTrackingTokenCache: mockCreateCache,
+}));
+vi.mock('@/lib/shipping/providers/gigl-tracking-cache-runner', () => ({
+  runWithGiglTrackingTokenCache: mockRunWithCache,
 }));
 
 const configuredEnv: NodeJS.ProcessEnv = {
@@ -249,7 +262,9 @@ describe('process-gigl-tracking', () => {
   });
 
   it('keeps the terminal failure message when the default console logger is suppressed', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
 
     try {
       await expect(

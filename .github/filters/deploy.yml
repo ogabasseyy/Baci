@@ -96,6 +96,7 @@ tracking:
   # by the worker graph (pinned by deploy-tracking-graph.test.mjs), so
   # their staleness cannot affect the poller or the smoke.
   - 'vps-workers/deploy.sh'
+  - 'vps-workers/bin/gigl-cache-lock-exec.py'
   - 'vps-workers/bin/gigl-tracking-scoped-env.sh'
   - 'vps-workers/bin/process-gigl-tracking.sh'
   - 'vps-workers/bin/run-web-script.sh'
@@ -118,6 +119,7 @@ tracking:
   - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/nullable-supabase-rpc-argument.ts'
   - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
+  - 'apps/web/src/schemas/gigl-tracking-token-cache.ts'
   - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
   - 'apps/web/src/lib/shipping/gigl*'
   - 'apps/web/src/lib/shipping/providers/gigl*'

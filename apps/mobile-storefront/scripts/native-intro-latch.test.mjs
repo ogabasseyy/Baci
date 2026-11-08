@@ -41,6 +41,9 @@ test('native lifecycle preserves intro playback on recreation and marker configu
   const root = new URL('../../../node_modules/react-native-splash-motion/', import.meta.url);
   const android = readFileSync(new URL('android/src/main/java/com/margelo/nitro/splashmotion/SplashMotionController.kt', root), 'utf8');
   const install = android.slice(android.indexOf('  fun install('), android.indexOf('  private fun attachOverlay('));
+  assert.match(install, /setOnExitAnimationListener/);
+  assert.match(install, /setKeepOnScreenCondition/);
+  assert.match(install, /if \(installed\)/);
   assert.ok(install.indexOf('setOnExitAnimationListener') < install.indexOf('if (installed)'), 'each Activity must register the exit listener before recreation returns');
   assert.ok(install.indexOf('setKeepOnScreenCondition') < install.indexOf('if (installed)'), 'each Activity must retain the splash until the overlay is ready');
   const ios = readFileSync(new URL('ios/LottieSplashPlayer.swift', root), 'utf8');

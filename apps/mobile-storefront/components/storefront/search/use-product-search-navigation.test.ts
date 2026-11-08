@@ -19,10 +19,10 @@ function setup() {
   const onNavigate = jest.fn();
   const saveSearch = jest.fn();
   const hook = renderHook(
-    ({ isVisible }: { isVisible: boolean }) =>
+    ({ isVisible, query }: { isVisible: boolean; query?: string }) =>
       useProductSearchNavigation({
         isVisible,
-        query: ' phone ',
+        query: query ?? ' phone ',
         saveSearch,
         onClose,
         onNavigate,
@@ -31,7 +31,13 @@ function setup() {
   );
   return { ...hook, release, onClose, onNavigate, saveSearch };
 }
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest
+    .spyOn(AppState, 'addEventListener')
+    .mockReturnValue({ remove: jest.fn() });
+});
+afterEach(() => jest.restoreAllMocks());
 it('keeps results visible and ignores duplicate taps until keyboard layout settles', async () => {
   const h = setup();
   let navigation: Promise<void> | undefined;
@@ -88,4 +94,16 @@ it('cancels pending navigation when the app backgrounds', async () => {
   expect(h.onNavigate).not.toHaveBeenCalled();
   expect(remove).toHaveBeenCalled();
   spy.mockRestore();
+});
+
+it('cancels a pending selection when the search query changes', async () => {
+  const h = setup();
+  const navigation = h.result.current(product);
+  h.rerender({ isVisible: true, query: 'laptop' });
+  await act(async () => {
+    h.release();
+    await navigation;
+  });
+  expect(h.onClose).not.toHaveBeenCalled();
+  expect(h.onNavigate).not.toHaveBeenCalled();
 });

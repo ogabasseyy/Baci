@@ -20,12 +20,13 @@ export function useProductSearchNavigation({
 }: ProductSearchNavigationOptions) {
   const generation = useRef(0);
   const pending = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Query edits invalidate the in-flight selection through effect cleanup.
   useLayoutEffect(() => {
     if (!isVisible) generation.current += 1;
     return () => {
       generation.current += 1;
     };
-  }, [isVisible]);
+  }, [isVisible, query]);
 
   return async (product: Product) => {
     if (!isVisible || pending.current) return;

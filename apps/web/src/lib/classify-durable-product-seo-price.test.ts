@@ -189,4 +189,50 @@ describe('isDurableSeoPrice', () => {
     if (!candidate) throw new Error('Expected candidate');
     expect(isDurableSeoPrice(candidate, text)).toBe(true);
   });
+
+  it.each([
+    'Only 500 ml capacity.',
+    'Only 500 mL capacity.',
+    'Only 500 milliliters capacity.',
+    'Only 500 millilitres capacity.',
+    'Only 2 meters long.',
+    'Only 2 metres long.',
+    'Only 2 m long.',
+  ])('preserves volume and length specifications: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it.each([
+    '900 is the current price.',
+    '999 is the retail price.',
+    '900 is the price.',
+    '900 was the original price.',
+  ])('classifies bare amounts with following price predicates as prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
+
+  it.each([
+    '900 is the model number.',
+    '900 is the SKU.',
+    '900 is the part number.',
+  ])('preserves specifications with following identifier predicates: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it.each([
+    '– 999 | Acme',
+    '– 999 • Acme Store',
+    '– 999 - Acme',
+    '– 999 – Acme',
+  ])('classifies separator prices before branded title suffixes as prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
 });

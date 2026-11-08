@@ -17,7 +17,7 @@ const POSSESSIVE_PRICE =
 const PREPOSITIONAL_OR_SALE_QUALIFIER =
   /^\s*(?:[/]\s*|(?:per|each)\s+|(?:a|an)\s+(?:piece|unit|item|pack|copy|month|week|year|license|device)\b|(?:for|on|across|in|at|with|from)\b)/i;
 const SPECIFICATION_UNIT =
-  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
+  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|ml|millilit(?:er|re)s?|met(?:er|re)s?|m|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
 const SENTENCE_BOUNDARY = /\.(?!\p{N})|[!?;\n]/u;
 
 export function retailRelation(text: string, start: number): RetailRelation {
@@ -62,7 +62,7 @@ export function retailRelation(text: string, start: number): RetailRelation {
         clause
       ));
   const cue =
-    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+range)?(?:\s+(?:is|from))?|costs?|priced\s+at|start(?:s|ing)?\s+(?:at|from)|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
+    /\b(msrp(?:\s+(?:is|was|are|were)(?:\s+(?:now|currently|today|still))?)?|rrp(?:\s+(?:is|was|are|were)(?:\s+(?:now|currently|today|still))?)?|prices?(?:\s+range)?(?:\s+(?:is(?:\s+(?:now|currently|today|still))?|from))?|costs?(?:\s+(?:is|was|are|were)(?:\s+(?:now|currently|today|still))?)?|priced\s+at|start(?:s|ing)?\s+(?:at|from)|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
     )?.[1] ??
     (commerceHeading
@@ -74,10 +74,13 @@ export function retailRelation(text: string, start: number): RetailRelation {
           : '');
   const predicate =
     possessivePrice ||
-    /\b(?:prices?|costs?)(?:\s+(?:in|of|for)(?:\s+(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+){0,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
+    /\b(?:prices?|costs?|msrp|rrp)(?:\s+(?:in|of|for)(?:\s+(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+){0,8})?\s*(?:\b(?:is|was|are|were)\b(?:\s+(?:now|currently|today|still))?|:)\s*$/iu.test(
       clause
     );
-  const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);
+  const copula =
+    /\b(?:is|was|are|were)(?:\s+(?:now|currently|today|still))?\s*$/i.test(
+      clause
+    );
   const identifierPredicate =
     /\b(?:model\s+(?:(?:number|no\.?)(?:\s+(?:is|was|are|were))?|is|was|are|were)|(?:sku|part\s+(?:number|no\.?)|serial(?:\s+(?:number|no\.?))?|imei|item\s+(?:number|no\.?)|product\s+code)(?:\s+(?:is|was|are|were))?)(?:\s*:)?\s*$/i.test(
       clause

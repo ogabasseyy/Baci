@@ -136,4 +136,71 @@ describe('getDurableProductSeoText price classification', () => {
       })
     ).toBe('Rice is an aromatic basmati variety.');
   });
+
+  it.each([
+    'Only 500 ml capacity.',
+    'Only 2 meters long.',
+    'Only 500 mL capacity.',
+    'Only 2 metres long.',
+  ])('preserves volume and length specifications: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Bottle' } })
+    ).toBe(text);
+  });
+
+  it.each([
+    'Available from 1 January 2026.',
+    'Available from 2026-01-01.',
+    'Available from 2026/01/01.',
+  ])('preserves price-free availability dates: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Gadget' } })
+    ).toBe(text);
+  });
+
+  it('rejects actual prices alongside calendar dates', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Available from 1 January 2026 for 999.',
+        product: { name: 'Gadget' },
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    '900 is the current price.',
+    '999 is the retail price.',
+  ])('rejects amounts followed by explicit price predicates: %s', (text) => {
+    expect(getDurableProductSeoText({ text, product: { name: 'Phone' } })).toBe(
+      ''
+    );
+  });
+
+  it('preserves amounts followed by non-price specifications', () => {
+    expect(
+      getDurableProductSeoText({
+        text: '900 is the model number.',
+        product: { name: 'Phone' },
+      })
+    ).toBe('900 is the model number.');
+  });
+
+  it('rejects explicit price predicates with temporal modifiers', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'The price is now 999.',
+        product: { name: 'Phone' },
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    'Phone – 999 | Acme',
+    'Phone – 999 • Acme',
+    'Phone – 999 - Acme',
+  ])('rejects separator prices before branded title suffixes: %s', (text) => {
+    expect(getDurableProductSeoText({ text, product: { name: 'Phone' } })).toBe(
+      ''
+    );
+  });
 });

@@ -125,4 +125,22 @@ describe('retailRelation', () => {
     const start = input.indexOf('900');
     expect(retailRelation(input, start).predicate).toBe(false);
   });
+
+  it.each([
+    { text: 'The price is now 999', expectedCue: 'price is now' },
+    { text: 'The price is currently 999', expectedCue: 'price is currently' },
+    { text: 'The price is today 999', expectedCue: 'price is today' },
+    { text: 'The price is still 999', expectedCue: 'price is still' },
+    { text: 'msrp is now 999', expectedCue: 'msrp is now' },
+  ])('recognizes price predicates with temporal modifiers: $text', ({
+    text,
+    expectedCue,
+  }) => {
+    const start = text.indexOf('999');
+    const relation = retailRelation(text, start);
+    expect(relation.predicate).toBe(true);
+    expect(relation.strong).toBe(true);
+    expect(relation.copula).toBe(true);
+    expect(relation.cue.toLowerCase()).toBe(expectedCue.toLowerCase());
+  });
 });

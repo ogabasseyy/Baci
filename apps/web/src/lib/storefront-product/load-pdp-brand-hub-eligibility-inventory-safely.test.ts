@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-category/brand-authority-inventory-rejection';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
-import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import { loadPdpBrandHubEligibilityInventorySafely as load } from './load-pdp-brand-hub-eligibility-inventory-safely';
 

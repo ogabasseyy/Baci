@@ -1,12 +1,12 @@
 import { cacheLife } from 'next/cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
 import {
   ExpectedBrandAuthorityInventoryRejectionError,
-  getCachedBrandAuthorityCategory,
   isExpectedBrandAuthorityInventoryRejection,
-  getCachedBrandAuthorityInventory as read,
-} from './get-cached-brand-authority-inventory';
+} from './brand-authority-inventory-rejection';
+import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
+import { getCachedBrandAuthorityCategory } from './get-cached-brand-authority-category';
+import { getCachedBrandAuthorityInventory as read } from './get-cached-brand-authority-inventory';
 
 const hydrate = vi.fn();
 const category = vi.fn();

@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  ExpectedBrandAuthorityInventoryRejectionError,
-  getCachedBrandAuthorityInventory,
-} from '@/lib/storefront-category/get-cached-brand-authority-inventory';
+import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-category/brand-authority-inventory-rejection';
+import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import { loadBrandAuthorityInventorySafely } from './load-brand-authority-inventory-safely';
 
 vi.mock(

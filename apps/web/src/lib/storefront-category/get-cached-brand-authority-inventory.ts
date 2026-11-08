@@ -4,10 +4,12 @@ import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products'
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
 import { generateSlug } from '@/lib/seo-utils';
+import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-category/brand-authority-inventory-rejection';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { isBrandAuthorityProductInStock } from '@/lib/storefront-category/brand-authority-stock-filter';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
+import { getCachedBrandAuthorityCategory } from '@/lib/storefront-category/get-cached-brand-authority-category';
 
 export { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 export const BRAND_AUTHORITY_MAX_QUERY_PAGES = 20;
@@ -84,35 +86,6 @@ export function matchesBrandAuthorityCategory(
 export interface BrandAuthorityInventoryBudget {
   maxProducts: number;
   timeoutMs: number;
-}
-
-export async function getCachedBrandAuthorityCategory(
-  merchantId: string,
-  categorySlug: string,
-  timeoutMs = 3_000
-) {
-  'use cache';
-
-  try {
-    cacheLife('storefront-page');
-    cacheTag('categories', `categories-${merchantId}`);
-  } catch {
-    // Unit tests run without Cache Components enabled.
-  }
-
-  const deadline = createStorefrontReadDeadline(timeoutMs);
-  try {
-    return await Promise.race([
-      brandAuthorityPublicData.readCategory(
-        merchantId,
-        categorySlug,
-        deadline.signal
-      ),
-      deadline.promise,
-    ]);
-  } finally {
-    deadline.cleanup();
-  }
 }
 
 async function readCachedBrandAuthorityInventory(
@@ -297,28 +270,6 @@ async function readInventory(
       products: inStockProducts,
     },
   };
-}
-
-export class ExpectedBrandAuthorityInventoryRejectionError extends Error {
-  readonly isExpectedRejection = true;
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'ExpectedBrandAuthorityInventoryRejectionError';
-  }
-}
-
-export function isExpectedBrandAuthorityInventoryRejection(
-  error: unknown
-): error is ExpectedBrandAuthorityInventoryRejectionError {
-  if (!error || typeof error !== 'object') return false;
-  if (error instanceof ExpectedBrandAuthorityInventoryRejectionError) {
-    return true;
-  }
-  return (
-    'isExpectedRejection' in error &&
-    (error as { isExpectedRejection?: unknown }).isExpectedRejection === true
-  );
 }
 
 export async function getCachedBrandAuthorityInventory(

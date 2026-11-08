@@ -1,9 +1,9 @@
 import { getEffectiveProductStock } from '@/lib/product-stock';
 import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
+import { isExpectedBrandAuthorityInventoryRejection } from '@/lib/storefront-category/brand-authority-inventory-rejection';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import {
   getCachedBrandAuthorityInventory,
-  isExpectedBrandAuthorityInventoryRejection,
   OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS,
 } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';

@@ -14,7 +14,7 @@ import test from 'node:test';
 
 const scriptPath = new URL('pnpm-install-with-retry.sh', import.meta.url);
 
-function makeFakePnpm({ retryable }) {
+function makeFakePnpm({ retryable, error }) {
   const tempDir = mkdtempSync(join(tmpdir(), 'baci-pnpm-retry-'));
   const binDir = join(tempDir, 'bin');
   const errorFile = join(tempDir, 'first-error.log');
@@ -35,9 +35,9 @@ function makeFakePnpm({ retryable }) {
     mkdirSync(dir, { recursive: true });
   });
 
-  const firstError = retryable
+  const firstError = error ?? (retryable
     ? 'Error: database disk image is malformed\ncode: ERR_SQLITE_ERROR\n'
-    : 'Error: non-retryable install failure\n';
+    : 'Error: non-retryable install failure\n');
   writeFileSync(errorFile, firstError);
 
   writeFileSync(
@@ -101,6 +101,17 @@ test('retries after pnpm sqlite store corruption and succeeds', () => {
         `Expected ${dir} to be removed after retryable failure`
       );
     });
+  } finally {
+    rmSync(fakePnpm.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('retries a transient DNS failure in a package postinstall', () => {
+  const fakePnpm = makeFakePnpm({ error: 'Error fetching release: getaddrinfo EAI_AGAIN github.com\n' });
+  try {
+    const result = runScript(fakePnpm);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readFileSync(fakePnpm.attemptsFile, 'utf8').trim(), '2');
   } finally {
     rmSync(fakePnpm.tempDir, { recursive: true, force: true });
   }

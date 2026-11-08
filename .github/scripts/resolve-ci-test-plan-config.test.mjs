@@ -8,6 +8,7 @@ import './ci-build-runner-contract.test.mjs';
 import './dependency-review-availability.test.mjs';
 import './jules-sunset-contract.test.mjs';
 import './jules-findings-gate.test.mjs';
+import './pnpm-install-with-retry.test.mjs';
 import './tools-worker-typecheck-contract.test.mjs';
 import './web-build-timeout-contract.test.mjs';
 import './web-test-checkout-contract.test.mjs';

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiscountItemSelector } from './DiscountItemSelector';
 
 const mocks = vi.hoisted(() => ({
+  announceForAccessibility: vi.fn(),
   fetchSelectableItems: vi.fn(),
   keyboardContainerProps: {
     align: undefined as 'start' | 'center' | 'end' | undefined,
@@ -89,105 +90,16 @@ vi.mock('react-native-safe-area-context', () => ({
   ),
 }));
 
-vi.mock('react-native', () => {
-  const Text = ({ children }: { children?: ReactNode }) => (
-    <span>{children}</span>
+vi.mock('react-native', async () => {
+  const { createDiscountItemSelectorReactNativeMock } = await import(
+    './DiscountItemSelector.test-mocks'
   );
-
-  return {
-    StatusBar: () => null,
-    ActivityIndicator: () => <Text>loading</Text>,
-    FlatList: ({
-      data,
-      initialNumToRender,
-      maxToRenderPerBatch,
-      removeClippedSubviews,
-      renderItem,
-      windowSize,
-    }: {
-      data: Array<{ id: string; name: string }>;
-      initialNumToRender?: number;
-      maxToRenderPerBatch?: number;
-      removeClippedSubviews?: boolean;
-      renderItem: (props: { item: { id: string; name: string } }) => ReactNode;
-      windowSize?: number;
-    }) => {
-      mocks.listProps.initialNumToRender = initialNumToRender ?? 0;
-      mocks.listProps.maxToRenderPerBatch = maxToRenderPerBatch ?? 0;
-      mocks.listProps.removeClippedSubviews = removeClippedSubviews ?? false;
-      mocks.listProps.windowSize = windowSize ?? 0;
-      return <div>{data.map((item) => renderItem({ item }))}</div>;
-    },
-    Modal: ({
-      children,
-      visible,
-    }: {
-      children?: ReactNode;
-      visible?: boolean;
-    }) => (visible ? <div>{children}</div> : null),
-    Platform: mocks.platform,
-    Pressable: ({
-      accessibilityLabel,
-      children,
-      onPress,
-    }: {
-      accessibilityLabel?: string;
-      children?: ReactNode;
-      onPress?: () => void;
-    }) => (
-      <button
-        aria-label={accessibilityLabel}
-        onClick={() => onPress?.()}
-        type="button"
-      >
-        {children}
-      </button>
-    ),
-    SafeAreaView: ({ children }: { children?: ReactNode }) => (
-      <section>{children}</section>
-    ),
-    StyleSheet: {
-      create: (styles: Record<string, unknown>) => styles,
-    },
-    Text,
-    TextInput: ({
-      onChangeText,
-      placeholder,
-      value,
-    }: {
-      onChangeText?: (value: string) => void;
-      placeholder?: string;
-      value?: string;
-    }) => (
-      <input
-        onChange={(event) => onChangeText?.(event.target.value)}
-        placeholder={placeholder}
-        value={value}
-      />
-    ),
-    View: ({
-      children,
-      accessibilityLiveRegion,
-      accessibilityRole,
-    }: {
-      children?: ReactNode;
-      accessibilityLiveRegion?: 'assertive' | 'none' | 'polite';
-      accessibilityRole?: string;
-    }) => (
-      <div
-        aria-live={
-          accessibilityLiveRegion === 'none' ? 'off' : accessibilityLiveRegion
-        }
-        role={accessibilityRole}
-      >
-        {children}
-      </div>
-    ),
-  };
+  return createDiscountItemSelectorReactNativeMock(mocks);
 });
 
 describe('DiscountItemSelector', () => {
   beforeEach(() => {
+    mocks.announceForAccessibility.mockReset();
     mocks.fetchSelectableItems.mockReset();
     mocks.fetchSelectableItems.mockResolvedValue([
       {
@@ -299,6 +211,9 @@ describe('DiscountItemSelector', () => {
       const alertElement = screen.getByRole('alert');
       expect(alertElement).toBeInTheDocument();
       expect(alertElement).toHaveAttribute('aria-live', 'assertive');
+      expect(mocks.announceForAccessibility).toHaveBeenCalledWith(
+        'Failed to load items'
+      );
     });
   });
 });

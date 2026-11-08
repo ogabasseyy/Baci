@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
   Modal,
@@ -113,6 +114,12 @@ export function DiscountItemSelector({
       requestIdRef.current += 1;
     };
   }, [visible, merchant?.id, type]);
+
+  useEffect(() => {
+    if (_fetchError) {
+      AccessibilityInfo.announceForAccessibility(_fetchError);
+    }
+  }, [_fetchError]);
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);

@@ -3,8 +3,8 @@ import type { MerchantReturnPolicy, OfferShippingDetails } from 'schema-dts';
 type NodeReference = { '@id': string };
 
 export interface SharedOfferPolicies {
-  shippingDetails: OfferShippingDetails | NodeReference;
-  hasMerchantReturnPolicy: MerchantReturnPolicy | NodeReference;
+  shippingDetails?: OfferShippingDetails | NodeReference;
+  hasMerchantReturnPolicy?: MerchantReturnPolicy | NodeReference;
 }
 
 /**
@@ -20,8 +20,8 @@ export interface SharedOfferPolicies {
 export function buildSharedOfferPolicies(
   productUrl: URL | undefined,
   productGroupId: string,
-  shippingDetails: OfferShippingDetails,
-  returnPolicy: MerchantReturnPolicy
+  shippingDetails: OfferShippingDetails | undefined,
+  returnPolicy: MerchantReturnPolicy | undefined
 ): (variantIndex: number) => SharedOfferPolicies {
   const prefix = productUrl
     ? `${productUrl.origin}${productUrl.pathname}#`
@@ -30,12 +30,16 @@ export function buildSharedOfferPolicies(
   const returnPolicyId = `${prefix}return-policy`;
 
   const definitions: SharedOfferPolicies = {
-    shippingDetails: { ...shippingDetails, '@id': shippingId },
-    hasMerchantReturnPolicy: { ...returnPolicy, '@id': returnPolicyId },
+    ...(shippingDetails && {
+      shippingDetails: { ...shippingDetails, '@id': shippingId },
+    }),
+    ...(returnPolicy && {
+      hasMerchantReturnPolicy: { ...returnPolicy, '@id': returnPolicyId },
+    }),
   };
   const references: SharedOfferPolicies = {
-    shippingDetails: { '@id': shippingId },
-    hasMerchantReturnPolicy: { '@id': returnPolicyId },
+    ...(shippingDetails && { shippingDetails: { '@id': shippingId } }),
+    ...(returnPolicy && { hasMerchantReturnPolicy: { '@id': returnPolicyId } }),
   };
 
   return (variantIndex) => (variantIndex === 0 ? definitions : references);

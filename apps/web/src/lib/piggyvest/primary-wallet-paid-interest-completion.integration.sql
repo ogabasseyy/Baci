@@ -16,6 +16,7 @@ CREATE TABLE piggyvest_staging.integrations(id uuid PRIMARY KEY,expected_provide
 \ir ../../../../../supabase/migrations/20260912120300_piggyvest_savings_ledger_snapshot.sql
 \ir ../../../../../supabase/migrations/20260912120400_piggyvest_savings_ledger_registry_gate.sql
 \ir ../../../../../supabase/migrations/20260912120500_piggyvest_savings_ledger_numeric_reference_casts.sql
+\ir ../../../../../supabase/migrations/20261003160000_piggyvest_ledger_deferred_balance_authority.sql
 \ir ../../../../../supabase/migrations/tests/fixtures/legacy-interest-capacity-drafts/20261004200000_customer_savings_paid_interest_completion.sql
 
 CREATE ROLE primary_interest_fixture LOGIN NOSUPERUSER NOBYPASSRLS;

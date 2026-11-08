@@ -85,6 +85,16 @@ describe('getDurableProductSeoText price classification', () => {
   });
 
   it.each([
+    'Was 999.99, now 799.99',
+    'Was 999.99, now 799.99 per unit',
+    'Sale: Was 999.99, now 799.99 on new models',
+  ])('rejects paired-sale prices with decimal points: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe('');
+  });
+
+  it.each([
     'Phone – 999.',
     'Phone: 999!',
     'Phone – 999?',

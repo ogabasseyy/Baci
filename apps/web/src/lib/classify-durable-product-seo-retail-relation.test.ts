@@ -28,6 +28,26 @@ describe('retailRelation', () => {
       firstStart: 10,
       secondStart: 19,
     },
+    {
+      text: 'Was 999.99, now 799.99',
+      firstStart: 4,
+      secondStart: 16,
+    },
+    {
+      text: 'Was 999.99, now 799.99 per unit',
+      firstStart: 4,
+      secondStart: 16,
+    },
+    {
+      text: 'Sale: Was 999.99, now 799.99 on new models',
+      firstStart: 10,
+      secondStart: 22,
+    },
+    {
+      text: 'First sentence. Was 999.99, now 799.99',
+      firstStart: 20,
+      secondStart: 32,
+    },
   ])('detects paired was/now sale pricing on both amounts: $text', ({
     text,
     firstStart,

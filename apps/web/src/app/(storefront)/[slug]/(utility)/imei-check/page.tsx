@@ -8,6 +8,7 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import {
   isDomainIdentifier,
@@ -16,14 +17,42 @@ import {
 import { getOgabasseyStaticParams } from '../../ogabassey-static-params';
 import { ImeiCheckFallback } from './imei-check-fallback';
 
-export const metadata: Metadata = {
-  title: buildStorefrontMetadataTitle({
-    title: 'IMEI Check',
-    fallback: 'IMEI Check',
-  }).metadataTitle,
-  description:
-    'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.',
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+
+  if (!isValidMerchantIdentifier(slug)) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const lookupKey = slug.toLowerCase();
+  const merchant = isDomainIdentifier(slug)
+    ? await getCachedMerchantByDomain(lookupKey)
+    : await getCachedMerchant(lookupKey);
+
+  if (!merchant || merchant.template_id !== OGABASSEY_TEMPLATE_ID) {
+    return {
+      title: 'Store Not Found',
+    };
+  }
+
+  const baseUrl = buildStoreUrl(merchant);
+
+  return {
+    title: buildStorefrontMetadataTitle({
+      title: 'IMEI Check',
+      fallback: 'IMEI Check',
+    }).metadataTitle,
+    description:
+      'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.',
+    alternates: { canonical: `${baseUrl}/imei-check` },
+  };
+}
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return getOgabasseyStaticParams();

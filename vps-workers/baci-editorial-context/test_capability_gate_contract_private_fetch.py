@@ -14,6 +14,16 @@ SPEC.loader.exec_module(check)
 
 
 class PrivateFetchContractTests(unittest.TestCase):
+    def test_unauthenticated_fetch_is_not_accepted(self):
+        workflow = (ROOT / ".github/workflows/capability-gate-contract.yml").read_text()
+        from capability_gate_contract_workflow_checks import PRIVATE_ENV, PRIVATE_RUN
+
+        legacy = '            base_ref=$(jq -r .pull_request.base.ref "$GITHUB_EVENT_PATH")\n            git fetch --no-tags --depth 1 origin "$base_ref"\n'
+        if PRIVATE_ENV in workflow:
+            workflow = workflow.replace(PRIVATE_ENV, '', 1).replace(PRIVATE_RUN, legacy, 1)
+        self.assertIn(legacy, workflow)
+        self.assertTrue(check.workflow_failures(workflow))
+
     def test_authenticated_transition_is_exact_and_fail_closed(self):
         from capability_gate_contract_workflow_checks import PRIVATE_ENV, PRIVATE_RUN
 

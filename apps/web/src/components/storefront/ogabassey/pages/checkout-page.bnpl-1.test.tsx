@@ -63,7 +63,7 @@ it('shows Klump in installment checkout when the merchant enables it', async () 
 
   renderCheckoutWithStoreRates();
 
-  fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+  fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
 
   expect(await screen.findByText('Klump')).toBeInTheDocument();
   fetchMock.mockRestore();
@@ -123,7 +123,7 @@ it('hides Klump in installment checkout when the merchant disables it', async ()
   renderCheckoutWithStoreRates();
 
   expect(
-    screen.queryByRole('button', { name: /pay in installments/i })
+    screen.queryByRole('button', { name: /pay small small/i })
   ).not.toBeInTheDocument();
 
   expect(screen.queryByText('Klump')).not.toBeInTheDocument();

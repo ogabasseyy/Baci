@@ -35,38 +35,6 @@ describe('buildCatalogLinkModules', () => {
         ],
       },
       {
-        id: 'catalog-pages',
-        title: 'Browse product pages',
-        description: 'Jump through the maintained product index.',
-        items: [
-          {
-            href: '/products?page=2',
-            label: 'Products page 2',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/products?page=3',
-            label: 'Products page 3',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/products?page=4',
-            label: 'Products page 4',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/products?page=5',
-            label: 'Products page 5',
-            source: 'catalog-pagination',
-          },
-          {
-            href: '/products?page=6',
-            label: 'Products page 6',
-            source: 'catalog-pagination',
-          },
-        ],
-      },
-      {
         id: 'category-pages',
         title: 'Browse category pages',
         description: 'Jump to maintained category listing pages.',
@@ -154,6 +122,18 @@ describe('buildCatalogLinkModules', () => {
         ],
       },
     ]);
+  });
+
+  it('omits catalog-pages module to avoid duplicating StorefrontPagination', () => {
+    const modules = buildCatalogLinkModules({
+      productBasePath: '/products',
+      productTotalPages: 10,
+      categories: [],
+      compareLinks: [],
+      editorialLinks: [],
+    });
+
+    expect(modules.some((module) => module.id === 'catalog-pages')).toBe(false);
   });
 
   it('does not create direct PDP shortcut modules from product slugs', () => {

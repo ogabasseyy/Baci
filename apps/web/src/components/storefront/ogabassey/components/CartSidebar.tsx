@@ -10,6 +10,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useSafeTimeout } from '@/hooks/use-safe-timeout';
 import { analytics } from '@/lib/analytics';
 import { asRoute } from '@/lib/routes';
+import { createClient } from '@/lib/supabase/client';
 import { AdUnit } from './AdUnit';
 // import { ActionTooltip } from './Tooltip';
 import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
@@ -150,11 +151,21 @@ export const CartSidebar: React.FC = () => {
   if (!isCartOpen) return null;
 
   const handleCheckout = async () => {
-    if (!auth?.user) {
+    setIsCheckoutLoading(true);
+    let user = auth?.user ?? null;
+    if (!user) {
+      try {
+        const result = await createClient().auth.getUser();
+        user = result.error ? null : result.data.user;
+      } catch {
+        user = null;
+      }
+    }
+    if (!user) {
+      setIsCheckoutLoading(false);
       setIsIdentityOpen(true);
       return;
     }
-    setIsCheckoutLoading(true);
     // Close the sidebar first to prevent it staying open
     setIsCartOpen(false);
     // Navigate to checkout

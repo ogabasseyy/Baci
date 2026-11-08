@@ -57,6 +57,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                 <button
                     type="button"
                     aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Hide' : 'Show'} order summary ${formatCurrencyAuto(remainingAmount)}`}
                     aria-controls={orderSummaryId}
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="w-full py-3 flex items-center justify-between text-sm"

@@ -86,10 +86,14 @@ export function CheckoutScreen({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           {oxygenStep ? (
             <div className="lg:col-span-8 space-y-6">{oxygenStep}</div>
-          ) : <CheckoutStepComposition session={steps} />}
+          ) : (
+            <CheckoutStepComposition session={steps} />
+          )}
           {oxygenSummary ? (
             <div className="lg:col-span-4">{oxygenSummary}</div>
-          ) : <DesktopOrderSummary {...presentation.desktop} />}
+          ) : (
+            <DesktopOrderSummary {...presentation.desktop} />
+          )}
         </div>
       </div>
     </div>

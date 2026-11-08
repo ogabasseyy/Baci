@@ -239,7 +239,7 @@ it('resumes the merchant-scoped order and displays persisted totals and checkout
   ]);
   expect(screen.getByText('Saved phone')).toBeVisible();
   expect(screen.getByText('Qty: 1')).toBeVisible();
-  expect(screen.getByRole('img', {name: 'Saved phone'})).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: 'Saved phone' })).toBeInTheDocument();
   expect(
     screen.getByRole('region', { name: 'Saved order summary' })
   ).toHaveTextContent('₦400,000.00');

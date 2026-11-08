@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let mockUser: { id: string } | null = null;
+let mockSessionUser: { id: string } | null = null;
 const mockPush = vi.fn();
 vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
 vi.mock('./CheckoutIdentityModal', () => ({ CheckoutIdentityModal: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div role="dialog">Sign in or continue as guest</div> : null }));
@@ -156,7 +157,7 @@ vi.mock('./empty-state', () => ({
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    auth: { getUser: vi.fn().mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null })) },
     from: () => ({ insert: vi.fn().mockResolvedValue({ error: null }) }),
   }),
 }));
@@ -173,6 +174,7 @@ describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUser = null;
+    mockSessionUser = null;
     mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
@@ -192,11 +194,19 @@ describe('CartSidebar', () => {
     ];
   });
 
-  it('shows the identity choice from the drawer for a guest', () => {
+  it('shows the identity choice from the drawer for a guest', async () => {
     render(<CartSidebar />);
     fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    expect(screen.getByRole('dialog')).toHaveTextContent('Sign in or continue as guest');
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Sign in or continue as guest');
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('recognizes a signed-in storefront session without an auth provider', async () => {
+    mockSessionUser = { id: 'user-1' };
+    render(<CartSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/test-store/checkout'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('takes a signed-in customer directly to checkout', () => {

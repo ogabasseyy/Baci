@@ -199,7 +199,10 @@ describe('SearchPageContent', () => {
       source: 'results-form',
     });
     const suggestion = screen.getByRole('link', { name: 'iphone' });
-    expect(suggestion).toHaveAttribute('href', '/another-store/search?q=iphone');
+    expect(suggestion).toHaveAttribute(
+      'href',
+      '/another-store/search?q=iphone'
+    );
     suggestion.addEventListener('click', (event) => event.preventDefault());
     fireEvent.click(suggestion);
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({

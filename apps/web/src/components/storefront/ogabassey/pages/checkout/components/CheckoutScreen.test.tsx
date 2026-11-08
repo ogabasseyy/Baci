@@ -187,12 +187,26 @@ beforeEach(() => {
 
 describe('CheckoutScreen', () => {
   it('keeps the Oxygen steps together in the main column beside the saved summary', () => {
-    render(<CheckoutScreen {...createProps()} oxygenStep={<><div>Contact saved</div><div>Delivery saved</div><div>Oxygen application</div></>} oxygenSummary={<div>Saved order</div>} />);
+    render(
+      <CheckoutScreen
+        {...createProps()}
+        oxygenStep={
+          <>
+            <div>Contact saved</div>
+            <div>Delivery saved</div>
+            <div>Oxygen application</div>
+          </>
+        }
+        oxygenSummary={<div>Saved order</div>}
+      />
+    );
     const steps = screen.getByText('Contact saved').parentElement;
     expect(steps).toHaveClass('lg:col-span-8');
     expect(steps).toContainElement(screen.getByText('Delivery saved'));
     expect(steps).toContainElement(screen.getByText('Oxygen application'));
-    expect(screen.getAllByText('Saved order').at(-1)?.parentElement).toHaveClass('lg:col-span-4');
+    expect(
+      screen.getAllByText('Saved order').at(-1)?.parentElement
+    ).toHaveClass('lg:col-span-4');
   });
   it('keeps the saved Oxygen application and its summaries inside checkout', () => {
     render(

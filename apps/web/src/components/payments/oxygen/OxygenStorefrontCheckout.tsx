@@ -9,13 +9,13 @@ import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
-import { OxygenSavedOrderSummary } from './OxygenSavedOrderSummary';
-import { oxygenOrderItemImage } from './oxygen-order-item-image';
 import { OxygenRecoverySignIn } from './OxygenRecoverySignIn';
+import { OxygenSavedOrderSummary } from './OxygenSavedOrderSummary';
 import {
   ownsOxygenCheckoutOrder,
   readOwnedOxygenCustomerId,
 } from './oxygen-checkout-ownership';
+import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
 /** Resume the owned, persisted order inside the existing storefront checkout. */
 export async function OxygenStorefrontCheckout({

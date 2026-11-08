@@ -122,8 +122,8 @@ describe('SearchPageContent', () => {
     mockNotFound.mockReset();
   });
 
-  it('renders a prefilled in-page search form', async () => {
-    mockStorefrontContext();
+  it('renders a prefilled in-page search form for other stores', async () => {
+    mockStorefrontContext('other');
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({
       count: 45,
       didYouMean: null,
@@ -139,7 +139,7 @@ describe('SearchPageContent', () => {
     );
 
     const form = screen.getByRole('form', { name: 'Edit search' });
-    expect(form).toHaveAttribute('action', '/ogabassey/search');
+    expect(form).toHaveAttribute('action', '/other/search');
     expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });
 
@@ -169,7 +169,9 @@ describe('SearchPageContent', () => {
           createSearchPageProps({ q: 'iphone' })
         )) as React.ReactElement
       );
-      fireEvent.focus(screen.getByLabelText('Search products'));
+      if (!present) fireEvent.focus(screen.getByLabelText('Search products'));
+      else
+        expect(screen.queryByRole('form', { name: 'Edit search' })).toBeNull();
 
       if (present) {
         expect(
@@ -212,8 +214,6 @@ describe('SearchPageContent', () => {
           createSearchPageProps({ q: 'iphone' })
         )) as React.ReactElement
       );
-      fireEvent.focus(screen.getByLabelText('Search products'));
-
       expect(
         screen.queryByRole('button', { name: 'Ask about this search' })
       ).toBeNull();
@@ -237,7 +237,7 @@ describe('SearchPageContent', () => {
     );
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       id: 'merchant-1',
-      slug: 'ogabassey',
+      slug: 'other',
       custom_domain: 'shop.example.ng',
       business_name: 'Ogabassey',
       payout_currency: 'NGN',
@@ -285,7 +285,8 @@ describe('SearchPageContent', () => {
     expect(
       screen.getByRole('button', { name: /try again/i })
     ).toBeInTheDocument();
-    // The submitted query survives the failure for editing and retry.
-    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
+    expect(
+      screen.getAllByText(/couldn't load results for/)[0]
+    ).toHaveTextContent('iphone');
   });
 });

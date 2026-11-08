@@ -101,12 +101,23 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
       return Response.json({});
     });
 
-  const formSession = await import('./checkout/hooks/use-checkout-form-session');
+  const formSession = await import(
+    './checkout/hooks/use-checkout-form-session'
+  );
   const originalUseFormSession = formSession.useCheckoutFormSession;
-  const formSpy = vi.spyOn(formSession, 'useCheckoutFormSession').mockImplementation((options) => {
-    const session = originalUseFormSession(options);
-    return { ...session, account: { ...session.account, createAccount: true, password: 'guest-password-1' } };
-  });
+  const formSpy = vi
+    .spyOn(formSession, 'useCheckoutFormSession')
+    .mockImplementation((options) => {
+      const session = originalUseFormSession(options);
+      return {
+        ...session,
+        account: {
+          ...session.account,
+          createAccount: true,
+          password: 'guest-password-1',
+        },
+      };
+    });
   renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));

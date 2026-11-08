@@ -54,10 +54,7 @@ const variants = [
     stock_quantity: 0,
   },
 ];
-const load = () =>
-  vi
-    .fn<PublicAdvertisedVariantLoader>()
-    .mockResolvedValue({ [phone.id]: variants });
+const load = () => vi.fn().mockResolvedValue({ [phone.id]: variants });
 
 describe('bounded advertised phone-price projection', () => {
   it('validates direct listing projection inputs before loading any public variants', async () => {
@@ -269,7 +266,7 @@ describe('bounded advertised phone-price projection', () => {
       manage_stock: false,
       stock: 0,
     };
-    const loader = vi.fn<PublicAdvertisedVariantLoader>().mockResolvedValue({
+    const loader = vi.fn().mockResolvedValue({
       [phoneWithProductCategories.id]: variants.map((v) => ({
         ...v,
         product_id: phoneWithProductCategories.id,
@@ -279,12 +276,46 @@ describe('bounded advertised phone-price projection', () => {
     const [projected] = await projectAdvertisedPhonePrices(
       'merchant',
       [phoneWithProductCategories],
-      loader
+      loader as unknown as PublicAdvertisedVariantLoader
     );
 
     expect(projected).toMatchObject({
       advertised_price: 900000,
       advertised_condition: 'new',
     });
+  });
+
+  it('chunks phone-family reads at the 200 nested inventory RPC limit', async () => {
+    const loader = vi
+      .fn()
+      .mockImplementation(async (_merchantId: string, ids: string[]) => {
+        const result: Record<string, typeof variants> = {};
+        for (const id of ids) {
+          result[id] = variants.map((v) => ({ ...v, product_id: id }));
+        }
+        return result;
+      });
+    const phones = Array.from({ length: 250 }, (_, i) => ({
+      ...phone,
+      id: `phone-${i + 1}`,
+      slug: `iphone-16-${i + 1}`,
+    }));
+    const projected = await projectAdvertisedPhonePrices(
+      'merchant',
+      phones,
+      loader as unknown as PublicAdvertisedVariantLoader
+    );
+    expect(projected).toHaveLength(250);
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(loader).toHaveBeenNthCalledWith(
+      1,
+      'merchant',
+      phones.slice(0, 200).map((p) => p.id)
+    );
+    expect(loader).toHaveBeenNthCalledWith(
+      2,
+      'merchant',
+      phones.slice(200, 250).map((p) => p.id)
+    );
   });
 });

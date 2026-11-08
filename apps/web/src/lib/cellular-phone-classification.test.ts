@@ -35,6 +35,33 @@ describe('cellular-phone-classification', () => {
     expect(isPhoneLikeProduct(product)).toBe(true);
   });
 
+  it('preserves handset classification in mixed product categories', () => {
+    expect(
+      isCellularPhoneProduct({
+        name: 'Samsung Galaxy S24',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Samsung Galaxy S24',
+        category: 'Phones & Tablets',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'iPhone 15',
+        category: 'Phones & Tablets',
+      })
+    ).toBe(true);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Google Pixel 8',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBe(true);
+  });
+
   it('excludes phone accessories and cases', () => {
     expect(
       isCellularPhoneProduct({
@@ -46,6 +73,27 @@ describe('cellular-phone-classification', () => {
       isCellularPhoneProduct({
         name: 'Galaxy S24 Screen Protector',
         category: 'Accessories',
+      })
+    ).toBe(false);
+  });
+
+  it('excludes accessories and genuine tablets even in mixed product categories', () => {
+    expect(
+      isCellularPhoneProduct({
+        name: 'iPhone 15 Silicone Case',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Galaxy Tab S9',
+        category: 'Phones & Tablets',
+      })
+    ).toBe(false);
+    expect(
+      isCellularPhoneProduct({
+        name: 'Apple iPad Pro 11-inch',
+        category: 'Phones & Tablets',
       })
     ).toBe(false);
   });

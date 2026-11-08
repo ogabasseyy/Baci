@@ -8,9 +8,12 @@ import { filterDefaultAdvertisedVariants } from './default-advertised-variants';
 import { getEffectiveStock } from './product-stock';
 import { projectPublicVariantSelection } from './project-public-variant-selection';
 import { assertPublicListingProductRows } from './read-public-listing-product-rows';
+import { resolveAdvertisedVariantImage } from './resolve-advertised-variant-image';
 import { resolveDefaultAdvertisedVariantSelection } from './resolve-default-advertised-variant-selection';
 import { resolvePublicProductOption } from './resolve-public-product-option';
 import { normalizeStorefrontProductVariants } from './storefront-product-variants';
+
+export const MAX_PHONE_FAMILY_BATCH_SIZE = 200;
 
 export interface AdvertisedPhonePriceFacts {
   advertised_price?: number;
@@ -42,20 +45,6 @@ export type PublicAdvertisedVariantLoader = (
   productIds: string[]
 ) => Promise<Record<string, PublicAdvertisedVariant[]>>;
 
-/** Prefer only actual selected-variant imagery; never infer it from a filename. */
-export function resolveAdvertisedVariantImage(
-  variant: PublicAdvertisedVariant
-): string | undefined {
-  if (typeof variant.primary_image === 'string' && variant.primary_image.trim())
-    return variant.primary_image;
-  return Array.isArray(variant.images)
-    ? variant.images.find(
-        (image): image is string =>
-          typeof image === 'string' && image.trim().length > 0
-      )
-    : undefined;
-}
-
 export interface AdvertisedPhoneConstraints {
   condition?: string;
   minPrice?: number;
@@ -79,7 +68,27 @@ export async function projectAdvertisedPhonePrices<
   );
   if (families.length === 0) return products;
   const familyIds = [...new Set(families.map((product) => product.id))];
-  const variantsByProduct = await loadVariants(merchantId, familyIds);
+
+  const chunkedIds: string[][] = [];
+  for (let i = 0; i < familyIds.length; i += MAX_PHONE_FAMILY_BATCH_SIZE) {
+    chunkedIds.push(familyIds.slice(i, i + MAX_PHONE_FAMILY_BATCH_SIZE));
+  }
+  const chunkedVariants = await Promise.all(
+    chunkedIds.map((batch) => loadVariants(merchantId, batch))
+  );
+  const variantsByProduct: Record<string, PublicAdvertisedVariant[]> = {};
+  for (const chunk of chunkedVariants) {
+    if (!chunk) continue;
+    for (const [productId, variants] of Object.entries(chunk)) {
+      if (Array.isArray(variants)) {
+        variantsByProduct[productId] = [
+          ...(variantsByProduct[productId] ?? []),
+          ...variants,
+        ];
+      }
+    }
+  }
+
   const familyIdSet = new Set(familyIds);
   return products.flatMap<T & AdvertisedPhonePriceFacts>((product) => {
     if (!familyIdSet.has(product.id)) return [product];

@@ -9,8 +9,6 @@ import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
   normalizeCanonicalProductCondition,
-  resolveDefaultVariantSelection,
-  resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
 } from '@baci/shared/lib';
@@ -66,9 +64,7 @@ export function useProductDetailsSelectionState(
     variantResolutionProduct,
     serverProduct
   );
-  const usesVariantConditions = hasVariantConditionAxis({
-    ...variantResolutionProduct,
-  });
+  const usesVariantConditions = hasVariantConditionAxis(variantResolutionProduct);
   const availableConditions = usesVariantConditions
     ? getValidAvailableConditions(
         getVariantConditionOptions({

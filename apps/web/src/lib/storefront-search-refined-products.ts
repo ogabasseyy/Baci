@@ -7,10 +7,10 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
-import { resolveAdvertisedVariantImage } from './advertised-phone-price-projection';
 import { getPublicProductVariantsByProductIds } from './cached-data';
 import { checkRefinedPhoneMatches } from './check-refined-phone-matches';
 import { normalizeProduct } from './normalize-product';
+import { resolveAdvertisedVariantImage } from './resolve-advertised-variant-image';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
 import type { StorefrontSearchSupabase } from './storefront-search';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';

@@ -7,7 +7,7 @@ let mockSessionUser: { id: string } | null = null;
 const mockGetUser = vi.fn();
 const mockPush = vi.fn();
 vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
-vi.mock('./CheckoutIdentityModal', () => ({ CheckoutIdentityModal: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div role="dialog">Sign in or continue as guest</div> : null }));
+vi.mock('@/components/storefront/checkout-code-signin', () => ({ CheckoutCodeSignin: () => <div>Sign in with email</div> }));
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -199,8 +199,11 @@ describe('CartSidebar', () => {
   it('shows the identity choice from the drawer for a guest', async () => {
     render(<CartSidebar />);
     fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Sign in or continue as guest');
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Let’s get you started');
     expect(mockPush).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /continue as guest/i }));
+    expect(mockPush).toHaveBeenCalledWith('/test-store/checkout');
+    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
 
   it('does not navigate or reopen identity after the cart closes during lookup', async () => {

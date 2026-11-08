@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let mockUser: { id: string } | null = null;
 let mockSessionUser: { id: string } | null = null;
+const mockGetUser = vi.fn();
 const mockPush = vi.fn();
 vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
 vi.mock('./CheckoutIdentityModal', () => ({ CheckoutIdentityModal: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div role="dialog">Sign in or continue as guest</div> : null }));
@@ -157,7 +158,7 @@ vi.mock('./empty-state', () => ({
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    auth: { getUser: vi.fn().mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null })) },
+    auth: { getUser: mockGetUser },
     from: () => ({ insert: vi.fn().mockResolvedValue({ error: null }) }),
   }),
 }));
@@ -175,6 +176,7 @@ describe('CartSidebar', () => {
     vi.clearAllMocks();
     mockUser = null;
     mockSessionUser = null;
+    mockGetUser.mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null }));
     mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
@@ -199,6 +201,22 @@ describe('CartSidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
     expect(await screen.findByRole('dialog')).toHaveTextContent('Sign in or continue as guest');
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate or reopen identity after the cart closes during lookup', async () => {
+    let resolveLookup: (value: unknown) => void = () => {};
+    mockGetUser.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve; }));
+    const { rerender } = render(<CartSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
+    fireEvent.click(screen.getByRole('button', { name: /dismiss cart backdrop/i }));
+    mockIsCartOpen = false;
+    rerender(<CartSidebar />);
+    resolveLookup({ data: { user: { id: 'user-1' } }, error: null });
+    mockIsCartOpen = true;
+    rerender(<CartSidebar />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /proceed to checkout/i })).toBeEnabled());
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('recognizes a signed-in storefront session without an auth provider', async () => {

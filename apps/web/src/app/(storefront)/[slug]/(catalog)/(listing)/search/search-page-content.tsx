@@ -158,7 +158,10 @@ export async function SearchPageContent({
                 defaultQuery={query}
                 pathPrefix={pathPrefix}
                 currency={merchantCurrency}
-                suggestionsOnly={merchant.slug === 'ogabassey'}
+                suggestionsOnly={
+                  merchant.slug === 'ogabassey' &&
+                  merchant.template_id === 'ogabassey'
+                }
                 assistEnabled={
                   process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
                   merchant.is_published &&

@@ -16,14 +16,21 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
   const [banks, setBanks] = useState<Bank[] | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  useEffect(() => {
+    if (retryAfter === null || retryAfter <= 0) return;
+    const timer = setTimeout(() => setRetryAfter(retryAfter - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [retryAfter]);
   useEffect(() => {
     if (!oxygen || !selected) return;
     const controller = new AbortController();
     setUnavailable(false);
+    setRetryAfter(null);
     void fetch('/api/payments/oxygen/supported-banks', { signal: controller.signal, cache: 'no-store' })
-      .then(async (response) => { if (!response.ok) throw new Error('unavailable'); return oxygenBankListSchema.parse(await response.json()).banks; })
+      .then(async (response) => { if (response.status === 429) { const seconds = Number(response.headers.get('Retry-After')); if (!controller.signal.aborted) setRetryAfter(Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60); throw new Error('rate-limited'); } if (!response.ok) throw new Error('unavailable'); return oxygenBankListSchema.parse(await response.json()).banks; })
       .then((result) => { if (!controller.signal.aborted) setBanks(result); })
-      .catch(() => { if (!controller.signal.aborted) setUnavailable(true); });
+      .catch(() => { if (!controller.signal.aborted) { setBanks(null); setUnavailable(true); } });
     return () => controller.abort();
   }, [oxygen, selected, retry]);
   const items: readonly Bank[] | null = oxygen ? banks : creditDirectBanks;
@@ -36,7 +43,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
       <span className={styles.dot} aria-hidden="true" />
     </label>
     {selected && <details className={styles.details}><summary><span className={styles.bankBadge}><Landmark size={13} aria-hidden="true" />{items ? `${items.length} supported banks` : 'Supported banks'}</span> {items && items.length > 8 && <span className={styles.scrollHint}>Scroll ↓</span>}<ChevronDown size={17} aria-hidden="true" /></summary>
-      {items ? <div className={styles.grid} role="region" tabIndex={0} aria-label={`${title} supported banks`}>{items.map(({name,code}) => <div className={styles.bank} key={`${name}-${code}`}><FinanceBankLogo name={name} code={code}/><span>{name}</span></div>)}</div> : <div className={styles.message}>{unavailable ? <>Bank list is temporarily unavailable. <button type="button" onClick={() => { setUnavailable(false); setRetry((value) => value + 1); }}>Retry bank list</button></> : 'Loading supported banks…'}</div>}
+      {items ? <div className={styles.grid} role="region" tabIndex={0} aria-label={`${title} supported banks`}>{items.map(({name,code}) => <div className={styles.bank} key={`${name}-${code}`}><FinanceBankLogo name={name} code={code}/><span>{name}</span></div>)}</div> : <div className={styles.message}>{unavailable ? <>{retryAfter === null ? 'Bank list is temporarily unavailable.' : retryAfter > 0 ? `Too many requests. Please try again in ${retryAfter} seconds.` : 'You can try again now.'} <button type="button" onClick={() => { setUnavailable(false); setRetry((value) => value + 1); }}>Retry bank list</button></> : 'Loading supported banks…'}</div>}
     </details>}
   </div>;
 }

@@ -106,6 +106,7 @@ function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
   vi.mocked(getRequestScopedMerchant).mockResolvedValue({
     id: 'merchant-1',
     slug,
+    template_id: slug === 'ogabassey' ? 'ogabassey' : 'standard',
     custom_domain: null,
     business_name: slug === 'ogabassey' ? 'Ogabassey' : 'Other store',
     payout_currency: 'NGN',
@@ -260,6 +261,43 @@ describe('SearchPageContent', () => {
       'action',
       '/search'
     );
+  });
+
+  it('keeps the query editable after a failed search on another store', async () => {
+    mockStorefrontContext('other');
+    mockGetStorefrontSearchProducts.mockRejectedValueOnce(
+      new Error('search unavailable')
+    );
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
+  });
+
+  it('keeps the query editor for Ogabassey on a different template', async () => {
+    mockStorefrontContext();
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      template_id: 'standard',
+      business_name: 'Ogabassey',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 0,
+      didYouMean: null,
+      products: [],
+      productIds: [],
+      query: 'iphone',
+    });
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });
 
   it('renders a distinct error state when the search fails', async () => {

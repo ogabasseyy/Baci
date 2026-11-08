@@ -136,6 +136,22 @@ describe('finance provider option', () => {
     expect(await screen.findByText('2 supported banks')).toBeVisible();
   });
 
+  it('explains when the bank-list request is rate limited', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }) });
+    renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+  });
+
+  it('does not keep stale banks when selecting Oxygen again fails', async () => {
+    fetchMock.mockResolvedValueOnce(bankResponse(oxygenBanks)).mockResolvedValueOnce(failureResponse());
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+    rerender(<FinanceProviderOption provider="oxygen" selected={false} onSelect={vi.fn()} logo={logo} />);
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(await screen.findByText('Bank list is temporarily unavailable.')).toBeInTheDocument();
+    expect(screen.queryByText('2 supported banks')).toBeNull();
+  });
+
   it('reports the bank list as unavailable when the payload fails validation', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

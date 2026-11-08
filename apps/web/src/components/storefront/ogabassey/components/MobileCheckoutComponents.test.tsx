@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
 import { MobileOrderSummary } from './MobileCheckoutComponents';
@@ -41,6 +41,21 @@ describe('MobileOrderSummary', () => {
     expect(bar).not.toBeVisible();
     fireEvent.focusOut(screen.getByRole('textbox', { name: 'Email' }));
     expect(bar).toBeVisible();
+  });
+  it('does not cover a checkout tap when leaving a text field', async () => {
+    const onPickup = vi.fn();
+    render(<><input aria-label="City" /><button type="button" onClick={onPickup}>Store pickup</button><MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod="pickup" giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={0} /></>);
+    const bar = screen.getByRole('complementary', { name: /order summary/i });
+    const city = screen.getByRole('textbox', { name: 'City' });
+    const pickup = screen.getByRole('button', { name: 'Store pickup' });
+    fireEvent.focusIn(city);
+    fireEvent.pointerDown(pickup);
+    fireEvent.focusOut(city, { relatedTarget: pickup });
+    expect(bar).not.toBeVisible();
+    fireEvent.pointerUp(pickup);
+    fireEvent.click(pickup);
+    expect(onPickup).toHaveBeenCalledOnce();
+    await waitFor(() => expect(bar).toBeVisible());
   });
   it('lets a customer turn wallet credit off in the mobile summary', () => {
     const setPayWithWallet = vi.fn();

@@ -4,7 +4,7 @@ import { CartVariantDetails } from './cart-variant-details';
 
 import { ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react';
 import type React from 'react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { CartItem } from '@/hooks/cart';
 import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
@@ -25,6 +25,7 @@ export interface MobileOrderSummaryProps {
     payWithWallet: boolean;
     walletAmountUsed: number;
     remainingAmount: number;
+    currency?: string;
     taxAmount?: number;
     discountAmount?: number;
 }
@@ -42,16 +43,28 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
     payWithWallet,
     walletAmountUsed,
     remainingAmount,
+    currency,
     taxAmount = 0,
     discountAmount = 0,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const summaryRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (!isExpanded) return;
+        const closeOutside = (event: PointerEvent) => {
+            if (event.target instanceof Node && !summaryRef.current?.contains(event.target)) setIsExpanded(false);
+        };
+        document.addEventListener('pointerdown', closeOutside);
+        return () => document.removeEventListener('pointerdown', closeOutside);
+    }, [isExpanded]);
     const keyboardOpen = useMobileKeyboardOpen();
     const orderSummaryId = useId();
-    const { formatCurrencyAuto, currencyCode } = useCurrency();
+    const merchantCurrency = useCurrency();
+    const currencyCode = currency ?? merchantCurrency.currencyCode;
+    const formatCurrencyAuto = currency ? (amount: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount) : merchantCurrency.formatCurrencyAuto;
 
     return (
-        <aside aria-label="Order summary" hidden={keyboardOpen} className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-store-background border-t border-store-background-text/15 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)]">
+        <aside ref={summaryRef} aria-label="Order summary" hidden={keyboardOpen} className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-store-background border-t border-store-background-text/15 shadow-[0_-6px_24px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)]">
             <div className="max-w-[1400px] mx-auto px-4 flex flex-col-reverse">
                 {/* Toggle Header */}
                 <button

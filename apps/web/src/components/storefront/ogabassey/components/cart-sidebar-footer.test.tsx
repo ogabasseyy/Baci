@@ -51,7 +51,7 @@ function setup(
 
 describe('CartSidebarFooter', () => {
   it('renders the total and checkout actions', () => {
-    setup();
+    const { onClose } = setup();
 
     expect(screen.getByTestId('cart-total')).toHaveTextContent('1000000');
     expect(
@@ -61,6 +61,8 @@ describe('CartSidebarFooter', () => {
       'href',
       '/store/cart'
     );
+    fireEvent.click(screen.getByRole('link', { name: 'View Full Cart' }));
+    expect(onClose).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: 'Continue Shopping' })).not.toBeInTheDocument();
   });
 

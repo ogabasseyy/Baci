@@ -30,6 +30,7 @@ export function OxygenMobileOrderSummary({
   }));
   return (
     <MobileOrderSummary
+      currency={order.currency}
       cart={cart}
       cartTotal={order.subtotal}
       deliveryCost={order.shipping_fee}

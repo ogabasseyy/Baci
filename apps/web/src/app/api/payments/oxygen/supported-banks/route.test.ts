@@ -53,3 +53,14 @@ it('returns unavailable when no saved list exists', async () => {
   mocks.read.mockResolvedValue(null);
   expect((await GET(new Request('http://localhost'))).status).toBe(503);
 });
+
+it('includes a retry interval on rate-limited requests', async () => {
+  mocks.limit.mockResolvedValue({
+    allowed: false,
+    resetTime: Date.now() + 30000,
+  });
+  const response = await GET(new Request('http://localhost'));
+  expect(response.status).toBe(429);
+  expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0);
+  expect(mocks.read).not.toHaveBeenCalled();
+});

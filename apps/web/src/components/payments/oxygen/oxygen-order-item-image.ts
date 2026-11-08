@@ -11,7 +11,7 @@ export function oxygenOrderItemImage(item: OrderItem): string {
     : item.products;
   const images = Array.isArray(product?.images) ? product.images : [];
   return (
-    item.image_url ||
+    (item.image_url?.trim() ? item.image_url : null) ||
     images.find(
       (image): image is string =>
         typeof image === 'string' && image.trim().length > 0

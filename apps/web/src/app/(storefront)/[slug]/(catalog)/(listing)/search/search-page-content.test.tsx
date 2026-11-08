@@ -91,6 +91,7 @@ describe('SearchPageContent', () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       id: 'merchant-1',
       slug: 'ogabassey',
+      template_id: 'ogabassey',
       business_name: 'Shop',
       payout_currency: 'NGN',
     } as never);

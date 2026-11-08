@@ -230,7 +230,7 @@ jobs:
   deploy:
     needs: [build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 70
     # Same-ref deploys serialize (cancel:false); burst redispatch may displace a queued run loudly — every started deploy logs its outcome.
     concurrency:
       group: preview-deploy-${{ inputs.ref }}
@@ -306,6 +306,14 @@ jobs:
         # Shell logic lives in the trusted helper (300-line rule); the step
         # stays a thin invocation pinned exactly by the contract suite.
         run: trusted-ops/.github/scripts/preview-deploy-run.sh trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz --turbo
+      - name: Verify preview when references were dropped
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: node trusted-ops/.github/scripts/preview-gate-cli.mjs .preview-refs-quarantine/.preview-refs-manifest.json "$PREVIEW_URL" trusted-ops/.github/scripts/run-pinned-vercel.sh
       - name: Clean up Vercel secrets
         if: always()
         run: |

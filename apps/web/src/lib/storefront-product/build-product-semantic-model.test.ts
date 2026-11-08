@@ -151,7 +151,7 @@ describe('buildProductSemanticModel', () => {
     );
     expect(model.alternatives?.cards.length).toBeGreaterThan(0);
     expect(
-      model.alternatives?.cards.some((card) =>
+      model.sameBrand?.cards.some((card) =>
         card.secondaryHref?.includes('/compare/')
       )
     ).toBe(true);

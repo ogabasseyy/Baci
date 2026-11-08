@@ -100,6 +100,13 @@ export async function buildInformationalClusterModel(
     );
   }
 
+  const featuredProductPool =
+    input.excludedProductSlugs && input.excludedProductSlugs.size > 0
+      ? products.filter(
+          (product) => !input.excludedProductSlugs?.has(product.slug)
+        )
+      : products;
+
   const destinationVerified =
     input.categoryDataOverride?.destinationVerified === true;
   const [
@@ -221,7 +228,7 @@ export async function buildInformationalClusterModel(
       input.storeUrl,
       categorySlug,
       inferred.brands,
-      products,
+      featuredProductPool,
       input.countryCode,
       `${input.post.title} ${input.post.slug}`
     ),

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   configuration: vi.fn(),
   refreshBanks: vi.fn(),
+  readBanks: vi.fn(),
   getRedis: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
@@ -19,6 +20,7 @@ vi.mock('@/lib/payments/oxygen/runtime-configuration', () => ({
 }));
 vi.mock('@/lib/payments/oxygen/supported-bank-cache', () => ({
   refreshSupportedBanks: mocks.refreshBanks,
+  readSupportedBanks: mocks.readBanks,
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: mocks.getRedis }));
 
@@ -174,6 +176,7 @@ describe('Oxygen bank-list refresh task', () => {
       reference: 'partner',
     });
     mocks.getRedis.mockReset().mockReturnValue({});
+    mocks.readBanks.mockReset();
     mocks.refreshBanks
       .mockReset()
       .mockResolvedValue([{ name: 'Access Bank', code: '044' }]);
@@ -194,6 +197,51 @@ describe('Oxygen bank-list refresh task', () => {
       'partner'
     );
     expect(mocks.reconcile).not.toHaveBeenCalled();
+  });
+
+  it('recovers a missing bank cache without calling Oxygen when the cache is valid', async () => {
+    const ensure = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
+      { headers: { authorization: 'Bearer secret' } }
+    );
+    const cache = { set: vi.fn().mockResolvedValue('OK') };
+    mocks.getRedis.mockReturnValue(cache);
+    mocks.readBanks.mockResolvedValueOnce([
+      { name: 'Access Bank', code: '044' },
+    ]);
+    expect(await (await GET(ensure)).json()).toEqual({ status: 'available' });
+    expect(mocks.connect).not.toHaveBeenCalled();
+    mocks.readBanks.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    expect((await GET(ensure)).status).toBe(200);
+    expect(cache.set).toHaveBeenCalledWith(
+      expect.stringMatching(/^oxygen:supported-banks-recovery:production:/),
+      '1',
+      { nx: true, ex: 300 }
+    );
+    expect(mocks.refreshBanks).toHaveBeenCalledOnce();
+  });
+
+  it('rejects unauthenticated cache recovery before inspecting Redis', async () => {
+    const request = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks'
+    );
+    expect((await GET(request)).status).toBe(401);
+    expect(mocks.getRedis).not.toHaveBeenCalled();
+    expect(mocks.refreshBanks).not.toHaveBeenCalled();
+  });
+
+  it('does not run concurrent recovery when another worker holds the lock', async () => {
+    const ensure = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
+      { headers: { authorization: 'Bearer secret' } }
+    );
+    mocks.getRedis.mockReturnValue({ set: vi.fn().mockResolvedValue(null) });
+    mocks.readBanks.mockResolvedValue(null);
+    expect(await (await GET(ensure)).json()).toEqual({
+      status: 'recovery_in_progress',
+    });
+    expect(mocks.connect).not.toHaveBeenCalled();
+    expect(mocks.refreshBanks).not.toHaveBeenCalled();
   });
 
   it('rejects an unauthenticated refresh before touching the provider', async () => {

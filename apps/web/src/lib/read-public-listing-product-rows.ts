@@ -1,6 +1,6 @@
 import type { AdvertisedPhoneProduct } from './advertised-phone-price-projection';
 
-type ListingRow = AdvertisedPhoneProduct & Record<string, unknown>;
+export type ListingRow = AdvertisedPhoneProduct & Record<string, unknown>;
 const optionalString = (value: unknown) =>
   value == null || typeof value === 'string';
 const optionalNumber = (value: unknown) =>
@@ -101,11 +101,4 @@ export function readPublicListingProductRows(value: unknown): ListingRow[] {
       throw new Error('Invalid public listing product projection');
     return row;
   });
-}
-
-/** Validate and narrow an existing typed array without dropping its extra columns. */
-export function assertPublicListingProductRows<T>(
-  rows: T[]
-): asserts rows is Array<T & ListingRow> {
-  readPublicListingProductRows(rows);
 }

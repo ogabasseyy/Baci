@@ -3,8 +3,8 @@ import {
   type AdvertisedPhoneConstraints,
   projectAdvertisedPhonePrices,
 } from './advertised-phone-price-projection';
+import { assertPublicListingProductRows } from './assert-public-listing-product-rows';
 import { getPublicProductVariantsByProductIds } from './cached-data';
-import { assertPublicListingProductRows } from './read-public-listing-product-rows';
 
 /** Apply display-only facts after the caller has scoped and bounded listing rows. */
 export async function projectStandardListingRows<

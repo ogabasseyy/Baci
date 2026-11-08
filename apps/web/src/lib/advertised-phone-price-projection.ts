@@ -1,5 +1,6 @@
 import 'server-only';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
+import { assertPublicListingProductRows } from './assert-public-listing-product-rows';
 import {
   isCellularPhoneProduct,
   type StorefrontVariantProductContext,
@@ -7,7 +8,6 @@ import {
 import { filterDefaultAdvertisedVariants } from './default-advertised-variants';
 import { getEffectiveStock } from './product-stock';
 import { projectPublicVariantSelection } from './project-public-variant-selection';
-import { assertPublicListingProductRows } from './read-public-listing-product-rows';
 import { resolveAdvertisedVariantImage } from './resolve-advertised-variant-image';
 import { resolveDefaultAdvertisedVariantSelection } from './resolve-default-advertised-variant-selection';
 import { resolvePublicProductOption } from './resolve-public-product-option';

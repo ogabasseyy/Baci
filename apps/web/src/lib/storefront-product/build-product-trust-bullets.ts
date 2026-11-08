@@ -40,8 +40,9 @@ export function buildProductTrustBullets(
   }
 
   if (
-    typeof input.currentProduct.stock === 'number' &&
-    input.currentProduct.stock > 0
+    input.currentProduct.manage_stock === false ||
+    (typeof input.currentProduct.stock === 'number' &&
+      input.currentProduct.stock > 0)
   ) {
     bullets.push('In stock for immediate dispatch');
   }
@@ -49,7 +50,13 @@ export function buildProductTrustBullets(
   const specHighlights = formatVerifiedProductSpecHighlights({
     specs: input.currentProduct.product_key_specs,
     category: input.categoryName || input.categorySlug,
-    keys: ['ram_gb', 'storage_gb', 'battery_mah', 'main_camera_mp'],
+    keys: [
+      'ram_gb',
+      'storage_gb',
+      'battery_mah',
+      'main_camera_mp',
+      'refresh_rate_hz',
+    ],
     maxHighlights: 3,
   });
   if (specHighlights.length > 0) {

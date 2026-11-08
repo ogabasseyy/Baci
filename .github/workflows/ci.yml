@@ -175,9 +175,10 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: |
-          # CI type-checks the application graph only: the full program
+          # CI type-checks the application graph only: the full web program
           # (including ~9k test files) peaks near 11 GB and is killed on the
-          # 8 GB hosted runners. `typecheck:ci` excludes tests; the full
+          # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
+          # delegates to the full `typecheck` for every other package; the full
           # `pnpm turbo typecheck` stays available locally.
           LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
           STATUS=0

@@ -268,7 +268,7 @@ export function SearchRefinementControls({
           {error && panel === null && <p role="alert">{error}</p>}
         </aside>
         <div className="min-w-0 flex-1">
-          <h2 className="sr-only">Search results</h2>
+          <h2 className="sr-only">Matching products</h2>
           {children}
         </div>
       </div>

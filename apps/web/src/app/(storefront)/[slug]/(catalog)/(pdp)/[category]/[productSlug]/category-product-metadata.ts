@@ -89,6 +89,7 @@ export function buildCategoryProductMetadata({
     normalizedProductMetaTitle || normalizedGeneratedTitle;
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
+      dropSuffixWhenTooLong: true,
       title: metadataTitleSource,
       suffix: merchantDisplayName,
       fallback:

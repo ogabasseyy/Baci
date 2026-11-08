@@ -54,7 +54,13 @@ export function CompareIndexPageContent({
       </header>
 
       {compareLinks.length > 0 ? (
-        <section className="mt-8 grid gap-4 md:grid-cols-2">
+        <section
+          aria-labelledby="available-comparisons-heading"
+          className="mt-8 grid gap-4 md:grid-cols-2"
+        >
+          <h2 id="available-comparisons-heading" className="sr-only">
+            Available {categoryName} comparisons
+          </h2>
           {compareLinks.map((link) => (
             <article
               key={link.href}
@@ -62,15 +68,17 @@ export function CompareIndexPageContent({
             >
               <div>
                 <div className="flex items-start justify-between gap-3">
-                  <Link
-                    className="text-base font-semibold text-store-primary transition-colors group-hover:underline after:absolute after:inset-0"
-                    href={asRoute(
-                      resolveStorefrontPathHref(pathPrefix, link.href)
-                    )}
-                    prefetch={false}
-                  >
-                    {link.label}
-                  </Link>
+                  <h3 className="text-base font-semibold text-store-primary">
+                    <Link
+                      className="transition-colors group-hover:underline after:absolute after:inset-0"
+                      href={asRoute(
+                        resolveStorefrontPathHref(pathPrefix, link.href)
+                      )}
+                      prefetch={false}
+                    >
+                      {link.label}
+                    </Link>
+                  </h3>
                   <span className="inline-flex shrink-0 items-center justify-center rounded-md bg-store-primary/10 px-2 py-0.5 text-[11px] font-bold text-store-primary">
                     VS
                   </span>

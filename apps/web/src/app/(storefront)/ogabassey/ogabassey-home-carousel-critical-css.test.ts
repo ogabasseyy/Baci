@@ -86,14 +86,35 @@ describe('homepage carousel critical CSS', () => {
     ).toMatchObject({ opacity: '1', 'z-index': '10' });
   });
 
-  it('locks mobile hero h2 typography and img padding so the slide-0 image always wins LCP area', () => {
+  it('locks mobile and desktop hero title/price typography and img padding so the slide-0 image always wins LCP area', () => {
     expect(
-      declarationsFor('[data-ogabassey-mobile-hero-panel] h2')
+      declarationsFor(
+        '[data-ogabassey-mobile-hero-panel] .ogabassey-hero-title'
+      )
     ).toMatchObject({
       '-webkit-line-clamp': '3',
       'font-size': '1.25rem',
       'line-height': '1.05',
       overflow: 'hidden',
+    });
+    expect(
+      declarationsFor(
+        '[data-ogabassey-mobile-hero-panel] .ogabassey-hero-price'
+      )
+    ).toMatchObject({
+      'font-size': '11px',
+      'font-weight': '600',
+    });
+    expect(
+      declarationsFor('[data-ogabassey-desktop-hero]>a .ogabassey-hero-title')
+    ).toMatchObject({
+      'font-size': '3rem',
+    });
+    expect(
+      declarationsFor('[data-ogabassey-desktop-hero]>a .ogabassey-hero-price')
+    ).toMatchObject({
+      'font-size': '1.25rem',
+      'line-height': '1.75rem',
     });
     expect(
       declarationsFor('[data-ogabassey-mobile-hero-panel] img')

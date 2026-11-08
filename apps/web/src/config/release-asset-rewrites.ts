@@ -3,7 +3,7 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from './cdn';
 export function isTypegenProcess(
   argv: readonly string[] = process.argv
 ): boolean {
-  return argv.some((arg) => arg.includes('typegen'));
+  return argv.includes('typegen');
 }
 
 /**

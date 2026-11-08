@@ -40,4 +40,19 @@ describe('release-asset-rewrites', () => {
       },
     ]);
   });
+
+  it('does not treat file paths containing "typegen" as substring as typegen process', () => {
+    const argv = [
+      'node',
+      '/Users/dev/typegen-test/node_modules/.bin/next',
+      'start',
+    ];
+    expect(isTypegenProcess(argv)).toBe(false);
+    expect(getReleaseAssetRewriteRules(argv)).toEqual([
+      {
+        source: '/release-assets/:path*',
+        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+      },
+    ]);
+  });
 });

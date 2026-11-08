@@ -1,6 +1,6 @@
 import { getProductSchemaDescription } from './get-product-schema-description';
 import type { Product } from './products';
-import { generateProductSchema } from './seo-utils';
+import { generateProductSchema, type ProductSchemaOptions } from './seo-utils';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
 
 /** Build storefront Product JSON-LD with volatile retail claims removed from narrative copy. */
@@ -11,10 +11,7 @@ export function generateStorefrontProductSchema(
   country: string = 'NG',
   merchantLogo?: string,
   trustProfile?: MerchantTrustProfile,
-  options: {
-    acceptedPaymentMethods?: readonly string[];
-    productUrl?: string;
-  } = {}
+  options: Omit<ProductSchemaOptions, 'description'> = {}
 ) {
   return generateProductSchema(
     product,

@@ -18,5 +18,8 @@ export function getProductSchemaDescription(
       );
     }
   }
-  return `Buy ${product.name} from ${merchantName}. Best prices, fast delivery, and secure payments.`;
+  return generateMetaDescription(
+    `Buy ${product.name} from ${merchantName}. Best prices, fast delivery, and secure payments.`,
+    PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+  );
 }

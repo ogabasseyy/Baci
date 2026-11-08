@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '../config/product-schema';
 import { generateStorefrontProductSchema } from './generate-storefront-product-schema';
 import { makeSeoProduct } from './seo-utils-product-schema-test-helper';
 
@@ -62,5 +63,21 @@ describe('getProductSchemaDescription through Product JSON-LD', () => {
       'NGN'
     );
     expect(schema.description).toBe('The best gaming laptop for creators.');
+  });
+
+  it('caps the generic fallback description at the schema limit', () => {
+    const schema = generateStorefrontProductSchema(
+      makeSeoProduct({
+        name: `Product ${'model '.repeat(PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH)}`,
+        description: '',
+        meta_description: '',
+      }),
+      'Ogabassey',
+      'NGN'
+    );
+
+    expect(
+      schema.description?.length ?? Number.POSITIVE_INFINITY
+    ).toBeLessThanOrEqual(PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH);
   });
 });

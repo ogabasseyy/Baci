@@ -16,10 +16,17 @@ describe('generateStorefrontProductSchema', () => {
       undefined,
       {
         acceptedPaymentMethods: ['Pay on delivery'],
+        merchantBaseUrl: 'https://ogabassey.com',
         productUrl: 'https://ogabassey.com/smartphones/phone',
       }
     );
 
+    expect(schema['@id']).toBe(
+      'https://ogabassey.com/smartphones/phone#product'
+    );
+    expect((schema.offers as Record<string, unknown>).seller).toMatchObject({
+      '@id': 'https://ogabassey.com/#online-store',
+    });
     expect(schema.description).toBe(
       'Buy Phone from Ogabassey. Best prices, fast delivery, and secure payments.'
     );

@@ -201,6 +201,8 @@ export function DiscountItemSelector({
 
             {_fetchError && !loading ? (
               <View
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
                 style={[
                   styles.errorBanner,
                   { backgroundColor: colors.errorLight },

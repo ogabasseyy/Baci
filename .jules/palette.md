@@ -175,3 +175,7 @@
 **Learning:** When a password toggle uses `aria-pressed`, tests should assert both the state transition and the stable accessible name so future visible/icon refactors do not regress the APG toggle-button contract.
 **Action:** Keep `aria-label="Show password"` stable across visibility toggles, bind `aria-pressed` to the current state, and hide decorative Eye/EyeOff icons from assistive technologies when the button already has an explicit accessible name.
 **Source:** WAI-ARIA APG button pattern, verified 2026-07-01.
+## 2025-02-23 — Add accessibilityRole and LiveRegion for Error Feedback
+**Learning:** React Native views used as error banners need both `accessibilityRole="alert"` and `accessibilityLiveRegion="polite"` to ensure screen readers announce dynamic error messages when they appear.
+**Action:** Always add `accessibilityRole="alert"` and `accessibilityLiveRegion="polite"` to dynamic error banner views in React Native, and verify with a role-based test `getByRole('alert')`.
+**Source:** Codebase standards for dynamic error feedback

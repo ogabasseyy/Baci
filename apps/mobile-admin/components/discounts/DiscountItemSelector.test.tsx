@@ -165,7 +165,13 @@ vi.mock('react-native', () => {
         value={value}
       />
     ),
-    View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    View: ({
+      children,
+      accessibilityRole,
+    }: {
+      children?: ReactNode;
+      accessibilityRole?: string;
+    }) => <div role={accessibilityRole}>{children}</div>,
   };
 });
 
@@ -279,6 +285,7 @@ describe('DiscountItemSelector', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load items')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
     });
   });
 });

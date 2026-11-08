@@ -100,11 +100,12 @@ export async function buildInformationalClusterModel(
     );
   }
 
-  if (input.excludedProductSlugs && input.excludedProductSlugs.size > 0) {
-    products = products.filter(
-      (product) => !input.excludedProductSlugs?.has(product.slug)
-    );
-  }
+  const featuredProductPool =
+    input.excludedProductSlugs && input.excludedProductSlugs.size > 0
+      ? products.filter(
+          (product) => !input.excludedProductSlugs?.has(product.slug)
+        )
+      : products;
 
   const destinationVerified =
     input.categoryDataOverride?.destinationVerified === true;
@@ -227,7 +228,7 @@ export async function buildInformationalClusterModel(
       input.storeUrl,
       categorySlug,
       inferred.brands,
-      products,
+      featuredProductPool,
       input.countryCode,
       `${input.post.title} ${input.post.slug}`
     ),

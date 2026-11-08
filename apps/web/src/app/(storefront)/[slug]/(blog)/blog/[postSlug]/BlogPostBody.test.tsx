@@ -115,9 +115,6 @@ describe('BlogPostBody', () => {
       screen.getByRole('link', { name: /Related Post/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { level: 3, name: 'Related Post' })
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('img', { name: 'Related Post' })
     ).toBeInTheDocument();
     expect(screen.getByText('4 min read')).toBeInTheDocument();

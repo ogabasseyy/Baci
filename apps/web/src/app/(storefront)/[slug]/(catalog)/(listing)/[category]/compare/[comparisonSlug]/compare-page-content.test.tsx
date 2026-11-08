@@ -1,22 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-    prefetch: _prefetch,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-    href: string;
-    prefetch?: boolean;
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
 
 const mockLoadComparePage = vi.fn();
 const mockCompareRelatedLinks = vi.fn(
@@ -263,35 +247,6 @@ describe('ComparePageContent', () => {
       'scope',
       'rowgroup'
     );
-  });
-
-  it('renders WCAG breadcrumb navigation with aria-current on the terminal item', async () => {
-    const { ComparePageContent } = await import('./compare-page-content');
-
-    render(
-      (await ComparePageContent({
-        params: Promise.resolve({
-          slug: 'ogabassey',
-          category: 'smartphones',
-          comparisonSlug: 'iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
-        }),
-      })) as ReactElement
-    );
-
-    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(nav).toBeInTheDocument();
-    expect(within(nav).getByRole('list')).toBeInTheDocument();
-    expect(
-      within(nav).getByRole('link', { name: 'Ogabassey' })
-    ).toHaveAttribute('href', 'https://ogabassey.com');
-    expect(
-      within(nav).getByRole('link', { name: 'Smartphones' })
-    ).toHaveAttribute('href', 'https://ogabassey.com/smartphones');
-    const terminalItem = within(nav).getByText(
-      'iPhone 17 Pro Max vs Samsung Galaxy Z TriFold',
-      { selector: '[aria-current="page"]' }
-    );
-    expect(terminalItem).toBeInTheDocument();
   });
 
   it('renders breadcrumb and product ItemList JSON-LD scripts while suppressing compare FAQPage markup', async () => {

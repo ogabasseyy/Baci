@@ -1,6 +1,3 @@
-import Link from 'next/link';
-import { asRoute } from '@/lib/routes';
-
 interface ComparePageBreadcrumbItem {
   name: string;
   url: string;
@@ -45,13 +42,12 @@ export function ComparePageBreadcrumb({
                   {item.name || fallbackTerminalName}
                 </span>
               ) : (
-                <Link
-                  href={asRoute(item.url)}
-                  prefetch={false}
+                <a
+                  href={item.url}
                   className="transition-colors hover:text-store-primary"
                 >
                   {item.name}
-                </Link>
+                </a>
               )}
             </li>
           );

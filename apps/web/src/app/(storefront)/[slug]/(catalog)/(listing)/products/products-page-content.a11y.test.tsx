@@ -169,10 +169,16 @@ describe('ProductsPageContent accessibility & heading outline semantics', () => 
     expect(catalogHeading).toHaveAttribute('id', 'products-catalog-heading');
 
     const catalogSection = catalogHeading.closest('section');
+    expect(catalogSection).not.toBeNull();
     expect(catalogSection).toHaveAttribute(
       'aria-labelledby',
       'products-catalog-heading'
     );
+    if (catalogSection) {
+      expect(
+        within(catalogSection).getByRole('group', { name: 'Product Catalog' })
+      ).toBeInTheDocument();
+    }
 
     // 4. ProductIndexCard renders H3 heading and grid position semantics
     const productHeading = screen.getByRole('heading', {

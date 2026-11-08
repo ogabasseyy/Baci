@@ -60,6 +60,25 @@ export function buildOfferSellerEntity(
   };
 }
 
+export function applyOfferSellerEntity(
+  offers: unknown,
+  seller: { '@type': 'Organization'; '@id'?: string; name: string }
+): unknown {
+  if (Array.isArray(offers)) {
+    return offers.map((offer) =>
+      offer && typeof offer === 'object' && !Array.isArray(offer)
+        ? { ...(offer as Record<string, unknown>), seller }
+        : offer
+    );
+  }
+
+  if (offers && typeof offers === 'object') {
+    return { ...(offers as Record<string, unknown>), seller };
+  }
+
+  return offers;
+}
+
 export function buildCollectionPageEntityIdentity(
   absolutePageUrl: string
 ): { '@id': string; url: string } | Record<string, never> {

@@ -235,4 +235,51 @@ describe('generateProductSchema & generateCollectionPageSchema entity-ID binding
       'https://usebaci.com/merchant-alpha/smartphones#collection'
     );
   });
+
+  it('preserves trusted seller @id and product @id when merging persisted schema_markup offers', () => {
+    const productWithStoredSchema = {
+      ...sampleProduct,
+      schema_markup: {
+        '@context': 'https://schema.org' as const,
+        '@type': 'Product' as const,
+        name: 'iPhone 16 Pro',
+        '@id': 'https://stale.example.com/#bad',
+        offers: [
+          {
+            '@type': 'Offer' as const,
+            price: 1500000,
+            priceCurrency: 'NGN',
+            availability: 'https://schema.org/InStock',
+            seller: { '@type': 'Organization' as const, name: 'OgaBassey' },
+          },
+        ],
+      },
+    };
+
+    const schema = generateProductSchema(
+      productWithStoredSchema,
+      'OgaBassey',
+      'NGN',
+      'NG',
+      undefined,
+      undefined,
+      {
+        merchantBaseUrl: 'https://ogabassey.com/',
+        productUrl: 'https://ogabassey.com/products/iphone-16-pro',
+      }
+    );
+
+    expect(schema['@id']).toBe(
+      'https://ogabassey.com/products/iphone-16-pro#product'
+    );
+    expect(schema.offers).toEqual([
+      expect.objectContaining({
+        seller: {
+          '@type': 'Organization',
+          '@id': 'https://ogabassey.com/#online-store',
+          name: 'OgaBassey',
+        },
+      }),
+    ]);
+  });
 });

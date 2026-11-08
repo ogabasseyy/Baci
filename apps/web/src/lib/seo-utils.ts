@@ -46,6 +46,7 @@ import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
 import { normalizeSocialUrl } from './social';
 import {
+  applyOfferSellerEntity,
   buildOfferSellerEntity,
   buildProductSchemaEntityIdentity,
   tryParseUrl,
@@ -900,6 +901,16 @@ export function generateProductSchema(
       )
     );
     Object.assign(schema, customSchemaFields);
+    Object.assign(
+      schema,
+      buildProductSchemaEntityIdentity(structuredDataProductUrl)
+    );
+    if ('offers' in schema && schema.offers !== undefined) {
+      schema.offers = applyOfferSellerEntity(
+        schema.offers,
+        seller
+      ) as typeof schema.offers;
+    }
 
     const customProperties = Array.isArray(customAdditionalProperty)
       ? customAdditionalProperty

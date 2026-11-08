@@ -8,6 +8,7 @@ interface ProductSearchNavigationOptions {
   query: string;
   saveSearch: (query: string) => void;
   onClose: () => void;
+  onSelectionStart?: () => void;
   onNavigate: (product: Product) => void;
 }
 
@@ -16,6 +17,7 @@ export function useProductSearchNavigation({
   query,
   saveSearch,
   onClose,
+  onSelectionStart,
   onNavigate,
 }: ProductSearchNavigationOptions) {
   const generation = useRef(0);
@@ -36,6 +38,7 @@ export function useProductSearchNavigation({
       if (state !== 'active') generation.current += 1;
     });
     try {
+      onSelectionStart?.();
       saveSearch(query.trim() || product.name);
       await dismissKeyboardForNavigation();
       if (request !== generation.current) return;

@@ -1,4 +1,4 @@
-import { Keyboard } from 'react-native';
+import { Keyboard, TextInput } from 'react-native';
 import {
   KeyboardController,
   KeyboardEvents,
@@ -7,7 +7,10 @@ import { markProductEntryTiming } from '@/lib/product-entry-timing';
 
 /** Finish the keyboard resize before starting a native navigation transition. */
 export function dismissKeyboardForNavigation(): Promise<void> {
-  if (!KeyboardController.isVisible()) {
+  if (
+    !KeyboardController.isVisible() &&
+    !TextInput.State.currentlyFocusedInput()
+  ) {
     Keyboard.dismiss();
     return Promise.resolve();
   }

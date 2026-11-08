@@ -1,4 +1,4 @@
-import { Keyboard } from 'react-native';
+import { Keyboard, TextInput } from 'react-native';
 import { dismissKeyboardForNavigation } from './dismiss-keyboard-for-navigation';
 
 const mockVisible = jest.fn(() => true);
@@ -68,4 +68,25 @@ it('releases navigation if layout frames are suspended after hiding', async () =
   expect(mockRemove).toHaveBeenCalledTimes(1);
   expect(jest.getTimerCount()).toBe(0);
   raf.mockRestore();
+});
+
+it('waits for dismissal when the input is focused before keyboard visibility updates', async () => {
+  mockVisible.mockReturnValue(false);
+  jest
+    .spyOn(TextInput.State, 'currentlyFocusedInput')
+    .mockReturnValue(
+      {} as NonNullable<
+        ReturnType<typeof TextInput.State.currentlyFocusedInput>
+      >
+    );
+  let done = false;
+  const promise = dismissKeyboardForNavigation().then(() => {
+    done = true;
+  });
+  await Promise.resolve();
+  expect(done).toBe(false);
+  mockEvents.get('keyboardDidHide')?.();
+  jest.advanceTimersByTime(16);
+  await promise;
+  expect(done).toBe(true);
 });

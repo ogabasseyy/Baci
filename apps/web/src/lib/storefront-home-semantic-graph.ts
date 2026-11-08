@@ -171,6 +171,7 @@ function buildNavigationNode(
   const navigationEntries: Record<string, unknown>[] = [
     {
       '@type': 'CollectionPage',
+      '@id': `${storeUrl(input.baseUrl, 'products')}#collection`,
       name: 'All products',
       url: storeUrl(input.baseUrl, 'products'),
     },

@@ -171,6 +171,16 @@ describe('buildStorefrontHomeSemanticGraph entity IDs', () => {
       }>;
     };
 
+    const navProducts = navigation.hasPart.find(
+      (entry) => entry.url === 'https://ogabassey.com/products'
+    );
+    expect(navProducts).toMatchObject({
+      '@id': 'https://ogabassey.com/products#collection',
+      '@type': 'CollectionPage',
+      name: 'All products',
+      url: 'https://ogabassey.com/products',
+    });
+
     const navCategory = navigation.hasPart.find(
       (entry) => entry.url === 'https://ogabassey.com/smartphones'
     );

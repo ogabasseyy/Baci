@@ -168,6 +168,51 @@ describe('Middleware Proxy', () => {
     vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
   });
 
+  it.each([
+    '/api/products',
+    '/api/merchants/by-slug',
+  ])('publishes the enforced quota once on %s and disables shared caching', async (pathname) => {
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: true,
+      limit: 30,
+      remaining: 24,
+      resetTime: Date.now() + 60_000,
+    });
+    const response = await proxy(
+      new NextRequest(`https://${ROOT_DOMAIN}${pathname}`)
+    );
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect(response.headers.get('RateLimit')).toMatch(/^"api";r=24;t=\d+$/);
+    expect(response.headers.get('RateLimit-Policy')).toBe('"api";q=30;w=60');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Retry-After')).toBeNull();
+  });
+
+  it('includes current quota and retry guidance when a reported route is throttled', async () => {
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      limit: 30,
+      remaining: 0,
+      resetTime: Date.now() + 60_000,
+    });
+    const response = await proxy(
+      new NextRequest(`https://${ROOT_DOMAIN}/api/products`)
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get('RateLimit')).toMatch(/^"api";r=0;t=\d+$/);
+    expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not attach caller quota or change caching on unrelated paths', async () => {
+    const response = await proxy(
+      new NextRequest(`https://${ROOT_DOMAIN}/api/other`)
+    );
+    expect(response.headers.get('RateLimit')).toBeNull();
+    expect(response.headers.get('RateLimit-Policy')).toBeNull();
+  });
+
   it('should apply security headers to API routes', async () => {
     const req = new NextRequest(`https://${ROOT_DOMAIN}/api/products`);
     req.headers.set('host', ROOT_DOMAIN);

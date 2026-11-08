@@ -4,14 +4,15 @@ import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authorit
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import { loadPdpBrandHubEligibilityInventorySafely as load } from './load-pdp-brand-hub-eligibility-inventory-safely';
 
+type GetCachedBrandAuthorityInventoryModule =
+  typeof import('@/lib/storefront-category/get-cached-brand-authority-inventory');
+
 const read = vi.fn();
 vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-inventory',
   async (importOriginal) => {
     const actual =
-      await importOriginal<
-        typeof import('@/lib/storefront-category/get-cached-brand-authority-inventory')
-      >();
+      (await importOriginal()) as GetCachedBrandAuthorityInventoryModule;
     return {
       ...actual,
       getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),

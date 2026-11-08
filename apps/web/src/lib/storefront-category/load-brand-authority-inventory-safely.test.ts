@@ -3,13 +3,14 @@ import { ExpectedBrandAuthorityInventoryRejectionError } from '@/lib/storefront-
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import { loadBrandAuthorityInventorySafely } from './load-brand-authority-inventory-safely';
 
+type GetCachedBrandAuthorityInventoryModule =
+  typeof import('@/lib/storefront-category/get-cached-brand-authority-inventory');
+
 vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-inventory',
   async (importOriginal) => {
     const actual =
-      await importOriginal<
-        typeof import('@/lib/storefront-category/get-cached-brand-authority-inventory')
-      >();
+      (await importOriginal()) as GetCachedBrandAuthorityInventoryModule;
     return {
       ...actual,
       getCachedBrandAuthorityInventory: vi.fn(),

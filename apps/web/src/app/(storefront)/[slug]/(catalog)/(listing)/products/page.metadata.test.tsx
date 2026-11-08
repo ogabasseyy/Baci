@@ -158,6 +158,25 @@ describe('products index page metadata', () => {
     });
   });
 
+  it('noindexes category query permutations and canonicalizes to clean /products', async () => {
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'test-store' }),
+      searchParams: Promise.resolve({ category: 'Smartphones' }),
+    });
+
+    expect(metadata.alternates?.canonical).toBe(
+      'https://test-store.usebaci.com/products'
+    );
+    expect(metadata.robots).toMatchObject({
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+      },
+    });
+  });
+
   it('drops price bounds from canonical listing metadata until listing results are filtered', async () => {
     const metadata = await generateMetadata({
       params: Promise.resolve({ slug: 'test-store' }),

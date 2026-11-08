@@ -47,10 +47,8 @@ export function CategoryPageToolbar({
               Home
             </Link>
           </li>
-          <li aria-hidden="true" className="flex items-center">
+          <li className="flex items-center">
             <ChevronRight size={16} className="mx-2" aria-hidden="true" />
-          </li>
-          <li>
             <span
               aria-current="page"
               className="font-medium text-store-background-text"

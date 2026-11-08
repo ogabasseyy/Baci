@@ -161,10 +161,13 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                   Home
                 </Link>
               </li>
-              <li aria-hidden="true">
-                <span className="text-store-background-text/40">/</span>
-              </li>
-              <li>
+              <li className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="text-store-background-text/40"
+                >
+                  /
+                </span>
                 <span
                   aria-current="page"
                   className="font-medium text-store-background-text"
@@ -232,7 +235,10 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 <h2 id="products-catalog-heading" className="sr-only">
                   Product Catalog
                 </h2>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                <div
+                  role="feed"
+                  className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
+                >
                   {currentProductIndex.products.map((product, index) => (
                     <ProductIndexCard
                       key={product.id}

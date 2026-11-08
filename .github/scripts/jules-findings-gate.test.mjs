@@ -28,6 +28,7 @@ const clean = `## Findings
 test('accepts the exact clean severity statements Jules returned', () => {
   assert.equal(runGate(clean).status, 0);
   assert.equal(runGate(`${clean}\n## Suggested next steps\n- Proceed.`).status, 0);
+  assert.equal(runGate('I found no high-severity issues.').status, 0);
 });
 
 test('still blocks real findings, including contradictions and appended text', () => {
@@ -41,6 +42,9 @@ test('still blocks real findings, including contradictions and appended text', (
     '- **High:** No high-severity issues found.\nHowever, credentials leak.',
     '- **High:** No medium-severity issues found.',
     `${clean}\n## Suggested next steps\n- **High:** Credentials leak.`,
+    'I have reviewed the pull request. However, I found a high-severity issue where the script is unsafe.',
+    '- I found a high-severity security vulnerability in auth.ts.',
+    'I found two high-severity issues in auth.ts.',
   ]) assert.notEqual(runGate(body).status, 0, body);
 });
 

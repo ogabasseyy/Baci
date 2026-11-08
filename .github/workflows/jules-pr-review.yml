@@ -925,6 +925,7 @@ jobs:
           # Matches bullet items starting with the severity name, avoiding false-positive triggers from code diffs or conversation text.
           any_severity_re='(^|\n)[[:space:]]*[-*][[:space:]]+(high|critical|major|medium|low|minor)\b[[:space:]]*:'
           any_severity_bold='(^|\n)[[:space:]]*[-*][[:space:]]+\*\*(Severity[: ]*)?(High|Critical|Major|Medium|Low|Minor)([: ]|\s+severity)?\*\*[[:space:]:]*'
+          affirmative_prose_re='\b(I|we)[[:space:]]+(found|identified)[[:space:]]+(a|an|one|two|three|four|five|[0-9]+)[[:space:]]+(high|critical|major|medium|low|minor)([-[:space:]]+severity)?[[:space:]]+([[:alpha:]]+[[:space:]]+){0,3}(issues?|findings?|defects?|vulnerabilit(y|ies))\b'
 
           # Jules sometimes labels an explicit absence of findings as a severity bullet.
           # Remove only its exact standalone sentences, never arbitrary negations.
@@ -951,10 +952,11 @@ jobs:
           ' "${body_file}" > "${findings_file}"
 
           if grep -qiE "${any_severity_re}" "${findings_file}" || \
-             grep -qiE "${any_severity_bold}" "${findings_file}"; then
+             grep -qiE "${any_severity_bold}" "${findings_file}" || \
+             grep -qiE "${affirmative_prose_re}" "${findings_file}"; then
             echo "::error::Jules flagged findings on this PR. All findings must be addressed before merge, or add the 'bypass-ai-gate' label."
             echo "------- Flagged Findings -------"
-            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}" "${findings_file}" | head -80 || true
+            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}|${affirmative_prose_re}" "${findings_file}" | head -80 || true
             exit 1
           fi
 

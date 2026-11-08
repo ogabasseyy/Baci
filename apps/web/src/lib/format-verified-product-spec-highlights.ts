@@ -1,31 +1,33 @@
 import type { ProductCategorySource } from './product-schema-spec-classification';
 import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
 
-export type VerifiedSpecHighlightKey =
+export type VerifiedProductSpecKey =
   | 'ram_gb'
   | 'storage_gb'
   | 'battery_mah'
   | 'main_camera_mp'
-  | 'screen_size_inches';
+  | 'screen_size_inches'
+  | 'refresh_rate_hz';
 
 export interface FormatVerifiedProductSpecHighlightsInput {
   specs?: Record<string, unknown> | null;
   category?: string | null;
   categorySlugs?: string[] | null;
-  keys?: readonly VerifiedSpecHighlightKey[];
+  keys?: readonly VerifiedProductSpecKey[];
   maxHighlights?: number;
 }
 
-const DEFAULT_SPEC_KEYS: readonly VerifiedSpecHighlightKey[] = [
+const DEFAULT_SPEC_KEYS: readonly VerifiedProductSpecKey[] = [
   'ram_gb',
   'storage_gb',
   'battery_mah',
   'main_camera_mp',
   'screen_size_inches',
+  'refresh_rate_hz',
 ];
 
 const SPEC_FORMATTERS: Record<
-  VerifiedSpecHighlightKey,
+  VerifiedProductSpecKey,
   (v: string | number) => string
 > = {
   ram_gb: (v) => `${v}GB RAM`,
@@ -33,7 +35,15 @@ const SPEC_FORMATTERS: Record<
   battery_mah: (v) => `${v}mAh battery`,
   main_camera_mp: (v) => `${v}MP camera`,
   screen_size_inches: (v) => `${v}" display`,
+  refresh_rate_hz: (v) => `${v}Hz refresh rate`,
 };
+
+function formatSpecValue(
+  key: VerifiedProductSpecKey,
+  value: string | number
+): string {
+  return SPEC_FORMATTERS[key]?.(value) ?? `${value}`;
+}
 
 function getPositiveNumericSpecValue(raw: unknown): string | number | null {
   if (typeof raw === 'number')
@@ -47,7 +57,7 @@ function getPositiveNumericSpecValue(raw: unknown): string | number | null {
 }
 
 function isSpecEligible(
-  key: VerifiedSpecHighlightKey,
+  key: VerifiedProductSpecKey,
   value: string | number,
   input: FormatVerifiedProductSpecHighlightsInput
 ): boolean {
@@ -87,7 +97,7 @@ export function formatVerifiedProductSpecHighlights(
   for (const key of keys) {
     const val = getPositiveNumericSpecValue(specs[key]);
     if (val === null || !isSpecEligible(key, val, input)) continue;
-    highlights.push(SPEC_FORMATTERS[key](val));
+    highlights.push(formatSpecValue(key, val));
     if (highlights.length === maxHighlights) break;
   }
 

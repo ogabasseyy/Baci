@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DiscountItemSelector } from './DiscountItemSelector';
 
 const mocks = vi.hoisted(() => ({
@@ -165,12 +165,30 @@ vi.mock('react-native', () => {
         value={value}
       />
     ),
-    View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    View: ({
+      children,
+      accessibilityLiveRegion,
+      accessibilityRole,
+    }: {
+      children?: ReactNode;
+      accessibilityLiveRegion?: 'assertive' | 'none' | 'polite';
+      accessibilityRole?: string;
+    }) => (
+      <div
+        aria-live={
+          accessibilityLiveRegion === 'none' ? 'off' : accessibilityLiveRegion
+        }
+        role={accessibilityRole}
+      >
+        {children}
+      </div>
+    ),
   };
 });
 
 describe('DiscountItemSelector', () => {
   beforeEach(() => {
+    mocks.platform.OS = 'ios';
     mocks.fetchSelectableItems.mockReset();
     mocks.fetchSelectableItems.mockResolvedValue([
       {
@@ -185,10 +203,6 @@ describe('DiscountItemSelector', () => {
     mocks.listProps.maxToRenderPerBatch = 0;
     mocks.listProps.removeClippedSubviews = false;
     mocks.listProps.windowSize = 0;
-  });
-
-  afterEach(() => {
-    mocks.platform.OS = 'ios';
   });
 
   it('renders search and done controls', async () => {
@@ -279,6 +293,9 @@ describe('DiscountItemSelector', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load items')).toBeInTheDocument();
+      const alertElement = screen.getByRole('alert');
+      expect(alertElement).toBeInTheDocument();
+      expect(alertElement).toHaveAttribute('aria-live', 'assertive');
     });
   });
 });

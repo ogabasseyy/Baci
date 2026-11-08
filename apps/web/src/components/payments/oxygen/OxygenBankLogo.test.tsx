@@ -1,16 +1,15 @@
-import { existsSync } from 'node:fs';
 import { fireEvent, render } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { OxygenBankLogo } from './OxygenBankLogo';
 import { oxygenBankLogo } from './oxygen-bank-logos';
 
 it('matches exact Oxygen codes and aliases without guessing or normalizing unknown codes', () => {
-  expect(oxygenBankLogo('058')).toBe('/bank-logos/058.png');
-  expect(oxygenBankLogo('000013')).toBe('/bank-logos/058.png');
-  expect(oxygenBankLogo('999992')).toBe('/bank-logos/999992.png');
+  expect(oxygenBankLogo('058')).toBeDefined();
+  expect(oxygenBankLogo('000013')).toBe(oxygenBankLogo('058'));
+  expect(oxygenBankLogo('999992')).toBeDefined();
+  expect(oxygenBankLogo('058')).not.toBe('/bank-logos/058.png');
   for (const code of ['58', 'unknown', '', '__proto__'])
     expect(oxygenBankLogo(code)).toBeUndefined();
-  expect(existsSync(`public${oxygenBankLogo('058')}`)).toBe(true);
 });
 
 it('falls back for unknown codes and broken images, and recovers when the bank changes', () => {

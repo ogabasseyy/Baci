@@ -96,14 +96,18 @@ async function readCachedBrandAuthorityInventory(
 
   try {
     // Category activity must refresh at least as often as storefront pages.
-    if (budget) cacheLife('storefront-page');
-    else cacheLife('products');
-    cacheTag(
-      'products',
-      `products-${merchantId}`,
-      'categories',
-      `categories-${merchantId}`
-    );
+    if (budget) {
+      cacheLife('storefront-page');
+      cacheTag(
+        'products',
+        `products-${merchantId}`,
+        'categories',
+        `categories-${merchantId}`
+      );
+    } else {
+      cacheLife('products');
+      cacheTag('products', `products-${merchantId}`);
+    }
   } catch {
     // Unit tests run without Cache Components enabled.
   }

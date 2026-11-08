@@ -68,18 +68,20 @@ describe('PDP hub eligibility adapter', () => {
     }
     warn.mockRestore();
   });
-  it('uses the destination threshold and stock normalization, including string prices', async () => {
+  it('uses the destination threshold for available products', async () => {
     read.mockResolvedValueOnce({
-      products: rows.map((row, i) => ({
-        ...row,
-        price: '1,000',
-        manage_stock: i !== 0,
-        stock: i === 0 ? 0 : 2,
-      })),
+      products: rows,
     });
     expect(await load(input)).toHaveLength(5);
     read.mockResolvedValueOnce({
-      products: rows.map((row, i) => ({ ...row, stock: i === 0 ? 0 : 2 })),
+      products: rows.slice(0, 4),
+    });
+    expect(await load(input)).toEqual([]);
+    read.mockResolvedValueOnce({
+      products: [
+        ...rows.slice(0, 4),
+        { ...rows[0], id: 'p-other', brand: 'Samsung' },
+      ],
     });
     expect(await load(input)).toEqual([]);
   });

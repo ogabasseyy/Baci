@@ -40,34 +40,34 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
       }
     );
     const eligibility =
-      authorityHubEligibility.resolveBrandAuthorityEligibility(
+      authorityHubEligibility.resolveAvailableBrandAuthorityEligibility(
         inventory.products,
-        input.categorySlug,
         entry
       );
     if (!eligibility.eligible) return [];
-    const rawById = new Map(
-      inventory.products
-        .filter((row) => row && typeof row.id === 'string')
-        .map((row) => [row.id, row])
-    );
-    return eligibility.products.map((product) => {
-      const raw = rawById.get(product.id);
-      return {
-        slug: product.slug,
-        name: product.name,
-        brand: product.brand,
-        price: product.price,
-        availability: product.availability,
-        stock: product.stock,
-        stock_quantity: getEffectiveProductStock(raw ?? {}),
-        manage_stock: raw?.manage_stock ?? null,
-        is_parent: raw?.is_parent ?? null,
-        parent_product_id: raw?.parent_product_id ?? null,
-        category_slug: input.categorySlug,
-        product_key_specs: product.product_key_specs ?? null,
-      };
-    });
+    return eligibility.products.map((product) => ({
+      slug: product.slug,
+      name: product.name,
+      brand: product.brand,
+      price: product.price,
+      availability:
+        product.availability === 'InStock' ||
+        product.availability === 'OutOfStock'
+          ? product.availability
+          : null,
+      stock: typeof product.stock === 'number' ? product.stock : null,
+      stock_quantity: getEffectiveProductStock(product),
+      manage_stock: product.manage_stock ?? null,
+      is_parent: product.is_parent ?? null,
+      parent_product_id: product.parent_product_id ?? null,
+      category_slug: input.categorySlug,
+      product_key_specs:
+        product.product_key_specs &&
+        typeof product.product_key_specs === 'object' &&
+        !Array.isArray(product.product_key_specs)
+          ? (product.product_key_specs as Record<string, unknown>)
+          : null,
+    }));
   } catch (error) {
     console.warn('Failed to load PDP brand hub eligibility inventory', {
       merchantId: input.merchantId,

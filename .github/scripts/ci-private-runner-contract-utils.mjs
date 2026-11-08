@@ -10,6 +10,11 @@ function evaluate(expression, values) {
   source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) =>
     JSON.stringify(JSON.parse(json))
   );
+  // GitHub compares strings case-insensitively. Normalize only literals that
+  // participate in equality tests, leaving returned runner label arrays intact.
+  // Escaped quotes are not supported; extend this if the workflow uses them.
+  source = source.replace(/((?:"[^"\\]*"|'[^'\\]*'))\s*(==|!=)\s*((?:"[^"\\]*"|'[^'\\]*'))/g,
+    (_match, left, operator, right) => `${left.toLowerCase()} ${operator} ${right.toLowerCase()}`);
   assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
   // This executes the checked-out workflow expression, which these tests trust
   // as repository code; the character check is not a security sandbox.

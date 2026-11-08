@@ -14,6 +14,7 @@ function route({ privateRepo = true, enabled = 'true', buildEnabled = 'true', ev
 
 test('build requires private opt-in and trusted non-merge-group source', () => {
   assert.deepEqual(route(), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
+  assert.deepEqual(route({ enabled: 'TRUE', buildEnabled: 'TRUE', head: 'OWNER/REPO' }), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
   assert.equal(route({}, 'timeout-minutes'), 75);
   for (const value of [{ privateRepo: false }, { privateRepo: null }, { enabled: '' }, { enabled: 'false' }, { buildEnabled: '' }, { buildEnabled: 'false' }, { head: 'other/fork' }, { head: '' }, { event: 'merge_group', head: '' }]) {
     assert.equal(route(value), 'ubuntu-24.04');
@@ -33,13 +34,21 @@ test('self-hosted build references no configured secrets and never runs hosted S
   const reclaim = job.steps.find((step) => step.name === 'Reclaim unused hosted-runner SDK space');
   assert.match(reclaim.if, /runner\.environment\s*==\s*'github-hosted'/);
   assert.equal(reclaim.run, 'bash .github/scripts/reclaim-hosted-build-space.sh');
-  for (const environment of ['github-hosted', 'self-hosted', '']) {
+  for (const [environment, web, plan, expected] of [
+    ['github-hosted', 'true', 'full-affected', true],
+    ['github-hosted', 'false', 'full-affected', false],
+    ['github-hosted', 'true', 'config-smoke', false],
+    ['self-hosted', 'true', 'full-affected', false],
+    ['self-hosted', 'false', 'full-affected', false],
+    ['self-hosted', 'true', 'config-smoke', false],
+    ['', 'true', 'full-affected', false],
+  ]) {
     const condition = reclaim.if
       .replaceAll('runner.environment', JSON.stringify(environment))
-      .replaceAll('needs.changes.outputs.web', "'true'")
-      .replaceAll('needs.changes.outputs.test_plan_mode', "'full-affected'");
+      .replaceAll('needs.changes.outputs.web', JSON.stringify(web))
+      .replaceAll('needs.changes.outputs.test_plan_mode', JSON.stringify(plan));
     assert.match(condition, /^[\s()'"\w=!&|.\-]+$/);
-    assert.equal(Function(`"use strict"; return (${condition});`)(), environment === 'github-hosted');
+    assert.equal(Function(`"use strict"; return (${condition});`)(), expected);
   }
 });
 

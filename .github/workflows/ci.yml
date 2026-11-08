@@ -182,6 +182,7 @@ jobs:
           # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
           # delegates to the full `typecheck` for every other package; the full
           # `pnpm turbo typecheck` stays available locally.
+          set -o pipefail
           LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
           STATUS=0
           if [ "$EVENT_NAME" = "pull_request" ]; then

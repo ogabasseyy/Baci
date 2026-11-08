@@ -56,6 +56,15 @@ describe('CategoryPageToolbar', () => {
     expect(screen.getByText('42 results found')).toBeInTheDocument();
   });
 
+  it('falls back to "/" for the Home breadcrumb link when basePath is empty on a custom domain', () => {
+    renderToolbar({ basePath: '' });
+
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'href',
+      '/'
+    );
+  });
+
   it('invokes onViewModeChange when a view mode button is clicked', () => {
     const { onViewModeChange } = renderToolbar();
 

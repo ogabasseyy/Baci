@@ -42,10 +42,17 @@ describe('CategoryPageToolbar', () => {
     expect(
       screen.getByRole('heading', { name: 'Smartphones', level: 1 })
     ).toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(nav).toBeInTheDocument();
+    expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
       '/test-store'
     );
+    const currentItem = screen.getByText('Smartphones', {
+      selector: '[aria-current="page"]',
+    });
+    expect(currentItem).toBeInTheDocument();
     expect(screen.getByText('42 results found')).toBeInTheDocument();
   });
 

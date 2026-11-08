@@ -197,7 +197,7 @@ export function LabHeroMobileCarousel({
                 <span className={HERO_MOBILE_EYEBROW_CLASSES}>
                   Just launched
                 </span>
-                <h2 className={HERO_MOBILE_TITLE_CLASSES}>{slide.name}</h2>
+                <p className={HERO_MOBILE_TITLE_CLASSES}>{slide.name}</p>
                 <p className={HERO_MOBILE_PRICE_CLASSES}>{slide.priceLabel}</p>
                 <span className={HERO_MOBILE_CTA_CLASSES}>
                   {slide.ctaLabel}

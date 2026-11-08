@@ -2,6 +2,7 @@ import type { CategoryNavItem } from '@/lib/cached-categories';
 import type { JsonLdGraphData, JsonLdGraphNode } from '@/lib/json-ld-types';
 import type { Product } from '@/lib/products';
 import { getProductUrl } from '@/lib/seo-utils';
+import { buildStorefrontEntityId } from '@/lib/storefront-entity-id';
 
 const DEFAULT_CATEGORY_LIMIT = 12;
 const DEFAULT_PRODUCT_LINK_LIMIT = 8;
@@ -61,7 +62,7 @@ function storeUrl(baseUrl: string, path = ''): string {
 }
 
 function schemaId(baseUrl: string, fragment: string): string {
-  return `${storeUrl(baseUrl)}/#${fragment}`;
+  return buildStorefrontEntityId(baseUrl, fragment);
 }
 
 function getIdentityGraphNodes(
@@ -182,7 +183,7 @@ function buildNavigationNode(
   input: StorefrontHomeSemanticGraphInput,
   categories: CategoryNavItem[]
 ): Record<string, unknown> {
-  const navigationEntries = [
+  const navigationEntries: Record<string, unknown>[] = [
     {
       '@type': 'CollectionPage',
       name: 'All products',
@@ -190,6 +191,7 @@ function buildNavigationNode(
     },
     ...categories.map((category) => ({
       '@type': 'CollectionPage',
+      '@id': `${storeUrl(input.baseUrl, category.slug)}#collection`,
       name: category.name,
       url: storeUrl(input.baseUrl, category.slug),
     })),
@@ -197,7 +199,7 @@ function buildNavigationNode(
 
   if (input.blogEnabled) {
     navigationEntries.push({
-      '@type': 'Blog',
+      '@id': `${storeUrl(input.baseUrl, 'blog')}#blog`,
       name: `${input.merchantName} blog`,
       url: storeUrl(input.baseUrl, 'blog'),
     });
@@ -281,7 +283,6 @@ function buildBlogNode(
     url: storeUrl(input.baseUrl, 'blog'),
     isPartOf: { '@id': schemaId(input.baseUrl, 'website') },
     publisher: { '@id': schemaId(input.baseUrl, 'online-store') },
-    about: buildAboutTopics(input),
   };
 }
 

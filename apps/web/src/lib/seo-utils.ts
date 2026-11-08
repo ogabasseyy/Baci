@@ -44,6 +44,10 @@ import type {
 import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
 import { normalizeSocialUrl } from './social';
+import {
+  buildStorefrontEntityId,
+  normalizeStorefrontBaseUrl,
+} from './storefront-entity-id';
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
 import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
@@ -415,8 +419,9 @@ function buildMerchantReturnPolicyFromTrustProfile(
   };
 }
 
-interface ProductSchemaOptions {
+export interface ProductSchemaOptions {
   acceptedPaymentMethods?: readonly string[];
+  merchantBaseUrl?: string;
   productUrl?: string;
 }
 
@@ -513,7 +518,7 @@ function normalizeAcceptedPaymentMethods(
   return methods.length > 0 ? methods : undefined;
 }
 
-function parseStructuredDataUrl(url: string | undefined): URL | undefined {
+export function tryParseUrl(url: string | undefined | null): URL | undefined {
   if (!url) {
     return undefined;
   }
@@ -660,7 +665,11 @@ export function generateProductSchema(
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
   const productIdentifiers = normalizeParentProductIdentifiers(product);
-  const structuredDataProductUrl = parseStructuredDataUrl(options.productUrl);
+  const structuredDataProductUrl = tryParseUrl(options.productUrl);
+  const validMerchantBaseUrl = tryParseUrl(options.merchantBaseUrl);
+  const sellerEntityId = validMerchantBaseUrl
+    ? buildStorefrontEntityId(validMerchantBaseUrl.toString(), 'online-store')
+    : undefined;
   const acceptedPaymentMethod = normalizeAcceptedPaymentMethods(
     options.acceptedPaymentMethods
   );
@@ -706,6 +715,7 @@ export function generateProductSchema(
     name: safeName,
     description: safeDescription,
     ...(structuredDataProductUrl && {
+      '@id': `${normalizeStorefrontBaseUrl(structuredDataProductUrl.toString())}#product`,
       url: structuredDataProductUrl.toString(),
     }),
     ...(finalImages && { image: finalImages }),
@@ -729,6 +739,7 @@ export function generateProductSchema(
             itemCondition: getSchemaItemCondition(offer.condition),
             seller: {
               '@type': 'Organization',
+              ...(sellerEntityId && { '@id': sellerEntityId }),
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
@@ -749,6 +760,7 @@ export function generateProductSchema(
             itemCondition: getSchemaItemCondition(product.condition),
             seller: {
               '@type': 'Organization',
+              ...(sellerEntityId && { '@id': sellerEntityId }),
               name: safeMerchantName,
             },
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
@@ -1069,6 +1081,7 @@ export function generateProductSchema(
           priceValidUntil: variantPriceValidUntil,
           seller: {
             '@type': 'Organization',
+            ...(sellerEntityId && { '@id': sellerEntityId }),
             name: safeMerchantName,
           },
           ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
@@ -1611,7 +1624,10 @@ export function generateCollectionPageSchema(
     '@type': 'CollectionPage',
     name: escapeHtml(data.name),
     description: data.description ? escapeHtml(data.description) : undefined,
-    ...(absolutePageUrl && { url: absolutePageUrl }),
+    ...(absolutePageUrl && {
+      '@id': `${normalizeStorefrontBaseUrl(absolutePageUrl)}#collection`,
+      url: absolutePageUrl,
+    }),
     mainEntity: {
       '@type': 'ItemList',
       numberOfItems: safeProducts.length,

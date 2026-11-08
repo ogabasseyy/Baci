@@ -137,6 +137,19 @@ describe('replayPrimaryDelivery', () => {
     ).resolves.toEqual({ status: 200 });
   });
 
+  it('defers a broken enabled direct inflow for legacy-only bank signatures', async () => {
+    mocks.dispatch.mockResolvedValue(null);
+    await expect(
+      replayPrimaryDelivery(delivery(inflow, ['legacy']), {
+        NODE_ENV: 'test',
+        PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
+        PIGGYVEST_PRIMARY_ENABLED: 'true',
+        PIGGYVEST_PRIMARY_INFLOWS_ENABLED: 'true',
+      })
+    ).resolves.toEqual({ status: 503, primaryInflowUnavailable: true });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
   it('flags a delivery no primary intake owns and no legacy path may take as an authorization quarantine', async () => {
     mocks.dispatch.mockResolvedValue(null);
     await expect(

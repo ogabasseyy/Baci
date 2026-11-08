@@ -13,6 +13,7 @@ import type {
   ReplayProcessResult,
 } from './webhook-capture-drain';
 import { replayLegacyDelivery } from './webhook-capture-legacy-replay';
+import { isPrimaryLegacyBankInflowUnavailable } from './webhook-capture-primary-intake-readiness';
 import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 import { isPiggyvestWebhookIntakeRuntimeReady } from './webhook-intake-runtime';
 
@@ -53,6 +54,17 @@ export async function replayPrimaryDelivery(
 
   let primary: Response | 'conflict' | null;
   try {
+    // Legacy-signed bank inflows also enter the optional direct primary
+    // fallback. With no bank-family signature there is no bank inbox that
+    // could handle the row first; broken fallback config is not a row error.
+    if (
+      isPiggyvestCaptureLegacyReplayEnabled(env) &&
+      owner === 'bank' &&
+      families.includes('legacy') &&
+      !families.includes('bank') &&
+      isPrimaryLegacyBankInflowUnavailable(env)
+    )
+      return { status: 503, primaryInflowUnavailable: true };
     primary = await dispatchPrimaryPiggyvestIntake({
       rawBody,
       signature,

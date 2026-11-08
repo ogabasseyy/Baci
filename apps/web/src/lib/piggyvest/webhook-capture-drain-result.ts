@@ -34,6 +34,8 @@ export interface ReplayProcessResult {
   killSwitchDeferred?: boolean;
   /** The primary path declined and its authorized legacy fallback is unconfigured. */
   legacyIntakeUnavailable?: boolean;
+  /** The enabled direct primary inflow fallback has invalid configuration. */
+  primaryInflowUnavailable?: boolean;
   /** Same event identity, different content: a person must decide. */
   conflict?: boolean;
   /** The row needs a processing path this runtime does not hold. */
@@ -56,6 +58,7 @@ export async function settleReplayResult(
     result.keySetIncomplete !== true &&
     result.killSwitchDeferred !== true &&
     result.legacyIntakeUnavailable !== true &&
+    result.primaryInflowUnavailable !== true &&
     result.conflict !== true &&
     result.outOfScope === undefined;
   if (completed) {
@@ -85,6 +88,10 @@ export async function settleReplayResult(
   }
   if (result?.legacyIntakeUnavailable === true) {
     await settle(deps, row, 'deferred', 'LEGACY_INTAKE_UNAVAILABLE');
+    return 'retried';
+  }
+  if (result?.primaryInflowUnavailable === true) {
+    await settle(deps, row, 'deferred', 'PRIMARY_INFLOW_UNAVAILABLE');
     return 'retried';
   }
   if (result?.keySetIncomplete === true || verifiedWithIncompleteKeySet) {

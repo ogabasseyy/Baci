@@ -10,7 +10,10 @@ import {
   drainLoginReason,
   drainScheduleReason,
 } from './webhook-capture-drain-readiness';
-import { primaryIntakeReason } from './webhook-capture-primary-intake-readiness';
+import {
+  isPrimaryLegacyBankInflowUnavailable,
+  primaryIntakeReason,
+} from './webhook-capture-primary-intake-readiness';
 import {
   collectPiggyvestWebhookSecretsWithStatus,
   type PiggyvestWebhookKeyFamily,
@@ -157,8 +160,13 @@ function primaryReadinessReason(
   const unavailable = primary.notReady.filter((family) =>
     configured.has(family)
   );
-  return unavailable.length
-    ? `PRIMARY_INTAKE_NOT_READY:${unavailable.join(',')}`
+  const legacyBankInflowUnavailable =
+    primary.legacyBankInflowUnavailable ??
+    isPrimaryLegacyBankInflowUnavailable(evidence.env);
+  if (legacyBankInflowUnavailable) unavailable.push('bank');
+  const uniqueUnavailable = [...new Set(unavailable)].sort();
+  return uniqueUnavailable.length
+    ? `PRIMARY_INTAKE_NOT_READY:${uniqueUnavailable.join(',')}`
     : null;
 }
 

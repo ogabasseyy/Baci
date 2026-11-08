@@ -175,11 +175,24 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: |
+          # CI type-checks the application graph only: the full program
+          # (including ~9k test files) peaks near 11 GB and is killed on the
+          # 8 GB hosted runners. `typecheck:ci` excludes tests; the full
+          # `pnpm turbo typecheck` stays available locally.
+          LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
+          STATUS=0
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pnpm turbo typecheck --affected
+            pnpm turbo typecheck:ci --affected 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
-            pnpm turbo typecheck
+            pnpm turbo typecheck:ci 2>&1 | tee "$LOG_FILE" || STATUS=$?
           fi
+          {
+            echo "### Typecheck budget"
+            echo '```'
+            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
 
   quality-test:
     name: Quality Gate - Test

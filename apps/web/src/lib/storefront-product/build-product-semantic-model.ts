@@ -235,20 +235,32 @@ function buildRecommendationSections(
       )
     : allAlternatives;
 
-  const reservedSameBrandSlugs =
+  const samePricePool = buildSamePriceCandidates(normalizedInput);
+  const nonSameBrandSamePrice = samePricePool.filter(
+    (p) =>
+      (!currentBrand || normalizeText(p.brand) !== normalizedCurrentBrand) &&
+      conditionBucketMatches(normalizedInput.currentProduct, p)
+  );
+  const reservedSpecialistSlugs = new Set<string>(
     nonSameBrandAlternatives.length >= 1 && sameBrandPool.length >= 1
-      ? new Set(
-          sameBrandPool
-            .slice(0, Math.min(2, sameBrandPool.length))
-            .map((p) => p.slug)
-        )
-      : new Set<string>();
+      ? sameBrandPool
+          .slice(0, Math.min(2, sameBrandPool.length))
+          .map((p) => p.slug)
+      : []
+  );
+  if (
+    currentBrand &&
+    nonSameBrandAlternatives.length >= 2 &&
+    nonSameBrandSamePrice.length >= 1
+  ) {
+    reservedSpecialistSlugs.add(nonSameBrandSamePrice[0].slug);
+  }
 
   const supportCopy = getProductSemanticSupport(normalizedInput.categorySlug);
   const selectedAlternatives = selectSectionCards(
     allAlternatives,
     seenSlugs,
-    reservedSameBrandSlugs
+    reservedSpecialistSlugs
   );
   const alternatives = buildSection(
     normalizedInput,
@@ -269,10 +281,7 @@ function buildRecommendationSections(
       )
     : null;
 
-  const selectedSamePrice = selectSectionCards(
-    buildSamePriceCandidates(normalizedInput),
-    seenSlugs
-  );
+  const selectedSamePrice = selectSectionCards(samePricePool, seenSlugs);
   const samePrice = buildSection(
     normalizedInput,
     supportCopy.samePriceHeading,

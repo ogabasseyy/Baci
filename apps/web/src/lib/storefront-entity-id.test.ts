@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildCollectionPageEntityIdentity,
+  buildOfferSellerEntity,
+  buildProductSchemaEntityIdentity,
   buildStorefrontEntityId,
   normalizeStorefrontBaseUrl,
+  tryParseUrl,
 } from './storefront-entity-id';
 
 describe('storefront-entity-id', () => {
@@ -63,6 +67,49 @@ describe('storefront-entity-id', () => {
       expect(
         buildStorefrontEntityId('https://ogabassey.com', '###online-store')
       ).toBe('https://ogabassey.com/#online-store');
+    });
+  });
+
+  describe('tryParseUrl and entity schema helpers', () => {
+    it('parses valid HTTP/HTTPS URLs and rejects invalid or empty inputs', () => {
+      expect(tryParseUrl('https://ogabassey.com')?.toString()).toBe(
+        'https://ogabassey.com/'
+      );
+      expect(tryParseUrl('')).toBeUndefined();
+      expect(tryParseUrl('javascript:alert(1)')).toBeUndefined();
+      expect(tryParseUrl('not a url')).toBeUndefined();
+    });
+
+    it('builds product and collection entity identities and tenant-scoped seller objects', () => {
+      expect(
+        buildProductSchemaEntityIdentity(
+          tryParseUrl('https://ogabassey.com/smartphones/iphone-16/')
+        )
+      ).toEqual({
+        '@id': 'https://ogabassey.com/smartphones/iphone-16#product',
+        url: 'https://ogabassey.com/smartphones/iphone-16/',
+      });
+      expect(buildProductSchemaEntityIdentity(undefined)).toEqual({});
+
+      expect(
+        buildCollectionPageEntityIdentity('https://ogabassey.com/smartphones/')
+      ).toEqual({
+        '@id': 'https://ogabassey.com/smartphones#collection',
+        url: 'https://ogabassey.com/smartphones/',
+      });
+      expect(buildCollectionPageEntityIdentity('')).toEqual({});
+
+      expect(
+        buildOfferSellerEntity('Ogabassey', 'https://ogabassey.com/')
+      ).toEqual({
+        '@type': 'Organization',
+        '@id': 'https://ogabassey.com/#online-store',
+        name: 'Ogabassey',
+      });
+      expect(buildOfferSellerEntity('Ogabassey')).toEqual({
+        '@type': 'Organization',
+        name: 'Ogabassey',
+      });
     });
   });
 });

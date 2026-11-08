@@ -6,7 +6,6 @@ import {
 import type { Route } from 'next';
 import type {
   BreadcrumbList,
-  CollectionPage,
   MerchantReturnPolicy,
   OfferShippingDetails,
   ReturnFeesEnumeration,
@@ -24,13 +23,15 @@ import {
   isPaystackCheckoutAvailable,
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
-import { generateStorefrontSlug } from './generate-storefront-slug';
 import {
-  isExternalPlaceholderImageUrl,
-  PLACEHOLDER_IMAGE,
-} from './image-utils';
+  type CollectionPageData,
+  type CollectionPageJsonLdSchema,
+  type CollectionPageProduct,
+  generateCollectionPageSchema,
+  toAbsoluteSchemaUrl,
+} from './collection-page-schema';
+import { generateStorefrontSlug } from './generate-storefront-slug';
 import { generateMetaDescription } from './meta-description';
-import { normalizeOgabasseyCdnImageUrl } from './ogabassey-cdn-image-url';
 import { buildSharedOfferPolicies } from './product-schema-shared-offer-policies';
 import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
 import { shouldIncludeProductSchemaSpec } from './product-schema-specs';
@@ -45,8 +46,9 @@ import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
 import { normalizeSocialUrl } from './social';
 import {
-  buildStorefrontEntityId,
-  normalizeStorefrontBaseUrl,
+  buildOfferSellerEntity,
+  buildProductSchemaEntityIdentity,
+  tryParseUrl,
 } from './storefront-entity-id';
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
@@ -518,22 +520,7 @@ function normalizeAcceptedPaymentMethods(
   return methods.length > 0 ? methods : undefined;
 }
 
-export function tryParseUrl(url: string | undefined | null): URL | undefined {
-  if (!url) {
-    return undefined;
-  }
-
-  const sanitizedUrl = sanitizeSchemaUrl(url);
-  if (!sanitizedUrl) {
-    return undefined;
-  }
-
-  try {
-    return new URL(sanitizedUrl);
-  } catch {
-    return undefined;
-  }
-}
+export { tryParseUrl };
 
 function buildStructuredDataVariantUrl(
   productUrl: URL | undefined,
@@ -666,10 +653,10 @@ export function generateProductSchema(
   const safeMerchantName = merchantName;
   const productIdentifiers = normalizeParentProductIdentifiers(product);
   const structuredDataProductUrl = tryParseUrl(options.productUrl);
-  const validMerchantBaseUrl = tryParseUrl(options.merchantBaseUrl);
-  const sellerEntityId = validMerchantBaseUrl
-    ? buildStorefrontEntityId(validMerchantBaseUrl.toString(), 'online-store')
-    : undefined;
+  const seller = buildOfferSellerEntity(
+    safeMerchantName,
+    options.merchantBaseUrl
+  );
   const acceptedPaymentMethod = normalizeAcceptedPaymentMethods(
     options.acceptedPaymentMethods
   );
@@ -714,10 +701,7 @@ export function generateProductSchema(
     '@type': 'Product',
     name: safeName,
     description: safeDescription,
-    ...(structuredDataProductUrl && {
-      '@id': `${normalizeStorefrontBaseUrl(structuredDataProductUrl.toString())}#product`,
-      url: structuredDataProductUrl.toString(),
-    }),
+    ...buildProductSchemaEntityIdentity(structuredDataProductUrl),
     ...(finalImages && { image: finalImages }),
     brand: {
       '@type': 'Brand',
@@ -737,11 +721,7 @@ export function generateProductSchema(
               stock_quantity: offer.stock_quantity,
             }),
             itemCondition: getSchemaItemCondition(offer.condition),
-            seller: {
-              '@type': 'Organization',
-              ...(sellerEntityId && { '@id': sellerEntityId }),
-              name: safeMerchantName,
-            },
+            seller,
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
             priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
               .toISOString()
@@ -758,11 +738,7 @@ export function generateProductSchema(
             }),
             availability: getSchemaAvailability(product),
             itemCondition: getSchemaItemCondition(product.condition),
-            seller: {
-              '@type': 'Organization',
-              ...(sellerEntityId && { '@id': sellerEntityId }),
-              name: safeMerchantName,
-            },
+            seller,
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
             priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
               .toISOString()
@@ -1079,11 +1055,7 @@ export function generateProductSchema(
           }),
           itemCondition: variantCondition,
           priceValidUntil: variantPriceValidUntil,
-          seller: {
-            '@type': 'Organization',
-            ...(sellerEntityId && { '@id': sellerEntityId }),
-            name: safeMerchantName,
-          },
+          seller,
           ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
           ...variantOfferPolicies(variantIndex),
         },
@@ -1524,152 +1496,12 @@ export function generateMetaTitle(
   return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
 }
 
-/**
- * Generates CollectionPage schema for product listing pages (categories, collections)
- * @see https://schema.org/CollectionPage
- */
-export type CollectionPageJsonLdSchema = WithContext<CollectionPage> &
-  Record<string, unknown>;
-
-export type CollectionPageProduct = Parameters<typeof getProductUrl>[0] & {
-  brand?: string | null;
-  description?: string | null;
-  gtin?: string | null;
-  image?: string | null;
-  imageLarge?: string | null;
-  low_stock_threshold?: number | string | null;
-  manage_stock?: boolean | null;
-  mpn?: string | null;
-  price: number;
-  stock?: number | string | null;
-  stock_quantity?: number | string | null;
+export {
+  type CollectionPageData,
+  type CollectionPageJsonLdSchema,
+  type CollectionPageProduct,
+  generateCollectionPageSchema,
 };
-
-export interface CollectionPageData {
-  name: string;
-  description?: string;
-  url: string;
-  products: CollectionPageProduct[];
-  merchantName: string;
-  currency?: string;
-  country?: string;
-  trustProfile?: MerchantTrustProfile;
-}
-
-function toAbsoluteSchemaUrl(baseUrl: string, value?: string | null): string {
-  if (!value) {
-    return '';
-  }
-
-  try {
-    return new URL(value, baseUrl).toString();
-  } catch {
-    return '';
-  }
-}
-
-function toAbsoluteSchemaImageUrl(
-  baseUrl: string,
-  ...values: Array<string | null | undefined>
-): string {
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    try {
-      const url = new URL(trimmed, baseUrl);
-      const isHttpImage = url.protocol === 'http:' || url.protocol === 'https:';
-      const absoluteImageUrl = url.toString();
-      const isPlaceholder =
-        url.pathname === PLACEHOLDER_IMAGE ||
-        url.pathname.endsWith(PLACEHOLDER_IMAGE) ||
-        isExternalPlaceholderImageUrl(absoluteImageUrl);
-
-      if (isHttpImage && !isPlaceholder) {
-        return normalizeOgabasseyCdnImageUrl(absoluteImageUrl);
-      }
-    } catch {
-      // Ignore malformed image candidates and continue to the next fallback.
-    }
-  }
-
-  return '';
-}
-
-/**
- * Generates CollectionPage schema for product listing pages (categories, collections).
- * @see https://schema.org/CollectionPage
- */
-export function generateCollectionPageSchema(
-  data: CollectionPageData
-): CollectionPageJsonLdSchema {
-  const safeProducts = data.products
-    .flatMap((product) => {
-      const imageCandidates = [product.imageLarge, product.image];
-      const productImage = toAbsoluteSchemaImageUrl(
-        data.url,
-        ...imageCandidates
-      );
-
-      return productImage ? [{ product, productImage }] : [];
-    })
-    .slice(0, 20);
-  const absolutePageUrl = toAbsoluteSchemaUrl(data.url, data.url);
-  const currency = data.currency || 'NGN';
-
-  const schema: CollectionPageJsonLdSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'CollectionPage',
-    name: escapeHtml(data.name),
-    description: data.description ? escapeHtml(data.description) : undefined,
-    ...(absolutePageUrl && {
-      '@id': `${normalizeStorefrontBaseUrl(absolutePageUrl)}#collection`,
-      url: absolutePageUrl,
-    }),
-    mainEntity: {
-      '@type': 'ItemList',
-      numberOfItems: safeProducts.length,
-      itemListElement: safeProducts.map(({ product, productImage }, index) => {
-        const productUrl = toAbsoluteSchemaUrl(
-          data.url,
-          getProductUrl(product)
-        );
-        const identifiers = normalizeParentProductIdentifiers(product);
-
-        return {
-          '@type': 'ListItem',
-          position: index + 1,
-          item: {
-            '@type': 'Product',
-            name: escapeHtml(product.name),
-            description: product.description
-              ? escapeHtml(generateMetaDescription(product.description, 100))
-              : undefined,
-            image: [productImage],
-            url: productUrl || undefined,
-            brand: {
-              '@type': 'Brand',
-              name: escapeHtml(product.brand || data.merchantName),
-            },
-            ...(identifiers.gtin && { gtin: escapeHtml(identifiers.gtin) }),
-            ...(identifiers.mpn && { mpn: escapeHtml(identifiers.mpn) }),
-            offers: {
-              '@type': 'Offer',
-              price: product.price,
-              priceCurrency: currency,
-              availability: getSchemaAvailability(product),
-              url: productUrl || undefined,
-            },
-          },
-        };
-      }),
-    },
-  };
-
-  return schema;
-}
 
 /**
  * Generates OnlineStore schema for platform and merchant storefront entities

@@ -32,6 +32,12 @@ export async function GET(
   const basePath = slug && !isCustomDomain ? `/${slug}` : '';
   const loginPath = `${basePath}/account/login`;
 
+  const cookieStore = await cookies();
+  const cookieNext = cookieStore.get?.(STOREFRONT_OAUTH_NEXT_COOKIE)?.value;
+  if (cookieNext && typeof cookieStore.delete === 'function') {
+    cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
+  }
+
   // If there's an OAuth error from the provider
   if (error) {
     // Explicit sanitization to satisfy CodeQL log injection flow analysis
@@ -65,7 +71,6 @@ export async function GET(
   }
 
   try {
-    const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
     // Exchange the authorization code for a session
@@ -85,10 +90,6 @@ export async function GET(
 
     // Success! Redirect to the account page (or checkout-return when resuming checkout)
     const accountPath = `${basePath}/account`;
-    const cookieNext = cookieStore.get?.(STOREFRONT_OAUTH_NEXT_COOKIE)?.value;
-    if (cookieNext && typeof cookieStore.delete === 'function') {
-      cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
-    }
     const next = searchParams.get('next') ?? cookieNext ?? null;
     let destination = accountPath;
     if (next) {

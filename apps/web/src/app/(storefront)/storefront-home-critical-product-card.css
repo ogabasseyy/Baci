@@ -31,7 +31,14 @@
   .ogabassey-home-product-card__media {
     align-items: center;
     aspect-ratio: 1 / 1;
-    background: #f9fafb;
+    background: var(
+      --ogabassey-surface-muted,
+      color-mix(
+        in srgb,
+        var(--ogabassey-surface-text, var(--store-background-text, #111827)) 4%,
+        var(--ogabassey-surface, var(--store-background, #ffffff))
+      )
+    );
     border-radius: 1rem;
     display: flex;
     justify-content: center;
@@ -81,7 +88,11 @@
   }
 
   .ogabassey-home-product-card__placeholder {
-    background: #e5e7eb;
+    background: color-mix(
+      in srgb,
+      var(--ogabassey-surface-text, var(--store-background-text, #111827)) 14%,
+      var(--ogabassey-surface, var(--store-background, #ffffff))
+    );
     border-radius: 0.5rem;
     height: 66.666667%;
     width: 66.666667%;

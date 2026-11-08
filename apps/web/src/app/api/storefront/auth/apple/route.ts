@@ -79,6 +79,8 @@ export async function POST(request: Request) {
         sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',
       });
+    } else if (!nextTarget && typeof cookieStore.delete === 'function') {
+      cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
     }
 
     // Initiate Apple OAuth

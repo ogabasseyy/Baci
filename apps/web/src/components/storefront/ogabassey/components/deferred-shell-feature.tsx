@@ -66,7 +66,19 @@ export function useDeferredActivation({
     let interactionActivationScheduled = false;
     let loadListenerAttached = false;
     let lastPointerWasTouch = false;
+    let touchResetTimeoutId: number | undefined;
     let interactionListenerTarget: HTMLElement | Window | undefined;
+
+    const markTouchInteraction = () => {
+      lastPointerWasTouch = true;
+      if (touchResetTimeoutId !== undefined) {
+        window.clearTimeout(touchResetTimeoutId);
+      }
+      touchResetTimeoutId = window.setTimeout(() => {
+        touchResetTimeoutId = undefined;
+        lastPointerWasTouch = false;
+      }, 0);
+    };
 
     const activate = () => {
       if (!cancelled) {
@@ -139,7 +151,7 @@ export function useDeferredActivation({
       activate();
     };
     const handleTouchStart = () => {
-      lastPointerWasTouch = true;
+      markTouchInteraction();
     };
     const handlePointerDown = (event: Event) => {
       const pointerType =
@@ -147,7 +159,7 @@ export function useDeferredActivation({
           ? (event as PointerEvent).pointerType
           : undefined;
       if (pointerType === 'touch') {
-        lastPointerWasTouch = true;
+        markTouchInteraction();
         if (ignoreTouchInteraction) {
           return;
         }
@@ -167,6 +179,7 @@ export function useDeferredActivation({
     };
     const handleFocusIn = () => {
       if (ignoreTouchInteraction && lastPointerWasTouch) {
+        lastPointerWasTouch = false;
         return;
       }
 
@@ -250,6 +263,10 @@ export function useDeferredActivation({
 
       if (interactionTimeoutId !== undefined) {
         window.clearTimeout(interactionTimeoutId);
+      }
+
+      if (touchResetTimeoutId !== undefined) {
+        window.clearTimeout(touchResetTimeoutId);
       }
 
       if (loadListenerAttached) {

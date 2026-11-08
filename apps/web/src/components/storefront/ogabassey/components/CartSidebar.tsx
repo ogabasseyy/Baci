@@ -79,6 +79,10 @@ export const CartSidebar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const lastPathnameRef = useRef(pathname);
+  const isCartOpenRef = useRef(isCartOpen);
+  isCartOpenRef.current = isCartOpen;
+  const setIsCartOpenRef = useRef(setIsCartOpen);
+  setIsCartOpenRef.current = setIsCartOpen;
   const scheduleTimeout = useSafeTimeout();
 
   useEffect(() => {
@@ -90,6 +94,14 @@ export const CartSidebar: React.FC = () => {
       }
     }
   }, [pathname, isCartOpen, setIsCartOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (isCartOpenRef.current) {
+        setIsCartOpenRef.current(false);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isCartOpen) {

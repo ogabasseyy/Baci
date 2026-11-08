@@ -36,14 +36,6 @@ function resolveCartColorHex(name: string, explicitValue?: string): string {
     return '#d4d4d8';
   }
   if (
-    lower.includes('natural') ||
-    lower.includes('titanium') ||
-    lower.includes('grey') ||
-    lower.includes('gray')
-  ) {
-    return '#9ca3af';
-  }
-  if (
     lower.includes('blue') ||
     lower.includes('pacific') ||
     lower.includes('ultramarine') ||
@@ -68,6 +60,14 @@ function resolveCartColorHex(name: string, explicitValue?: string): string {
   }
   if (lower.includes('yellow') || lower.includes('orange')) {
     return '#f59e0b';
+  }
+  if (
+    lower.includes('natural') ||
+    lower.includes('titanium') ||
+    lower.includes('grey') ||
+    lower.includes('gray')
+  ) {
+    return '#9ca3af';
   }
 
   return '#cbd5e1';
@@ -107,18 +107,6 @@ export function resolveCartColorChipStyle(
       backgroundColor: '#e4e4e7',
       color: '#27272a',
       borderColor: '#cbd5e1',
-    };
-  }
-  if (
-    lower.includes('natural') ||
-    lower.includes('titanium') ||
-    lower.includes('grey') ||
-    lower.includes('gray')
-  ) {
-    return {
-      backgroundColor: '#e5e7eb',
-      color: '#1f2937',
-      borderColor: '#9ca3af',
     };
   }
   if (lower.includes('yellow') || lower.includes('orange')) {
@@ -183,17 +171,33 @@ export function resolveCartColorChipStyle(
       borderColor: '#fca5a5',
     };
   }
+  if (
+    lower.includes('natural') ||
+    lower.includes('titanium') ||
+    lower.includes('grey') ||
+    lower.includes('gray')
+  ) {
+    return {
+      backgroundColor: '#e5e7eb',
+      color: '#1f2937',
+      borderColor: '#9ca3af',
+    };
+  }
 
   const trimmed = explicitValue?.trim();
-  if (trimmed && /^#[0-9a-f]{6}$/i.test(trimmed)) {
-    const r = Number.parseInt(trimmed.slice(1, 3), 16);
-    const g = Number.parseInt(trimmed.slice(3, 5), 16);
-    const b = Number.parseInt(trimmed.slice(5, 7), 16);
+  if (trimmed && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) {
+    const hex =
+      trimmed.length === 4
+        ? `#${trimmed[1]}${trimmed[1]}${trimmed[2]}${trimmed[2]}${trimmed[3]}${trimmed[3]}`
+        : trimmed;
+    const r = Number.parseInt(hex.slice(1, 3), 16);
+    const g = Number.parseInt(hex.slice(3, 5), 16);
+    const b = Number.parseInt(hex.slice(5, 7), 16);
     const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return {
-      backgroundColor: trimmed,
+      backgroundColor: hex,
       color: luminance > 0.6 ? '#1f2937' : '#ffffff',
-      borderColor: luminance > 0.85 ? '#d4d4d8' : trimmed,
+      borderColor: luminance > 0.85 ? '#d4d4d8' : hex,
     };
   }
 
@@ -346,7 +350,7 @@ export function CartVariantDetails({
                   ? 'sr-only'
                   : isColorChip
                     ? 'inline-flex max-w-full items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-tight'
-                    : 'inline-flex max-w-full items-center rounded bg-store-background-text/5 px-1.5 py-0.5 text-[10px] font-medium leading-tight ring-1 ring-inset ring-store-background-text/8'
+                    : 'inline-flex max-w-full items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-gray-700 ring-1 ring-inset ring-gray-200/80'
                 : 'flex flex-wrap gap-x-1'
             }
             style={colorChipStyle}
@@ -355,7 +359,9 @@ export function CartVariantDetails({
             <dt className={presentation === 'chips' ? 'sr-only' : undefined}>
               {label}:
             </dt>
-            {!(presentation === 'chips' && label === 'Condition') && (
+            {presentation === 'chips' && label === 'Condition' ? (
+              <dd aria-label={value} />
+            ) : (
               <dd className="break-words">
                 {value}
                 {presentation === 'chips' && label === 'RAM' ? ' RAM' : ''}

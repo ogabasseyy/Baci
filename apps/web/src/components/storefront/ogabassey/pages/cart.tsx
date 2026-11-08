@@ -1,6 +1,9 @@
 'use client';
 
-import { CartVariantDetails } from '../components/cart-variant-details';
+import {
+  CartVariantDetails,
+  getCartItemConditionBadge,
+} from '../components/cart-variant-details';
 // Template preview
 
 import {
@@ -173,6 +176,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                 const assuranceCost = item.hasAssurance
                   ? itemTotal * (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)
                   : 0;
+                const conditionBadge = getCartItemConditionBadge(item);
 
                 return (
                   <div
@@ -183,17 +187,11 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                     <div className="flex gap-3.5 md:gap-4 items-start">
                       {/* Image */}
                       <div className="relative shrink-0">
-                        {item.condition && (
+                        {conditionBadge && (
                           <span
-                            className={`pointer-events-none absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-[7.5px] leading-none font-bold uppercase tracking-wider shadow-2xs text-white ${
-                              item.condition.toLowerCase() === 'new'
-                                ? 'bg-gray-900'
-                                : item.condition.toLowerCase() === 'open box'
-                                  ? 'bg-indigo-600'
-                                  : 'bg-stone-500'
-                            }`}
+                            className={`pointer-events-none absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-[7.5px] leading-none font-bold uppercase tracking-wider shadow-2xs ${conditionBadge.badgeClassName}`}
                           >
-                            {item.condition}
+                            {conditionBadge.label}
                           </span>
                         )}
                         <Link
@@ -260,10 +258,10 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                         </div>
 
                         {/* Negotiate (left) + Price (right) */}
-                        <div className="mt-2.5 flex items-center justify-between gap-2">
-                          <div className="flex items-center shrink-0">
+                        <div className="mt-2.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
+                          <div className="flex items-center min-w-0">
                             {item.negotiationStatus === 'accepted' ? (
-                              <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
                                 <Check size={11} strokeWidth={3} />
                                 <span>
                                   Matched @ ₦
@@ -290,9 +288,9 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                             )}
                           </div>
 
-                          <div className="shrink-0 ml-auto text-right">
+                          <div className="ml-auto text-right">
                             {item.negotiatedPrice ? (
-                              <div className="flex items-baseline gap-1.5">
+                              <div className="flex flex-col items-end leading-tight">
                                 <span className="text-[10px] text-gray-400 line-through decoration-red-400 whitespace-nowrap">
                                   ₦{(item.price * item.quantity).toLocaleString()}
                                 </span>

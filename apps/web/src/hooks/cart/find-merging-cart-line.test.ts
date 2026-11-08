@@ -195,4 +195,46 @@ describe('findMergingCartLineIndex', () => {
       })
     ).toBe(0);
   });
+
+  it('matches shared-cart server UUID and optimistic temp lines by canonical identity and add lane', () => {
+    const product = makeProduct({ id: 'p1', condition: 'new' });
+    const sharedServerLine = {
+      ...makeCartItem({
+        id: 'p1',
+        cartItemId: '2f8c7a30-1111-4444-8888-999999999999',
+        condition: 'new',
+        selectedColor: 'Silver',
+        selectedStorage: '1TB',
+        variantId: 'v-1tb-silver',
+        variantAttributes: { storage: '1TB', color: 'Silver' },
+      }),
+      serverLineId: '2f8c7a30-1111-4444-8888-999999999999',
+      pendingTempId: null,
+    };
+    const sharedTempLine = {
+      ...makeCartItem({
+        id: 'p1',
+        cartItemId: 'temp:t1-abc',
+        condition: 'new',
+      }),
+      serverLineId: null,
+      pendingTempId: 't1-abc',
+    };
+
+    expect(
+      findMergingCartLineIndex([sharedServerLine], product, {
+        condition: 'new',
+        color: 'Silver',
+        storage: '1TB',
+        variantId: 'v-1tb-silver',
+        variantAttributes: { storage: '1TB', color: 'Silver' },
+      })
+    ).toBe(0);
+
+    expect(
+      findMergingCartLineIndex([sharedTempLine], product, {
+        condition: 'new',
+      })
+    ).toBe(0);
+  });
 });

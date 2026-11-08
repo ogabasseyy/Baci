@@ -191,19 +191,25 @@ describe('CartSidebar', () => {
     ];
   });
 
-  it('keeps the drawer open in loading state when Proceed to Checkout is clicked and closes once pathname changes', () => {
+  it('keeps the drawer open in loading state when Proceed to Checkout is clicked and closes on route change or unmount', () => {
     const view = render(<CartSidebar />);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /proceed to checkout/i })
-    );
+    const checkoutButton = screen.getByRole('button', {
+      name: /proceed to checkout/i,
+    });
+    fireEvent.click(checkoutButton);
 
     expect(mockRouterPush).toHaveBeenCalledWith('/test-store/checkout');
+    expect(checkoutButton).toBeDisabled();
     expect(mockSetIsCartOpen).not.toHaveBeenCalledWith(false);
 
     mockPathname = '/test-store/checkout';
     view.rerender(<CartSidebar />);
+    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
+    expect(checkoutButton).not.toBeDisabled();
 
+    mockSetIsCartOpen.mockClear();
+    view.unmount();
     expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
 

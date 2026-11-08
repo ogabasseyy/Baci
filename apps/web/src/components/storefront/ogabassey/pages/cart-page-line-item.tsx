@@ -116,7 +116,8 @@ export function CartPageLineItem({
                 onClick={() =>
                   onUpdateQuantity(item.cartItemId, itemQuantity + 1)
                 }
-                className="px-2 h-full hover:bg-white text-gray-500 rounded-r-md transition-colors border-l border-gray-200 active:bg-gray-200"
+                className="px-2 h-full hover:bg-white text-gray-500 rounded-r-md transition-colors border-l border-gray-200 active:bg-gray-200 disabled:opacity-40"
+                disabled={isQuizGift}
                 aria-label={`Increase quantity for ${item.name}`}
               >
                 <Plus size={11} />
@@ -124,11 +125,11 @@ export function CartPageLineItem({
             </div>
           </div>
 
-          <div className="mt-2.5 flex items-center justify-between gap-2">
+          <div className="mt-2.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
             {hasPriceNegotiation && !isQuizGift ? (
-              <div className="flex items-center shrink-0">
+              <div className="flex items-center min-w-0">
                 {item.negotiationStatus === 'accepted' ? (
-                  <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-store-primary bg-store-primary/5 px-2 py-0.5 rounded-md whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-store-primary bg-store-primary/5 px-1.5 py-0.5 rounded-md whitespace-nowrap">
                     <Check size={11} strokeWidth={3} />
                     <span>
                       Matched @ ₦{(item.negotiatedPrice || 0).toLocaleString()}
@@ -154,15 +155,15 @@ export function CartPageLineItem({
               <span />
             )}
 
-            <div className="shrink-0 ml-auto text-right">
+            <div className="ml-auto text-right">
               {isQuizGift ? (
                 <div className="font-bold text-store-primary text-sm md:text-lg whitespace-nowrap">
                   Free gift
                 </div>
               ) : item.negotiatedPrice ? (
-                <div className="flex items-baseline gap-1.5">
+                <div className="flex flex-col items-end leading-tight">
                   <span className="text-[10px] text-store-background-text/45 line-through decoration-store-primary/40 whitespace-nowrap">
-                    ₦{((item.price || 0) * item.quantity).toLocaleString()}
+                    ₦{((item.price || 0) * itemQuantity).toLocaleString()}
                   </span>
                   <span className="font-bold text-store-primary text-sm md:text-lg whitespace-nowrap">
                     ₦{(itemTotal || 0).toLocaleString()}

@@ -41,7 +41,9 @@ entry point; a stale token, expired lease or late renewal response prevents
 replay. GNU timeout uses `--verbose`, and the wrapper also records timeout exits.
 
 Unavailable primary families are deferred without spending an attempt; ready
-families continue. If every family is unavailable the pass reads review
+families continue. A mixed-family delivery that a ready primary intake declines
+also waits without spending attempts if its authorized legacy fallback is
+unconfigured; primary successes do not wait for that fallback. If every family is unavailable the pass reads review
 metadata only and claims nothing. Every enabled pass checks review metadata
 before and after draining and writes a concise status line. It pages when the
 number of parked rows increases, persisting that count under the worker's

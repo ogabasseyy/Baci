@@ -39,6 +39,7 @@ import type {
   ReplayProcessResult,
 } from './webhook-capture-drain';
 import { schemaValidInflow } from './webhook-capture-drain.test-support';
+import { MAX_DRAIN_ATTEMPTS } from './webhook-capture-drain-result';
 import { runPiggyvestWebhookCaptureDrain } from './webhook-capture-drain-runtime';
 import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
 import { createStatefulCaptureExecutor } from './webhook-capture-pg-executor.test-support';
@@ -203,6 +204,55 @@ describe('legacy replay runtime lane', () => {
     expect(model.rows.find((entry) => entry.id === row.id)).toMatchObject({
       processing_state: 'processed',
     });
+  });
+
+  it('keeps a mixed-family legacy fallback recoverable beyond the attempt budget', async () => {
+    mocks.bankKey = LEGACY_KEY;
+    const model = makeStore();
+    const stored = model.add('mixed-legacy-fallback', LEGACY_KEY, [
+      'bank',
+      'legacy',
+    ]);
+    const env = {
+      ...BASE_ENV,
+      PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
+    };
+    for (let pass = 0; pass <= MAX_DRAIN_ATTEMPTS; pass += 1) {
+      clock += 60 * 60_000;
+      const result = await runPiggyvestWebhookCaptureDrain({
+        env,
+        limit: 1,
+        deps: {
+          createExecutor: () => model.executor,
+          now: () => new Date(clock),
+          primaryIntake: () => ({ notReady: [] }),
+        },
+      });
+      expect(result).toMatchObject({
+        status: 'drained',
+        summary: { processed: 0, retried: 1 },
+      });
+    }
+    expect(model.rows.find((entry) => entry.id === stored.id)).toMatchObject({
+      processing_state: 'pending',
+      last_error: 'LEGACY_INTAKE_UNAVAILABLE',
+      attempts: 0,
+      config_deferrals: MAX_DRAIN_ATTEMPTS + 1,
+    });
+    expect(mocks.replay).not.toHaveBeenCalled();
+    clock += 60 * 60_000;
+    const recovered = await run(model.executor, {
+      ...env,
+      PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD: 'restricted-intake-password',
+    });
+    expect(recovered).toMatchObject({
+      status: 'drained',
+      summary: { processed: 1 },
+    });
+    expect(mocks.replay).toHaveBeenCalledOnce();
+    expect(
+      model.rows.find((entry) => entry.id === stored.id)?.processing_state
+    ).toBe('processed');
   });
 
   it('defers a recorded unavailable primary owner while processing legacy bank rows', async () => {

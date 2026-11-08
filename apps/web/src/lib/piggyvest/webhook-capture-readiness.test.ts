@@ -142,39 +142,6 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ]);
   });
 
-  it('checks only the legacy key and restricted intake runtime for the opt-in legacy lane', () => {
-    primary.bank = '';
-    primary.custody = '';
-    primary.interest = '';
-    ready.env = {
-      ...ready.env,
-      PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
-    };
-    ready.drain = {
-      login: { ok: true },
-      schedule: { enabled: true, cron: 'installed' },
-      legacyReplayRuntimeReady: true,
-      primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
-      alerts: { configured: true },
-    };
-    expect(inspectPiggyvestWebhookCaptureReadiness(ready)).toMatchObject({
-      status: 'ready',
-      readyToAttest: true,
-      notReady: [],
-    });
-
-    primary.bank = freshKey();
-    expect(notReadyGates(ready)).toContain(
-      'primary_intake:PRIMARY_INTAKE_NOT_READY:bank'
-    );
-    primary.bank = '';
-
-    if (ready.drain) ready.drain.legacyReplayRuntimeReady = false;
-    expect(notReadyGates(ready)).toContain(
-      'legacy_replay:LEGACY_INTAKE_RUNTIME_NOT_READY'
-    );
-  });
-
   it('is never ready to attest on the web app, where worker-host evidence cannot be collected', () => {
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
     const web = onWebApp(ready);

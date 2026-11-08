@@ -14,6 +14,7 @@ import type {
 } from './webhook-capture-drain';
 import { replayLegacyDelivery } from './webhook-capture-legacy-replay';
 import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
+import { isPiggyvestWebhookIntakeRuntimeReady } from './webhook-intake-runtime';
 
 /**
  * Processing step of the worker-host capture drain (R5): primary intakes
@@ -79,8 +80,14 @@ export async function replayPrimaryDelivery(
     isPiggyvestCaptureLegacyReplayEnabled(env) &&
     authorizesLegacyHandling(event.eventType, families) &&
     authorizesLegacyHandling(event.eventType, delivery.recordedFamilies)
-  )
+  ) {
+    // A ready primary intake can decline a legacy wallet. Check the fallback
+    // only after that decline, so missing legacy configuration cannot either
+    // block primary successes or exhaust a mixed-family capture's attempts.
+    if (!isPiggyvestWebhookIntakeRuntimeReady(env))
+      return { status: 503, legacyIntakeUnavailable: true };
     return replayLegacyDelivery(delivery, env);
+  }
   if (authorizesLegacyHandling(event.eventType, delivery.recordedFamilies))
     return { status: 503, outOfScope: 'LEGACY_PATH' };
   return incompleteKeySet === true

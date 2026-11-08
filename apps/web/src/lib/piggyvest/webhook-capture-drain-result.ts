@@ -32,6 +32,8 @@ export interface ReplayProcessResult {
   keySetIncomplete?: boolean;
   /** The master kill switch deferred the delivery without spending an attempt. */
   killSwitchDeferred?: boolean;
+  /** The primary path declined and its authorized legacy fallback is unconfigured. */
+  legacyIntakeUnavailable?: boolean;
   /** Same event identity, different content: a person must decide. */
   conflict?: boolean;
   /** The row needs a processing path this runtime does not hold. */
@@ -53,6 +55,7 @@ export async function settleReplayResult(
     result.contentQuarantine !== true &&
     result.keySetIncomplete !== true &&
     result.killSwitchDeferred !== true &&
+    result.legacyIntakeUnavailable !== true &&
     result.conflict !== true &&
     result.outOfScope === undefined;
   if (completed) {
@@ -79,6 +82,10 @@ export async function settleReplayResult(
   }
   if (result?.contentQuarantine === true) {
     return parkContentQuarantined(deps, row);
+  }
+  if (result?.legacyIntakeUnavailable === true) {
+    await settle(deps, row, 'deferred', 'LEGACY_INTAKE_UNAVAILABLE');
+    return 'retried';
   }
   if (result?.keySetIncomplete === true || verifiedWithIncompleteKeySet) {
     // The key set is incomplete (the replay verified under only the

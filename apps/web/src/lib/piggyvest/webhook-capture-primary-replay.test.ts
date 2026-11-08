@@ -121,6 +121,22 @@ describe('replayPrimaryDelivery', () => {
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
 
+  it('finishes a mixed-family primary success while the enabled legacy fallback is unconfigured', async () => {
+    mocks.dispatch.mockResolvedValue(json(200));
+    await expect(
+      replayPrimaryDelivery(
+        {
+          ...delivery(inflow, ['bank', 'legacy']),
+          recordedFamilies: ['bank', 'legacy'],
+        },
+        {
+          NODE_ENV: 'test',
+          PIGGYVEST_WEBHOOK_CAPTURE_LEGACY_REPLAY_ENABLED: 'true',
+        }
+      )
+    ).resolves.toEqual({ status: 200 });
+  });
+
   it('flags a delivery no primary intake owns and no legacy path may take as an authorization quarantine', async () => {
     mocks.dispatch.mockResolvedValue(null);
     await expect(

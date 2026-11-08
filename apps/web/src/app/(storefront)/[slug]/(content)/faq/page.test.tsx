@@ -59,6 +59,9 @@ vi.mock('@/types/faq', async (importOriginal) => {
 });
 
 const { parseLegacyFAQ } = await import('@/types/faq');
+const { OgabasseyV2HelpSupport } = await import(
+  '@/components/storefront/ogabassey/pages/help-support'
+);
 
 vi.mock('../pages/faq/faq-page-client', () => ({
   FAQPageClient: ({ children }: { children?: ReactNode }) => (
@@ -74,12 +77,17 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: FAQPage, generateMetadata } = await import('./page');
+const {
+  default: FAQPage,
+  FAQContent,
+  generateMetadata,
+} = await import('./page');
 
 describe('FAQPage', () => {
   beforeEach(() => {
     vi.mocked(getMerchantByIdentifier).mockReset();
     vi.mocked(getRequestScopedMerchant).mockReset();
+    vi.mocked(OgabasseyV2HelpSupport).mockClear();
     notFound.mockClear();
     mockConnection.mockReset();
   });
@@ -154,6 +162,39 @@ describe('FAQPage', () => {
     await vi.waitFor(() => {
       expect(notFound).toHaveBeenCalled();
     });
+  });
+
+  it('threads normalized approved policy FAQ items into Ogabassey template help page', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      business_name: 'Ogabassey',
+      template_id: 'ogabassey',
+      slug: 'ogabassey',
+      faq_items: [
+        { question: 'What is your return policy?', answer: '7 days return' },
+      ],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+
+    const ui = await FAQContent({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    render(ui);
+
+    expect(OgabasseyV2HelpSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchant: expect.objectContaining({
+          slug: 'ogabassey',
+          faq_items: [
+            expect.objectContaining({
+              question: 'What is your return policy?',
+              answer: expect.stringContaining('14 days'),
+            }),
+          ],
+        }),
+      }),
+      undefined
+    );
   });
 });
 

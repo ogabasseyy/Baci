@@ -90,7 +90,7 @@ async function FAQJsonLd({ params }: PageProps) {
   return <JsonLd data={faqSchema} />;
 }
 
-async function FAQContent({ params }: PageProps) {
+export async function FAQContent({ params }: PageProps) {
   const { slug } = await params;
   const merchant = await getRequestScopedMerchant(slug);
 
@@ -113,7 +113,10 @@ async function FAQContent({ params }: PageProps) {
       ? OgabasseyV2HelpSupport
       : null;
   if (TemplateHelp) {
-    const merchantData = toTemplateMerchantData(merchant);
+    const merchantData = {
+      ...toTemplateMerchantData(merchant),
+      faq_items: faqItems,
+    };
     return (
       <>
         <TemplateHelp merchant={merchantData} />

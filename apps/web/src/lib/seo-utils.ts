@@ -4,14 +4,7 @@ import {
   getProductStockBucket,
 } from '@baci/shared/lib/product-inventory';
 import type { Route } from 'next';
-import type {
-  BreadcrumbList,
-  MerchantReturnPolicy,
-  OfferShippingDetails,
-  ReturnFeesEnumeration,
-  ReturnMethodEnumeration,
-  WithContext,
-} from 'schema-dts';
+import type { BreadcrumbList, WithContext } from 'schema-dts';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
@@ -54,11 +47,11 @@ import {
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
 import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
-import type {
-  MerchantTrustProfile,
-  MerchantTrustProfileReturnFee,
-  MerchantTrustProfileReturnMethod,
-} from './storefront-trust/merchant-trust-profile-types';
+import {
+  buildMerchantReturnPolicy,
+  buildOfferShippingDetails,
+} from './storefront-trust/build-seo-offer-policy-schema';
+import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
 import { productManufacturerIdentifiers } from './variant-product-identifiers';
 
 const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
@@ -256,35 +249,6 @@ function getVariantSchemaSize(
   return Array.from(new Set(inferredParts)).join(' / ');
 }
 
-function mapReturnMethodToSchemaUrl(
-  returnMethod: MerchantTrustProfileReturnMethod | undefined
-): ReturnMethodEnumeration | undefined {
-  switch (returnMethod) {
-    case 'mail':
-    case 'carrier_dropoff':
-      return 'https://schema.org/ReturnByMail';
-    case 'in_store':
-      return 'https://schema.org/ReturnInStore';
-    default:
-      return undefined;
-  }
-}
-
-function mapReturnFeeToSchemaUrl(
-  returnFees: MerchantTrustProfileReturnFee | undefined
-): ReturnFeesEnumeration | undefined {
-  switch (returnFees) {
-    case 'free':
-      return 'https://schema.org/FreeReturn';
-    case 'customer_pays':
-      return 'https://schema.org/ReturnShippingFees';
-    case 'original_shipping_deducted':
-      return 'https://schema.org/OriginalShippingFees';
-    default:
-      return undefined;
-  }
-}
-
 function buildSameAsUrls(
   data: OrganizationData,
   trustProfile?: MerchantTrustProfile
@@ -337,99 +301,6 @@ function buildContactPoint(
     ...(email && { email: escapeHtml(email) }),
     ...(telephone && { telephone: escapeHtml(telephone) }),
     availableLanguage: 'English',
-  };
-}
-
-function buildMerchantReturnPolicy(
-  country: string,
-  trustProfile?: MerchantTrustProfile
-): MerchantReturnPolicy | undefined {
-  const returnPolicy = trustProfile?.returnPolicy;
-  const windowDays = returnPolicy?.windowDays;
-  if (
-    windowDays === undefined ||
-    !Number.isInteger(windowDays) ||
-    windowDays < 0
-  )
-    return undefined;
-  if (windowDays === 0)
-    return {
-      '@type': 'MerchantReturnPolicy',
-      applicableCountry: country,
-      returnPolicyCountry: country,
-      returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
-    };
-
-  return {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: windowDays,
-    ...(returnPolicy?.returnMethod && {
-      returnMethod: mapReturnMethodToSchemaUrl(returnPolicy.returnMethod),
-    }),
-    ...(returnPolicy?.returnFees && {
-      returnFees: mapReturnFeeToSchemaUrl(returnPolicy.returnFees),
-    }),
-  };
-}
-
-function buildOfferShippingDetails(
-  country: string,
-  currency: string,
-  trustProfile?: MerchantTrustProfile
-): OfferShippingDetails | undefined {
-  const shippingPolicy = trustProfile?.shippingPolicy;
-  // This projection has no numeric shipping charge. Only an explicitly free,
-  // exact country policy with complete confirmed timings can form this object.
-  // Conditional local offers cannot establish a country-wide shipping rate.
-  if (
-    shippingPolicy?.shippingFeeType !== 'free' ||
-    !shippingPolicy.regions.some(
-      (region) => region.trim().toUpperCase() === country.toUpperCase()
-    )
-  )
-    return undefined;
-  const handlingMin = shippingPolicy.handlingDaysMin;
-  const handlingMax = shippingPolicy.handlingDaysMax;
-  const transitMin = shippingPolicy.transitDaysMin;
-  const transitMax = shippingPolicy.transitDaysMax;
-  if (
-    handlingMin === undefined ||
-    handlingMax === undefined ||
-    transitMin === undefined ||
-    transitMax === undefined ||
-    ![handlingMin, handlingMax, transitMin, transitMax].every(
-      (value) => Number.isInteger(value) && value >= 0
-    ) ||
-    handlingMin > handlingMax ||
-    transitMin > transitMax
-  )
-    return undefined;
-
-  return {
-    '@type': 'OfferShippingDetails',
-    shippingRate: { '@type': 'MonetaryAmount', value: 0, currency },
-    shippingDestination: {
-      '@type': 'DefinedRegion',
-      addressCountry: country,
-    },
-    deliveryTime: {
-      '@type': 'ShippingDeliveryTime',
-      handlingTime: {
-        '@type': 'QuantitativeValue',
-        minValue: handlingMin,
-        maxValue: handlingMax,
-        unitCode: 'DAY',
-      },
-      transitTime: {
-        '@type': 'QuantitativeValue',
-        minValue: transitMin,
-        maxValue: transitMax,
-        unitCode: 'DAY',
-      },
-    },
   };
 }
 

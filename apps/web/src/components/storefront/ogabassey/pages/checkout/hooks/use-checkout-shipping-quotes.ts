@@ -104,8 +104,9 @@ export function useCheckoutShippingQuotes({
             merchantId: merchantId,
             deliveryPreference,
             merchantRatesOnly:
-              deliveryPreference === 'pickup_station' &&
-              deliveryMethod !== 'pickup_station'
+              deliveryMethod === 'pickup' ||
+              (deliveryPreference === 'pickup_station' &&
+                deliveryMethod !== 'pickup_station')
                 ? true
                 : undefined,
             latitude: deliveryCoordinates?.latitude,
@@ -149,8 +150,9 @@ export function useCheckoutShippingQuotes({
           isStreetReady: !isNewAddressMode || isNewDeliveryAddressReady,
         });
   const isMerchantOnlyPickupCheck =
-    currentDeliveryPreference === 'pickup_station' &&
-    deliveryMethod !== 'pickup_station';
+    deliveryMethod === 'pickup' ||
+    (currentDeliveryPreference === 'pickup_station' &&
+      deliveryMethod !== 'pickup_station');
   const currentRequestKey = currentCheckoutShippingRequestKey({
     isHydrated,
     merchantId,

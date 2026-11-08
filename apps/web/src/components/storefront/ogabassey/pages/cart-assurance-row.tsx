@@ -34,7 +34,7 @@ export function CartAssuranceRow({
   return (
     <div>
       <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
-        <div className="relative flex items-center mt-0.5">
+        <span className="relative flex items-center mt-0.5">
           <input
             ref={checkboxRef}
             type="checkbox"
@@ -42,14 +42,14 @@ export function CartAssuranceRow({
             onChange={handleToggle}
             className="peer sr-only"
           />
-          <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
-        </div>
-        <div className="flex flex-col">
+          <span className="block w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-store-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
+        </span>
+        <span className="flex flex-col">
           <span className="text-xs font-bold text-store-background-text flex items-center gap-1.5">
             <ShieldCheck size={12} className="text-store-primary" />
             Ogabassey Assurance
           </span>
-          <p className="text-[10px] text-store-background-text/55 leading-tight mt-0.5">
+          <span className="block text-[10px] text-store-background-text/55 leading-tight mt-0.5">
             {hasAssurance ? (
               <>
                 Covers{' '}
@@ -57,19 +57,19 @@ export function CartAssuranceRow({
                   Screen & Liquid Damage
                 </span>
                 <span className="ml-1 text-store-primary font-bold">
-                  +₦{assuranceCost.toLocaleString()}
+                  +₦{assuranceCost.toLocaleString('en-NG')}
                 </span>
               </>
             ) : (
               `Device Protection (+${assuranceRateLabel})`
             )}
-          </p>
-          <p className="text-[10px] text-store-background-text/55 leading-tight mt-0.5">
+          </span>
+          <span className="block text-[10px] text-store-background-text/55 leading-tight mt-0.5">
             {hasAssurance
               ? 'Optional. Included in total; uncheck to remove.'
               : 'Optional. Check to add.'}
-          </p>
-        </div>
+          </span>
+        </span>
       </label>
       <div role="status" className="text-xs text-store-background-text/70">
         {removedByShopper && !hasAssurance && (

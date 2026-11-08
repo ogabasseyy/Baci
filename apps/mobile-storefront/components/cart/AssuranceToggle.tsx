@@ -29,7 +29,7 @@ export default function AssuranceToggle({
   };
 
   return (
-    <View>
+    <View style={styles.assuranceWrapper}>
       <Pressable
         style={styles.assuranceContainer}
         onPress={handleToggle}

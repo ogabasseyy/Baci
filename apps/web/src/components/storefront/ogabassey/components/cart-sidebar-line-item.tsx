@@ -195,33 +195,33 @@ export function CartSidebarLineItem({
                 />
               ) : (
                 <label className="flex items-start gap-2 cursor-pointer group">
-                  <div className="relative flex items-center mt-0.5">
+                  <span className="relative flex items-center mt-0.5">
                     <input
                       type="checkbox"
                       checked={item.hasAssurance || false}
                       onChange={() => onToggleAssurance?.(item.cartItemId)}
                       className="peer sr-only"
                     />
-                    <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
+                    <span className="block w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-store-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
+                  </span>
+                  <span className="flex-1">
+                    <span className="flex justify-between items-center">
                       <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
                         <ShieldCheck size={12} className="text-store-primary" />
                         Order Protection
                       </span>
                       {item.hasAssurance && (
                         <span className="text-xs font-bold text-gray-900">
-                          +₦{assuranceCost.toLocaleString()}
+                          +₦{assuranceCost.toLocaleString('en-NG')}
                         </span>
                       )}
-                    </div>
-                    <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                    </span>
+                    <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
                       {item.hasAssurance
                         ? 'Standard Shipping Protection'
                         : `Safety & Shipping Coverage (+${assuranceRateLabel})`}
-                    </p>
-                  </div>
+                    </span>
+                  </span>
                 </label>
               )}
             </div>

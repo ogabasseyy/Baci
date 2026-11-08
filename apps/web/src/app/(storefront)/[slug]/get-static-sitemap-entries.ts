@@ -1,7 +1,9 @@
 import type { MetadataRoute } from 'next';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { hasAnyRenderedAboutField } from '@/types/about-page';
+import { hasPublishableContactInfo } from './has-publishable-contact-info';
 import { isStorefrontStaticSitemapEligible } from './is-storefront-static-sitemap-eligible';
 import type { SitemapStaticMerchant } from './sitemap-static-merchant';
 
@@ -32,13 +34,16 @@ export function getStaticSitemapEntries({
       changeFrequency: 'daily',
       priority: 0.9,
     },
-    {
+  ];
+
+  if (hasPublishableFaqContent(merchant)) {
+    entries.push({
       url: `${storeUrl}/faq`,
       lastModified,
       changeFrequency: 'monthly',
       priority: 0.5,
-    },
-  ];
+    });
+  }
 
   const hasAbout =
     merchant.template_id === OGABASSEY_TEMPLATE_ID ||
@@ -57,13 +62,7 @@ export function getStaticSitemapEntries({
   }
 
   const trustProfile = buildMerchantTrustProfile(merchant, storeUrl);
-  const hasContact = [
-    merchant.pages?.contact,
-    merchant.email,
-    merchant.phone,
-    trustProfile.supportEmail,
-    trustProfile.supportPhone,
-  ].some(hasNonEmptyText);
+  const hasContact = hasPublishableContactInfo(merchant, trustProfile);
 
   if (hasContact) {
     entries.push({

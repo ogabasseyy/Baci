@@ -1,6 +1,7 @@
 import { AUTHORITY_HUB_LCP_CSS } from './authority-hub-lcp-css';
 import { BLOG_LISTING_LCP_CSS } from './blog-listing-lcp-css';
 import { BLOG_POST_LCP_CSS } from './blog-post-lcp-css';
+import { OGABASSEY_DARK_MODE_LCP_CSS } from './ogabassey-dark-mode-lcp-css';
 import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
 
 /**
@@ -125,6 +126,8 @@ ${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 ${BLOG_LISTING_LCP_CSS}
 
 ${BLOG_POST_LCP_CSS}
+
+${OGABASSEY_DARK_MODE_LCP_CSS}
 
 /*
   Reserve viewport height on the pending Suspense fallback so the footer stays

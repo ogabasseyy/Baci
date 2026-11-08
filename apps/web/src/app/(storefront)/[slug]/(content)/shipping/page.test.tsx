@@ -112,6 +112,7 @@ describe('shipping page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/shipping'
     );
+    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 
   it('renders when the shipping summary exists', async () => {
@@ -193,6 +194,7 @@ describe('shipping page', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/shipping'
     );
+    expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(mockNotFound).not.toHaveBeenCalled();
   });
 

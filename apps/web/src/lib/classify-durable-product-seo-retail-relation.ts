@@ -15,9 +15,9 @@ const POSSESSIVE_PRICE =
   /\b(?:has|had|have|with)\s+(?:an?\s+)?(?:retail\s+|listed\s+)?(?:prices?|costs?)\s+of\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i;
 
 const PREPOSITIONAL_OR_SALE_QUALIFIER =
-  /^\s*(?:[/]\s*|(?:per|each)\s+|(?:a|an)\s+(?:piece|unit|item|pack|copy|month|year|license|device)\b|(?:for|on|across|in|at|with|from)\b)/i;
+  /^\s*(?:[/]\s*|(?:per|each)\s+|(?:a|an)\s+(?:piece|unit|item|pack|copy|month|week|year|license|device)\b|(?:for|on|across|in|at|with|from)\b)/i;
 const SPECIFICATION_UNIT =
-  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
+  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|months?|mos?|weeks?|wks?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
 const SENTENCE_BOUNDARY = /\.(?!\p{N})|[!?;\n]/u;
 
 export function retailRelation(text: string, start: number): RetailRelation {

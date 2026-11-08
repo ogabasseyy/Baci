@@ -146,6 +146,14 @@ describe('isDurableSeoPrice', () => {
   });
 
   it.each([
+    'Only 12 months warranty.',
+    'Only 2 weeks of battery life.',
+    'Only 1 month warranty.',
+    'Only 1 week of battery life.',
+    'Only 6 mos warranty.',
+    'Only 3 wks of battery life.',
+    'Only 1 mo warranty.',
+    'Only 1 wk of battery life.',
     'Only 30 minutes to charge.',
     'Only 10 seconds to boot.',
     'Only 30 mins to charge.',

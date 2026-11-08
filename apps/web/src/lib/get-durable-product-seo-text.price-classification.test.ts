@@ -59,6 +59,14 @@ describe('getDurableProductSeoText price classification', () => {
   it.each([
     'Rated for 10,000-hour use.',
     'Only 6.1-inch display.',
+    'Only 12 months warranty.',
+    'Only 2 weeks of battery life.',
+    'Only 1 month warranty.',
+    'Only 1 week of battery life.',
+    'Only 6 mos warranty.',
+    'Only 3 wks of battery life.',
+    'Only 1 mo warranty.',
+    'Only 1 wk of battery life.',
     'Only 30 minutes to charge.',
     'Only 10 seconds to boot.',
     'Only 30 mins to charge.',
@@ -87,6 +95,8 @@ describe('getDurableProductSeoText price classification', () => {
   it.each([
     'Was 999.99, now 799.99',
     'Was 999.99, now 799.99 per unit',
+    'Was 999.99, now 799.99 per month',
+    'Was 999.99, now 799.99 per week',
     'Sale: Was 999.99, now 799.99 on new models',
   ])('rejects paired-sale prices with decimal points: %s', (text) => {
     expect(

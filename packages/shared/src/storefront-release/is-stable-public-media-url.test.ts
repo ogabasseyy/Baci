@@ -17,6 +17,7 @@ describe('isStablePublicMediaUrl', () => {
       '/media/logo.png',
       `/release-assets/${'a'.repeat(63)}.webp`,
       `/release-assets/${'a'.repeat(64)}.html`,
+      `/release-assets/${'a'.repeat(64)}.webp\n`,
     ])
       expect(isStablePublicMediaUrl(value)).toBe(false);
   });

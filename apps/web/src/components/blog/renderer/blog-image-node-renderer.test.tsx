@@ -55,7 +55,10 @@ describe('BlogImageNodeRenderer', () => {
       />
     );
 
-    expect(screen.getByRole('img', { name: 'Release' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Release' })).toHaveAttribute(
+      'src',
+      stableSrc
+    );
   });
 
   it('drops legacy ogabassey CDN blog images', () => {

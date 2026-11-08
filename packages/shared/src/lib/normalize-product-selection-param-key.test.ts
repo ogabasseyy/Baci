@@ -6,6 +6,12 @@ describe('normalizeProductSelectionParamKey', () => {
     expect(normalizeProductSelectionParamKey('  Storage-Size  ')).toBe(
       'storage_size'
     );
+    expect(normalizeProductSelectionParamKey('Storage Size')).toBe(
+      'storage_size'
+    );
+    expect(normalizeProductSelectionParamKey('Storage -- Size')).toBe(
+      'storage_size'
+    );
   });
 
   it('returns an empty key for missing values', () => {

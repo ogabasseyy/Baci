@@ -14,9 +14,7 @@ import { SearchSubmissionLink } from '@/components/storefront/search-submission-
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
-import { STOREFRONT_PRODUCTS_PER_PAGE } from '@/lib/storefront-pagination';
 import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
-import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { ProductIndexCard } from '../products/product-index-card';
 import { SearchCompareButton } from './search-compare-button';
 import { SearchComparisonTray } from './search-comparison';
@@ -30,6 +28,7 @@ import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
 import { formatSearchSummary } from './search-page-summary';
+import { searchPageTotalPages } from './search-page-total-pages';
 
 export interface SearchPageProps {
   params: Promise<{ slug: string }>;
@@ -93,18 +92,7 @@ export async function SearchPageContent({
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
-  // Pagination never advertises pages the bounded offset cannot serve.
-  // Use the ranked total even when hydration drops every row on a page.
-  const totalPages =
-    searchFailed || (effectiveResult.totalCount ?? effectiveResult.count) <= 0
-      ? 0
-      : Math.min(
-          Math.ceil(
-            (effectiveResult.totalCount ?? effectiveResult.count) /
-              STOREFRONT_PRODUCTS_PER_PAGE
-          ),
-          STOREFRONT_SEARCH_MAX_PAGE
-        );
+  const totalPages = searchPageTotalPages(effectiveResult, searchFailed);
   const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({
     businessName: merchant.business_name,
     merchantCurrency,

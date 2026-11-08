@@ -140,6 +140,7 @@ describe('finance provider option', () => {
     fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }) });
     renderOption('oxygen', true);
     expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /retry bank list/i })).toBeDisabled();
   });
 
   it('does not keep stale banks when selecting Oxygen again fails', async () => {

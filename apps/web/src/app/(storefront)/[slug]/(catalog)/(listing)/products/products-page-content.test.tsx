@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT } from '@/lib/storefront-pagination';
 
 const {
   mockGenerateBreadcrumbSchema,
@@ -278,9 +277,9 @@ describe('ProductsPageContent', () => {
       expect.objectContaining({
         ariaLabel: 'Products pagination',
         basePath: '/demo-store/products',
-        crawlDiscoveryAllPagesThreshold:
-          STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT,
+        crawlDiscoveryAllPagesThreshold: 20,
         crawlDiscoveryLabel: 'Browse product index pages',
+        crawlDiscoveryMaxLinks: 24,
         crawlDiscoveryPageLabel: 'Products page',
         currentPage: 1,
         totalPages: 64,

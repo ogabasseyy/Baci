@@ -264,4 +264,34 @@ describe('buildInformationalClusterModel', () => {
       'https://ogabassey.com/smartphones/iphone-17-pro-max'
     );
   });
+
+  it('excludes products specified in excludedProductSlugs from featured picks without shrinking commerce link pools', async () => {
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: smartphoneGuidePost,
+      categoryDataOverride: smartphoneCategoryData,
+      excludedProductSlugs: new Set([
+        'galaxy-a56',
+        'iphone-15',
+        'iphone-17-pro-max',
+      ]),
+    });
+
+    const featuredHrefs = model?.featuredProducts.map((p) => p.href) ?? [];
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/galaxy-a56'
+    );
+    expect(featuredHrefs).not.toContain(
+      'https://ogabassey.com/smartphones/iphone-15'
+    );
+    expect(featuredHrefs.length).toBeGreaterThan(0);
+    expect(model?.commerceLinks.map((link) => link.href)).toEqual(
+      expect.arrayContaining([
+        'https://ogabassey.com/smartphones/compare/iphone-17-pro-max-vs-samsung-galaxy-z-trifold',
+        'https://ogabassey.com/smartphones/compare/apple-vs-samsung',
+      ])
+    );
+  });
 });

@@ -48,10 +48,8 @@ import {
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
 import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
-import {
-  buildMerchantReturnPolicy,
-  buildOfferShippingDetails,
-} from './storefront-trust/build-seo-offer-policy-schema';
+import { buildOfferShippingDetails } from './storefront-trust/build-offer-shipping-details-schema';
+import { buildMerchantReturnPolicy } from './storefront-trust/build-seo-offer-policy-schema';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
 import { productManufacturerIdentifiers } from './variant-product-identifiers';
 

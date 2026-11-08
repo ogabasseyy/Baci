@@ -20,7 +20,7 @@ it('does not offer or open retired CredPal when its stored flag is enabled', asy
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     fireEvent.click(
-      await screen.findByRole('button', { name: /pay in installments/i })
+      await screen.findByRole('button', { name: /pay small small/i })
     );
     expect(
       screen.queryByRole('radio', { name: /credpal/i })

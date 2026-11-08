@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 
 const mockLoadComparePage = vi.fn();
 const mockCompareRelatedLinks = vi.fn(

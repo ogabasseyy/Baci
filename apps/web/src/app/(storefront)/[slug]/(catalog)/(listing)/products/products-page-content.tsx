@@ -235,10 +235,7 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 <h2 id="products-catalog-heading" className="sr-only">
                   Product Catalog
                 </h2>
-                <div
-                  role="feed"
-                  className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
-                >
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                   {currentProductIndex.products.map((product, index) => (
                     <ProductIndexCard
                       key={product.id}

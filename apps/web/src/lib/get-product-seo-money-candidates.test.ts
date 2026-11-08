@@ -83,8 +83,20 @@ describe('getProductSeoMoneyCandidates', () => {
   it.each([
     'Price: 900, next day delivery',
     'Buy for 350000, free shipping',
+    'Price: 900, 128GB storage',
   ])('tokenizes an explicitly cued bare price before sentence punctuation: %s', (text) => {
     expect(getProductSeoMoneyCandidates(text)).toHaveLength(1);
+  });
+
+  it('retains price candidates before comma-separated specifications', () => {
+    const candidates = getProductSeoMoneyCandidates(
+      'Buy for 350000, 2-year warranty'
+    );
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rawAmount: '350000', amount: 350000 }),
+      ])
+    );
   });
 
   it('does not split amounts into model/specification suffixes', () => {

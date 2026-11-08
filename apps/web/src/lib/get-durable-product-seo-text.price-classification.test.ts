@@ -59,9 +59,59 @@ describe('getDurableProductSeoText price classification', () => {
   it.each([
     'Rated for 10,000-hour use.',
     'Only 6.1-inch display.',
-  ])('preserves hyphenated physical quantities: %s', (text) => {
+    'Only 30 minutes to charge.',
+    'Only 10 seconds to boot.',
+    'Only 30 mins to charge.',
+    'Only 10 secs to boot.',
+    'Only 1 minute to setup.',
+    'Only 1 second to unlock.',
+    'Only 2-in-1 design.',
+    'Only 3-in-1 charger.',
+    'Only 4-in-1 hub.',
+    'Only 2 in 1 design.',
+  ])('preserves nonmonetary specifications with retail cues: %s', (text) => {
     expect(
       getDurableProductSeoText({ text, product: { name: 'Device' } })
     ).toBe(text);
+  });
+
+  it.each([
+    'Price: 900, 128GB storage',
+    'Buy for 350000, 2-year warranty',
+  ])('rejects stale prices preceding comma-separated specifications: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe('');
+  });
+
+  it.each([
+    'Phone – 999.',
+    'Phone: 999!',
+    'Phone – 999?',
+    'Phone: 999...',
+    '(Phone: 999).',
+  ])('recognizes sentence punctuation after separator-only prices: %s', (text) => {
+    expect(getDurableProductSeoText({ text, product: { name: 'Phone' } })).toBe(
+      ''
+    );
+  });
+
+  it.each([
+    { name: 'Rice', text: 'Rice price is 900' },
+    { name: 'Ice', text: 'Ice price is 900' },
+  ])('bounds product-identity removal to complete tokens: $text', ({
+    name,
+    text,
+  }) => {
+    expect(getDurableProductSeoText({ text, product: { name } })).toBe('');
+  });
+
+  it('preserves nonmonetary copy for products with substring-sensitive names', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Rice is an aromatic basmati variety.',
+        product: { name: 'Rice' },
+      })
+    ).toBe('Rice is an aromatic basmati variety.');
   });
 });

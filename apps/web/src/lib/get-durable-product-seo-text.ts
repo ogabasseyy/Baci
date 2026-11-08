@@ -24,6 +24,10 @@ function removeIdentityIgnoringCase(text: string, identity: string): string {
       foldedOffsets.push(sourceOffset);
     sourceOffset += character.length;
   }
+  const firstNonSpace = identity.match(/\S/)?.[0] ?? '';
+  const lastNonSpace = identity.match(/\S(?=\s*$)/)?.[0] ?? '';
+  const identityStartsWord = /[\p{L}\p{N}]/u.test(firstNonSpace);
+  const identityEndsWord = /[\p{L}\p{N}]/u.test(lastNonSpace);
   let foldedCursor = 0;
   let sourceCursor = 0;
   let result = '';
@@ -42,9 +46,21 @@ function removeIdentityIgnoringCase(text: string, identity: string): string {
         foldedEnd === foldedText.length
           ? text.length
           : foldedOffsets[foldedEnd];
-      result += text.slice(sourceCursor, sourceStart);
-      sourceCursor = sourceEnd;
-      foldedCursor = foldedEnd;
+      const charBefore =
+        sourceStart > 0 ? text.slice(0, sourceStart).slice(-1) : '';
+      const charAfter =
+        sourceEnd < text.length ? text.slice(sourceEnd, sourceEnd + 1) : '';
+      const validTokenStart =
+        !identityStartsWord || !/[\p{L}\p{N}]/u.test(charBefore);
+      const validTokenEnd =
+        !identityEndsWord || !/[\p{L}\p{N}]/u.test(charAfter);
+      if (validTokenStart && validTokenEnd) {
+        result += text.slice(sourceCursor, sourceStart);
+        sourceCursor = sourceEnd;
+        foldedCursor = foldedEnd;
+      } else {
+        foldedCursor = matchIndex + 1;
+      }
     } else {
       foldedCursor = matchIndex + 1;
     }

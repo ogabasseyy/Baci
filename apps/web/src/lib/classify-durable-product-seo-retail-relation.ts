@@ -17,7 +17,7 @@ const POSSESSIVE_PRICE =
 const PREPOSITIONAL_OR_SALE_QUALIFIER =
   /^\s*(?:[/]\s*|(?:per|each)\s+|(?:a|an)\s+(?:piece|unit|item|pack|copy|month|year|license|device)\b|(?:for|on|across|in|at|with|from)\b)/i;
 const SPECIFICATION_UNIT =
-  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
+  /^\s*(?:(?!(?:on|for|in|at|across|with|from|to|by|per|each|and|or)\b)[\p{L}-]+\s+){0,2}(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/iu;
 
 export function retailRelation(text: string, start: number): RetailRelation {
   const clause =
@@ -91,7 +91,7 @@ export function retailRelation(text: string, start: number): RetailRelation {
     copula,
     identifierPredicate,
     commercial,
-    separator: /^\s*[-:–—(|]?\s*$/.test(clause),
+    separator: /^\s*[-:–—(|]*\s*$/.test(clause),
     strong:
       commerceHeading ||
       possessivePrice ||

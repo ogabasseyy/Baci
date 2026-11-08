@@ -144,4 +144,31 @@ describe('isDurableSeoPrice', () => {
     if (!candidate) throw new Error('Expected a monetary-looking candidate');
     expect(isDurableSeoPrice(candidate, text)).toBe(true);
   });
+
+  it.each([
+    'Only 30 minutes to charge.',
+    'Only 10 seconds to boot.',
+    'Only 30 mins to charge.',
+    'Only 10 secs to boot.',
+    'Only 2-in-1 design.',
+    'Only 3-in-1 charger.',
+  ])('does not classify duration or form-factor specifications as prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it.each([
+    '– 999.',
+    ': 999!',
+    '– 999?',
+    ': 999...',
+    '(999).',
+  ])('classifies separator-prefixed amounts with sentence punctuation as prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
 });

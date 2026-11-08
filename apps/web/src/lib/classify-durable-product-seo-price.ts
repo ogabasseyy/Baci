@@ -2,7 +2,7 @@ import { retailRelation } from './classify-durable-product-seo-retail-relation';
 import type { ProductSeoMoneyCandidate } from './get-product-seo-money-candidates';
 
 const QUANTITY_UNIT =
-  /^\s*[-‑]?\s*(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
+  /^\s*[-‑]?\s*(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
 const STOCK_COUNT_CONTEXT =
   /^\s*(?:(?:items?|pieces?|units?|copies)\s+)?(?:left(?:\s+in\s+stock)?|in\s+stock|remaining)\b/i;
 const PERCENTAGE_QUANTITY = /^\s*%/;
@@ -14,8 +14,9 @@ const UNITLESS_PIXEL_DIMENSION_PAIR =
   /^\s*(?:[×x]|by)\s*(\d[\d,.]*)\s*[.,;)!?]?\s*$/i;
 const UNLABELLED_PRICE_RANGE =
   /^\s*[–—-]?\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[–—-]\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[.!?]?\s*$/;
+const FORM_FACTOR_SPECIFICATION = /^\s*[-‑]?\s*in\s*[-‑]?\s*[0-9٠-٩۰-۹]+\b/i;
 const LIFESPAN_QUANTITY_UNIT =
-  /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
+  /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/iu;
 const MODIFIED_COUNT_UNIT =
   /^\s+(?:[\p{L}-]+\s+){1,2}(?:models?|colou?rs?|options?|sizes?|picks?)\b/iu;
 // These ISO spellings are also ordinary words, unlike unambiguous usd/ngn.
@@ -130,13 +131,16 @@ export function isDurableSeoPrice(
   const quantity =
     QUANTITY_UNIT.test(tail) ||
     PERCENTAGE_QUANTITY.test(tail) ||
+    FORM_FACTOR_SPECIFICATION.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
     hasUnitlessPixelDimension ||
     (/\d[\d,.]*\s*(?:[×x]|by)\s*$/i.test(nearbyPrefix) &&
       /^\s*(?:pixels?|px|display|screen|resolution)\b/i.test(tail)) ||
     STOCK_COUNT_CONTEXT.test(tail) ||
     (LIFESPAN_QUANTITY_UNIT.test(tail) &&
-      !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
+      !/^\s+per\s+(?:hours?|minutes?|mins?|seconds?|secs?|cycles?|washes|uses)\b/i.test(
+        tail
+      )) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
   const unlabelledRange = UNLABELLED_PRICE_RANGE.exec(text);
   const normalizedRange = unlabelledRange
@@ -206,7 +210,7 @@ export function isDurableSeoPrice(
       relation.commercial ||
       (relation.separator &&
         rawAmountDigitCount >= 3 &&
-        (/^\s*$/.test(tail) || /^\s*\)\s*[.!?]?\s*$/.test(tail))) ||
+        /^\s*(?:\)\s*)?[.!?]{0,3}\s*$/.test(tail)) ||
       (relation.copula &&
         (/^\d{1,3}(?:[,. '\u2019\u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?$/.test(
           rawAmount

@@ -146,6 +146,7 @@ jobs:
         env:
           TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
           TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo lint --affected

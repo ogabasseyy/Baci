@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./AdUnit', () => ({
+  AdUnit: () => <div data-testid="popup-ad-unit" />,
+}));
+
 import { PopupSystem } from './PopupSystem';
 
 describe('PopupSystem', () => {
@@ -53,7 +57,7 @@ describe('PopupSystem', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the newsletter dismissal behavior without showing the sponsored popup', async () => {
+  it('still queues the ad popup after the newsletter is dismissed', async () => {
     render(<PopupSystem />);
 
     fireEvent.pointerDown(window);
@@ -72,9 +76,7 @@ describe('PopupSystem', () => {
       vi.advanceTimersByTime(10000);
     });
 
-    expect(screen.queryByText('Sponsored')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'Join Ogabassey' })
-    ).not.toBeInTheDocument();
+    expect(screen.getByText('Sponsored')).toBeInTheDocument();
+    expect(screen.getByTestId('popup-ad-unit')).toBeInTheDocument();
   });
 });

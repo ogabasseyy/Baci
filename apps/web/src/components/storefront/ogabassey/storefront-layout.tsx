@@ -65,7 +65,6 @@ export function OgabasseyStorefrontLayout({
       {merchant && (
         <DeferredGoogleStoreWidget
           merchant={merchant}
-          homePath={basePath || '/'}
           enabled={shouldEnableGoogleStoreWidget}
         />
       )}

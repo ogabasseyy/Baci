@@ -1,5 +1,7 @@
+import { Mail, UserRound } from 'lucide-react';
 import type { OxygenCustomerPrefill } from '@/schemas/oxygen-customer-prefill';
 import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
+import iconStyles from './OxygenFieldIcon.module.css';
 import { oxygenFieldClass as field } from './oxygen-checkout-styles';
 import { oxygenPersonalFields as personal } from './oxygen-customer-form-payload';
 export function OxygenContactFields({
@@ -28,19 +30,27 @@ export function OxygenContactFields({
               className="grid gap-1.5 text-xs font-bold text-gray-700"
             >
               {label}
-              <input
-                className={field}
-                name={key}
-                defaultValue={
-                  defaults[key] ??
-                  prefill[key as keyof OxygenCustomerPrefill] ??
-                  ''
-                }
-                type={key === 'email' ? 'email' : 'text'}
-                required={key !== 'middle_name'}
-                maxLength={100}
-                autoComplete="off"
-              />
+              <div className={iconStyles.field}>
+                <input
+                  placeholder=" "
+                  className={field}
+                  name={key}
+                  defaultValue={
+                    defaults[key] ??
+                    prefill[key as keyof OxygenCustomerPrefill] ??
+                    ''
+                  }
+                  type={key === 'email' ? 'email' : 'text'}
+                  required={key !== 'middle_name'}
+                  maxLength={100}
+                  autoComplete="off"
+                />
+                {key === 'email' ? (
+                  <Mail aria-hidden="true" className={iconStyles.icon} />
+                ) : (
+                  <UserRound aria-hidden="true" className={iconStyles.icon} />
+                )}
+              </div>
             </label>
           ))}
       </div>

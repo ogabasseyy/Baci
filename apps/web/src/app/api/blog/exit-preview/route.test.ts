@@ -67,6 +67,17 @@ describe('GET /api/blog/exit-preview', () => {
     expect(mockRedirect).toHaveBeenCalledWith('/blog');
   });
 
+  it('falls back to /blog for protocol-relative bypass attempts using dot segments', async () => {
+    const request = new Request(
+      'https://usebaci.com/api/blog/exit-preview?callbackUrl=/..//evil.example'
+    );
+
+    await expect(GET(request)).rejects.toThrow('NEXT_REDIRECT: /blog');
+
+    expect(mockDisableDraft).toHaveBeenCalledTimes(1);
+    expect(mockRedirect).toHaveBeenCalledWith('/blog');
+  });
+
   it('falls back to /blog for javascript: and backslash open-redirect attempts', async () => {
     for (const malicious of ['javascript:alert(1)', '/\\evil.com', '   ']) {
       vi.clearAllMocks();

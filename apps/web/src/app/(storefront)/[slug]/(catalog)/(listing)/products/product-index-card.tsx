@@ -17,6 +17,8 @@ interface ProductIndexCardProps {
   footer?: ReactNode;
   /** Opt in only for a measured first-screen LCP candidate. */
   imagePriority?: boolean;
+  posInSet?: number;
+  setSize?: number;
 }
 
 function hasRenderableImage(image?: string | null) {
@@ -88,6 +90,8 @@ export function ProductIndexCard({
   modern = false,
   footer,
   imagePriority = false,
+  posInSet,
+  setSize,
 }: ProductIndexCardProps) {
   const productPath = `${pathPrefix}${getProductUrl({
     id: product.id,
@@ -127,6 +131,8 @@ export function ProductIndexCard({
 
   return (
     <article
+      aria-posinset={posInSet}
+      aria-setsize={setSize}
       className={
         modern
           ? 'flex h-full flex-col overflow-hidden rounded-2xl border border-store-background-text/10 bg-store-background'
@@ -179,7 +185,7 @@ export function ProductIndexCard({
                 {product.category}
               </p>
             )}
-            <h2
+            <h3
               className={
                 modern
                   ? 'min-h-10 line-clamp-2 text-sm font-medium text-store-background-text'
@@ -187,7 +193,7 @@ export function ProductIndexCard({
               }
             >
               {product.name}
-            </h2>
+            </h3>
           </div>
 
           <div className="flex items-center justify-between gap-3">

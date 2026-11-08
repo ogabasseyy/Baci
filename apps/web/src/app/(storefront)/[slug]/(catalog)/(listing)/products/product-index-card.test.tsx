@@ -285,3 +285,25 @@ it.each([
     screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
   ).toHaveTextContent(expected);
 });
+
+it('renders product title as h3 and applies aria-posinset and aria-setsize to article', () => {
+  render(
+    <ProductIndexCard
+      formattedPrice="₦550,000"
+      pathPrefix=""
+      posInSet={3}
+      product={makeProduct({ name: 'iPhone 13 Pro' })}
+      setSize={24}
+    />
+  );
+
+  const heading = screen.getByRole('heading', {
+    level: 3,
+    name: 'iPhone 13 Pro',
+  });
+  expect(heading).toBeInTheDocument();
+
+  const article = screen.getByRole('article');
+  expect(article).toHaveAttribute('aria-posinset', '3');
+  expect(article).toHaveAttribute('aria-setsize', '24');
+});

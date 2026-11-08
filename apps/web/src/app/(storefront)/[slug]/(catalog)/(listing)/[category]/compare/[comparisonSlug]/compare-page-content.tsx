@@ -1,8 +1,10 @@
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import type { BreadcrumbList, FAQPage, ItemList } from 'schema-dts';
 import { StorefrontRouteNotFoundContent } from '@/app/(storefront)/[slug]/storefront-route-not-found-content';
 import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import { asRoute } from '@/lib/routes';
 import {
   buildComparePageSchemas,
   buildProductCompareItemListSchema,
@@ -134,6 +136,47 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
       */}
       <div className="min-h-[70vh] bg-store-background text-store-background-text">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+          {page.breadcrumbItems && page.breadcrumbItems.length > 0 && (
+            <nav
+              aria-label="Breadcrumb"
+              className="mb-6 text-sm text-store-background-text/65"
+            >
+              <ol className="flex flex-wrap items-center gap-2">
+                {page.breadcrumbItems.map((item, index) => {
+                  const isTerminal = index === page.breadcrumbItems.length - 1;
+                  return (
+                    <li key={item.url} className="flex items-center gap-2">
+                      {index > 0 && (
+                        <span
+                          aria-hidden="true"
+                          className="text-store-background-text/40"
+                        >
+                          /
+                        </span>
+                      )}
+                      {isTerminal ? (
+                        <span
+                          aria-current="page"
+                          className="font-medium text-store-background-text"
+                        >
+                          {item.name || page.heading}
+                        </span>
+                      ) : (
+                        <Link
+                          href={asRoute(item.url)}
+                          prefetch={false}
+                          className="transition-colors hover:text-store-primary"
+                        >
+                          {item.name}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
+          )}
+
           <header className="space-y-4">
             <h1
               className="text-3xl font-bold tracking-tight md:text-4xl"

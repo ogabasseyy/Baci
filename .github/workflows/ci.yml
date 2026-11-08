@@ -147,7 +147,7 @@ jobs:
           TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
           TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo lint --affected
           else
             pnpm turbo lint
@@ -174,6 +174,7 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # CI type-checks the application graph only: the full web program
           # (including ~9k test files) peaks near 11 GB and is killed on the
@@ -182,7 +183,7 @@ jobs:
           # `pnpm turbo typecheck` stays available locally.
           LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
           STATUS=0
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo typecheck:ci --affected 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
             pnpm turbo typecheck:ci 2>&1 | tee "$LOG_FILE" || STATUS=$?

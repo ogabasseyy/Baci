@@ -25,10 +25,15 @@ describe('homepage carousel critical CSS', () => {
         color: 'var(--store-foreground, #111827)',
       });
     }
+    expect(declarationsFor('[data-ogabassey-hero-utility]')).toMatchObject({
+      'border-top': '1px solid var(--ogabassey-border, #f3f4f6)',
+      'border-bottom': '1px solid var(--ogabassey-border, #f3f4f6)',
+    });
     expect(
       declarationsFor('[data-ogabassey-mobile-utility-panel]')
     ).toMatchObject({
       'min-height': '158px',
+      border: '1px solid var(--ogabassey-border, #f3f4f6)',
     });
     expect(
       declarationsFor('[data-ogabassey-hero-utility] span>span:last-child')

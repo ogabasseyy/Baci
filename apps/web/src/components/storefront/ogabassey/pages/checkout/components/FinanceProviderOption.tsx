@@ -1,5 +1,5 @@
 'use client';
-import { CalendarDays, ChevronDown, HandCoins } from 'lucide-react';
+import { CalendarDays, ChevronDown, HandCoins, Landmark } from 'lucide-react';
 import Image, { type StaticImageData } from 'next/image';
 import { useEffect, useState } from 'react';
 import { FinanceBankLogo } from './FinanceBankLogo';
@@ -34,7 +34,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
       <span className={styles.content}><span className={styles.title}>{title}</span><span className={styles.chips}><span><HandCoins size={13} aria-hidden="true" /> From {oxygen ? '25%' : '30%'} down</span><span><CalendarDays size={13} aria-hidden="true" /> {oxygen ? '3–12' : '3–6'} months</span></span></span>
       <span className={styles.dot} aria-hidden="true" />
     </label>
-    {selected && <details className={styles.details}><summary>{items ? `${items.length} supported banks` : 'Supported banks'} {items && items.length > 8 && <span className={styles.scrollHint}>Scroll ↓</span>}<ChevronDown size={17} aria-hidden="true" /></summary>
+    {selected && <details className={styles.details}><summary><span className={styles.bankBadge}><Landmark size={13} aria-hidden="true" />{items ? `${items.length} supported banks` : 'Supported banks'}</span> {items && items.length > 8 && <span className={styles.scrollHint}>Scroll ↓</span>}<ChevronDown size={17} aria-hidden="true" /></summary>
       {items ? <div className={styles.grid} role="region" tabIndex={0} aria-label={`${title} supported banks`}>{items.map(({name,code}) => <div className={styles.bank} key={`${name}-${code}`}><FinanceBankLogo name={name} code={code}/><span>{name}</span></div>)}</div> : <p className={styles.message}>{unavailable ? 'Bank list is temporarily unavailable.' : 'Loading supported banks…'}</p>}
     </details>}
   </div>;

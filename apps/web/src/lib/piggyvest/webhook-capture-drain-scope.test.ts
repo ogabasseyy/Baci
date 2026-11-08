@@ -20,4 +20,13 @@ describe('workerHostReplayScope', () => {
       workerHostReplayScope({ key_families: families, event_type: eventType })
     ).toBe(scope);
   });
+
+  it('flags legacy rows as LEGACY_FAMILY by default and admits them only when enabled', () => {
+    const row = {
+      key_families: ['legacy'] as PiggyvestWebhookKeyFamily[],
+      event_type: 'bank-transfer.inflow.success',
+    };
+    expect(workerHostReplayScope(row)).toBe('LEGACY_FAMILY');
+    expect(workerHostReplayScope(row, true)).toBeNull();
+  });
 });

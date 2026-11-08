@@ -114,6 +114,7 @@ describe('DiscountItemSelector', () => {
     mocks.listProps.maxToRenderPerBatch = 0;
     mocks.listProps.removeClippedSubviews = false;
     mocks.listProps.windowSize = 0;
+    mocks.platform.OS = 'ios';
   });
 
   afterEach(() => {

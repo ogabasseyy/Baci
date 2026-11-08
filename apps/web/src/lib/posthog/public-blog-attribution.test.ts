@@ -59,6 +59,7 @@ describe('lightweight blog acquisition payload', () => {
   });
   it.each([
     '',
+    '   ',
     'https://ogabassey.com/account/private',
     'javascript:secret',
     'invalid',

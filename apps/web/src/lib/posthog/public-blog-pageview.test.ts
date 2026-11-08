@@ -243,4 +243,25 @@ describe('capturePublicBlogPageview transport', () => {
       },
     });
   });
+
+  it('handles missing or undefined document cookie without throwing', () => {
+    stubStorage();
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null))
+    );
+    vi.stubGlobal('document', {
+      cookie: undefined,
+      referrer: '',
+    });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+
+    expect(() =>
+      capturePublicBlogPageview(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).not.toThrow();
+  });
 });

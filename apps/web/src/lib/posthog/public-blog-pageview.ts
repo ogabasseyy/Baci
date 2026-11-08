@@ -82,7 +82,7 @@ function hasPostHogOptedOut(projectToken: string): boolean {
   if (isDenied(readStorageValue(key))) return true;
   try {
     return (
-      globalThis.document?.cookie?.split(';').some((cookie) => {
+      globalThis.document?.cookie?.split(';')?.some((cookie) => {
         const trimmed = cookie.trim();
         const separator = trimmed.indexOf('=');
         if (separator < 0) return false;

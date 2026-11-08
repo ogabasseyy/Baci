@@ -17,8 +17,12 @@ let documentAttribution:
 
 function externalReferrer(currentUrl: URL): PublicBlogAttribution {
   const direct = { $referrer: '$direct', $referring_domain: '$direct' };
+  const rawReferrer = globalThis.document?.referrer?.trim();
+  if (!rawReferrer) {
+    return direct;
+  }
   try {
-    const referrer = new URL(globalThis.document?.referrer ?? '');
+    const referrer = new URL(rawReferrer);
     if (
       !['https:', 'http:'].includes(referrer.protocol) ||
       referrer.username ||

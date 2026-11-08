@@ -243,6 +243,7 @@ export function buildRecommendationSections(
   );
   if (
     currentBrand &&
+    sameBrandPool.length >= 1 &&
     nonSameBrandAlternatives.length >= 2 &&
     nonSameBrandSamePrice.length >= 1
   ) {

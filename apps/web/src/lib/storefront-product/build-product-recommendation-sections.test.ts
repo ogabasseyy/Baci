@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildProductSemanticModel } from './build-product-semantic-model';
+import { buildRecommendationSections } from './build-product-recommendation-sections';
 import {
   makeCandidate,
   makeInput,
 } from './build-product-semantic-model.test-helpers';
 
-describe('buildProductSemanticModel recommendation allocation', () => {
+const NO_COMPARE_SLUGS = new Set<string>();
+
+describe('buildRecommendationSections', () => {
   it('guarantees zero duplicate product hrefs across alternatives, sameBrand, and samePrice', () => {
     const currentProduct = makeCandidate({
       slug: 'galaxy-s25',
@@ -47,8 +49,9 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       }),
     ];
 
-    const model = buildProductSemanticModel(
-      makeInput({ currentProduct, inventory })
+    const model = buildRecommendationSections(
+      makeInput({ currentProduct, inventory }),
+      NO_COMPARE_SLUGS
     );
 
     const allHrefs = [
@@ -85,8 +88,9 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       }),
     ];
 
-    const model = buildProductSemanticModel(
-      makeInput({ currentProduct, inventory })
+    const model = buildRecommendationSections(
+      makeInput({ currentProduct, inventory }),
+      NO_COMPARE_SLUGS
     );
 
     expect(model.sameBrand).toBeNull();
@@ -113,11 +117,12 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       price: 1_150_000,
     });
 
-    const model = buildProductSemanticModel(
+    const model = buildRecommendationSections(
       makeInput({
         currentProduct,
         inventory: [currentProduct, sameBrandCandidate, otherBrandCandidate],
-      })
+      }),
+      NO_COMPARE_SLUGS
     );
 
     expect(model.alternatives).not.toBeNull();
@@ -169,8 +174,9 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       }),
     ];
 
-    const model = buildProductSemanticModel(
-      makeInput({ currentProduct, inventory })
+    const model = buildRecommendationSections(
+      makeInput({ currentProduct, inventory }),
+      NO_COMPARE_SLUGS
     );
 
     expect(model.alternatives).not.toBeNull();
@@ -208,8 +214,9 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       }),
     ];
 
-    const model = buildProductSemanticModel(
-      makeInput({ currentProduct, inventory })
+    const model = buildRecommendationSections(
+      makeInput({ currentProduct, inventory }),
+      NO_COMPARE_SLUGS
     );
 
     expect(model.alternatives?.cards).toHaveLength(2);
@@ -232,8 +239,9 @@ describe('buildProductSemanticModel recommendation allocation', () => {
       })
     );
 
-    const model = buildProductSemanticModel(
-      makeInput({ currentProduct, inventory: [currentProduct, ...candidates] })
+    const model = buildRecommendationSections(
+      makeInput({ currentProduct, inventory: [currentProduct, ...candidates] }),
+      NO_COMPARE_SLUGS
     );
 
     expect(model.alternatives?.cards).toHaveLength(6);

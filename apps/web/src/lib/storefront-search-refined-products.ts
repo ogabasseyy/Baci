@@ -15,10 +15,8 @@ import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select
 import type { StorefrontSearchSupabase } from './storefront-search';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';
 import type { StorefrontSearchProductsPage } from './storefront-search-products';
-import {
-  buildStorefrontVariantTitle,
-  getVariantConnectivityDisclosure,
-} from './storefront-variant-disclosure';
+import { getVariantConnectivityDisclosure } from './storefront-variant-disclosure';
+import { buildStorefrontVariantTitle } from './storefront-variant-title';
 import { createClient } from './supabase/server';
 
 async function findRefinedDidYouMean({

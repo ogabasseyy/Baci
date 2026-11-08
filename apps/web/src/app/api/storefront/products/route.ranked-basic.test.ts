@@ -94,6 +94,12 @@ describe('GET /api/storefront/products ranked search basics', () => {
       'product-1',
     ]);
     expect(body.count).toBe(2);
+    expect(body.pagination).toEqual({
+      hasMore: false,
+      totalCount: 2,
+      limit: 20,
+      offset: 0,
+    });
   });
 
   it('forwards a bounded search offset to the ranked catalog lookup', async () => {
@@ -290,6 +296,12 @@ describe('GET /api/storefront/products ranked search basics', () => {
       'product-3',
     ]);
     expect(body.count).toBe(2);
+    expect(body.pagination).toEqual({
+      hasMore: false,
+      totalCount: 2,
+      limit: 20,
+      offset: 0,
+    });
   });
 
   it('keeps unexpected unranked hydration rows after ranked products', async () => {

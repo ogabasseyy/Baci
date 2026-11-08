@@ -8,7 +8,7 @@ import {
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
-import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
+import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import {
   canonicalizeVariantAxis,
 } from '@/components/storefront/ogabassey/variant-attributes';

@@ -7,8 +7,8 @@ import {
   resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
+import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import type { Product, ProductVariant } from '@/lib/products';
-import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
 import {
   type CriticalRouteOfferInput,
   resolveCriticalRouteOffer,

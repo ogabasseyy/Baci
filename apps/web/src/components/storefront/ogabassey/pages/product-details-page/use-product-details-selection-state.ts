@@ -3,7 +3,7 @@
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
 import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
-import { resolveDefaultAdvertisedVariantSelection } from '@/lib/storefront-variant-disclosure';
+import { resolveDefaultAdvertisedVariantSelection } from '@/lib/resolve-default-advertised-variant-selection';
 import { resolveProductDetailsRouteSelection } from './product-details-route-selection';
 import {
   getVariantConditionOptions,

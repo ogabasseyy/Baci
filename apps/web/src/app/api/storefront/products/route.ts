@@ -484,6 +484,12 @@ export async function GET(request: NextRequest) {
             products: [],
             didYouMean,
             count: dbCount ?? 0,
+            pagination: {
+              hasMore: false,
+              totalCount: dbCount ?? 0,
+              limit: requestedLimit,
+              offset: offset ?? 0,
+            },
           },
           {
             headers: {
@@ -527,12 +533,20 @@ export async function GET(request: NextRequest) {
       const responseCount = usesInMemoryFilters
         ? filteredRows.length
         : (dbCount ?? filteredRows.length);
+      const effectiveOffset = offset ?? 0;
+      const hasMore = effectiveOffset + requestedLimit < responseCount;
 
       return NextResponse.json(
         {
           products: visibleProducts,
           didYouMean,
           count: responseCount,
+          pagination: {
+            hasMore,
+            totalCount: responseCount,
+            limit: requestedLimit,
+            offset: effectiveOffset,
+          },
         },
         {
           headers: {

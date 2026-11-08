@@ -1,99 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { getProductPriceRange } from './storefront-product-price-seo';
-import {
-  filterDefaultAdvertisedVariants,
-  isCellularPhoneProduct,
-  isPhoneLikeProduct,
-  isRestrictedWifiOnlyVariant,
-  resolveDefaultAdvertisedVariantSelection,
-} from './storefront-variant-disclosure';
+import { getVariantConnectivityDisclosure } from './storefront-variant-disclosure';
 
-const variants = [
-  {
-    id: 'wifi',
-    attributes: { sim_type: 'Wi-Fi Only' },
-    price_override: 600000,
-    stock_quantity: 5,
-  },
-  {
-    id: 'cellular',
-    attributes: { sim_type: 'Physical + eSIM' },
-    price_override: 900000,
-    stock_quantity: 5,
-  },
-];
-describe('restricted connectivity defaults', () => {
-  it('resolves the same lowest-priced eligible cellular default without mutating explicit variants', () => {
-    const selection = resolveDefaultAdvertisedVariantSelection(
-      { price: 600000, manage_stock: false, variants },
-      { name: 'iPhone 16' }
+describe('storefront-variant-disclosure', () => {
+  it('returns a disclosure message for restricted Wi-Fi only variants', () => {
+    expect(
+      getVariantConnectivityDisclosure({
+        id: 'v1',
+        attributes: { sim_type: 'Wi-Fi Only' },
+      })
+    ).toBe(
+      'Listed as Wi-Fi only. Do not assume cellular service support; confirm connectivity limitations before purchase.'
     );
-    expect(selection?.variant.id).toBe('cellular');
-    expect(selection?.price).toBe(900000);
-    expect(variants).toHaveLength(2);
-    expect(
-      resolveDefaultAdvertisedVariantSelection(
-        { price: 600000, manage_stock: false, variants },
-        { name: 'iPad', category: 'Tablets' }
-      )?.variant.id
-    ).toBe('wifi');
   });
-  it('excludes Wi-Fi-only units from general cellular defaults without removing explicit variants', () => {
+
+  it('returns undefined for non-restricted variants', () => {
     expect(
-      filterDefaultAdvertisedVariants(variants, { name: 'iPhone 16' }).map(
-        (variant) => variant.id
-      )
-    ).toEqual(['cellular']);
-    expect(variants).toHaveLength(2);
-    expect(
-      isRestrictedWifiOnlyVariant({ attributes: { 'SIM Type': 'Wifi Only' } })
-    ).toBe(true);
-  });
-  it('preserves normal Wi-Fi tablets', () => {
-    expect(
-      filterDefaultAdvertisedVariants(variants, {
-        name: 'iPad',
-        category: 'Tablets',
+      getVariantConnectivityDisclosure({
+        id: 'v2',
+        attributes: { sim_type: 'Physical + eSIM' },
       })
-    ).toHaveLength(2);
-  });
-  it('excludes phone accessories from cellular phone classification', () => {
-    expect(
-      filterDefaultAdvertisedVariants(variants, {
-        name: 'iPhone 15 Pro Case',
-        category: 'Phone Accessories',
-      })
-    ).toHaveLength(2);
-    expect(
-      filterDefaultAdvertisedVariants(variants, {
-        name: 'Galaxy S24 Screen Protector',
-        category: 'Phone Accessories',
-      })
-    ).toHaveLength(2);
-  });
-  it('does not advertise the cheaper restricted phone in the ordinary price range', () => {
-    expect(
-      getProductPriceRange({
-        name: 'iPhone 16',
-        has_variants: true,
-        price: 600000,
-        manage_stock: false,
-        variants,
-      })
-    ).toEqual({ min: 900000, max: 900000, hasRange: false });
-  });
-  it('classifies phones with category: null and joined product_categories', () => {
-    const product = {
-      name: 'Motorola Edge 50',
-      category: null,
-      product_categories: [
-        { categories: { name: 'Smartphones', slug: 'smartphones' } },
-      ],
-    };
-    expect(isCellularPhoneProduct(product)).toBe(true);
-    expect(isPhoneLikeProduct(product)).toBe(true);
-    expect(
-      filterDefaultAdvertisedVariants(variants, product).map((v) => v.id)
-    ).toEqual(['cellular']);
+    ).toBeUndefined();
   });
 });

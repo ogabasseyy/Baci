@@ -6,11 +6,11 @@ import { normalizeProductCondition } from '@/components/storefront/ogabassey/typ
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import type { CachedProductLcpHint } from '@/lib/cached-data';
 import { getCachedProductLcpHintPrimaryImage } from '@/lib/cached-product-lcp-hint-primary-image';
+import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductCondition } from '@/lib/products';
 import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
-import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
 import {
   getVariantPrimaryImage,
   normalizeRouteProductVariants,

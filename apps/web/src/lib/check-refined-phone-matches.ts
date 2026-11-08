@@ -5,9 +5,9 @@ import type {
 } from './advertised-phone-price-projection';
 import {
   isCellularPhoneProduct,
-  isRestrictedWifiOnlyVariant,
   type StorefrontVariantProductContext,
-} from './storefront-variant-disclosure';
+} from './cellular-phone-classification';
+import { isRestrictedWifiOnlyVariant } from './restricted-wifi-variant';
 
 interface Match {
   productId: string;

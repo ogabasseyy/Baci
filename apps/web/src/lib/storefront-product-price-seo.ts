@@ -1,3 +1,4 @@
+import { filterDefaultAdvertisedVariants } from './default-advertised-variants';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
 import {
@@ -6,7 +7,6 @@ import {
   getStorefrontLocale,
 } from './storefront-localization';
 import { getSeoProductName } from './storefront-product-slug-disambiguation';
-import { filterDefaultAdvertisedVariants } from './storefront-variant-disclosure';
 
 interface ProductPriceSeoVariant {
   attributes?: Record<string, unknown> | null;

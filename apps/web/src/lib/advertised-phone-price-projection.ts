@@ -1,16 +1,16 @@
 import 'server-only';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
+import {
+  isCellularPhoneProduct,
+  type StorefrontVariantProductContext,
+} from './cellular-phone-classification';
+import { filterDefaultAdvertisedVariants } from './default-advertised-variants';
 import { getEffectiveStock } from './product-stock';
 import { projectPublicVariantSelection } from './project-public-variant-selection';
 import { assertPublicListingProductRows } from './read-public-listing-product-rows';
+import { resolveDefaultAdvertisedVariantSelection } from './resolve-default-advertised-variant-selection';
 import { resolvePublicProductOption } from './resolve-public-product-option';
 import { normalizeStorefrontProductVariants } from './storefront-product-variants';
-import type { StorefrontVariantProductContext } from './storefront-variant-disclosure';
-import {
-  filterDefaultAdvertisedVariants,
-  isCellularPhoneProduct,
-  resolveDefaultAdvertisedVariantSelection,
-} from './storefront-variant-disclosure';
 
 export interface AdvertisedPhonePriceFacts {
   advertised_price?: number;

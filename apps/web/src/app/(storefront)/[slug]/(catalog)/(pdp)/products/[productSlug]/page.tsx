@@ -3,6 +3,7 @@ import type { Metadata, ResolvingMetadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
+import { resolveServerPdpRouteSelectionStatus } from '@/app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/critical-variant-selection';
 import { ProductDetailRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { StorefrontRouteNotFound } from '@/app/(storefront)/[slug]/storefront-route-not-found';
 import { getBrandMatchedTwitterHandle } from '@/lib/brand-matched-twitter-handle';
@@ -147,7 +148,7 @@ export async function generateMetadata(
     merchantDisplayName,
     socialMedia?.twitter
   );
-  const robots = buildProductSeoDecision(
+  const seoDecision = buildProductSeoDecision(
     toProductIndexingFacts({
       isStorePublished: merchant.is_published,
       status: product.status,
@@ -155,6 +156,13 @@ export async function generateMetadata(
       canonicalUrl,
     })
   );
+  const selectionStatus = resolveServerPdpRouteSelectionStatus({
+    product,
+    offers: product.offers,
+    searchParams: resolvedSearchParams,
+  });
+  const shouldIndex =
+    seoDecision.index && !selectionStatus.hasMissingRouteSelection;
   const baseRobots = getIndexableRobotsMetadata();
   const baseGoogleBot =
     typeof baseRobots === 'object' &&
@@ -162,6 +170,12 @@ export async function generateMetadata(
     typeof baseRobots.googleBot === 'object'
       ? baseRobots.googleBot
       : {};
+  const robots = {
+    ...(typeof baseRobots === 'object' ? baseRobots : {}),
+    index: shouldIndex,
+    follow: true,
+    googleBot: { ...baseGoogleBot, index: shouldIndex, follow: true },
+  };
   return {
     title: metadataTitle,
     description: seoDescription,
@@ -169,12 +183,7 @@ export async function generateMetadata(
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: {
-      ...(typeof baseRobots === 'object' ? baseRobots : {}),
-      index: robots.index,
-      follow: true,
-      googleBot: { ...baseGoogleBot, index: robots.index, follow: true },
-    },
+    robots,
     openGraph: {
       title: metadataTitleText,
       description: seoDescription,

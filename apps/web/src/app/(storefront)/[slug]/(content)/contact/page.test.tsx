@@ -108,6 +108,21 @@ describe('contact metadata', () => {
       'https://ogabassey.com/contact'
     );
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/contact');
+    expect(metadata.robots).toEqual({ index: false, follow: false });
+  });
+
+  it('returns indexable robots metadata when merchant has contact details', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue(
+      merchantFixture as unknown as Awaited<
+        ReturnType<typeof getMerchantByIdentifier>
+      >
+    );
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'test-store' }),
+    });
+
+    expect(metadata.robots).toMatchObject({ index: true, follow: true });
   });
 
   it('uses trust profile support contact data in JSON-LD', async () => {

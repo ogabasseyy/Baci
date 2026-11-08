@@ -169,6 +169,11 @@ const cartItemStyles = {
     alignItems: 'flex-start' as const,
     gap: 8,
   },
+  // Keeps the toggle sharing the cart row with the negotiation action now
+  // that the removal notice adds a second child around the Pressable.
+  assuranceWrapper: {
+    flex: 1,
+  },
   toggle: {
     width: 36,
     height: 20,

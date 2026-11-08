@@ -14,6 +14,7 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import { isLegalPagePublishable } from '../../is-legal-page-publishable';
 import { PrivacyPageClient } from '../pages/privacy/privacy-page-client';
 
 interface PageProps {
@@ -29,6 +30,8 @@ export async function generateMetadata({
   if (!merchant) {
     return { title: 'Privacy Policy' };
   }
+
+  const isPublishable = isLegalPagePublishable(merchant, 'privacy');
 
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/privacy`;
@@ -49,7 +52,9 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: isPublishable
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: false },
   };
 }
 
@@ -69,15 +74,14 @@ async function PrivacyPageContent({ params }: PageProps) {
     notFound();
   }
 
-  const hasPrivacyContent = merchant.pages?.privacy;
-  const templateHasPrivacyPage =
-    !!merchant.template_id &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
-
-  if (!hasPrivacyContent && !templateHasPrivacyPage) {
+  if (!isLegalPagePublishable(merchant, 'privacy')) {
     notFound();
   }
+
+  const templateHasPrivacyPage =
+    Boolean(merchant.template_id) &&
+    merchant.template_id !== 'default' &&
+    merchant.template_id !== 'puck';
 
   const baseUrl = buildRequestScopedStoreUrl(merchant, await headers());
 

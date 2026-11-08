@@ -8,7 +8,12 @@ export type SitemapStaticMerchant = MerchantTrustProfileSource & {
   updated_at?: string | null;
   template_id?: string | null;
   about_page?: MerchantAboutPage | null;
-  pages?: { about?: string | null; contact?: string | null } | null;
+  faq_items?: unknown;
+  pages?: {
+    about?: string | null;
+    contact?: string | null;
+    faq?: string | null;
+  } | null;
   email?: string | null;
   phone?: string | null;
 };

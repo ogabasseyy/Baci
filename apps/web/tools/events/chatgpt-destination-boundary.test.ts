@@ -44,6 +44,7 @@ describe('ChatGPT worker database boundary', () => {
       `${path}: unauthorized merchant_chatgpt_ads_credentials column capi_key`
     );
   });
+  // The full Git source inventory took over 15 seconds on the CI runner.
   it('keeps pure URL formatting independent of the storefront data loader', () => {
     // Include every real local intermediate, so a helper or barrel cannot hide
     // a transitive dependency on the storefront data loader.
@@ -52,5 +53,5 @@ describe('ChatGPT worker database boundary', () => {
     expect(sources.has('apps/web/src/lib/cached-data.ts')).toBe(true);
     const closure = collectProductionImportClosure([urlPath], sources);
     expect(closure.has('apps/web/src/lib/cached-data.ts')).toBe(false);
-  });
+  }, 30_000);
 });

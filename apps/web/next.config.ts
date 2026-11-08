@@ -639,10 +639,6 @@ const nextConfig: NextConfig = {
         source: '/robots.txt',
         destination: '/api/robots',
       },
-      {
-        source: '/blog/sitemap.xml',
-        destination: '/sitemap/blog.xml',
-      },
     ];
 
     if (!mcpServerUrl) {

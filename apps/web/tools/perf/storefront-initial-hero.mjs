@@ -27,7 +27,7 @@ function hasVisibleFirstSlideContent(document, hero) {
   }
   const scope = hero.querySelector('[data-ogabassey-mobile-hero]') ?? hero;
   const firstSlide = scope.querySelector('[role="group"]') ?? scope;
-  const heading = firstSlide.querySelector('h2');
+  const heading = firstSlide.querySelector('.ogabassey-hero-title, h2');
   const image = firstSlide.querySelector('img');
   return Boolean(
     heading?.textContent?.trim() &&
@@ -48,7 +48,9 @@ function getHiddenOwnerIds(document, hero) {
   const hiddenMatches = [
     ...document.querySelectorAll('[hidden] [data-ogabassey-mobile-hero]'),
     ...getHeroStreamedSegments(document, hero).filter((segment) =>
-      segment.querySelector('[data-ogabassey-mobile-hero], h2, img')
+      segment.querySelector(
+        '[data-ogabassey-mobile-hero], .ogabassey-hero-title, h2, img'
+      )
     ),
   ];
   if (hiddenMatches.length === 0) {

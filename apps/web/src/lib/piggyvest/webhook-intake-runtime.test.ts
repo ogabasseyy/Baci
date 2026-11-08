@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readPiggyvestWebhookIntakeRuntime } from './webhook-intake-runtime';
+import {
+  isPiggyvestWebhookIntakeRuntimeReady,
+  readPiggyvestWebhookIntakeRuntime,
+} from './webhook-intake-runtime';
 
 vi.mock('server-only', () => ({}));
 
@@ -43,4 +46,11 @@ describe('readPiggyvestWebhookIntakeRuntime', () => {
     } as NodeJS.ProcessEnv;
     expect(() => readPiggyvestWebhookIntakeRuntime(env)).toThrow();
   });
+});
+
+it('reports the same fail-closed readiness used by capture workers', () => {
+  expect(isPiggyvestWebhookIntakeRuntimeReady(complete)).toBe(true);
+  expect(isPiggyvestWebhookIntakeRuntimeReady({ NODE_ENV: 'test' })).toBe(
+    false
+  );
 });

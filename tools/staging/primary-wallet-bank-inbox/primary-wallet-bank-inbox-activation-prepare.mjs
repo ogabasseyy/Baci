@@ -13,6 +13,15 @@ const required = ['PIGGYVEST_PRIMARY_INTEGRATION_ID','PIGGYVEST_PRIMARY_MERCHANT
   'PIGGYVEST_PRIMARY_DB_HOST','PIGGYVEST_PRIMARY_DB_PORT','PIGGYVEST_PRIMARY_DB_NAME',
   'PIGGYVEST_PRIMARY_BANK_WORKER_PASSWORD','PIGGYVEST_PRIMARY_DB_CA'];
 
+const bankWorkerRpcs = new Set([
+  'bank_inbox_readiness(p_integration uuid, p_environment text, p_scope jsonb)',
+  'bank_role_safe(p_worker boolean)',
+  'claim_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+  'engine_ready(p_surface text)',
+  'process_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+  'retry_bank_inbox(p_integration uuid, p_environment text, p_scope jsonb, p_command jsonb)',
+]);
+
 function inspectOperatorProof(proof, context) {
   if (!proof) return false;
   const allowed = ['kind','capturedAt','expiresAt','hostInventorySha256','databaseInventorySha256',
@@ -47,7 +56,7 @@ export async function preparePrimaryBankActivation(input) {
   const inventoryBytes = `${JSON.stringify(inventory, null, 2)}\n`;
   const database = input.databaseInventory;
   const dbKeys = ['captured_at','session_is_fixed_login','tls','login_restricted','login_valid_until','sole_capability_membership',
-    'capability_restricted','capability_parent_memberships','schema_usage','effective_primary_rpcs','direct_private_table_privileges',
+    'capability_restricted','capability_parent_memberships','readiness_reader_restricted','schema_usage','effective_primary_rpcs','direct_private_table_privileges',
     'public_bank_rpcs','bank_rpcs_present','customer_or_service_bank_execution'];
   if (database && (Object.keys(database).some((key) => !['restricted_inventory','authority_inventory'].includes(key)) ||
     !database.restricted_inventory || !database.authority_inventory ||
@@ -56,14 +65,13 @@ export async function preparePrimaryBankActivation(input) {
     throw new Error('Unsafe database inventory metadata');
   const db = database?.restricted_inventory;
   const credentialExpiry = Date.parse(db?.login_valid_until);
-  const rpcNames = ['bank_inbox_readiness','bank_role_safe','claim_bank_inbox','process_bank_inbox','retry_bank_inbox'];
-  const databaseReady = !!db && ['session_is_fixed_login','tls','login_restricted','sole_capability_membership','capability_restricted','schema_usage','bank_rpcs_present'].every((key) => db[key]===true) &&
-    ['capability_parent_memberships','direct_private_table_privileges','public_bank_rpcs','customer_or_service_bank_execution'].every((key) => db[key]===0) &&
+  const databaseReady = !!db && ['session_is_fixed_login','tls','login_restricted','sole_capability_membership','capability_restricted','readiness_reader_restricted','schema_usage','bank_rpcs_present'].every((key) => db[key]===true) &&
+    db.capability_parent_memberships===1 && ['direct_private_table_privileges','public_bank_rpcs','customer_or_service_bank_execution'].every((key) => db[key]===0) &&
     Number.isFinite(Date.parse(db.captured_at)) && Date.parse(db.captured_at)<=now+5000 && now-Date.parse(db.captured_at)<=3600000 &&
     Number.isFinite(credentialExpiry) && credentialExpiry>now && credentialExpiry<=expiry &&
-    Array.isArray(db.effective_primary_rpcs) && db.effective_primary_rpcs.length===5 &&
-    new Set(db.effective_primary_rpcs.map((rpc) => typeof rpc==='string' && rpc.slice(0,rpc.indexOf('(')))).size===5 &&
-    db.effective_primary_rpcs.every((rpc) => typeof rpc==='string' && rpcNames.includes(rpc.slice(0,rpc.indexOf('(')))) &&
+    Array.isArray(db.effective_primary_rpcs) && db.effective_primary_rpcs.length===bankWorkerRpcs.size &&
+    new Set(db.effective_primary_rpcs).size===bankWorkerRpcs.size &&
+    db.effective_primary_rpcs.every((rpc) => bankWorkerRpcs.has(rpc)) &&
     database.authority_inventory.exact_enabled_authority_ready===true && database.authority_inventory.financial_actions===false;
   const databaseBytes = `${JSON.stringify(database ?? { status: 'not_supplied' }, null, 2)}\n`;
   const reviewed = inspectOperatorProof(input.operatorProof, { now, expiry, databaseReady, databaseDigest: digest(databaseBytes), inventoryDigest: digest(inventoryBytes), bundleDigest: manifest.artifacts['bank-inbox.cjs'] });

@@ -5,6 +5,7 @@ import {
   generateMetaDescription,
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
+import { hasPublishableShippingPolicy } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { getTrustRouteContext } from '../trust-route-context';
 import { ShippingPageContent } from './shipping-page-content';
 
@@ -46,7 +47,9 @@ export async function generateMetadata({
         images: [{ url: context.merchant.logo_url }],
       }),
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: hasPublishableShippingPolicy(context.trustProfile)
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: true },
   };
 }
 

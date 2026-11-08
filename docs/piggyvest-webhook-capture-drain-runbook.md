@@ -149,8 +149,12 @@ pass except `drain_schedule: DRAIN_NOT_ENABLED`. Fix anything else first:
   not enough;
 - `LEGACY_INTAKE_RUNTIME_NOT_READY`: the optional lane is enabled but the
   existing restricted webhook-intake login settings are missing or malformed.
-  It uses `PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD` and shared verified TLS
-  database settings; it does not use service-role credentials;
+  The drain still monitors review metadata and processes ready primary-owned
+  captures. Legacy-dependent captures are deferred without spending replay
+  attempts. If every primary intake is unavailable, the pass reports
+  `legacy_intake_not_ready` without claiming rows. The runtime uses
+  `PIGGYVEST_WEBHOOK_INTAKE_DB_PASSWORD` and shared verified TLS database
+  settings; it does not use service-role credentials;
 - `DRAIN_ALERTS_NOT_CONFIGURED`: `POSTHOG_PROJECT_TOKEN` is missing.
 
 The worker host cannot see the web app's setting from Step 5, so the
@@ -214,3 +218,13 @@ All alerts reach PostHog as `piggyvest_money_alert` once
 - `PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED`: the host's key set is incomplete
   or out of date (for example a rotation not copied over); affected
   deliveries wait without using up their retries.
+
+## Captures already parked before enabling legacy replay
+
+Enabling the legacy lane does not release `needs_review` rows. Before rollout,
+count rows whose state is `needs_review` and whose exact last error is
+`REPLAY_OUT_OF_SCOPE_LEGACY_FAMILY`. The production metadata check on
+2026-11-08 found zero such rows. A nonzero count requires a separate, audited
+recovery of those specific captures after signature and ownership verification.
+Do not broaden the worker login or release unrelated quarantines. A verified
+provider redelivery still settles its matching capture through the receiver.

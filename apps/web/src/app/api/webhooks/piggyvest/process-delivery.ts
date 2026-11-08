@@ -68,6 +68,7 @@ export interface VerifiedDelivery {
 export interface ProcessDeliveryDeps {
   createClient: () => PiggyvestIntakeClient;
   getPiggyvestConfig: () => PiggyvestClientConfig | null;
+  env?: NodeJS.ProcessEnv;
 }
 
 // Responses where the delivery was set aside for authorization (the wrong
@@ -206,6 +207,7 @@ export async function processVerifiedDelivery(
       event: parsed.data,
       families,
       keyScope,
+      env: deps.env ?? process.env,
     });
     // Not completed: the owning intake did not run, so whatever else
     // answered (a legacy path's successful no-op, or an inflow credit that is

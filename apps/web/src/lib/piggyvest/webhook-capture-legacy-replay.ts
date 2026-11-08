@@ -61,7 +61,7 @@ export async function replayLegacyDelivery(
         incompleteKeySet: false,
         keyScope: 'replay',
       },
-      { createClient: lazyClient, getPiggyvestConfig: getConfig }
+      { createClient: lazyClient, getPiggyvestConfig: getConfig, env }
     );
     return {
       status: response.status,

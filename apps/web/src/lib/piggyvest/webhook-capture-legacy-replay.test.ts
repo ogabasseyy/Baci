@@ -68,7 +68,10 @@ describe('legacy capture replay adapter', () => {
         families: ['legacy'],
         keyScope: 'replay',
       }),
-      expect.objectContaining({ createClient: expect.any(Function) })
+      expect.objectContaining({
+        createClient: expect.any(Function),
+        env: process.env,
+      })
     );
     expect(mocks.dispose).not.toHaveBeenCalled();
   });

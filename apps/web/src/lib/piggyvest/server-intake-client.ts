@@ -7,7 +7,8 @@ import { readPiggyvestWebhookIntakeRuntime } from './webhook-intake-runtime';
 /**
  * PiggyVest webhook intake boundary.
  *
- * Only the HMAC-authenticated `/api/webhooks/piggyvest` route may call this.
+ * Only the HMAC-authenticated `/api/webhooks/piggyvest` route and the opt-in
+ * capture replay adapter after complete stored-signature verification may call this.
  * The client reaches the database through the restricted login
  * `baci_piggyvest_webhook_intake` (EXECUTE on the `piggyvest_webhook_intake`
  * SECURITY DEFINER functions only, over verified TLS). It never uses the

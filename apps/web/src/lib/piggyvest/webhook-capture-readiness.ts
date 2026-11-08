@@ -150,7 +150,7 @@ function primaryReadinessReason(
     evidence.now
   );
   const configured = new Set(
-    keys.secrets
+    [...keys.secrets, ...keys.replayOnly]
       .filter((key) => key.family !== 'legacy')
       .map((key) => key.family)
   );

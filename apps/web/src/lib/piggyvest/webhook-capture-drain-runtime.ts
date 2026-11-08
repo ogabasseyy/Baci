@@ -4,7 +4,10 @@ import {
   type PiggyvestCaptureDrainRuntime,
   piggyvestCaptureDrainRuntimeSchema,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
-import { primaryOwnerFamily } from './primary-event-owner';
+import {
+  authorizesLegacyHandling,
+  primaryOwnerFamily,
+} from './primary-event-owner';
 import {
   isPiggyvestCaptureDrainEnabled,
   isPiggyvestCaptureLegacyReplayEnabled,
@@ -105,13 +108,20 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
     deps.now?.() ?? new Date()
   );
   const legacyReplayEnabled = isPiggyvestCaptureLegacyReplayEnabled(env);
-  if (legacyReplayEnabled && !isPiggyvestWebhookIntakeRuntimeReady(env))
-    return { status: 'legacy_intake_not_ready' };
+  const legacyIntakeReady = isPiggyvestWebhookIntakeRuntimeReady(env);
   const executor = (deps.createExecutor ?? createCaptureDrainPgExecutor)(
     runtime
   );
   const queue = createPgCaptureQueue(executor);
   await monitorCaptureReviews(() => queue.status());
+  if (
+    legacyReplayEnabled &&
+    !legacyIntakeReady &&
+    notReady.includes('bank') &&
+    notReady.includes('custody') &&
+    notReady.includes('interest')
+  )
+    return { status: 'legacy_intake_not_ready' };
   if (
     !legacyReplayEnabled &&
     notReady.includes('bank') &&
@@ -136,6 +146,13 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
         deps.process ?? ((delivery) => replayPrimaryDelivery(delivery, env)),
       deferBeforeReplay: (row) => {
         const family = primaryOwnerFamily(row.event_type ?? '');
+        if (
+          legacyReplayEnabled &&
+          !legacyIntakeReady &&
+          authorizesLegacyHandling(row.event_type ?? '', row.key_families) &&
+          (!family || !row.key_families.includes(family))
+        )
+          return 'LEGACY_INTAKE_UNAVAILABLE';
         return family &&
           row.key_families.includes(family) &&
           notReady.some((unavailable) => unavailable === family)

@@ -1,6 +1,8 @@
 import { formatCurrencyCompact } from '@/lib/currency';
+import { formatVerifiedProductSpecHighlights } from '@/lib/format-verified-product-spec-highlights';
 import { normalizeInferredBrands } from '@/lib/storefront-compare/normalize-inferred-brands';
 import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
+import { toTitleCase } from '@/lib/to-title-case';
 import { isAvailableProduct } from './is-available-product';
 
 export interface ClusterFeaturedInventoryProduct {
@@ -95,52 +97,24 @@ function scoreProductModelAffinity(
     : 0;
 }
 
-const SPEC_HIGHLIGHTS = [
-  { key: 'ram_gb', format: (v: string | number) => `${v}GB RAM` },
-  { key: 'storage_gb', format: (v: string | number) => `${v}GB storage` },
-  { key: 'battery_mah', format: (v: string | number) => `${v}mAh battery` },
-] as const;
-
-function toTitleCase(value: string): string {
-  return value
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
-
-function getPositiveNumericValue(raw: unknown): string | number | null {
-  if (typeof raw === 'number')
-    return Number.isFinite(raw) && raw > 0 ? raw : null;
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    if (trimmed && /^\d+(\.\d+)?$/.test(trimmed) && Number(trimmed) > 0)
-      return trimmed;
-  }
-  return null;
-}
-
 function buildFeaturedProductDescription(
   product: ClusterFeaturedInventoryProduct,
-  countryCode?: string | null
+  countryCode?: string | null,
+  categorySlug?: string | null
 ): string {
   const segments: string[] = [product.brand ?? 'Storefront pick'];
   const condition = product.condition?.trim();
   if (condition) segments.push(toTitleCase(condition));
   segments.push(formatCurrencyCompact(product.price, countryCode || 'NG'));
 
-  const specs = product.product_key_specs;
-  if (specs && typeof specs === 'object') {
-    const highlights: string[] = [];
-    for (const def of SPEC_HIGHLIGHTS) {
-      const val = getPositiveNumericValue(specs[def.key]);
-      if (val !== null) {
-        highlights.push(def.format(val));
-        if (highlights.length === 2) break;
-      }
-    }
-    if (highlights.length > 0) segments.push(highlights.join(', '));
-  }
+  const highlights = formatVerifiedProductSpecHighlights({
+    specs: product.product_key_specs,
+    category: product.category_slug ?? categorySlug,
+    categorySlugs: product.category_slugs,
+    keys: ['ram_gb', 'storage_gb', 'battery_mah'],
+    maxHighlights: 2,
+  });
+  if (highlights.length > 0) segments.push(highlights.join(', '));
   return segments.join(' • ');
 }
 
@@ -196,6 +170,10 @@ export function buildClusterFeaturedProducts(
     .map((product) => ({
       href: buildProductHref(storeUrl, product),
       title: product.name,
-      description: buildFeaturedProductDescription(product, countryCode),
+      description: buildFeaturedProductDescription(
+        product,
+        countryCode,
+        categorySlug
+      ),
     }));
 }

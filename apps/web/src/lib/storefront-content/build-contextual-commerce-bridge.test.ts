@@ -3,10 +3,7 @@ import {
   buildClusterFeaturedProducts,
   type ClusterFeaturedInventoryProduct,
 } from './build-cluster-featured-products';
-import {
-  annotateCommerceBridgeLinks,
-  buildClusterContextSummary,
-} from './build-contextual-commerce-bridge';
+import { buildClusterContextSummary } from './build-contextual-commerce-bridge';
 import { buildInformationalClusterModel } from './build-informational-cluster-model';
 import {
   smartphoneCategoryData,
@@ -89,48 +86,6 @@ describe('build-contextual-commerce-bridge', () => {
       expect(summary).toBe(
         'Compare verified prices, condition grading, and key specs across laptops.'
       );
-    });
-  });
-
-  describe('annotateCommerceBridgeLinks', () => {
-    it('annotates price-band, compare, and catalog hub links with contextual descriptions', () => {
-      const links = [
-        {
-          href: 'https://ogabassey.com/smartphones/best-under/500000',
-          label: 'Best under ₦500,000',
-        },
-        {
-          href: 'https://ogabassey.com/smartphones/compare/apple-vs-samsung',
-          label: 'Apple vs Samsung',
-        },
-        {
-          href: 'https://ogabassey.com/smartphones/apple',
-          label: 'Apple iPhones',
-        },
-      ];
-
-      const annotated = annotateCommerceBridgeLinks(links, 'Smartphones');
-
-      expect(annotated).toEqual([
-        {
-          href: 'https://ogabassey.com/smartphones/best-under/500000',
-          label: 'Best under ₦500,000',
-          description:
-            'Compare verified prices and in-stock options within this budget tier.',
-        },
-        {
-          href: 'https://ogabassey.com/smartphones/compare/apple-vs-samsung',
-          label: 'Apple vs Samsung',
-          description:
-            'Review side-by-side specifications, price difference, and buying fit.',
-        },
-        {
-          href: 'https://ogabassey.com/smartphones/apple',
-          label: 'Apple iPhones',
-          description:
-            'Explore verified smartphones listings with condition and stock details.',
-        },
-      ]);
     });
   });
 

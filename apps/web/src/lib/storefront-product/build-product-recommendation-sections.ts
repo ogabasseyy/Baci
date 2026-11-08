@@ -88,6 +88,7 @@ function buildSectionCards(
         title: product.name,
         description: buildProductCardDescription({
           candidate: product,
+          categorySlug: input.categorySlug,
           currentProduct: input.currentProduct,
           countryCode: input.countryCode,
         }),

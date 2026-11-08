@@ -154,4 +154,26 @@ describe('buildProductCardDescription', () => {
       '₦385,000'
     );
   });
+
+  it('suppresses stale hardware highlights when candidate is in an accessory category', () => {
+    const candidate = makeCandidate({
+      slug: 'leather-case',
+      name: 'Leather Case',
+      condition: 'new',
+      price: 15_000,
+      category_slug: 'phone-cases',
+      product_key_specs: {
+        ram_gb: 8,
+        storage_gb: 256,
+      },
+    });
+
+    expect(
+      buildProductCardDescription({
+        candidate,
+        categorySlug: 'phone-cases',
+        countryCode: 'NG',
+      })
+    ).toBe('New • ₦15,000');
+  });
 });

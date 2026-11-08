@@ -3,15 +3,13 @@ import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-ind
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import { annotateCommerceBridgeLinks } from './annotate-commerce-bridge-links';
 import {
   buildClusterFeaturedProducts,
   type ClusterFeaturedInventoryProduct,
 } from './build-cluster-featured-products';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
-import {
-  annotateCommerceBridgeLinks,
-  buildClusterContextSummary,
-} from './build-contextual-commerce-bridge';
+import { buildClusterContextSummary } from './build-contextual-commerce-bridge';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,

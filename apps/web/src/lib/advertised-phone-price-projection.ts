@@ -127,6 +127,9 @@ export async function projectAdvertisedPhonePrices<
       product
     );
     if (!selected) return [];
+    const selectedOption = resolvePublicProductOption(parent, {
+      variant: selected.variant,
+    });
     const requestedCondition = normalizeCanonicalProductCondition(
       constraints.condition
     );
@@ -138,7 +141,7 @@ export async function projectAdvertisedPhonePrices<
       (['new', 'used', 'open_box', 'refurbished'].includes(
         requestedCondition
       ) &&
-        selected.condition !== requestedCondition)
+        selectedOption.condition !== requestedCondition)
     )
       return [];
 
@@ -150,7 +153,8 @@ export async function projectAdvertisedPhonePrices<
         ...product,
         has_variants: true,
         advertised_price: selected.price,
-        advertised_condition: selected.condition ?? product.condition,
+        advertised_condition:
+          selectedOption.condition ?? selected.condition ?? product.condition,
         advertised_compare_at_price: null,
         ...(resolveAdvertisedVariantImage(selected.variant)
           ? {

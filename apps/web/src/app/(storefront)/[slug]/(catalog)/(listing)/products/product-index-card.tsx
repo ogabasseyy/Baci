@@ -17,6 +17,7 @@ interface ProductIndexCardProps {
   footer?: ReactNode;
   /** Opt in only for a measured first-screen LCP candidate. */
   imagePriority?: boolean;
+  headingLevel?: 'h2' | 'h3';
   posInSet?: number;
   setSize?: number;
 }
@@ -90,9 +91,11 @@ export function ProductIndexCard({
   modern = false,
   footer,
   imagePriority = false,
+  headingLevel = 'h3',
   posInSet,
   setSize,
 }: ProductIndexCardProps) {
+  const HeadingTag = headingLevel;
   const productPath = `${pathPrefix}${getProductUrl({
     id: product.id,
     name: product.name,
@@ -185,7 +188,7 @@ export function ProductIndexCard({
                 {product.category}
               </p>
             )}
-            <h3
+            <HeadingTag
               className={
                 modern
                   ? 'min-h-10 line-clamp-2 text-sm font-medium text-store-background-text'
@@ -193,7 +196,7 @@ export function ProductIndexCard({
               }
             >
               {product.name}
-            </h3>
+            </HeadingTag>
           </div>
 
           <div className="flex items-center justify-between gap-3">

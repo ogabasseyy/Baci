@@ -1,4 +1,4 @@
-import * as Haptics from 'expo-haptics';
+import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 
@@ -51,13 +51,7 @@ export function buildSavingsSuccessMessage({
   };
 }
 
-/** Best-effort success buzz; a missing haptics engine never blocks saving. */
+/** Success buzz through the shared haptic policy; never blocks saving. */
 export function playSavingsSuccessHaptic(): void {
-  try {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => undefined
-    );
-  } catch {
-    // Haptics are decorative only.
-  }
+  triggerHaptic('success');
 }

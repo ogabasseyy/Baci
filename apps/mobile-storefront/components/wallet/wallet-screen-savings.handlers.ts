@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import {
   resolveSavingsGoalVariant,
@@ -6,7 +7,9 @@ import {
 } from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
+import { readConfirmedContribution } from './read-confirmed-contribution';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
+import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
 
 interface AddSavingsContributionParams {
@@ -61,15 +64,6 @@ export function createSavingsVariantResolutionHandler({
       refetchWallet,
       variantId,
     });
-}
-
-function isCompletedSavingsContributionResult(result: unknown) {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    'goalStatus' in result &&
-    result.goalStatus === 'completed'
-  );
 }
 
 export async function addSavingsContributionToGoal({
@@ -154,10 +148,16 @@ export async function addSavingsContributionToGoal({
       );
       return;
     }
-    if (
-      amount >= remainingAmount ||
-      isCompletedSavingsContributionResult(contributionResult)
-    ) {
+    // The server's verdict wins over the client guess, which a replayed
+    // contribution with an already-refreshed goal would get wrong; the same
+    // verdict drives both reminder cleanup and the celebration.
+    const confirmed = readConfirmedContribution(contributionResult);
+    const goalCompleted =
+      confirmed.goalCompleted ??
+      (confirmed.savedAfter === undefined
+        ? amount >= remainingAmount
+        : confirmed.savedAfter >= goal.target_amount);
+    if (goalCompleted) {
       try {
         await cancelSavingsReminder?.(goal.id);
       } catch {
@@ -166,19 +166,24 @@ export async function addSavingsContributionToGoal({
     }
     clearSavingsContributionAmount();
     clearIdempotencyKey?.();
-    try {
-      await refetchWallet();
-    } catch {
-      Alert.alert(
-        'Savings updated',
-        `Added ${formatNgnCurrency(amount)} to your savings goal, but wallet refresh failed. Pull to refresh your latest balance.`
-      );
-      return;
-    }
-    Alert.alert(
-      'Savings updated',
-      `Added ${formatNgnCurrency(amount)} to your savings goal.`
+    triggerHaptic('success');
+    const refreshFailed = await refetchWallet().then(
+      () => false,
+      () => true
     );
+    const success = buildSavingsSuccessMessage({
+      amount,
+      goal,
+      // Celebrate completion only on the server's word; the client guess
+      // above still drives best-effort reminder cleanup.
+      goalCompleted:
+        confirmed.goalCompleted ??
+        (confirmed.savedAfter !== undefined &&
+          confirmed.savedAfter >= goal.target_amount),
+      refreshFailed,
+      savedAfter: confirmed.savedAfter,
+    });
+    Alert.alert(success.title, success.message);
   } catch (error) {
     reportContributionError(error, clearIdempotencyKey);
   } finally {

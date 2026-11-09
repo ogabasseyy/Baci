@@ -19,6 +19,7 @@
     "./lib/commerce-variant-axis": "./src/lib/commerce-variant-axis.ts",
     "./lib/filter-by-location-phrase": "./src/lib/filter-by-location-phrase.ts",
     "./lib/gigl-tracking-status": "./src/lib/gigl-tracking-status.ts",
+    "./lib/gigl-shipping-retention-payment-methods": "./src/lib/gigl-shipping-retention-payment-methods.ts",
     "./lib/negotiation-policy": "./src/lib/negotiation-policy.ts",
     "./lib/product-condition": "./src/lib/product-condition.ts",
     "./lib/product-default-variant": "./src/lib/product-default-variant.ts",

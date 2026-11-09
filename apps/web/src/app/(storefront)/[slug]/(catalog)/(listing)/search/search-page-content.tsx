@@ -140,6 +140,7 @@ export async function SearchPageContent({
               {/* Keyed by route query so client-side navigation remounts the
           form and draft session, resetting the controlled input and any
           validation error for the new results. */}
+              {/* Ogabassey's template supplies the search input in its navbar. */}
               <SearchPageForm
                 key={query}
                 action={searchBasePath}

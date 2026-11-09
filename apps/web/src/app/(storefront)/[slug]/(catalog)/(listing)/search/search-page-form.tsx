@@ -151,6 +151,7 @@ export function SearchPageForm({
           className="mt-2 text-sm text-store-background-text/70"
         >
           {error}
+          {suggestionsOnly && ' Use the search bar to update your search.'}
         </p>
       )}
     </div>

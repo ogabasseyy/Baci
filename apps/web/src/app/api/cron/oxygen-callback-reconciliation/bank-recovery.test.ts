@@ -165,6 +165,7 @@ describe('Oxygen bank-list refresh task', () => {
     mocks.getRedis.mockReturnValue({ set: vi.fn().mockResolvedValue(null) });
     mocks.readBanks.mockResolvedValue(null);
     const response = await GET(ensure);
+    expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ status: 'recovery_in_progress' });
     expect(response.headers.get('Retry-After')).toBe('330');
     expect(mocks.connect).not.toHaveBeenCalled();

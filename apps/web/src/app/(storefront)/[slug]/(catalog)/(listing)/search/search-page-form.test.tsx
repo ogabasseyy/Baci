@@ -127,5 +127,8 @@ it('announces shared draft errors without rendering the duplicate form', () => {
   );
   fireEvent.click(screen.getByRole('button', { name: 'Set error' }));
   expect(screen.getByRole('alert')).toHaveTextContent('Invalid search');
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Use the search bar to update your search.'
+  );
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });

@@ -54,6 +54,7 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
         return Response.json(
           { status: 'recovery_in_progress' },
           {
+            status: 202,
             headers: {
               ...headers,
               'Retry-After': String(BANK_RECOVERY_LOCK_SECONDS),

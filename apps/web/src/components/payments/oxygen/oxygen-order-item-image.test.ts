@@ -24,6 +24,13 @@ it('prefers the order image, then product images, then a placeholder', () => {
     oxygenOrderItemImage({
       ...item,
       image_url: null,
+      products: { images: [{ url: ' /object.jpg ' }] },
+    })
+  ).toBe('/object.jpg');
+  expect(
+    oxygenOrderItemImage({
+      ...item,
+      image_url: null,
       products: { images: ['', null] },
     })
   ).toBe('/placeholder.png');

@@ -1,7 +1,7 @@
 'use client';
 import { CalendarDays, ChevronDown, HandCoins, Landmark } from 'lucide-react';
 import Image, { type StaticImageData } from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCheckoutSessionUser } from '../hooks/use-checkout-session-user';
 import { FinanceBankLogo } from './FinanceBankLogo';
 import { oxygenBankListSchema } from '@/schemas/oxygen-bank-details';
@@ -19,6 +19,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
   const [unavailable, setUnavailable] = useState(false);
   const [retry, setRetry] = useState(0);
   const [retryDeadline, setRetryDeadline] = useState<number | null>(null);
+  const cooldownOwner = useRef<string | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const [authRequired, setAuthRequired] = useState(false);
   const retryAfter = retryDeadline === null ? null : Math.max(0, Math.ceil((retryDeadline - clock) / 1000));
@@ -30,8 +31,10 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', updateClock); };
   }, [retryDeadline]);
   useEffect(() => {
-    if (!oxygen || !selected || (retryDeadline !== null && retryDeadline > Date.now())) return;
+    if (!oxygen || !selected) return;
+    if (retryDeadline !== null && retryDeadline > Date.now() && !(cooldownOwner.current && cooldownOwner.current !== userId)) return;
     const controller = new AbortController();
+    cooldownOwner.current = null;
     setRetryDeadline(null);
     setUnavailable(false);
     setAuthRequired(false);
@@ -39,9 +42,11 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
       .then(async (response) => {
         if (response.status === 401) { if (!controller.signal.aborted) setAuthRequired(true); throw new Error('unauthorized'); }
         if (response.status === 429) {
-          const seconds = Number(response.headers.get('Retry-After'));
+          if (!controller.signal.aborted) cooldownOwner.current = response.headers.get('X-Oxygen-Rate-Limit-Scope') === 'user' ? userId ?? null : null;
+          const header = response.headers.get('Retry-After');
+          const seconds = header === null || header.trim() === '' ? NaN : Number(header);
           const now = Date.now();
-          if (!controller.signal.aborted) { setClock(now); setRetryDeadline(now + (Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60) * 1000); }
+          if (!controller.signal.aborted) { setClock(now); setRetryDeadline(now + (Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds) : 60) * 1000); }
           throw new Error('rate-limited');
         }
         if (!response.ok) throw new Error('unavailable');

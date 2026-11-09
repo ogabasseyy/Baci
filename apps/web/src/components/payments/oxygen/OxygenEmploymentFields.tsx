@@ -67,6 +67,7 @@ export function OxygenEmploymentFields({
           inputMode="decimal"
           maxLength={40}
           pattern={'[0-9,]+(\\.[0-9]{1,2})?'}
+          title="Enter an amount with up to two decimal places."
           placeholder="e.g. 250,000"
           required
           onChange={(event) => {

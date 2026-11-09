@@ -47,11 +47,22 @@ vi.mock('@/components/storefront/checkout/discount-code-input', () => ({
 vi.mock(
   '@/components/storefront/ogabassey/components/MobileCheckoutComponents',
   () => ({
-    MobileOrderSummary: (props: { remainingAmount: number }) => (
+    MobileOrderSummary: (props: {
+      remainingAmount: number;
+      taxAmount?: number;
+      walletBalance?: number;
+      setPayWithWallet?: (value: boolean) => void;
+    }) => (
       <div
         data-testid="mobile-summary"
         data-remaining={props.remainingAmount}
-      />
+        data-tax={props.taxAmount}
+        data-wallet={props.walletBalance}
+      >
+        <button type="button" onClick={() => props.setPayWithWallet?.(true)}>
+          Use wallet
+        </button>
+      </div>
     ),
   })
 );
@@ -244,6 +255,47 @@ describe('CheckoutScreen summaries', () => {
     expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('desktop-summary')).toBeInTheDocument();
     expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
+  });
+
+  it('forwards tax and wallet controls to the mobile summary', () => {
+    const props = createProps();
+    const setPayWithWallet = vi.fn();
+    Object.assign(props.summary.presentation.mobile, {
+      taxAmount: 525,
+      walletBalance: 500,
+      setPayWithWallet,
+    });
+    render(<CheckoutScreen {...props} />);
+    expect(screen.getByTestId('mobile-summary')).toHaveAttribute(
+      'data-tax',
+      '525'
+    );
+    expect(screen.getByTestId('mobile-summary')).toHaveAttribute(
+      'data-wallet',
+      '500'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Use wallet' }));
+    expect(setPayWithWallet).toHaveBeenCalledWith(true);
+  });
+
+  it('places the dedicated mobile and desktop Oxygen summaries around the steps', () => {
+    render(
+      <CheckoutScreen
+        {...createProps()}
+        oxygenStep={<div data-testid="oxygen-step" />}
+        oxygenMobileSummary={<div data-testid="oxygen-mobile" />}
+        oxygenSummary={<div data-testid="oxygen-desktop" />}
+      />
+    );
+    const step = screen.getByTestId('oxygen-step');
+    expect(
+      screen.getByTestId('oxygen-mobile').compareDocumentPosition(step) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      step.compareDocumentPosition(screen.getByTestId('oxygen-desktop')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('renders the Oxygen summary before the steps when no separate mobile summary exists', () => {

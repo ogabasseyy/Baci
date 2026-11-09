@@ -33,6 +33,7 @@ it('reveals address and consent after required income details, preserving them w
   await waitFor(() =>
     expect(screen.getByLabelText('Home address')).toBeVisible()
   );
+  expect(screen.getByRole('checkbox')).toBeVisible();
   fireEvent.change(screen.getByLabelText('Home address'), {
     target: { value: 'My address' },
   });

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { isOxygenEmploymentReady } from './oxygen-employment-ready';
 
 describe('employment readiness', () => {
+  it('accepts a saved, formatted income', () => {
+    expect(isOxygenEmploymentReady('250,000', '26')).toBe(true);
+  });
   it.each([
     ['100', '1', true],
     ['100.25', '31', true],

@@ -10,15 +10,19 @@ export function oxygenOrderItemImage(item: OrderItem): string {
     ? item.products[0]
     : item.products;
   const images = Array.isArray(product?.images) ? product.images : [];
+  const urls = images.map((image: unknown) =>
+    typeof image === 'string'
+      ? image
+      : typeof image === 'object' &&
+          image !== null &&
+          'url' in image &&
+          typeof image.url === 'string'
+        ? image.url
+        : ''
+  );
   return (
     item.image_url?.trim() ||
-    null ||
-    images
-      .find(
-        (image): image is string =>
-          typeof image === 'string' && image.trim().length > 0
-      )
-      ?.trim() ||
+    urls.find((image) => image.trim().length > 0)?.trim() ||
     '/placeholder.png'
   );
 }

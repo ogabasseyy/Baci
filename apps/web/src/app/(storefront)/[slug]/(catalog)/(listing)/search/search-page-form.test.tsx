@@ -131,4 +131,7 @@ it('announces shared draft errors without rendering the duplicate form', () => {
     'Use the search bar to update your search.'
   );
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('form', { name: 'Edit search' })
+  ).not.toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { OxygenCustomerPrefill } from '@/schemas/oxygen-customer-prefill';
 import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
 import { OxygenBankFields } from './OxygenBankFields';
@@ -76,6 +76,7 @@ export function CustomerFormFields({
     saveDraft(oxygenCustomerDraft(formRef.current, nextStep));
   }
   const [formError, setFormError] = useState('');
+  const formErrorId = useId();
   const focusInvalidField = useRef(false);
   const [continuing, setContinuing] = useState<'saving' | 'starting' | null>(
     null
@@ -84,13 +85,18 @@ export function CustomerFormFields({
   useOxygenFormErrorFocus(formRef, formError, focusInvalidField);
   function highlightField(input: HTMLElement) {
     focusInvalidField.current = true;
-    highlightOxygenControl(input);
+    highlightOxygenControl(input, formErrorId);
   }
   function validateSection(form: HTMLFormElement): boolean {
+    focusInvalidField.current = false;
     const invalid = firstInvalidOxygenControl(form, step);
     if (invalid) {
       highlightField(invalid);
-      setFormError('Please complete the required fields in this step.');
+      setFormError(
+        invalid.validity.patternMismatch
+          ? invalid.title || 'Check the format of the highlighted field.'
+          : 'Please complete the required fields in this step.'
+      );
       return false;
     }
     if (step === 1 && !String(new FormData(form).get('account_name') ?? '')) {
@@ -200,6 +206,7 @@ export function CustomerFormFields({
         />
         {formError && (
           <p
+            id={formErrorId}
             role="alert"
             tabIndex={-1}
             className="rounded-xl bg-red-50 p-3 text-sm text-red-700"

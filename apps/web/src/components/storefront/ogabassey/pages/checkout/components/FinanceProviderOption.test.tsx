@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { StaticImageData } from 'next/image';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaymentMethod } from '../types';
@@ -184,6 +184,46 @@ describe('finance provider option', () => {
     renderOption('oxygen', true);
     expect(await screen.findByText('Sign in to view supported banks.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry bank list/i })).toBeNull();
+  });
+
+  it('allows an immediate retry when the server returns Retry-After: 0', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '0' }) }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    renderOption('oxygen', true);
+    const retry = await screen.findByRole('button', { name: /retry bank list/i });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+  });
+
+  it('enables retry when the cooldown expires while the page stays visible', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '1' }) }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    renderOption('oxygen', true);
+    const retry = await screen.findByRole('button', { name: /retry bank list/i });
+    expect(retry).toBeDisabled();
+    await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
+    fireEvent.click(retry);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+  });
+
+  it('clears a user-scoped cooldown when a different customer signs in', async () => {
+    auth.user = { id: 'first' };
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30', 'X-Oxygen-Rate-Limit-Scope': 'user' }) }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    auth.user = { id: 'second' };
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+  });
+
+  it('preserves an unscoped cooldown when a different customer signs in', async () => {
+    auth.user = { id: 'first' };
+    fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }) });
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    auth.user = { id: 'second' };
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: /retry bank list/i })).toBeDisabled();
   });
 
   it('loads the bank list after a guest signs in', async () => {

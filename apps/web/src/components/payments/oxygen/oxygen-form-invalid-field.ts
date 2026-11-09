@@ -7,8 +7,9 @@ export function firstInvalidOxygenControl(form: HTMLFormElement, step: number) {
   return Array.from(controls).find((control) => !control.checkValidity());
 }
 
-export function highlightOxygenControl(input: HTMLElement) {
+export function highlightOxygenControl(input: HTMLElement, errorId?: string) {
   input.setAttribute('aria-invalid', 'true');
+  if (errorId) input.setAttribute('aria-errormessage', errorId);
   input.classList.add(styles.invalid);
   requestAnimationFrame(() => {
     input.scrollIntoView?.({ block: 'center', behavior: 'auto' });
@@ -19,6 +20,7 @@ export function highlightOxygenControl(input: HTMLElement) {
 export function clearOxygenControlError(target: EventTarget) {
   if (target instanceof HTMLElement) {
     target.removeAttribute('aria-invalid');
+    target.removeAttribute('aria-errormessage');
     target.classList.remove(styles.invalid);
   }
 }

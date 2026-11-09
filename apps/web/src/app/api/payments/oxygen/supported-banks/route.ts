@@ -25,7 +25,11 @@ export async function GET(request: Request) {
         { error: 'Too many requests' },
         {
           status: 429,
-          headers: { ...headers, 'Retry-After': String(retryAfter) },
+          headers: {
+            ...headers,
+            'Retry-After': String(retryAfter),
+            'X-Oxygen-Rate-Limit-Scope': 'user',
+          },
         }
       );
     }

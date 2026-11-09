@@ -17,11 +17,13 @@ it('finds the first invalid field in the current step and highlights and clears 
     return 1;
   });
   if (!invalid) throw new Error('Expected an invalid field');
-  highlightOxygenControl(invalid);
+  highlightOxygenControl(invalid, 'field-error');
   expect(invalid).toHaveAttribute('aria-invalid', 'true');
+  expect(invalid).toHaveAttribute('aria-errormessage', 'field-error');
   expect(document.activeElement).toBe(invalid);
   clearOxygenControlError(invalid);
   expect(invalid).not.toHaveAttribute('aria-invalid');
+  expect(invalid).not.toHaveAttribute('aria-errormessage');
   vi.restoreAllMocks();
   form.remove();
 });

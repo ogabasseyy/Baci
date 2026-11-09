@@ -3,6 +3,7 @@ import type {
   ReturnFeesEnumeration,
   ReturnMethodEnumeration,
 } from 'schema-dts';
+import { normalizeCountryCode } from './normalize-country-code';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -42,6 +43,10 @@ export function buildMerchantReturnPolicyFromTrustProfile(
   country: string,
   trustProfile?: MerchantTrustProfile
 ): MerchantReturnPolicy | undefined {
+  const normalizedCountry = normalizeCountryCode(country);
+  if (!normalizedCountry) {
+    return undefined;
+  }
   const policy = trustProfile?.returnPolicy;
   const windowDays = policy?.windowDays;
   if (windowDays == null || !Number.isInteger(windowDays) || windowDays < 0) {
@@ -50,8 +55,8 @@ export function buildMerchantReturnPolicyFromTrustProfile(
   if (windowDays === 0) {
     return {
       '@type': 'MerchantReturnPolicy',
-      applicableCountry: country,
-      returnPolicyCountry: country,
+      applicableCountry: normalizedCountry,
+      returnPolicyCountry: normalizedCountry,
       returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
     };
   }
@@ -59,8 +64,8 @@ export function buildMerchantReturnPolicyFromTrustProfile(
   const returnFees = mapReturnFeeToSchemaUrl(policy?.returnFees);
   return {
     '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
+    applicableCountry: normalizedCountry,
+    returnPolicyCountry: normalizedCountry,
     returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
     merchantReturnDays: windowDays,
     ...(returnMethod && { returnMethod }),

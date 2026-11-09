@@ -17,13 +17,41 @@ const profile = {
 } satisfies MerchantTrustProfile;
 
 describe('shipping', () => {
-  it('recognizes country names and rejects inverted delivery ranges', () => {
+  it('recognizes country names and rejects inverted, negative, or fractional delivery ranges', () => {
+    expect(
+      buildOfferShippingDetails('Nigeria', 'NGN', {
+        ...profile,
+        shippingPolicy: { ...profile.shippingPolicy, regions: ['NG'] },
+      })
+    ).toMatchObject({
+      shippingDestination: { addressCountry: 'NG' },
+    });
     expect(
       buildOfferShippingDetails('NG', 'NGN', {
         ...profile,
         shippingPolicy: { ...profile.shippingPolicy, regions: ['Nigeria'] },
       })
     ).toBeDefined();
+    expect(
+      buildOfferShippingDetails('NG', 'NGN', {
+        ...profile,
+        shippingPolicy: {
+          ...profile.shippingPolicy,
+          handlingDaysMin: -1,
+          handlingDaysMax: 2,
+        },
+      })
+    ).toBeUndefined();
+    expect(
+      buildOfferShippingDetails('NG', 'NGN', {
+        ...profile,
+        shippingPolicy: {
+          ...profile.shippingPolicy,
+          transitDaysMin: 1.5,
+          transitDaysMax: 3,
+        },
+      })
+    ).toBeUndefined();
     expect(
       buildOfferShippingDetails('NG', 'NGN', {
         ...profile,

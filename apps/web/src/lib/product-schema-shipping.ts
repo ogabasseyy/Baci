@@ -1,32 +1,54 @@
 import type { OfferShippingDetails } from 'schema-dts';
-import { getCountryByCode } from './countries';
+import { normalizeCountryCode } from './normalize-country-code';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
+
+function isValidShippingDayRange(
+  min: number | undefined,
+  max: number | undefined
+): min is number {
+  return (
+    min !== undefined &&
+    max !== undefined &&
+    Number.isInteger(min) &&
+    Number.isInteger(max) &&
+    min >= 0 &&
+    min <= max
+  );
+}
 
 export function buildOfferShippingDetails(
   country: string,
   currency: string,
   trustProfile?: MerchantTrustProfile
 ): OfferShippingDetails | undefined {
+  const normalizedCountry = normalizeCountryCode(country);
+  if (!normalizedCountry) {
+    return undefined;
+  }
+
   const shippingPolicy = trustProfile?.shippingPolicy;
   if (
     shippingPolicy?.shippingFeeType !== 'free' ||
     !shippingPolicy.regions.some(
-      (region) =>
-        region.trim().toUpperCase() === country.toUpperCase() ||
-        getCountryByCode(region.trim())?.code === country.toUpperCase()
-    ) ||
-    shippingPolicy.handlingDaysMin == null ||
-    shippingPolicy.handlingDaysMax == null ||
-    shippingPolicy.transitDaysMin == null ||
-    shippingPolicy.transitDaysMax == null ||
-    shippingPolicy.handlingDaysMin > shippingPolicy.handlingDaysMax ||
-    shippingPolicy.transitDaysMin > shippingPolicy.transitDaysMax
-  )
+      (region) => normalizeCountryCode(region) === normalizedCountry
+    )
+  ) {
     return undefined;
+  }
+
   const handlingMin = shippingPolicy.handlingDaysMin;
   const handlingMax = shippingPolicy.handlingDaysMax;
   const transitMin = shippingPolicy.transitDaysMin;
   const transitMax = shippingPolicy.transitDaysMax;
+
+  if (
+    handlingMax === undefined ||
+    transitMax === undefined ||
+    !isValidShippingDayRange(handlingMin, handlingMax) ||
+    !isValidShippingDayRange(transitMin, transitMax)
+  ) {
+    return undefined;
+  }
 
   return {
     '@type': 'OfferShippingDetails',
@@ -37,7 +59,7 @@ export function buildOfferShippingDetails(
     },
     shippingDestination: {
       '@type': 'DefinedRegion',
-      addressCountry: country,
+      addressCountry: normalizedCountry,
     },
     deliveryTime: {
       '@type': 'ShippingDeliveryTime',

@@ -611,220 +611,224 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variesBy).toHaveLength(2);
   });
 
-  it('declares only variant dimensions present on every variant', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { color: 'Silver', storage: '512GB' },
-            stock_quantity: 2,
-          },
-          {
-            id: 'v2',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { ram: '16GB' },
-            stock_quantity: 2,
-          },
-          {
-            id: 'v3',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { color: 'Black' },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    expect(schema.variesBy).toBeUndefined();
-    const variants = schema.hasVariant as Record<string, unknown>[];
-    expect(variants[0].color).toBe('Silver');
-    expect(variants[1]).not.toHaveProperty('color');
-    expect(variants[2]).not.toHaveProperty('size');
-  });
-
-  it.each([
-    [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
-    [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
-  ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
-    const schema = generateProductSchema(
-      makeProduct({
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            stock_quantity: 2,
-            attributes: first,
-          },
-          {
-            id: 'v2',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            stock_quantity: 2,
-            attributes: second,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
-  });
-
-  it('provides a truthful description on each product variant', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        description: 'A refurbished phone with a clear display.',
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { color: 'Black', storage: '128GB' },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    const variant = (schema.hasVariant as Record<string, unknown>[])[0];
-    expect(variant.description).toContain(
-      'A refurbished phone with a clear display.'
-    );
-    expect(variant.description).toContain('Black');
-    expect(variant.description).toContain('128GB');
-  });
-
-  it('keeps variant names concise when catalog attributes contain long specifications', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        name: 'HP ProBook 440 G11',
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: {
-              color: 'Pike Silver',
-              ram: '16GB',
-              processor: 'Core Ultra 5',
-              specifications: 'detailed specification '.repeat(30),
+  describe('bugfix: product structured data variant and policy regressions', () => {
+    it('declares only variant dimensions present on every variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Silver', storage: '512GB' },
+              stock_quantity: 2,
             },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    const name = String(
-      (schema.hasVariant as Record<string, unknown>[])[0].name
-    );
-    expect(name.length).toBeLessThanOrEqual(150);
-    expect(name).toContain('HP ProBook 440 G11');
-    expect(name).toContain('Pike Silver');
-    expect(name).toContain('16GB');
-  });
-
-  it('uses stable feed identifiers when a variant SKU or group slug is invalid', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
-        slug: `product-${'x'.repeat(60)}`,
-        variants: [
-          {
-            id: 'b9c67d32-7d63-41a3-9b14-2e7eb322a995',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            sku: `INVALID SKU ${'x'.repeat(60)}`,
-            attributes: { color: 'Black' },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    const variant = (schema.hasVariant as Record<string, unknown>[])[0];
-    expect(schema.productGroupID).toBe('e7d13d26-ef38-4c5b-a616-40d23cf69708');
-    expect(variant.inProductGroupWithID).toBe(schema.productGroupID);
-    expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
-  });
-
-  it('does not treat oversized specification text as a variant size', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: {
-              storage: 'Full product specification '.repeat(10),
-              ram: '32GB RAM',
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { ram: '16GB' },
+              stock_quantity: 2,
             },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-    expect((schema.hasVariant as Record<string, unknown>[])[0].size).toBe(
-      '32GB RAM'
-    );
-  });
+            {
+              id: 'v3',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toBeUndefined();
+      const variants = schema.hasVariant as Record<string, unknown>[];
+      expect(variants[0].color).toBe('Silver');
+      expect(variants[1]).not.toHaveProperty('color');
+      expect(variants[2]).not.toHaveProperty('size');
+    });
 
-  it('does not claim free nationwide shipping or return terms without evidence', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        variants: [
-          {
-            id: 'v1',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { color: 'Black' },
-            stock_quantity: 2,
+    it.each([
+      [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+      [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+    ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: first,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: second,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
+    });
+
+    it('provides a truthful description on each product variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          description: 'A refurbished phone with a clear display.',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black', storage: '128GB' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(variant.description).toContain(
+        'A refurbished phone with a clear display.'
+      );
+      expect(variant.description).toContain('Black');
+      expect(variant.description).toContain('128GB');
+    });
+
+    it('keeps variant names concise when catalog attributes contain long specifications', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          name: 'HP ProBook 440 G11',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                color: 'Pike Silver',
+                ram: '16GB',
+                processor: 'Core Ultra 5',
+                specifications: 'detailed specification '.repeat(30),
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const name = String(
+        (schema.hasVariant as Record<string, unknown>[])[0].name
+      );
+      expect(name.length).toBeLessThanOrEqual(150);
+      expect(name).toContain('HP ProBook 440 G11');
+      expect(name).toContain('Pike Silver');
+      expect(name).toContain('16GB');
+    });
+
+    it('uses stable feed identifiers when a variant SKU or group slug is invalid', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          slug: `product-${'x'.repeat(60)}`,
+          variants: [
+            {
+              id: 'b9c67d32-7d63-41a3-9b14-2e7eb322a995',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              sku: `INVALID SKU ${'x'.repeat(60)}`,
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(schema.productGroupID).toBe(
+        'e7d13d26-ef38-4c5b-a616-40d23cf69708'
+      );
+      expect(variant.inProductGroupWithID).toBe(schema.productGroupID);
+      expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
+    });
+
+    it('does not treat oversized specification text as a variant size', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                storage: 'Full product specification '.repeat(10),
+                ram: '32GB RAM',
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect((schema.hasVariant as Record<string, unknown>[])[0].size).toBe(
+        '32GB RAM'
+      );
+    });
+
+    it('does not claim free nationwide shipping or return terms without evidence', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'White' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG',
+        undefined,
+        makeTrustProfile({
+          shippingPolicy: {
+            localRoute: '/shipping',
+            regions: ['Lagos, Nigeria'],
+            shippingFeeType: 'calculated',
           },
-          {
-            id: 'v2',
-            product_id: 'test-123',
-            merchant_id: 'm1',
-            attributes: { color: 'White' },
-            stock_quantity: 2,
-          },
-        ],
-      }),
-      'TestStore',
-      'NGN',
-      'NG',
-      undefined,
-      makeTrustProfile({
-        shippingPolicy: {
-          localRoute: '/shipping',
-          regions: ['Lagos, Nigeria'],
-          shippingFeeType: 'calculated',
-        },
-      })
-    );
-    for (const variant of schema.hasVariant as Record<string, unknown>[]) {
-      const offer = variant.offers as Record<string, unknown>;
-      expect(offer).not.toHaveProperty('shippingDetails');
-      expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
-    }
+        })
+      );
+      for (const variant of schema.hasVariant as Record<string, unknown>[]) {
+        const offer = variant.offers as Record<string, unknown>;
+        expect(offer).not.toHaveProperty('shippingDetails');
+        expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
+      }
+    });
   });
 
   it('sets variant-level availability correctly', () => {

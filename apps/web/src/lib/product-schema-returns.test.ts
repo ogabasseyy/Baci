@@ -25,6 +25,21 @@ describe('returns', () => {
     expect(policy?.merchantReturnDays).toBe(7);
     expect(policy).not.toHaveProperty('returnFees');
     expect(policy).not.toHaveProperty('returnMethod');
+    expect(
+      buildMerchantReturnPolicyFromTrustProfile('Nigeria', {
+        ...profile,
+        returnPolicy: { localRoute: '/returns', windowDays: 7 },
+      })
+    ).toMatchObject({
+      applicableCountry: 'NG',
+      returnPolicyCountry: 'NG',
+    });
+    expect(
+      buildMerchantReturnPolicyFromTrustProfile('Atlantis', {
+        ...profile,
+        returnPolicy: { localRoute: '/returns', windowDays: 7 },
+      })
+    ).toBeUndefined();
     expect(buildMerchantReturnPolicyFromTrustProfile('NG')).toBeUndefined();
   });
 });

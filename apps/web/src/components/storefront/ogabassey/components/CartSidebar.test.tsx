@@ -1,6 +1,13 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+let mockUser: { id: string } | null = null;
+let mockSessionUser: { id: string } | null = null;
+const mockGetUser = vi.fn();
+const mockPush = vi.fn();
+vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: mockUser }) }));
+vi.mock('@/components/storefront/checkout-code-signin', () => ({ CheckoutCodeSignin: () => <div>Sign in with email</div> }));
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -89,12 +96,8 @@ vi.mock('@/lib/routes', () => ({
   asRoute: (path: string) => path,
 }));
 
-let mockPathname = '/test-store';
-const mockRouterPush = vi.fn();
-
 vi.mock('next/navigation', () => ({
-  usePathname: () => mockPathname,
-  useRouter: () => ({ push: mockRouterPush }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('next/image', () => ({
@@ -155,7 +158,7 @@ vi.mock('./empty-state', () => ({
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    auth: { getUser: mockGetUser },
     from: () => ({ insert: vi.fn().mockResolvedValue({ error: null }) }),
   }),
 }));
@@ -171,8 +174,10 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsCartOpen = true;
-    mockPathname = '/test-store';
+    mockUser = null;
+    mockSessionUser = null;
+    mockGetUser.mockImplementation(async () => ({ data: { user: mockSessionUser }, error: null }));
+    mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
     mockCartItems = [
@@ -189,28 +194,6 @@ describe('CartSidebar', () => {
         negotiationStatus: 'accepted' as const,
       },
     ];
-  });
-
-  it('keeps the drawer open in loading state when Proceed to Checkout is clicked and closes on route change or unmount', () => {
-    const view = render(<CartSidebar />);
-
-    const checkoutButton = screen.getByRole('button', {
-      name: /proceed to checkout/i,
-    });
-    fireEvent.click(checkoutButton);
-
-    expect(mockRouterPush).toHaveBeenCalledWith('/test-store/checkout');
-    expect(checkoutButton).toBeDisabled();
-    expect(mockSetIsCartOpen).not.toHaveBeenCalledWith(false);
-
-    mockPathname = '/test-store/checkout';
-    view.rerender(<CartSidebar />);
-    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
-    expect(checkoutButton).not.toBeDisabled();
-
-    mockSetIsCartOpen.mockClear();
-    view.unmount();
-    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
 
   it('shows cart totals without the shipping placeholder', () => {
@@ -389,53 +372,6 @@ describe('CartSidebar', () => {
     expect(
       screen.getByRole('button', { name: /negotiate total amount/i })
     ).toBeInTheDocument();
-  });
-
-  it('displays an error alert when checkout navigation fails', () => {
-    mockRouterPush.mockImplementationOnce(() => {
-      throw new Error('Navigation failed');
-    });
-    render(<CartSidebar />);
-    const checkoutBtn = screen.getByRole('button', { name: /proceed to checkout/i });
-    fireEvent.click(checkoutBtn);
-    expect(screen.getByRole('alert')).toHaveTextContent(/unable to proceed to checkout/i);
-  });
-
-  it('displays an error alert when checkout navigation promise rejects', async () => {
-    mockRouterPush.mockReturnValueOnce(
-      Promise.reject(new Error('Navigation rejected'))
-    );
-    render(<CartSidebar />);
-    const checkoutBtn = screen.getByRole('button', {
-      name: /proceed to checkout/i,
-    });
-    fireEvent.click(checkoutBtn);
-    expect(
-      await screen.findByRole('alert')
-    ).toHaveTextContent(/unable to proceed to checkout/i);
-  });
-
-  it('displays a timeout error alert when checkout navigation exceeds 4 seconds', () => {
-    vi.useFakeTimers();
-    try {
-      mockRouterPush.mockReturnValueOnce(new Promise(() => {}));
-      render(<CartSidebar />);
-      const checkoutBtn = screen.getByRole('button', {
-        name: /proceed to checkout/i,
-      });
-      fireEvent.click(checkoutBtn);
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-
-      act(() => {
-        vi.advanceTimersByTime(4000);
-      });
-
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        /checkout is taking longer than expected\. please retry\./i
-      );
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

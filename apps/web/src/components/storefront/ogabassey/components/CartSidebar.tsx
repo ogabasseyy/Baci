@@ -1,18 +1,18 @@
 'use client';
 
 import { ShoppingBag, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { useSafeTimeout } from '@/hooks/use-safe-timeout';
 import { analytics } from '@/lib/analytics';
 import { asRoute } from '@/lib/routes';
 import { AdUnit } from './AdUnit';
 // import { ActionTooltip } from './Tooltip';
 import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
 import { CartSidebarFooter } from './cart-sidebar-footer';
+import { CheckoutIdentityModal } from './CheckoutIdentityModal';
+import { useCartCheckout } from './use-cart-checkout';
 import { CartSidebarLineItem } from './cart-sidebar-line-item';
 import { EmptyState } from './empty-state';
 import {
@@ -20,7 +20,6 @@ import {
   NegotiationModal,
 } from './NegotiationModal';
 import { useCartSidebarNegotiation } from './use-cart-sidebar-negotiation';
-import { useCartDrawerLifecycle } from './use-cart-drawer-lifecycle';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { isProductNegotiable } from '@baci/shared/lib';
 import {
@@ -77,17 +76,12 @@ export const CartSidebar: React.FC = () => {
     path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
 
   const {
+    closeCart,
+    handleCheckout,
     isCheckoutLoading,
-    setIsCheckoutLoading,
-    isCheckoutLoadingRef,
-    checkoutError,
-    setCheckoutError,
-  } = useCartDrawerLifecycle({
-    isCartOpen,
-    setIsCartOpen,
-  });
-  const router = useRouter();
-  const scheduleTimeout = useSafeTimeout();
+    isIdentityOpen,
+    setIsIdentityOpen,
+  } = useCartCheckout(isCartOpen, setIsCartOpen, getHref('/checkout'));
 
   const {
     negotiationState,
@@ -136,46 +130,7 @@ export const CartSidebar: React.FC = () => {
 
   if (!isCartOpen) return null;
 
-  const handleCheckout = () => {
-    setCheckoutError(null);
-    setIsCheckoutLoading(true);
-    // Keep the drawer visible in its loading state while Next.js navigates
-    // so the underlying page does not flash before /checkout mounts.
-    // The pathname effect above closes the drawer once the route commits.
-    try {
-      const pushResult: unknown = (router.push as (target: unknown) => unknown)(
-        asRoute(getHref('/checkout'))
-      );
-      if (
-        typeof pushResult === 'object' &&
-        pushResult !== null &&
-        'catch' in pushResult &&
-        typeof (pushResult as { catch: unknown }).catch === 'function'
-      ) {
-        (pushResult as Promise<unknown>).catch(() => {
-          setIsCheckoutLoading(false);
-          setCheckoutError('Unable to proceed to checkout. Please try again.');
-        });
-      }
-    } catch {
-      setIsCheckoutLoading(false);
-      setCheckoutError('Unable to proceed to checkout. Please try again.');
-    }
-    scheduleTimeout(() => {
-      if (isCheckoutLoadingRef.current) {
-        setIsCheckoutLoading(false);
-        setCheckoutError(
-          'Checkout is taking longer than expected. Please retry.'
-        );
-      }
-    }, 4000);
-  };
-
-  const handleClose = () => {
-    setCheckoutError(null);
-    setIsCheckoutLoading(false);
-    setIsCartOpen(false);
-  };
+  const handleClose = closeCart;
 
   return (
     <>
@@ -187,7 +142,7 @@ export const CartSidebar: React.FC = () => {
           aria-label="Dismiss cart backdrop"
           tabIndex={-1}
           className="absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs transition-opacity"
-          onClick={() => setIsCartOpen(false)}
+          onClick={closeCart}
         />
 
         {/* Sidebar Panel - SWIPES FROM RIGHT */}
@@ -204,7 +159,7 @@ export const CartSidebar: React.FC = () => {
               </h2>
               <button
                 type="button"
-                onClick={() => setIsCartOpen(false)}
+                onClick={closeCart}
                 className="p-2 hover:bg-store-background-text/10 rounded-full transition-colors text-store-background-text/60 hover:text-store-primary"
                 aria-label="Close cart"
               >
@@ -223,7 +178,7 @@ export const CartSidebar: React.FC = () => {
                     title="Your cart is empty"
                     description="Add an item to your cart and it will appear here."
                     actionLabel="Start Shopping"
-                    onAction={() => setIsCartOpen(false)}
+                    onAction={closeCart}
                   />
                 </div>
               ) : (
@@ -262,7 +217,6 @@ export const CartSidebar: React.FC = () => {
                 hasPriceNegotiation={hasPriceNegotiation}
                 hasNonNegotiableCartItem={hasNonNegotiableCartItem}
                 isCheckoutLoading={isCheckoutLoading}
-                checkoutError={checkoutError}
                 cartHref={asRoute(getHref('/cart'))}
                 onNegotiateTotal={openTotalNegotiation}
                 onCheckout={handleCheckout}
@@ -273,6 +227,7 @@ export const CartSidebar: React.FC = () => {
         </div>
       </div>
 
+      <CheckoutIdentityModal isOpen={isIdentityOpen} onClose={() => setIsIdentityOpen(false)} checkoutUrl={getHref('/checkout')} onProceed={closeCart} />
       {/* Negotiation Modal — only render when merchant context is available */}
       {negotiationState && cartMerchantContextMatches && merchant?.id && (
         <NegotiationModal

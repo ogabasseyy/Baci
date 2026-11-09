@@ -1,0 +1,59 @@
+.amountInput {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.25rem 0.4rem;
+  color: var(--store-background-text, #111827);
+  border: 1px solid var(--store-border, #d1d5db);
+  border-radius: 0.75rem;
+  padding: 0.25rem 0.75rem;
+}
+.amountInput:focus-within {
+  border-color: var(--store-primary, #dc2626);
+}
+.amountInput > span {
+  font-size: 1.5rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+.amountInput input {
+  min-width: 0;
+  width: 100%;
+  min-height: 3.25rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+.percentage {
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  color: var(--store-background-text, #111827);
+  background: color-mix(
+    in srgb,
+    var(--store-primary, #dc2626) 7%,
+    var(--store-background, white)
+  );
+  white-space: nowrap;
+}
+.editAmount {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  min-height: 2.75rem;
+  font-size: 0.75rem;
+  color: var(--store-background-text, #111827);
+  white-space: nowrap;
+}

@@ -65,10 +65,8 @@ export function CheckoutScreen({
       <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <CheckoutPageHeading />
         {oxygenStep
-          ? (oxygenMobileSummary ?? oxygenSummary) && (
-              <div className="lg:hidden">
-                {oxygenMobileSummary ?? oxygenSummary}
-              </div>
+          ? oxygenMobileSummary && (
+              <div className="lg:hidden">{oxygenMobileSummary}</div>
             )
           : presentation.showMobile && (
               <MobileOrderSummary {...presentation.mobile} />
@@ -94,7 +92,7 @@ export function CheckoutScreen({
             <CheckoutStepComposition session={steps} />
           )}
           {oxygenSummary ? (
-            <div className="hidden lg:block lg:col-span-4">{oxygenSummary}</div>
+            <div className="lg:col-span-4">{oxygenSummary}</div>
           ) : (
             <DesktopOrderSummary {...presentation.desktop} />
           )}

@@ -7,6 +7,8 @@
 
 @source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
 @source "../../components/storefront/ogabassey/components/cart-item-badge-style.ts";
+@source "../../components/storefront/ogabassey/components/CheckoutIdentityModal.tsx";
+@source "../../components/storefront/checkout-code-signin.tsx";
 @source "../../components/storefront/ogabassey/components/cart-sidebar-*.tsx";
 @source "../../components/storefront/ogabassey/components/cart-variant-details.tsx";
 @source "../../components/storefront/ogabassey/components/empty-state.tsx";

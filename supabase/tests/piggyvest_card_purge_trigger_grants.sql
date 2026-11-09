@@ -34,7 +34,7 @@ BEGIN
     WHERE t.tgrelid = 'public.customers'::regclass
       AND t.tgname = 'primary_card_purge_saved_tokens_on_customer_deletion'
       AND t.tgfoid = routine
-      AND t.tgenabled <> 'D'
+      AND t.tgenabled IN ('O', 'A')
       -- FOR EACH ROW (1), BEFORE (2), DELETE (8); not INSERT (4) or UPDATE (16).
       AND (t.tgtype::integer & 31) = 11
   ) THEN

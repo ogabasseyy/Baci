@@ -133,3 +133,19 @@ it('does not cheer while the contribution is still pending', async () => {
     expect.any(String)
   );
 });
+it('adds the refresh hint to the status-check cheer when the wallet refresh fails', async () => {
+  mockCheck.mockResolvedValue({
+    status: 'confirmed',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings({
+    ...input(),
+    amount: 1000,
+    goal: pendingGoal,
+    refetchWallet: jest.fn(() => Promise.reject(new Error('offline'))),
+  });
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Savings updated',
+    expect.stringMatching(/Pull to refresh your latest balance\.$/)
+  );
+});

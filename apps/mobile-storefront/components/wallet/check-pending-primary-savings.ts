@@ -26,14 +26,17 @@ export async function checkPendingPrimarySavings(input: {
       input.clearOperation();
       input.clearAmount();
       triggerHaptic('success');
-      await input.refetchWallet().catch(() => undefined);
+      const refreshFailed = await input.refetchWallet().then(
+        () => false,
+        () => true
+      );
       const { amount, goal } = input;
       if (goal && amount && Number.isFinite(amount) && amount > 0) {
         const success = buildSavingsSuccessMessage({
           amount,
           goal,
           goalCompleted: amount >= goal.target_amount - goal.current_amount,
-          refreshFailed: false,
+          refreshFailed,
         });
         Alert.alert(success.title, success.message);
       } else

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useStorefrontScopedRoute } from '@/components/builder/use-storefront-scoped-route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { asRoute } from '@/lib/routes';
 
 export interface FooterProps {
   businessName?: string;
@@ -121,16 +120,18 @@ export function Footer({
               {Object.entries(socialLinks).map(([platform, url]) => {
                 if (!url) return null;
                 const Icon = socialIcons[platform];
+                if (!Icon) return null;
                 return (
-                  <Link
+                  <a
                     key={platform}
-                    href={asRoute(url)}
+                    href={url}
                     className="size-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-white hover:text-black transition-all"
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={platform}
                   >
                     <Icon className="size-5" />
-                  </Link>
+                  </a>
                 );
               })}
             </div>

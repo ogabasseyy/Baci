@@ -1,4 +1,14 @@
-import type { Route } from 'next';
+import type { Route as NextRoute } from 'next';
+
+/**
+ * Narrowed Next.js Route alias (`Route<never>`) so `<Link href={asRoute(url)}>`
+ * and dynamic route helpers do not force TypeScript to distribute `RouteImpl<T>`
+ * over the full ~400-member `DynamicRoutes` template-literal union (which can
+ * trigger `TS2589: Type instantiation is excessively deep and possibly infinite`
+ * during `next build`).
+ */
+export type DynamicRoute = NextRoute<never>;
+type Route = DynamicRoute;
 
 /**
  * Type-safe route builders for dynamic routes.

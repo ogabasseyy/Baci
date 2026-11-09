@@ -61,7 +61,10 @@ describe('Oxygen bank-list refresh task', () => {
       environment: 'production',
       reference: 'partner',
     });
-    mocks.getRedis.mockReset().mockReturnValue({});
+    mocks.getRedis.mockReset().mockReturnValue({
+      set: vi.fn().mockResolvedValue('OK'),
+      eval: vi.fn().mockResolvedValue(1),
+    });
     mocks.readBanks.mockReset();
     mocks.refreshBanks
       .mockReset()
@@ -77,7 +80,7 @@ describe('Oxygen bank-list refresh task', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(await response.json()).toEqual({ count: 1 });
     expect(mocks.refreshBanks).toHaveBeenCalledExactlyOnceWith(
-      {},
+      expect.objectContaining({ set: expect.any(Function) }),
       { environment: 'production' },
       'production',
       'partner'
@@ -186,6 +189,13 @@ describe('Oxygen bank-list refresh task', () => {
     expect(await response.json()).toEqual({ status: 'recovery_in_progress' });
     expect(response.headers.get('Retry-After')).toBe('330');
     expect(mocks.connect).not.toHaveBeenCalled();
+    expect(mocks.refreshBanks).not.toHaveBeenCalled();
+  });
+
+  it('does not start a weekly refresh while recovery holds the shared lock', async () => {
+    mocks.getRedis.mockReturnValue({ set: vi.fn().mockResolvedValue(null) });
+    const response = await GET(refreshRequest('Bearer secret'));
+    expect(response.status).toBe(202);
     expect(mocks.refreshBanks).not.toHaveBeenCalled();
   });
 

@@ -42,27 +42,29 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
         config.reference
       );
       if (existing) return Response.json({ status: 'available' }, { headers });
-      const partnerHash = createHash('sha256')
-        .update(config.reference)
-        .digest('hex');
-      const lockKey = `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`;
-      const token = randomUUID();
-      const lock = await cache.set(lockKey, token, {
-        nx: true,
-        ex: BANK_RECOVERY_LOCK_SECONDS,
-      });
-      if (lock !== 'OK')
-        return Response.json(
-          { status: 'recovery_in_progress' },
-          {
-            status: 202,
-            headers: {
-              ...headers,
-              'Retry-After': String(BANK_RECOVERY_LOCK_SECONDS),
-            },
-          }
-        );
-      heldLock = { cache, key: lockKey, token };
+    }
+    const partnerHash = createHash('sha256')
+      .update(config.reference)
+      .digest('hex');
+    const lockKey = `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`;
+    const token = randomUUID();
+    const lock = await cache.set(lockKey, token, {
+      nx: true,
+      ex: BANK_RECOVERY_LOCK_SECONDS,
+    });
+    if (lock !== 'OK')
+      return Response.json(
+        { status: 'recovery_in_progress' },
+        {
+          status: 202,
+          headers: {
+            ...headers,
+            'Retry-After': String(BANK_RECOVERY_LOCK_SECONDS),
+          },
+        }
+      );
+    heldLock = { cache, key: lockKey, token };
+    if (onlyIfMissing) {
       if (await readSupportedBanks(cache, config.environment, config.reference))
         return Response.json({ status: 'available' }, { headers });
     }

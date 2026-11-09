@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import rawNextConfig from './next.config';
+import { DEFAULT_MEDIA_CDN_ORIGIN } from './src/config/cdn';
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from './src/config/storefront-metadata-cache-bots';
 import {
   DEFAULT_POSTHOG_ASSETS_HOST,
@@ -65,6 +66,10 @@ describe('next.config rewrites and redirects', () => {
         {
           source: `${DEFAULT_POSTHOG_PROXY_PATH}/:path*`,
           destination: `${DEFAULT_POSTHOG_INGEST_HOST}/:path*`,
+        },
+        {
+          source: '/release-assets/:path*',
+          destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
         },
         {
           source: '/',

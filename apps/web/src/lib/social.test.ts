@@ -73,10 +73,13 @@ describe('normalizeSocialUrl', () => {
     );
   });
 
-  it('rejects non-http(s) URI schemes', () => {
+  it('rejects non-http(s) URI schemes while preserving host-and-port URLs', () => {
     expect(
       normalizeSocialUrl('javascript:alert(1)', 'instagram')
     ).toBeUndefined();
     expect(normalizeSocialUrl('data:text/html,hi', 'facebook')).toBeUndefined();
+    expect(normalizeSocialUrl('facebook.com:443/brand', 'facebook')).toBe(
+      'https://facebook.com:443/brand'
+    );
   });
 });

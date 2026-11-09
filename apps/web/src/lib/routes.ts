@@ -1,35 +1,14 @@
 import type { Route as NextRoute } from 'next';
 
-/**
- * Narrowed Next.js Route alias (`Route<never>`) so `<Link href={asRoute(url)}>`
- * and dynamic route helpers do not force TypeScript to distribute `RouteImpl<T>`
- * over the full ~400-member `DynamicRoutes` template-literal union (which can
- * trigger `TS2589: Type instantiation is excessively deep and possibly infinite`
- * during `next build`).
- */
+/** Narrowed Next.js Route alias (`Route<never>`) to avoid TS2589 union distribution on `<Link>`. */
 export type DynamicRoute = NextRoute<never>;
 type Route = DynamicRoute;
 
 /**
- * Type-safe route builders for dynamic routes.
- * Use these helpers when constructing dynamic URLs to get compile-time validation
- * when typedRoutes is enabled in next.config.ts.
- *
- * @example
- * ```tsx
- * import { routes } from '@/lib/routes';
- *
- * // Instead of:
- * <Link href={`/${slug}/products/${productSlug}`}>
- *
- * // Use:
- * <Link href={routes.product(slug, productSlug)}>
- * ```
+ * Type-safe route builders for dynamic routes (`typedRoutes: true`).
  */
 export const routes = {
-  // ============================================================
   // Storefront Routes (public merchant store pages)
-  // ============================================================
 
   /** Merchant storefront homepage: /{slug} */
   storefront: (slug: string) => `/${slug}` as Route,

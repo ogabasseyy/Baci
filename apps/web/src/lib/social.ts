@@ -65,18 +65,23 @@ export function normalizeSocialUrl(
 
   const cleanInput = input.trim();
 
-  if (
-    /^[a-z][a-z0-9+.-]*:/i.test(cleanInput) &&
-    !/^https?:\/\//i.test(cleanInput)
-  ) {
-    return undefined;
-  }
-
   if (/^https?:\/\//i.test(cleanInput)) {
     if (platform === 'twitter') {
       return normalizeTwitterProfileUrl(cleanInput) ?? cleanInput;
     }
     return cleanInput;
+  }
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(cleanInput)) {
+    const withHttps = `https://${cleanInput}`;
+    if (platform === 'twitter') {
+      return normalizeTwitterProfileUrl(withHttps) ?? withHttps;
+    }
+    return withHttps;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(cleanInput)) {
+    return undefined;
   }
 
   // Remove leading @ if present

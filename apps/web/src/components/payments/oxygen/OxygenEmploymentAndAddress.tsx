@@ -52,7 +52,7 @@ export function OxygenEmploymentAndAddress({
             onChange={onAddressChange}
           />
         )}
-        <label className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+        <label className="flex items-start gap-3 rounded-xl border border-store-border bg-store-background p-4 text-sm text-store-background-text">
           <input
             name="consent"
             type="checkbox"

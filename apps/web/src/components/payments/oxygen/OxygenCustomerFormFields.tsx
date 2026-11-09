@@ -7,6 +7,7 @@ import { OxygenBirthDateField } from './OxygenBirthDateField';
 import { OxygenContactFields } from './OxygenContactFields';
 import styles from './OxygenCustomerFormFields.module.css';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
+import { OxygenFormError } from './OxygenFormError';
 import { OxygenFormProgress } from './OxygenFormProgress';
 import { OxygenIdentityField } from './OxygenIdentityField';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
@@ -27,6 +28,7 @@ import {
   residentialAddress,
   residentialKeys,
 } from './oxygen-residential-address';
+import { OXYGEN_SAVE_ERROR, useOxygenFormError } from './use-oxygen-form-error';
 import { useOxygenFormErrorFocus } from './use-oxygen-form-error-focus';
 export type CustomerFormProps = {
   prefill?: OxygenCustomerPrefill;
@@ -77,17 +79,7 @@ export function CustomerFormFields({
     if (!formRef.current) return;
     saveDraft(oxygenCustomerDraft(formRef.current, nextStep));
   }
-  const [formError, setFormError] = useState('');
-  useEffect(() => {
-    if (saveStatus === 'saved') {
-      setFormError((current) =>
-        current ===
-        'We could not save your details. Check the message above before continuing.'
-          ? ''
-          : current
-      );
-    }
-  }, [saveStatus]);
+  const { formError, setFormError } = useOxygenFormError(saveStatus);
   const formErrorId = useId();
   const focusInvalidField = useRef(false);
   const [continuing, setContinuing] = useState<'saving' | 'starting' | null>(
@@ -151,9 +143,7 @@ export function CustomerFormFields({
         setContinuing('saving');
         try {
           if (workflowId && !(await flushDraft())) {
-            setFormError(
-              'We could not save your details. Check the message above before continuing.'
-            );
+            setFormError(OXYGEN_SAVE_ERROR);
             return;
           }
           if (data.get('consent') !== 'on') return;
@@ -214,16 +204,7 @@ export function CustomerFormFields({
         <OxygenStepHeading
           step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
         />
-        {formError && (
-          <p
-            id={formErrorId}
-            role="alert"
-            tabIndex={-1}
-            className="rounded-xl bg-red-50 p-3 text-sm text-red-700"
-          >
-            {formError}
-          </p>
-        )}
+        <OxygenFormError id={formErrorId} error={formError} />
         <div
           data-step="0"
           hidden={step !== 0}

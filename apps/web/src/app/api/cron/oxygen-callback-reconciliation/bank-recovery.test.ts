@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -27,6 +29,15 @@ vi.mock('@/lib/redis', () => ({ getRedis: mocks.getRedis }));
 import { GET } from './route';
 
 describe('Oxygen bank-list refresh task', () => {
+  it('schedules recovery again shortly after an abandoned lock can expire', () => {
+    const config = JSON.parse(
+      readFileSync(resolve(process.cwd(), '../../vercel.json'), 'utf8')
+    );
+    const job = config.crons.find((entry: { path: string }) =>
+      entry.path.endsWith('?task=ensure-banks')
+    );
+    expect(job?.schedule).toBe('*/10 * * * *');
+  });
   const refreshRequest = (authorization?: string) =>
     new Request(
       'https://example.test/api/cron/oxygen-callback-reconciliation?task=refresh-banks',

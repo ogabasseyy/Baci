@@ -20,7 +20,8 @@ const BANK_RECOVERY_LOCK_SECONDS = maxDuration + 30;
 
 /**
  * The bank-list jobs share this authenticated endpoint. Weekly refresh keeps
- * the list current; hourly recovery contacts Oxygen only when the cache is missing.
+ * the list current; recovery checks every ten minutes and contacts Oxygen only
+ * when the cache is missing.
  */
 async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
   let heldLock:

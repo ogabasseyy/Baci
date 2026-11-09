@@ -141,6 +141,13 @@ INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
   ('b4c11000-0000-4000-8000-000000000002', 'b4c10000-0000-4000-8000-000000000002',
     'platform-funded-control@example.test', 'Platform Control Fixture', 'platform-control-fixture');
 
+-- enforce_merchant_shipping_provider_enabled needs GIGL enabled per merchant.
+INSERT INTO public.merchant_feature_settings (merchant_id, shipping_providers)
+VALUES
+  ('b4c11000-0000-4000-8000-000000000001', '["gigl"]'::jsonb),
+  ('b4c11000-0000-4000-8000-000000000002', '["gigl"]'::jsonb)
+ON CONFLICT (merchant_id) DO UPDATE SET shipping_providers = EXCLUDED.shipping_providers;
+
 INSERT INTO public.staff_members (
   merchant_id, user_id, email, name, role, permissions, status
 ) VALUES (

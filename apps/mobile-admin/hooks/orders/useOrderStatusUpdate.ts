@@ -42,8 +42,7 @@ const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
 // Only errors traced to lookup/validation before carrier submission belong
 // here. A new server/proxy code alone does not prove that booking failed.
 const DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES = new Set([
-  // Invariant: the server raises this only from assertGiglCustomerCheckoutPrepaid,
-  // which runs before any carrier submission. Never emit it after submission.
+  // Refused before any carrier submission (payment/funding check).
   'GIGL_REQUIRES_PREPAID_OR_WALLET',
   'SHIPMENT_BOOKING_LOCK_FAILED',
   'MERCHANT_LOOKUP_FAILED',

@@ -10,9 +10,11 @@ export function firstInvalidOxygenControl(form: HTMLFormElement, step: number) {
 export function oxygenInvalidControlMessage(
   input: HTMLInputElement | HTMLSelectElement
 ) {
-  return input.validity.patternMismatch
-    ? input.title || 'Check the format of the highlighted field.'
-    : 'Please complete the required fields in this step.';
+  if (input.validity.patternMismatch)
+    return input.title || 'Check the format of the highlighted field.';
+  if (!input.validity.valueMissing && input.validationMessage)
+    return input.validationMessage;
+  return 'Please complete the required fields in this step.';
 }
 
 export function highlightOxygenControl(input: HTMLElement, errorId?: string) {
@@ -31,4 +33,14 @@ export function clearOxygenControlError(target: EventTarget) {
     target.removeAttribute('aria-errormessage');
     target.classList.remove(styles.invalid);
   }
+}
+
+export function clearOxygenFormErrors(
+  form: HTMLFormElement | null,
+  errorId: string
+) {
+  form?.querySelectorAll('[aria-errormessage]').forEach((input) => {
+    if (input.getAttribute('aria-errormessage') === errorId)
+      clearOxygenControlError(input);
+  });
 }

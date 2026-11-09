@@ -19,6 +19,7 @@ import { parseOxygenCustomerForm } from './oxygen-customer-form-payload';
 import { getOxygenFormCorrection } from './oxygen-form-correction';
 import {
   clearOxygenControlError,
+  clearOxygenFormErrors,
   firstInvalidOxygenControl,
   highlightOxygenControl,
   oxygenInvalidControlMessage,
@@ -263,6 +264,7 @@ export function CustomerFormFields({
               disabled={busy || Boolean(continuing)}
               className="min-h-11 rounded-xl border border-gray-200 px-5 text-sm font-semibold text-gray-600"
               onClick={() => {
+                clearOxygenFormErrors(formRef.current, formErrorId);
                 setFormError('');
                 capture(step - 1);
                 setStep(step - 1);

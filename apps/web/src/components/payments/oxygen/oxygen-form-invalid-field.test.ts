@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import {
   clearOxygenControlError,
+  clearOxygenFormErrors,
   firstInvalidOxygenControl,
   highlightOxygenControl,
   oxygenInvalidControlMessage,
@@ -29,10 +30,30 @@ it('finds the first invalid field in the current step and highlights and clears 
   form.remove();
 });
 
+it('clears marked fields when leaving a step without touching unrelated errors', () => {
+  const form = document.createElement('form');
+  const marked = document.createElement('input');
+  const unrelated = document.createElement('input');
+  marked.setAttribute('aria-errormessage', 'field-error');
+  marked.setAttribute('aria-invalid', 'true');
+  unrelated.setAttribute('aria-invalid', 'true');
+  form.append(marked, unrelated);
+  clearOxygenFormErrors(form, 'field-error');
+  expect(marked).not.toHaveAttribute('aria-invalid');
+  expect(unrelated).toHaveAttribute('aria-invalid', 'true');
+});
+
 it('uses the field format hint for a pattern mismatch', () => {
   const input = document.createElement('input');
   input.pattern = '[0-9]+';
   input.title = 'Enter digits';
   input.value = 'abc';
   expect(oxygenInvalidControlMessage(input)).toBe('Enter digits');
+});
+
+it('shows the browser validation message for a nonempty invalid email', () => {
+  const input = document.createElement('input');
+  input.type = 'email';
+  input.value = 'not-an-email';
+  expect(oxygenInvalidControlMessage(input)).toBe(input.validationMessage);
 });

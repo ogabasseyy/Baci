@@ -1,7 +1,16 @@
 import { Alert } from 'react-native';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
+import {
+  buildSavingsSuccessMessage,
+  playSavingsSuccessHaptic,
+} from './savings-contribution-success';
 
 export async function checkPendingPrimarySavings(input: {
+  /** The pending operation's own amount (entered or recovered from the server). */
+  amount?: number;
+  /** The goal as it stood before this confirmation. */
+  goal?: WalletActiveSavingsGoal | null;
   merchantId?: string;
   operationId: string;
   clearOperation: () => void;
@@ -18,11 +27,22 @@ export async function checkPendingPrimarySavings(input: {
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();
+      playSavingsSuccessHaptic();
       await input.refetchWallet().catch(() => undefined);
-      Alert.alert(
-        'Savings updated',
-        'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
-      );
+      const { amount, goal } = input;
+      if (goal && amount && Number.isFinite(amount) && amount > 0) {
+        const success = buildSavingsSuccessMessage({
+          amount,
+          goal,
+          goalCompleted: amount >= goal.target_amount - goal.current_amount,
+          refreshFailed: false,
+        });
+        Alert.alert(success.title, success.message);
+      } else
+        Alert.alert(
+          'Savings updated',
+          'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+        );
     } else if (result.status === 'cancelled') {
       input.clearOperation();
       await input.refetchWallet().catch(() => undefined);

@@ -87,7 +87,12 @@ BEGIN
       shipping_provider = 'GIGL'
   WHERE id = v_order;
 EXCEPTION WHEN OTHERS THEN
-  RAISE EXCEPTION 'seed_order % failed at %: % (%)', p_n, v_step, SQLERRM, SQLSTATE;
+  -- The replay runner prints only the SQLSTATE, so encode the failing step in
+  -- it: UF001 order, UF002 quote, UF003 attestation, UF004 bind.
+  RAISE EXCEPTION 'seed_order % failed at %: % (%)', p_n, v_step, SQLERRM, SQLSTATE
+    USING ERRCODE = CASE v_step
+      WHEN 'order' THEN 'UF001' WHEN 'quote' THEN 'UF002'
+      WHEN 'attestation' THEN 'UF003' ELSE 'UF004' END;
 END;
 $seed$;
 

@@ -4,6 +4,7 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from './cdn';
 import {
   getReleaseAssetRewriteRules,
   isTypegenProcess,
+  RELEASE_ASSET_REWRITE_DESTINATION,
   RELEASE_ASSET_REWRITE_SOURCE,
 } from './release-asset-rewrites';
 
@@ -23,10 +24,14 @@ describe('release-asset-rewrites', () => {
     ]);
     expect(buildRules).toEqual([
       {
-        source: '/release-assets/:path([^?]+)',
-        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
+        source: RELEASE_ASSET_REWRITE_SOURCE,
+        destination: RELEASE_ASSET_REWRITE_DESTINATION,
       },
     ]);
+    expect(RELEASE_ASSET_REWRITE_SOURCE).toBe('/release-assets/:path([^/?]+)');
+    expect(RELEASE_ASSET_REWRITE_DESTINATION).toBe(
+      `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`
+    );
     expect(RELEASE_ASSET_REWRITE_SOURCE).not.toContain('*');
     expect(convertCustomRouteSource(buildRules[0].source)).toEqual([]);
     expect(convertCustomRouteSource('/release-assets/:path*')).toEqual([
@@ -63,8 +68,8 @@ describe('release-asset-rewrites', () => {
     ]);
     expect(rules).toEqual([
       {
-        source: '/release-assets/:path([^?]+)',
-        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
+        source: RELEASE_ASSET_REWRITE_SOURCE,
+        destination: RELEASE_ASSET_REWRITE_DESTINATION,
       },
     ]);
   });
@@ -78,8 +83,8 @@ describe('release-asset-rewrites', () => {
     expect(isTypegenProcess(argv)).toBe(false);
     expect(getReleaseAssetRewriteRules(argv)).toEqual([
       {
-        source: '/release-assets/:path([^?]+)',
-        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
+        source: RELEASE_ASSET_REWRITE_SOURCE,
+        destination: RELEASE_ASSET_REWRITE_DESTINATION,
       },
     ]);
   });

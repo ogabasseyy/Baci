@@ -28,35 +28,45 @@ export function triggerHaptic(type: HapticType = 'light'): void {
   // Only trigger on iOS for consistent behavior
   if (Platform.OS !== 'ios') return;
 
+  let pending: Promise<void> | undefined;
   try {
     switch (type) {
       case 'light':
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        pending = Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         break;
       case 'medium':
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        pending = Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         break;
       case 'heavy':
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        pending = Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         break;
       case 'success':
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        pending = Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success
+        );
         break;
       case 'warning':
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        pending = Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Warning
+        );
         break;
       case 'error':
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        pending = Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Error
+        );
         break;
       case 'selection':
-        Haptics.selectionAsync();
+        pending = Haptics.selectionAsync();
         break;
       default:
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        pending = Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   } catch {
     // Silently fail if haptics aren't available
   }
+  // The native call is async: swallow a late rejection as well, so a missing
+  // haptics engine never surfaces as an unhandled promise rejection.
+  void Promise.resolve(pending).catch(() => undefined);
 }
 
 /**

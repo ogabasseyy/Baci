@@ -282,3 +282,17 @@ REVOKE ALL ON FUNCTION public.get_merchant_shipping_wallet_balance(uuid)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_merchant_shipping_wallet_balance(uuid)
   TO authenticated;
+
+-- Backfill: orders already mis-stamped customer_checkout with a payment method
+-- that cannot retain shipping, not yet booked/shipped and with no real settled
+-- retention. The stamp trigger clears funding/retention on this update, so the
+-- admin wallet-quote flow can re-stamp them as merchant_wallet.
+UPDATE public.orders AS o
+SET shipping_funding_source = NULL,
+    shipping_platform_retained_amount = 0
+WHERE o.shipping_funding_source = 'customer_checkout'
+  AND private.is_non_retaining_checkout_payment_method(o.payment_method)
+  AND o.shipment_id IS NULL
+  AND o.tracking_number IS NULL
+  AND pg_catalog.lower(COALESCE(o.shipping_status, '')) NOT IN ('shipped', 'delivered', 'cancelled')
+  AND private.order_settled_gigl_retained_amount(o.id, o.merchant_id) <= 0;

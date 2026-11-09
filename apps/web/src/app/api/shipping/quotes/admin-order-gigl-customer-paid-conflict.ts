@@ -39,10 +39,11 @@ export async function getAdminOrderGiglCustomerPaidConflict(
 ): Promise<NextResponse | null> {
   if (order.shipping_funding_source !== 'customer_checkout') return null;
   // Credit Direct / POD / cash / manual never route shipping to Baci, so a
-  // customer_checkout stamp on them is stale and must not block the wallet.
-  if (isGiglCheckoutPaymentWithoutRetainedShipping(order.payment_method)) {
-    return null;
-  }
+  // customer_checkout stamp on them is stale. Only real settlement retention
+  // (the rule the database bind enforces) can still hold the order.
+  const nonRetaining = isGiglCheckoutPaymentWithoutRetainedShipping(
+    order.payment_method
+  );
 
   let heldAmount: number;
   try {
@@ -52,7 +53,7 @@ export async function getAdminOrderGiglCustomerPaidConflict(
       orderId
     );
     heldAmount =
-      settled > 0
+      settled > 0 || nonRetaining
         ? settled
         : await loadOrderGiglInternalCreditRetainedAmount(
             supabase,

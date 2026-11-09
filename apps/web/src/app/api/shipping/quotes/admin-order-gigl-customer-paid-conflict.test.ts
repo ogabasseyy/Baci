@@ -108,12 +108,22 @@ describe('getAdminOrderGiglCustomerPaidConflict', () => {
       'pod',
       'cash',
       'manual',
-    ])('allows the wallet quote for %s even though settlement shows retained shipping', async (payment_method) => {
-      loaders.settled.mockResolvedValue(11500);
-
+    ])('allows the wallet quote for %s when no settlement retained shipping', async (payment_method) => {
       const response = await check({ ...checkoutOrder, payment_method });
 
       expect(response).toBeNull();
+      expect(loaders.internalCredit).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a non-retaining order whose settlement really retained shipping', async () => {
+      loaders.settled.mockResolvedValue(11500);
+
+      const response = await check({
+        ...checkoutOrder,
+        payment_method: 'credit_direct',
+      });
+
+      expect(response?.status).toBe(409);
     });
 
     it('fails closed when the payment method is missing', async () => {

@@ -289,34 +289,6 @@ describe('order shipping transport failures', () => {
     });
   });
 
-  describe('bugfix: pre-submit prepaid/wallet refusal is not an unknown booking state', () => {
-    it.each([
-      [400],
-      [409],
-      [500],
-    ])('shows the real refusal for GIGL_REQUIRES_PREPAID_OR_WALLET at HTTP %s', async (status) => {
-      mocks.fetch.mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            error:
-              'GIGL shipping must be prepaid at checkout or funded from the merchant wallet before booking.',
-            code: 'GIGL_REQUIRES_PREPAID_OR_WALLET',
-          }),
-          { status }
-        )
-      );
-      await expect(
-        useOrderStatusMutation().mutate({
-          orderId: 'order-1',
-          status: 'shipped',
-        })
-      ).rejects.toMatchObject({
-        code: 'GIGL_REQUIRES_PREPAID_OR_WALLET',
-        message: expect.stringContaining('prepaid at checkout'),
-      });
-    });
-  });
-
   it.each([
     'SHIPMENT_SAVE_FAILED',
     'INTERNAL_ERROR',

@@ -125,7 +125,7 @@ export function SearchPageForm({
           </button>
         </form>
       )}
-      {(focused || suggestionsOnly) && refinements && (
+      {focused && refinements && (
         <>
           <SearchAssistance
             query={query}

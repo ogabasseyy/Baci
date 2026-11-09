@@ -86,6 +86,21 @@ it('shows catalog suggestions beside the focused input and hides them on blur', 
   expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
 });
 
+it('does not show unfocused suggestions when the duplicate form is hidden', () => {
+  render(
+    <SearchPageForm
+      action="/search"
+      pathPrefix=""
+      defaultQuery="iphone"
+      currency="NGN"
+      refinements={{ brands: [], sort: 'relevance' }}
+      suggestionProducts={[{ price: 250000, condition: 'used' }]}
+      suggestionsOnly
+    />
+  );
+  expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
+});
+
 it('themes the search outline from the merchant palette', () => {
   // The outline follows the per-merchant primary token (Ogabassey's brand
   // red included) instead of a fixed Tailwind red, so dark themes and

@@ -10,7 +10,7 @@ vi.mock(
     getCachedBrandAuthorityInventory: async (...args: unknown[]) => ({
       products: await mockGetInventory(...args),
     }),
-    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
+    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 300,
   })
 );
 

@@ -16,7 +16,7 @@ vi.mock(
     return {
       ...actual,
       getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),
-      OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
+      OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 300,
     };
   }
 );
@@ -30,6 +30,7 @@ const rows = Array.from({ length: 5 }, (_, i) => ({
   slug: `iphone-${i}`,
   name: `iPhone 15 ${i}`,
   brand: 'Apple',
+  condition: 'new',
   price: 100,
   stock: 2,
   manage_stock: true,
@@ -45,8 +46,9 @@ describe('PDP hub eligibility adapter', () => {
       'merchant-1',
       'smartphones',
       expect.objectContaining({ brandKey: 'apple' }),
-      { maxProducts: 100, timeoutMs: 1000 }
+      { maxProducts: 300, timeoutMs: 1000 }
     );
+    expect(products[0]?.condition).toBe('new');
     const destinations = resolveEligibleCategoryHubDestinations({
       categorySlug: input.categorySlug,
       products,

@@ -11,16 +11,22 @@ interface CheckoutGiglPaidFeeOrder {
   tracking_number?: string | null;
 }
 
-// Mirrors the web booking prepaid check: checkout keeps no shipping money for
-// these methods, so GIG booking refuses them (GIGL_REQUIRES_PREPAID_OR_WALLET).
-const PAYMENT_METHODS_WITHOUT_RETAINED_SHIPPING = new Set([
-  'pod',
-  'pay_on_delivery',
-  'credit_direct',
-  'credit-direct',
-  'manual',
-  'manual_payment',
-  'cash',
+// Mirrors the web booking prepaid check: fail-safe allow-list of payment
+// methods verified to route the shipping fee to Baci. Any other method
+// (credit_direct, oxygen, bank_transfer, pod, unknown providers) books from
+// the merchant wallet, so it is never shown as paid by the customer.
+const PAYMENT_METHODS_WITH_RETAINED_SHIPPING = new Set([
+  'card',
+  'paystack',
+  'korapay',
+  'uba_redvault',
+  'invoice',
+  'payforme',
+  'juicyway',
+  'klump',
+  'wallet',
+  'savings',
+  'store_credit',
 ]);
 
 /**
@@ -37,7 +43,7 @@ export function getCheckoutGiglPaidShippingFee(
   if (order.shipping_funding_source !== 'customer_checkout') return null;
   if (order.payment_status !== 'paid') return null;
   const method = (order.payment_method ?? '').trim().toLowerCase();
-  if (PAYMENT_METHODS_WITHOUT_RETAINED_SHIPPING.has(method)) return null;
+  if (!PAYMENT_METHODS_WITH_RETAINED_SHIPPING.has(method)) return null;
   if (!canUseSelectedShippingProvider(order)) return null;
   const fee = Number(order.shipping_fee);
   return Number.isFinite(fee) && fee > 0 ? fee : null;

@@ -19,14 +19,26 @@ export type AssertGiglCustomerCheckoutPrepaidContext = {
   settledRetainedAmount?: number;
 };
 
-const GIGL_CHECKOUT_PAYMENT_METHODS_WITHOUT_RETENTION = new Set([
-  'pod',
-  'pay_on_delivery',
-  'credit_direct',
-  'credit-direct',
-  'manual',
-  'manual_payment',
-  'cash',
+/**
+ * Fail-safe allow-list of payment methods verified to route the GIG shipping
+ * fee to Baci (Paystack split card, Korapay, UBA RedVault split, Baci-held
+ * invoice/payforme DVA, Juicyway, Klump, internal credit). Any other method --
+ * credit_direct, oxygen, bank_transfer, pod, cash, manual, imports, unknown or
+ * future providers -- must book from the merchant shipping wallet. Mirrors
+ * private.is_non_retaining_checkout_payment_method (migration 20261109120000).
+ */
+const GIGL_CHECKOUT_PAYMENT_METHODS_WITH_RETENTION = new Set([
+  'card',
+  'paystack',
+  'korapay',
+  'uba_redvault',
+  'invoice',
+  'payforme',
+  'juicyway',
+  'klump',
+  'wallet',
+  'savings',
+  'store_credit',
 ]);
 
 function normalizePaymentMethod(
@@ -54,7 +66,7 @@ export function isPayOnDeliveryPaymentMethod(
 export function isGiglCheckoutPaymentWithoutRetainedShipping(
   paymentMethod: string | null | undefined
 ): boolean {
-  return GIGL_CHECKOUT_PAYMENT_METHODS_WITHOUT_RETENTION.has(
+  return !GIGL_CHECKOUT_PAYMENT_METHODS_WITH_RETENTION.has(
     normalizePaymentMethod(paymentMethod)
   );
 }

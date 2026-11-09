@@ -6,6 +6,9 @@ describe('bugfix: paid non-retaining order with null funding source', () => {
     'credit_direct',
     'cash',
     'manual',
+    'oxygen',
+    'bank_transfer',
+    'some_future_provider',
   ])('requires wallet funding for a paid %s order that was unstamped', async (payment_method) => {
     await expect(
       assertGiglCustomerCheckoutPrepaid({
@@ -17,13 +20,18 @@ describe('bugfix: paid non-retaining order with null funding source', () => {
     ).rejects.toMatchObject({ code: 'GIGL_REQUIRES_PREPAID_OR_WALLET' });
   });
 
-  it('keeps the legacy paid path for a retaining method with null funding', async () => {
+  it.each([
+    'paystack',
+    'card',
+    'juicyway',
+    'wallet',
+  ])('keeps the legacy paid path for allow-listed %s with null funding', async (payment_method) => {
     await expect(
       assertGiglCustomerCheckoutPrepaid({
         shipping_provider: 'GIGL',
         shipping_funding_source: null,
         payment_status: 'paid',
-        payment_method: 'paystack',
+        payment_method,
       })
     ).resolves.toBeUndefined();
   });

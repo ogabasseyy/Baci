@@ -68,7 +68,7 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fi
 
   should_retry=false
-  if grep -Eq "ERR_PNPM_ENOENT|Worker pnpm#[0-9]+ exited with code 1|GET .* error \\(unknown\\)|ECONNRESET|ETIMEDOUT|ERR_PNPM_META_FETCH_FAIL|ERR_PNPM_FETCH|ERR_SQLITE_ERROR|database disk image is malformed" "$log_file"; then
+  if grep -Eq "ERR_PNPM_ENOENT|Worker pnpm#[0-9]+ exited with code 1|GET .* error \\(unknown\\)|EAI_AGAIN|ECONNRESET|ETIMEDOUT|ERR_PNPM_META_FETCH_FAIL|ERR_PNPM_FETCH|ERR_SQLITE_ERROR|database disk image is malformed|Error fetching release: HTTP 504 from https://github[.]com/PostHog/posthog/releases/download/" "$log_file"; then
     should_retry=true
   fi
 

@@ -21,6 +21,8 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # The CodeQL CLI license does not cover this private personal repository.
+    if: toJSON(github.event.repository.private) == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
@@ -59,3 +61,15 @@ jobs:
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: "/language:${{ matrix.language }}"
+
+  private-unavailable:
+    name: CodeQL unavailable for private repository
+    if: toJSON(github.event.repository.private) == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Explain unavailable CodeQL scan
+        run: |
+          echo '::warning::CodeQL is unavailable for this private repository under its current license.'
+          echo 'CodeQL is unavailable for this private repository under its current license. Semgrep continues to run separately; it has different coverage.' >> "$GITHUB_STEP_SUMMARY"

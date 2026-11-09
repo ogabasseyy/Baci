@@ -148,9 +148,9 @@ export async function addSavingsContributionToGoal({
       );
       return;
     }
+    const confirmed = readConfirmedContribution(contributionResult);
     const goalCompleted =
-      amount >= remainingAmount ||
-      readConfirmedContribution(contributionResult).goalCompleted;
+      amount >= remainingAmount || confirmed.goalCompleted === true;
     if (goalCompleted) {
       try {
         await cancelSavingsReminder?.(goal.id);
@@ -168,9 +168,15 @@ export async function addSavingsContributionToGoal({
     const success = buildSavingsSuccessMessage({
       amount,
       goal,
-      goalCompleted,
+      // The server's verdict wins over the client guess, which a replayed
+      // contribution with an already-refreshed goal would get wrong.
+      goalCompleted:
+        confirmed.goalCompleted ??
+        (confirmed.savedAfter === undefined
+          ? goalCompleted
+          : confirmed.savedAfter >= goal.target_amount),
       refreshFailed,
-      savedAfter: readConfirmedContribution(contributionResult).savedAfter,
+      savedAfter: confirmed.savedAfter,
     });
     Alert.alert(success.title, success.message);
   } catch (error) {

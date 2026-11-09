@@ -17,13 +17,17 @@ describe('readConfirmedContribution', () => {
     });
   });
 
+  it('reports no verdict when the rail returns no goal status', () => {
+    expect(readConfirmedContribution({ status: 'confirmed' })).toEqual({});
+  });
+
   it.each([
     null,
     undefined,
     'ok',
     42,
   ])('treats %p as an unknown result', (value) => {
-    expect(readConfirmedContribution(value)).toEqual({ goalCompleted: false });
+    expect(readConfirmedContribution(value)).toEqual({});
   });
 
   it('ignores a non-numeric or non-finite balance', () => {

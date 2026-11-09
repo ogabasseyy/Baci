@@ -1,5 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react-native';
 import { Modal, Text } from 'react-native';
+import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useAuthStore } from '@/stores/auth-store';
 import { SERVER_OFF_MERCHANT_ID } from '@/test-support/piggyvest-server-off.test-support';
 import { WalletContent } from './WalletContent';
@@ -21,12 +22,12 @@ jest.mock('@/hooks/use-product-search', () => ({
 }));
 jest.mock('expo-image', () => ({ Image: () => null }));
 
-// A real Modal stands in for WalletPinSheet (which is a ModalSheet), so the
-// test checks Modal-in-Modal nesting rather than plain view placement.
+// WalletPinSheet's own host, a ModalSheet (a native Modal), stands in for the
+// PIN sheet, so the test checks real sheet-in-sheet nesting.
 const pinPrompt = (
-  <Modal transparent visible>
+  <ModalSheet visible>
     <Text testID="wallet-pin-prompt">Enter wallet PIN</Text>
-  </Modal>
+  </ModalSheet>
 );
 
 function modalsContainingPrompt() {

@@ -167,7 +167,7 @@ export function WalletContent(props: WalletContentProps) {
     showSavingsDeviceSwap,
     handleSelectSavingsDevice,
   } = useSavingsDeviceSwap(onChangeSavingsDevice);
-  const savingsSheetOpen = showSavingsProgress && activeSavingsGoal !== null;
+  const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
     <WalletPrimaryContext.Provider value={props.primaryReady === true}>

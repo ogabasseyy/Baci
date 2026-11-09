@@ -11,6 +11,7 @@ import { V2ComparisonScope } from '@/components/storefront/ogabassey/providers/v
 import { SearchQueryDraftSession } from '@/components/storefront/search-refinements/search-query-draft';
 import { SearchRefinementControls } from '@/components/storefront/search-refinements/search-refinement-controls';
 import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
@@ -147,10 +148,7 @@ export async function SearchPageContent({
                 defaultQuery={query}
                 pathPrefix={pathPrefix}
                 currency={merchantCurrency}
-                suggestionsOnly={
-                  merchant.slug === 'ogabassey' &&
-                  merchant.template_id === 'ogabassey'
-                }
+                suggestionsOnly={merchant.template_id === OGABASSEY_TEMPLATE_ID}
                 assistEnabled={
                   process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
                   merchant.is_published &&

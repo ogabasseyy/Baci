@@ -95,7 +95,11 @@ function createSearchProducts(count: number): NormalizedProduct[] {
   })) as NormalizedProduct[];
 }
 
-function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
+function mockStorefrontContext(
+  slug = 'ogabassey',
+  isPublished = true,
+  template = slug === 'ogabassey' ? 'ogabassey' : 'standard'
+) {
   mockHeaders.mockResolvedValue(
     new Headers([
       ['host', 'proxy.internal'],
@@ -106,7 +110,7 @@ function mockStorefrontContext(slug = 'ogabassey', isPublished = true) {
   vi.mocked(getRequestScopedMerchant).mockResolvedValue({
     id: 'merchant-1',
     slug,
-    template_id: slug === 'ogabassey' ? 'ogabassey' : 'standard',
+    template_id: template,
     custom_domain: null,
     business_name: slug === 'ogabassey' ? 'Ogabassey' : 'Other store',
     payout_currency: 'NGN',
@@ -121,6 +125,23 @@ describe('SearchPageContent', () => {
     mockHeaders.mockReset();
     mockRedirect.mockReset();
     mockNotFound.mockReset();
+  });
+
+  it('uses the navbar search for another merchant using the Ogabassey template', async () => {
+    mockStorefrontContext('other', true, 'ogabassey');
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 1,
+      didYouMean: null,
+      products: createSearchProducts(1),
+      productIds: [],
+      query: 'iphone',
+    });
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    expect(screen.queryByRole('form', { name: 'Edit search' })).toBeNull();
   });
 
   it('renders a prefilled in-page search form for other stores', async () => {

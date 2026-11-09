@@ -138,6 +138,7 @@ export async function getStorefrontSearchReadiness(merchantId: string) {
     ),
     hasPublishedTrustPolicy: hasPublishableTrustPolicy(
       buildMerchantTrustProfile({
+        slug: merchantFacts.slug,
         trust_profile: merchantFacts.trust_profile,
       })
     ),

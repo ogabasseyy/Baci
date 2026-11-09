@@ -31,7 +31,7 @@ export function PrimaryWalletSetupPending({
     ? 'We couldn’t reach PiggyVest just now. We’ll keep trying, or you can check again.'
     : stillWaiting
       ? 'This is taking longer than usual. You can close this and come back. We’ll keep your setup.'
-      : 'Your BVN was accepted. PiggyVest is now creating your bank transfer account. This can take a few minutes.';
+      : 'We’ve sent your details to PiggyVest and are confirming your bank transfer account. This can take a few minutes.';
 
   return (
     <View style={setupStyles.form} accessibilityLiveRegion="polite">
@@ -71,7 +71,7 @@ export function PrimaryWalletSetupPending({
             color="#16A34A"
           />
           <Text style={[setupStyles.benefitText, { color: colors.text }]}>
-            BVN accepted
+            Details sent to PiggyVest
           </Text>
         </View>
         <View style={setupStyles.benefitRow}>
@@ -83,7 +83,7 @@ export function PrimaryWalletSetupPending({
             color={BRAND.primary}
           />
           <Text style={[setupStyles.benefitText, { color: colors.text }]}>
-            Creating your account number
+            Confirming your account number
           </Text>
         </View>
       </View>

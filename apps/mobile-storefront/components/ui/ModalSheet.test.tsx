@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Button, Modal, Text } from 'react-native';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { ModalSheet } from './ModalSheet';
@@ -58,6 +58,32 @@ describe('ModalSheet', () => {
 
     expect(screen.getByText('Faded sheet')).toBeOnTheScreen();
     expect(UNSAFE_getByType(Modal).props.animationType).toBe('fade');
+  });
+
+  it('slides the faded sheet down before unmounting it on close', () => {
+    jest.useFakeTimers();
+    try {
+      const { UNSAFE_getByType, rerender } = render(
+        <ModalSheet presentation="fade-backdrop" visible>
+          <Text>Closing sheet</Text>
+        </ModalSheet>
+      );
+      rerender(
+        <ModalSheet presentation="fade-backdrop" visible={false}>
+          <Text>Closing sheet</Text>
+        </ModalSheet>
+      );
+      // Still mounted while the card slides back down.
+      expect(UNSAFE_getByType(Modal).props.visible).toBe(true);
+
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      expect(UNSAFE_getByType(Modal).props.visible).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('keeps the native slide for sheets that have not opted in', () => {

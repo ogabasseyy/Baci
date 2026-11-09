@@ -1,17 +1,15 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { ModalProps, StyleProp, ViewStyle } from 'react-native';
 import {
   Animated,
-  Dimensions,
   Modal,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
-// Start fully below the screen whatever the card's height.
-const CARD_SLIDE_DISTANCE = Dimensions.get('window').height;
 const CARD_SLIDE_MS = 280;
 
 import { useKeyboard } from '@/hooks/use-keyboard';
@@ -53,20 +51,27 @@ export function ModalSheet({
   const combinedBackdropStyle = [styles.backdrop, backdropStyle];
   const combinedCardStyle = [styles.card, cardStyle];
   const fadeBackdrop = presentation === 'fade-backdrop';
-  // Card slides up on its own while the Modal fades the backdrop in place.
-  const cardOffset = useRef(new Animated.Value(CARD_SLIDE_DISTANCE)).current;
+  // Card slides on its own while the Modal fades the backdrop in place. It
+  // starts fully below the current window (tracks rotation) whatever the
+  // card's height. On close the Modal stays mounted until the card has slid
+  // back down, then fades out.
+  const { height: slideDistance } = useWindowDimensions();
+  const cardOffset = useRef(new Animated.Value(slideDistance)).current;
+  const [mounted, setMounted] = useState(visible);
   useEffect(() => {
     if (!fadeBackdrop) return;
-    if (!visible) {
-      cardOffset.setValue(CARD_SLIDE_DISTANCE);
-      return;
-    }
-    Animated.timing(cardOffset, {
-      toValue: 0,
+    if (visible) setMounted(true);
+    const slide = Animated.timing(cardOffset, {
+      toValue: visible ? 0 : slideDistance,
       duration: CARD_SLIDE_MS,
       useNativeDriver: true,
-    }).start();
-  }, [fadeBackdrop, visible, cardOffset]);
+    });
+    slide.start(({ finished }) => {
+      if (finished && !visible) setMounted(false);
+    });
+    return () => slide.stop();
+  }, [fadeBackdrop, visible, cardOffset, slideDistance]);
+  const modalVisible = fadeBackdrop ? visible || mounted : visible;
   const content = fadeBackdrop ? (
     <Animated.View
       style={[combinedCardStyle, { transform: [{ translateY: cardOffset }] }]}
@@ -92,7 +97,7 @@ export function ModalSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={modalVisible}
       animationType={fadeBackdrop ? 'fade' : animationType}
       presentationStyle="overFullScreen"
       transparent

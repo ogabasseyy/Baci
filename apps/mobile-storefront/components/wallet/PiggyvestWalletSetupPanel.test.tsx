@@ -56,7 +56,9 @@ it('explains when a read-only refresh still has no verified account', async () =
   await waitFor(() =>
     expect(screen.getByText('Setting up your account number')).toBeOnTheScreen()
   );
-  expect(screen.getByText('BVN accepted')).toBeOnTheScreen();
+  // Pending proves only that setup is in progress, never that the BVN passed.
+  expect(screen.getByText('Details sent to PiggyVest')).toBeOnTheScreen();
+  expect(screen.queryByText(/BVN (accepted|verified)/)).toBeNull();
   expect(screen.queryByLabelText('BVN')).toBeNull();
 });
 
@@ -320,4 +322,47 @@ it('ignores in-flight creation results from a previous account', async () => {
   expect(onRefresh).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   expect(screen.getByLabelText('BVN')).toHaveProp('value', '');
+});
+
+it('never overlaps automatic checks while one is still in flight', async () => {
+  jest.useFakeTimers();
+  try {
+    jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue({
+      provisioningStatus: 'pending',
+      requiresConsent: false,
+      account: null,
+    });
+    // A slow read that never settles during the test.
+    const read = jest
+      .mocked(piggyvestPrimaryWalletApi.read)
+      .mockReturnValue(new Promise(() => undefined));
+    render(
+      <PiggyvestWalletSetupPanel
+        colors={Colors.light}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        needsPhone={false}
+        onSubmitPhone={async () => ({ success: true })}
+        onRefresh={jest.fn()}
+        onClose={jest.fn()}
+      />
+    );
+    fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+    fireEvent.press(screen.getByRole('checkbox'));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Create account number' })
+    );
+    await screen.findByText('Setting up your account number');
+    const readsBefore = read.mock.calls.length;
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(20000);
+    });
+
+    expect(read.mock.calls.length - readsBefore).toBe(1);
+  } finally {
+    jest.useRealTimers();
+  }
 });

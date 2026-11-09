@@ -115,13 +115,15 @@ export function PiggyvestWalletSetupPanel({
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   useEffect(() => {
-    if (!pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT) return;
+    // Wait while a check is in flight so every counted check really runs.
+    if (busy || !pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT)
+      return;
     const timer = setTimeout(() => {
       setAutoChecks((count) => count + 1);
       void refreshRef.current();
     }, AUTO_CHECK_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [pending, reviewRequired, autoChecks]);
+  }, [busy, pending, reviewRequired, autoChecks]);
 
   return (
     <View style={{ padding: 24, gap: 20 }}>

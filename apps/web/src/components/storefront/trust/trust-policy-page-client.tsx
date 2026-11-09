@@ -49,7 +49,7 @@ function formatShippingFeeType(
     case 'flat_rate':
       return 'Flat rate';
     case 'calculated':
-      return 'Calculated';
+      return 'Calculated at checkout';
     default:
       return 'Not specified';
   }

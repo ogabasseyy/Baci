@@ -31,7 +31,7 @@ describe('generateProductSchema - offer policy schemas', () => {
     const variants = schema.hasVariant as Record<string, unknown>[];
     const offer = variants[0].offers as Record<string, unknown>;
 
-    expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(offer).not.toHaveProperty('priceValidUntil');
     expect(offer).not.toHaveProperty('shippingDetails');
     expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
   });
@@ -44,7 +44,7 @@ describe('generateProductSchema - offer policy schemas', () => {
     const schema = generateProductSchema(product, 'TestStore', 'NGN', 'NG');
     const offer = schema.offers as Record<string, unknown>;
 
-    expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(offer).not.toHaveProperty('priceValidUntil');
     expect(offer).not.toHaveProperty('shippingDetails');
     expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
   });

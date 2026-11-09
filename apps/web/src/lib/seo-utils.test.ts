@@ -32,6 +32,24 @@ function makeTrustProfile(
   };
 }
 
+const completePolicies = makeTrustProfile({
+  shippingPolicy: {
+    localRoute: '/shipping',
+    regions: ['NG'],
+    shippingFeeType: 'free',
+    handlingDaysMin: 0,
+    handlingDaysMax: 1,
+    transitDaysMin: 1,
+    transitDaysMax: 5,
+  },
+  returnPolicy: {
+    localRoute: '/returns',
+    windowDays: 7,
+    returnMethod: 'in_store',
+    returnFees: 'free',
+  },
+});
+
 describe('buildStorefrontAcceptedPaymentMethods', () => {
   it('derives only checkout-enabled payment methods for structured data', () => {
     const methods = buildStorefrontAcceptedPaymentMethods(
@@ -524,7 +542,9 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
-    expect(variants[0]).not.toHaveProperty('description');
+    expect(variants[0]?.description).toContain(
+      'A flagship device with variant-specific merchandising.'
+    );
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -591,6 +611,277 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variesBy).toHaveLength(2);
   });
 
+  describe('bugfix: product structured data variant and policy regressions', () => {
+    it('declares only variant dimensions present on every variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Silver', storage: '512GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { ram: '16GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v3',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toBeUndefined();
+      const variants = schema.hasVariant as Record<string, unknown>[];
+      expect(variants[0].color).toBe('Silver');
+      expect(variants[1]).not.toHaveProperty('color');
+      expect(variants[2]).not.toHaveProperty('size');
+    });
+
+    it.each([
+      [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+      [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+    ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: first,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: second,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
+    });
+
+    it('provides a truthful description on each product variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          description: 'A refurbished phone with a clear display.',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black', storage: '128GB' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(variant.description).toContain(
+        'A refurbished phone with a clear display.'
+      );
+      expect(variant.description).toContain('Black');
+      expect(variant.description).toContain('128GB');
+    });
+
+    it('keeps variant names concise when catalog attributes contain long specifications', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          name: 'HP ProBook 440 G11',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                color: 'Pike Silver',
+                ram: '16GB',
+                processor: 'Core Ultra 5',
+                specifications: 'detailed specification '.repeat(30),
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const name = String(
+        (schema.hasVariant as Record<string, unknown>[])[0].name
+      );
+      expect(name.length).toBeLessThanOrEqual(150);
+      expect(name).toContain('HP ProBook 440 G11');
+      expect(name).toContain('Pike Silver');
+      expect(name).toContain('16GB');
+    });
+
+    it('uses stable feed identifiers when a variant SKU or group slug is invalid', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          slug: `product-${'x'.repeat(60)}`,
+          variants: [
+            {
+              id: 'b9c67d32-7d63-41a3-9b14-2e7eb322a995',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              sku: `INVALID SKU ${'x'.repeat(60)}`,
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(schema.productGroupID).toBe(
+        'e7d13d26-ef38-4c5b-a616-40d23cf69708'
+      );
+      expect(variant.inProductGroupWithID).toBe(schema.productGroupID);
+      expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
+    });
+
+    it('preserves validated SKU fallback and clears stale custom variesBy when custom schema markup is invalid or incomplete', () => {
+      const singleSchema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          sku: `INVALID SKU ${'x'.repeat(60)}`,
+          schema_markup: {
+            sku: `CUSTOM INVALID SKU ${'y'.repeat(60)}`,
+          } as unknown as Product['schema_markup'],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(singleSchema.sku).toBe('e7d13d26-ef38-4c5b-a616-40d23cf69708');
+
+      const groupSchema = generateProductSchema(
+        makeProduct({
+          id: 'invalid id / with spaces',
+          slug: `product-${'x'.repeat(60)}`,
+          schema_markup: {
+            variesBy: ['https://schema.org/color'],
+          } as unknown as Product['schema_markup'],
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { processor: 'M4' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(groupSchema.variesBy).toBeUndefined();
+      expect(groupSchema.productGroupID).toBe('group-invalid-id---with-spaces');
+      expect(
+        (groupSchema.hasVariant as Record<string, unknown>[])[0]
+          .inProductGroupWithID
+      ).toBe(groupSchema.productGroupID);
+    });
+
+    it('does not treat oversized specification text as a variant size', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                storage: 'Full product specification '.repeat(10),
+                ram: '32GB RAM',
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect((schema.hasVariant as Record<string, unknown>[])[0].size).toBe(
+        '32GB RAM'
+      );
+    });
+
+    it('does not claim free nationwide shipping or return terms without evidence', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'White' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG',
+        undefined,
+        makeTrustProfile({
+          shippingPolicy: {
+            localRoute: '/shipping',
+            regions: ['Lagos, Nigeria'],
+            shippingFeeType: 'calculated',
+          },
+        })
+      );
+      for (const variant of schema.hasVariant as Record<string, unknown>[]) {
+        const offer = variant.offers as Record<string, unknown>;
+        expect(offer).not.toHaveProperty('shippingDetails');
+        expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
+      }
+    });
+  });
+
   it('sets variant-level availability correctly', () => {
     const product = makeProduct({
       variants: [
@@ -653,6 +944,152 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variants[0].image).toEqual(['https://cdn.example.com/black.avif']);
     // v2 falls back to parent images
     expect(variants[1].image).toEqual(['https://cdn.example.com/parent.avif']);
+  });
+
+  it('includes shippingDetails and returnPolicy on variant Offers (2026 best practice)', () => {
+    const product = makeProduct({
+      variants: [
+        {
+          id: 'v1',
+          product_id: 'test-123',
+          merchant_id: 'm1',
+          attributes: { storage: '128GB' },
+          stock_quantity: 5,
+        },
+      ],
+    });
+
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      completePolicies
+    );
+    const variants = schema.hasVariant as Record<string, unknown>[];
+    const offer = variants[0].offers as Record<string, unknown>;
+
+    // The catalog does not provide a real expiry for this price.
+    expect(offer).not.toHaveProperty('priceValidUntil');
+
+    // shippingDetails
+    const shipping = offer.shippingDetails as Record<string, unknown>;
+    expect(shipping['@type']).toBe('OfferShippingDetails');
+    const dest = shipping.shippingDestination as Record<string, unknown>;
+    expect(dest.addressCountry).toBe('NG');
+
+    // returnPolicy
+    const returnPolicy = offer.hasMerchantReturnPolicy as Record<
+      string,
+      unknown
+    >;
+    expect(returnPolicy['@type']).toBe('MerchantReturnPolicy');
+    expect(returnPolicy.applicableCountry).toBe('NG');
+    expect(returnPolicy.returnPolicyCountry).toBe('NG');
+    expect(returnPolicy.merchantReturnDays).toBe(7);
+  });
+
+  it('defines shared offer policies once and references them from later variants', () => {
+    const product = makeProduct({
+      variants: [1, 2, 3].map((n) => ({
+        id: `v${n}`,
+        product_id: 'test-123',
+        merchant_id: 'm1',
+        attributes: { storage: `${n * 128}GB` },
+        stock_quantity: 5,
+      })),
+    });
+
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      completePolicies,
+      { productUrl: 'https://shop.example/phones/test-product' }
+    );
+    const offers = (schema.hasVariant as Record<string, unknown>[]).map(
+      (variant) => variant.offers as Record<string, unknown>
+    );
+
+    expect(offers[0]?.shippingDetails).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      '@type': 'OfferShippingDetails',
+    });
+    expect(offers[0]?.hasMerchantReturnPolicy).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#return-policy',
+      '@type': 'MerchantReturnPolicy',
+    });
+    for (const offer of offers.slice(1)) {
+      expect(offer.shippingDetails).toEqual({
+        '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      });
+      expect(offer.hasMerchantReturnPolicy).toEqual({
+        '@id': 'https://shop.example/phones/test-product#return-policy',
+      });
+    }
+  });
+
+  it('uses structured trust profile shipping and return settings instead of hardcoded defaults', () => {
+    const schema = generateProductSchema(
+      makeProduct({
+        variants: [
+          {
+            id: 'v1',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            attributes: { storage: '128GB' },
+            stock_quantity: 5,
+          },
+        ],
+      }),
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      makeTrustProfile({
+        returnPolicy: {
+          summary: 'Returns accepted within 14 days.',
+          windowDays: 14,
+          returnMethod: 'mail',
+          returnFees: 'customer_pays',
+          localRoute: '/returns',
+        },
+        shippingPolicy: {
+          summary: 'Ships across Nigeria.',
+          regions: ['NG'],
+          handlingDaysMin: 2,
+          handlingDaysMax: 4,
+          transitDaysMin: 6,
+          transitDaysMax: 8,
+          shippingFeeType: 'free',
+          localRoute: '/shipping',
+        },
+      })
+    );
+
+    const offer = (schema.hasVariant as Record<string, unknown>[])[0]
+      .offers as Record<string, unknown>;
+    const shipping = offer.shippingDetails as Record<string, unknown>;
+    const returnPolicy = offer.hasMerchantReturnPolicy as Record<
+      string,
+      unknown
+    >;
+    const deliveryTime = shipping.deliveryTime as Record<string, unknown>;
+    const handlingTime = deliveryTime.handlingTime as Record<string, unknown>;
+    const transitTime = deliveryTime.transitTime as Record<string, unknown>;
+
+    expect(handlingTime.minValue).toBe(2);
+    expect(handlingTime.maxValue).toBe(4);
+    expect(transitTime.minValue).toBe(6);
+    expect(transitTime.maxValue).toBe(8);
+    expect(returnPolicy.merchantReturnDays).toBe(14);
+    expect(returnPolicy.returnMethod).toBe('https://schema.org/ReturnByMail');
+    expect(returnPolicy.returnFees).toBe(
+      'https://schema.org/ReturnShippingFees'
+    );
   });
 
   it('strips HTML tags from structured product descriptions', () => {
@@ -901,6 +1338,19 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
 });
 
 describe('generateOrganizationSchema', () => {
+  it('does not invent a return window or fees from a summary-only policy', () => {
+    const schema = generateOrganizationSchema({
+      name: 'Test Store',
+      url: 'https://test.example',
+      trustProfile: makeTrustProfile({
+        returnPolicy: {
+          summary: 'Contact us about returns',
+          localRoute: '/returns',
+        },
+      }),
+    });
+    expect(schema).not.toHaveProperty('hasMerchantReturnPolicy');
+  });
   it('keeps controlled use-brand profiles for the platform organization', () => {
     const schema = generateOrganizationSchema({
       name: 'Baci',

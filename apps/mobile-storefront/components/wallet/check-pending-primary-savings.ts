@@ -2,11 +2,8 @@ import { Alert } from 'react-native';
 import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
-import { buildSavingsSuccessMessage } from './savings-contribution-success';
 
 export async function checkPendingPrimarySavings(input: {
-  /** The pending operation's own amount (entered or recovered from the server). */
-  amount?: number;
   /** The goal as it stood before this confirmation. */
   goal?: WalletActiveSavingsGoal | null;
   merchantId?: string;
@@ -30,19 +27,17 @@ export async function checkPendingPrimarySavings(input: {
         () => false,
         () => true
       );
-      const { amount, goal } = input;
-      if (goal && amount && Number.isFinite(amount) && amount > 0) {
-        const success = buildSavingsSuccessMessage({
-          amount,
-          goal,
-          // The status endpoint returns no goal balance, and a background
-          // refresh may already include this transfer in the snapshot, so
-          // neither completion nor a percentage is inferred here.
-          goalCompleted: false,
-          refreshFailed,
-          snapshotExcludesAmount: false,
-        });
-        Alert.alert(success.title, success.message);
+      // The status endpoint returns neither the amount nor the goal balance,
+      // and the amount field may have been edited since the transfer began,
+      // so the cheer names the goal without an amount or percentage.
+      const { goal } = input;
+      if (goal) {
+        Alert.alert(
+          'Savings updated',
+          `Nice! PiggyVest confirmed your savings. Every naira gets you closer to your ${goal.title}. Keep it going!${
+            refreshFailed ? ' Pull to refresh your latest balance.' : ''
+          }`
+        );
       } else
         Alert.alert(
           'Savings updated',

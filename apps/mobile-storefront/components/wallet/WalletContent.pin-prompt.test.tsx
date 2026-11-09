@@ -82,4 +82,29 @@ describe('WalletContent PIN prompt placement', () => {
     // Only the PIN modal itself: it is not nested in any other modal.
     expect(modalsContainingPrompt()).toHaveLength(1);
   });
+
+  it('keeps the PIN prompt mounted at the root when the goal disappears with the sheet open', () => {
+    const props = createWalletContentProps();
+    const view = render(
+      <WalletContent
+        {...props}
+        pinPrompt={pinPrompt}
+        savingsContributionAmount="500"
+        showSavingsProgress
+      />
+    );
+    expect(modalsContainingPrompt()).toHaveLength(2);
+    view.rerender(
+      <WalletContent
+        {...props}
+        activeSavingsGoal={null}
+        pinPrompt={pinPrompt}
+        savingsContributionAmount="500"
+        showSavingsProgress
+      />
+    );
+    expect(screen.getAllByTestId('wallet-pin-prompt')).toHaveLength(1);
+    // Only the PIN modal itself: the savings sheet is gone, so it is at root.
+    expect(modalsContainingPrompt()).toHaveLength(1);
+  });
 });

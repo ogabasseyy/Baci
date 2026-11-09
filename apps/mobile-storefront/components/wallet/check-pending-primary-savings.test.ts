@@ -94,24 +94,9 @@ const pendingGoal = {
 } as const;
 // Regression: in practice PiggyVest settles minutes later, so confirmation
 // arrives through "Check contribution status". That path must cheer the
-// customer with the operation's own amount. A background refresh may already
-// include the transfer in the goal, so no percentage or completion is guessed.
-it('cheers a confirmation found by the status check with the operation amount', async () => {
-  mockCheck.mockResolvedValue({
-    status: 'confirmed',
-    operationId: 'operation',
-  });
-  await checkPendingPrimarySavings({
-    ...input(),
-    amount: 1000,
-    goal: pendingGoal,
-  });
-  expect(Alert.alert).toHaveBeenCalledWith(
-    'Savings updated',
-    'Nice! ₦1,000 added. Every naira gets you closer to your iPhone 13. Keep it going!'
-  );
-});
-it('keeps the plain confirmation when the amount is unknown', async () => {
+// customer, but the status endpoint returns no amount or goal balance and the
+// amount field may have been edited, so it names the goal without either.
+it('cheers a confirmation found by the status check without guessing amounts', async () => {
   mockCheck.mockResolvedValue({
     status: 'confirmed',
     operationId: 'operation',
@@ -119,18 +104,43 @@ it('keeps the plain confirmation when the amount is unknown', async () => {
   await checkPendingPrimarySavings({ ...input(), goal: pendingGoal });
   expect(Alert.alert).toHaveBeenCalledWith(
     'Savings updated',
+    'Nice! PiggyVest confirmed your savings. Every naira gets you closer to your iPhone 13. Keep it going!'
+  );
+  expect(Alert.alert).not.toHaveBeenCalledWith(
+    expect.any(String),
+    expect.stringMatching(/₦|%/)
+  );
+});
+it('keeps the plain confirmation when the goal is unknown', async () => {
+  mockCheck.mockResolvedValue({
+    status: 'confirmed',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings(input());
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Savings updated',
     'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
   );
 });
 it('does not cheer while the contribution is still pending', async () => {
   mockCheck.mockResolvedValue({ status: 'pending', operationId: 'operation' });
-  await checkPendingPrimarySavings({
-    ...input(),
-    amount: 1000,
-    goal: pendingGoal,
-  });
+  await checkPendingPrimarySavings({ ...input(), goal: pendingGoal });
   expect(Alert.alert).not.toHaveBeenCalledWith(
     'Savings updated',
+    expect.any(String)
+  );
+});
+it('never claims the goal is reached on a late confirmation', async () => {
+  mockCheck.mockResolvedValue({
+    status: 'confirmed',
+    operationId: 'operation',
+  });
+  await checkPendingPrimarySavings({
+    ...input(),
+    goal: { ...pendingGoal, current_amount: 5000 },
+  });
+  expect(Alert.alert).not.toHaveBeenCalledWith(
+    'Goal reached! 🎉',
     expect.any(String)
   );
 });
@@ -141,33 +151,11 @@ it('adds the refresh hint to the status-check cheer when the wallet refresh fail
   });
   await checkPendingPrimarySavings({
     ...input(),
-    amount: 1000,
     goal: pendingGoal,
     refetchWallet: jest.fn(() => Promise.reject(new Error('offline'))),
   });
   expect(Alert.alert).toHaveBeenCalledWith(
     'Savings updated',
     expect.stringMatching(/Pull to refresh your latest balance\.$/)
-  );
-});
-it('never claims the goal is reached from an already-refreshed snapshot', async () => {
-  mockCheck.mockResolvedValue({
-    status: 'confirmed',
-    operationId: 'operation',
-  });
-  // ₦2,000 took a ₦5,000 goal from ₦1,000 to ₦3,000; the snapshot already
-  // shows ₦3,000, so ₦3,000 + ₦2,000 must not read as "Goal reached!".
-  await checkPendingPrimarySavings({
-    ...input(),
-    amount: 2000,
-    goal: { ...pendingGoal, current_amount: 3000 },
-  });
-  expect(Alert.alert).not.toHaveBeenCalledWith(
-    'Goal reached! 🎉',
-    expect.any(String)
-  );
-  expect(Alert.alert).toHaveBeenCalledWith(
-    'Savings updated',
-    expect.not.stringMatching(/%/)
   );
 });

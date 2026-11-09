@@ -171,7 +171,7 @@ jobs:
       - name: Run isolated builder auth tests
         id: builder-auth-tests
         run: |
-          node --test apps/web/tools/builder-auth/ci-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
           pnpm --dir apps/web/tools/builder-auth test
       - name: Clean builder auth test containers
         if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}

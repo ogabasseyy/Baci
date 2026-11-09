@@ -37,6 +37,10 @@ test('typecheck job does not reference secrets', () => {
 });
 
 test('builder fixture containers are scoped and cleaned after interruption', async () => {
+  const configSuite = await readFile('.github/scripts/resolve-ci-test-plan-config.test.mjs', 'utf8');
+  const labelSuite = '.github/scripts/ci-builder-container-labels.test.mjs';
+  assert.match(configSuite, /import '\.\/ci-builder-container-labels\.test\.mjs'/);
+  assert.ok(job.steps.some((step) => typeof step.run === 'string' && step.run.includes(labelSuite)));
   const fixtures = await readFile('apps/web/tools/builder-auth/test-fixtures.ts', 'utf8');
   const api = await readFile('apps/web/tools/builder-auth/data-api.node.test.ts', 'utf8');
   const draftApi = await readFile('apps/web/tools/builder-auth/draft-api-fixture.ts', 'utf8');

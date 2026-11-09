@@ -7,7 +7,7 @@ import './ci-web-shard-runner-contract.test.mjs';
 import './ci-non-web-runner-contract.test.mjs';
 import './cleanup-shipping-ci-containers.test.mjs';
 import './cleanup-builder-ci-containers.test.mjs';
-import '../../apps/web/tools/builder-auth/ci-container-labels.test.mjs';
+import './ci-builder-container-labels.test.mjs';
 import '../../supabase/tests/shipping-ci-container-labels.test.mjs';
 import './ci-build-runner-contract.test.mjs';
 import './dependency-review-availability.test.mjs';

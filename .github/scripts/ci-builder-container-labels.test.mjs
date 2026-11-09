@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   builderCiContainerLabels,
   builderCiDockerArgs,
-} from './ci-container-labels.mjs';
+} from '../../apps/web/tools/builder-auth/ci-container-labels.mjs';
 
 test('scopes builder fixtures to the current run, attempt, and job', () => {
   assert.deepEqual(

@@ -342,6 +342,7 @@ web:
   - '.github/scripts/cleanup-shipping-ci-containers.test.mjs'
   - '.github/scripts/cleanup-builder-ci-containers.mjs'
   - '.github/scripts/cleanup-builder-ci-containers.test.mjs'
+  - '.github/scripts/ci-builder-container-labels.test.mjs'
   - '.github/scripts/ci-build-runner-contract.test.mjs'
   - '.github/scripts/ci-private-runner-contract-utils.mjs'
   - '.github/scripts/run-ci-web-shard.sh'

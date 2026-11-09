@@ -156,7 +156,7 @@ export async function SearchPageContent({
                 }
                 refinements={refinements}
                 suggestionProducts={
-                  !searchFailed && merchant.slug === 'ogabassey'
+                  !searchFailed
                     ? effectiveResult.products.map((product) => ({
                         price: product.price,
                         condition:

@@ -165,6 +165,26 @@ describe('SearchPageContent', () => {
     expect(screen.getByLabelText('Search products')).toHaveValue('iphone');
   });
 
+  it('uses the current merchant results for suggestions on a non-Ogabassey storefront', async () => {
+    mockStorefrontContext('other');
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 1,
+      didYouMean: null,
+      products: [{ ...createSearchProducts(1)[0], condition: 'used' }],
+      productIds: [],
+      query: 'iphone',
+    });
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+    fireEvent.focus(screen.getByRole('searchbox'));
+    expect(
+      screen.getByRole('link', { name: 'Used iphone' })
+    ).toBeInTheDocument();
+  });
+
   it.each([
     { slug: 'ogabassey', present: true },
     { slug: 'other', present: false },

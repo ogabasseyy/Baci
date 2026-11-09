@@ -58,7 +58,9 @@ across the merchant, using a 301-row sentinel and exact count to reject oversize
 or server-truncated results before hydration. This deliberately omits optional
 links for oversized brands above that ceiling, even when their destination remains
 eligible. It does not infer eligibility from a sample or inflate counts from a
-lower bound.
+lower bound. Measured cold-cache single-query reads using the lightweight
+`BRAND_AUTHORITY_ELIGIBILITY_SELECT` projection (which omits `description` and
+`images`) complete in 460–835 ms across 101–197 store-wide parent rows.
 
 A single 1-second operation deadline covers the active-category read, product
 query and existing public serialized-stock hydration. The same signal is applied

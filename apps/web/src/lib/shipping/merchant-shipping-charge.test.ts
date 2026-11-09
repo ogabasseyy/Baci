@@ -6,6 +6,30 @@ import {
 } from './merchant-shipping-charge';
 
 describe('merchant shipping charge RPC adapter', () => {
+  it('keeps a NULL balance_after (platform-funded charge) as null instead of 0', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          charge_id: 'c1',
+          charged_amount: 4500,
+          balance_after: null,
+          status: 'reserved',
+        },
+      ],
+      error: null,
+    });
+    const result = await reserveMerchantShippingCharge(
+      { rpc } as never,
+      'o1',
+      'q1'
+    );
+    expect(result.charge).toMatchObject({
+      chargeId: 'c1',
+      chargedAmount: 4500,
+      balanceAfter: null,
+    });
+  });
+
   it('generates a 64-character token and normalizes RPC rows', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [

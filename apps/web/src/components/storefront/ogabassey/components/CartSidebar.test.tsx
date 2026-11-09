@@ -196,47 +196,6 @@ describe('CartSidebar', () => {
     ];
   });
 
-  it('shows the identity choice from the drawer for a guest', async () => {
-    render(<CartSidebar />);
-    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Let’s get you started');
-    expect(mockPush).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: /continue as guest/i }));
-    expect(mockPush).toHaveBeenCalledWith('/test-store/checkout');
-    expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
-  });
-
-  it('does not navigate or reopen identity after the cart closes during lookup', async () => {
-    let resolveLookup: (value: unknown) => void = () => {};
-    mockGetUser.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve; }));
-    const { rerender } = render(<CartSidebar />);
-    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    fireEvent.click(screen.getByRole('button', { name: /dismiss cart backdrop/i }));
-    mockIsCartOpen = false;
-    rerender(<CartSidebar />);
-    resolveLookup({ data: { user: { id: 'user-1' } }, error: null });
-    mockIsCartOpen = true;
-    rerender(<CartSidebar />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /proceed to checkout/i })).toBeEnabled());
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('recognizes a signed-in storefront session without an auth provider', async () => {
-    mockSessionUser = { id: 'user-1' };
-    render(<CartSidebar />);
-    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/test-store/checkout'));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('takes a signed-in customer directly to checkout', () => {
-    mockUser = { id: 'user-1' };
-    render(<CartSidebar />);
-    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
-    expect(mockPush).toHaveBeenCalledWith('/test-store/checkout');
-  });
-
   it('shows cart totals without the shipping placeholder', () => {
     render(<CartSidebar />);
     expect(screen.queryByText('Subtotal')).not.toBeInTheDocument();

@@ -54,6 +54,6 @@
   background: transparent;
   min-height: 2.75rem;
   font-size: 0.75rem;
-  color: var(--store-primary, #b91c1c);
+  color: var(--store-background-text, #111827);
   white-space: nowrap;
 }

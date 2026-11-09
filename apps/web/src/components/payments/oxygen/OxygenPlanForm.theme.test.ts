@@ -25,3 +25,20 @@ it('uses storefront foreground and background tokens for the payment plan', () =
   expect(effective('.form', 'color')).toContain('var(--store-background-text');
   expect(effective('.card', 'background')).toContain('var(--store-background');
 });
+
+it('uses the readable storefront foreground for editing the down payment', () => {
+  const css = readFileSync(
+    resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      'OxygenDownPaymentAmount.module.css'
+    ),
+    'utf8'
+  );
+  let color = '';
+  postcss.parse(css).walkRules('.editAmount', (rule) => {
+    rule.walkDecls('color', (decl) => {
+      color = decl.value;
+    });
+  });
+  expect(color).toContain('var(--store-background-text');
+});

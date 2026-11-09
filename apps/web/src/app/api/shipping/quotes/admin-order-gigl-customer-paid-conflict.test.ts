@@ -19,7 +19,10 @@ vi.mock(
 const supabase = {} as SupabaseClient;
 const checkoutOrder = { shipping_funding_source: 'customer_checkout' };
 
-function check(order: { shipping_funding_source?: string | null }) {
+function check(order: {
+  shipping_funding_source?: string | null;
+  payment_method?: string | null;
+}) {
   return getAdminOrderGiglCustomerPaidConflict(
     supabase,
     'merchant-1',
@@ -95,6 +98,33 @@ describe('getAdminOrderGiglCustomerPaidConflict', () => {
       code: 'CHECKOUT_SHIPPING_PAYMENT_LOOKUP_FAILED',
       error:
         'Could not check what the customer paid for delivery. Please try again.',
+    });
+  });
+
+  describe('bugfix: Credit Direct order mis-stamped as customer_checkout', () => {
+    it.each([
+      'credit_direct',
+      'credit-direct',
+      'pod',
+      'cash',
+      'manual',
+    ])('allows the wallet quote for %s even though settlement shows retained shipping', async (payment_method) => {
+      loaders.settled.mockResolvedValue(11500);
+
+      const response = await check({ ...checkoutOrder, payment_method });
+
+      expect(response).toBeNull();
+    });
+
+    it('still refuses a genuinely retained Paystack order', async () => {
+      loaders.settled.mockResolvedValue(11500);
+
+      const response = await check({
+        ...checkoutOrder,
+        payment_method: 'paystack',
+      });
+
+      expect(response?.status).toBe(409);
     });
   });
 });

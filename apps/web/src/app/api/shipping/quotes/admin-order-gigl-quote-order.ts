@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export const ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT =
-  'id, merchant_id, customer_name, customer_phone, customer_email, shipping_address, shipping_status, shipping_provider, shipping_funding_source, selected_quote_id, shipment_id, tracking_number, order_items(id, name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))';
+  'id, merchant_id, customer_name, customer_phone, customer_email, shipping_address, shipping_status, shipping_provider, shipping_funding_source, payment_method, selected_quote_id, shipment_id, tracking_number, order_items(id, name, quantity, price, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))';
 
 type AdminOrderGiglQuoteOrder = {
   shipment_id?: string | null;

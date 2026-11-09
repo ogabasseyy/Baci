@@ -1,6 +1,7 @@
 import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { logZeptoMailSendFailure } from '@/lib/zeptomail-error-log';
 import {
   isRetryableError,
   RETRY_CONFIG,
@@ -491,12 +492,7 @@ export async function sendEmail({
   const totalAttempts = outcome.attempts;
   const finalSenderAddress = outcome.finalSenderAddress;
 
-  console.error(
-    'ZeptoMail email error:',
-    redactProviderErrorLog
-      ? (lastError.code ?? 'unknown')
-      : JSON.stringify(lastError)
-  );
+  logZeptoMailSendFailure(lastError, redactProviderErrorLog);
   await updateEmailAttempts(auditIds, {
     status: 'failed',
     attempt_count: totalAttempts,

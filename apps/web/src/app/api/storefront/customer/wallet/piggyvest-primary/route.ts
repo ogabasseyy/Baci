@@ -136,7 +136,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error:
-            'Wallet setup could not be confirmed. Please try refreshing later.',
+            outcome.code === 'PROVIDER_UNAVAILABLE'
+              ? 'Wallet setup is unavailable right now. Please try again later.'
+              : 'Wallet setup could not be confirmed. Please try refreshing later.',
           code: outcome.code,
         },
         { status: 503 }

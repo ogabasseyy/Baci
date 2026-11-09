@@ -50,21 +50,66 @@ it('explains when a read-only refresh still has no verified account', async () =
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-    ).toBeOnTheScreen()
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-  );
+  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
   await waitFor(() =>
-    expect(
-      screen.getByText(
-        'Your account is still being prepared. Check again shortly.'
-      )
-    ).toBeOnTheScreen()
+    expect(screen.getByText('Setting up your account number')).toBeOnTheScreen()
   );
+  expect(screen.getByText('BVN accepted')).toBeOnTheScreen();
   expect(screen.queryByLabelText('BVN')).toBeNull();
+});
+
+it('checks for the account number by itself and finishes when it is ready', async () => {
+  jest.useFakeTimers();
+  try {
+    const onRefresh = jest.fn();
+    jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue({
+      provisioningStatus: 'pending',
+      requiresConsent: false,
+      account: null,
+    });
+    jest
+      .mocked(piggyvestPrimaryWalletApi.read)
+      .mockResolvedValueOnce({
+        provisioningStatus: 'pending',
+        requiresConsent: false,
+        account: null,
+      })
+      .mockResolvedValue({
+        provisioningStatus: 'ready',
+        requiresConsent: false,
+        account: {
+          accountNumber: '0123456789',
+          bankName: 'Test Bank',
+          accountName: 'Test User',
+        },
+      } as never);
+    render(
+      <PiggyvestWalletSetupPanel
+        colors={Colors.light}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        needsPhone={false}
+        onSubmitPhone={async () => ({ success: true })}
+        onRefresh={onRefresh}
+        onClose={jest.fn()}
+      />
+    );
+    fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+    fireEvent.press(screen.getByRole('checkbox'));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Create account number' })
+    );
+    await screen.findByText('Setting up your account number');
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 it('binds onboarding and refresh to the submitting account', async () => {
@@ -96,9 +141,7 @@ it('binds onboarding and refresh to the submitting account', async () => {
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-    ).toBeOnTheScreen()
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
   );
   // The client rejects a mismatched session before the BVN leaves the
   // device, so a mid-flight switch cannot onboard the new account.
@@ -106,9 +149,7 @@ it('binds onboarding and refresh to the submitting account', async () => {
     expect.objectContaining({ bvn: '12345678901' }),
     'user-a-id'
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-  );
+  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
   await waitFor(() =>
     expect(piggyvestPrimaryWalletApi.read).toHaveBeenCalledWith(
       '6b5cb8a4-5575-456c-b936-8cdfae30db74',
@@ -150,9 +191,7 @@ it('keeps the form actionable with input preserved when creation fails', async (
     ).toBeOnTheScreen()
   );
   expect(screen.getByLabelText('BVN')).toHaveProp('value', '12345678901');
-  expect(
-    screen.queryByRole('button', { name: 'Refresh PiggyVest account' })
-  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   expect(onRefresh).not.toHaveBeenCalled();
 });
 it('refreshes the wallet when creation returns an account', async () => {
@@ -279,8 +318,6 @@ it('ignores in-flight creation results from a previous account', async () => {
   // discarded (stale account) rather than refreshing or flipping pending.
   await act(async () => {});
   expect(onRefresh).not.toHaveBeenCalled();
-  expect(
-    screen.queryByRole('button', { name: 'Refresh PiggyVest account' })
-  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   expect(screen.getByLabelText('BVN')).toHaveProp('value', '');
 });

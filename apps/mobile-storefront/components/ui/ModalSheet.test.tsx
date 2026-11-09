@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Button, Text } from 'react-native';
+import { Button, Modal, Text } from 'react-native';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { ModalSheet } from './ModalSheet';
 
@@ -47,6 +47,27 @@ describe('ModalSheet', () => {
     );
 
     expect(screen.queryByTestId('modal-keyboard-surface')).toBeNull();
+  });
+
+  it('fades the backdrop in place instead of sliding it when opted in', () => {
+    const { UNSAFE_getByType } = render(
+      <ModalSheet presentation="fade-backdrop" visible>
+        <Text>Faded sheet</Text>
+      </ModalSheet>
+    );
+
+    expect(screen.getByText('Faded sheet')).toBeOnTheScreen();
+    expect(UNSAFE_getByType(Modal).props.animationType).toBe('fade');
+  });
+
+  it('keeps the native slide for sheets that have not opted in', () => {
+    const { UNSAFE_getByType } = render(
+      <ModalSheet visible>
+        <Text>Sliding sheet</Text>
+      </ModalSheet>
+    );
+
+    expect(UNSAFE_getByType(Modal).props.animationType).toBe('slide');
   });
 
   it('renders modal sheet content when visible', () => {

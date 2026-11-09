@@ -22,6 +22,7 @@ import {
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
+import { isPrimaryWalletCreateNotSent } from './primary-wallet-onboarding-not-sent';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Input = {
@@ -42,7 +43,8 @@ type Outcome = {
     | 'INVALID_BVN'
     | 'OWNERSHIP_REVIEW_REQUIRED'
     | 'INTEREST_ROUTING_REVIEW_REQUIRED'
-    | 'STORAGE_UNAVAILABLE';
+    | 'STORAGE_UNAVAILABLE'
+    | 'PROVIDER_UNAVAILABLE';
 };
 
 export async function onboardPiggyvestPrimaryWallet(
@@ -249,6 +251,26 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
+    // Credentials rejected or relay refused: provably nothing was created.
+    // Fail fast with "unavailable" instead of an endless "pending". A fresh
+    // claim is released for a clean retry; a reclaimed one stays reclaimable
+    // because an earlier ambiguous dispatch may still have created the
+    // customer. Logs only the error code and status, never request data.
+    if (isPrimaryWalletCreateNotSent(error)) {
+      console.error(
+        `[PiggyVest][primary-onboarding] create not sent: ${error.code} status=${error.status ?? 'none'}`
+      );
+      try {
+        if (claim.reclaimed === true) {
+          await input.storage.recordUncertain(claimedScope);
+        } else if (!(await input.storage.releaseIntent(claimedScope))) {
+          return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+        }
+      } catch {
+        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+      }
+      return { status: 'unavailable', code: 'PROVIDER_UNAVAILABLE' };
+    }
     // A decline that names the interest settings is our configured payout
     // wallet being refused, never the customer's BVN. On a fresh claim it
     // proves nothing was created, so the intent is released for a corrected

@@ -127,10 +127,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   armButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   ctaButton: {
@@ -138,11 +138,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   ctaButtonText: {
     color: '#FFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   statusCard: {
@@ -155,12 +155,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusMessage: {
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 18,
     opacity: 0.85,
   },
   statusTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
 });

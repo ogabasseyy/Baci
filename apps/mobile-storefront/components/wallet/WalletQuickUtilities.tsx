@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
 import type { ComponentProps } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { styles } from './wallet.styles';
 
 type UtilityRoute =
@@ -61,25 +61,24 @@ export function WalletQuickUtilities({
   return (
     <>
       <View style={styles.utilityPillsDivider} />
-      <Text style={styles.utilityPillsLabel}>Quick Utilities</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.utilityPillsScroll}
-      >
+      <View style={styles.utilityTilesRow}>
         {QUICK_UTILITIES.map((utility) => (
           <Pressable
             key={utility.route}
             accessibilityRole="button"
             accessibilityLabel={utility.accessibilityLabel}
-            style={styles.utilityPill}
+            style={styles.utilityTile}
             onPress={() => router.push(utility.route)}
           >
-            <Ionicons name={utility.icon} size={17} color={accentColor} />
-            <Text style={styles.utilityPillText}>{utility.label}</Text>
+            <View style={styles.utilityTileIcon}>
+              <Ionicons name={utility.icon} size={19} color={accentColor} />
+            </View>
+            <Text style={styles.utilityTileText} numberOfLines={1}>
+              {utility.label}
+            </Text>
           </Pressable>
         ))}
-      </ScrollView>
+      </View>
     </>
   );
 }

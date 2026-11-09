@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { readWalletSpendableBreakdown } from '@/lib/wallet/wallet-spendable-breakdown';
 import {
   getTransactions,
   getWalletData,
@@ -50,11 +51,13 @@ export default async function WalletPage() {
     pendingSettlements: PendingSettlement[];
   } | null;
   let transactions: Transaction[];
+  let spendable: Awaited<ReturnType<typeof readWalletSpendableBreakdown>>;
 
   try {
-    [walletData, transactions] = await Promise.all([
+    [walletData, transactions, spendable] = await Promise.all([
       getWalletData(merchant.id),
       getTransactions(merchant.id),
+      readWalletSpendableBreakdown(supabase, merchant.id),
     ]);
   } catch (error) {
     console.error('Failed to fetch wallet data:', error);
@@ -68,6 +71,7 @@ export default async function WalletPage() {
       transactions={transactions}
       merchantId={merchant.id}
       payoutCurrency={merchant.payout_currency || 'NGN'}
+      spendable={spendable.ok ? spendable : null}
     />
   );
 }

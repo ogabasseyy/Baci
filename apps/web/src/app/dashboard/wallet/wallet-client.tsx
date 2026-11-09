@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import type { WalletSpendableBreakdown } from '@/lib/wallet/wallet-spendable-breakdown';
 import {
   type PendingSettlement,
   type Transaction,
@@ -47,6 +48,7 @@ import {
   type WalletData,
 } from './actions';
 import { getWalletPayoutAmountOptions } from './wallet-payout-options';
+import { WalletSpendableCards } from './wallet-spendable-cards';
 
 interface WalletClientProps {
   wallet: WalletData | null;
@@ -54,6 +56,7 @@ interface WalletClientProps {
   transactions: Transaction[];
   merchantId: string;
   payoutCurrency?: string | null;
+  spendable?: WalletSpendableBreakdown | null;
 }
 
 export default function WalletClient({
@@ -62,6 +65,7 @@ export default function WalletClient({
   transactions,
   merchantId,
   payoutCurrency = 'NGN',
+  spendable = null,
 }: WalletClientProps) {
   const { toast } = useToast();
   const router = useRouter();
@@ -198,6 +202,10 @@ export default function WalletClient({
           Refresh
         </Button>
       </div>
+
+      {spendable ? (
+        <WalletSpendableCards spendable={spendable} formatMoney={formatMoney} />
+      ) : null}
 
       {/* Balance Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">

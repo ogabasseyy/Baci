@@ -1,5 +1,6 @@
 -- Catalog assertions for 20261109090000: nobody but the owner may call the
--- saved-token purge directly, and its deletion trigger is still installed.
+-- saved-token purge directly, and its BEFORE DELETE row trigger is still
+-- installed and enabled.
 DO $$
 DECLARE
   routine regprocedure :=
@@ -17,7 +18,7 @@ BEGIN
     RAISE EXCEPTION 'Saved-token purge still grants PUBLIC execution';
   END IF;
   FOREACH role_name IN ARRAY ARRAY[
-    'anon', 'authenticated',
+    'anon', 'authenticated', 'service_role',
     'primary_bank_signed_intake', 'primary_bank_inbox_worker',
     'primary_card_authorizer', 'primary_card_evidence',
     'primary_card_custody_evidence'
@@ -34,6 +35,8 @@ BEGIN
       AND t.tgname = 'primary_card_purge_saved_tokens_on_customer_deletion'
       AND t.tgfoid = routine
       AND t.tgenabled <> 'D'
+      -- FOR EACH ROW (1), BEFORE (2), DELETE (8); not INSERT (4) or UPDATE (16).
+      AND (t.tgtype::integer & 31) = 11
   ) THEN
     RAISE EXCEPTION 'Saved-token purge trigger is missing or disabled';
   END IF;

@@ -7,6 +7,14 @@ export function firstInvalidOxygenControl(form: HTMLFormElement, step: number) {
   return Array.from(controls).find((control) => !control.checkValidity());
 }
 
+export function oxygenInvalidControlMessage(
+  input: HTMLInputElement | HTMLSelectElement
+) {
+  return input.validity.patternMismatch
+    ? input.title || 'Check the format of the highlighted field.'
+    : 'Please complete the required fields in this step.';
+}
+
 export function highlightOxygenControl(input: HTMLElement, errorId?: string) {
   input.setAttribute('aria-invalid', 'true');
   if (errorId) input.setAttribute('aria-errormessage', errorId);

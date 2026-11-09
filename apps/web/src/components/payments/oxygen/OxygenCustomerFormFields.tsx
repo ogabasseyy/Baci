@@ -20,6 +20,7 @@ import {
   clearOxygenControlError,
   firstInvalidOxygenControl,
   highlightOxygenControl,
+  oxygenInvalidControlMessage,
 } from './oxygen-form-invalid-field';
 import {
   type ResidentialProof,
@@ -27,7 +28,6 @@ import {
   residentialKeys,
 } from './oxygen-residential-address';
 import { useOxygenFormErrorFocus } from './use-oxygen-form-error-focus';
-
 export type CustomerFormProps = {
   prefill?: OxygenCustomerPrefill;
   workflowId?: string;
@@ -92,11 +92,7 @@ export function CustomerFormFields({
     const invalid = firstInvalidOxygenControl(form, step);
     if (invalid) {
       highlightField(invalid);
-      setFormError(
-        invalid.validity.patternMismatch
-          ? invalid.title || 'Check the format of the highlighted field.'
-          : 'Please complete the required fields in this step.'
-      );
+      setFormError(oxygenInvalidControlMessage(invalid));
       return false;
     }
     if (step === 1 && !String(new FormData(form).get('account_name') ?? '')) {
@@ -115,9 +111,7 @@ export function CustomerFormFields({
       }}
       onBlur={(event) => {
         capture();
-        // Focus moves between inputs and Continue are covered by the debounce.
-        // Flush only when focus leaves the entire form, avoiding a second save
-        // immediately before the next-step snapshot is queued.
+        // Flush only when focus leaves the form to avoid a duplicate save.
         if (!event.currentTarget.contains(event.relatedTarget))
           void flushDraft();
       }}
@@ -137,8 +131,7 @@ export function CustomerFormFields({
             step === 0 ? 'identity' : 'bank'
           );
           setStep(step + 1);
-          // Local navigation never submits to Oxygen. The final submit below
-          // still requires durable save acknowledgement and rejects conflicts.
+          // Only the final submit requires durable save acknowledgement.
           void flushDraft();
           return;
         }

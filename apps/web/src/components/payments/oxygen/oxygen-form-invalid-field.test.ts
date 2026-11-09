@@ -3,6 +3,7 @@ import {
   clearOxygenControlError,
   firstInvalidOxygenControl,
   highlightOxygenControl,
+  oxygenInvalidControlMessage,
 } from './oxygen-form-invalid-field';
 
 it('finds the first invalid field in the current step and highlights and clears it', () => {
@@ -26,4 +27,12 @@ it('finds the first invalid field in the current step and highlights and clears 
   expect(invalid).not.toHaveAttribute('aria-errormessage');
   vi.restoreAllMocks();
   form.remove();
+});
+
+it('uses the field format hint for a pattern mismatch', () => {
+  const input = document.createElement('input');
+  input.pattern = '[0-9]+';
+  input.title = 'Enter digits';
+  input.value = 'abc';
+  expect(oxygenInvalidControlMessage(input)).toBe('Enter digits');
 });

@@ -124,73 +124,14 @@ vi.mock('./DesktopOrderSummary', () => ({
 
 import { CheckoutScreen } from './CheckoutScreen';
 
-const onConfirmTransfer = vi.fn();
-const onCloseTransfer = vi.fn();
-const onAuthSuccess = vi.fn();
-const onDiscountApplied = vi.fn();
-const onSignIn = vi.fn();
-const appliedDiscount: DiscountResult = {
-  valid: true,
-  code: 'WELCOME',
-  discount_type: 'percentage',
-  discount_value: 10,
-};
-
-function createProps({
-  showMobile = true,
-  discountVisible = true,
-  authOpen = false,
-}: {
-  showMobile?: boolean;
-  discountVisible?: boolean;
-  authOpen?: boolean;
-} = {}): CheckoutScreenProps {
-  return {
-    page: {
-      onReturnToCart: vi.fn(),
-      merchantName: 'Ada Store',
-      formatCurrency: (amount) => `₦${amount}`,
-    },
-    auth: { isOpen: authOpen, onOpenChange: vi.fn(), onSuccess: onAuthSuccess },
-    overlays: {
-      crypto: {} as CheckoutScreenProps['overlays']['crypto'],
-      walletFundedTransfer: {
-        error: 'Could not verify transfer',
-      } as CheckoutScreenProps['overlays']['walletFundedTransfer'],
-      dva: {
-        data: {
-          account_number: '1234567890',
-        } as CheckoutScreenProps['overlays']['dva']['data'],
-        isVerifying: false,
-        onClose: onCloseTransfer,
-        onConfirmTransfer,
-      },
-    },
-    summary: {
-      presentation: {
-        showMobile,
-        mobile: {
-          remainingAmount: 9000,
-        } as CheckoutScreenProps['summary']['presentation']['mobile'],
-        desktop: {
-          summarySubtotal: 10000,
-        } as CheckoutScreenProps['summary']['presentation']['desktop'],
-        discount: {
-          visible: discountVisible,
-          merchantId: 'merchant-1',
-          cartTotal: 10000,
-          currencyCountryCode: 'NG',
-          payoutCurrency: 'NGN',
-          productIds: ['product-1'],
-        },
-      },
-      payment: {
-        discount: { applied: appliedDiscount, setApplied: onDiscountApplied },
-      } as unknown as CheckoutScreenProps['summary']['payment'],
-    },
-    steps: { onSignIn } as unknown as CheckoutScreenProps['steps'],
-  };
-}
+import {
+  createProps,
+  onAuthSuccess,
+  onCloseTransfer,
+  onConfirmTransfer,
+  onDiscountApplied,
+  onSignIn,
+} from './CheckoutScreen-summary.fixture';
 
 beforeEach(() => {
   vi.clearAllMocks();

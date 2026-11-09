@@ -73,13 +73,16 @@ describe('normalizeSocialUrl', () => {
     );
   });
 
-  it('rejects non-http(s) URI schemes while preserving host-and-port URLs', () => {
+  it('rejects non-http(s) URI schemes while preserving host-and-port URLs and dotted handles', () => {
     expect(
       normalizeSocialUrl('javascript:alert(1)', 'instagram')
     ).toBeUndefined();
     expect(normalizeSocialUrl('data:text/html,hi', 'facebook')).toBeUndefined();
     expect(normalizeSocialUrl('facebook.com:443/brand', 'facebook')).toBe(
       'https://facebook.com:443/brand'
+    );
+    expect(normalizeSocialUrl('jane.doe', 'instagram')).toBe(
+      'https://instagram.com/jane.doe'
     );
   });
 });

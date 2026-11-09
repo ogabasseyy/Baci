@@ -72,7 +72,7 @@ export function normalizeSocialUrl(
     return cleanInput;
   }
 
-  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(cleanInput)) {
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+|[/?#])/i.test(cleanInput)) {
     const withHttps = `https://${cleanInput}`;
     if (platform === 'twitter') {
       return normalizeTwitterProfileUrl(withHttps) ?? withHttps;

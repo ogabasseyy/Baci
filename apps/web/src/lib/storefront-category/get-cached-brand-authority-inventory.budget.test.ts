@@ -39,7 +39,7 @@ const entry = brandAuthorityTaxonomy.getEntry('smartphones', 'apple');
 if (!entry) throw new Error('Missing Apple entry');
 const load = () =>
   read('merchant-1', 'smartphones', entry, {
-    maxProducts: 100,
+    maxProducts: 300,
     timeoutMs: 1000,
   });
 const rows = [
@@ -70,19 +70,19 @@ describe('shared brand inventory work budget', () => {
     1000, 3000,
   ])('keeps category freshness on the storefront profile for the %ims policy', async (timeoutMs) => {
     await read('merchant-1', 'smartphones', entry, {
-      maxProducts: 100,
+      maxProducts: 300,
       timeoutMs,
     });
     expect(cacheLife).toHaveBeenCalledWith('storefront-page');
     category.mockResolvedValueOnce(null);
     await expect(
-      read('merchant-1', 'smartphones', entry, { maxProducts: 100, timeoutMs })
+      read('merchant-1', 'smartphones', entry, { maxProducts: 300, timeoutMs })
     ).rejects.toThrow('category unavailable');
     expect(query.range).toHaveBeenCalledTimes(1);
   });
   it('bounds the query before hydration and shares destination category, stock and parent scope', async () => {
     expect((await load()).products).toEqual(rows);
-    expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 100);
+    expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 300);
     expect(query.select).toHaveBeenCalledWith(expect.any(String), {
       count: 'exact',
     });
@@ -112,30 +112,32 @@ describe('shared brand inventory work budget', () => {
   it.each([
     null,
     2,
-    101,
+    301,
   ])('rejects missing, truncated or oversized count %s without hydration', async (count) => {
     query.range.mockResolvedValueOnce({ data: rows, count, error: null });
     await expect(load()).rejects.toThrow('complete-pool budget');
     expect(hydrate).not.toHaveBeenCalled();
   });
-  it('accepts a complete pool exactly at the ceiling and an empty pool', async () => {
-    const products = Array.from({ length: 100 }, (_, i) => ({
-      ...rows[0],
-      id: `p-${i}`,
-    }));
-    query.range.mockResolvedValueOnce({
-      data: products,
-      count: 100,
-      error: null,
-    });
-    expect((await load()).products).toHaveLength(100);
+  it('accepts a complete pool exactly at the ceiling, large merchant brand pools (155 and 197), and an empty pool', async () => {
+    for (const poolSize of [155, 197, 300]) {
+      const products = Array.from({ length: poolSize }, (_, i) => ({
+        ...rows[0],
+        id: `p-${i}`,
+      }));
+      query.range.mockResolvedValueOnce({
+        data: products,
+        count: poolSize,
+        error: null,
+      });
+      expect((await load()).products).toHaveLength(poolSize);
+    }
     query.range.mockResolvedValueOnce({ data: [], count: 0, error: null });
     expect((await load()).products).toEqual([]);
   });
   it('does not hydrate an oversized complete pool or issue a second page', async () => {
     query.range.mockResolvedValueOnce({
-      data: Array.from({ length: 101 }, () => rows[0]),
-      count: 101,
+      data: Array.from({ length: 301 }, () => rows[0]),
+      count: 301,
       error: null,
     });
     await expect(load()).rejects.toThrow('complete-pool budget');
@@ -250,8 +252,8 @@ describe('shared brand inventory work budget', () => {
     );
 
     query.range.mockResolvedValueOnce({
-      data: Array.from({ length: 101 }, () => rows[0]),
-      count: 101,
+      data: Array.from({ length: 301 }, () => rows[0]),
+      count: 301,
       error: null,
     });
     caught = undefined;

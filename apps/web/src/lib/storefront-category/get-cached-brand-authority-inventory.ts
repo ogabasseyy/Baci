@@ -14,7 +14,7 @@ import { getCachedBrandAuthorityCategory } from '@/lib/storefront-category/get-c
 export { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 export const BRAND_AUTHORITY_MAX_QUERY_PAGES = 20;
 /** Complete-pool ceiling shared by optional PDP and article enrichment. */
-export const OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS = 100;
+export const OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS = 300;
 export const BRAND_AUTHORITY_QUERY_PAGE_SIZE = 100;
 export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   id, name, slug, description, images, category, brand, price,
@@ -146,7 +146,7 @@ async function readInventory(
     budget &&
     (!Number.isInteger(budget.maxProducts) ||
       budget.maxProducts < 1 ||
-      budget.maxProducts > 200 ||
+      budget.maxProducts > OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS ||
       !Number.isFinite(budget.timeoutMs) ||
       budget.timeoutMs <= 0)
   ) {

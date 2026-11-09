@@ -1,10 +1,8 @@
 import { Alert } from 'react-native';
+import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
-import {
-  buildSavingsSuccessMessage,
-  playSavingsSuccessHaptic,
-} from './savings-contribution-success';
+import { buildSavingsSuccessMessage } from './savings-contribution-success';
 
 export async function checkPendingPrimarySavings(input: {
   /** The pending operation's own amount (entered or recovered from the server). */
@@ -27,7 +25,7 @@ export async function checkPendingPrimarySavings(input: {
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();
-      playSavingsSuccessHaptic();
+      triggerHaptic('success');
       await input.refetchWallet().catch(() => undefined);
       const { amount, goal } = input;
       if (goal && amount && Number.isFinite(amount) && amount > 0) {

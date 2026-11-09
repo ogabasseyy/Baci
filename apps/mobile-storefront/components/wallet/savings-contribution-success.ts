@@ -1,4 +1,3 @@
-import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 
@@ -10,6 +9,11 @@ interface SavingsSuccessInput {
   >;
   goalCompleted: boolean;
   refreshFailed: boolean;
+  /**
+   * The goal balance the server reported after this contribution. Preferred
+   * over the client snapshot, which may already include a replayed amount.
+   */
+  savedAfter?: number;
 }
 
 const REFRESH_HINT = ' Pull to refresh your latest balance.';
@@ -24,6 +28,7 @@ export function buildSavingsSuccessMessage({
   goal,
   goalCompleted,
   refreshFailed,
+  savedAfter,
 }: SavingsSuccessInput): { message: string; title: string } {
   const added = formatNgnCurrency(amount);
   const hint = refreshFailed ? REFRESH_HINT : '';
@@ -33,7 +38,10 @@ export function buildSavingsSuccessMessage({
       title: 'Goal reached! 🎉',
     };
   }
-  const saved = goal.current_amount + amount;
+  const saved =
+    savedAfter !== undefined && Number.isFinite(savedAfter)
+      ? savedAfter
+      : goal.current_amount + amount;
   const percent =
     goal.target_amount > 0
       ? Math.min(
@@ -49,9 +57,4 @@ export function buildSavingsSuccessMessage({
     message: `Nice! ${added} added. ${progress}${hint}`,
     title: 'Savings updated',
   };
-}
-
-/** Success buzz through the shared haptic policy; never blocks saving. */
-export function playSavingsSuccessHaptic(): void {
-  triggerHaptic('success');
 }

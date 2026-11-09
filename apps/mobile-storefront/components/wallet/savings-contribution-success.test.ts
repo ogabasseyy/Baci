@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
 import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import {
-  buildSavingsSuccessMessage,
-  playSavingsSuccessHaptic,
-} from './savings-contribution-success';
+import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -87,6 +84,20 @@ describe('buildSavingsSuccessMessage', () => {
     expect(result.message).toBe('Nice! ₦500 added. Keep it going!');
   });
 
+  it('prefers the server-confirmed balance over the client snapshot', () => {
+    // Regression: a replayed contribution whose goal already refreshed would
+    // double-count the amount (₦500 + ₦1,000 + ₦1,000 = 50%). The server's
+    // goal balance after the contribution (₦1,500 of ₦5,000) is 30%.
+    const result = buildSavingsSuccessMessage({
+      amount: 1000,
+      goal: { ...goal, current_amount: 1500 },
+      goalCompleted: false,
+      refreshFailed: false,
+      savedAfter: 1500,
+    });
+    expect(result.message).toContain("You're 30%");
+  });
+
   it('adds the refresh hint when the wallet refresh failed', () => {
     const result = buildSavingsSuccessMessage({
       amount: 500,
@@ -98,18 +109,25 @@ describe('buildSavingsSuccessMessage', () => {
   });
 });
 
-describe('playSavingsSuccessHaptic', () => {
-  it('never throws when haptics are unavailable', () => {
-    jest.mocked(Haptics.notificationAsync).mockImplementationOnce(() => {
-      throw new Error('no engine');
-    });
-    expect(() => playSavingsSuccessHaptic()).not.toThrow();
-  });
-});
-
 describe('success feedback is bound to confirmed contributions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('uses the legacy response balance for progress', async () => {
+    await addSavingsContributionToGoal({
+      ...baseParams,
+      addSavingsContribution: async () => ({
+        goalCurrentAmount: 1500,
+        goalStatus: 'active',
+      }),
+      goal: { ...goal, current_amount: 1500 },
+      rawAmount: '1000',
+    });
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Savings updated',
+      "Nice! ₦1,000 added. You're 30% of the way to your iPhone 13. Keep it going!"
+    );
   });
 
   it('buzzes once after a confirmed contribution', async () => {

@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import { triggerHaptic } from '@/hooks/use-haptics';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import {
   resolveSavingsGoalVariant,
@@ -6,11 +7,9 @@ import {
 } from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
+import { readConfirmedContribution } from './read-confirmed-contribution';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
-import {
-  buildSavingsSuccessMessage,
-  playSavingsSuccessHaptic,
-} from './savings-contribution-success';
+import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
 
 interface AddSavingsContributionParams {
@@ -65,15 +64,6 @@ export function createSavingsVariantResolutionHandler({
       refetchWallet,
       variantId,
     });
-}
-
-function isCompletedSavingsContributionResult(result: unknown) {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    'goalStatus' in result &&
-    result.goalStatus === 'completed'
-  );
 }
 
 export async function addSavingsContributionToGoal({
@@ -160,7 +150,7 @@ export async function addSavingsContributionToGoal({
     }
     const goalCompleted =
       amount >= remainingAmount ||
-      isCompletedSavingsContributionResult(contributionResult);
+      readConfirmedContribution(contributionResult).goalCompleted;
     if (goalCompleted) {
       try {
         await cancelSavingsReminder?.(goal.id);
@@ -170,7 +160,7 @@ export async function addSavingsContributionToGoal({
     }
     clearSavingsContributionAmount();
     clearIdempotencyKey?.();
-    playSavingsSuccessHaptic();
+    triggerHaptic('success');
     const refreshFailed = await refetchWallet().then(
       () => false,
       () => true
@@ -180,6 +170,7 @@ export async function addSavingsContributionToGoal({
       goal,
       goalCompleted,
       refreshFailed,
+      savedAfter: readConfirmedContribution(contributionResult).savedAfter,
     });
     Alert.alert(success.title, success.message);
   } catch (error) {

@@ -2,8 +2,8 @@
 import { Pencil } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { equityForPercentage, percentageForAmount } from './down-payment';
-import { OxygenDownPaymentSlider } from './OxygenDownPaymentSlider';
 import amountStyles from './OxygenDownPaymentAmount.module.css';
+import { OxygenDownPaymentSlider } from './OxygenDownPaymentSlider';
 import styles from './OxygenPlanForm.module.css';
 
 const format = (value: number) =>

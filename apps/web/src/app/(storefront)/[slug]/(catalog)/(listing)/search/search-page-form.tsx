@@ -126,23 +126,23 @@ export function SearchPageForm({
         </form>
       )}
       {focused && refinements && (
-        <>
-          <SearchAssistance
-            query={query}
-            resultQuery={defaultQuery}
-            products={suggestionProducts}
-            criteria={refinements}
-            basePath={action}
-            currency={currency}
-          />
-          <AssistedSearchSuggestions
-            query={query}
-            resultQuery={defaultQuery}
-            enabled={assistEnabled}
-            criteria={refinements}
-            basePath={action}
-          />
-        </>
+        <SearchAssistance
+          query={query}
+          resultQuery={defaultQuery}
+          products={suggestionProducts}
+          criteria={refinements}
+          basePath={action}
+          currency={currency}
+        />
+      )}
+      {(focused || suggestionsOnly) && refinements && (
+        <AssistedSearchSuggestions
+          query={query}
+          resultQuery={defaultQuery}
+          enabled={assistEnabled}
+          criteria={refinements}
+          basePath={action}
+        />
       )}
       {error === null ? null : (
         <p

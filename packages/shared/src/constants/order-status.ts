@@ -55,6 +55,8 @@ export const PAYMENT_STATUS_CONFIG: Record<
   partially_paid: { label: 'Partial', colorKey: 'warning' },
   bnpl_approved: { label: 'BNPL Approved', colorKey: 'info' },
   bnpl_pending: { label: 'BNPL Pending', colorKey: 'pending' },
+  cancelled: { label: 'Cancelled', colorKey: 'textMuted' },
+  expired: { label: 'Expired', colorKey: 'textMuted' },
 };
 
 // Allowed status transitions (from -> to[])

@@ -19,7 +19,9 @@ export type PaymentStatus =
   | 'refunded'
   | 'partially_paid'
   | 'bnpl_approved'
-  | 'bnpl_pending';
+  | 'bnpl_pending'
+  | 'cancelled'
+  | 'expired';
 
 export type OrderSource =
   | 'online_store'

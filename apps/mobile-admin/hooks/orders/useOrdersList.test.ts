@@ -99,6 +99,12 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+const customerSearchMock = vi.hoisted(() => ({
+  findCustomerIdsMatchingSearch: vi.fn(async () => [] as string[]),
+}));
+
+vi.mock('./order-search-customers', () => customerSearchMock);
+
 vi.mock('@/lib/orders', () => ({
   ORDER_COLUMNS: 'id, order_items(id)',
 }));
@@ -313,6 +319,48 @@ describe('fetchOrders', () => {
         },
       ])
     );
+  });
+
+  it('also matches orders whose customer profile matches the search', async () => {
+    customerSearchMock.findCustomerIdsMatchingSearch.mockResolvedValueOnce([
+      'customer-1',
+      'customer-2',
+    ]);
+
+    await fetchOrders('merchant-1', 0, { search: 'jonathan' }, { type: 'all' });
+
+    expect(
+      customerSearchMock.findCustomerIdsMatchingSearch
+    ).toHaveBeenCalledWith('merchant-1', 'jonathan');
+    expect(supabaseMock.chainCalls).toEqual(
+      expect.arrayContaining([
+        {
+          method: 'or',
+          args: [
+            'order_number.ilike."%jonathan%",customer_name.ilike."%jonathan%",customer_email.ilike."%jonathan%",customer_phone.ilike."%jonathan%",payment_method.ilike."%jonathan%",tracking_number.ilike."%jonathan%",tracking_token.ilike."%jonathan%",customer_id.in.("customer-1","customer-2")',
+          ],
+        },
+      ])
+    );
+  });
+
+  it('shows orders whose payment was cancelled instead of dropping them', async () => {
+    supabaseMock.setResult({
+      count: 1,
+      data: [
+        {
+          id: 'order-cancelled',
+          order_items: [],
+          payment_status: 'cancelled',
+          shipping_status: 'cancelled',
+        },
+      ],
+      error: null,
+    });
+
+    const page = await fetchOrders('merchant-1', 0, {}, { type: 'all' });
+
+    expect(page.orders.map((order) => order.id)).toEqual(['order-cancelled']);
   });
 
   it('keeps checkout drop-offs out of the admin orders list', async () => {

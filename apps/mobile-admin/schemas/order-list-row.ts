@@ -17,6 +17,8 @@ const PAYMENT_STATUSES = [
   'partially_paid',
   'bnpl_approved',
   'bnpl_pending',
+  'cancelled',
+  'expired',
 ] as const;
 
 export const orderListRowSchema = z

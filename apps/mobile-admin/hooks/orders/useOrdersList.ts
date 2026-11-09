@@ -17,6 +17,7 @@ import {
 import { useBranchScope } from '../useBranchScope';
 import { useMerchant } from '../useMerchant';
 import { applyOrderListVisibilityFilter } from './order-list-visibility';
+import { findCustomerIdsMatchingSearch } from './order-search-customers';
 import type { OrdersPage, OrderWithCount } from './order-types';
 
 const PAGE_SIZE = 20;
@@ -38,13 +39,22 @@ function quotePostgrestFilterValue(value: string): string {
   return `"${value.replace(/[\\"]/g, '\\$&')}"`;
 }
 
-function buildAdminOrderSearchFilter(searchTerm: string): string {
+function buildAdminOrderSearchFilter(
+  searchTerm: string,
+  matchedCustomerIds: string[] = []
+): string {
   const escapedTerm = escapePostgrestIlikePattern(searchTerm);
   const quotedPattern = quotePostgrestFilterValue(`%${escapedTerm}%`);
-
-  return ORDER_SEARCH_FIELDS.map(
+  const filters = ORDER_SEARCH_FIELDS.map(
     (field) => `${field}.ilike.${quotedPattern}`
-  ).join(',');
+  );
+
+  if (matchedCustomerIds.length > 0) {
+    const ids = matchedCustomerIds.map(quotePostgrestFilterValue).join(',');
+    filters.push(`customer_id.in.(${ids})`);
+  }
+
+  return filters.join(',');
 }
 
 function parseOrderListRows(rows: unknown[]) {
@@ -103,7 +113,11 @@ export async function fetchOrders(
   if (filters?.search) {
     const term = sanitizeText(filters.search, 200);
     if (term) {
-      query = query.or(buildAdminOrderSearchFilter(term));
+      const matchedCustomerIds = await findCustomerIdsMatchingSearch(
+        merchantId,
+        term
+      );
+      query = query.or(buildAdminOrderSearchFilter(term, matchedCustomerIds));
     }
   }
 

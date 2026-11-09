@@ -81,6 +81,9 @@ export function hasGiglCheckoutShippingRetention(
   );
 }
 
+// Invariant: mobile-admin treats GIGL_REQUIRES_PREPAID_OR_WALLET as a refusal
+// before carrier submission (not an unknown booking state). Only raise it from
+// pre-submission guards; never after a booking request has been sent.
 function throwPrepaidRequired(): never {
   throw new OrderShipmentBookingError(
     'GIGL shipping must be prepaid at checkout or funded from the merchant wallet before booking.',
@@ -114,9 +117,12 @@ export async function assertGiglCustomerCheckoutPrepaid(
   // source. Preserve the prior paid booking path for those rows; only stamped
   // customer_checkout orders require settlement-covered retention below.
   if (order.shipping_funding_source == null) {
+    // Credit Direct / cash / manual never route shipping money to Baci, so a
+    // null funding source cannot count as prepaid: bind the merchant wallet.
     if (
       paymentStatus !== 'paid' ||
-      isPayOnDeliveryPaymentMethod(order.payment_method)
+      isPayOnDeliveryPaymentMethod(order.payment_method) ||
+      isGiglCheckoutPaymentWithoutRetainedShipping(paymentMethod)
     ) {
       throwPrepaidRequired();
     }

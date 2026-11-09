@@ -79,7 +79,7 @@ describe('article verification cancellation through the shared inventory reader'
     expect(result.brandHubs).toHaveLength(1);
     expect(result.familyHubs).toHaveLength(1);
     expect(result.brandHubs[0].product_count).toBe(5);
-    expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 100);
+    expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 300);
     expect(category).toHaveBeenCalledTimes(1);
     expect(legacyCategory).not.toHaveBeenCalled();
   });
@@ -133,7 +133,7 @@ describe('article verification cancellation through the shared inventory reader'
   it('does not verify or hydrate a partial oversized pool', async () => {
     query.range.mockResolvedValueOnce({
       data: products,
-      count: 101,
+      count: 301,
       error: null,
     });
     expect(await verify(args)).toEqual(empty);

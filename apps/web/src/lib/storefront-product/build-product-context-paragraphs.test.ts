@@ -108,8 +108,8 @@ describe('buildProductContextParagraphs', () => {
     expect(paragraphs[1]).not.toContain('related links on this page connect');
   });
 
-  it('renders checkout confirmation copy instead of out-of-stock copy when stock is null (unmanaged)', () => {
-    const paragraphs = buildProductContextParagraphs({
+  it('renders checkout confirmation copy instead of out-of-stock copy when stock is null or manage_stock is false', () => {
+    const nullStockParagraphs = buildProductContextParagraphs({
       merchantBusinessName: 'Ogabassey',
       categorySlug: 'smartphones',
       categoryName: 'Smartphones',
@@ -121,10 +121,28 @@ describe('buildProductContextParagraphs', () => {
       },
     });
 
-    expect(paragraphs[0]).toContain(
+    expect(nullStockParagraphs[0]).toContain(
       'Live stock, selected options and delivery timing should still be confirmed at checkout.'
     );
-    expect(paragraphs[0]).not.toContain('out of stock');
+    expect(nullStockParagraphs[0]).not.toContain('out of stock');
+
+    const unmanagedZeroStockParagraphs = buildProductContextParagraphs({
+      merchantBusinessName: 'Ogabassey',
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      currentProduct: {
+        slug: 'iphone-16-pro-max',
+        name: 'iPhone 16 Pro Max',
+        price: 1_950_000,
+        stock: 0,
+        manage_stock: false,
+      },
+    });
+
+    expect(unmanagedZeroStockParagraphs[0]).toContain(
+      'Live stock, selected options and delivery timing should still be confirmed at checkout.'
+    );
+    expect(unmanagedZeroStockParagraphs[0]).not.toContain('out of stock');
   });
 
   it('builds product-specific gaming context without fixed price claims', () => {

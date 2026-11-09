@@ -53,11 +53,12 @@ their ranking, inference taxonomy, schema, or public stock policy.
 ## PDP optional-read budget and surface audit (2026-10-27)
 
 The PDP adapter uses the existing inventory reader's bounded mode, not a new
-stock/category loader. It accepts a complete pool of at most 100 brand candidates
-across the merchant, using a 101-row sentinel and exact count to reject oversized
+stock/category loader. It accepts a complete pool of at most 300 brand candidates
+across the merchant, using a 301-row sentinel and exact count to reject oversized
 or server-truncated results before hydration. This deliberately omits optional
-links for large brands, even when their destination remains eligible. It does not
-infer eligibility from a sample or inflate counts from a lower bound.
+links for oversized brands above that ceiling, even when their destination remains
+eligible. It does not infer eligibility from a sample or inflate counts from a
+lower bound.
 
 A single 1-second operation deadline covers the active-category read, product
 query and existing public serialized-stock hydration. The same signal is applied

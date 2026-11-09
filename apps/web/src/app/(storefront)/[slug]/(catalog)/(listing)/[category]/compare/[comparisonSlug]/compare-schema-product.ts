@@ -178,6 +178,27 @@ function getStructuredDataCategories(
   return name || slug ? { name, slug } : null;
 }
 
+function truncateBrand(rawBrand: string, maxCodePoints = 70): string {
+  const trimmed = rawBrand.trim();
+  if (!trimmed) return '';
+  const segments =
+    typeof Intl !== 'undefined' && 'Segmenter' in Intl
+      ? Array.from(
+          new Intl.Segmenter().segment(trimmed),
+          (entry) => entry.segment
+        )
+      : Array.from(trimmed);
+  let result = '';
+  let count = 0;
+  for (const segment of segments) {
+    const segmentLength = Array.from(segment).length;
+    if (count + segmentLength > maxCodePoints) break;
+    result += segment;
+    count += segmentLength;
+  }
+  return result;
+}
+
 export function toProductCompareSchemaProduct(
   product: unknown,
   baseUrl: string
@@ -202,9 +223,7 @@ export function toProductCompareSchemaProduct(
   }
 
   const brand =
-    typeof record.brand === 'string' && record.brand.trim()
-      ? Array.from(record.brand.trim()).slice(0, 70).join('')
-      : '';
+    typeof record.brand === 'string' ? truncateBrand(record.brand, 70) : '';
 
   return {
     id,

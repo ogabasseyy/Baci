@@ -218,6 +218,17 @@ describe('compare schema product helpers', () => {
         BASE_URL
       )?.brand
     ).toHaveLength(70);
+    expect(
+      toProductCompareSchemaProduct(
+        {
+          id: 'phone-1',
+          name: 'Galaxy S25',
+          brand: `${'A'.repeat(69)}🇳🇬`,
+          image: '/media/galaxy-s25.avif',
+        },
+        BASE_URL
+      )?.brand
+    ).toBe('A'.repeat(69));
   });
 
   it.each([

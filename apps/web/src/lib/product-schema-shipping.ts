@@ -22,7 +22,8 @@ export function buildOfferShippingDetails(
   trustProfile?: MerchantTrustProfile
 ): OfferShippingDetails | undefined {
   const normalizedCountry = normalizeCountryCode(country);
-  if (!normalizedCountry) {
+  const normalizedCurrency = currency.trim().toUpperCase();
+  if (!normalizedCountry || !/^[A-Z]{3}$/.test(normalizedCurrency)) {
     return undefined;
   }
 
@@ -55,7 +56,7 @@ export function buildOfferShippingDetails(
     shippingRate: {
       '@type': 'MonetaryAmount',
       value: 0,
-      currency,
+      currency: normalizedCurrency,
     },
     shippingDestination: {
       '@type': 'DefinedRegion',

@@ -28,11 +28,15 @@ export function buildVariantSchemaName(
     orderedValues.push(trimmed);
   }
 
-  const firstAttr = orderedValues[0];
-  const firstAttrCodePoints = firstAttr ? Array.from(firstAttr).length : 0;
+  const firstFittingAttr = orderedValues.find(
+    (value) => Array.from(value).length <= 100
+  );
+  const firstFittingCodePoints = firstFittingAttr
+    ? Array.from(firstFittingAttr).length
+    : 0;
   const maxBaseLength =
-    firstAttr && firstAttrCodePoints <= 60
-      ? Math.max(1, 150 - 3 - firstAttrCodePoints)
+    firstFittingCodePoints > 0
+      ? Math.max(1, 150 - 3 - firstFittingCodePoints)
       : 150;
 
   let variantName = Array.from(productName).slice(0, maxBaseLength).join('');

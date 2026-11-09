@@ -74,10 +74,12 @@ describe('shipping', () => {
     ).toBeUndefined();
   });
   it('publishes an explicitly configured free country-wide rate and delivery times', () => {
-    expect(buildOfferShippingDetails('NG', 'NGN', profile)).toMatchObject({
+    expect(buildOfferShippingDetails('NG', ' ngn ', profile)).toMatchObject({
       shippingRate: { value: 0, currency: 'NGN' },
       deliveryTime: { transitTime: { maxValue: 7 } },
     });
+    expect(buildOfferShippingDetails('NG', '', profile)).toBeUndefined();
+    expect(buildOfferShippingDetails('NG', 'NAIRA', profile)).toBeUndefined();
   });
   it('omits unquoted calculated rates and restricted regional coverage', () => {
     expect(

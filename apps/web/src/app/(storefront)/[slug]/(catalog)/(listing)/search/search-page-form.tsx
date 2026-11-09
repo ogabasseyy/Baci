@@ -144,7 +144,7 @@ export function SearchPageForm({
           />
         </>
       )}
-      {error === null ? null : (
+      {error === null || suggestionsOnly ? null : (
         <p
           id="search-page-error"
           role="alert"

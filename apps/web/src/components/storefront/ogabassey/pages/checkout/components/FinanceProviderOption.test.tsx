@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaymentMethod } from '../types';
 import { FinanceProviderOption } from './FinanceProviderOption';
 
+const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
+vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: auth.user }) }));
+
 const logo = {
   src: '/logos/oxygen-finance.png',
   width: 48,
@@ -41,6 +44,7 @@ function renderOption(
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  auth.user = null;
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -161,11 +165,34 @@ describe('finance provider option', () => {
     clock.mockRestore();
   });
 
+  it('reports an unavailable bank list if a retry after the cooldown fails', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '1' }) }).mockResolvedValueOnce(failureResponse());
+    renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 1 second/i)).toBeInTheDocument();
+    clock.mockReturnValue(now + 2000);
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent.click(screen.getByText('Supported banks'));
+    fireEvent.click(screen.getByRole('button', { name: /retry bank list/i }));
+    expect(await screen.findByText('Bank list is temporarily unavailable.')).toBeInTheDocument();
+    clock.mockRestore();
+  });
+
   it('asks guests to sign in rather than offering an ineffective retry', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 401 });
     renderOption('oxygen', true);
     expect(await screen.findByText('Sign in to view supported banks.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry bank list/i })).toBeNull();
+  });
+
+  it('loads the bank list after a guest signs in', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText('Sign in to view supported banks.')).toBeInTheDocument();
+    auth.user = { id: 'customer-1' };
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
   });
 
   it('does not keep stale banks when selecting Oxygen again fails', async () => {

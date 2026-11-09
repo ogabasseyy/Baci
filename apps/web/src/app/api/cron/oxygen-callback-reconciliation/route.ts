@@ -16,6 +16,7 @@ const headers = { 'Cache-Control': 'no-store' };
 const BACKLOG_ALERT_AGE_SECONDS = 15 * 60;
 const REFRESH_BANKS_TASK = 'refresh-banks';
 const ENSURE_BANKS_TASK = 'ensure-banks';
+const BANK_RECOVERY_LOCK_SECONDS = maxDuration + 30;
 
 /**
  * The bank-list jobs share this authenticated endpoint. Weekly refresh keeps
@@ -45,9 +46,20 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
         .digest('hex');
       const lockKey = `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`;
       const token = randomUUID();
-      const lock = await cache.set(lockKey, token, { nx: true, ex: 300 });
+      const lock = await cache.set(lockKey, token, {
+        nx: true,
+        ex: BANK_RECOVERY_LOCK_SECONDS,
+      });
       if (lock !== 'OK')
-        return Response.json({ status: 'recovery_in_progress' }, { headers });
+        return Response.json(
+          { status: 'recovery_in_progress' },
+          {
+            headers: {
+              ...headers,
+              'Retry-After': String(BANK_RECOVERY_LOCK_SECONDS),
+            },
+          }
+        );
       heldLock = { cache, key: lockKey, token };
       if (await readSupportedBanks(cache, config.environment, config.reference))
         return Response.json({ status: 'available' }, { headers });

@@ -88,7 +88,7 @@ describe('Oxygen bank-list refresh task', () => {
     expect(cache.set).toHaveBeenCalledWith(
       expect.stringMatching(/^oxygen:supported-banks-recovery:production:/),
       expect.any(String),
-      { nx: true, ex: 300 }
+      { nx: true, ex: 330 }
     );
     expect(mocks.refreshBanks).toHaveBeenCalledOnce();
   });
@@ -146,9 +146,9 @@ describe('Oxygen bank-list refresh task', () => {
     );
     mocks.getRedis.mockReturnValue({ set: vi.fn().mockResolvedValue(null) });
     mocks.readBanks.mockResolvedValue(null);
-    expect(await (await GET(ensure)).json()).toEqual({
-      status: 'recovery_in_progress',
-    });
+    const response = await GET(ensure);
+    expect(await response.json()).toEqual({ status: 'recovery_in_progress' });
+    expect(response.headers.get('Retry-After')).toBe('330');
     expect(mocks.connect).not.toHaveBeenCalled();
     expect(mocks.refreshBanks).not.toHaveBeenCalled();
   });

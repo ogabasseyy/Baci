@@ -1,5 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+afterEach(() => {
+  HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+});
+
 import { CustomerFormFields } from './OxygenCustomerFormFields';
 
 vi.mock('./OxygenBankFields', () => ({
@@ -94,4 +100,34 @@ it('collects the checkout address and proof beside income, without sending them 
   expect(JSON.stringify(submit.mock.calls)).not.toContain('Example Road');
   expect(save.mock.calls.at(-1)?.[0].fields.home_street).toBe('Example Road');
   expect(JSON.stringify(save.mock.calls)).not.toContain('bill.pdf');
+});
+
+it('focuses and highlights the missing payday instead of the error banner', async () => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  render(
+    <CustomerFormFields
+      busy={false}
+      phone="08000000001"
+      submit={vi.fn()}
+      initialDraft={{
+        step: 2,
+        fields: { salary_amount: '500000', salary_date: '' },
+      }}
+      saveDraft={vi.fn()}
+      flushDraft={async () => true}
+      saveBlocked={false}
+    />
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to income details' })
+  );
+  const payday = screen.getByLabelText('When are you paid?');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  await waitFor(() => expect(payday).toHaveFocus());
+  expect(payday).toHaveAttribute('aria-invalid', 'true');
+  expect(payday.scrollIntoView).toHaveBeenCalled();
+  fireEvent.change(payday, { target: { value: '25' } });
+  expect(payday).not.toHaveAttribute('aria-invalid');
 });

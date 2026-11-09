@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -220,6 +220,21 @@ describe('CartSidebar', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /proceed to checkout/i })).toBeEnabled());
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not open identity for a stale guest lookup after reopening the cart', async () => {
+    let resolveLookup: (value: unknown) => void = () => {};
+    mockGetUser.mockReturnValue(new Promise((resolve) => { resolveLookup = resolve; }));
+    const { rerender } = render(<CartSidebar />);
+    fireEvent.click(screen.getByRole('button', { name: /proceed to checkout/i }));
+    fireEvent.click(screen.getByRole('button', { name: /dismiss cart backdrop/i }));
+    mockIsCartOpen = false;
+    rerender(<CartSidebar />);
+    mockIsCartOpen = true;
+    rerender(<CartSidebar />);
+    await act(async () => { resolveLookup({ data: { user: null }, error: null }); await Promise.resolve(); });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('recognizes a signed-in storefront session without an auth provider', async () => {

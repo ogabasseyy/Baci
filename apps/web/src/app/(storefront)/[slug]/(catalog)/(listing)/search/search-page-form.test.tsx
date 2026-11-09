@@ -1,5 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  SearchQueryDraftSession,
+  useSearchQueryDraft,
+} from '@/components/storefront/search-refinements/search-query-draft';
 import { SearchPageForm } from './search-page-form';
 
 const fetchMock = vi.fn();
@@ -98,4 +102,30 @@ it('themes the search outline from the merchant palette', () => {
     'border-store-primary',
     'focus:border-store-primary'
   );
+});
+
+it('does not announce an error for the hidden duplicate form', () => {
+  function SetDraftError() {
+    const draft = useSearchQueryDraft();
+    return (
+      <button type="button" onClick={() => draft?.setError('Invalid search')}>
+        Set error
+      </button>
+    );
+  }
+  render(
+    <SearchQueryDraftSession initialQuery="phone">
+      <SetDraftError />
+      <SearchPageForm
+        action="/search"
+        pathPrefix=""
+        defaultQuery="phone"
+        currency="NGN"
+        suggestionsOnly
+      />
+    </SearchQueryDraftSession>
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Set error' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });

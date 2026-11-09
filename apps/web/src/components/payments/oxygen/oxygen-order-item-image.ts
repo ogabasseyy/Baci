@@ -13,10 +13,12 @@ export function oxygenOrderItemImage(item: OrderItem): string {
   return (
     item.image_url?.trim() ||
     null ||
-    images.find(
-      (image): image is string =>
-        typeof image === 'string' && image.trim().length > 0
-    ) ||
+    images
+      .find(
+        (image): image is string =>
+          typeof image === 'string' && image.trim().length > 0
+      )
+      ?.trim() ||
     '/placeholder.png'
   );
 }

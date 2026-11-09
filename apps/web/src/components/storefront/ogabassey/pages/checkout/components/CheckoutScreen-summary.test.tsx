@@ -246,6 +246,22 @@ describe('CheckoutScreen summaries', () => {
     expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
   });
 
+  it('renders the Oxygen summary before the steps when no separate mobile summary exists', () => {
+    render(
+      <CheckoutScreen
+        {...createProps()}
+        oxygenStep={<div data-testid="oxygen-step" />}
+        oxygenSummary={<div data-testid="oxygen-summary" />}
+      />
+    );
+    const summaries = screen.getAllByTestId('oxygen-summary');
+    expect(summaries).toHaveLength(2);
+    expect(
+      summaries[0].compareDocumentPosition(screen.getByTestId('oxygen-step')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
   it('opens the auth prompt from checkout steps and renders the open auth dialog', () => {
     render(<CheckoutScreen {...createProps({ authOpen: true })} />);
 

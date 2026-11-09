@@ -28,3 +28,16 @@ it('prefers the order image, then product images, then a placeholder', () => {
     })
   ).toBe('/placeholder.png');
 });
+
+it('normalizes product image URLs in array-valued relationships', () => {
+  expect(
+    oxygenOrderItemImage({
+      id: 'i',
+      name: 'Phone',
+      quantity: 1,
+      price: 100,
+      image_url: null,
+      products: [{ images: ['  /product.jpg  '] }],
+    })
+  ).toBe('/product.jpg');
+});

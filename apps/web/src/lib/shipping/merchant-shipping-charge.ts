@@ -96,12 +96,12 @@ export async function reserveMerchantShippingCharge(
       | (MerchantShippingCharge & {
           charge_id?: string;
           charged_amount?: number;
-          balance_after?: number;
+          balance_after?: number | null;
         })
       | (MerchantShippingCharge & {
           charge_id?: string;
           charged_amount?: number;
-          balance_after?: number;
+          balance_after?: number | null;
         })[]
       | null
   );

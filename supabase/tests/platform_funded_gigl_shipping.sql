@@ -63,6 +63,20 @@ BEGIN
   IF v_src NOT LIKE '%funding_source%platform%' THEN
     RAISE EXCEPTION 'refund_merchant_shipping_charge must skip wallet credit for platform charges';
   END IF;
+  IF NOT pg_catalog.has_column_privilege(
+       'authenticated', 'public.merchant_shipping_charges', 'funding_source', 'SELECT')
+     OR pg_catalog.has_column_privilege(
+       'authenticated', 'public.merchant_shipping_charges', 'provider_cost', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated must read funding_source but not internal economics';
+  END IF;
+  -- The provider-cancellation helper only refunds a charge whose exact wallet
+  -- debit exists; platform charges have debit_transaction_id NULL, so it
+  -- declines (0 refunds) and the cancel guard keeps the order for manual care.
+  SELECT p.prosrc INTO v_src FROM pg_catalog.pg_proc p
+  WHERE p.oid = 'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid,uuid,uuid,text,jsonb)'::regprocedure;
+  IF v_src NOT LIKE '%debit.id = v_charge.debit_transaction_id%' THEN
+    RAISE EXCEPTION 'provider-cancellation refund must require the matching wallet debit';
+  END IF;
   SELECT p.prosrc INTO v_src FROM pg_catalog.pg_proc p
   WHERE p.oid = 'private.prevent_active_gigl_shipping_cancellation()'::regprocedure;
   IF v_src NOT LIKE '%funding_source%platform%' THEN

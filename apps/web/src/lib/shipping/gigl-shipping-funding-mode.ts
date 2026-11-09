@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { calculateAdminWalletFunding } from '@/app/api/shipping/quotes/admin-order-gigl-quote.helpers';
+import { calculateAdminWalletFunding } from './calculate-admin-wallet-funding';
 
 export type GiglShippingFundingMode = 'platform' | 'merchant_wallet';
 

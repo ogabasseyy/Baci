@@ -422,3 +422,9 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- merchant_shipping_charges is column-granted to authenticated (20260903128000);
+-- the bound-quote lookup reads the payer of an existing reservation. The
+-- column carries no money values, so exposing it leaks no economics.
+GRANT SELECT (funding_source) ON TABLE public.merchant_shipping_charges
+  TO authenticated;

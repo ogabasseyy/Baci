@@ -65,6 +65,29 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
     });
   });
 
+  it('validates ?next= against expectedMerchantSlug when supplied', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://usebaci.com/ogabassey/account/callback?next=%2Fogabassey%2Fcheckout',
+        'ogabassey'
+      )
+    ).toEqual({
+      redirectTo: 'https://usebaci.com/ogabassey/account/callback',
+      nextTarget: '/ogabassey/checkout',
+    });
+
+    // Mismatched merchant slug is dropped from nextTarget
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://usebaci.com/ogabassey/account/callback?next=%2Fotherstore%2Fcheckout',
+        'ogabassey'
+      )
+    ).toEqual({
+      redirectTo: 'https://usebaci.com/ogabassey/account/callback',
+      nextTarget: null,
+    });
+  });
+
   it('rejects unrelated absolute origins', () => {
     expect(
       resolveTrustedStorefrontRedirectUrl(

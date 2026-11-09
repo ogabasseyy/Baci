@@ -16,6 +16,11 @@ export function useCartDrawerLifecycle({
   const lastPathnameRef = useRef(pathname);
   const isCartOpenRef = useRef(isCartOpen);
   const setIsCartOpenRef = useRef(setIsCartOpen);
+  const isCheckoutLoadingRef = useRef(isCheckoutLoading);
+
+  useEffect(() => {
+    isCheckoutLoadingRef.current = isCheckoutLoading;
+  }, [isCheckoutLoading]);
 
   useEffect(() => {
     isCartOpenRef.current = isCartOpen;
@@ -51,6 +56,7 @@ export function useCartDrawerLifecycle({
   return {
     isCheckoutLoading,
     setIsCheckoutLoading,
+    isCheckoutLoadingRef,
     checkoutError,
     setCheckoutError,
   };

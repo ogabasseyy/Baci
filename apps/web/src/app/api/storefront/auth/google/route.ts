@@ -69,8 +69,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { redirectTo, nextTarget } =
-      extractStorefrontOAuthCallbackNext(trustedRedirectUrl);
+    const { redirectTo, nextTarget } = extractStorefrontOAuthCallbackNext(
+      trustedRedirectUrl,
+      merchant.slug
+    );
     if (nextTarget && typeof cookieStore.set === 'function') {
       cookieStore.set(STOREFRONT_OAUTH_NEXT_COOKIE, nextTarget, {
         httpOnly: true,

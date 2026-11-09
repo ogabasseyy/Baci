@@ -213,16 +213,37 @@
   [data-ogabassey-pdp-commerce-primary-action],
   [data-ogabassey-pdp-commerce-secondary-action] {
     align-items: center;
-    background: var(--store-primary, #d62027);
-    border: 0;
     border-radius: 0.75rem;
-    color: var(--store-on-primary, #ffffff);
     display: inline-flex;
     font-weight: 800;
     gap: 0.5rem;
     justify-content: center;
     min-height: 3.5rem;
     text-decoration: none;
+    transition:
+      background 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
+
+  [data-ogabassey-pdp-commerce-primary-action] {
+    background: var(--store-primary, #d62027);
+    border: 0;
+    color: var(--store-on-primary, #ffffff);
+  }
+
+  [data-ogabassey-pdp-commerce-secondary-action] {
+    background: transparent;
+    border: 1.5px solid var(--store-primary, #d62027);
+    color: var(--store-primary, #d62027);
+  }
+
+  [data-ogabassey-pdp-commerce-secondary-action]:hover {
+    background: color-mix(
+      in srgb,
+      var(--store-primary, #d62027) 8%,
+      transparent
+    );
   }
 
   [data-ogabassey-pdp-commerce-primary-action]:disabled {

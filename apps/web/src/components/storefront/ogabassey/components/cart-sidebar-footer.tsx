@@ -27,14 +27,15 @@ export function CartSidebarFooter({
   onClose: () => void;
 }) {
   return (
-    <div className="border-t border-gray-100 bg-gray-50 p-6 space-y-4 shrink-0">
+    <div className="border-t border-store-border bg-store-background-text/5 p-6 space-y-4 shrink-0">
       <CartSidebarTotal total={total} />
 
       {/* Negotiate Total Button */}
       {hasPriceNegotiation && !hasNonNegotiableCartItem && (
-        <button type="button"
+        <button
+          type="button"
           onClick={onNegotiateTotal}
-          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200"
+          className="w-full bg-store-background-text/10 hover:bg-store-background-text/15 text-store-background-text font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-store-border"
         >
           <Calculator size={18} className="text-store-primary" />
           Negotiate Total Amount
@@ -42,7 +43,8 @@ export function CartSidebarFooter({
       )}
 
       <div>
-        <button type="button"
+        <button
+          type="button"
           onClick={onCheckout}
           disabled={isCheckoutLoading}
           className="w-full bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group disabled:opacity-70 disabled:cursor-not-allowed"
@@ -73,13 +75,14 @@ export function CartSidebarFooter({
         <Link
           href={cartHref}
           onClick={onClose}
-          className="w-full bg-white hover:bg-gray-50 text-gray-900 font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200 active:bg-gray-50 text-sm"
+          className="w-full bg-store-background hover:bg-store-background-text/5 text-store-background-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-store-border active:bg-store-background-text/10 text-sm"
         >
           View Full Cart
         </Link>
-        <button type="button"
+        <button
+          type="button"
           onClick={onClose}
-          className="w-full text-center text-gray-500 hover:text-gray-900 text-sm font-medium py-3.5 px-4 rounded-xl hover:bg-gray-50 transition-colors"
+          className="w-full text-center text-store-background-text/60 hover:text-store-background-text text-sm font-medium py-3.5 px-4 rounded-xl hover:bg-store-background-text/5 transition-colors"
         >
           Continue Shopping
         </button>

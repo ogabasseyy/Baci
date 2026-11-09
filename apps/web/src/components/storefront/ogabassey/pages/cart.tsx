@@ -128,14 +128,14 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
+    <div className="min-h-screen bg-store-background-text/5 pb-24 md:pb-12 pt-4 md:pt-8 flex flex-col">
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 w-full flex-1 flex flex-col">
         {/* Header */}
         <div className="flex items-center mb-6 shrink-0">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-store-background-text flex items-center gap-2">
             <ShoppingCart className="text-store-primary fill-store-primary" />
             Cart{' '}
-            <span className="text-gray-400 text-lg font-medium">
+            <span className="text-store-background-text/40 text-lg font-medium">
               ({cart.length})
             </span>
           </h1>
@@ -164,22 +164,22 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
 
             {/* Right Column: Summary */}
             <div className="lg:col-span-4 mt-6 lg:mt-0">
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-24">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">
+              <div className="bg-store-background rounded-2xl shadow-sm border border-store-border p-6 sticky top-24">
+                <h2 className="text-lg font-bold text-store-background-text mb-4">
                   Order Summary
                 </h2>
 
                 <div className="space-y-3 mb-6">
-                  <div className="flex justify-between text-gray-600 text-sm">
+                  <div className="flex justify-between text-store-background-text/70 text-sm">
                     <span>Subtotal</span>
                     <span>₦{cartTotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-gray-600 text-sm">
+                  <div className="flex justify-between text-store-background-text/70 text-sm">
                     <span>Shipping</span>
                     <span className="text-green-600 font-medium">Free</span>
                   </div>
-                  <div className="border-t border-dashed border-gray-200 my-2" />
-                  <div className="flex justify-between text-gray-900 font-bold text-lg">
+                  <div className="border-t border-dashed border-store-border my-2" />
+                  <div className="flex justify-between text-store-background-text font-bold text-lg">
                     <span>Total</span>
                     <span>₦{cartTotal.toLocaleString()}</span>
                   </div>
@@ -187,16 +187,20 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
 
                 <div className="space-y-3">
                   {!hasNonNegotiableCartItem && (
-                    <button type="button"
+                    <button
+                      type="button"
                       onClick={openTotalNegotiation}
-                      className="w-full bg-gray-100 md:hover:bg-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200 active:scale-[0.98] active:bg-gray-200"
+                      className="w-full bg-store-background-text/10 md:hover:bg-store-background-text/15 text-store-background-text font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-store-border active:scale-[0.98] active:bg-store-background-text/15"
                     >
                       <Calculator size={18} className="text-store-primary" />
                       Negotiate Total
                     </button>
                   )}
 
-                  <button type="button" className="w-full bg-store-primary md:hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group active:scale-[0.98] active:shadow-none">
+                  <button
+                    type="button"
+                    className="w-full bg-store-primary md:hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group active:scale-[0.98] active:shadow-none"
+                  >
                     Proceed to Checkout
                     <ArrowRight
                       size={20}
@@ -206,7 +210,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                 </div>
 
                 <div className="mt-6 flex justify-center">
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <div className="flex items-center gap-2 text-xs text-store-background-text/40">
                     <ShieldCheck size={14} />
                     <span>Secure Checkout</span>
                   </div>

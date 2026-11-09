@@ -54,7 +54,7 @@ export function CartPageLineItem({
   const conditionBadge = getCartItemConditionBadge(item);
 
   return (
-    <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation">
+    <div className="bg-store-background p-4 rounded-2xl shadow-xs border border-store-border relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation">
       <div className="flex gap-3.5 md:gap-4 items-start">
         <div className="relative shrink-0">
           {conditionBadge && (
@@ -67,7 +67,7 @@ export function CartPageLineItem({
           )}
           <Link
             href={asRoute(productHref)}
-            className="ogabassey-product-card-image-surface w-[72px] h-[72px] md:w-28 md:h-28 bg-gray-50 rounded-xl border border-gray-100 p-1.5 shrink-0 flex items-center justify-center relative overflow-hidden"
+            className="ogabassey-product-card-image-surface w-[72px] h-[72px] md:w-28 md:h-28 bg-store-background-text/5 rounded-xl border border-store-border p-1.5 shrink-0 flex items-center justify-center relative overflow-hidden"
           >
             <CdnFormatImage
               src={item.image || '/placeholder.png'}
@@ -86,7 +86,7 @@ export function CartPageLineItem({
         <div className="flex-1 min-w-0">
           <div className="pr-7">
             <Link href={asRoute(productHref)} className="group/title">
-              <h3 className="font-bold text-gray-900 text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-store-primary transition-colors">
+              <h3 className="font-bold text-store-background-text text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-store-primary transition-colors">
                 {item.name}
               </h3>
             </Link>
@@ -95,19 +95,19 @@ export function CartPageLineItem({
           </div>
 
           <div className="mt-2.5 flex items-center">
-            <div className="inline-flex items-center border border-gray-200 rounded-md h-7 md:h-8 bg-gray-50/80">
+            <div className="inline-flex items-center border border-store-border rounded-md h-7 md:h-8 bg-store-background-text/5">
               <button
                 type="button"
                 onClick={() =>
                   onUpdateQuantity(item.cartItemId, itemQuantity - 1)
                 }
-                className="px-2 h-full hover:bg-white text-gray-500 rounded-l-md transition-colors border-r border-gray-200 active:bg-gray-200 disabled:opacity-40"
+                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-l-md transition-colors border-r border-store-border active:bg-store-background-text/10 disabled:opacity-40"
                 disabled={itemQuantity <= 1}
                 aria-label={`Decrease quantity for ${item.name}`}
               >
                 <Minus size={11} />
               </button>
-              <span className="w-6 text-center text-[11px] font-semibold text-gray-900">
+              <span className="w-6 text-center text-[11px] font-semibold text-store-background-text">
                 {itemQuantity}
               </span>
               <button
@@ -115,7 +115,7 @@ export function CartPageLineItem({
                 onClick={() =>
                   onUpdateQuantity(item.cartItemId, itemQuantity + 1)
                 }
-                className="px-2 h-full hover:bg-white text-gray-500 rounded-r-md transition-colors border-l border-gray-200 active:bg-gray-200 disabled:opacity-40"
+                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-r-md transition-colors border-l border-store-border active:bg-store-background-text/10 disabled:opacity-40"
                 disabled={isQuizGift}
                 aria-label={`Increase quantity for ${item.name}`}
               >
@@ -144,7 +144,7 @@ export function CartPageLineItem({
                     <span>Negotiate</span>
                   </button>
                 ) : (
-                  <div className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 whitespace-nowrap">
+                  <div className="inline-flex items-center gap-1 text-[11px] font-medium text-store-background-text/40 whitespace-nowrap">
                     <Check size={11} strokeWidth={2.5} />
                     <span>Best price</span>
                   </div>
@@ -169,7 +169,7 @@ export function CartPageLineItem({
                   </span>
                 </div>
               ) : (
-                <div className="font-bold text-gray-900 text-sm md:text-lg whitespace-nowrap">
+                <div className="font-bold text-store-background-text text-sm md:text-lg whitespace-nowrap">
                   ₦{(itemTotal || 0).toLocaleString()}
                 </div>
               )}
@@ -180,7 +180,7 @@ export function CartPageLineItem({
         <button
           type="button"
           onClick={() => onRemove(item.cartItemId)}
-          className="absolute top-3.5 right-3.5 text-gray-400 hover:text-store-primary p-1 md:hover:bg-store-primary/5 rounded-full transition-colors active:bg-store-primary/5"
+          className="absolute top-3.5 right-3.5 text-store-background-text/40 hover:text-store-primary p-1 md:hover:bg-store-primary/5 rounded-full transition-colors active:bg-store-primary/5"
           aria-label={`Remove ${item.name} from cart`}
         >
           <Trash2 size={14} />
@@ -190,7 +190,7 @@ export function CartPageLineItem({
       {(shippingInsuranceEnabled || item.hasAssurance) && (
         <fieldset
           aria-label="Product extras"
-          className="mt-3 pt-3 border-t border-gray-100"
+          className="mt-3 pt-3 border-t border-store-border"
         >
           {/* An assured line keeps its removal control even when the
             setting is off, so the fee stays removable pre-checkout. */}
@@ -214,14 +214,14 @@ export function CartPageLineItem({
                 <span className="block w-7 h-4 bg-store-background-text/20 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-store-primary rounded-full peer peer-checked:after:translate-x-3 peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-store-primary" />
               </span>
               <span className="flex-1 min-w-0 flex flex-col">
-                <span className="text-[11px] font-bold text-gray-800 flex items-center gap-1 whitespace-nowrap">
+                <span className="text-[11px] font-bold text-store-background-text flex items-center gap-1 whitespace-nowrap">
                   <ShieldCheck
                     size={12}
                     className="text-store-primary shrink-0"
                   />
                   Order Protection
                 </span>
-                <span className="block text-[10px] text-gray-500 leading-tight mt-0.5 whitespace-nowrap">
+                <span className="block text-[10px] text-store-background-text/60 leading-tight mt-0.5 whitespace-nowrap">
                   {item.hasAssurance ? (
                     <>
                       Standard Shipping Protection

@@ -203,9 +203,11 @@ describe('CheckoutScreen', () => {
     });
     expect(oxygenStepRegion).toBeVisible();
     expect(oxygenSummaryRegion).toBeVisible();
-    expect(
-      screen.getByRole('complementary', { name: 'Mobile selected plan' })
-    ).toBeVisible();
+    const mobileSummary = screen.getByRole('complementary', {
+      name: 'Mobile selected plan',
+    });
+    expect(mobileSummary).toBeVisible();
+    expect(mobileSummary.parentElement).toHaveClass('lg:hidden');
     expect(oxygenStepRegion.parentElement).toHaveClass('lg:col-span-8');
     expect(oxygenSummaryRegion.parentElement).toHaveClass('lg:col-span-4');
     expect(oxygenStepRegion.parentElement?.parentElement).toHaveClass(

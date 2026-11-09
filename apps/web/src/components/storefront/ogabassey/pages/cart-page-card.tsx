@@ -36,7 +36,7 @@ export function CartPageCard({
   return (
     <div
       key={item.cartItemId}
-      className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100 relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation"
+      className="bg-store-background p-4 rounded-2xl shadow-xs border border-store-border relative overflow-hidden transition-all md:hover:shadow-md active:scale-[0.99] md:active:scale-100 touch-manipulation"
     >
       <div className="flex gap-3.5 md:gap-4 items-start">
         <div className="relative shrink-0">
@@ -50,7 +50,7 @@ export function CartPageCard({
           )}
           <Link
             href={asRoute(productHref)}
-            className="ogabassey-product-card-image-surface relative w-[72px] h-[72px] md:w-28 md:h-28 bg-gray-50 rounded-xl border border-gray-100 p-1.5 shrink-0 flex items-center justify-center overflow-hidden"
+            className="ogabassey-product-card-image-surface relative w-[72px] h-[72px] md:w-28 md:h-28 bg-store-background-text/5 rounded-xl border border-store-border p-1.5 shrink-0 flex items-center justify-center overflow-hidden"
           >
             <CdnFormatImage
               src={item.image || '/placeholder.png'}
@@ -66,7 +66,7 @@ export function CartPageCard({
         <div className="flex-1 min-w-0">
           <div className="pr-7">
             <Link href={asRoute(productHref)} className="group/title">
-              <h3 className="font-bold text-gray-900 text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-store-primary transition-colors">
+              <h3 className="font-bold text-store-background-text text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-store-primary transition-colors">
                 {item.name}
               </h3>
             </Link>
@@ -75,19 +75,19 @@ export function CartPageCard({
           </div>
 
           <div className="mt-2.5 flex items-center">
-            <div className="inline-flex items-center border border-gray-200 rounded-md h-7 md:h-8 bg-gray-50/80">
+            <div className="inline-flex items-center border border-store-border rounded-md h-7 md:h-8 bg-store-background-text/5">
               <button
                 type="button"
                 onClick={() =>
                   updateQuantity(item.cartItemId, item.quantity - 1)
                 }
-                className="px-2 h-full hover:bg-white text-gray-500 rounded-l-md transition-colors border-r border-gray-200 active:bg-gray-200 disabled:opacity-40"
+                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-l-md transition-colors border-r border-store-border active:bg-store-background-text/10 disabled:opacity-40"
                 disabled={item.quantity <= 1}
                 aria-label="Decrease quantity"
               >
                 <Minus size={11} />
               </button>
-              <span className="w-6 text-center text-[11px] font-semibold text-gray-900">
+              <span className="w-6 text-center text-[11px] font-semibold text-store-background-text">
                 {item.quantity}
               </span>
               <button
@@ -95,7 +95,7 @@ export function CartPageCard({
                 onClick={() =>
                   updateQuantity(item.cartItemId, item.quantity + 1)
                 }
-                className="px-2 h-full hover:bg-white text-gray-500 rounded-r-md transition-colors border-l border-gray-200 active:bg-gray-200"
+                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-r-md transition-colors border-l border-store-border active:bg-store-background-text/10"
                 aria-label="Increase quantity"
               >
                 <Plus size={11} />
@@ -126,7 +126,7 @@ export function CartPageCard({
                   <span>Negotiate</span>
                 </button>
               ) : (
-                <div className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 whitespace-nowrap">
+                <div className="inline-flex items-center gap-1 text-[11px] font-medium text-store-background-text/40 whitespace-nowrap">
                   <Check size={11} strokeWidth={2.5} />
                   <span>Best price</span>
                 </div>
@@ -144,7 +144,7 @@ export function CartPageCard({
                   </span>
                 </div>
               ) : (
-                <div className="font-bold text-gray-900 text-sm md:text-lg whitespace-nowrap">
+                <div className="font-bold text-store-background-text text-sm md:text-lg whitespace-nowrap">
                   ₦{itemTotal.toLocaleString()}
                 </div>
               )}
@@ -155,14 +155,14 @@ export function CartPageCard({
         <button
           type="button"
           onClick={() => removeFromCart(item.cartItemId)}
-          className="absolute top-3.5 right-3.5 text-gray-400 hover:text-store-primary p-1 md:hover:bg-store-primary/5 rounded-full transition-colors active:bg-store-primary/5"
+          className="absolute top-3.5 right-3.5 text-store-background-text/40 hover:text-store-primary p-1 md:hover:bg-store-primary/5 rounded-full transition-colors active:bg-store-primary/5"
           aria-label="Remove item"
         >
           <Trash2 size={14} />
         </button>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-gray-100">
+      <div className="mt-3 pt-3 border-t border-store-border">
         <CartAssuranceRow
           hasAssurance={item.hasAssurance}
           assuranceCost={assuranceCost}

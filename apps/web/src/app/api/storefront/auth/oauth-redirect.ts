@@ -72,7 +72,8 @@ export const STOREFRONT_OAUTH_NEXT_COOKIE = 'baci_oauth_next';
  * query-suffixed URLs and fall back to `site_url` (`https://usebaci.com`).
  */
 export function extractStorefrontOAuthCallbackNext(
-  trustedRedirectUrl: string
+  trustedRedirectUrl: string,
+  expectedMerchantSlug?: string
 ): {
   redirectTo: string;
   nextTarget: string | null;
@@ -89,11 +90,13 @@ export function extractStorefrontOAuthCallbackNext(
       let validatedNextTarget: string | null = null;
       try {
         const nextUrl = new URL(nextParam, parsed.origin);
-        if (
-          nextUrl.origin === parsed.origin &&
-          (nextUrl.pathname === '/checkout' ||
-            /^\/[^/]+\/checkout$/.test(nextUrl.pathname))
-        ) {
+        const isCheckoutTarget = expectedMerchantSlug
+          ? nextUrl.pathname === '/checkout' ||
+            nextUrl.pathname === `/${expectedMerchantSlug}/checkout`
+          : nextUrl.pathname === '/checkout' ||
+            /^\/[^/]+\/checkout$/.test(nextUrl.pathname);
+
+        if (nextUrl.origin === parsed.origin && isCheckoutTarget) {
           validatedNextTarget = `${nextUrl.pathname}${nextUrl.search}`;
         }
       } catch {

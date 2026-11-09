@@ -49,16 +49,18 @@ RETURNS void
 LANGUAGE plpgsql
 AS $seed$
 DECLARE
+  v_step text := 'order';
   v_order constant uuid := pg_catalog.format('b4c1%s000-0000-4000-8000-%s', 2, pg_catalog.lpad(p_n::text, 12, '0'))::uuid;
   v_quote constant uuid := pg_catalog.format('b4c1%s000-0000-4000-8000-%s', 3, pg_catalog.lpad(p_n::text, 12, '0'))::uuid;
 BEGIN
   INSERT INTO public.orders (
     id, merchant_id, order_number, total, amount_paid, payment_status,
-    shipping_status, shipping_provider
+    shipping_status
   ) VALUES (
     v_order, p_merchant, 'PLATFORM-FUNDED-' || p_n, 150000, 150000, 'paid',
-    'processing', 'GIGL'
+    'processing'
   );
+  v_step := 'quote';
   INSERT INTO public.shipping_quotes (
     id, merchant_id, session_id, provider, service_tier, carrier_name, price,
     provider_cost, platform_margin, pricing_version, currency,
@@ -68,6 +70,7 @@ BEGIN
     4500.00, 4000.00, 500.00, 'gigl_platform_margin_v1', 'NGN', false,
     'rate-' || p_n, now() + interval '1 hour', jsonb_build_object('fixture', p_n)
   );
+  v_step := 'attestation';
   INSERT INTO public.shipping_quote_attestations (
     quote_id, order_id, merchant_id, price, provider_cost, platform_margin,
     currency, pricing_version, expires_at, is_station_pickup,
@@ -78,9 +81,13 @@ BEGIN
     quote.pricing_version, quote.expires_at, quote.is_station_pickup,
     quote.provider_rate_id, quote.quote_request
   FROM public.shipping_quotes AS quote WHERE quote.id = v_quote;
+  v_step := 'bind';
   UPDATE public.orders
-  SET selected_quote_id = v_quote, shipping_funding_source = 'merchant_wallet'
+  SET selected_quote_id = v_quote, shipping_funding_source = 'merchant_wallet',
+      shipping_provider = 'GIGL'
   WHERE id = v_order;
+EXCEPTION WHEN OTHERS THEN
+  RAISE EXCEPTION 'seed_order % failed at %: % (%)', p_n, v_step, SQLERRM, SQLSTATE;
 END;
 $seed$;
 

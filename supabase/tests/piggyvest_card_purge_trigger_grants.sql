@@ -23,10 +23,12 @@ BEGIN
     'primary_card_authorizer', 'primary_card_evidence',
     'primary_card_custody_evidence'
   ]::name[] LOOP
-    IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name)
-      AND pg_catalog.has_function_privilege(role_name, routine, 'EXECUTE')
-    THEN
-      RAISE EXCEPTION 'Role % can execute the saved-token purge', role_name;
+    -- Nested IFs: SQL AND does not guarantee short-circuit evaluation, and
+    -- has_function_privilege raises for a role that does not exist.
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
+      IF pg_catalog.has_function_privilege(role_name, routine, 'EXECUTE') THEN
+        RAISE EXCEPTION 'Role % can execute the saved-token purge', role_name;
+      END IF;
     END IF;
   END LOOP;
   IF NOT EXISTS (

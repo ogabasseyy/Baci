@@ -1,3 +1,4 @@
+import { filterDefaultAdvertisedVariants } from './default-advertised-variants';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
 import {
@@ -8,6 +9,7 @@ import {
 import { getSeoProductName } from './storefront-product-slug-disambiguation';
 
 interface ProductPriceSeoVariant {
+  attributes?: Record<string, unknown> | null;
   inventory_tracking_policy?: string | null;
   price_override?: number | null;
   stock_quantity?: number | null;
@@ -21,6 +23,8 @@ interface ProductPriceSeoOffer {
 
 export interface ProductPriceSeoProduct {
   name: string;
+  category?: string | null;
+  category_slug?: string | null;
   slug?: string | null;
   has_variants?: boolean | null;
   price?: number | null;
@@ -123,6 +127,7 @@ export function getProductPriceRange(
   const variants = (product.variants ?? []).filter(
     (variant): variant is ProductPriceSeoVariant => Boolean(variant)
   );
+  const advertisedVariants = filterDefaultAdvertisedVariants(variants, product);
   const hasSelectableVariants =
     product.has_variants === true && variants.length > 0;
 
@@ -142,7 +147,7 @@ export function getProductPriceRange(
     addPriceCandidate(candidates, product.max_variant_price);
   }
 
-  for (const variant of variants) {
+  for (const variant of advertisedVariants) {
     const isSerialized =
       variant.inventory_tracking_policy === 'serialized_strict' ||
       variant.inventory_tracking_policy === 'serialized_then_unlimited';

@@ -5,6 +5,7 @@ import {
 } from '@baci/shared/lib/product-inventory';
 import type { Route } from 'next';
 import type { BreadcrumbList, WithContext } from 'schema-dts';
+import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '@/config/product-schema';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
@@ -16,6 +17,7 @@ import {
   isPaystackCheckoutAvailable,
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
+
 import {
   type CollectionPageData,
   type CollectionPageJsonLdSchema,
@@ -41,6 +43,7 @@ import type {
   ProductVariant,
   Review,
 } from './products';
+import { resolveVariantSeoImages } from './resolve-variant-seo-images';
 // Import from sanitize-core to avoid loading jsdom on server components
 import { escapeHtml, stripHtmlTags } from './sanitize-core';
 import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
@@ -227,6 +230,7 @@ function buildContactPoint(
 
 export interface ProductSchemaOptions {
   acceptedPaymentMethods?: readonly string[];
+  description?: string;
   merchantBaseUrl?: string;
   productUrl?: string;
 }
@@ -436,22 +440,34 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  // Product schema should describe the product itself, not repeat a short
-  // search-snippet template. Prefer the enriched visible description and use
-  // the meta description only when the visible description sanitizes empty.
+  // Preserve the generic schema contract for non-storefront callers. PDPs use
+  // generateStorefrontProductSchema to supply price-free durable copy.
   const productDescription = product.description
-    ? generateMetaDescription(product.description, 500)
+    ? generateMetaDescription(
+        product.description,
+        PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+      )
     : '';
   const metaDescription = product.meta_description
-    ? generateMetaDescription(product.meta_description, 500)
+    ? generateMetaDescription(
+        product.meta_description,
+        PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+      )
     : '';
   const visibleDescriptionSupported =
-    productDescription && !isUnsupportedSpecValue(productDescription);
-  const safeDescription = visibleDescriptionSupported
-    ? productDescription
-    : metaDescription
-      ? metaDescription
-      : `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`;
+    Boolean(productDescription) && !isUnsupportedSpecValue(productDescription);
+  const metaDescriptionSupported =
+    Boolean(metaDescription) && !isUnsupportedSpecValue(metaDescription);
+  const safeDescription =
+    options.description ??
+    (visibleDescriptionSupported
+      ? productDescription
+      : metaDescriptionSupported
+        ? metaDescription
+        : generateMetaDescription(
+            `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`,
+            PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+          ));
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
@@ -527,8 +543,8 @@ export function generateProductSchema(
             itemCondition: getSchemaItemCondition(offer.condition),
             seller,
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           }))
         : {
             '@type': 'Offer',
@@ -541,8 +557,8 @@ export function generateProductSchema(
             itemCondition: getSchemaItemCondition(product.condition),
             seller,
             ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           },
   };
 
@@ -786,7 +802,7 @@ export function generateProductSchema(
     // referenced by @id (2026 best practice)
     const variantOfferPolicies = buildSharedOfferPolicies(
       structuredDataProductUrl,
-      schema.productGroupID,
+      String(schema.productGroupID),
       shippingDetails,
       hasMerchantReturnPolicy
     );
@@ -807,18 +823,7 @@ export function generateProductSchema(
       const variantSize = getVariantSchemaSize(variant.attributes);
       const variantName = buildVariantSchemaName(safeName, variant.attributes);
 
-      // Variant images: use variant-specific images if available, fall back to parent images
-      let variantImages: string[] | undefined;
-      if (variant.images && variant.images.length > 0) {
-        const filtered = variant.images.filter((img) => img.trim() !== '');
-        if (filtered.length > 0) variantImages = filtered;
-      } else if (variant.primary_image?.trim()) {
-        variantImages = [variant.primary_image.trim()];
-      }
-
-      if (!variantImages) {
-        variantImages = finalImages;
-      }
+      const variantImages = resolveVariantSeoImages(variant, finalImages);
 
       return {
         '@type': 'Product',

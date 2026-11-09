@@ -175,3 +175,7 @@
 **Learning:** When a password toggle uses `aria-pressed`, tests should assert both the state transition and the stable accessible name so future visible/icon refactors do not regress the APG toggle-button contract.
 **Action:** Keep `aria-label="Show password"` stable across visibility toggles, bind `aria-pressed` to the current state, and hide decorative Eye/EyeOff icons from assistive technologies when the button already has an explicit accessible name.
 **Source:** WAI-ARIA APG button pattern, verified 2026-07-01.
+## 2025-02-23 — Use assertive live regions for React Native alert roles
+**Learning:** In React Native, `accessibilityRole="alert"` corresponds to the assertive live region behavior. The value `"status"` is not a valid `accessibilityRole`.
+**Action:** When adding error feedback banners, use `accessibilityRole="alert"` and `accessibilityLiveRegion="assertive"`. Do not use `"status"`.
+**Source:** Codebase standards for dynamic error feedback

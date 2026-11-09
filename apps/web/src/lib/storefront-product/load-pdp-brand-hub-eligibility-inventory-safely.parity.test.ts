@@ -2,31 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import { loadPdpBrandHubEligibilityInventorySafely } from './load-pdp-brand-hub-eligibility-inventory-safely';
 
-const mockGetCachedBrandAuthorityProducts = vi.fn();
-const mockGetCategory = vi.fn();
+const mockGetInventory = vi.fn();
 
 vi.mock(
-  '@/lib/storefront-category/get-cached-brand-authority-products',
+  '@/lib/storefront-category/get-cached-brand-authority-inventory',
   () => ({
-    getCachedBrandAuthorityProducts: (...args: unknown[]) =>
-      mockGetCachedBrandAuthorityProducts(...args),
+    getCachedBrandAuthorityInventory: async (...args: unknown[]) => ({
+      products: await mockGetInventory(...args),
+    }),
+    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
   })
 );
-
-vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
-  brandAuthorityPublicData: {
-    getCategory: (...args: unknown[]) => mockGetCategory(...args),
-  },
-}));
 
 describe('loadPdpBrandHubEligibilityInventorySafely parity fields', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetCategory.mockResolvedValue({
-      id: 'cat-1',
-      name: 'Smartphones',
-      slug: 'smartphones',
-    });
   });
 
   it('carries raw parity fields so resolver guards exclude variant rows', async () => {
@@ -42,7 +32,7 @@ describe('loadPdpBrandHubEligibilityInventorySafely parity fields', () => {
       is_parent: true,
       parent_product_id: null,
     });
-    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce([
+    mockGetInventory.mockResolvedValueOnce([
       parent('p-1', 'iPhone 15 A'),
       parent('p-2', 'iPhone 15 B'),
       parent('p-3', 'iPhone 15 C'),

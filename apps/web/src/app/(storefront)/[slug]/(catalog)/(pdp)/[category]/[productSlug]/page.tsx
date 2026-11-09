@@ -263,7 +263,8 @@ function startKnownOgaBasseyPdpProductPreload(
 
 async function resolveKnownOgaBasseyPdpProductPreload(
   preload: StartedKnownOgaBasseyPdpProductPreload,
-  routeControlPromise: Promise<CategoryProductRouteControl | null>
+  routeControlPromise: Promise<CategoryProductRouteControl | null>,
+  searchParamsPromise?: PageProps['searchParams']
 ): Promise<string | null> {
   const { isKnownOgaBasseyCustomDomain, knownOgaBasseyImageLcpHintPromise } =
     preload;
@@ -273,11 +274,20 @@ async function resolveKnownOgaBasseyPdpProductPreload(
   }
 
   const earlyPreloadResult = await Promise.race([
-    knownOgaBasseyImageLcpHintPromise
-      .then((cachedProduct) => ({
+    Promise.all([
+      knownOgaBasseyImageLcpHintPromise,
+      searchParamsPromise
+        ? searchParamsPromise.catch(() => undefined)
+        : Promise.resolve(undefined),
+    ])
+      .then(([cachedProduct, resolvedSearchParams]) => ({
         cachedProduct,
         kind: 'lcp-hint' as const,
-        primaryImage: getCachedProductRoutePrimaryImage(cachedProduct),
+        primaryImage: getCachedProductRoutePrimaryImage(
+          cachedProduct,
+          undefined,
+          resolvedSearchParams
+        ),
       }))
       .catch(() => ({
         cachedProduct: null,
@@ -595,7 +605,8 @@ export default async function CategoryProductPage({
   const preloadedProductResourceKeyPromise =
     resolveKnownOgaBasseyPdpProductPreload(
       knownOgaBasseyProductPreload,
-      routeControlPromise
+      routeControlPromise,
+      searchParams
     );
   const routeControl = await routeControlPromise;
 

@@ -20,9 +20,13 @@ export interface SharedOfferPolicies {
 export function buildSharedOfferPolicies(
   productUrl: URL | undefined,
   productGroupId: string,
-  shippingDetails: OfferShippingDetails | undefined,
-  returnPolicy: MerchantReturnPolicy | undefined
+  shippingDetails?: OfferShippingDetails,
+  returnPolicy?: MerchantReturnPolicy
 ): (variantIndex: number) => SharedOfferPolicies {
+  if (!shippingDetails && !returnPolicy) {
+    return () => ({});
+  }
+
   const prefix = productUrl
     ? `${productUrl.origin}${productUrl.pathname}#`
     : `#${encodeURIComponent(productGroupId)}-`;
@@ -38,8 +42,12 @@ export function buildSharedOfferPolicies(
     }),
   };
   const references: SharedOfferPolicies = {
-    ...(shippingDetails && { shippingDetails: { '@id': shippingId } }),
-    ...(returnPolicy && { hasMerchantReturnPolicy: { '@id': returnPolicyId } }),
+    ...(shippingDetails && {
+      shippingDetails: { '@id': shippingId },
+    }),
+    ...(returnPolicy && {
+      hasMerchantReturnPolicy: { '@id': returnPolicyId },
+    }),
   };
 
   return (variantIndex) => (variantIndex === 0 ? definitions : references);

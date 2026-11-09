@@ -43,15 +43,26 @@ export function buildMerchantReturnPolicyFromTrustProfile(
   trustProfile?: MerchantTrustProfile
 ): MerchantReturnPolicy | undefined {
   const policy = trustProfile?.returnPolicy;
-  if (policy?.windowDays == null) return undefined;
-  const returnMethod = mapReturnMethodToSchemaUrl(policy.returnMethod);
-  const returnFees = mapReturnFeeToSchemaUrl(policy.returnFees);
+  const windowDays = policy?.windowDays;
+  if (windowDays == null || !Number.isInteger(windowDays) || windowDays < 0) {
+    return undefined;
+  }
+  if (windowDays === 0) {
+    return {
+      '@type': 'MerchantReturnPolicy',
+      applicableCountry: country,
+      returnPolicyCountry: country,
+      returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
+    };
+  }
+  const returnMethod = mapReturnMethodToSchemaUrl(policy?.returnMethod);
+  const returnFees = mapReturnFeeToSchemaUrl(policy?.returnFees);
   return {
     '@type': 'MerchantReturnPolicy',
     applicableCountry: country,
     returnPolicyCountry: country,
     returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: policy.windowDays,
+    merchantReturnDays: windowDays,
     ...(returnMethod && { returnMethod }),
     ...(returnFees && { returnFees }),
   };

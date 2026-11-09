@@ -14,7 +14,7 @@ vi.mock(
     return {
       ...actual,
       getCachedBrandAuthorityInventory: vi.fn(),
-      OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
+      OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 300,
     };
   }
 );
@@ -61,7 +61,7 @@ describe('loadBrandAuthorityInventorySafely', () => {
       'merchant-1',
       'smartphones',
       entry,
-      { maxProducts: 100, timeoutMs: 10 }
+      { maxProducts: 300, timeoutMs: 10 }
     );
     expect(warnSpy).toHaveBeenCalledWith(
       'Failed to load brand authority inventory for hub check',

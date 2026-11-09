@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { FALLBACK_HELP_FAQS } from '@/components/storefront/ogabassey/pages/approved-policy-faq';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { resolveStorefrontFaqItems } from './resolve-faq-items';
 
@@ -81,9 +80,17 @@ describe('resolveStorefrontFaqItems', () => {
       item.question.toLowerCase().includes('warranty')
     );
     expect(warrantyFaq?.answer).toContain('one-year');
+    const installmentFaq = items.find((item) =>
+      item.question.toLowerCase().includes('installment')
+    );
+    expect(installmentFaq?.answer).toContain('Buy Now, Pay Later');
+    const swapFaq = items.find((item) =>
+      item.question.toLowerCase().includes('swap')
+    );
+    expect(swapFaq?.answer).toContain('Swap & Trade-in');
   });
 
-  it('returns raw fallback help FAQs for Ogabassey template merchant with a different slug', () => {
+  it('returns empty array for non-Ogabassey merchant using Ogabassey template with no custom FAQs', () => {
     const merchant = {
       slug: 'custom-tenant',
       template_id: OGABASSEY_TEMPLATE_ID,
@@ -93,7 +100,7 @@ describe('resolveStorefrontFaqItems', () => {
 
     const items = resolveStorefrontFaqItems(merchant);
 
-    expect(items).toEqual(FALLBACK_HELP_FAQS);
+    expect(items).toEqual([]);
   });
 
   it('returns empty array for non-Ogabassey merchant with no custom FAQs', () => {

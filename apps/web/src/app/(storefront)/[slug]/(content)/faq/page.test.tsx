@@ -178,6 +178,7 @@ describe('generateMetadata', () => {
   it('returns indexable metadata for Ogabassey template even when faq_items is empty', async () => {
     vi.mocked(getMerchantByIdentifier).mockResolvedValue({
       business_name: 'Ogabassey',
+      slug: 'ogabassey',
       template_id: 'ogabassey',
       faq_items: [],
       pages: {},
@@ -188,6 +189,22 @@ describe('generateMetadata', () => {
     });
 
     expect(metadata.robots).toEqual({ index: true, follow: true });
+  });
+
+  it('returns noindex metadata for non-Ogabassey merchant using Ogabassey template when no FAQs exist', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Custom Store',
+      slug: 'custom-store',
+      template_id: 'ogabassey',
+      faq_items: [],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'custom-store' }),
+    });
+
+    expect(metadata.robots).toEqual({ index: false, follow: true });
   });
 
   it('returns metadata for the advertised FAQ page when no FAQ items exist', async () => {

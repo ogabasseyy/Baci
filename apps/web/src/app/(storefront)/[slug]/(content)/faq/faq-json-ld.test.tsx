@@ -58,6 +58,23 @@ describe('FAQJsonLd', () => {
     expect(generateFAQSchema).not.toHaveBeenCalled();
   });
 
+  it('returns null when non-Ogabassey merchant uses Ogabassey template with no custom FAQs', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      business_name: 'Custom Store',
+      template_id: 'ogabassey',
+      slug: 'custom-store',
+      faq_items: [],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+
+    const ui = await FAQJsonLd({
+      params: Promise.resolve({ slug: 'custom-store' }),
+    });
+
+    expect(ui).toBeNull();
+    expect(generateFAQSchema).not.toHaveBeenCalled();
+  });
+
   it('renders JsonLd schema for custom FAQs on regular merchant', async () => {
     const customFaqs = [{ question: 'Shipping?', answer: '1-3 days' }];
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({

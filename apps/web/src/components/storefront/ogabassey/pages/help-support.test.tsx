@@ -72,6 +72,22 @@ describe('Ogabassey help support contacts', () => {
       screen.getByText(/one-year Ogabassey warranty/i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/3-month warranty/i)).not.toBeInTheDocument();
+
+    const installmentQuestion = screen.getByRole('button', {
+      name: /do you offer installment payments/i,
+    });
+    fireEvent.click(installmentQuestion);
+    expect(
+      screen.getByText(/we partner with selected financial institutions/i)
+    ).toBeInTheDocument();
+
+    const swapQuestion = screen.getByRole('button', {
+      name: /can i swap my old phone/i,
+    });
+    fireEvent.click(swapQuestion);
+    expect(
+      screen.getByText(/Use our 'Swap & Trade-in' feature/i)
+    ).toBeInTheDocument();
   });
 
   it('keeps neutral fallback FAQs without stale claims for other merchants', () => {
@@ -93,6 +109,28 @@ describe('Ogabassey help support contacts', () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/7-day return policy/i)).not.toBeInTheDocument();
+
+    const installmentQuestion = screen.getByRole('button', {
+      name: /do you offer installment payments/i,
+    });
+    fireEvent.click(installmentQuestion);
+    expect(
+      screen.getByText(/Available payment options are shown at checkout/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/we partner with selected financial institutions/i)
+    ).not.toBeInTheDocument();
+
+    const swapQuestion = screen.getByRole('button', {
+      name: /can i swap my old phone/i,
+    });
+    fireEvent.click(swapQuestion);
+    expect(
+      screen.getByText(
+        /Contact customer support to check whether device trade-in or swap options are available/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Swap & Trade-in/i)).not.toBeInTheDocument();
   });
 
   it('renders passed faq_items with approved policy normalization', () => {

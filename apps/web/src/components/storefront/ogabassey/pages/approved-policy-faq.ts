@@ -27,12 +27,12 @@ export const FALLBACK_HELP_FAQS: FaqItem[] = [
   {
     question: 'Do you offer installment payments?',
     answer:
-      "Yes, we partner with selected financial institutions to offer 'Buy Now, Pay Later' options. You can select this option at checkout if you are eligible.",
+      'Available payment options are shown at checkout. Contact customer support to confirm whether installment or financing plans are available for your order.',
   },
   {
     question: 'Can I swap my old phone?',
     answer:
-      "Absolutely! Use our 'Swap & Trade-in' feature to get an estimated value for your current device. You can use this value as a discount towards your new purchase.",
+      'Contact customer support to check whether device trade-in or swap options are available for your purchase.',
   },
 ];
 
@@ -58,6 +58,20 @@ export function applyApprovedPolicyFaqs<
       question === 'how does your warranty work'
     ) {
       return { ...faq, answer: OGABASSEY_WARRANTY_POLICY_SUMMARY };
+    }
+    if (question === 'do you offer installment payments') {
+      return {
+        ...faq,
+        answer:
+          "Yes, we partner with selected financial institutions to offer 'Buy Now, Pay Later' options. You can select this option at checkout if you are eligible.",
+      };
+    }
+    if (question === 'can i swap my old phone') {
+      return {
+        ...faq,
+        answer:
+          "Absolutely! Use our 'Swap & Trade-in' feature to get an estimated value for your current device. You can use this value as a discount towards your new purchase.",
+      };
     }
     return faq;
   });

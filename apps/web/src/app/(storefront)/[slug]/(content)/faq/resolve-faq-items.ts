@@ -17,9 +17,9 @@ export interface ResolveFaqItemsMerchant extends MerchantFaqSource {
 /**
  * Resolves FAQ items for storefront rendering and structured data generation.
  * If the merchant has custom FAQ items (or legacy content), approved policy
- * overrides are applied. For Ogabassey template merchants without custom FAQs,
- * the fallback help FAQs are normalized and returned so SSR HTML and JSON-LD
- * describe the same questions.
+ * overrides are applied. For the Ogabassey merchant using the Ogabassey template
+ * without custom FAQs, the fallback help FAQs are normalized and returned so SSR
+ * HTML and JSON-LD describe the same questions.
  */
 export function resolveStorefrontFaqItems(
   merchant: ResolveFaqItemsMerchant
@@ -29,11 +29,11 @@ export function resolveStorefrontFaqItems(
     return applyApprovedPolicyFaqs(extracted, merchant.slug ?? undefined);
   }
 
-  if (merchant.template_id === OGABASSEY_TEMPLATE_ID) {
-    return applyApprovedPolicyFaqs(
-      FALLBACK_HELP_FAQS,
-      merchant.slug ?? undefined
-    );
+  if (
+    merchant.template_id === OGABASSEY_TEMPLATE_ID &&
+    merchant.slug === 'ogabassey'
+  ) {
+    return applyApprovedPolicyFaqs(FALLBACK_HELP_FAQS, merchant.slug);
   }
 
   return [];

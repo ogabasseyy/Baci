@@ -3,7 +3,10 @@ import {
   OGABASSEY_RETURN_POLICY_SUMMARY,
   OGABASSEY_WARRANTY_POLICY_SUMMARY,
 } from '@/lib/storefront-trust/ogabassey-approved-policy';
-import { applyApprovedPolicyFaqs } from './approved-policy-faq';
+import {
+  applyApprovedPolicyFaqs,
+  FALLBACK_HELP_FAQS,
+} from './approved-policy-faq';
 
 describe('approved policy FAQs', () => {
   const stale = [
@@ -23,6 +26,39 @@ describe('approved policy FAQs', () => {
   it('preserves another merchant even when using the template', () => {
     expect(applyApprovedPolicyFaqs(stale, 'other')).toBe(stale);
     expect(applyApprovedPolicyFaqs(stale)).toBe(stale);
+  });
+  it('applies Ogabassey installment and swap answers when slug is ogabassey', () => {
+    const faqs = [
+      { question: 'Do you offer installment payments?', answer: 'neutral' },
+      { question: 'Can I swap my old phone?', answer: 'neutral' },
+    ];
+    const result = applyApprovedPolicyFaqs(faqs, 'ogabassey');
+    expect(result[0]?.answer).toContain('Buy Now, Pay Later');
+    expect(result[1]?.answer).toContain('Swap & Trade-in');
+  });
+  it('preserves neutral installment and swap answers for other merchants', () => {
+    const faqs = [
+      {
+        question: 'Do you offer installment payments?',
+        answer: 'neutral payment',
+      },
+      { question: 'Can I swap my old phone?', answer: 'neutral swap' },
+    ];
+    const result = applyApprovedPolicyFaqs(faqs, 'other');
+    expect(result).toBe(faqs);
+  });
+  it('provides neutral default installment and swap answers in FALLBACK_HELP_FAQS', () => {
+    const installment = FALLBACK_HELP_FAQS.find((item) =>
+      item.question.toLowerCase().includes('installment')
+    );
+    expect(installment?.answer).not.toContain('Buy Now, Pay Later');
+    expect(installment?.answer).toContain('Available payment options');
+
+    const swap = FALLBACK_HELP_FAQS.find((item) =>
+      item.question.toLowerCase().includes('swap')
+    );
+    expect(swap?.answer).not.toContain('Swap & Trade-in');
+    expect(swap?.answer).toContain('trade-in or swap options');
   });
   it('preserves specific warranty, Assurance, claims and payment return questions', () => {
     const specific = [

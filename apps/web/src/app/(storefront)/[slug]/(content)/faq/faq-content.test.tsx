@@ -94,6 +94,34 @@ describe('FAQContent', () => {
     );
   });
 
+  it('renders Ogabassey template help page with empty resolved FAQs when non-Ogabassey merchant has no custom FAQs', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      business_name: 'Custom Store',
+      business_type: 'fashion',
+      template_id: 'ogabassey',
+      slug: 'custom-store',
+      faq_items: [],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+
+    const ui = await FAQContent({
+      params: Promise.resolve({ slug: 'custom-store' }),
+    });
+
+    render(ui);
+
+    expect(screen.getByTestId('ogabassey-help')).toBeInTheDocument();
+    expect(OgabasseyV2HelpSupport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchant: expect.objectContaining({
+          slug: 'custom-store',
+          faq_items: [],
+        }),
+      }),
+      undefined
+    );
+  });
+
   it('renders standard FAQPageClient fallback with resolved FAQs for non-template merchants', async () => {
     const customFaqs = [
       { question: 'How to pay?', answer: 'Card or transfer' },

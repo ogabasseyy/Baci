@@ -127,7 +127,8 @@ export function useOrderGiglShipping({
   };
   requestQuoteRef.current = requestQuote;
   const editDraft = (edit: addressDraftEdit.DraftEdit) => {
-    setAddressDraft((previous) => (addressRef.current = edit(previous)));
+    addressRef.current = edit(addressRef.current);
+    setAddressDraft(addressRef.current);
     invalidateQuote();
   };
   const updateAddressField = (field: OrderGiglMissingField, value: string) =>

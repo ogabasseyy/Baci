@@ -4,6 +4,8 @@ import type {
   OrderGiglSelectedPlace,
 } from './order-gigl-shipping';
 
+const PIN_FIELDS: OrderGiglMissingField[] = ['address', 'city', 'state'];
+
 type Draft = Partial<OrderGiglReceiver>;
 export type DraftEdit = (draft: Draft) => Draft;
 
@@ -13,7 +15,7 @@ export function applyAddressField(
   field: OrderGiglMissingField,
   value: string
 ): Draft {
-  if (field === 'phone') return { ...draft, phone: value };
+  if (!PIN_FIELDS.includes(field)) return { ...draft, [field]: value };
   const { latitude: _lat, longitude: _lng, ...rest } = draft;
   return { ...rest, [field]: value };
 }

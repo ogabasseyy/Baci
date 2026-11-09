@@ -4,6 +4,7 @@ import Ionicons, {
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  Platform,
   StyleSheet,
   Text,
   useColorScheme,
@@ -116,8 +117,10 @@ export function Toast({
         timerRef.current = null;
       }, duration);
 
-      // Announce to screen readers for accessibility
-      AccessibilityInfo.announceForAccessibility(message);
+      // M35 fix: iOS requires manual announcement, Android handles live region
+      if (Platform.OS === 'ios') {
+        AccessibilityInfo.announceForAccessibility(message);
+      }
     }
 
     return () => {
@@ -150,7 +153,7 @@ export function Toast({
       ]}
       accessible={true}
       accessibilityRole="alert"
-      accessibilityLiveRegion="polite"
+      accessibilityLiveRegion="assertive"
       accessibilityLabel={message}
     >
       <Ionicons name={icon} size={20} color={config.iconColor} />

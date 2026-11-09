@@ -179,3 +179,7 @@
 **Learning:** In React Native, `accessibilityRole="alert"` corresponds to the assertive live region behavior. The value `"status"` is not a valid `accessibilityRole`.
 **Action:** When adding error feedback banners, use `accessibilityRole="alert"` and `accessibilityLiveRegion="assertive"`. Do not use `"status"`.
 **Source:** Codebase standards for dynamic error feedback
+## 2025-02-05 — Prevent Double SR Announcements in RN Toasts
+**Learning:** Mixing `accessibilityRole="alert"` with `accessibilityLiveRegion="polite"` causes ARIA conflicts in React Native. Additionally, using manual `AccessibilityInfo.announceForAccessibility` alongside declarative live regions causes double announcements on Android. However, iOS VoiceOver doesn't support live regions correctly.
+**Action:** Use `accessibilityLiveRegion="assertive"` with `accessibilityRole="alert"` for Android, and only call `AccessibilityInfo.announceForAccessibility` manually for iOS (`Platform.OS === 'ios'`).
+**Source:** React Native Accessibility Docs

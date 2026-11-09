@@ -80,10 +80,13 @@ export const CartSidebar: React.FC = () => {
   const pathname = usePathname();
   const lastPathnameRef = useRef(pathname);
   const isCartOpenRef = useRef(isCartOpen);
-  isCartOpenRef.current = isCartOpen;
   const setIsCartOpenRef = useRef(setIsCartOpen);
-  setIsCartOpenRef.current = setIsCartOpen;
   const scheduleTimeout = useSafeTimeout();
+
+  useEffect(() => {
+    isCartOpenRef.current = isCartOpen;
+    setIsCartOpenRef.current = setIsCartOpen;
+  }, [isCartOpen, setIsCartOpen]);
 
   useEffect(() => {
     if (lastPathnameRef.current !== pathname) {

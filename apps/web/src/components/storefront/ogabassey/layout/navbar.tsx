@@ -124,9 +124,14 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
                   prefetch={false}
                   onClick={(e) => {
                     if (
-                      typeof window !== 'undefined' &&
-                      typeof window.matchMedia === 'function' &&
-                      window.matchMedia('(max-width: 767px)').matches
+                      e.button !== 0 ||
+                      e.metaKey ||
+                      e.ctrlKey ||
+                      e.shiftKey ||
+                      e.altKey ||
+                      (typeof window !== 'undefined' &&
+                        typeof window.matchMedia === 'function' &&
+                        window.matchMedia('(max-width: 767px)').matches)
                     ) {
                       return;
                     }

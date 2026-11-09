@@ -79,16 +79,30 @@ export function extractStorefrontOAuthCallbackNext(
 } {
   try {
     const parsed = new URL(trustedRedirectUrl);
-    const nextTarget = parsed.searchParams.get('next');
-    if (
-      nextTarget &&
-      (parsed.pathname === '/account/callback' ||
-        parsed.pathname.endsWith('/account/callback'))
-    ) {
+    const nextParam = parsed.searchParams.get('next');
+    const isCallbackPath =
+      parsed.pathname === '/account/callback' ||
+      /^\/[^/]+\/account\/callback$/.test(parsed.pathname);
+
+    if (nextParam && isCallbackPath) {
       parsed.searchParams.delete('next');
+      let validatedNextTarget: string | null = null;
+      try {
+        const nextUrl = new URL(nextParam, parsed.origin);
+        if (
+          nextUrl.origin === parsed.origin &&
+          (nextUrl.pathname === '/checkout' ||
+            /^\/[^/]+\/checkout$/.test(nextUrl.pathname))
+        ) {
+          validatedNextTarget = `${nextUrl.pathname}${nextUrl.search}`;
+        }
+      } catch {
+        // Invalid next URLs are dropped rather than persisted into the cookie.
+      }
+
       return {
         redirectTo: parsed.toString(),
-        nextTarget,
+        nextTarget: validatedNextTarget,
       };
     }
   } catch {

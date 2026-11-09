@@ -261,7 +261,10 @@ export async function postAdminOrderGiglQuote(
     auth.supabase,
     access.merchantId,
     quote.price,
-    async () => Number(result?.available_balance ?? 0)
+    () => {
+      const balance = Number(result?.available_balance);
+      return Promise.resolve(Number.isFinite(balance) ? balance : null);
+    }
   );
   if (!funding.ok) {
     return NextResponse.json(

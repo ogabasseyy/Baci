@@ -79,10 +79,13 @@ DECLARE
   v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
   v_order constant uuid := 'b4c12000-0000-4000-8000-000000000004';
   v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000004';
-  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_before numeric;
   v_result record;
   v_row public.merchant_shipping_charges%ROWTYPE;
 BEGIN
+  -- Zero wallet: Baci pays, so a flagged merchant needs no spendable funds.
+  UPDATE public.merchant_wallets SET available_balance = 0 WHERE merchant_id = v_merchant;
+  v_before := pg_temp.wallet_balance(v_merchant);
   PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
   SELECT * INTO v_result FROM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-4');
   SELECT * INTO v_row FROM public.merchant_shipping_charges
@@ -120,6 +123,63 @@ BEGIN
   END IF;
 END;
 $t5$;
+
+-- T5b (control): releasing the wallet-funded reservation restores the balance
+-- once, and a repeated release does not credit twice.
+DO $t5b$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000002';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000005';
+  v_charge uuid;
+  v_start numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  SELECT id INTO v_charge FROM public.merchant_shipping_charges WHERE order_id = v_order;
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
+  PERFORM public.refund_merchant_shipping_charge(v_charge, 'tok-5', 'TEST');
+  PERFORM public.refund_merchant_shipping_charge(v_charge, 'tok-5', 'TEST');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges WHERE id = v_charge;
+  IF v_row.status IS DISTINCT FROM 'refunded' OR v_row.refund_transaction_id IS NULL
+     OR pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_start + 4500.00 THEN
+    RAISE EXCEPTION 'T5b: wallet-funded release must credit exactly once (balance %, start %)',
+      pg_temp.wallet_balance(v_merchant), v_start;
+  END IF;
+  BEGIN
+    PERFORM public.refund_merchant_shipping_charge(v_charge, NULL, 'TEST');
+    RAISE EXCEPTION 'T5b: NULL attempt token must be rejected';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+END;
+$t5b$;
+
+-- T7: the funding-mode RPC accepts the owner, rejects unrelated users and
+-- a missing identity.
+DO $t7$
+DECLARE
+  v_flagged constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+BEGIN
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  IF public.get_gigl_shipping_funding_mode(v_flagged) IS DISTINCT FROM 'platform' THEN
+    RAISE EXCEPTION 'T7: owner of a flagged merchant must resolve platform mode';
+  END IF;
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
+  BEGIN
+    PERFORM public.get_gigl_shipping_funding_mode(v_flagged);
+    RAISE EXCEPTION 'T7: an unrelated user must not resolve the mode';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+  PERFORM pg_catalog.set_config('request.jwt.claims', '', true);
+  BEGIN
+    PERFORM public.get_gigl_shipping_funding_mode(v_flagged);
+    RAISE EXCEPTION 'T7: a missing identity must not resolve the mode';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+END;
+$t7$;
 
 -- T6: the platform charge can never carry a wallet transaction (CHECK).
 DO $t6$

@@ -19,7 +19,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'charge_not_owned' USING ERRCODE = '42501';
   END IF;
-  IF v_charge.attempt_token_digest <> pg_catalog.encode(
+  IF v_charge.attempt_token_digest IS DISTINCT FROM pg_catalog.encode(
     extensions.digest(p_attempt_token, 'sha256'), 'hex'
   ) THEN
     RAISE EXCEPTION 'charge_not_owned' USING ERRCODE = '42501';

@@ -101,7 +101,7 @@ BEGIN
           failure_code = 'STALE_PROVIDER_SUBMISSION',
           updated_at = now()
       WHERE id = v_existing.id
-      RETURNING status INTO v_charge_status;
+      RETURNING public.merchant_shipping_charges.status INTO v_charge_status;
       v_existing.status := v_charge_status;
     END IF;
     IF v_existing.funding_source = 'platform' THEN

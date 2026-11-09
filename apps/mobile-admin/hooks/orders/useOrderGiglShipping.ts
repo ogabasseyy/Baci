@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import * as addressDraftEdit from '@/lib/order-gigl-address-draft';
 import {
   OrderGiglFundingPoller,
   type OrderGiglPollContext,
@@ -125,31 +126,16 @@ export function useOrderGiglShipping({
     return null;
   };
   requestQuoteRef.current = requestQuote;
-  const updateAddressField = (field: OrderGiglMissingField, value: string) => {
-    setAddressDraft((previous) => {
-      const next = { ...previous, [field]: value };
-      addressRef.current = next;
-      return next;
-    });
+  const editDraft = (edit: addressDraftEdit.DraftEdit) => {
+    setAddressDraft((previous) => (addressRef.current = edit(previous)));
     invalidateQuote();
   };
-  // One atomic update so a picked place never keeps the previous city, state
-  // or pin.
-  const selectAddressPlace = (place: OrderGiglSelectedPlace) => {
-    setAddressDraft((previous) => {
-      const next = {
-        ...previous,
-        address: place.address,
-        city: place.city,
-        state: place.state,
-        latitude: place.latitude,
-        longitude: place.longitude,
-      };
-      addressRef.current = next;
-      return next;
-    });
-    invalidateQuote();
-  };
+  const updateAddressField = (field: OrderGiglMissingField, value: string) =>
+    editDraft((draft) =>
+      addressDraftEdit.applyAddressField(draft, field, value)
+    );
+  const selectAddressPlace = (place: OrderGiglSelectedPlace) =>
+    editDraft((draft) => addressDraftEdit.applySelectedPlace(draft, place));
   const refreshBalance = async (context?: OrderGiglPollContext) => {
     const isCurrent = () =>
       !context ||

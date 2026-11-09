@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
@@ -112,15 +112,16 @@ export function PiggyvestWalletSetupPanel({
 
   // While PiggyVest finishes the account number, check by itself every few
   // seconds (bounded) so the customer never has to keep tapping.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  const runAutoCheck = useEffectEvent(() => {
+    void refresh();
+  });
   useEffect(() => {
     // Wait while a check is in flight so every counted check really runs.
     if (busy || !pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT)
       return;
     const timer = setTimeout(() => {
       setAutoChecks((count) => count + 1);
-      void refreshRef.current();
+      runAutoCheck();
     }, AUTO_CHECK_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [busy, pending, reviewRequired, autoChecks]);

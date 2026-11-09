@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -68,6 +69,11 @@ export function WalletFundModal({
     isPiggyvestPrimaryMerchant(merchantId) &&
     primaryCapability !== false &&
     fundingAccount?.provider !== 'piggyvest';
+  // Keep the panel rendered while the card slides down on close, so the
+  // exit animation shows the sheet instead of an empty card; it unmounts
+  // (clearing any retained BVN state) once the slide has finished.
+  const [retainContent, setRetainContent] = useState(showFundPanel);
+  if (showFundPanel && !retainContent) setRetainContent(true);
   return (
     <ModalSheet
       presentation="fade-backdrop"
@@ -87,8 +93,9 @@ export function WalletFundModal({
       visible={showFundPanel}
       onRequestClose={onResetFund}
       onBackdropPress={onResetFund}
+      onClosed={() => setRetainContent(false)}
     >
-      {showFundPanel ? (
+      {showFundPanel || retainContent ? (
         <ScrollView
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"

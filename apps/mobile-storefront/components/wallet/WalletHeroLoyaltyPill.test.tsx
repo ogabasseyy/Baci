@@ -46,4 +46,24 @@ describe('WalletHeroLoyaltyPill', () => {
 
     expect(screen.getByLabelText('Loyalty 0 pts')).toBeOnTheScreen();
   });
+
+  it('never shows negative or invalid points', () => {
+    const { rerender } = render(
+      <WalletHeroLoyaltyPill
+        loyaltyPoints={-5}
+        visibleTier={null}
+        onOpenRedeemPanel={jest.fn()}
+      />
+    );
+    expect(screen.getByText('0 pts')).toBeOnTheScreen();
+    rerender(
+      <WalletHeroLoyaltyPill
+        loyaltyPoints={Number.NaN}
+        visibleTier={null}
+        onOpenRedeemPanel={jest.fn()}
+      />
+    );
+    expect(screen.getByText('0 pts')).toBeOnTheScreen();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
 });

@@ -86,6 +86,45 @@ describe('ModalSheet', () => {
     }
   });
 
+  it('reports when the closing slide has finished', () => {
+    jest.useFakeTimers();
+    try {
+      const onClosed = jest.fn();
+      const { rerender } = render(
+        <ModalSheet presentation="fade-backdrop" visible onClosed={onClosed}>
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      rerender(
+        <ModalSheet
+          presentation="fade-backdrop"
+          visible={false}
+          onClosed={onClosed}
+        >
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      expect(onClosed).not.toHaveBeenCalled();
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(onClosed).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('runs a shared backdrop and request-close handler only once', () => {
+    const close = jest.fn();
+    render(
+      <ModalSheet visible onBackdropPress={close} onRequestClose={close}>
+        <Text>Sheet</Text>
+      </ModalSheet>
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Dismiss modal' }));
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the native slide for sheets that have not opted in', () => {
     const { UNSAFE_getByType } = render(
       <ModalSheet visible>

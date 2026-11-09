@@ -146,10 +146,13 @@ export async function onboardPiggyvestPrimaryWallet(
     }
   }
 
+  // Set once createCustomer resolves: only its own rejection can prove
+  // nothing was created; a matching error from a later step cannot.
+  let createReturned = false;
   try {
-    const result = piggyvestPrimaryWalletCreationSchema.safeParse(
-      await input.createCustomer(providerRequest)
-    );
+    const created = await input.createCustomer(providerRequest);
+    createReturned = true;
+    const result = piggyvestPrimaryWalletCreationSchema.safeParse(created);
     if (!result.success) {
       await input.storage.recordUncertain(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
@@ -256,7 +259,7 @@ export async function onboardPiggyvestPrimaryWallet(
     // claim is released for a clean retry; a reclaimed one stays reclaimable
     // because an earlier ambiguous dispatch may still have created the
     // customer. Logs only the error code and status, never request data.
-    if (isPrimaryWalletCreateNotSent(error)) {
+    if (!createReturned && isPrimaryWalletCreateNotSent(error)) {
       console.error(
         `[PiggyVest][primary-onboarding] create not sent: ${error.code} status=${error.status ?? 'none'}`
       );

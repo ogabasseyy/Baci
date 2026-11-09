@@ -126,6 +126,7 @@ const styles = StyleSheet.create({
     gap: 6,
     justifyContent: 'center',
     marginTop: SPACING.sm,
+    minHeight: 44,
     paddingHorizontal: SPACING.md,
     paddingVertical: 8,
   },
@@ -136,7 +137,9 @@ const styles = StyleSheet.create({
   ctaButton: {
     alignItems: 'center',
     borderRadius: 10,
+    justifyContent: 'center',
     marginTop: SPACING.sm,
+    minHeight: 44,
     paddingHorizontal: SPACING.md,
     paddingVertical: 10,
   },

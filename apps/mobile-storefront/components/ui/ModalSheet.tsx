@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
 import type { ModalProps, StyleProp, ViewStyle } from 'react-native';
 import {
   Animated,
@@ -28,6 +28,8 @@ export type ModalSheetProps = {
   keyboardSurfaceColor?: string;
   onBackdropPress?: () => void;
   onRequestClose?: () => void;
+  /** fade-backdrop only: called once the closing slide has finished. */
+  onClosed?: () => void;
   visible: boolean;
 };
 
@@ -41,12 +43,14 @@ export function ModalSheet({
   keyboardSurfaceColor,
   onBackdropPress,
   onRequestClose,
+  onClosed,
   visible,
 }: ModalSheetProps) {
   const { keyboardHeight } = useKeyboard();
   const handleBackdropPress = () => {
     onBackdropPress?.();
-    onRequestClose?.();
+    // Callers often wire the same close handler to both: run it once.
+    if (onRequestClose !== onBackdropPress) onRequestClose?.();
   };
   const combinedBackdropStyle = [styles.backdrop, backdropStyle];
   const combinedCardStyle = [styles.card, cardStyle];
@@ -56,8 +60,9 @@ export function ModalSheet({
   // card's height. On close the Modal stays mounted until the card has slid
   // back down, then fades out.
   const { height: slideDistance } = useWindowDimensions();
-  const cardOffset = useRef(new Animated.Value(slideDistance)).current;
+  const [cardOffset] = useState(() => new Animated.Value(slideDistance));
   const [mounted, setMounted] = useState(visible);
+  const notifyClosed = useEffectEvent(() => onClosed?.());
   useEffect(() => {
     if (!fadeBackdrop) return;
     if (visible) setMounted(true);
@@ -67,7 +72,10 @@ export function ModalSheet({
       useNativeDriver: true,
     });
     slide.start(({ finished }) => {
-      if (finished && !visible) setMounted(false);
+      if (finished && !visible) {
+        setMounted(false);
+        notifyClosed();
+      }
     });
     return () => slide.stop();
   }, [fadeBackdrop, visible, cardOffset, slideDistance]);

@@ -19,7 +19,11 @@ export function WalletHeroLoyaltyPill({
   visibleTier,
   onOpenRedeemPanel,
 }: WalletHeroLoyaltyPillProps) {
-  const pointsLabel = `${loyaltyPoints.toLocaleString()} pts`;
+  // Points are a non-negative whole number; never show '-5' or 'NaN'.
+  const points = Number.isFinite(loyaltyPoints)
+    ? Math.max(0, Math.floor(loyaltyPoints))
+    : 0;
+  const pointsLabel = `${points.toLocaleString()} pts`;
   const content = (
     <>
       <Ionicons
@@ -32,7 +36,7 @@ export function WalletHeroLoyaltyPill({
       <Text style={styles.loyaltyPillText} numberOfLines={1}>
         {pointsLabel}
       </Text>
-      {loyaltyPoints > 0 ? (
+      {points > 0 ? (
         <View style={styles.redeemPill}>
           <Text style={styles.redeemPillText}>Redeem</Text>
         </View>
@@ -42,7 +46,7 @@ export function WalletHeroLoyaltyPill({
     </>
   );
 
-  if (loyaltyPoints > 0) {
+  if (points > 0) {
     return (
       <Pressable
         accessibilityRole="button"

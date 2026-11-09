@@ -91,6 +91,21 @@ describe('bugfix: a rejected live credential no longer parks setup as endless "p
     expect(input.storage.releaseIntent).not.toHaveBeenCalled();
   });
 
+  it('does not release the intent when a matching error comes after the customer was created', async () => {
+    const input = onboardingFixture();
+    input.storage.recordAccepted.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'late failure', 401)
+    );
+
+    const outcome = await onboardPiggyvestPrimaryWallet(input);
+
+    expect(outcome).not.toEqual({
+      status: 'unavailable',
+      code: 'PROVIDER_UNAVAILABLE',
+    });
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
+
   it('still keeps a timeout ambiguous (pending), since the customer may exist', async () => {
     const input = onboardingFixture();
     input.createCustomer.mockRejectedValue(

@@ -26,7 +26,10 @@ const goal: WalletActiveSavingsGoal = {
 describe('server keeps PiggyVest off', () => {
   it('cheers a confirmed legacy contribution without provider wording', async () => {
     await addSavingsContributionToGoal({
-      addSavingsContribution: async () => ({ goalStatus: 'active' }),
+      addSavingsContribution: async () => ({
+        goalCurrentAmount: 1500,
+        goalStatus: 'active',
+      }),
       clearSavingsContributionAmount: jest.fn(),
       createIdempotencyKey: () => 'op-1',
       goal,

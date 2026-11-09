@@ -38,6 +38,7 @@ describe('buildSavingsSuccessMessage', () => {
         goal,
         goalCompleted: false,
         refreshFailed: false,
+        savedAfter: 1500,
       })
     ).toEqual({
       message:
@@ -63,6 +64,7 @@ describe('buildSavingsSuccessMessage', () => {
       goal,
       goalCompleted: false,
       refreshFailed: false,
+      savedAfter: 4999,
     });
     expect(almost.message).toContain("You're 99%");
     const tiny = buildSavingsSuccessMessage({
@@ -70,6 +72,7 @@ describe('buildSavingsSuccessMessage', () => {
       goal: { ...goal, current_amount: 0, target_amount: 1_000_000 },
       goalCompleted: false,
       refreshFailed: false,
+      savedAfter: 1,
     });
     expect(tiny.message).toContain("You're 1%");
   });
@@ -83,6 +86,18 @@ describe('buildSavingsSuccessMessage', () => {
     });
     expect(result.message).toBe(
       'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going!'
+    );
+  });
+
+  it('shows no percentage without a server-confirmed balance', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 1000,
+      goal,
+      goalCompleted: false,
+      refreshFailed: false,
+    });
+    expect(result.message).toBe(
+      'Nice! ₦1,000 added. Every naira gets you closer to your iPhone 13. Keep it going!'
     );
   });
 

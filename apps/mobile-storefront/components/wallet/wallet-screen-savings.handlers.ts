@@ -174,7 +174,12 @@ export async function addSavingsContributionToGoal({
     const success = buildSavingsSuccessMessage({
       amount,
       goal,
-      goalCompleted,
+      // Celebrate completion only on the server's word; the client guess
+      // above still drives best-effort reminder cleanup.
+      goalCompleted:
+        confirmed.goalCompleted ??
+        (confirmed.savedAfter !== undefined &&
+          confirmed.savedAfter >= goal.target_amount),
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });

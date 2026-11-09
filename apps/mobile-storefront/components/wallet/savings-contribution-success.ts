@@ -40,12 +40,13 @@ export function buildSavingsSuccessMessage({
   }
   const confirmedSaved =
     savedAfter !== undefined && Number.isFinite(savedAfter) ? savedAfter : null;
-  const saved = confirmedSaved ?? goal.current_amount + amount;
+  // Progress is shown only from the server's own post-contribution balance:
+  // a client snapshot can be stale or already include a replayed amount.
   const percent =
-    goal.target_amount > 0
+    confirmedSaved !== null && goal.target_amount > 0
       ? Math.min(
           99,
-          Math.max(1, Math.floor((saved / goal.target_amount) * 100))
+          Math.max(1, Math.floor((confirmedSaved / goal.target_amount) * 100))
         )
       : null;
   const progress =

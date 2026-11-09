@@ -195,7 +195,9 @@ export function ShipmentFlowGiglPanel({
         </View>
       ) : null}
 
-      {selected && fundingAccount?.status === 'active' ? (
+      {selected &&
+      !wallet?.paidByBaci &&
+      fundingAccount?.status === 'active' ? (
         <View
           style={[
             panelStyles.account,
@@ -234,7 +236,7 @@ export function ShipmentFlowGiglPanel({
         </View>
       ) : null}
 
-      {state === 'polling' ? (
+      {state === 'polling' && !wallet?.paidByBaci ? (
         <Text style={{ color: colors.textSecondary }}>
           Checking your wallet balance…
         </Text>

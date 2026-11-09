@@ -111,7 +111,7 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
 
   const { data: latestCharge, error: chargeError } = await supabase
     .from('merchant_shipping_charges')
-    .select('status')
+    .select('status, funding_source')
     .eq('merchant_id', merchantId)
     .eq('shipping_quote_id', quoteId)
     .order('created_at', { ascending: false })
@@ -167,6 +167,12 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
         merchantId
       );
       return wallet.ok ? wallet.availableBalance : null;
+    },
+    {
+      existingChargeFundingSource:
+        typeof latestCharge?.funding_source === 'string'
+          ? latestCharge.funding_source
+          : null,
     }
   );
   if (!funding.ok) {

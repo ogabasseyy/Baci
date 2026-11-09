@@ -7,7 +7,8 @@ import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 export type MerchantShippingCharge = {
   chargeId: string;
   chargedAmount: number;
-  balanceAfter: number;
+  /** null when no wallet moved (platform-funded charge). */
+  balanceAfter: number | null;
   status: string;
 };
 
@@ -118,9 +119,10 @@ export async function reserveMerchantShippingCharge(
       chargedAmount: Number(
         normalized.chargedAmount ?? normalized.charged_amount ?? 0
       ),
-      balanceAfter: Number(
-        normalized.balanceAfter ?? normalized.balance_after ?? 0
-      ),
+      balanceAfter:
+        (normalized.balanceAfter ?? normalized.balance_after) === null
+          ? null
+          : Number(normalized.balanceAfter ?? normalized.balance_after ?? 0),
       status: normalized.status,
     },
     token,

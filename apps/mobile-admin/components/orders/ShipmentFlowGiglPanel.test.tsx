@@ -73,6 +73,32 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(screen.queryByRole('button', { name: 'Fund wallet' })).toBeNull();
   });
 
+  it('hides the funding-account panel and polling copy for platform-funded merchants', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        fundingAccount={{
+          accountName: 'Shop',
+          accountNumber: '0123456789',
+          bankName: 'Bank',
+          currency: 'NGN',
+          status: 'active',
+        }}
+        selected
+        state="polling"
+        wallet={{
+          availableBalance: 0,
+          canBook: true,
+          paidByBaci: true,
+          shortfall: 0,
+        }}
+      />
+    );
+    expect(screen.queryByText('0123456789')).toBeNull();
+    expect(screen.queryByText("I've transferred")).toBeNull();
+    expect(screen.queryByText(/Checking your wallet balance/)).toBeNull();
+  });
+
   it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
     expect(screen.getByText('GIG')).toBeTruthy();

@@ -63,6 +63,11 @@ BEGIN
   IF v_src NOT LIKE '%funding_source%platform%' THEN
     RAISE EXCEPTION 'refund_merchant_shipping_charge must skip wallet credit for platform charges';
   END IF;
+  SELECT p.prosrc INTO v_src FROM pg_catalog.pg_proc p
+  WHERE p.oid = 'private.prevent_active_gigl_shipping_cancellation()'::regprocedure;
+  IF v_src NOT LIKE '%funding_source%platform%' THEN
+    RAISE EXCEPTION 'cancellation trigger must not credit wallets for platform charges';
+  END IF;
   IF pg_catalog.has_function_privilege(
        'anon', 'public.reserve_merchant_shipping_charge(uuid,uuid,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'anon must not execute reserve_merchant_shipping_charge';

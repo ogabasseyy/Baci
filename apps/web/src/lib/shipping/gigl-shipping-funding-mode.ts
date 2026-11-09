@@ -36,11 +36,17 @@ export async function resolveAdminGiglQuoteFunding(
   supabase: SupabaseClient,
   merchantId: string,
   price: number,
-  readBalance: () => Promise<number | null>
+  readBalance: () => Promise<number | null>,
+  options: { existingChargeFundingSource?: string | null } = {}
 ): Promise<AdminGiglQuoteFunding> {
-  if (
-    (await readGiglShippingFundingMode(supabase, merchantId)) === 'platform'
-  ) {
+  // An existing reservation was funded when it was created; the current flag
+  // must not re-label who pays for it.
+  const existing = options.existingChargeFundingSource;
+  const mode: GiglShippingFundingMode =
+    existing === 'platform' || existing === 'merchant_wallet'
+      ? existing
+      : await readGiglShippingFundingMode(supabase, merchantId);
+  if (mode === 'platform') {
     return {
       ok: true,
       availableBalance: 0,

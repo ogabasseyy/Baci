@@ -29,11 +29,18 @@ export function SavingsBottomSheet({
   children,
   colors,
   onClose,
+  overlay,
   visible,
 }: {
   children: ReactNode | ((dismiss: () => void) => ReactNode);
   colors: (typeof Colors)['light'];
   onClose: () => void;
+  /**
+   * A modal that must appear above this sheet (the wallet PIN prompt). iOS
+   * presents a second sibling modal only from the topmost one, so it is
+   * rendered inside this sheet's modal instead of beside it.
+   */
+  overlay?: ReactNode;
   visible: boolean;
 }) {
   const insets = useSafeAreaInsets();
@@ -86,6 +93,7 @@ export function SavingsBottomSheet({
             </View>
           </BottomSheet>
         </SavingsSheetContext.Provider>
+        {overlay}
       </GestureHandlerRootView>
     </Modal>
   );

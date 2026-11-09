@@ -9,6 +9,7 @@ describe('hasPositiveWifiOnlyIntent', () => {
     'exclude Wi-Fi Only',
     "don't show Wi-Fi Only",
     "iPhone that isn't Wi-Fi only",
+    'iPhone that isn’t Wi-Fi only',
     'iPhone anything but Wi-Fi only',
     'iPhone other than Wi-Fi only',
   ])('does not infer positive intent from negated query %s', (query) => {

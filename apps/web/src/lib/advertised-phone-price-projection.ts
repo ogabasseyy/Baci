@@ -68,7 +68,7 @@ function getEligibleAdvertisedVariants(
   const variants = normalizeStorefrontProductVariants(
     rawVariants.filter((variant) => variant.product_id === product.id),
     {
-      merchantId,
+      merchantId: merchantId ?? '',
       productId: product.id,
       parentStock: getEffectiveStock(parent),
     }
@@ -88,10 +88,14 @@ function getEligibleAdvertisedVariants(
   return { parent, eligible };
 }
 
+type EligibleAdvertisedVariant = ReturnType<
+  typeof getEligibleAdvertisedVariants
+>['eligible'][number];
+
 function filterConstrainedEligibleVariants(
   parent: Record<string, unknown>,
   product: AdvertisedPhoneProduct,
-  eligible: PublicAdvertisedVariant[],
+  eligible: EligibleAdvertisedVariant[],
   constraints: AdvertisedPhoneConstraints = {}
 ) {
   const requestedCondition = normalizeCanonicalProductCondition(

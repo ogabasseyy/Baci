@@ -20,12 +20,12 @@ const NON_HANDSET_PRODUCT_PATTERN =
   /\b(?:cases?|covers?|chargers?|cables?|protectors?|accessor(?:y|ies)|headphones?|earphones?|earbuds?|microphones?|screen protectors?|tempered glass|batter(?:y|ies)|replacements?|parts?|spare parts?)\b/i;
 
 const TABLET_OR_COMPUTER_PRODUCT_PATTERN =
-  /\b(?:tablets?|ipads?|galaxy tab|redmi pad|xiaomi pad|lenovo tab|megapads?|nokia\s+t\s*\d+|laptops?|notebooks?|computers?|macbooks?)\b/i;
+  /\b(?:tablets?|ipads?|galaxy tab|redmi pad|xiaomi pad|oneplus\s+pad|lenovo tab|megapads?|nokia\s+t\s*\d+|laptops?|notebooks?|computers?|macbooks?)\b/i;
 
 const NON_PHONE_PRODUCT_PATTERN = TABLET_OR_COMPUTER_PRODUCT_PATTERN;
 
 const UNAMBIGUOUS_HANDSET_PATTERN =
-  /\b(?:iphones?|(?:google\s+)?pixel\s+\d+|galaxy\s+(?:[sazmf]\d+|z\s*(?:fold|flip)|fold|flip)|redmi\s+note|infinix\s+(?:hot|note|zero|smart)|tecno\s+(?:camon|spark|phantom|pop|pova)|itel\s+(?:[aps]\d+|vision)|(?:motorola\s+)?(?:moto\s+[ge]\d+|edge\s+\d+)|xperia\s+\d+)\b/i;
+  /\b(?:iphones?|(?:google\s+)?pixel\s+\d+|galaxy\s+(?:[sazmf]\d+[a-z]*|z\s*(?:fold|flip)|fold|flip)|redmi\s+note|infinix\s+(?:hot|note|zero|smart)|tecno\s+(?:camon|spark|phantom|pop|pova)|itel\s+(?:[aps]\d+|vision)|(?:motorola\s+)?(?:moto\s+[ge]\d+|edge\s+\d+)|xperia\s+\d+)\b/i;
 
 const BARE_MANUFACTURER_PATTERN =
   /\b(?:nokia|tecno|infinix|xiaomi|redmi|oppo|vivo|realme|honor|motorola|zte|asus|oneplus|itel|poco)\b/i;

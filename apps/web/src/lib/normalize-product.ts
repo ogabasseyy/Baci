@@ -148,7 +148,14 @@ export function normalizeProduct(
   options: NormalizeProductOptions = {}
 ): NormalizedProduct {
   const primaryImage = raw.advertised_image || extractPrimaryImage(raw.images);
-  const normalizedImages = normalizeImages(raw.images);
+  const rawNormalizedImages = normalizeImages(raw.images);
+  const normalizedImages =
+    typeof raw.advertised_image === 'string' && raw.advertised_image.trim()
+      ? [
+          raw.advertised_image,
+          ...rawNormalizedImages.filter((url) => url !== raw.advertised_image),
+        ]
+      : rawNormalizedImages;
   const joinedCategories = getJoinedCategories(raw);
   const preferredCategory = options.preferredCategorySlug
     ? joinedCategories.find(
@@ -183,7 +190,8 @@ export function normalizeProduct(
     stock: raw.stock,
     stock_quantity: raw.stock_quantity,
   });
-  const hasProjectedInStock = raw.availability === 'InStock';
+  const hasProjectedInStock =
+    typeof raw.advertised_price === 'number' && raw.availability === 'InStock';
   const stock = hasProjectedInStock
     ? Math.max(agentAvailability.stock, 1)
     : agentAvailability.stock;

@@ -9,6 +9,7 @@ describe('cellular-phone-classification', () => {
     expect(isCellularPhoneProduct({ name: 'iPhone 16 Pro Max' })).toBe(true);
     expect(isCellularPhoneProduct({ name: 'Google Pixel 8' })).toBe(true);
     expect(isCellularPhoneProduct({ name: 'Samsung Galaxy S24' })).toBe(true);
+    expect(isCellularPhoneProduct({ name: 'Samsung Galaxy A05s' })).toBe(true);
   });
 
   it('classifies phones by category and category slug', () => {
@@ -25,7 +26,7 @@ describe('cellular-phone-classification', () => {
 
   it('classifies phones with null category and joined product_categories', () => {
     const product = {
-      name: 'Motorola Edge 50',
+      name: 'Unbranded Flagship Device',
       category: null,
       product_categories: [
         { categories: { name: 'Smartphones', slug: 'smartphones' } },
@@ -171,6 +172,13 @@ describe('cellular-phone-classification', () => {
     expect(isCellularPhoneProduct({ name: 'Tecno Megapad 10 4GB 128GB' })).toBe(
       false
     );
+    expect(
+      isCellularPhoneProduct({
+        name: 'OnePlus Pad 2',
+        category: 'Phones & Tablets',
+      })
+    ).toBe(false);
+    expect(isCellularPhoneProduct({ name: 'OnePlus Pad' })).toBe(false);
   });
 
   it('preserves phone classification in mixed categories like Tablets & Phones', () => {

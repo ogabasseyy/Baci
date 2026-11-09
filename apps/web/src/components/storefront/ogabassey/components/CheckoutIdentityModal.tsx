@@ -71,9 +71,9 @@ export function CheckoutIdentityModal({
         </div>
 
         <div className="space-y-5 px-6 pb-6 pt-6 sm:px-8">
-          {_merchant?.slug ? (
+          {merchant?.slug ? (
             <CheckoutCodeSignin
-              merchantSlug={_merchant.slug}
+              merchantSlug={merchant.slug}
               onSuccess={handleGuestCheckout}
               socialReturnTo={socialAvailable ? String(normalizedCheckoutUrl) : undefined}
             />

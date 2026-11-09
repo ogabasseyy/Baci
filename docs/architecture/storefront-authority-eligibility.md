@@ -49,3 +49,59 @@ their ranking, inference taxonomy, schema, or public stock policy.
 - Wrong-brand, malformed and unavailable managed rows cannot inflate counts.
 - Family thresholds use the complete parent inventory before display limits.
 - Existing page, content-link and comparison consumer suites cover integration.
+
+## PDP optional-read budget and surface audit (2026-10-27)
+
+The PDP adapter uses the existing inventory reader's bounded mode, not a new
+stock/category loader. It accepts a complete pool of at most 100 brand candidates
+across the merchant, using a 101-row sentinel and exact count to reject oversized
+or server-truncated results before hydration. This deliberately omits optional
+links for large brands, even when their destination remains eligible. It does not
+infer eligibility from a sample or inflate counts from a lower bound.
+
+A single 1-second operation deadline covers the active-category read, product
+query and existing public serialized-stock hydration. The same signal is applied
+at the anonymous client's transport so nested variant/count requests also abort;
+checks between phases prevent late work. Errors escape the cached reader and are
+caught outside it, preventing transient failures from becoming cached empty pools.
+Budget arguments form a separate cache key from the complete destination scan.
+Product and category cache tags invalidate the bounded result. Bounded entries
+use the shorter `storefront-page` cache lifetime (300-second revalidation), so
+active-category freshness does not inherit the 1800-second products lifetime.
+As with the former cached category lookup, changes can remain visible until
+revalidation unless a category tag is invalidated.
+
+The 1-second PDP and 3-second article policies intentionally have distinct cache
+entries, despite sharing the same reader and eligibility contract. Each cold fill
+owns its abort signal: cancelling a PDP fill must not cancel an article fill, and
+a timed-out PDP must not leave a shared background fill running for 3 seconds.
+This can duplicate one bounded scan per policy on a cold cache; moving deadlines
+outside a shared cache fill would sacrifice that cancellation guarantee.
+
+The adapter delegates normalization and brand eligibility to
+`authorityHubEligibility`; provisional link builders now delegate brand and family
+threshold decisions to that same contract. The existing category membership,
+parent/standalone SQL scope, hydration and stock filter remain in the inventory
+reader. Bounded reads select eligibility fields, category evidence, update timestamps and semantic specifications, while omitting images/descriptions. PDP projections retain parent/variant and managed-stock parity metadata for the existing downstream guard.
+
+Audit boundary and remaining findings:
+
+- Both generic and OgaBassey PDP semantic callers use this adapter; no critical
+  commerce or above-fold rendering path gains a new query.
+- Primary brand/family destinations still use the existing complete scan (up to
+  20 pages of 100 rows). Their counts are not replaced by the optional PDP budget.
+- Article verification uses `loadBrandAuthorityInventorySafely` with the same
+  complete-pool ceiling as PDP enrichment and a 3-second shared deadline per
+  brand. Active-category validation runs inside that operation; the verifier no
+  longer starts a separate uncancellable category read. Category, product and
+  hydration aborts omit both brand and dependent family links. Parallel brands
+  retain their own deadlines; primary destination reads remain unchanged.
+- Serialized hydration retains its existing policy/variant/count implementation;
+  this patch bounds its input product IDs and elapsed time, not the number of
+  variants a product may have. There is no new inventory policy or RLS exception.
+
+Regression coverage includes oversized/truncated pools, exact ceiling and empty
+results, category joins and legacy membership, serialized stock after hydration,
+managed/unmanaged availability, numeric-string prices, brand/family thresholds,
+and aborts during category, product and hydration phases. Public-client tests
+verify the deadline reaches actual fetch signals and blocks subsequent requests.

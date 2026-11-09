@@ -3,6 +3,7 @@ import { extractFaqItems, type MerchantFaqSource } from './extract-faq-items';
 
 export interface MerchantPublishableFaqSource extends MerchantFaqSource {
   template_id?: string | null;
+  slug?: string | null;
 }
 
 export function hasPublishableFaqContent(
@@ -15,7 +16,8 @@ export function hasPublishableFaqContent(
       .trim()
   );
   return (
-    merchant.template_id === OGABASSEY_TEMPLATE_ID ||
+    (merchant.template_id === OGABASSEY_TEMPLATE_ID &&
+      merchant.slug === 'ogabassey') ||
     extractFaqItems(merchant).length > 0 ||
     hasLegacyText
   );

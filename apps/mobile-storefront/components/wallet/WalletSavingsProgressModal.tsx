@@ -1,5 +1,6 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
@@ -28,6 +29,8 @@ type WalletSavingsProgressModalProps = {
   onFundWallet: () => void;
   onRefreshWallet?: () => Promise<unknown>;
   onResolveVariant?: () => void;
+  /** Rendered inside the sheet's modal so it can appear above it on iOS. */
+  overlay?: ReactNode;
   visible: boolean;
   walletBalance: number;
   walletUpdatedAt?: number;
@@ -47,6 +50,7 @@ export function WalletSavingsProgressModal({
   onFundWallet,
   onRefreshWallet,
   onResolveVariant,
+  overlay,
   visible,
   walletBalance,
   walletUpdatedAt,
@@ -72,7 +76,12 @@ export function WalletSavingsProgressModal({
       : 'This goal is funded by scheduled auto-debit.';
 
   return (
-    <SavingsBottomSheet visible={visible} colors={colors} onClose={onClose}>
+    <SavingsBottomSheet
+      visible={visible}
+      colors={colors}
+      onClose={onClose}
+      overlay={overlay}
+    >
       {(dismiss) => (
         <>
           <View style={styles.header}>

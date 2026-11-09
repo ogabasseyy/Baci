@@ -50,6 +50,8 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
       slug: product.slug,
       name: product.name,
       brand: product.brand,
+      condition:
+        typeof product.condition === 'string' ? product.condition : null,
       price: product.price,
       availability:
         product.availability === 'InStock' ||

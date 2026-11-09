@@ -1,4 +1,6 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons, {
+  type IoniconsIconName,
+} from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -6,7 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 export interface FeedbackCategory {
   id: string;
   label: string;
-  icon: string;
+  icon: IoniconsIconName;
 }
 
 export const FEEDBACK_CATEGORIES: readonly FeedbackCategory[] = [

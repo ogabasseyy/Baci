@@ -7,6 +7,10 @@ import {
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
+import {
+  buildSavingsSuccessMessage,
+  playSavingsSuccessHaptic,
+} from './savings-contribution-success';
 import { reportContributionError } from './wallet-contribution-error';
 
 interface AddSavingsContributionParams {
@@ -154,10 +158,10 @@ export async function addSavingsContributionToGoal({
       );
       return;
     }
-    if (
+    const goalCompleted =
       amount >= remainingAmount ||
-      isCompletedSavingsContributionResult(contributionResult)
-    ) {
+      isCompletedSavingsContributionResult(contributionResult);
+    if (goalCompleted) {
       try {
         await cancelSavingsReminder?.(goal.id);
       } catch {
@@ -166,19 +170,18 @@ export async function addSavingsContributionToGoal({
     }
     clearSavingsContributionAmount();
     clearIdempotencyKey?.();
-    try {
-      await refetchWallet();
-    } catch {
-      Alert.alert(
-        'Savings updated',
-        `Added ${formatNgnCurrency(amount)} to your savings goal, but wallet refresh failed. Pull to refresh your latest balance.`
-      );
-      return;
-    }
-    Alert.alert(
-      'Savings updated',
-      `Added ${formatNgnCurrency(amount)} to your savings goal.`
+    const refreshFailed = await refetchWallet().then(
+      () => false,
+      () => true
     );
+    playSavingsSuccessHaptic();
+    const success = buildSavingsSuccessMessage({
+      amount,
+      goal,
+      goalCompleted,
+      refreshFailed,
+    });
+    Alert.alert(success.title, success.message);
   } catch (error) {
     reportContributionError(error, clearIdempotencyKey);
   } finally {

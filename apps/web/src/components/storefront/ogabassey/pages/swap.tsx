@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import {
   type DeviceGradingResult,
@@ -30,6 +31,7 @@ function TradeInModal({
   onClose: () => void;
   supportPhone: string;
 }) {
+  const { formatCurrency } = useCurrency();
   const [step, setStep] = useState<'upload' | 'analyzing' | 'result'>('upload');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [result, setResult] = useState<DeviceGradingResult | null>(null);
@@ -73,7 +75,7 @@ function TradeInModal({
       `Hello! I did an AI trade-in check.\n\n` +
       `📱 Device: ${result.model}\n` +
       `✨ Grade: ${result.grade}\n` +
-      `💰 Estimate: ₦${result.estimatedValue.toLocaleString()}\n` +
+      `💰 Estimate: ${formatCurrency(result.estimatedValue)}\n` +
       `📝 Observations: ${result.observations.join(', ')}\n\n` +
       `I'd like to proceed with the swap.`
     );
@@ -173,11 +175,11 @@ function TradeInModal({
               <div className="bg-green-50 border border-green-100 rounded-xl p-4 text-center">
                 <p className="text-sm text-green-800 font-medium mb-1">Estimated Trade-in Value</p>
                 <div className="text-3xl font-extrabold text-green-700">
-                  ₦{result.estimatedValue.toLocaleString()}
+                  {formatCurrency(result.estimatedValue)}
                 </div>
                 {result.basePrice > 0 && (
                   <div className="text-xs text-green-600 mt-1">
-                    Based on market price: ₦{result.basePrice.toLocaleString()}
+                    Based on market price: {formatCurrency(result.basePrice)}
                   </div>
                 )}
               </div>

@@ -59,8 +59,13 @@ vi.mock('@/lib/loyalty/server-resolver-client', () => ({
 // cost 7s per test (10s timeouts in CI). Answer "current" directly, the
 // same outcome, with no network; the order wrapper's currency gate stays
 // covered by the error-mapping cases.
+// Exported so a test can override it to false and cover the stale-currency
+// preview branch; clearAllMocks keeps this default implementation.
+const mockIsLoyaltyCodeCurrencyCurrent = vi.hoisted(() =>
+  vi.fn(async () => true)
+);
 vi.mock('@/lib/checkout/is-loyalty-code-currency-current', () => ({
-  isLoyaltyCodeCurrencyCurrent: vi.fn(async () => true),
+  isLoyaltyCodeCurrencyCurrent: mockIsLoyaltyCodeCurrencyCurrent,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -168,4 +173,5 @@ export {
   mockCreateAdminClient,
   mockCreateAnonClient,
   mockCreateLoyaltyResolverServiceClient,
+  mockIsLoyaltyCodeCurrencyCurrent,
 };

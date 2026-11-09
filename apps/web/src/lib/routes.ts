@@ -200,13 +200,14 @@ export function isValidRouteKey(key: string): key is keyof AppRoutes {
 }
 
 /**
- * Cast a dynamic string URL to Route type.
- * Use this for user-provided URLs or dynamic paths that can't be statically validated.
+ * Cast a dynamic internal pathname to the narrowed `DynamicRoute` type.
+ * Use this for internal paths that can't be statically validated at compile time;
+ * use a native `<a>` element for external `https://` URLs.
  *
  * @example
  * ```tsx
- * // For dynamic URLs from CMS or user input
- * <Link href={asRoute(userProvidedUrl)}>Click me</Link>
+ * // For dynamic internal paths from CMS or merchant storefront scoping
+ * <Link href={asRoute(`/${merchantSlug}/${pageSlug}`)}>Read more</Link>
  * ```
  */
 export function asRoute(url: string): Route {

@@ -72,4 +72,11 @@ describe('normalizeSocialUrl', () => {
       'https://pinterest.com/ogabassey'
     );
   });
+
+  it('rejects non-http(s) URI schemes', () => {
+    expect(
+      normalizeSocialUrl('javascript:alert(1)', 'instagram')
+    ).toBeUndefined();
+    expect(normalizeSocialUrl('data:text/html,hi', 'facebook')).toBeUndefined();
+  });
 });

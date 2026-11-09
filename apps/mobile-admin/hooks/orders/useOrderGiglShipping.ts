@@ -11,6 +11,7 @@ import {
   type OrderGiglMissingField,
   type OrderGiglQuoteResult,
   type OrderGiglReceiver,
+  type OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
 import { bindOrderGiglShippingAppState } from '@/lib/order-gigl-shipping-app-state';
 import {
@@ -127,6 +128,23 @@ export function useOrderGiglShipping({
   const updateAddressField = (field: OrderGiglMissingField, value: string) => {
     setAddressDraft((previous) => {
       const next = { ...previous, [field]: value };
+      addressRef.current = next;
+      return next;
+    });
+    invalidateQuote();
+  };
+  // One atomic update so a picked place never keeps the previous city, state
+  // or pin.
+  const selectAddressPlace = (place: OrderGiglSelectedPlace) => {
+    setAddressDraft((previous) => {
+      const next = {
+        ...previous,
+        address: place.address,
+        city: place.city,
+        state: place.state,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      };
       addressRef.current = next;
       return next;
     });
@@ -288,6 +306,7 @@ export function useOrderGiglShipping({
     startFunding,
     startTransferPoll,
     state,
+    selectAddressPlace,
     updateAddressField,
     wallet,
   };

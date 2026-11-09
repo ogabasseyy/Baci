@@ -73,6 +73,14 @@ export interface OrderGiglReceiver {
   longitude?: number;
 }
 
+export interface OrderGiglSelectedPlace {
+  address: string;
+  city: string;
+  state: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export class OrderGiglShippingError extends Error {
   code?: string;
   missing: OrderGiglMissingField[];

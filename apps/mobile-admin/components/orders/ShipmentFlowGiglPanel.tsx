@@ -8,17 +8,13 @@ import type {
   OrderGiglMissingField,
   OrderGiglQuote,
   OrderGiglReceiver,
+  OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
 import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
 } from './ShipmentOptionCard';
-
-// Typing in the search box must not overwrite the manual fields.
-function ignoreSearchText(_text: string) {
-  return undefined;
-}
 
 const formatPrice = (amount: number) =>
   formatMerchantPrice(amount, { payout_currency: 'NGN' });
@@ -61,6 +57,7 @@ interface Props {
   missingFields: OrderGiglMissingField[];
   onAddressFieldChange: (field: OrderGiglMissingField, value: string) => void;
   onFundWallet: () => void;
+  onPlaceSelect: (place: OrderGiglSelectedPlace) => void;
   onRefreshFundingAccount: () => void;
   onModeChange: () => void;
   onRetryQuote: () => void;
@@ -115,6 +112,7 @@ export function ShipmentFlowGiglPanel({
   missingFields,
   onAddressFieldChange,
   onFundWallet,
+  onPlaceSelect,
   onRefreshFundingAccount,
   onModeChange,
   onRetryQuote,
@@ -161,11 +159,20 @@ export function ShipmentFlowGiglPanel({
         <CheckoutRecoveryAddressInput
           accessibilityLabel="Search shipping address"
           address={addressDraft.address ?? ''}
-          onSearchChange={ignoreSearchText}
+          disabled={loading}
+          onSearchChange={(text) => onAddressFieldChange('address', text)}
           onSelect={(place) => {
-            onAddressFieldChange('address', place.address);
-            if (place.city) onAddressFieldChange('city', place.city);
-            if (place.state) onAddressFieldChange('state', place.state);
+            const latitude = Number.parseFloat(place.latitude);
+            const longitude = Number.parseFloat(place.longitude);
+            const hasPin =
+              Number.isFinite(latitude) && Number.isFinite(longitude);
+            onPlaceSelect({
+              address: place.address,
+              city: place.city,
+              state: place.state,
+              latitude: hasPin ? latitude : undefined,
+              longitude: hasPin ? longitude : undefined,
+            });
           }}
           placeholder="Search delivery address"
         />

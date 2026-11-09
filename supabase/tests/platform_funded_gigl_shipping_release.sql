@@ -174,6 +174,7 @@ BEGIN
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000002', 6); -- control cancel
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000002', 7); -- control self-fulfil
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000001', 8); -- funded-wallet platform reserve
+  PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000001', 9); -- no-wallet-row platform reserve
 END;
 $seed_orders$;
 

@@ -208,6 +208,25 @@ BEGIN
 END;
 $t4b$;
 
+-- T4c: a flagged merchant with NO wallet row still reserves as platform.
+DO $t4c$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000009';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000009';
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  DELETE FROM public.merchant_wallets WHERE merchant_id = v_merchant;
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  PERFORM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-9');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.funding_source IS DISTINCT FROM 'platform' OR v_row.debit_transaction_id IS NOT NULL THEN
+    RAISE EXCEPTION 'T4c: a flagged merchant without a wallet row must still reserve as platform';
+  END IF;
+END;
+$t4c$;
+
 -- T5c (control): cancelling a wallet-funded reservation restores the balance
 -- once, with a refund transaction linked to the charge.
 DO $t5c$
@@ -258,6 +277,9 @@ $t5d$;
 -- T6: the platform charge can never carry a wallet transaction (CHECK).
 DO $t6$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.merchant_shipping_charges WHERE funding_source = 'platform') THEN
+    RAISE EXCEPTION 'T6: fixture needs at least one platform charge';
+  END IF;
   BEGIN
     UPDATE public.merchant_shipping_charges
     SET debit_transaction_id = (SELECT id FROM public.wallet_transactions LIMIT 1)

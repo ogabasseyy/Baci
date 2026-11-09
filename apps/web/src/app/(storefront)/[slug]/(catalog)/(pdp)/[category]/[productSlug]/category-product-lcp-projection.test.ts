@@ -176,7 +176,7 @@ describe('cached category PDP projection', () => {
       product_variants: [
         {
           id: 'variant-wifi',
-          is_active: true,
+          product_id: 'product-1',
           price_override: 900_000,
           stock_quantity: 5,
           primary_image: 'https://cdn.example/wifi.avif',
@@ -184,7 +184,7 @@ describe('cached category PDP projection', () => {
         },
         {
           id: 'variant-cellular',
-          is_active: true,
+          product_id: 'product-1',
           price_override: 1_100_000,
           stock_quantity: 5,
           primary_image: 'https://cdn.example/cellular.avif',

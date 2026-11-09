@@ -31,7 +31,7 @@ function getRowEffectivePrice(row: Record<string, unknown>): number {
 
 /** Apply display-only facts after the caller has scoped and bounded listing rows. */
 export async function projectStandardListingRows<
-  T extends AdvertisedPhoneProduct & Record<string, unknown>,
+  T extends Record<string, unknown>,
 >(
   merchantId: string,
   rows: T[],
@@ -40,7 +40,7 @@ export async function projectStandardListingRows<
   assertPublicListingProductRows(rows);
   const projected = await projectAdvertisedPhonePrices(
     merchantId,
-    rows,
+    rows as Array<T & AdvertisedPhoneProduct>,
     getPublicProductVariantsByProductIds,
     constraints
   );

@@ -1,4 +1,5 @@
 import type { Route } from 'next';
+import type { ProductVariant } from '@/lib/products';
 import {
   buildDescriptionExcerpt,
   type ConditionType,
@@ -41,6 +42,7 @@ interface ProductPurchasePanelProps {
   selectedAttributes: Record<string, string>;
   selectedColor: number | null;
   selectedCondition: ConditionType;
+  selectedVariant?: ProductVariant | null;
   showColorToast: boolean;
 }
 
@@ -75,6 +77,7 @@ export function ProductPurchasePanel({
   selectedAttributes,
   selectedColor,
   selectedCondition,
+  selectedVariant,
   showColorToast,
 }: ProductPurchasePanelProps) {
   return (
@@ -104,6 +107,7 @@ export function ProductPurchasePanel({
         secondaryColor={secondaryColor}
         selectedAttributes={selectedAttributes}
         selectedColor={selectedColor}
+        selectedVariant={selectedVariant}
         showColorToast={showColorToast}
       />
       <ProductCartActions

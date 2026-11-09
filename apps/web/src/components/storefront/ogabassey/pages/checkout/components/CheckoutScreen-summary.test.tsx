@@ -229,6 +229,9 @@ describe('CheckoutScreen summaries', () => {
       />
     );
     const step = screen.getByTestId('oxygen-step');
+    const grid = step.closest('.grid');
+    expect(grid).toHaveClass('lg:grid-cols-12');
+    expect(grid).toContainElement(screen.getByTestId('oxygen-desktop'));
     expect(
       screen.getByTestId('oxygen-mobile').compareDocumentPosition(step) &
         Node.DOCUMENT_POSITION_FOLLOWING
@@ -239,7 +242,7 @@ describe('CheckoutScreen summaries', () => {
     ).toBeTruthy();
   });
 
-  it('renders the Oxygen summary before the steps when no separate mobile summary exists', () => {
+  it('renders the desktop Oxygen summary once when no separate mobile summary exists', () => {
     render(
       <CheckoutScreen
         {...createProps()}
@@ -247,12 +250,7 @@ describe('CheckoutScreen summaries', () => {
         oxygenSummary={<div data-testid="oxygen-summary" />}
       />
     );
-    const summaries = screen.getAllByTestId('oxygen-summary');
-    expect(summaries).toHaveLength(2);
-    expect(
-      summaries[0].compareDocumentPosition(screen.getByTestId('oxygen-step')) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    expect(screen.getAllByTestId('oxygen-summary')).toHaveLength(1);
   });
 
   it('opens the auth prompt from checkout steps and renders the open auth dialog', () => {

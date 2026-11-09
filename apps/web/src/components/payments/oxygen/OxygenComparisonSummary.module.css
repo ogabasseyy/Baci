@@ -16,7 +16,11 @@
 .highlights p {
   margin: 0 0 0.5rem;
   font-size: 0.8125rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 80%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
 }
 .highlights strong {
   display: block;
@@ -29,12 +33,20 @@
   display: block;
   margin-top: 0.25rem;
   font-size: 0.6875rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .finalPayment {
   margin: 0.85rem 0 0;
   font-size: 0.75rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .chips {
   display: flex;
@@ -49,7 +61,11 @@
   padding: 0.35rem 0.5rem;
   font-size: 0.6875rem;
   line-height: 1.5;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .chips b {
   font-weight: 500;
@@ -67,7 +83,11 @@
   cursor: pointer;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 80%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
 }
 .details summary:focus-visible {
   outline: 2px solid var(--store-primary, #dc2626);
@@ -92,7 +112,11 @@
 }
 .details dt,
 .details li > span {
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 .details h4 {
   font-size: 0.8125rem;
@@ -109,7 +133,11 @@
 .reference {
   font-size: 0.625rem;
   overflow-wrap: anywhere;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin-top: 1rem;
 }
 .skeleton {
@@ -146,7 +174,11 @@
 }
 .footer p {
   font-size: 0.75rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin: 0;
   text-align: center;
 }
@@ -159,7 +191,11 @@
   display: flex;
   align-items: center;
   min-height: 2.75rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 60%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 60%,
+    transparent
+  );
   font-size: 0.8125rem;
   font-weight: 600;
 }
@@ -167,12 +203,20 @@
 .highlights .finalPayment {
   margin-top: 0.55rem;
   font-size: 0.6875rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
 }
 
 .context {
   font-size: 0.75rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   margin: 0.25rem 0 1rem;
 }
 
@@ -194,7 +238,11 @@
 .dateRange {
   display: block;
   margin-top: 0.25rem;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   font-size: 0.6875rem;
 }
 .dateGroups strong {
@@ -203,7 +251,11 @@
 }
 .dateGroups small {
   display: block;
-  color: color-mix(in srgb, var(--store-background-text, #111827) 70%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
   font-weight: 400;
   font-size: 0.6875rem;
 }

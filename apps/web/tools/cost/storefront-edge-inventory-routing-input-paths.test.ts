@@ -19,10 +19,14 @@ describe('storefront edge inventory routing input paths', () => {
       .map((name) => `apps/web/src/lib/proxy/${name}`)
       .sort();
 
-    expect(runtimeProxyPaths).toHaveLength(32);
-    expect(STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS).toEqual(
-      expect.arrayContaining(runtimeProxyPaths)
+    const inventoriedProxyPaths =
+      STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS.filter((path) =>
+        path.startsWith('apps/web/src/lib/proxy/')
+      ).sort();
+    expect(runtimeProxyPaths).toContain(
+      'apps/web/src/lib/proxy/oxygen-payment-surface.ts'
     );
+    expect(inventoriedProxyPaths).toEqual(runtimeProxyPaths);
     expect(
       STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS.some(
         (path) =>

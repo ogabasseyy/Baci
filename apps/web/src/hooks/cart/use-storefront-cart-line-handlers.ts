@@ -53,6 +53,7 @@ export function useStorefrontCartLineHandlers({
   const noteAddedProduct = (added: Product) => {
     if (enableSmartCartPro) {
       setLastAddedProduct(added);
+      if (upsellTimerRef.current) clearTimeout(upsellTimerRef.current);
       upsellTimerRef.current = setTimeout(() => {
         setShowUpsell(true);
       }, 500);
@@ -104,7 +105,9 @@ export function useStorefrontCartLineHandlers({
       cartSlug: merchantSlugRef.current,
     });
 
+    const lineInstanceId = globalThis.crypto?.randomUUID?.();
     const lineAddInput = {
+      lineInstanceId,
       product,
       productForCart,
       normalizedOptions,

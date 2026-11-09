@@ -40,7 +40,7 @@ describe('WalletSavingsFundingSection wallet path', () => {
       />
     );
     const action = screen.getByRole('button', {
-      name: 'Fund wallet for savings',
+      name: 'Add money for savings',
     });
     expect(
       screen.queryByRole('button', { name: 'Continue to payment' })

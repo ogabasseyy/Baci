@@ -42,11 +42,27 @@ describe('CategoryPageToolbar', () => {
     expect(
       screen.getByRole('heading', { name: 'Smartphones', level: 1 })
     ).toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(nav).toBeInTheDocument();
+    expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
       '/test-store'
     );
+    const currentItem = screen.getByText('Smartphones', {
+      selector: '[aria-current="page"]',
+    });
+    expect(currentItem).toBeInTheDocument();
     expect(screen.getByText('42 results found')).toBeInTheDocument();
+  });
+
+  it('falls back to "/" for the Home breadcrumb link when basePath is empty on a custom domain', () => {
+    renderToolbar({ basePath: '' });
+
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'href',
+      '/'
+    );
   });
 
   it('invokes onViewModeChange when a view mode button is clicked', () => {

@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineChatwootCartCredentialPaths } from './event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
@@ -34,6 +35,7 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       ...eventPipelineCartCredentialPaths,
+      ...eventPipelineChatwootCartCredentialPaths,
       // One host-verified public observation may mint only the existing
       // short-lived event-ingress capability; it cannot read provider credentials.
       [

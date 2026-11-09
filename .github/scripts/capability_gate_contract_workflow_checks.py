@@ -5,6 +5,8 @@ archived extraction alongside it. Everything here reads candidate text as
 data; nothing here executes PR code.
 """
 import re
+import importlib.util
+from pathlib import Path
 
 from capability_gate_contract_ci_checks import (
     CHECKER,
@@ -17,20 +19,25 @@ from capability_gate_contract_ci_checks import (
     _without_block_scalars,
 )
 
+# Resolve exclusively relative to this extracted base-owned script, never cwd.
+_companion_path = Path(__file__).resolve().parents[2] / "vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py"
+_spec = importlib.util.spec_from_file_location("base_capability_private_fetch", _companion_path)
+if _spec is None or _spec.loader is None:
+    raise ImportError("base-owned capability gate companion unavailable")
+_companion = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_companion)
+PRIVATE_ENV = _companion.PRIVATE_ENV
+PRIVATE_RUN = _companion.PRIVATE_RUN
+
+
+sha256_of = _companion.sha256_of
+declared_checker_pin = _companion.declared_checker_pin
+
 # The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
 # Keep inline ${{ }} out of bare run arguments and avoid case-pattern alternations: the SAST Pro rules parse run snippets as Bash and fail the required check on PartialParsing warnings. Resolve dynamic values via GITHUB_EVENT_PATH instead.
-EXPECTED_RUN = [
-    'if [ -n "${{ github.event.pull_request.head.sha }}" ]; then',
-    "rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check",
-    'base_ref=$(jq -r .pull_request.base.ref "$GITHUB_EVENT_PATH")',
-    'git fetch --no-tags --depth 1 origin "$base_ref"',
-    "git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check",
-    "CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py",
-    "else",
-    "CHECKER=.github/scripts/capability_gate_contract_check.py",
-    "fi",
-    'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
-]
+EXPECTED_RUN = _companion.EXPECTED_RUN
+EXPECTED_RUN_WITH_COMPANION = _companion.EXPECTED_RUN_WITH_COMPANION
+EXPECTED_RUN_PRIVATE = _companion.EXPECTED_RUN_PRIVATE
 
 # The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
 EXPECTED_FIRST_STEP = [
@@ -251,8 +258,10 @@ def workflow_failures(workflow_text):
         if len(line) - len(line.lstrip()) <= indent:
             break
         body.append(stripped)
-    if body != EXPECTED_RUN:
+    if body != EXPECTED_RUN_PRIVATE:
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
+    if body == EXPECTED_RUN_PRIVATE and "        env:" not in block:
+        failures.append("authenticated fetch must supply its read-only token")
     # Startup env preloads PR code before the checker starts: job env carries only the pin, steps none.
     for line in block:
         if _has_escaped_key(line):
@@ -274,7 +283,7 @@ def workflow_failures(workflow_text):
                     break
                 continue
             env_open = False
-        if re.match(r"^        [\"']?env[\"']?\s*:", line):
+        if re.match(r"^        [\"']?env[\"']?\s*:", line) and not _companion.private_env_is_exact(body, EXPECTED_RUN_PRIVATE, block, line):
             failures.append("contract workflow steps must not set environment")
             break
     # Steps must run their scripts with the default shell: a custom shell

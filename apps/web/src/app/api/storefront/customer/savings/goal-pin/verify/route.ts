@@ -4,10 +4,13 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { isPrimaryWalletGoalCancelIssued } from '@/lib/piggyvest/goal-cancel-runtime';
 import { isPiggyvestGoalCancelDisabled } from '@/lib/piggyvest/goal-cancel-switch';
+import { isPrimaryWalletGoalCompleteIssued } from '@/lib/piggyvest/goal-complete-runtime';
+import { isPiggyvestGoalCompleteDisabled } from '@/lib/piggyvest/goal-complete-switch';
 import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
 import {
   isActiveOwnGoal,
   isCancellableOwnGoal,
+  isCompletableOwnGoal,
 } from '@/lib/piggyvest/goal-pin-fund-eligibility';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
@@ -15,6 +18,7 @@ import {
   readPrimaryWalletSavingsRecoveryRuntime,
   readPrimaryWalletSavingsRuntime,
 } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import { chargeWalletPinCustomerLimit } from '@/lib/wallet-pin/wallet-pin-customer-limit';
 import { piggyvestGoalPinSchemas } from '@/schemas/piggyvest-goal-pin';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -42,15 +46,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   const input = parsed.data;
-  // A complete proof is not issued until it binds to a server-issued
-  // per-attempt operation id (S7). Refuse before any PIN verification so no
-  // attempt is counted and no proof is minted.
-  if (input.action === 'complete')
-    return refuse(
-      'This PIN check is not available yet.',
-      'PIN_ACTION_NOT_AVAILABLE',
-      400
-    );
   // The cancel-only emergency switch refuses NEW cancels, and a PIN check is
   // the first step of one: no attempt is counted and no proof is minted.
   if (input.action === 'cancel' && isPiggyvestGoalCancelDisabled())
@@ -59,12 +54,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       'SAVINGS_UNAVAILABLE',
       503
     );
+  // Likewise the complete-only switch refuses NEW completes before any PIN
+  // attempt is counted. It never touches funding or cancel PIN checks.
+  if (input.action === 'complete' && isPiggyvestGoalCompleteDisabled())
+    return refuse(
+      'Goal completion is temporarily unavailable.',
+      'SAVINGS_UNAVAILABLE',
+      503
+    );
   try {
-    // Cancel-to-main stays available with the PiggyVest flags and the kill
-    // switch off, so its PIN check uses the recovery runtime, which reads
+    // Cancel and complete return the customer's own money to their own main
+    // wallet, so they stay available with the PiggyVest flags and the kill
+    // switch off: their PIN checks use the recovery runtime, which reads
     // neither. Funding still needs the enabled runtime.
     const runtime =
-      input.action === 'cancel'
+      input.action === 'cancel' || input.action === 'complete'
         ? readPrimaryWalletSavingsRecoveryRuntime()
         : readPrimaryWalletSavingsRuntime();
     if (!runtime || runtime.merchantId !== input.merchantId)
@@ -87,9 +91,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     const supabase = auth.supabase;
     // A funding proof is only issued for an active goal of this customer
-    // while the customer savings feature is on. A cancel proof does not
-    // depend on the feature setting (nobody is trapped in a goal) and is
-    // issued for an active or paused goal of this customer.
+    // while the customer savings feature is on. A cancel or complete proof
+    // does not depend on the feature setting (nobody is trapped in a goal);
+    // cancel is issued for an active or paused goal of this customer and
+    // complete for an active, paused or completed one (whether the goal
+    // reached its target or maturity is decided by the database).
     if (input.action === 'fund') {
       const features = await getPrimaryCustomerSavingsFeatureSettings({
         supabase,
@@ -112,7 +118,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const owned =
       input.action === 'cancel'
         ? await isCancellableOwnGoal(ownership)
-        : await isActiveOwnGoal(ownership);
+        : input.action === 'complete'
+          ? await isCompletableOwnGoal(ownership)
+          : await isActiveOwnGoal(ownership);
     if (!owned)
       return refuse('That savings goal was not found.', 'GOAL_NOT_FOUND', 404);
     // A cancel proof is only minted for an operation id this database issued
@@ -139,6 +147,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           409
         );
     }
+    // The same for a complete proof: only for a live operation id this
+    // database issued for this customer and goal.
+    if (input.action === 'complete') {
+      const issued = await isPrimaryWalletGoalCompleteIssued({
+        configuration: runtime.configuration,
+        scope: {
+          merchantId: identity.merchantId,
+          customerId: identity.customerId,
+          userId: identity.userId,
+          integrationId: runtime.configuration.integrationId,
+          environment: runtime.configuration.environment,
+          businessId: runtime.businessId,
+        },
+        goalId: input.goalId,
+        operationId: input.operationId,
+      });
+      if (!issued)
+        return refuse(
+          'This completion is no longer valid. Please start again.',
+          'COMPLETE_OPERATION_INVALID',
+          409
+        );
+    }
+    // Charged only now that the request will actually examine a PIN, so a
+    // mistyped goal id or an eligibility refusal never burns the budget.
+    const limited = await chargeWalletPinCustomerLimit(
+      'goal-verify',
+      identity.merchantId,
+      identity.userId
+    );
+    if (limited) return limited;
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

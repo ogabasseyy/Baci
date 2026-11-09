@@ -1,10 +1,16 @@
 import { useRef } from 'react';
 import { Alert } from 'react-native';
+import { isFundedUnsettledGoal } from './savings/goal-settlement';
+import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
+import { useWalletPinPrompt } from './savings/use-wallet-pin-prompt';
 import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 
 export function useWalletSavingsController(
-  input: Parameters<typeof createWalletSavingsActions>[0] & { userId?: string }
+  input: Parameters<typeof createWalletSavingsActions>[0] & {
+    userId?: string;
+    walletUpdatedAt?: number;
+  }
 ) {
   // The pending key belongs to the (user, merchant, goal) scope that
   // created it: the server answers not_found for any other scope (its
@@ -33,7 +39,18 @@ export function useWalletSavingsController(
     railRef: input.operationRailRef,
     setAmount: input.setSavingsContributionAmount,
   });
-  const actions = createWalletSavingsActions(input);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
+  const gate = usePrimaryGoalGate(input.walletUpdatedAt);
+  const goalAwaitingSettlement =
+    gate === 'ready' && isFundedUnsettledGoal(input.goal);
+  const actions = createWalletSavingsActions({
+    ...input,
+    goalAwaitingSettlement,
+    goalSettlementChecking:
+      (gate === 'checking' || gate === 'error') &&
+      isFundedUnsettledGoal(input.goal),
+    requestPinProof: requestProof,
+  });
   const retryRecovery = () => {
     recovery.retry();
     Alert.alert(
@@ -41,10 +58,19 @@ export function useWalletSavingsController(
       'We need to check for an existing transfer before starting another payment. Please try again after this check.'
     );
   };
+  const hasPendingSavingsContribution =
+    recovery.ready && actions.hasPendingSavingsContribution;
   return {
     ...actions,
-    hasPendingSavingsContribution:
-      recovery.ready && actions.hasPendingSavingsContribution,
+    goalAwaitingSettlement,
+    pinSheetProps,
+    hasPendingSavingsContribution,
+    /** What the wallet content needs to show the savings sheet correctly. */
+    walletContentSavingsProps: {
+      hasPendingSavingsContribution,
+      goalAwaitingSettlement,
+      walletUpdatedAt: input.walletUpdatedAt,
+    },
     handleAddSavingsContribution: recovery.ready
       ? actions.handleAddSavingsContribution
       : retryRecovery,

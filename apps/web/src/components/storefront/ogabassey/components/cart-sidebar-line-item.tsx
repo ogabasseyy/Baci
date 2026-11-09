@@ -1,10 +1,6 @@
 'use client';
 
-import { CartVariantDetails } from './cart-variant-details';
-
-import Link from 'next/link';
 import { isProductNegotiable } from '@baci/shared/lib';
-import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
   Check,
   HandCoins,
@@ -13,14 +9,19 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react';
-import { type CartItem } from '@/hooks/cart';
-import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+
+import Link from 'next/link';
+import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
+import type { CartItem } from '@/hooks/cart';
 import {
   getCartItemCheckoutUnitPrice,
   isQuizVoucherCartItem,
 } from '@/lib/checkout/cart-entitlement-sanitizer';
+import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
+import { CartAssuranceRow } from '../pages/cart-assurance-row';
+import { CartVariantDetails } from './cart-variant-details';
 
 export function CartSidebarLineItem({
   item,
@@ -80,7 +81,8 @@ export function CartSidebarLineItem({
             >
               {item.name}
             </Link>
-            <button type="button"
+            <button
+              type="button"
               onClick={() => onRemove(item.cartItemId)}
               className="text-gray-400 hover:text-store-primary p-1 -mt-1 -mr-1"
               aria-label="Remove item"
@@ -97,7 +99,8 @@ export function CartSidebarLineItem({
           <div className="flex flex-col gap-3">
             {/* Quantity */}
             <div className="flex items-center border border-gray-200 rounded-md w-fit">
-              <button type="button"
+              <button
+                type="button"
                 onClick={() =>
                   onUpdateQuantity(item.cartItemId, item.quantity - 1)
                 }
@@ -110,7 +113,8 @@ export function CartSidebarLineItem({
               <span className="w-6 text-center text-xs font-medium">
                 {item.quantity}
               </span>
-              <button type="button"
+              <button
+                type="button"
                 onClick={() =>
                   onUpdateQuantity(item.cartItemId, item.quantity + 1)
                 }
@@ -123,8 +127,9 @@ export function CartSidebarLineItem({
             </div>
 
             {/* Negotiation - Bottom Left */}
-            {hasPriceNegotiation && !isQuizGift && (
-              item.negotiationStatus === 'accepted' ? (
+            {hasPriceNegotiation &&
+              !isQuizGift &&
+              (item.negotiationStatus === 'accepted' ? (
                 <div className="flex items-center gap-1 text-[10px] font-bold text-store-primary bg-store-primary/5 px-1.5 py-0.5 rounded-md w-fit border border-store-primary/15">
                   <Check size={10} strokeWidth={3} />
                   <span>
@@ -135,7 +140,8 @@ export function CartSidebarLineItem({
                   brand: item.brand,
                   name: item.name,
                 }) ? (
-                <button type="button"
+                <button
+                  type="button"
                   onClick={() => onNegotiate(item)}
                   className="flex items-center gap-1.5 text-[10px] font-bold text-store-primary hover:text-store-primary transition-colors"
                 >
@@ -147,8 +153,7 @@ export function CartSidebarLineItem({
                   <Check size={10} strokeWidth={3} />
                   <span>Best price</span>
                 </div>
-              )
-            )}
+              ))}
           </div>
 
           <div className="text-right pb-0.5">
@@ -179,51 +184,48 @@ export function CartSidebarLineItem({
             charged without a pre-checkout opt-out. */}
         {cartMerchantContextMatches &&
           (shippingInsuranceEnabled || item.hasAssurance) && (
-          <div className="mt-4 pt-3 border-t border-gray-50">
-            <label className="flex items-start gap-2 cursor-pointer group">
-              <div className="relative flex items-center mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={item.hasAssurance || false}
-                  onChange={() => onToggleAssurance?.(item.cartItemId)}
-                  className="peer sr-only"
+            <div className="mt-4 pt-3 border-t border-gray-50">
+              {merchantSlug === 'ogabassey' ? (
+                <CartAssuranceRow
+                  hasAssurance={item.hasAssurance}
+                  assuranceCost={assuranceCost}
+                  assuranceRateLabel={assuranceRateLabel}
+                  cartItemId={item.cartItemId}
+                  onToggle={onToggleAssurance}
                 />
-                <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                    <ShieldCheck
-                      size={12}
-                      className="text-store-primary"
+              ) : (
+                <label className="flex items-start gap-2 cursor-pointer group">
+                  <span className="relative flex items-center mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={item.hasAssurance || false}
+                      onChange={() => onToggleAssurance?.(item.cartItemId)}
+                      className="peer sr-only"
                     />
-                    {merchantSlug === 'ogabassey' ? 'Ogabassey Assurance' : 'Order Protection'}
+                    <span className="block w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden peer-focus:ring-2 peer-focus:ring-store-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
                   </span>
-                  {item.hasAssurance && (
-                    <span className="text-xs font-bold text-gray-900">
-                      +₦{assuranceCost.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
-                  {item.hasAssurance ? (
-                    <>
-                      {merchantSlug === 'ogabassey' ? (
-                        <>
-                          Covers <span className="font-bold text-gray-700">Screen & Liquid Damage</span>
-                        </>
-                      ) : (
-                        'Standard Shipping Protection'
+                  <span className="flex-1">
+                    <span className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                        <ShieldCheck size={12} className="text-store-primary" />
+                        Order Protection
+                      </span>
+                      {item.hasAssurance && (
+                        <span className="text-xs font-bold text-gray-900">
+                          +₦{assuranceCost.toLocaleString('en-NG')}
+                        </span>
                       )}
-                    </>
-                  ) : (
-                    `${merchantSlug === 'ogabassey' ? 'Device Protection' : 'Safety & Shipping Coverage'} (+${assuranceRateLabel})`
-                  )}
-                </p>
-              </div>
-            </label>
-          </div>
-        )}
+                    </span>
+                    <span className="block text-[10px] text-gray-500 leading-tight mt-0.5">
+                      {item.hasAssurance
+                        ? 'Standard Shipping Protection'
+                        : `Safety & Shipping Coverage (+${assuranceRateLabel})`}
+                    </span>
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

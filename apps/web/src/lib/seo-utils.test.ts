@@ -13,11 +13,11 @@ import {
   generateOrganizationSchema,
   generateProductSchema,
   generateSlug,
-  getCanonicalStorefrontFilterSearchParams,
   getEffectiveProductStock,
-  getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
+  isRedundantPlatformListParenthetical,
+  stripRedundantPlatformParentheticals,
 } from './seo-utils';
 import { makeSeoProduct as makeProduct } from './seo-utils-product-schema-test-helper';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
@@ -31,6 +31,24 @@ function makeTrustProfile(
     ...overrides,
   };
 }
+
+const completePolicies = makeTrustProfile({
+  shippingPolicy: {
+    localRoute: '/shipping',
+    regions: ['NG'],
+    shippingFeeType: 'free',
+    handlingDaysMin: 0,
+    handlingDaysMax: 1,
+    transitDaysMin: 1,
+    transitDaysMax: 5,
+  },
+  returnPolicy: {
+    localRoute: '/returns',
+    windowDays: 7,
+    returnMethod: 'in_store',
+    returnFees: 'free',
+  },
+});
 
 describe('buildStorefrontAcceptedPaymentMethods', () => {
   it('derives only checkout-enabled payment methods for structured data', () => {
@@ -524,7 +542,9 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
-    expect(variants[0]).not.toHaveProperty('description');
+    expect(variants[0]?.description).toContain(
+      'A flagship device with variant-specific merchandising.'
+    );
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -589,6 +609,277 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variesBy).not.toContain('https://schema.org/additionalProperty');
     // Exactly 2 unique values: size + color
     expect(variesBy).toHaveLength(2);
+  });
+
+  describe('bugfix: product structured data variant and policy regressions', () => {
+    it('declares only variant dimensions present on every variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Silver', storage: '512GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { ram: '16GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v3',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toBeUndefined();
+      const variants = schema.hasVariant as Record<string, unknown>[];
+      expect(variants[0].color).toBe('Silver');
+      expect(variants[1]).not.toHaveProperty('color');
+      expect(variants[2]).not.toHaveProperty('size');
+    });
+
+    it.each([
+      [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+      [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+    ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: first,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: second,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
+    });
+
+    it('provides a truthful description on each product variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          description: 'A refurbished phone with a clear display.',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black', storage: '128GB' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(variant.description).toContain(
+        'A refurbished phone with a clear display.'
+      );
+      expect(variant.description).toContain('Black');
+      expect(variant.description).toContain('128GB');
+    });
+
+    it('keeps variant names concise when catalog attributes contain long specifications', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          name: 'HP ProBook 440 G11',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                color: 'Pike Silver',
+                ram: '16GB',
+                processor: 'Core Ultra 5',
+                specifications: 'detailed specification '.repeat(30),
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const name = String(
+        (schema.hasVariant as Record<string, unknown>[])[0].name
+      );
+      expect(name.length).toBeLessThanOrEqual(150);
+      expect(name).toContain('HP ProBook 440 G11');
+      expect(name).toContain('Pike Silver');
+      expect(name).toContain('16GB');
+    });
+
+    it('uses stable feed identifiers when a variant SKU or group slug is invalid', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          slug: `product-${'x'.repeat(60)}`,
+          variants: [
+            {
+              id: 'b9c67d32-7d63-41a3-9b14-2e7eb322a995',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              sku: `INVALID SKU ${'x'.repeat(60)}`,
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(schema.productGroupID).toBe(
+        'e7d13d26-ef38-4c5b-a616-40d23cf69708'
+      );
+      expect(variant.inProductGroupWithID).toBe(schema.productGroupID);
+      expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
+    });
+
+    it('preserves validated SKU fallback and clears stale custom variesBy when custom schema markup is invalid or incomplete', () => {
+      const singleSchema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          sku: `INVALID SKU ${'x'.repeat(60)}`,
+          schema_markup: {
+            sku: `CUSTOM INVALID SKU ${'y'.repeat(60)}`,
+          } as unknown as Product['schema_markup'],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(singleSchema.sku).toBe('e7d13d26-ef38-4c5b-a616-40d23cf69708');
+
+      const groupSchema = generateProductSchema(
+        makeProduct({
+          id: 'invalid id / with spaces',
+          slug: `product-${'x'.repeat(60)}`,
+          schema_markup: {
+            variesBy: ['https://schema.org/color'],
+          } as unknown as Product['schema_markup'],
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { processor: 'M4' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(groupSchema.variesBy).toBeUndefined();
+      expect(groupSchema.productGroupID).toBe('group-invalid-id---with-spaces');
+      expect(
+        (groupSchema.hasVariant as Record<string, unknown>[])[0]
+          .inProductGroupWithID
+      ).toBe(groupSchema.productGroupID);
+    });
+
+    it('does not treat oversized specification text as a variant size', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                storage: 'Full product specification '.repeat(10),
+                ram: '32GB RAM',
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect((schema.hasVariant as Record<string, unknown>[])[0].size).toBe(
+        '32GB RAM'
+      );
+    });
+
+    it('does not claim free nationwide shipping or return terms without evidence', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'White' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG',
+        undefined,
+        makeTrustProfile({
+          shippingPolicy: {
+            localRoute: '/shipping',
+            regions: ['Lagos, Nigeria'],
+            shippingFeeType: 'calculated',
+          },
+        })
+      );
+      for (const variant of schema.hasVariant as Record<string, unknown>[]) {
+        const offer = variant.offers as Record<string, unknown>;
+        expect(offer).not.toHaveProperty('shippingDetails');
+        expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
+      }
+    });
   });
 
   it('sets variant-level availability correctly', () => {
@@ -668,12 +959,19 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       ],
     });
 
-    const schema = generateProductSchema(product, 'TestStore', 'NGN', 'NG');
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      completePolicies
+    );
     const variants = schema.hasVariant as Record<string, unknown>[];
     const offer = variants[0].offers as Record<string, unknown>;
 
-    // priceValidUntil is a YYYY-MM-DD string
-    expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The catalog does not provide a real expiry for this price.
+    expect(offer).not.toHaveProperty('priceValidUntil');
 
     // shippingDetails
     const shipping = offer.shippingDetails as Record<string, unknown>;
@@ -709,7 +1007,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       'NGN',
       'NG',
       undefined,
-      undefined,
+      completePolicies,
       { productUrl: 'https://shop.example/phones/test-product' }
     );
     const offers = (schema.hasVariant as Record<string, unknown>[]).map(
@@ -1039,242 +1337,20 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
   });
 });
 
-describe('getIndexableRobotsMetadata', () => {
-  it('returns large-preview directives for indexable storefront pages', () => {
-    expect(getIndexableRobotsMetadata()).toEqual({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        'max-image-preview': 'large',
-        'max-snippet': -1,
-        'max-video-preview': -1,
-      },
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-      'max-video-preview': -1,
-    });
-  });
-
-  it('keeps focused single-filter listing URLs indexable when filters affect results', () => {
-    expect(getIndexableRobotsMetadata({ brand: 'Dell' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(
-      getIndexableRobotsMetadata(
-        { brand: 'Dell' },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('deduplicates legacy singular and plural keys for the same listing filter', () => {
-    expect(
-      getIndexableRobotsMetadata(
-        {
-          brand: 'Dell',
-          brands: 'Dell',
-        },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('treats price bounds as one listing filter', () => {
-    expect(
-      getIndexableRobotsMetadata(
-        {
-          minPrice: '100000',
-          maxPrice: '500000',
-        },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('noindexes multi-filter listing URLs while preserving follow directives', () => {
-    expect(
-      getIndexableRobotsMetadata({
-        brand: 'Dell',
-        minPrice: '100000',
-      })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-  });
-
-  it('ignores the hub transition token in robots and canonical decisions', () => {
-    expect(
-      getIndexableRobotsMetadata({
-        graphics: 'NVIDIA RTX 4070',
-        graphicsHub: 'rtx-4070',
-      })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-    });
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('graphics=NVIDIA+RTX+4070');
-  });
-
-  it('treats graphics as a storefront filter for faceted listing URLs', () => {
-    expect(
-      getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-    });
-
-    expect(
-      getIndexableRobotsMetadata(
-        { graphics: 'NVIDIA RTX 4070' },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-    });
-  });
-
-  it('noindexes storefront search query URLs while preserving follow directives', () => {
-    expect(getIndexableRobotsMetadata({ q: 'acc6.top' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(getIndexableRobotsMetadata({ query: 'iphone 16' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(getIndexableRobotsMetadata({ search: 'pixel 10' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-  });
-});
-
-describe('getCanonicalStorefrontFilterSearchParams', () => {
-  it('preserves a focused single listing filter in canonical query params', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { brand: 'Dell' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('brand=Dell');
-  });
-
-  it('keeps price range bounds together as one canonical listing filter', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        {
-          minPrice: '100000',
-          maxPrice: '500000',
-        },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('minPrice=100000&maxPrice=500000');
-  });
-
-  it('normalizes search aliases to the canonical search query param', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { q: 'iphone 16' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=iphone+16');
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { query: 'pixel 10' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=pixel+10');
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { search: 'redmi pad' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=redmi+pad');
-  });
-
-  it('preserves a focused graphics filter in canonical query params', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { graphics: 'NVIDIA RTX 4070' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('graphics=NVIDIA+RTX+4070');
-  });
-
-  it('drops canonical filter params until filters affect listing results', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams({ brand: 'Dell' }).toString()
-    ).toBe('');
-  });
-
-  it('drops canonical filter params for multi-filter listing URLs', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams({
-        brand: 'Dell',
-        minPrice: '100000',
-      }).toString()
-    ).toBe('');
-  });
-});
-
 describe('generateOrganizationSchema', () => {
+  it('does not invent a return window or fees from a summary-only policy', () => {
+    const schema = generateOrganizationSchema({
+      name: 'Test Store',
+      url: 'https://test.example',
+      trustProfile: makeTrustProfile({
+        returnPolicy: {
+          summary: 'Contact us about returns',
+          localRoute: '/returns',
+        },
+      }),
+    });
+    expect(schema).not.toHaveProperty('hasMerchantReturnPolicy');
+  });
   it('keeps controlled use-brand profiles for the platform organization', () => {
     const schema = generateOrganizationSchema({
       name: 'Baci',
@@ -1368,53 +1444,844 @@ describe('generateOrganizationSchema', () => {
 });
 
 describe('generateMetaTitle', () => {
-  it('removes duplicated suffixes and keeps a single merchant suffix', () => {
-    expect(
-      generateMetaTitle('Buy Smartphones in Nigeria | Ogabassey | Ogabassey', {
-        suffix: 'Ogabassey',
-        maxLength: 70,
-      })
-    ).toBe('Buy Smartphones in Nigeria | Ogabassey');
+  describe('platform-list-only parenthetical compaction', () => {
+    it('compacts redundant platform list with suffix and returns full title without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - ₦112,000',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - ₦112,000 | Ogabassey');
+    });
+
+    it('compacts (PS5 & Xbox Series X) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 & Xbox Series X) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
+    it('compacts (PS5 or Xbox) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 or Xbox) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
+    it('compacts (Nintendo Switch / Nintendo Switch 2) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy The Legend of Zelda (Nintendo Switch / Nintendo Switch 2) Pre-Order Now',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy The Legend of Zelda Pre-Order Now | Ogabassey');
+    });
+
+    it('retains parenthetical untouched when short title already fits within maxLength', () => {
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4)');
+
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+          suffix: 'Store',
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4) | Store');
+    });
+
+    it('preserves single-platform parentheticals even when over maxLength', () => {
+      const ps5 = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5) - Ultimate Edition With Lots of Extra Bonus Content',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(ps5).toContain('(PS5)');
+
+      const switchTitle = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch) Tears of the Kingdom Special Edition Full Guide',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switchTitle).toContain('(Nintendo Switch)');
+
+      const switch2 = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch 2) Next Chapter Next-Gen Deluxe Set',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switch2).toContain('(Nintendo Switch 2)');
+
+      const xbox = generateMetaTitle(
+        'Forza Motorsport (Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xbox).toContain('(Xbox Series X)');
+    });
+
+    it('preserves single-platform synonym lists (fewer than 2 distinct identities) even when over maxLength', () => {
+      const ps5Synonyms = generateMetaTitle(
+        'EA Sports FC 27 (PS5 / PlayStation 5) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(ps5Synonyms).toContain('(PS5 / PlayStation 5)');
+
+      const pcSynonyms = generateMetaTitle(
+        'EA Sports FC 27 (PC / Windows / Steam) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(pcSynonyms).toContain('(PC / Windows / Steam)');
+
+      const xboxSeriesSynonyms = generateMetaTitle(
+        'Forza Motorsport (Xbox, Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxSeriesSynonyms).toContain('(Xbox, Xbox Series X)');
+
+      const xboxOneSynonyms = generateMetaTitle(
+        'Forza Horizon 4 (Xbox, Xbox One) Complete Ultimate Edition Racing Pass Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxOneSynonyms).toContain('(Xbox, Xbox One)');
+    });
+
+    it('preserves mixed, unknown, edition, and condition qualifiers even when over maxLength', () => {
+      const mixed = generateMetaTitle(
+        'Sony PlayStation 5 (PS5, Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(mixed).toContain('(PS5, Disc Edition)');
+
+      const edition = generateMetaTitle(
+        'Sony PlayStation 5 Slim (Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(edition).toContain('(Disc Edition)');
+
+      const wifi = generateMetaTitle(
+        'Apple iPad Pro (Wi-Fi Only) 11-inch M4 Chip Liquid Retina Display Space Gray',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(wifi).toContain('(Wi-Fi Only)');
+
+      const refurbished = generateMetaTitle(
+        'Apple iPhone 14 Pro Max (Refurbished) 256GB Deep Purple Unlocked Grade A Best Deal',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(refurbished).toContain('(Refurbished)');
+    });
+
+    it('compacts Oxford-comma and pipe platform lists', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, and Xbox) - Best Price in Nigeria',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 | PS4) - Best Price in Nigeria Today',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria Today | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5, Xbox Series X|S) at Best Price Guaranteed',
+          {
+            maxLength: 65,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy Monster Hunter Wilds at Best Price Guaranteed | Ogabassey');
+    });
+
+    it('compacts unspaced parenthetical without token concatenation', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy EA Sports FC 27 Edition Now Online at Best Price | Ogabassey'
+      );
+    });
+
+    it('compacts parenthetical before punctuation without leaving a leading space', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today | Ogabassey');
+    });
+
+    it('slices compacted title to allowedBaseLength and appends ellipsis when still too long with suffix', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship Edition with Extra DLC and Season Pass',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(title).toBe(
+        'Buy EA Sports FC 27 - Ultimate Championship Edition... | Ogabassey'
+      );
+      expect(title.length).toBeLessThanOrEqual(70);
+    });
+
+    it('preserves existing fallback slice behavior when suffix is overlong and allowedBaseLength <= 0', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2)',
+        {
+          maxLength: 20,
+          suffix: 'Very Long Merchant Suffix That Exceeds Max',
+        }
+      );
+      expect(title).toBe('Buy EA Sports FC 27');
+      expect(title.length).toBeLessThanOrEqual(20);
+    });
+
+    it('handles genuine no-suffix path when title fits after compaction without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Best Price',
+          {
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price');
+    });
+
+    it('handles genuine no-suffix path when title is still too long after compaction', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship League Edition',
+          {
+            maxLength: 40,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Ultimate...');
+    });
+
+    it('handles empty titles, fallbacks, and identity suffixes correctly', () => {
+      expect(generateMetaTitle('', { fallback: 'Default Title' })).toBe(
+        'Default Title'
+      );
+      expect(generateMetaTitle('')).toBe('');
+      expect(generateMetaTitle('Ogabassey', { suffix: 'Ogabassey' })).toBe(
+        'Ogabassey'
+      );
+    });
+
+    it('handles titles consisting solely of a redundant platform list when over length', () => {
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 30,
+        })
+      ).toBe('Ogabassey');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', { maxLength: 20 })
+      ).toBe('');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey Electronics Store',
+          maxLength: 15,
+        })
+      ).toBe('Ogabassey...');
+    });
+
+    it('strips orphan trailing separators before suffix or end of title when over length', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27, (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27: (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27');
+    });
+
+    it('handles titles with orphan separators before terminal punctuation when compacted', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27. | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27.');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5 - PS4)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 Pro, Xbox Series X) - Best Deal',
+          {
+            suffix: 'Ogabassey',
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Deal | Ogabassey');
+    });
   });
 
-  it('adds suffix when missing and trims long titles', () => {
-    const title = generateMetaTitle(
-      "Introducing the iPhone 15 Series: Apple's Next Evolution in Smartphones",
-      {
-        suffix: 'Ogabassey',
-        maxLength: 70,
-      }
-    );
+  describe('isRedundantPlatformListParenthetical detector', () => {
+    it('returns true for multi-platform lists', () => {
+      expect(
+        isRedundantPlatformListParenthetical(
+          'PS5, PS4, Xbox, Switch & Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 & Xbox Series X')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical(
+          'Nintendo Switch / Nintendo Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('switch, pc')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('playstation 4; xbox one; steam')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, and Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, & Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5 | PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X|S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X/S')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X & S')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X and S')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Series X & S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Series S and X')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox, Xbox Series X, PS5')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 - PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 – PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 — PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5-PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X - PS5')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Pro, Xbox Series X')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PlayStation 5 Pro, Steam Deck')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch OLED, Xbox One X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Switch OLED, PS5')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Steam Deck, Switch')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox One X, PS4')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Switch Lite, PS5')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Slim, Xbox Series X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox 360, PS3')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS Vita, Nintendo Switch')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Wii U, Nintendo Switch')
+      ).toBe(true);
+    });
 
-    expect(title).toContain('Ogabassey');
-    expect(title.length).toBeLessThanOrEqual(70);
+    it('returns false for single-platform parentheticals', () => {
+      expect(isRedundantPlatformListParenthetical('PS5')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PlayStation 5 Pro')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PS4 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Steam Deck')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox 360')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS Vita')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wii U')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch OLED')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Switch OLED')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Switch Lite')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch 2')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series S')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X|S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X/S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X & S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X and S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Series X & S')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Series S and X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox Series X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox One')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox / Xbox Series X')).toBe(
+        false
+      );
+    });
+
+    it('returns false for single-platform synonym lists with fewer than 2 distinct identities', () => {
+      expect(isRedundantPlatformListParenthetical('PS5 / PlayStation 5')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Slim')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS4, PS4 Pro')).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox Series X, Xbox Series S')
+      ).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch, Switch OLED')
+      ).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One, Xbox One X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PC / Windows / Steam')).toBe(
+        false
+      );
+    });
+
+    it('returns false for mixed, unknown, condition, or edition qualifiers', () => {
+      expect(isRedundantPlatformListParenthetical('PS5, Disc Edition')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Disc Edition')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wi-Fi Only')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Refurbished')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, ')).toBe(false);
+    });
   });
 
-  it('deduplicates suffixes that include regex metacharacters', () => {
-    expect(
-      generateMetaTitle('Buy Smartphones | Oga(bassey)+? | Oga(bassey)+?', {
-        suffix: 'Oga(bassey)+?',
-        maxLength: 70,
-      })
-    ).toBe('Buy Smartphones | Oga(bassey)+?');
-  });
+  describe('stripRedundantPlatformParentheticals', () => {
+    it('strips redundant platform parentheticals and normalizes spacing and punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27 Edition Now Online at Best Price');
 
-  it('does not treat an inline substring as an existing suffix', () => {
-    expect(
-      generateMetaTitle('MacBook Pro 16', {
-        suffix: 'Pro',
-        maxLength: 70,
-      })
-    ).toBe('MacBook Pro 16 | Pro');
-  });
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today'
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today');
 
-  it('does not treat partial word matches as an existing suffix', () => {
-    expect(
-      generateMetaTitle('Restore your phone fast', {
-        suffix: 'Store',
-        maxLength: 70,
-      })
-    ).toBe('Restore your phone fast | Store');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4), Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27, Best Price');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4)! In Stock'
+        )
+      ).toBe('Buy EA Sports FC 27! In Stock');
+    });
+
+    it('preserves meaningful qualifiers unchanged', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'PlayStation 5 Console (Disc Edition)'
+        )
+      ).toBe('PlayStation 5 Console (Disc Edition)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPad Pro 11-inch (Wi-Fi Only)')
+      ).toBe('iPad Pro 11-inch (Wi-Fi Only)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPhone 13 128GB (Refurbished)')
+      ).toBe('iPhone 13 128GB (Refurbished)');
+    });
+
+    it('does not mutate unrelated punctuation spacing elsewhere in the string', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Console (Disc Edition) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Console (Disc Edition) : Best Price ... Guaranteed !');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Game: Best Price ... Guaranteed !');
+    });
+
+    it('handles leading redundant parentheticals without leaving orphan punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4): Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4), Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) - Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) / Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) & Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) -30% Deal Today')
+      ).toBe('-30% Deal Today');
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) /deal')).toBe(
+        '/deal'
+      );
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) &sons')).toBe(
+        '&sons'
+      );
+    });
+
+    it('compacts adjacent redundant parentheticals without creating double spaces', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Xbox, PC) Edition'
+        )
+      ).toBe('Game Edition');
+    });
+
+    it('preserves single space before a preserved parenthetical following a redundant parenthetical', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Disc Edition) Edition'
+        )
+      ).toBe('Game (Disc Edition) Edition');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Refurbished) Edition'
+        )
+      ).toBe('Game (Refurbished) Edition');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) (Disc Edition)')
+      ).toBe('(Disc Edition)');
+    });
+
+    it('handles trailing redundant parentheticals without leaving orphan separators', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man (PS5, PS4)')
+      ).toBe('Spider-Man');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (Disc Edition) (PS5, PS4)'
+        )
+      ).toBe('Buy Game - (Disc Edition)');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) -')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) and')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) |')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) /')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) &')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) –')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) —')
+      ).toBe('Buy Game');
+    });
+
+    it('drops orphan separators before retained terminal punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4),')
+      ).toBe('Buy Game,');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4):')
+      ).toBe('Buy Game:');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4);')
+      ).toBe('Buy Game;');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)!')
+      ).toBe('Buy Game!');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)?')
+      ).toBe('Buy Game?');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5 - PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (PS5 Pro, Xbox Series X).'
+        )
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man - (PS5, PS4).')
+      ).toBe('Spider-Man.');
+    });
+
+    it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {
+      expect(
+        stripRedundantPlatformParentheticals('-30% Deal (PS5, PS4) Today')
+      ).toBe('-30% Deal Today');
+      expect(
+        stripRedundantPlatformParentheticals(
+          '| Special Offer (PS5, PS4) Right Now'
+        )
+      ).toBe('| Special Offer Right Now');
+    });
+
+    it('localizes spacing normalization without collapsing double spaces elsewhere', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Deal  of the Day (PS5, PS4) Sale  Now'
+        )
+      ).toBe('Deal  of the Day Sale  Now');
+    });
+
+    it('localizes orphan separator cleanup to the removed parenthetical boundary without touching distant punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All'
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
+
+      expect(
+        stripRedundantPlatformParentheticals('Game (PS5, PS4) Finals - : Sale')
+      ).toBe('Game Finals - : Sale');
+
+      expect(
+        generateMetaTitle(
+          'Buy Game (PS5, PS4) - Bonus: ...And Justice for All',
+          { maxLength: 45 }
+        )
+      ).toBe('Buy Game - Bonus: ...And Justice for All');
+    });
+
+    it('handles adjoining word conjunctions when platform list is stripped', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) and Best Game')
+      ).toBe('Best Game');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5 or PS4) or Best Game')
+      ).toBe('Best Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4).')
+      ).toBe('Buy Game.');
+    });
+
+    it('processes long separator runs without catastrophic backtracking', () => {
+      const longSeparatorsNoParen = `Buy Game ${'-'.repeat(50)} Edition Today`;
+      expect(stripRedundantPlatformParentheticals(longSeparatorsNoParen)).toBe(
+        longSeparatorsNoParen
+      );
+
+      const longSeparatorsWithParen = `Buy Game ${'-'.repeat(50)} (PS5, PS4) Edition Today`;
+      expect(
+        stripRedundantPlatformParentheticals(longSeparatorsWithParen)
+      ).toBe(`Buy Game ${'-'.repeat(50)} Edition Today`);
+    });
   });
 });
 

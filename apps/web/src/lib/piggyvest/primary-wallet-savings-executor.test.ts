@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
+import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
 
 const mocks = vi.hoisted(() => ({
@@ -156,4 +157,51 @@ it('permits the five goal cancel statements with their exact parameter counts', 
       'Savings statement unavailable'
     );
   }
+});
+
+it('permits the five goal complete statements with their exact parameter counts and no evidence statement', async () => {
+  const execute = createPrimaryWalletSavingsExecutor(config);
+  const id = '55555555-5555-4555-8555-555555555555';
+  const cases = [
+    [GOAL_COMPLETE_STATEMENTS.issue, [JSON.stringify(scope), id]],
+    [GOAL_COMPLETE_STATEMENTS.reserve, [JSON.stringify(scope), '{}', pinProof]],
+    [
+      GOAL_COMPLETE_STATEMENTS.manage,
+      [JSON.stringify(scope), id, 'dispatch', '5'],
+    ],
+    [GOAL_COMPLETE_STATEMENTS.status, [JSON.stringify(scope), id]],
+    [GOAL_COMPLETE_STATEMENTS.checkIssued, [JSON.stringify(scope), id, id]],
+  ] as const;
+  for (const [text, parameters] of cases) {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: config.database.login,
+          role_name: config.database.login,
+          safe: true,
+          tls: true,
+        },
+      ],
+    });
+    mocks.query.mockResolvedValueOnce({ rows: [{ result: true }] });
+    await execute(text, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(text, parameters);
+    await expect(execute(text, [...parameters, 'extra'])).rejects.toThrow(
+      'Savings statement unavailable'
+    );
+    await expect(execute(text, parameters.slice(0, -1))).rejects.toThrow(
+      'Savings statement unavailable'
+    );
+  }
+  for (const text of [
+    GOAL_COMPLETE_STATEMENTS.settle,
+    GOAL_COMPLETE_STATEMENTS.release,
+    GOAL_COMPLETE_STATEMENTS.readDispatched,
+    GOAL_COMPLETE_STATEMENTS.readPurchaseAlert,
+    GOAL_COMPLETE_STATEMENTS.markPurchaseAlerted,
+  ])
+    await expect(
+      execute(text, [JSON.stringify(scope), id, id])
+    ).rejects.toThrow('Savings statement unavailable');
 });

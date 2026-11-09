@@ -1,0 +1,292 @@
+.summary {
+  border: 1px solid var(--store-border, #e5e7eb);
+  border-radius: 1rem;
+  background: var(--store-background, #fff);
+  color: var(--store-background-text, #111827);
+  padding: 1.1rem;
+}
+.highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.highlights > div {
+  min-width: 0;
+}
+.highlights p {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
+}
+.highlights strong {
+  display: block;
+  min-height: 2rem;
+  font-size: clamp(1.1rem, 4vw, 1.55rem);
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.highlights small {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+.finalPayment {
+  margin: 0.85rem 0 0;
+  font-size: 0.75rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+.chips > span {
+  border: 1px solid var(--store-border, #e5e7eb);
+  border-radius: 0.5rem;
+  background: var(--store-background, #fff);
+  padding: 0.35rem 0.5rem;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+.chips b {
+  font-weight: 500;
+  color: var(--store-background-text, #111827);
+}
+.details {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--store-border, #e5e7eb);
+}
+.details summary {
+  min-height: 2.75rem;
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 80%,
+    transparent
+  );
+}
+.details summary:focus-visible {
+  outline: 2px solid var(--store-primary, #dc2626);
+  outline-offset: 2px;
+}
+.details dl {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.8125rem;
+}
+.details dl > div,
+.details li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.details dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+}
+.details dt,
+.details li > span {
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+.details h4 {
+  font-size: 0.8125rem;
+  margin: 0 0 0.75rem;
+}
+.details ol {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+.reference {
+  font-size: 0.625rem;
+  overflow-wrap: anywhere;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+  margin-top: 1rem;
+}
+.skeleton {
+  display: block;
+  height: 1.8rem;
+  width: 90%;
+  border-radius: 0.35rem;
+  background: linear-gradient(100deg, #e5e7eb 25%, #f9fafb 45%, #e5e7eb 65%);
+  background-size: 250% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+.footer {
+  position: sticky;
+  bottom: -1px;
+  z-index: 1;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 0;
+  background: var(--store-background, #fff);
+  border-top: 1px solid var(--store-border, #e5e7eb);
+}
+.footer p {
+  font-size: 0.75rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+  margin: 0;
+  text-align: center;
+}
+.footer button {
+  min-height: 2.75rem;
+  width: 100%;
+}
+
+.disabledDetails {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 60%,
+    transparent
+  );
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.highlights .finalPayment {
+  margin-top: 0.55rem;
+  font-size: 0.6875rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+}
+
+.context {
+  font-size: 0.75rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+  margin: 0.25rem 0 1rem;
+}
+
+.details .dateGroups {
+  gap: 0.5rem;
+}
+.dateGroups li {
+  align-items: center;
+  border: 1px solid var(--store-border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--store-background, #fff);
+}
+.dateLabel {
+  display: block;
+  color: var(--store-background-text, #111827);
+  font-weight: 500;
+}
+.dateRange {
+  display: block;
+  margin-top: 0.25rem;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+  font-size: 0.6875rem;
+}
+.dateGroups strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dateGroups small {
+  display: block;
+  color: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 70%,
+    transparent
+  );
+  font-weight: 400;
+  font-size: 0.6875rem;
+}
+
+.dateToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--store-primary, #b91c1c);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.dateToggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.summary[data-compact="true"] {
+  padding: 0.85rem;
+}
+.summary[data-compact="true"] header {
+  margin-bottom: 0.6rem;
+}
+.summary[data-compact="true"] .highlights strong {
+  min-height: 1.5rem;
+  font-size: 1.2rem;
+}
+.summary[data-compact="true"] .details {
+  margin-top: 0.5rem;
+  padding-top: 0;
+}
+.summary[data-compact="true"] .details summary {
+  min-height: 2.25rem;
+}

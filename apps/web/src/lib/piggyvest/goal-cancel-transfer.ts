@@ -17,7 +17,9 @@ type Claim =
         | 'conflict'
         | 'expired'
         | 'busy'
-        | 'needs_review';
+        | 'needs_review'
+        // Only goal complete answers this (target or maturity not reached).
+        | 'not_eligible';
     }
   | { status: 'pin_refused'; reason: string };
 
@@ -109,6 +111,8 @@ async function releaseIfDefinitivelyRejected(
 
 /**
  * Cancels a goal by moving its full PiggyVest balance to the main wallet.
+ * Goal complete reuses this exact transfer step (same one-shot send, same
+ * pending-on-doubt rules) with its own reservation and reference.
  *
  * The provider reference is per goal ('pvb-cancel-<goalId>'), so a double tap
  * or a retry can never move money twice. It only takes a new suffix after a
@@ -130,6 +134,7 @@ export async function submitGoalCancel(
         | 'expired'
         | 'busy'
         | 'needs_review'
+        | 'not_eligible'
         | 'unavailable'
         | 'empty'
         | 'too_large'

@@ -1,3 +1,4 @@
+import { isStablePublicMediaUrl } from '@baci/shared/storefront';
 import {
   isLegacyOgabasseyCdnBlogImage,
   isTrustedCdnInlineImage,
@@ -11,8 +12,14 @@ function findFirstRenderableImageNode(
 ): { src: string; nodePath: string } | null {
   if (node.type === 'image') {
     const rawSrc = node.attrs?.src;
-    const src = typeof rawSrc === 'string' ? sanitizeUrl(rawSrc) : '';
-    return src?.startsWith('http') && !isLegacyOgabasseyCdnBlogImage(src)
+    const src =
+      typeof rawSrc === 'string'
+        ? isStablePublicMediaUrl(rawSrc)
+          ? rawSrc
+          : sanitizeUrl(rawSrc)
+        : '';
+    return (src?.startsWith('http') || isStablePublicMediaUrl(src)) &&
+      !isLegacyOgabasseyCdnBlogImage(src)
       ? { src, nodePath }
       : null;
   }

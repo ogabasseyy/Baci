@@ -5,6 +5,9 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { POST as handler } from './route';
 
 vi.mock('server-only', () => ({}));
+vi.mock('@/lib/wallet-pin/wallet-pin-customer-limit', () => ({
+  chargeWalletPinCustomerLimit: async () => null,
+}));
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),

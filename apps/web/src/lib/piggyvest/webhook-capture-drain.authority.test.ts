@@ -55,6 +55,7 @@ function setup(
   }));
   const deps: DrainDeps = {
     claim: async () => [row(recorded)],
+    renew: async () => true,
     resolve: async (_id, _token, state, error) => {
       resolved.push({ state, error });
       return true;

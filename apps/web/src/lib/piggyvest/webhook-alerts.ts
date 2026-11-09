@@ -18,6 +18,10 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   'PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED',
   'PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE',
   'PIGGYVEST_WEBHOOK_NEEDS_REVIEW',
+  // A captured delivery the worker-host drain is not allowed to replay (it
+  // holds no service-role authority): set aside for review, never dropped.
+  // A successful provider redelivery still closes it automatically.
+  'PIGGYVEST_WEBHOOK_REPLAY_DEFERRED',
   // A transfer reference still unconfirmed past its retry window (TSQ 404
   // or provider-failed): held, never resubmitted or released; an operator
   // must resolve it. Also the code for any stale unconfirmed transfer.
@@ -69,6 +73,13 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // database refused to settle it (for example a late success while a newer
   // attempt is live). Nothing is resent or released; a person resolves it.
   'PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW',
+  // A goal complete that cannot finish by itself: the goal also holds legacy
+  // contributions or order redemptions, or PiggyVest moved the balance but
+  // the database refused to settle it (it stays held for a person).
+  'PIGGYVEST_GOAL_COMPLETE_NEEDS_REVIEW',
+  // A customer completed a goal: the balance is already in their main wallet
+  // and a purchase request is saved. The owner fulfils the purchase by hand.
+  'PIGGYVEST_GOAL_PURCHASE_REQUEST',
 ] as const;
 
 export type PiggyvestWebhookAlertCode =

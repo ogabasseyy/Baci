@@ -23,6 +23,7 @@ const task3Paths = [
   'apps/web/tools/db/replay-project-ownership.test.ts',
   'apps/web/tools/db/supabase-replay-expected-resources.ts',
   'apps/web/tools/db/supabase-replay-expected-resources.test.ts',
+  'apps/web/tools/db/supabase-replay-resource-inspection.test.ts',
   'apps/web/tools/db/parse-supabase-migration-list.ts',
   'apps/web/tools/db/parse-supabase-migration-list.test.ts',
   'apps/web/tools/db/schemas/linked-migration-ledger-schema.ts',
@@ -64,7 +65,7 @@ const task3Paths = [
   'apps/web/package.json',
 ] as const;
 const task3ManifestSha256 =
-  'f061d6a4570769f91406b879659965a3150b53301bf24d928eac8beee6dddbf1';
+  '93c336191bf54b7d0f454f7d3c6559cb8f99b17a8f1426f699f2897508fb2fd4';
 
 const task3FixtureConfigPaths = [
   'apps/web/tools/db/fixtures/biome.json',
@@ -105,8 +106,8 @@ describe('Task 3 replay module boundaries', () => {
       (filePath) => !existsSync(path.join(workspaceRoot, filePath))
     );
 
-    expect(task3Paths).toHaveLength(57);
-    expect(new Set(task3Paths).size).toBe(57);
+    expect(task3Paths).toHaveLength(58);
+    expect(new Set(task3Paths).size).toBe(58);
     expect(
       createHash('sha256')
         .update(`${task3Paths.join('\n')}\n`)

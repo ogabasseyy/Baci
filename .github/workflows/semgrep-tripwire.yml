@@ -16,6 +16,7 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
+      - '.github/actions/semgrep-sarif-routing/**'
       - '.github/scripts/muse-review/**'
       - '.github/scripts/muse-pin-update*'
       - '.github/scripts/semgrep-sarif*'

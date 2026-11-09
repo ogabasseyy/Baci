@@ -48,8 +48,8 @@ BEGIN
       'a late success did not cancel the goal');
     PERFORM pg_temp.gc_assert(
       (SELECT available_balance FROM public.customer_wallets
-        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500,
-      'a late success did not credit the main wallet');
+        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000,
+      'a late success changed the legacy wallet');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
@@ -83,8 +83,8 @@ BEGIN
       'a late success zeroed, closed or confirmed a goal that was funded again');
     PERFORM pg_temp.gc_assert(
       (SELECT available_balance FROM public.customer_wallets
-        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500,
-      'a late success after new funding did not credit exactly its own amount');
+        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000,
+      'a late success after new funding changed the legacy wallet');
     PERFORM pg_temp.gc_assert(
       EXISTS (SELECT 1 FROM public.customer_savings_events
                WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancel_needs_review')

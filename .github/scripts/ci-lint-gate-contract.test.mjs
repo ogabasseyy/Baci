@@ -5,6 +5,7 @@ import { matchesGlob } from 'node:path';
 import test from 'node:test';
 
 import YAML from 'yaml';
+import { privateRunnerRoute, privateRunnerRouteWithTrust } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(
   await readFile('.github/workflows/ci.yml', 'utf8')
@@ -19,6 +20,55 @@ const NO_CHANGES = {
   quiz_db: 'false',
   test_plan_mode: 'targeted',
 };
+
+function lintRunner({ isPrivate, enabled, event, headRepository, repository }) {
+  return privateRunnerRoute(workflow, 'quality-lint', { 'github.event.repository.private': isPrivate, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': headRepository, 'github.repository': repository });
+}
+
+test('routes lint to the private runner only for an opted-in private repository and trusted PR head', () => {
+  const trusted = {
+    isPrivate: true,
+    enabled: 'true',
+    event: 'pull_request',
+    headRepository: 'owner/repo',
+    repository: 'owner/repo',
+  };
+  const privateRunner = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
+  assert.deepEqual(lintRunner(trusted), privateRunner);
+  assert.equal(lintRunner({ ...trusted, isPrivate: false }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, isPrivate: null }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, enabled: '' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, enabled: 'false' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }), 'ubuntu-24.04');
+  assert.equal(lintRunner({ ...trusted, headRepository: '' }), 'ubuntu-24.04');
+  for (const event of ['merge_group', 'pull_request_target', 'issue_comment']) {
+    assert.equal(lintRunner({ ...trusted, event, headRepository: '' }), 'ubuntu-24.04');
+  }
+  for (const event of ['push', 'workflow_dispatch']) {
+    assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
+  }
+});
+
+test('lint job does not reference secrets', () => {
+  const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
+  assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(workflow.env);
+  noSecrets(workflow.jobs['quality-lint']);
+});
+
+test('missing or false shared trust output never selects Contabo', () => {
+  const values = {
+    'vars.BACI_PRIVATE_TYPECHECK_ENABLED': 'true',
+    'vars.BACI_PRIVATE_WEB_TEST_ENABLED': 'true',
+    'vars.BACI_PRIVATE_BUILD_ENABLED': 'true',
+  };
+  for (const job of ['quality-lint', 'quality-typecheck', 'quality-test-web', 'build']) {
+    for (const trusted of ['', 'false']) {
+      assert.equal(privateRunnerRouteWithTrust(workflow, job, values, trusted), 'ubuntu-24.04');
+    }
+  }
+});
 
 // GitHub expressions limited to `needs.changes.outputs.*`, quoted strings,
 // ==, !=, &&, || and parentheses are also valid JavaScript.

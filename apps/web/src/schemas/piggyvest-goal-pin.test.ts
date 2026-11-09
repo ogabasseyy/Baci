@@ -22,7 +22,13 @@ const cancel = {
   goalId,
   operationId,
 };
-const complete = { merchantId, pin: '123456', action: 'complete', goalId };
+const complete = {
+  merchantId,
+  pin: '123456',
+  action: 'complete',
+  goalId,
+  operationId,
+};
 const { verifyRequest, pinState, verifyResult } = piggyvestGoalPinSchemas;
 
 describe('verifyRequest', () => {
@@ -83,16 +89,22 @@ describe('verifyRequest', () => {
     ).toBe(false);
   });
 
-  it('refuses an amount on cancel and complete, and an operation on complete', () => {
+  it('requires the server-issued operation id on complete and refuses an invented one', () => {
+    const { operationId: _o, ...noOperation } = complete;
+    expect(verifyRequest.safeParse(noOperation).success).toBe(false);
+    expect(
+      verifyRequest.safeParse({ ...complete, operationId: 'not-a-uuid' })
+        .success
+    ).toBe(false);
+  });
+
+  it('refuses an amount on cancel and complete', () => {
     expect(verifyRequest.safeParse({ ...cancel, amountKobo: 1 }).success).toBe(
       false
     );
     expect(
       verifyRequest.safeParse({ ...complete, amountKobo: 1 }).success
     ).toBe(false);
-    expect(verifyRequest.safeParse({ ...complete, operationId }).success).toBe(
-      false
-    );
   });
 
   it('requires a merchant, a goal and a known action, with no extra keys', () => {

@@ -13,6 +13,10 @@ export type SavingsPlanFundingPhase =
   | 'loading'
   | 'ready'
   | 'pending'
+  | 'not_started'
+  // Pending, but the stored setup claim expired: setup may run again. Only
+  // reported to a status-only caller that asked for setup status.
+  | 'setup_retryable'
   | 'unavailable'
   | 'error';
 
@@ -25,6 +29,9 @@ type UseSavingsPlanFundingInput = {
   // A never-started goal (404 SAVINGS_WALLET_NOT_FOUND) reads as 'pending'
   // (still being set up), not as an error, for status-only callers.
   notFoundMeansPending?: boolean;
+  // A never-started goal reads as 'not_started', so a status-only caller
+  // can offer setup. Takes precedence over notFoundMeansPending.
+  notFoundMeansNotStarted?: boolean;
 };
 
 function isWalletNotFound(error: unknown): boolean {
@@ -55,6 +62,7 @@ export function useSavingsPlanFunding({
   identityKey,
   loadExisting = false,
   notFoundMeansPending = false,
+  notFoundMeansNotStarted = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
   const [statusCode, setStatusCode] = useState<string | null>(null);
@@ -97,17 +105,23 @@ export function useSavingsPlanFunding({
     if (response.status === 'ready') {
       setPhase('ready');
     } else if (response.status === 'pending') {
-      setPhase('pending');
+      setPhase(
+        notFoundMeansNotStarted && response.setupRetryable === true
+          ? 'setup_retryable'
+          : 'pending'
+      );
     } else {
       setPhase('unavailable');
     }
   };
 
-  const fetchExistingPlanFunding = async () => {
+  // A silent read (used while polling a pending setup) keeps the current
+  // phase on screen instead of flashing 'loading'.
+  const fetchExistingPlanFunding = async (options?: { silent?: boolean }) => {
     if (!goalId) return;
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
-    setPhase('loading');
+    if (!options?.silent) setPhase('loading');
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({
@@ -119,14 +133,25 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      if (notFoundMeansPending && isWalletNotFound(error)) {
+      if (
+        (notFoundMeansNotStarted || notFoundMeansPending) &&
+        isWalletNotFound(error)
+      ) {
         setStatusCode(null);
-        setPhase('pending');
+        setPhase(notFoundMeansNotStarted ? 'not_started' : 'pending');
         return;
       }
+      // A silent read belongs to the bounded setup poll: a transient failure
+      // leaves the phase pending and is reported to the poll, which retries
+      // and only calls failExistingPlanFunding once its attempts run out.
+      if (options?.silent) throw error;
       setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
+  };
+  const failExistingPlanFunding = (error: unknown) => {
+    setFundingError(planFundingErrorMessage(error));
+    setPhase('error');
   };
   const fetchExistingPlanFundingRef = useRef(fetchExistingPlanFunding);
   fetchExistingPlanFundingRef.current = fetchExistingPlanFunding;
@@ -184,6 +209,7 @@ export function useSavingsPlanFunding({
   }, [automaticLookupKey]);
 
   return {
+    failExistingPlanFunding,
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError,

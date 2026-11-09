@@ -45,6 +45,9 @@ export function projectWalletSavingsInterest<T extends SavingsGoalRow>({
       appliedInterestKobo += interestKobo;
       const projected = {
         ...goal,
+        // The stored balance before the interest projection: whether a goal
+        // still holds money to settle must not count interest already paid.
+        principal_amount: currentAmount,
         current_amount: addWalletCurrencyAmounts(
           currentAmount,
           interestKobo / 100

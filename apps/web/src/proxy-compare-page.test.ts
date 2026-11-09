@@ -146,7 +146,7 @@ describe('compare-page proxy hard-status preflight', () => {
     );
   });
 
-  it('keeps query variants and internal navigations fail-open', async () => {
+  it('runs preflight on parameterized requests and keeps internal navigations fail-open', async () => {
     comparePageStatusMock.mockResolvedValue({ kind: 'missing' });
     const queryRequest = new NextRequest(
       'https://ogabassey.com/laptops/compare/left-laptop-vs-right-laptop?utm_source=email'
@@ -155,8 +155,18 @@ describe('compare-page proxy hard-status preflight', () => {
 
     const queryResponse = await proxy(queryRequest);
 
-    expect(queryResponse.status).not.toBe(404);
-    expect(comparePageStatusMock).not.toHaveBeenCalled();
+    expect(queryResponse.status).toBe(404);
+    expect(queryResponse.headers.get('x-robots-tag')).toBe('noindex, follow');
+    expect(comparePageStatusMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identifier: 'ogabassey',
+        categorySlug: 'laptops',
+        comparisonSlug: 'left-laptop-vs-right-laptop',
+        secret: 'test-internal-secret',
+      })
+    );
+
+    comparePageStatusMock.mockClear();
 
     const rscRequest = new NextRequest(
       'https://ogabassey.com/laptops/compare/left-laptop-vs-right-laptop',

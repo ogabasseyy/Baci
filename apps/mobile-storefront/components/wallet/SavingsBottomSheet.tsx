@@ -1,0 +1,111 @@
+import BottomSheet, {
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
+import { type ReactNode, useRef } from 'react';
+import { Modal, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type Colors from '@/constants/Colors';
+import { SavingsSheetContext } from './SavingsSheetContext';
+
+const SNAP_POINTS = ['72%', '92%'];
+
+/** Let Gorhom own backdrop dismissal so closing retains its exit animation. */
+function SavingsBackdrop(props: BottomSheetBackdropProps) {
+  return (
+    <BottomSheetBackdrop
+      {...props}
+      appearsOnIndex={0}
+      disappearsOnIndex={-1}
+      pressBehavior="close"
+      opacity={0.5}
+    />
+  );
+}
+
+/** Own sheet gestures and defer parent dismissal until the exit animation completes. */
+export function SavingsBottomSheet({
+  children,
+  colors,
+  onClose,
+  overlay,
+  visible,
+}: {
+  children: ReactNode | ((dismiss: () => void) => ReactNode);
+  colors: (typeof Colors)['light'];
+  onClose: () => void;
+  /**
+   * A modal that must appear above this sheet (the wallet PIN prompt). iOS
+   * presents a second sibling modal only from the topmost one, so it is
+   * rendered inside this sheet's modal instead of beside it.
+   */
+  overlay?: ReactNode;
+  visible: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const sheet = useRef<BottomSheet>(null);
+  const dismiss = () => sheet.current?.close();
+  if (!visible) return null;
+  return (
+    <Modal
+      transparent
+      visible
+      animationType="none"
+      presentationStyle="overFullScreen"
+      onRequestClose={dismiss}
+    >
+      <GestureHandlerRootView style={styles.root}>
+        <SavingsSheetContext.Provider value={true}>
+          <BottomSheet
+            ref={sheet}
+            index={0}
+            snapPoints={SNAP_POINTS}
+            enableDynamicSizing={false}
+            enablePanDownToClose
+            enableBlurKeyboardOnGesture
+            keyboardBehavior="interactive"
+            keyboardBlurBehavior="restore"
+            android_keyboardInputMode="adjustResize"
+            topInset={insets.top}
+            backdropComponent={SavingsBackdrop}
+            onClose={onClose}
+            backgroundStyle={[
+              styles.background,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.primary,
+              },
+            ]}
+            handleIndicatorStyle={{
+              backgroundColor: colors.primary,
+              width: 40,
+            }}
+          >
+            <View
+              accessibilityViewIsModal
+              style={[
+                styles.content,
+                { paddingBottom: Math.max(insets.bottom, 16) },
+              ]}
+            >
+              {typeof children === 'function' ? children(dismiss) : children}
+            </View>
+          </BottomSheet>
+        </SavingsSheetContext.Provider>
+        {overlay}
+      </GestureHandlerRootView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  background: {
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+});

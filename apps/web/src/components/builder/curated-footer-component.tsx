@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
+import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
 import { getStorefrontScopedHref } from './storefront-scoping';
 
 type SocialLinks = {
@@ -51,9 +52,15 @@ export function CuratedFooter({
 }: CuratedFooterProps) {
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath;
-  const visibleSocialLinks = Object.entries(socialLinks).filter(
-    ([platform, url]) => Boolean(url) && Boolean(socialIcons[platform])
-  );
+  const visibleSocialLinks = Object.entries(socialLinks)
+    .map(([platform, url]) => {
+      const Icon = socialIcons[platform];
+      if (!Icon || !url || !isSocialPlatform(platform)) return null;
+      const normalizedUrl = normalizeSocialUrl(url, platform);
+      if (!normalizedUrl) return null;
+      return { platform, url: normalizedUrl, Icon };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   return (
     <FooterPresentation
@@ -86,21 +93,18 @@ export function CuratedFooter({
         <div>
           <h3 className="text-lg font-semibold mb-4">{socialLinksLabel}</h3>
           <div className="flex gap-4">
-            {visibleSocialLinks.map(([platform, url]) => {
-              const Icon = socialIcons[platform];
-              return (
-                <Link
-                  key={platform}
-                  href={asRoute(url)}
-                  className="transition-opacity hover:opacity-100"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Follow us on ${platform}`}
-                >
-                  <Icon className="size-5" />
-                </Link>
-              );
-            })}
+            {visibleSocialLinks.map(({ platform, url, Icon }) => (
+              <a
+                key={platform}
+                href={url}
+                className="transition-opacity hover:opacity-100"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Follow us on ${platform}`}
+              >
+                <Icon className="size-5" />
+              </a>
+            ))}
           </div>
         </div>
       )}

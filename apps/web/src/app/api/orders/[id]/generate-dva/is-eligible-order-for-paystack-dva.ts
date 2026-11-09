@@ -7,9 +7,11 @@ const PAYSTACK_DVA_PAYMENT_STATUSES = [
 export function isEligibleOrderForPaystackDva(order: {
   cancelled_at?: string | null;
   payment_status?: string | null;
+  payment_method?: string | null;
   shipping_status?: string | null;
 }) {
   return (
+    order.payment_method?.trim().toLowerCase() !== 'oxygen' &&
     PAYSTACK_DVA_PAYMENT_STATUSES.includes(
       order.payment_status as (typeof PAYSTACK_DVA_PAYMENT_STATUSES)[number]
     ) &&

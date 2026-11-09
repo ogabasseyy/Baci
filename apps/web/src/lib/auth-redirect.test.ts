@@ -44,6 +44,10 @@ describe('sanitizeRelativeRedirectPath', () => {
     expect(sanitizeRelativeRedirectPath('/\\evil.example/dashboard')).toBe(
       '/dashboard'
     );
+    expect(sanitizeRelativeRedirectPath('/..//evil.example')).toBe(
+      '/dashboard'
+    );
+    expect(sanitizeRelativeRedirectPath('/.//evil.example')).toBe('/dashboard');
     expect(sanitizeRelativeRedirectPath('/admin\n//evil.example')).toBe(
       '/dashboard'
     );

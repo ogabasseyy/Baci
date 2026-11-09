@@ -25,4 +25,36 @@ describe('notificationPreferencesPatchSchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('accepts partial per-event GIG shipment toggles', () => {
+    expect(
+      notificationPreferencesPatchSchema.safeParse({
+        shipment_event_preferences: {
+          out_for_delivery: true,
+          delivered: false,
+        },
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects unknown shipment event keys and non-boolean values', () => {
+    expect(
+      notificationPreferencesPatchSchema.safeParse({
+        shipment_event_preferences: { nonsense: true },
+      }).success
+    ).toBe(false);
+    expect(
+      notificationPreferencesPatchSchema.safeParse({
+        shipment_event_preferences: { delivered: 'no' },
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects an empty shipment_event_preferences object', () => {
+    expect(
+      notificationPreferencesPatchSchema.safeParse({
+        shipment_event_preferences: {},
+      }).success
+    ).toBe(false);
+  });
 });

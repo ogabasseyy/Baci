@@ -53,6 +53,11 @@ describe('resolveCartColorChipStyle', () => {
       color: '#ffffff',
       borderColor: '#112233',
     });
+    expect(resolveCartColorChipStyle('Blue Custom', '#123456')).toEqual({
+      backgroundColor: '#123456',
+      color: '#ffffff',
+      borderColor: '#123456',
+    });
   });
 });
 

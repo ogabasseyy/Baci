@@ -34,9 +34,6 @@ export async function GET(
 
   const cookieStore = await cookies();
   const cookieNext = cookieStore.get?.(STOREFRONT_OAUTH_NEXT_COOKIE)?.value;
-  if (cookieNext && typeof cookieStore.delete === 'function') {
-    cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
-  }
 
   // If there's an OAuth error from the provider
   if (error) {
@@ -86,6 +83,10 @@ export async function GET(
       return NextResponse.redirect(
         `${origin}${loginPath}?error=${encodeURIComponent(exchangeError.message)}`
       );
+    }
+
+    if (cookieNext && typeof cookieStore.delete === 'function') {
+      cookieStore.delete(STOREFRONT_OAUTH_NEXT_COOKIE);
     }
 
     // Success! Redirect to the account page (or checkout-return when resuming checkout)

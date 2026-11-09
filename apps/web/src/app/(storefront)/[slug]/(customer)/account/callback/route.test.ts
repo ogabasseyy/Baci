@@ -160,4 +160,24 @@ describe('GET [slug]/(customer)/account/callback', () => {
       `${ORIGIN}/account/checkout-return?next=%2Fcheckout`
     );
   });
+
+  it('preserves baci_oauth_next cookie when code exchange fails', async () => {
+    const mockDeleteCookie = vi.fn();
+    mockCookies.mockResolvedValue({
+      delete: mockDeleteCookie,
+      get: vi.fn((name: string) =>
+        name === 'baci_oauth_next' ? { value: '/checkout' } : undefined
+      ),
+    });
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: {},
+      error: { message: 'code expired' },
+    });
+
+    await GET(request('/account/callback?code=stale-code'), {
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    });
+
+    expect(mockDeleteCookie).not.toHaveBeenCalled();
+  });
 });

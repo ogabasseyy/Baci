@@ -60,8 +60,8 @@ export function useCartCheckout(isCartOpen: boolean, setIsCartOpen: (open: boole
       return;
     }
     try {
-      closeCart();
       router.push(asRoute(checkoutUrl));
+      closeCart();
     } catch {
       setCheckoutError('Unable to proceed to checkout. Please try again.');
     }

@@ -37,4 +37,5 @@ it('captures checkoutError if navigation throws', async () => {
   });
   expect(result.current.checkoutError).toBe('Unable to proceed to checkout. Please try again.');
   expect(result.current.isCheckoutLoading).toBe(false);
+  expect(close).not.toHaveBeenCalled();
 });

@@ -68,6 +68,8 @@ const sampleItem: CartItem = {
   imageLarge: 'https://example.com/iphone.jpg',
   imageHint: 'iPhone 15 Pro Max',
   brand: 'Apple',
+  gtin: '',
+  mpn: '',
   hasAssurance: true,
   assuranceRate: 0.02,
 };

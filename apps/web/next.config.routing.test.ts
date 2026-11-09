@@ -111,7 +111,9 @@ describe('next.config rewrites and redirects', () => {
   // Regression: a `/release-assets/:path*` rewrite in next.config is added to
   // Next's typed-routes union, which tipped `next build` type checking over
   // TypeScript's instantiation depth (TS2589 in storefront footer Links) and
-  // failed production deploys. The rewrite lives in vercel.json instead.
+  // failed production deploys. The rewrite lives in the repository-root
+  // vercel.json, the config the production `vercel build` reads. Keep its
+  // destination in sync with DEFAULT_MEDIA_CDN_ORIGIN (asserted below).
   it('serves release assets through vercel.json, not next.config typed routes', async () => {
     const rewrites = await nextConfig.rewrites();
     expectStructuredRewrites(rewrites);
@@ -122,7 +124,7 @@ describe('next.config rewrites and redirects', () => {
     expect(allSources).not.toContain('/release-assets/:path*');
 
     const vercelConfig: unknown = JSON.parse(
-      readFileSync(path.join(__dirname, 'vercel.json'), 'utf8')
+      readFileSync(path.join(__dirname, '..', '..', 'vercel.json'), 'utf8')
     );
     expect(vercelConfig).toMatchObject({
       rewrites: [

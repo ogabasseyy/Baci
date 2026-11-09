@@ -6,6 +6,12 @@
   "framework": "nextjs",
   "ignoreCommand": "exit 0",
   "regions": ["dub1"],
+  "rewrites": [
+    {
+      "source": "/release-assets/:path*",
+      "destination": "https://cdn.ogabassey.com/release-assets/:path*"
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron/oxygen-callback-reconciliation?task=refresh-banks",

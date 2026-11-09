@@ -92,7 +92,6 @@ export function PiggyvestWalletSetupForm({
     }
   }
 
-  const ready = bvn.length === 11 && consent;
   return (
     <View style={setupStyles.form}>
       <View style={setupStyles.header}>
@@ -218,10 +217,7 @@ export function PiggyvestWalletSetupForm({
         accessibilityState={{ disabled: busy }}
         disabled={busy}
         onPress={submit}
-        style={[
-          setupStyles.submit,
-          { backgroundColor: BRAND.primary, opacity: ready || busy ? 1 : 0.55 },
-        ]}
+        style={[setupStyles.submit, { backgroundColor: BRAND.primary }]}
       >
         {busy ? (
           <ActivityIndicator color={BRAND.onPrimary} />

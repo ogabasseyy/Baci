@@ -37,5 +37,7 @@ describe('PrimaryWalletSetupPending', () => {
       <PrimaryWalletSetupPending {...base} checkFailed onCheckNow={jest.fn()} />
     );
     expect(screen.getByText(/couldn’t reach PiggyVest/)).toBeOnTheScreen();
+    // Automatic checks are bounded, so the copy must not promise more.
+    expect(screen.queryByText(/keep trying/)).toBeNull();
   });
 });

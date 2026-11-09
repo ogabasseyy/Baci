@@ -28,7 +28,7 @@ export function PrimaryWalletSetupPending({
   onCheckNow,
 }: Props) {
   const message = checkFailed
-    ? 'We couldn’t reach PiggyVest just now. We’ll keep trying, or you can check again.'
+    ? 'We couldn’t reach PiggyVest just now. Tap Check now to try again, or close this and come back later.'
     : stillWaiting
       ? 'This is taking longer than usual. You can close this and come back. We’ll keep your setup.'
       : 'We’ve sent your details to PiggyVest and are confirming your bank transfer account. This can take a few minutes.';

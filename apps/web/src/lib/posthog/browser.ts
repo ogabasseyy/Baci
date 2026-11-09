@@ -28,7 +28,11 @@ let postHogLoadedStateCheckAttempts = 0;
 let postHogLoadedStateCheckTimer:
   | ReturnType<typeof globalThis.setTimeout>
   | undefined;
-const pendingPostHogPageviewUrls: string[] = [];
+interface PendingPostHogPageview {
+  url: string;
+  properties?: Record<string, string>;
+}
+const pendingPostHogPageviews: PendingPostHogPageview[] = [];
 
 function isPostHogDevelopmentMode(env: PostHogEnv): boolean {
   return (env.NODE_ENV ?? POSTHOG_NODE_ENV) === 'development';
@@ -127,7 +131,7 @@ export function initializePostHogBrowser(
   if (!projectToken) {
     isPostHogBrowserDisabled = true;
     clearPostHogLoadedStateCheck();
-    pendingPostHogPageviewUrls.length = 0;
+    pendingPostHogPageviews.length = 0;
     pendingClientExceptionQueue.clear();
     clearPendingPostHogWebVitals();
 
@@ -222,12 +226,18 @@ function resolvePostHogPageviewUrl(currentUrl?: string) {
   return resolvedUrl;
 }
 
-function queuePostHogPageview(resolvedUrl: string) {
+function queuePostHogPageview(
+  resolvedUrl: string,
+  properties?: Record<string, string>
+) {
+  const lastPending =
+    pendingPostHogPageviews[pendingPostHogPageviews.length - 1];
   if (
-    pendingPostHogPageviewUrls[pendingPostHogPageviewUrls.length - 1] !==
-    resolvedUrl
+    !lastPending ||
+    lastPending.url !== resolvedUrl ||
+    lastPending.properties !== properties
   ) {
-    pendingPostHogPageviewUrls.push(resolvedUrl);
+    pendingPostHogPageviews.push({ url: resolvedUrl, properties });
   }
 
   flushPendingPostHogPageviewsIfClientLoaded();
@@ -271,7 +281,7 @@ function schedulePostHogLoadedStateCheck() {
     postHogLoadedStateCheckTimer !== undefined ||
     isPostHogReadyForCapture ||
     !hasInitializedPostHogBrowser ||
-    pendingPostHogPageviewUrls.length === 0 ||
+    pendingPostHogPageviews.length === 0 ||
     postHogLoadedStateCheckAttempts >= POSTHOG_LOADED_STATE_CHECK_ATTEMPTS
   ) {
     return;
@@ -281,7 +291,7 @@ function schedulePostHogLoadedStateCheck() {
     postHogLoadedStateCheckTimer = undefined;
     flushPendingPostHogPageviewsIfClientLoaded();
 
-    if (isPostHogReadyForCapture || pendingPostHogPageviewUrls.length === 0) {
+    if (isPostHogReadyForCapture || pendingPostHogPageviews.length === 0) {
       return;
     }
 
@@ -299,14 +309,17 @@ function flushPendingPostHogPageviewsIfClientLoaded() {
 }
 
 function flushPendingPostHogPageviews() {
-  const pendingUrls = pendingPostHogPageviewUrls.splice(0);
+  const pendingPageviews = pendingPostHogPageviews.splice(0);
 
-  for (const pendingUrl of pendingUrls) {
-    sendPostHogPageview(pendingUrl);
+  for (const pending of pendingPageviews) {
+    sendPostHogPageview(pending.url, pending.properties);
   }
 }
 
-function sendPostHogPageview(resolvedUrl: string) {
+function sendPostHogPageview(
+  resolvedUrl: string,
+  properties?: Record<string, string>
+) {
   if (lastCapturedPostHogPageviewUrl === resolvedUrl) {
     return;
   }
@@ -317,12 +330,16 @@ function sendPostHogPageview(resolvedUrl: string) {
     {
       $current_url: resolvedUrl,
       app_surface: 'web',
+      ...properties,
     },
     POSTHOG_PAGEVIEW_CAPTURE_OPTIONS
   );
 }
 
-export function capturePostHogPageview(currentUrl?: string) {
+export function capturePostHogPageview(
+  currentUrl?: string,
+  properties?: Record<string, string>
+) {
   if (isPostHogBrowserDisabled) {
     return;
   }
@@ -334,11 +351,11 @@ export function capturePostHogPageview(currentUrl?: string) {
   }
 
   if (!hasInitializedPostHogBrowser || !isPostHogReadyForCapture) {
-    queuePostHogPageview(resolvedUrl);
+    queuePostHogPageview(resolvedUrl, properties);
     return;
   }
 
-  sendPostHogPageview(resolvedUrl);
+  sendPostHogPageview(resolvedUrl, properties);
 }
 
 export type { PostHogWebVitalsPayload };

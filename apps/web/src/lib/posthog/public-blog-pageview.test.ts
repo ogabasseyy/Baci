@@ -3,6 +3,7 @@ import {
   capturePublicBlogPageview,
   resetPublicBlogPageviewDedupe,
   resetPublicBlogPageviewDedupeForTests,
+  resolvePublicBlogPageviewAttribution,
 } from './public-blog-pageview';
 
 function parseFetchBody(fetch: ReturnType<typeof vi.fn>, index = 0) {
@@ -263,5 +264,61 @@ describe('capturePublicBlogPageview transport', () => {
         'https://ogabassey.com/blog'
       )
     ).not.toThrow();
+  });
+});
+
+describe('resolvePublicBlogPageviewAttribution', () => {
+  it('returns null when consent is declined, project token is missing, or bot UA is detected', () => {
+    stubStorage({
+      'baci-cookie-consent': JSON.stringify({
+        necessary: true,
+        analytics: false,
+      }),
+    });
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+
+    expect(
+      resolvePublicBlogPageviewAttribution(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).toBeNull();
+
+    stubStorage();
+    expect(
+      resolvePublicBlogPageviewAttribution({}, 'https://ogabassey.com/blog')
+    ).toBeNull();
+
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 Googlebot/2.1 (+http://www.google.com/bot.html)',
+    });
+    expect(
+      resolvePublicBlogPageviewAttribution(
+        { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+        'https://ogabassey.com/blog'
+      )
+    ).toBeNull();
+  });
+
+  it('resolves attribution properties when analytics is allowed', () => {
+    stubStorage();
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0' });
+    vi.stubGlobal('location', { origin: 'https://ogabassey.com' });
+    vi.stubGlobal('document', {
+      referrer: 'https://www.google.com/search?q=phones',
+    });
+
+    const attribution = resolvePublicBlogPageviewAttribution(
+      { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_public' },
+      'https://ogabassey.com/blog?utm_source=google&utm_medium=cpc'
+    );
+
+    expect(attribution).toMatchObject({
+      $referrer: 'https://www.google.com',
+      $referring_domain: 'www.google.com',
+      utm_source: 'google',
+      utm_medium: 'cpc',
+    });
   });
 });

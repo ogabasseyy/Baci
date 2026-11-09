@@ -161,6 +161,28 @@ function getOrCreatePublicBlogDistinctId(projectToken: string): string {
   return generated;
 }
 
+export function resolvePublicBlogPageviewAttribution(
+  env: PostHogEnv = DEFAULT_PUBLIC_BLOG_POSTHOG_ENV,
+  currentUrl = resolveCurrentUrl()
+): Record<string, string> | null {
+  const projectToken = env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim();
+
+  if (
+    !projectToken ||
+    !currentUrl ||
+    isLikelyBotUserAgent() ||
+    !isAnalyticsAllowed() ||
+    hasPostHogOptedOut(projectToken)
+  ) {
+    resetPublicBlogAttribution();
+    return null;
+  }
+
+  return getPublicBlogAttribution(
+    new URL(currentUrl, getBrowserOrigin() ?? DEFAULT_PUBLIC_BLOG_URL_BASE)
+  );
+}
+
 export function capturePublicBlogPageview(
   env: PostHogEnv = DEFAULT_PUBLIC_BLOG_POSTHOG_ENV,
   currentUrl = resolveCurrentUrl()

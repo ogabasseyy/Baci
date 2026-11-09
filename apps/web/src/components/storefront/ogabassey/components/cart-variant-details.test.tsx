@@ -128,3 +128,39 @@ it.each([
   expect(screen.getByText(variant)).toBeVisible();
   expect(screen.queryByText('Variant:')).not.toBeInTheDocument();
 });
+
+it('renders colour-matched chips, themed neutral chips, and an accessible sr-only condition definition in chips mode', () => {
+  render(
+    <CartVariantDetails
+      presentation="chips"
+      item={{
+        condition: 'new',
+        variantAttributes: {
+          storage: '1TB',
+          sim_type: 'Physical + eSIM',
+          color: 'Yellow',
+          ram: '8GB',
+        },
+      }}
+    />
+  );
+
+  const storageChip = screen.getByText('1TB').closest('div');
+  expect(storageChip).toHaveClass(
+    'bg-store-background-text/5',
+    'ring-store-background-text/8'
+  );
+
+  const colorChip = screen.getByText('Yellow').closest('div');
+  expect(colorChip).toHaveStyle({
+    backgroundColor: '#fef08a',
+    color: '#854d0e',
+    borderColor: '#facc15',
+  });
+
+  expect(screen.getByText('8GB RAM')).toBeInTheDocument();
+  const conditionText = screen.getByText('New');
+  expect(conditionText).toHaveClass('sr-only');
+  expect(conditionText.closest('dd')).not.toBeNull();
+});
+

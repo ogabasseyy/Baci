@@ -48,6 +48,14 @@ export function useCriticalCommerceCartActions({
   const mergingCartLine =
     mergingCartLineIndex >= 0 ? cart[mergingCartLineIndex] : undefined;
   const quantityInCart = mergingCartLine?.quantity ?? 0;
+  const minimumQuantity = Math.max(
+    1,
+    mergingCartLine?.minimum_order_quantity ??
+      productForCart.minimum_order_quantity ??
+      1
+  );
+  const isAtMinCartQuantity =
+    quantityInCart > 0 && quantityInCart <= minimumQuantity;
   const targetCartItemId =
     mergingCartLine?.cartItemId ||
     mergingCartLine?.id ||
@@ -81,7 +89,7 @@ export function useCriticalCommerceCartActions({
       return;
     }
 
-    if (quantityInCart === 1) {
+    if (quantityInCart <= minimumQuantity) {
       removeFromCart?.(targetCartItemId, targetVariantId);
       return;
     }
@@ -93,6 +101,7 @@ export function useCriticalCommerceCartActions({
     handleAddToCart,
     handleDecrementCartQuantity,
     handleIncrementCartQuantity,
+    isAtMinCartQuantity,
     quantityInCart,
   };
 }

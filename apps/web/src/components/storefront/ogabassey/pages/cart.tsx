@@ -1,9 +1,7 @@
 'use client';
 
-import {
-  CartVariantDetails,
-  getCartItemConditionBadge,
-} from '../components/cart-variant-details';
+import { getCartItemConditionBadge } from '../components/cart-item-badge-style';
+import { CartVariantDetails } from '../components/cart-variant-details';
 // Template preview
 
 import {
@@ -147,7 +145,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
         {/* Header */}
         <div className="flex items-center mb-6 shrink-0">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <ShoppingCart className="text-red-600 fill-red-600" />
+            <ShoppingCart className="text-store-primary fill-store-primary" />
             Cart{' '}
             <span className="text-gray-400 text-lg font-medium">
               ({cart.length})
@@ -216,7 +214,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                             href={asRoute(productHref)}
                             className="group/title"
                           >
-                            <h3 className="font-bold text-gray-900 text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-red-600 transition-colors">
+                            <h3 className="font-bold text-gray-900 text-[13px] md:text-base line-clamp-1 leading-snug group-hover/title:text-store-primary transition-colors">
                               {item.name}
                             </h3>
                           </Link>
@@ -261,7 +259,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                         <div className="mt-2.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
                           <div className="flex items-center min-w-0">
                             {item.negotiationStatus === 'accepted' ? (
-                              <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-store-primary bg-store-primary/5 px-1.5 py-0.5 rounded-md whitespace-nowrap">
                                 <Check size={11} strokeWidth={3} />
                                 <span>
                                   Matched @ ₦
@@ -275,7 +273,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => openItemNegotiation(item)}
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:opacity-80 py-0.5 transition-opacity active:scale-95 whitespace-nowrap"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-store-primary hover:opacity-80 py-0.5 transition-opacity active:scale-95 whitespace-nowrap"
                               >
                                 <HandCoins size={12} />
                                 <span>Negotiate</span>
@@ -291,10 +289,10 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                           <div className="ml-auto text-right">
                             {item.negotiatedPrice ? (
                               <div className="flex flex-col items-end leading-tight">
-                                <span className="text-[10px] text-gray-400 line-through decoration-red-400 whitespace-nowrap">
+                                <span className="text-[10px] text-store-background-text/45 line-through decoration-store-primary/40 whitespace-nowrap">
                                   ₦{(item.price * item.quantity).toLocaleString()}
                                 </span>
-                                <span className="font-bold text-green-600 text-sm md:text-lg whitespace-nowrap">
+                                <span className="font-bold text-store-primary text-sm md:text-lg whitespace-nowrap">
                                   ₦{itemTotal.toLocaleString()}
                                 </span>
                               </div>
@@ -311,7 +309,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                       <button
                         type="button"
                         onClick={() => removeFromCart(item.cartItemId)}
-                        className="absolute top-3.5 right-3.5 text-gray-400 hover:text-red-600 p-1 md:hover:bg-red-50 rounded-full transition-colors active:bg-red-50"
+                        className="absolute top-3.5 right-3.5 text-gray-400 hover:text-store-primary p-1 md:hover:bg-store-primary/5 rounded-full transition-colors active:bg-store-primary/5"
                         aria-label="Remove item"
                       >
                         <Trash2 size={14} />
@@ -364,12 +362,12 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                       onClick={openTotalNegotiation}
                       className="w-full bg-gray-100 md:hover:bg-gray-200 text-gray-900 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors border border-gray-200 active:scale-[0.98] active:bg-gray-200"
                     >
-                      <Calculator size={18} className="text-red-600" />
+                      <Calculator size={18} className="text-store-primary" />
                       Negotiate Total
                     </button>
                   )}
 
-                  <button type="button" className="w-full bg-red-600 md:hover:bg-red-700 text-white font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg md:hover:shadow-red-200 group active:scale-[0.98] active:shadow-none">
+                  <button type="button" className="w-full bg-store-primary md:hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group active:scale-[0.98] active:shadow-none">
                     Proceed to Checkout
                     <ArrowRight
                       size={20}

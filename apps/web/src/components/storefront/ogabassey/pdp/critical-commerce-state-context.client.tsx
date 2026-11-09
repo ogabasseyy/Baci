@@ -41,6 +41,7 @@ export interface OgabasseyPdpCriticalCommerceState {
   handleDecrementCartQuantity: () => void;
   handleIncrementCartQuantity: () => void;
   isAtMaxQuantity: boolean;
+  isAtMinCartQuantity?: boolean;
   maxQuantity: number | null;
   productForCart: CartProduct;
   quantity: number;

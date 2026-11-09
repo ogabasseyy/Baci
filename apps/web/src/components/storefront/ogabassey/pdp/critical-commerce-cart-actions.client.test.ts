@@ -164,4 +164,44 @@ describe('useCriticalCommerceCartActions', () => {
     expect(cartMocks.addToCart).not.toHaveBeenCalled();
     expect(cartMocks.setIsCartOpen).not.toHaveBeenCalled();
   });
+
+  it('does not increment beyond maxQuantity and removes the line when decrementing at minimum_order_quantity', () => {
+    cartMocks.cart = [
+      {
+        cartItemId: 'simple-1::condition=new',
+        condition: 'new',
+        id: 'simple-1',
+        minimum_order_quantity: 2,
+        quantity: 2,
+      },
+    ];
+    const { result } = renderHook(() =>
+      useCriticalCommerceCartActions({
+        activeRouteOffer: null,
+        canAddToCart: true,
+        effectivePurchasableVariantSelection: null,
+        maxQuantity: 2,
+        productForCart: {
+          ...productForCart,
+          minimum_order_quantity: 2,
+        } as never,
+        quantity: 2,
+      })
+    );
+
+    expect(result.current.isAtMinCartQuantity).toBe(true);
+
+    act(() => {
+      result.current.handleIncrementCartQuantity();
+    });
+    expect(cartMocks.updateQuantity).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.handleDecrementCartQuantity();
+    });
+    expect(cartMocks.removeFromCart).toHaveBeenCalledWith(
+      'simple-1::condition=new',
+      undefined
+    );
+  });
 });

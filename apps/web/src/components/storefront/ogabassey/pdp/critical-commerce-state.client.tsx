@@ -253,6 +253,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     handleAddToCart,
     handleDecrementCartQuantity,
     handleIncrementCartQuantity,
+    isAtMinCartQuantity,
     quantityInCart,
   } = useCriticalCommerceCartActions({
     activeRouteOffer,
@@ -277,6 +278,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
         handleDecrementCartQuantity,
         handleIncrementCartQuantity,
         isAtMaxQuantity,
+        isAtMinCartQuantity,
         maxQuantity,
         productForCart,
         quantity,

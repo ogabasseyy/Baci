@@ -195,15 +195,23 @@ describe('CheckoutScreen', () => {
         oxygenMobileSummary={<aside aria-label="Mobile selected plan" />}
       />
     );
-    expect(
-      screen.getByRole('region', { name: 'Saved Oxygen application' })
-    ).toBeVisible();
-    expect(
-      screen.getByRole('complementary', { name: 'Selected payment plan' })
-    ).toBeVisible();
+    const oxygenStepRegion = screen.getByRole('region', {
+      name: 'Saved Oxygen application',
+    });
+    const oxygenSummaryRegion = screen.getByRole('complementary', {
+      name: 'Selected payment plan',
+    });
+    expect(oxygenStepRegion).toBeVisible();
+    expect(oxygenSummaryRegion).toBeVisible();
     expect(
       screen.getByRole('complementary', { name: 'Mobile selected plan' })
     ).toBeVisible();
+    expect(oxygenStepRegion.parentElement).toHaveClass('lg:col-span-8');
+    expect(oxygenSummaryRegion.parentElement).toHaveClass('lg:col-span-4');
+    expect(oxygenStepRegion.parentElement?.parentElement).toHaveClass(
+      'grid',
+      'lg:grid-cols-12'
+    );
     expect(screen.queryByTestId('steps')).not.toBeInTheDocument();
     expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
     expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();

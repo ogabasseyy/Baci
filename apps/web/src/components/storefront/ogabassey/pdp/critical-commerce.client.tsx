@@ -140,8 +140,13 @@ export function OgabasseyPdpCriticalCommerceControls({
     handleDecrementCartQuantity,
     handleIncrementCartQuantity,
     isAtMaxQuantity,
+    isAtMinCartQuantity,
+    productForCart,
     quantityInCart,
   } = useOgabasseyPdpCriticalCommerce();
+  const removeOnDecrement =
+    isAtMinCartQuantity ??
+    quantityInCart <= Math.max(1, productForCart?.minimum_order_quantity ?? 1);
 
   return (
     <div
@@ -157,14 +162,14 @@ export function OgabasseyPdpCriticalCommerceControls({
           >
             <button
               aria-label={
-                quantityInCart === 1
+                removeOnDecrement
                   ? `Remove ${productName} from cart`
                   : `Decrease quantity for ${productName}`
               }
               onClick={handleDecrementCartQuantity}
               type="button"
             >
-              {quantityInCart === 1 ? (
+              {removeOnDecrement ? (
                 <svg
                   aria-hidden="true"
                   fill="none"

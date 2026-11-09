@@ -30,6 +30,7 @@
 @source "../../components/storefront/ogabassey/components/AdUnit.tsx";
 @source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
 @source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
+@source "../../components/storefront/ogabassey/components/cart-item-badge-style.ts";
 @source "../../components/storefront/ogabassey/components/cart-sidebar*.tsx";
 @source "../../components/storefront/ogabassey/components/cart-variant-details.tsx";
 @source "../../components/storefront/ogabassey/components/CategoryFiltersSidebar.tsx";

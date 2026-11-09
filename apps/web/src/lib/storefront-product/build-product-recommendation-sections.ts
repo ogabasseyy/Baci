@@ -224,7 +224,7 @@ export function buildRecommendationSections(
         ...buildSupplementalSameBrandCandidates(
           normalizedInput,
           normalizedCurrentBrand,
-          new Set(inventorySameBrand.map((p) => p.slug))
+          new Set(allAlternatives.map((p) => p.slug))
         ),
       ].sort(rankAlternatives(normalizedInput.currentProduct))
     : [];

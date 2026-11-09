@@ -4,6 +4,7 @@ import type {
   BuildProductSemanticModelInput,
   ProductSemanticCandidate,
 } from './product-semantic-types';
+import { resolveSemanticCandidateStock } from './resolve-semantic-candidate-stock';
 
 function normalizeText(value?: string | null): string {
   return (value ?? '').trim().toLowerCase();
@@ -61,6 +62,14 @@ export function buildSupplementalSameBrandCandidates(
       continue;
     }
 
+    const effectiveManageStock =
+      item.manage_stock === undefined &&
+      item.availability === 'InStock' &&
+      item.stock != null &&
+      item.stock <= 0
+        ? false
+        : (item.manage_stock ?? null);
+
     seen.add(slug);
     candidates.push({
       slug,
@@ -69,20 +78,20 @@ export function buildSupplementalSameBrandCandidates(
       brand: item.brand ?? input.currentProduct.brand,
       condition: item.condition ?? null,
       stock:
-        item.manage_stock !== true && item.stock != null && item.stock <= 0
+        item.stock === undefined && item.stock_quantity == null
           ? null
-          : (item.stock ?? null),
+          : resolveSemanticCandidateStock({
+              manage_stock: effectiveManageStock,
+              stock: item.stock,
+              stock_quantity: item.stock_quantity,
+            }),
       stock_quantity: item.stock_quantity ?? null,
       category_slug: categorySlug,
       category_slugs: item.category_slugs ?? null,
       product_key_specs: item.product_key_specs ?? null,
       is_parent: item.is_parent ?? null,
       parent_product_id: item.parent_product_id ?? null,
-      manage_stock:
-        item.manage_stock ??
-        (item.manage_stock !== true && item.stock != null && item.stock <= 0
-          ? false
-          : null),
+      manage_stock: effectiveManageStock,
     });
   }
 

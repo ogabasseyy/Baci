@@ -146,7 +146,7 @@ async function readInventory(
     budget &&
     (!Number.isInteger(budget.maxProducts) ||
       budget.maxProducts < 1 ||
-      budget.maxProducts > 500 ||
+      budget.maxProducts > OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS ||
       !Number.isFinite(budget.timeoutMs) ||
       budget.timeoutMs <= 0)
   ) {

@@ -39,8 +39,8 @@ describe('buildSupplementalSameBrandCandidates', () => {
             condition: 'new',
             price: 1_100_000,
             stock: 0,
-            manage_stock: null,
-            availability: null,
+            manage_stock: false,
+            availability: 'InStock',
           },
           {
             slug: 'redmi-child-variant',

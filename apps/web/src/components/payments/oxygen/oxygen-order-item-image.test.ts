@@ -8,17 +8,17 @@ it('prefers the order image, then product images, then a placeholder', () => {
     quantity: 1,
     price: 100,
     image_url: 'order.jpg',
-    products: { images: ['product.jpg'] },
+    products: { images: ['/product.jpg'] },
   };
-  expect(oxygenOrderItemImage(item)).toBe('order.jpg');
+  expect(oxygenOrderItemImage(item)).toBe('/product.jpg');
   expect(oxygenOrderItemImage({ ...item, image_url: '  /phone.jpg  ' })).toBe(
     '/phone.jpg'
   );
   expect(oxygenOrderItemImage({ ...item, image_url: '  ' })).toBe(
-    'product.jpg'
+    '/product.jpg'
   );
   expect(oxygenOrderItemImage({ ...item, image_url: null })).toBe(
-    'product.jpg'
+    '/product.jpg'
   );
   expect(
     oxygenOrderItemImage({
@@ -32,6 +32,28 @@ it('prefers the order image, then product images, then a placeholder', () => {
       ...item,
       image_url: null,
       products: { images: ['', null] },
+    })
+  ).toBe('/placeholder.png');
+});
+
+it('accepts absolute web images and skips malformed paths before the fallback', () => {
+  const item = {
+    id: 'i',
+    name: 'Phone',
+    quantity: 1,
+    price: 100,
+    image_url: 'https://cdn.example.com/a.jpg',
+    products: { images: ['/fallback.jpg'] },
+  };
+  expect(oxygenOrderItemImage(item)).toBe('https://cdn.example.com/a.jpg');
+  expect(
+    oxygenOrderItemImage({ ...item, image_url: '//evil.example/a.jpg' })
+  ).toBe('/fallback.jpg');
+  expect(
+    oxygenOrderItemImage({
+      ...item,
+      image_url: 'relative.jpg',
+      products: { images: ['other.jpg'] },
     })
   ).toBe('/placeholder.png');
 });

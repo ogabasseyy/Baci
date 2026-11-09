@@ -111,7 +111,6 @@ describe('POST /api/orders loyalty-code bridge errors', () => {
     expect((await response.json()).code).toBe('discount_code_invalid');
   });
   it('rejects a fixed code whose currency preview is stale before calling the wrapper', async () => {
-    mockIsLoyaltyCodeCurrencyCurrent.mockResolvedValueOnce(false);
     const supabase = await setupLoyaltyBridge({
       get_storefront_discount_code: { data: [], error: null },
       get_loyalty_redemption_for_checkout: {
@@ -119,6 +118,8 @@ describe('POST /api/orders loyalty-code bridge errors', () => {
         error: null,
       },
     });
+    // Set after setup, which clears mocks, so the override clearly applies.
+    mockIsLoyaltyCodeCurrencyCurrent.mockResolvedValueOnce(false);
     const response = await POST(
       loyaltyRequest({ discount_code: 'RDM-ABCDEF12' })
     );

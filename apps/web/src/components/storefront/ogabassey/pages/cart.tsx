@@ -24,6 +24,7 @@ import {
 import { runCartTotalNegotiation } from '../lib/cart-total-negotiation';
 import { CartEmptyState } from './cart-empty-state';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { hasCartMerchantContext } from '../components/cart-sidebar-merchant-context';
 
 interface NegotiationState {
   isOpen: boolean;
@@ -49,12 +50,21 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
     clearNegotiatedPrice,
     toggleAssurance,
     cartTotal,
+    merchantSlug: cartMerchantSlug,
   } = useCart();
   const merchantContext = useMerchantSafe();
+  const merchant = merchantContext?.merchant;
+  const cartMerchantContextMatches = hasCartMerchantContext(
+    cartMerchantSlug,
+    merchant?.slug
+  );
+  const shippingInsuranceEnabled = Boolean(
+    merchant?.feature_settings?.shipping_insurance_enabled
+  );
   const basePath = merchantContext?.basePath ?? `/${storeSlug || 'ogabassey'}`;
   const negotiationVatRate =
-    merchantContext?.merchant?.vat_registration_status === 'registered'
-      ? (merchantContext.merchant.vat_rate ?? 7.5) / 100
+    merchant?.vat_registration_status === 'registered'
+      ? (merchant.vat_rate ?? 7.5) / 100
       : 0;
   const [negotiationState, setNegotiationState] =
     useState<NegotiationState | null>(null);
@@ -162,6 +172,8 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                   item={item}
                   key={item.cartItemId}
                   onOpenItemNegotiation={openItemNegotiation}
+                  shippingInsuranceEnabled={shippingInsuranceEnabled}
+                  cartMerchantContextMatches={cartMerchantContextMatches}
                 />
               ))}
 

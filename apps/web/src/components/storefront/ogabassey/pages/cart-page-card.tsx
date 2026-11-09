@@ -21,6 +21,8 @@ interface CartPageCardProps {
   hasPriceNegotiation?: boolean;
   item: CartItem;
   onOpenItemNegotiation: (item: CartItem) => void;
+  shippingInsuranceEnabled?: boolean;
+  cartMerchantContextMatches?: boolean;
 }
 
 export function CartPageCard({
@@ -28,6 +30,8 @@ export function CartPageCard({
   hasPriceNegotiation = false,
   item,
   onOpenItemNegotiation,
+  shippingInsuranceEnabled = false,
+  cartMerchantContextMatches = true,
 }: CartPageCardProps) {
   const { removeFromCart, toggleAssurance, updateQuantity } = useCart();
   const productHref = getStorefrontProductHref(item, basePath);
@@ -40,6 +44,9 @@ export function CartPageCard({
     ? itemTotal * assuranceRate
     : 0;
   const conditionBadge = getCartItemConditionBadge(item);
+  const showAssuranceRow =
+    cartMerchantContextMatches &&
+    (shippingInsuranceEnabled || item.hasAssurance);
 
   return (
     <div
@@ -179,15 +186,17 @@ export function CartPageCard({
         </button>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-store-border">
-        <CartAssuranceRow
-          hasAssurance={item.hasAssurance}
-          assuranceCost={assuranceCost}
-          assuranceRateLabel={assuranceRateLabel}
-          cartItemId={item.cartItemId}
-          onToggle={toggleAssurance}
-        />
-      </div>
+      {showAssuranceRow && (
+        <div className="mt-3 pt-3 border-t border-store-border">
+          <CartAssuranceRow
+            hasAssurance={item.hasAssurance}
+            assuranceCost={assuranceCost}
+            assuranceRateLabel={assuranceRateLabel}
+            cartItemId={item.cartItemId}
+            onToggle={toggleAssurance}
+          />
+        </div>
+      )}
     </div>
   );
 }

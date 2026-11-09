@@ -164,4 +164,44 @@ describe('CartPageCard', () => {
     expect(screen.getByLabelText('Increase quantity')).toBeDisabled();
     expect(screen.queryByText('Negotiate')).not.toBeInTheDocument();
   });
+
+  it('conditionally displays assurance row based on merchant feature flag and context', () => {
+    const onOpenItemNegotiation = vi.fn();
+    const itemWithoutAssurance = { ...sampleItem, hasAssurance: false };
+    const { rerender } = render(
+      <CartPageCard
+        basePath="/ogabassey"
+        item={itemWithoutAssurance}
+        onOpenItemNegotiation={onOpenItemNegotiation}
+        shippingInsuranceEnabled={false}
+        cartMerchantContextMatches={true}
+      />
+    );
+
+    expect(screen.queryByText('Ogabassey Assurance')).not.toBeInTheDocument();
+
+    rerender(
+      <CartPageCard
+        basePath="/ogabassey"
+        item={itemWithoutAssurance}
+        onOpenItemNegotiation={onOpenItemNegotiation}
+        shippingInsuranceEnabled={true}
+        cartMerchantContextMatches={true}
+      />
+    );
+
+    expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
+
+    rerender(
+      <CartPageCard
+        basePath="/ogabassey"
+        item={itemWithoutAssurance}
+        onOpenItemNegotiation={onOpenItemNegotiation}
+        shippingInsuranceEnabled={true}
+        cartMerchantContextMatches={false}
+      />
+    );
+
+    expect(screen.queryByText('Ogabassey Assurance')).not.toBeInTheDocument();
+  });
 });

@@ -29,6 +29,7 @@ export async function GET(request: Request) {
             ...headers,
             'Retry-After': String(retryAfter),
             'X-Oxygen-Rate-Limit-Scope': 'user',
+            'X-Oxygen-Rate-Limit-User': auth.user.id,
           },
         }
       );

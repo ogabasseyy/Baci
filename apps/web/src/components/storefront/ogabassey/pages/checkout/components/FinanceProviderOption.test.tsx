@@ -215,6 +215,24 @@ describe('finance provider option', () => {
     expect(await screen.findByText('2 supported banks')).toBeVisible();
   });
 
+  it('honors the server owner when the local session has not loaded yet', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30', 'X-Oxygen-Rate-Limit-Scope': 'user', 'X-Oxygen-Rate-Limit-User': 'first' }) }).mockResolvedValueOnce(bankResponse(oxygenBanks));
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    auth.user = { id: 'second' };
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(await screen.findByText('2 supported banks')).toBeVisible();
+  });
+
+  it('does not retry when the delayed local session matches the server owner', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30', 'X-Oxygen-Rate-Limit-Scope': 'user', 'X-Oxygen-Rate-Limit-User': 'first' }) });
+    const { rerender } = renderOption('oxygen', true);
+    expect(await screen.findByText(/try again in 30 seconds/i)).toBeInTheDocument();
+    auth.user = { id: 'first' };
+    rerender(<FinanceProviderOption provider="oxygen" selected onSelect={vi.fn()} logo={logo} />);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves an unscoped cooldown when a different customer signs in', async () => {
     auth.user = { id: 'first' };
     fetchMock.mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': '30' }) });

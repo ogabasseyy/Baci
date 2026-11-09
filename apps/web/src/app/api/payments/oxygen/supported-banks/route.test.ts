@@ -62,6 +62,7 @@ it('includes a retry interval on rate-limited requests', async () => {
   const response = await GET(new Request('http://localhost'));
   expect(response.status).toBe(429);
   expect(response.headers.get('X-Oxygen-Rate-Limit-Scope')).toBe('user');
+  expect(response.headers.get('X-Oxygen-Rate-Limit-User')).toBe('user');
   expect(Number(response.headers.get('Retry-After'))).toBeGreaterThan(0);
   expect(mocks.read).not.toHaveBeenCalled();
 });

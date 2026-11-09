@@ -32,7 +32,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
   }, [retryDeadline]);
   useEffect(() => {
     if (!oxygen || !selected) return;
-    if (retryDeadline !== null && retryDeadline > Date.now() && !(cooldownOwner.current && cooldownOwner.current !== userId)) return;
+    if (retryDeadline !== null && retryDeadline > Date.now() && !(cooldownOwner.current && userId && cooldownOwner.current !== userId)) return;
     const controller = new AbortController();
     cooldownOwner.current = null;
     setRetryDeadline(null);
@@ -42,7 +42,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
       .then(async (response) => {
         if (response.status === 401) { if (!controller.signal.aborted) setAuthRequired(true); throw new Error('unauthorized'); }
         if (response.status === 429) {
-          if (!controller.signal.aborted) cooldownOwner.current = response.headers.get('X-Oxygen-Rate-Limit-Scope') === 'user' ? userId ?? null : null;
+          if (!controller.signal.aborted) cooldownOwner.current = response.headers.get('X-Oxygen-Rate-Limit-Scope') === 'user' ? response.headers.get('X-Oxygen-Rate-Limit-User') || userId || null : null;
           const header = response.headers.get('Retry-After');
           const seconds = header === null || header.trim() === '' ? NaN : Number(header);
           const now = Date.now();

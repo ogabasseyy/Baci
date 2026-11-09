@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -68,10 +70,6 @@ describe('next.config rewrites and redirects', () => {
           destination: `${DEFAULT_POSTHOG_INGEST_HOST}/:path*`,
         },
         {
-          source: '/release-assets/:path*',
-          destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
-        },
-        {
           source: '/',
           has: [
             {
@@ -108,6 +106,32 @@ describe('next.config rewrites and redirects', () => {
           rewrite.destination === '/llms-full.txt'
       )
     ).toBe(false);
+  });
+
+  // Regression: a `/release-assets/:path*` rewrite in next.config is added to
+  // Next's typed-routes union, which tipped `next build` type checking over
+  // TypeScript's instantiation depth (TS2589 in storefront footer Links) and
+  // failed production deploys. The rewrite lives in vercel.json instead.
+  it('serves release assets through vercel.json, not next.config typed routes', async () => {
+    const rewrites = await nextConfig.rewrites();
+    expectStructuredRewrites(rewrites);
+    const allSources = [
+      ...(rewrites.beforeFiles ?? []),
+      ...(rewrites.afterFiles ?? []),
+    ].map((rule) => (rule as { source?: string }).source);
+    expect(allSources).not.toContain('/release-assets/:path*');
+
+    const vercelConfig: unknown = JSON.parse(
+      readFileSync(path.join(__dirname, 'vercel.json'), 'utf8')
+    );
+    expect(vercelConfig).toMatchObject({
+      rewrites: [
+        {
+          source: '/release-assets/:path*',
+          destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+        },
+      ],
+    });
   });
 
   it('keeps MCP proxy rewrites when MCP_SERVER_URL is configured', async () => {

@@ -1,3 +1,9 @@
 {
-  "crons": []
+  "crons": [],
+  "rewrites": [
+    {
+      "source": "/release-assets/:path*",
+      "destination": "https://cdn.ogabassey.com/release-assets/:path*"
+    }
+  ]
 }

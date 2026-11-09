@@ -12,7 +12,6 @@ import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standa
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
 import { applyPilotPublicGate } from './src/config/pilot-next-gate';
-import { getReleaseAssetRewriteRules } from './src/config/release-asset-rewrites';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -613,7 +612,6 @@ const nextConfig: NextConfig = {
     const mcpServerUrl = process.env.MCP_SERVER_URL;
     const beforeFiles = [
       ...getPostHogRewriteRules(),
-      ...getReleaseAssetRewriteRules(),
       {
         source: '/',
         has: [

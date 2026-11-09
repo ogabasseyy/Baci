@@ -20,9 +20,7 @@ BEGIN
   ]::name[] LOOP
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = role_name) THEN
       EXECUTE pg_catalog.format(
-        'REVOKE EXECUTE ON FUNCTION '
-        'piggyvest_primary_card.purge_saved_tokens_on_customer_deletion() '
-        'FROM %I',
+        'REVOKE EXECUTE ON FUNCTION piggyvest_primary_card.purge_saved_tokens_on_customer_deletion() FROM %I',
         role_name
       );
     END IF;

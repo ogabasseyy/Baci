@@ -34,11 +34,17 @@ function isControlCharacter(character: string): boolean {
   return code < 0x20 || (code >= 0x7f && code <= 0x9f);
 }
 
-function subjectPreview(message: string): string {
-  const firstLine = Array.from(message.split(/\r?\n|\r/)[0] ?? '')
+// Every piece of the subject is folded onto one clean line.
+function toSubjectText(value: string): string {
+  return Array.from(value)
     .map((character) => (isControlCharacter(character) ? ' ' : character))
     .join('')
+    .replace(/ {2,}/g, ' ')
     .trim();
+}
+
+function subjectPreview(message: string): string {
+  const firstLine = toSubjectText(message.split(/\r?\n|\r/)[0] ?? '');
   return firstLine.length > SUBJECT_PREVIEW_LENGTH
     ? `${firstLine.slice(0, SUBJECT_PREVIEW_LENGTH - 1)}…`
     : firstLine;
@@ -67,7 +73,7 @@ export function buildFeedbackReportEmail(
   input: FeedbackReportEmailInput
 ): FeedbackReportEmail {
   const rows = detailRows(input);
-  const storeName = input.businessName ?? 'a merchant';
+  const storeName = toSubjectText(input.businessName ?? '') || 'a merchant';
   const subject = `Feedback from ${storeName}: ${subjectPreview(input.report.message)}`;
 
   const htmlRows = rows

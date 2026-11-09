@@ -49,6 +49,16 @@ describe('buildFeedbackReportEmail', () => {
     expect(email.subject).toBe('Feedback from Ogabassey: Orders broken');
   });
 
+  it('keeps line breaks in the store name out of the subject', () => {
+    const email = buildFeedbackReportEmail(
+      input({ businessName: 'Oga\r\nBassey\u0007' })
+    );
+
+    expect(email.subject).toBe(
+      'Feedback from Oga Bassey: Orders tab shows nothing'
+    );
+  });
+
   it('lists the store, sender, screen and device in the text body', () => {
     const email = buildFeedbackReportEmail(input());
 

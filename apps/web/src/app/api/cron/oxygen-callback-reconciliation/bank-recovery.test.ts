@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,8 +30,14 @@ import { GET } from './route';
 
 describe('Oxygen bank-list refresh task', () => {
   it('schedules recovery again shortly after an abandoned lock can expire', () => {
+    const appConfig = resolve(process.cwd(), '../../vercel.json');
     const config = JSON.parse(
-      readFileSync(resolve(process.cwd(), '../../vercel.json'), 'utf8')
+      readFileSync(
+        existsSync(appConfig)
+          ? appConfig
+          : resolve(process.cwd(), 'vercel.json'),
+        'utf8'
+      )
     );
     const job = config.crons.find((entry: { path: string }) =>
       entry.path.endsWith('?task=ensure-banks')

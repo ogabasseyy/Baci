@@ -7,12 +7,12 @@ def unquote: gsub("^[\"']|[\"']$"; "");
 def dir_args:
   (.input.command // "")
   | [ scan("(?:^|[\\s;&|(])(?:cd|pushd)\\s+(\"[^\"]+\"|'[^']+'|[^\\s;&|)]+)"),
-      scan("git\\s+-C\\s+(\"[^\"]+\"|'[^']+'|[^\\s;&|)]+)") ]
+      scan("(?:^|[\\s;&|(])git\\s+-C\\s+(\"[^\"]+\"|'[^']+'|[^\\s;&|)]+)") ]
   | flatten | map(unquote)[];
 def mutates:
   (.name? // "") as $n
   | ($n | test("^(Edit|Write|NotebookEdit|MultiEdit)$"))
-    or ((.input.command? // "") | test("(^|[\\s;&|(])git\\s+(-C\\s+\\S+\\s+)?(add|commit)\\b"));
+    or ((.input.command? // "") | test("(^|[\\s;&|(])git\\s+(-C\\s+(\"[^\"]+\"|'[^']+'|[^\\s;&|)]+)\\s+)?(add|commit)\\b"));
 (.cwd? // "") as $cwd
 | ( (.message.content? | if type == "array" then .[] else empty end)
     | select(.type? == "tool_use")

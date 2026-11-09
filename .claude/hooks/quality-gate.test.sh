@@ -96,4 +96,12 @@ if out=$(bash "$HOOK_DIR/quality-gate-check-worktree.sh" "$T/wtC" 2>/dev/null); 
   fail "missing merge-base must fall back to full checks (clean tree, expected deps block)"
 fi
 
+# 10. `git -C "path with spaces" add` counts as a mutation (main-checkout fallback)
+echo dirty > "$R/x"
+{ tool '{"command":"git -C \"'"$R"' \" add ."}' Bash "$R"; } > "$T/t10"
+jq -r -f "$HOOK_DIR/quality-gate-session-paths.jq" "$T/t10" | grep -q '^M' || fail "quoted -C path with add should be a mutation"
+# 11. `git -C` inside another word is not a directory target
+{ tool '{"command":"echo digit -C /tmp/nope"}' Bash "$R"; } > "$T/t11"
+if jq -r -f "$HOOK_DIR/quality-gate-session-paths.jq" "$T/t11" | grep -q '/tmp/nope'; then fail "git -C inside a word must not match"; fi
+
 echo "quality-gate tests: all passed"

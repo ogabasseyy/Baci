@@ -1,6 +1,7 @@
 import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isValidEmail } from '@/lib/zeptomail-email-address';
 import { logZeptoMailSendFailure } from '@/lib/zeptomail-error-log';
 import {
   isRetryableError,
@@ -93,27 +94,6 @@ async function resolveSenderAddress(
     name: base.name,
     isCustomDomain: true,
   };
-}
-
-/**
- * Validate email address format
- * Uses length limit and simpler pattern to prevent ReDoS
- */
-function isValidEmail(email: string): boolean {
-  // Limit length to prevent ReDoS attacks
-  if (!email || email.length > 254) return false;
-
-  // Simple email validation - avoids complex patterns that can cause backtracking
-  const atIndex = email.indexOf('@');
-  if (atIndex < 1 || atIndex === email.length - 1) return false;
-
-  const dotIndex = email.lastIndexOf('.');
-  if (dotIndex < atIndex + 2 || dotIndex === email.length - 1) return false;
-
-  // No whitespace allowed
-  if (/\s/.test(email)) return false;
-
-  return true;
 }
 
 function normalizeRuntimeRecipientEmail(email: unknown): string | null {

@@ -45,6 +45,14 @@ describe('sendFeedbackReportEmail', () => {
     );
   });
 
+  it('drops an invalid sender address instead of failing the email', async () => {
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await sendFeedbackReportEmail(input({ senderEmail: 'not an email' }));
+
+    expect(mockSendEmail.mock.calls[0]?.[0].replyTo).toBeUndefined();
+  });
+
   it('bounds delivery to one attempt within the client request budget', async () => {
     mockSendEmail.mockResolvedValue({ success: true });
     const before = Date.now();

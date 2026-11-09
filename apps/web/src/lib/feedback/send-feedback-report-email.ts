@@ -4,6 +4,7 @@ import {
   type FeedbackReportEmailInput,
 } from '@/lib/feedback/feedback-report-email';
 import { sendEmail } from '@/lib/zeptomail';
+import { isValidEmail } from '@/lib/zeptomail-email-address';
 
 // The admin app aborts API calls after 20s. One bounded attempt keeps a slow
 // provider from turning an already-saved report into a client timeout (and a
@@ -28,7 +29,11 @@ export async function sendFeedbackReportEmail(
       subject: email.subject,
       htmlContent: email.htmlContent,
       textContent: email.textContent,
-      replyTo: input.senderEmail ?? undefined,
+      // An unusable sender address must not block the support email.
+      replyTo:
+        input.senderEmail && isValidEmail(input.senderEmail)
+          ? input.senderEmail
+          : undefined,
       emailType: 'notifications',
       signal: AbortSignal.timeout(FEEDBACK_EMAIL_BUDGET_MS),
       maxAttemptsPerSender: 1,

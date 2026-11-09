@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 // graph to exactly what the poller executes.
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
-import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import {
+  GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+  GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
+} from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';
 import {
   GIGL_TRACKING_MAX_FUTURE_SKEW_MS,
@@ -53,6 +56,74 @@ function fallbackProviderEventKey(
     scanStatusIncident ?? '',
   ]);
   return `fallback:${createHash('sha256').update(tuple).digest('hex')}`;
+}
+
+function compactPlace(value: string | undefined): string {
+  return (value ?? '')
+    .split('(')[0]
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase();
+}
+
+function matchesDestination(
+  location: string | undefined,
+  destination: string | undefined
+): boolean {
+  const place = compactPlace(location);
+  const city = compactPlace(destination);
+  if (place.length < 3 || city.length < 3) {
+    return false;
+  }
+  return place.includes(city) || city.includes(place);
+}
+
+type Guardable = {
+  event: TrackingEvent;
+  recognizedStatus: TrackingEvent['status'] | null;
+};
+
+/**
+ * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
+ * run, and an arrival scan also marks the parcel reaching its destination.
+ * Walk the events oldest-first: MSHC is only out-for-delivery once the parcel
+ * reached the destination (or, when the destination is unknowable, once it
+ * has moved through the network); earlier it is the pickup rider en route.
+ */
+function applyLifecycleGuards(
+  candidates: Guardable[],
+  destination: string | undefined
+): void {
+  const ordered = [...candidates].sort(
+    (a, b) => a.event.timestamp.getTime() - b.event.timestamp.getTime()
+  );
+  let arrived = false;
+  let seenTransit = false;
+  for (const candidate of ordered) {
+    const { event } = candidate;
+    const raw = event.rawStatus.trim().toUpperCase();
+    const isArrival =
+      raw === 'ARF' ||
+      (candidate.recognizedStatus === 'in_transit' &&
+        /ARRIV/i.test(event.description) &&
+        matchesDestination(event.location, destination));
+    if (isArrival) {
+      arrived = true;
+      event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
+    } else if (raw === 'MSHC' && !arrived) {
+      const destinationUnknown = !destination?.trim();
+      if (!(destinationUnknown && seenTransit)) {
+        event.status = 'pickup_scheduled';
+        event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
+        candidate.recognizedStatus = 'pickup_scheduled';
+      }
+    }
+    if (
+      candidate.recognizedStatus === 'in_transit' ||
+      candidate.recognizedStatus === 'picked_up'
+    ) {
+      seenTransit = true;
+    }
+  }
 }
 
 export function normalizeGiglTrackingShipment(
@@ -149,6 +220,8 @@ export function normalizeGiglTrackingShipment(
       }
     }
   );
+
+  applyLifecycleGuards(candidates, shipment.Destination);
 
   const sortedCandidates = [...candidates].sort(
     (left, right) =>

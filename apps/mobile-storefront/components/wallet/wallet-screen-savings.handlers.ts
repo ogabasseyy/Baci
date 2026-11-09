@@ -170,11 +170,11 @@ export async function addSavingsContributionToGoal({
     }
     clearSavingsContributionAmount();
     clearIdempotencyKey?.();
+    playSavingsSuccessHaptic();
     const refreshFailed = await refetchWallet().then(
       () => false,
       () => true
     );
-    playSavingsSuccessHaptic();
     const success = buildSavingsSuccessMessage({
       amount,
       goal,

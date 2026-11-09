@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import * as Haptics from 'expo-haptics';
 import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { buildSavingsSuccessMessage } from './savings-contribution-success';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -42,5 +43,16 @@ describe('server keeps PiggyVest off', () => {
     expect(JSON.stringify(jest.mocked(Alert.alert).mock.calls)).not.toMatch(
       /PIN|PiggyVest/
     );
+  });
+
+  it('builds the cheer from the confirmed amount alone', () => {
+    expect(
+      buildSavingsSuccessMessage({
+        amount: 4500,
+        goal,
+        goalCompleted: true,
+        refreshFailed: false,
+      }).title
+    ).toBe('Goal reached! 🎉');
   });
 });

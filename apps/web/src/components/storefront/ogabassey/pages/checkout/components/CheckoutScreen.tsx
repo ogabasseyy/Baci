@@ -92,7 +92,7 @@ export function CheckoutScreen({
             <CheckoutStepComposition session={steps} />
           )}
           {oxygenSummary ? (
-            <div className="lg:col-span-4">{oxygenSummary}</div>
+            <div className="hidden lg:block lg:col-span-4">{oxygenSummary}</div>
           ) : (
             <DesktopOrderSummary {...presentation.desktop} />
           )}

@@ -31,27 +31,39 @@ DECLARE
   v_platform_margin numeric;
   v_pricing_version text;
   v_price numeric;
+  v_settled_retained numeric := 0;
 BEGIN
   IF NEW.shipping_funding_source IS NOT NULL
      AND NEW.shipping_funding_source NOT IN ('customer_checkout', 'merchant_wallet') THEN
     RAISE EXCEPTION 'Invalid shipping funding source' USING ERRCODE = '22023';
   END IF;
 
+  IF TG_OP = 'UPDATE' THEN
+    v_settled_retained := private.order_settled_gigl_retained_amount(
+      NEW.id, NEW.merchant_id
+    );
+  END IF;
+
   IF TG_OP = 'UPDATE'
      AND OLD.shipping_funding_source = 'customer_checkout'
-     AND COALESCE(OLD.shipping_platform_retained_amount, 0) > 0
-     AND NEW.shipping_funding_source = 'merchant_wallet'
-     AND NOT private.is_non_retaining_checkout_payment_method(OLD.payment_method) THEN
+     AND v_settled_retained > 0
+     AND NEW.shipping_funding_source = 'merchant_wallet' THEN
     RAISE EXCEPTION 'customer_checkout_wallet_rebind_forbidden' USING ERRCODE = 'P0001';
   END IF;
 
   -- Self-fulfillment before settlement must drop checkout retention so payment
   -- settlement does not withhold GIGL shipping for a merchant-delivered order.
+  -- After settlement has retained shipping, reject — clearing the snapshot would
+  -- leave the merchant short the already-deducted tariff.
   IF TG_OP = 'UPDATE'
      AND NEW.fulfillment_type = 'self'
      AND COALESCE(OLD.fulfillment_type, '') IS DISTINCT FROM 'self'
      AND NEW.selected_quote_id IS NULL
      AND NEW.shipping_status IN ('shipped', 'delivered') THEN
+    IF v_settled_retained > 0 THEN
+      RAISE EXCEPTION 'settled_checkout_retention_blocks_self_fulfillment'
+        USING ERRCODE = 'P0001';
+    END IF;
     NEW.shipping_funding_source := NULL;
     NEW.shipping_provider_cost := NULL;
     NEW.shipping_platform_margin := NULL;
@@ -62,8 +74,7 @@ BEGIN
 
   IF TG_OP = 'UPDATE'
      AND OLD.shipping_funding_source = 'customer_checkout'
-     AND COALESCE(OLD.shipping_platform_retained_amount, 0) > 0
-     AND NOT private.is_non_retaining_checkout_payment_method(OLD.payment_method) THEN
+     AND v_settled_retained > 0 THEN
     NEW.shipping_funding_source := 'customer_checkout';
     IF COALESCE(NEW.fulfillment_type, '') IS DISTINCT FROM 'self' THEN
       NEW.shipping_provider := 'GIGL';
@@ -107,10 +118,13 @@ BEGIN
     NEW.shipping_platform_retained_amount := 0;
     RETURN NEW;
   END IF;
+  -- Credit Direct / POD / cash / manual never route the delivery fee to Baci:
+  -- never stamp (or keep an unsettled) customer_checkout retention for them.
+  -- Settled retention is handled above and still wins. Booking then requires
+  -- the merchant wallet (see assertGiglCustomerCheckoutPrepaid).
   IF NEW.shipping_funding_source = 'customer_checkout'
+     AND v_settled_retained <= 0
      AND private.is_non_retaining_checkout_payment_method(NEW.payment_method) THEN
-    -- Mis-stamped (or client-supplied) checkout funding on a payment that
-    -- cannot retain shipping: leave it for the merchant wallet at booking.
     NEW.shipping_funding_source := NULL;
   END IF;
   IF NEW.shipping_funding_source IS NULL
@@ -130,18 +144,9 @@ $$;
 
 REVOKE ALL ON FUNCTION private.stamp_gigl_order_economics() FROM PUBLIC;
 
--- Re-evaluate when the payment method is set or changed after the quote.
-DROP TRIGGER IF EXISTS stamp_gigl_order_economics ON public.orders;
-CREATE TRIGGER stamp_gigl_order_economics
-  BEFORE INSERT OR UPDATE OF selected_quote_id, shipping_funding_source,
-    shipping_provider_cost, shipping_platform_margin,
-    shipping_platform_retained_amount, shipping_pricing_version, shipping_provider,
-    payment_status, payment_method
-  ON public.orders
-  FOR EACH ROW EXECUTE FUNCTION private.stamp_gigl_order_economics();
-
--- Payments that cannot retain shipping hold none, whatever a stale settlement
--- or stamp says; this lets the admin wallet bind rebind mis-stamped orders.
+-- Real settlement retention always counts. Only the stamped-snapshot /
+-- internal-credit leg (a stale checkout stamp) is ignored for payment methods
+-- that cannot retain shipping.
 CREATE OR REPLACE FUNCTION private.order_settled_gigl_retained_amount(
   p_order_id uuid,
   p_merchant_id uuid
@@ -202,26 +207,37 @@ AS $$
       ), 0)
     ) AS amount
   )
-  SELECT CASE WHEN EXISTS (
-    SELECT 1 FROM public.orders AS po
-    WHERE po.id = p_order_id
-      AND po.merchant_id = p_merchant_id
-      AND private.is_non_retaining_checkout_payment_method(po.payment_method)
-  ) THEN 0::numeric ELSE GREATEST(
+  SELECT GREATEST(
     (SELECT amount FROM settlement_retained),
     CASE
       WHEN (SELECT shipping_funding_source FROM order_retention)
            IS NOT DISTINCT FROM 'customer_checkout'
+        AND NOT EXISTS (
+          SELECT 1 FROM public.orders AS po
+          WHERE po.id = p_order_id
+            AND po.merchant_id = p_merchant_id
+            AND private.is_non_retaining_checkout_payment_method(po.payment_method)
+        )
         THEN LEAST(
           (SELECT stamped_retained FROM order_retention),
           (SELECT amount FROM internal_credit)
         )
       ELSE 0
     END
-  ) END;
+  );
 $$;
 REVOKE ALL ON FUNCTION private.order_settled_gigl_retained_amount(uuid, uuid)
   FROM PUBLIC;
+
+-- Re-evaluate when the payment method is set or changed after the quote.
+DROP TRIGGER IF EXISTS stamp_gigl_order_economics ON public.orders;
+CREATE TRIGGER stamp_gigl_order_economics
+  BEFORE INSERT OR UPDATE OF selected_quote_id, shipping_funding_source,
+    shipping_provider_cost, shipping_platform_margin,
+    shipping_platform_retained_amount, shipping_pricing_version, shipping_provider,
+    payment_status, payment_method
+  ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION private.stamp_gigl_order_economics();
 
 -- The shipping wallet balance shown to merchants must be the spendable figure
 -- reserve_merchant_shipping_charge uses (20261103084503): balance minus Paystack

@@ -116,6 +116,14 @@ describe('getAdminOrderGiglCustomerPaidConflict', () => {
       expect(response).toBeNull();
     });
 
+    it('fails closed when the payment method is missing', async () => {
+      loaders.settled.mockResolvedValue(11500);
+
+      const response = await check({ ...checkoutOrder, payment_method: null });
+
+      expect(response?.status).toBe(409);
+    });
+
     it('still refuses a genuinely retained Paystack order', async () => {
       loaders.settled.mockResolvedValue(11500);
 

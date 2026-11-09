@@ -114,9 +114,12 @@ export async function assertGiglCustomerCheckoutPrepaid(
   // source. Preserve the prior paid booking path for those rows; only stamped
   // customer_checkout orders require settlement-covered retention below.
   if (order.shipping_funding_source == null) {
+    // Credit Direct / cash / manual never route shipping money to Baci, so a
+    // null funding source cannot count as prepaid: bind the merchant wallet.
     if (
       paymentStatus !== 'paid' ||
-      isPayOnDeliveryPaymentMethod(order.payment_method)
+      isPayOnDeliveryPaymentMethod(order.payment_method) ||
+      isGiglCheckoutPaymentWithoutRetainedShipping(paymentMethod)
     ) {
       throwPrepaidRequired();
     }

@@ -82,6 +82,11 @@ BEGIN
   IF v_src NOT LIKE '%funding_source%platform%' THEN
     RAISE EXCEPTION 'cancellation trigger must not credit wallets for platform charges';
   END IF;
+  SELECT p.prosrc INTO v_src FROM pg_catalog.pg_proc p
+  WHERE p.oid = 'public.self_fulfill_order_with_wallet_release(uuid,jsonb,text,text)'::regprocedure;
+  IF v_src NOT LIKE '%funding_source%platform%' THEN
+    RAISE EXCEPTION 'self-fulfilment must not credit wallets for platform charges';
+  END IF;
   IF pg_catalog.has_function_privilege(
        'anon', 'public.reserve_merchant_shipping_charge(uuid,uuid,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'anon must not execute reserve_merchant_shipping_charge';

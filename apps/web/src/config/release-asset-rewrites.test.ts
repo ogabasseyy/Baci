@@ -1,20 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { convertCustomRouteSource } from '../../../../node_modules/next/dist/server/lib/router-utils/route-types-utils';
 import { DEFAULT_MEDIA_CDN_ORIGIN } from './cdn';
 import {
   getReleaseAssetRewriteRules,
   isTypegenProcess,
+  RELEASE_ASSET_REWRITE_SOURCE,
 } from './release-asset-rewrites';
 
 describe('release-asset-rewrites', () => {
-  it('uses a custom regex parameter so Next.js route typegen during next build skips DynamicRoutes expansion', () => {
-    const rules = getReleaseAssetRewriteRules([
-      '/usr/local/bin/node',
-      '/path/to/next',
-      'build',
-    ]);
-    expect(rules).toHaveLength(1);
-    expect(convertCustomRouteSource(rules[0].source)).toEqual([]);
+  it('uses a custom character-class regex parameter instead of a catch-all wildcard modifier', () => {
+    expect(RELEASE_ASSET_REWRITE_SOURCE).toBe('/release-assets/:path([^?]+)');
+    expect(RELEASE_ASSET_REWRITE_SOURCE).not.toContain('*');
   });
 
   it('detects typegen process from argv', () => {

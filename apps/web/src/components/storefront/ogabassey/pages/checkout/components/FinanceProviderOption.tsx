@@ -2,7 +2,7 @@
 import { CalendarDays, ChevronDown, HandCoins, Landmark } from 'lucide-react';
 import Image, { type StaticImageData } from 'next/image';
 import { useEffect, useState } from 'react';
-import { useAuthSafe } from '@/contexts/auth-context';
+import { useCheckoutSessionUser } from '../hooks/use-checkout-session-user';
 import { FinanceBankLogo } from './FinanceBankLogo';
 import { oxygenBankListSchema } from '@/schemas/oxygen-bank-details';
 import type { PaymentMethod } from '../types';
@@ -14,7 +14,7 @@ export function FinanceProviderOption({ provider, selected, onSelect, logo }: {
   provider: 'oxygen' | 'credit_direct'; selected: boolean; onSelect: (v: PaymentMethod) => void; logo: StaticImageData;
 }) {
   const oxygen = provider === 'oxygen';
-  const userId = useAuthSafe()?.user?.id;
+  const userId = useCheckoutSessionUser()?.id;
   const [banks, setBanks] = useState<Bank[] | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [retry, setRetry] = useState(0);

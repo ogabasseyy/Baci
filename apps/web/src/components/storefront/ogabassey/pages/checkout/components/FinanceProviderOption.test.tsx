@@ -5,7 +5,7 @@ import type { PaymentMethod } from '../types';
 import { FinanceProviderOption } from './FinanceProviderOption';
 
 const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
-vi.mock('@/contexts/auth-context', () => ({ useAuthSafe: () => ({ user: auth.user }) }));
+vi.mock('../hooks/use-checkout-session-user', () => ({ useCheckoutSessionUser: () => auth.user }));
 
 const logo = {
   src: '/logos/oxygen-finance.png',

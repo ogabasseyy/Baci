@@ -158,7 +158,8 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && 30 || 15 }}
+    # Cold hosted runs can exceed 15 minutes while installing and typechecking.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

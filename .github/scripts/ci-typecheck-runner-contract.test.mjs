@@ -13,13 +13,11 @@ function route({ privateRepo = true, enabled = 'true', typecheckEnabled = 'true'
 
 test('typecheck requires explicit private opt-in and trusted repository head', () => {
   assert.deepEqual(route(), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
-  assert.equal(route({}, 'timeout-minutes'), 30);
+  assert.equal(job['timeout-minutes'], 30);
   for (const value of [{ privateRepo: false }, { privateRepo: null }, { enabled: '' }, { enabled: 'false' }, { typecheckEnabled: '' }, { typecheckEnabled: 'false' }, { head: 'other/fork' }, { head: '' }]) {
     assert.equal(route(value), 'ubuntu-24.04');
-    assert.equal(route(value, 'timeout-minutes'), 15);
   }
   assert.equal(route({ event: 'merge_group', head: '' }), 'ubuntu-24.04');
-  assert.equal(route({ event: 'merge_group', head: '' }, 'timeout-minutes'), 15);
   for (const event of ['pull_request_target', 'issue_comment']) {
     assert.equal(route({ event }), 'ubuntu-24.04');
   }

@@ -64,7 +64,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.refund_merchant_shipping_charge(uuid, text, text)
-  FROM PUBLIC, anon;
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.refund_merchant_shipping_charge(uuid, text, text)
   TO authenticated;
 

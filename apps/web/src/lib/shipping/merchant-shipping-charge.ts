@@ -120,7 +120,7 @@ export async function reserveMerchantShippingCharge(
         normalized.chargedAmount ?? normalized.charged_amount ?? 0
       ),
       balanceAfter:
-        (normalized.balanceAfter ?? normalized.balance_after) === null
+        normalized.balanceAfter === null || normalized.balance_after === null
           ? null
           : Number(normalized.balanceAfter ?? normalized.balance_after ?? 0),
       status: normalized.status,

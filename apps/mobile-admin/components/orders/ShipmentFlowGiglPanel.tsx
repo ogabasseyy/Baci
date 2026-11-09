@@ -184,7 +184,7 @@ export function ShipmentFlowGiglPanel({
           onPress={onFundWallet}
         />
       ) : null}
-      {state === 'funding_pending' && !fundingAccount ? (
+      {state === 'funding_pending' && !fundingAccount && !wallet?.paidByBaci ? (
         <View>
           <Text style={{ color: colors.textSecondary }}>
             Your bank transfer account is being prepared. Check again shortly.

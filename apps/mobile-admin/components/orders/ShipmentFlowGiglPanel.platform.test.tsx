@@ -97,3 +97,23 @@ it('hides the funding-account panel and polling copy for platform-funded merchan
   expect(screen.queryByText("I've transferred")).toBeNull();
   expect(screen.queryByText(/Checking your wallet balance/)).toBeNull();
 });
+
+it('bugfix: hides the funding_pending prompt for platform-funded merchants', () => {
+  render(
+    <ShipmentFlowGiglPanel
+      {...base}
+      selected
+      state="funding_pending"
+      wallet={{
+        availableBalance: 0,
+        canBook: true,
+        paidByBaci: true,
+        shortfall: 0,
+      }}
+    />
+  );
+  expect(
+    screen.queryByText(/bank transfer account is being prepared/)
+  ).toBeNull();
+  expect(screen.queryByText('Check funding status')).toBeNull();
+});

@@ -7,15 +7,15 @@ import type {
 type Draft = Partial<OrderGiglReceiver>;
 export type DraftEdit = (draft: Draft) => Draft;
 
-// Editing the street by hand invalidates a pin picked for the old address.
+// Editing the street, city or state by hand invalidates the old pin.
 export function applyAddressField(
   draft: Draft,
   field: OrderGiglMissingField,
   value: string
 ): Draft {
-  if (field !== 'address') return { ...draft, [field]: value };
+  if (field === 'phone') return { ...draft, phone: value };
   const { latitude: _lat, longitude: _lng, ...rest } = draft;
-  return { ...rest, address: value };
+  return { ...rest, [field]: value };
 }
 
 // A picked place replaces address, city, state and pin together.
@@ -23,12 +23,13 @@ export function applySelectedPlace(
   draft: Draft,
   place: OrderGiglSelectedPlace
 ): Draft {
+  const { latitude: _lat, longitude: _lng, ...rest } = draft;
+  const hasPin = place.latitude !== undefined && place.longitude !== undefined;
   return {
-    ...draft,
+    ...rest,
     address: place.address,
     city: place.city,
     state: place.state,
-    latitude: place.latitude,
-    longitude: place.longitude,
+    ...(hasPin ? { latitude: place.latitude, longitude: place.longitude } : {}),
   };
 }

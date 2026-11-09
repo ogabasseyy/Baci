@@ -22,8 +22,15 @@ describe('order-gigl-address-draft', () => {
     });
   });
 
-  it('keeps the pin when city is edited', () => {
-    expect(applyAddressField(picked, 'city', 'Abuja').latitude).toBe(6.6);
+  it('clears the pin when city or state is edited by hand', () => {
+    expect(applyAddressField(picked, 'city', 'Abuja').latitude).toBeUndefined();
+    expect('latitude' in applyAddressField(picked, 'state', 'Ogun')).toBe(
+      false
+    );
+  });
+
+  it('keeps the pin when the phone is edited', () => {
+    expect(applyAddressField(picked, 'phone', '0801').latitude).toBe(6.6);
   });
 
   it('replaces stale city, state and pin when a place has none', () => {
@@ -32,12 +39,7 @@ describe('order-gigl-address-draft', () => {
       city: '',
       state: '',
     });
-    expect(next).toEqual({
-      address: 'Somewhere',
-      city: '',
-      state: '',
-      latitude: undefined,
-      longitude: undefined,
-    });
+    expect(next).toEqual({ address: 'Somewhere', city: '', state: '' });
+    expect('latitude' in next).toBe(false);
   });
 });

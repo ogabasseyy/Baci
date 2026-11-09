@@ -139,6 +139,24 @@ describe('Oxygen bank-list refresh task', () => {
     expect(mocks.refreshBanks).not.toHaveBeenCalled();
   });
 
+  it('logs a failed lock release without exposing Redis details', async () => {
+    const ensure = new Request(
+      'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',
+      { headers: { authorization: 'Bearer secret' } }
+    );
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.getRedis.mockReturnValue({
+      set: vi.fn().mockResolvedValue('OK'),
+      eval: vi.fn().mockRejectedValue(new Error('private redis detail')),
+    });
+    mocks.readBanks.mockResolvedValue(null);
+    expect((await GET(ensure)).status).toBe(200);
+    expect(log).toHaveBeenCalledWith(
+      'Oxygen supported-bank recovery lock release failed'
+    );
+    log.mockRestore();
+  });
+
   it('does not run concurrent recovery when another worker holds the lock', async () => {
     const ensure = new Request(
       'https://example.test/api/cron/oxygen-callback-reconciliation?task=ensure-banks',

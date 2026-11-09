@@ -89,6 +89,7 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
         );
       } catch {
         // The short TTL still bounds recovery if Redis is unavailable.
+        console.error('Oxygen supported-bank recovery lock release failed');
       }
     }
   }

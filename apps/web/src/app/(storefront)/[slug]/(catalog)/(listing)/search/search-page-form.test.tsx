@@ -104,7 +104,7 @@ it('themes the search outline from the merchant palette', () => {
   );
 });
 
-it('does not announce an error for the hidden duplicate form', () => {
+it('announces shared draft errors without rendering the duplicate form', () => {
   function SetDraftError() {
     const draft = useSearchQueryDraft();
     return (
@@ -126,6 +126,6 @@ it('does not announce an error for the hidden duplicate form', () => {
     </SearchQueryDraftSession>
   );
   fireEvent.click(screen.getByRole('button', { name: 'Set error' }));
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Invalid search');
   expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
 });

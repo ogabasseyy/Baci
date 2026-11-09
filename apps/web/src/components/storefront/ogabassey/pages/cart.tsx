@@ -23,6 +23,7 @@ import {
 } from '../components/NegotiationModal';
 import { runCartTotalNegotiation } from '../lib/cart-total-negotiation';
 import { CartEmptyState } from './cart-empty-state';
+import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 
 interface NegotiationState {
   isOpen: boolean;
@@ -58,6 +59,11 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
   const [negotiationState, setNegotiationState] =
     useState<NegotiationState | null>(null);
   const _router = useRouter();
+
+  const hasPriceNegotiation = Boolean(
+    merchantContext?.merchant &&
+      hasStorefrontPriceNegotiation(merchantContext.merchant)
+  );
 
   const hasNonNegotiableCartItem = cart.some(
     (item) =>
@@ -152,6 +158,7 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
               {cart.map((item) => (
                 <CartPageCard
                   basePath={basePath}
+                  hasPriceNegotiation={hasPriceNegotiation}
                   item={item}
                   key={item.cartItemId}
                   onOpenItemNegotiation={openItemNegotiation}

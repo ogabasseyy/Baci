@@ -38,6 +38,7 @@ export function OgabasseyPdpCriticalCommerceControls({
         <div data-ogabassey-pdp-commerce-in-cart-actions>
           <div
             data-ogabassey-pdp-commerce-quantity
+            role="group"
             aria-label="Quantity"
           >
             <button

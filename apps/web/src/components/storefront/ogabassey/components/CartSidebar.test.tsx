@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -399,6 +399,43 @@ describe('CartSidebar', () => {
     const checkoutBtn = screen.getByRole('button', { name: /proceed to checkout/i });
     fireEvent.click(checkoutBtn);
     expect(screen.getByRole('alert')).toHaveTextContent(/unable to proceed to checkout/i);
+  });
+
+  it('displays an error alert when checkout navigation promise rejects', async () => {
+    mockRouterPush.mockReturnValueOnce(
+      Promise.reject(new Error('Navigation rejected'))
+    );
+    render(<CartSidebar />);
+    const checkoutBtn = screen.getByRole('button', {
+      name: /proceed to checkout/i,
+    });
+    fireEvent.click(checkoutBtn);
+    expect(
+      await screen.findByRole('alert')
+    ).toHaveTextContent(/unable to proceed to checkout/i);
+  });
+
+  it('displays a timeout error alert when checkout navigation exceeds 4 seconds', () => {
+    vi.useFakeTimers();
+    try {
+      mockRouterPush.mockReturnValueOnce(new Promise(() => {}));
+      render(<CartSidebar />);
+      const checkoutBtn = screen.getByRole('button', {
+        name: /proceed to checkout/i,
+      });
+      fireEvent.click(checkoutBtn);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /checkout is taking longer than expected\. please retry\./i
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

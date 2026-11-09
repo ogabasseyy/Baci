@@ -11,25 +11,33 @@ import { CartAssuranceRow } from './cart-assurance-row';
 import { getCartItemConditionBadge } from '../components/cart-item-badge-style';
 import { CartVariantDetails } from '../components/cart-variant-details';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import {
+  getCartItemCheckoutUnitPrice,
+  isQuizVoucherCartItem,
+} from '@/lib/checkout/cart-entitlement-sanitizer';
 
 interface CartPageCardProps {
   basePath: string;
+  hasPriceNegotiation?: boolean;
   item: CartItem;
   onOpenItemNegotiation: (item: CartItem) => void;
 }
 
 export function CartPageCard({
   basePath,
+  hasPriceNegotiation = false,
   item,
   onOpenItemNegotiation,
 }: CartPageCardProps) {
   const { removeFromCart, toggleAssurance, updateQuantity } = useCart();
   const productHref = getStorefrontProductHref(item, basePath);
-  const priceToUse =
-    item.negotiatedPrice !== undefined ? item.negotiatedPrice : item.price;
+  const isQuizGift = isQuizVoucherCartItem(item);
+  const priceToUse = getCartItemCheckoutUnitPrice(item);
   const itemTotal = priceToUse * item.quantity;
+  const assuranceRate = item.assuranceRate ?? DEFAULT_ASSURANCE_RATE;
+  const assuranceRateLabel = `${Number((assuranceRate * 100).toFixed(2))}%`;
   const assuranceCost = item.hasAssurance
-    ? itemTotal * (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)
+    ? itemTotal * assuranceRate
     : 0;
   const conditionBadge = getCartItemConditionBadge(item);
 
@@ -95,7 +103,8 @@ export function CartPageCard({
                 onClick={() =>
                   updateQuantity(item.cartItemId, item.quantity + 1)
                 }
-                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-r-md transition-colors border-l border-store-border active:bg-store-background-text/10"
+                className="px-2 h-full hover:bg-store-background text-store-background-text/60 rounded-r-md transition-colors border-l border-store-border active:bg-store-background-text/10 disabled:opacity-40"
+                disabled={isQuizGift}
                 aria-label="Increase quantity"
               >
                 <Plus size={11} />
@@ -105,36 +114,44 @@ export function CartPageCard({
 
           <div className="mt-2.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
             <div className="flex items-center min-w-0">
-              {item.negotiationStatus === 'accepted' ? (
-                <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-store-primary bg-store-primary/5 px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                  <Check size={11} strokeWidth={3} />
-                  <span>
-                    Matched @ ₦
-                    {item.negotiatedPrice?.toLocaleString()}
-                  </span>
-                </div>
-              ) : isProductNegotiable({
-                  brand: item.brand,
-                  name: item.name,
-                }) ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenItemNegotiation(item)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-store-primary hover:opacity-80 py-0.5 transition-opacity active:scale-95 whitespace-nowrap"
-                >
-                  <HandCoins size={12} />
-                  <span>Negotiate</span>
-                </button>
+              {hasPriceNegotiation && !isQuizGift ? (
+                item.negotiationStatus === 'accepted' ? (
+                  <div className="inline-flex items-center gap-1 text-[10px] md:text-[11px] font-semibold text-store-primary bg-store-primary/5 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                    <Check size={11} strokeWidth={3} />
+                    <span>
+                      Matched @ ₦
+                      {item.negotiatedPrice?.toLocaleString()}
+                    </span>
+                  </div>
+                ) : isProductNegotiable({
+                    brand: item.brand,
+                    name: item.name,
+                  }) ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenItemNegotiation(item)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-store-primary hover:opacity-80 py-0.5 transition-opacity active:scale-95 whitespace-nowrap"
+                  >
+                    <HandCoins size={12} />
+                    <span>Negotiate</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1 text-[11px] font-medium text-store-background-text/40 whitespace-nowrap">
+                    <Check size={11} strokeWidth={2.5} />
+                    <span>Best price</span>
+                  </div>
+                )
               ) : (
-                <div className="inline-flex items-center gap-1 text-[11px] font-medium text-store-background-text/40 whitespace-nowrap">
-                  <Check size={11} strokeWidth={2.5} />
-                  <span>Best price</span>
-                </div>
+                <span />
               )}
             </div>
 
             <div className="ml-auto text-right">
-              {item.negotiatedPrice ? (
+              {isQuizGift ? (
+                <div className="font-bold text-store-primary text-sm md:text-lg whitespace-nowrap">
+                  Free gift
+                </div>
+              ) : item.negotiatedPrice ? (
                 <div className="flex flex-col items-end leading-tight">
                   <span className="text-[10px] text-store-background-text/45 line-through decoration-store-primary/40 whitespace-nowrap">
                     ₦{(item.price * item.quantity).toLocaleString()}
@@ -166,6 +183,7 @@ export function CartPageCard({
         <CartAssuranceRow
           hasAssurance={item.hasAssurance}
           assuranceCost={assuranceCost}
+          assuranceRateLabel={assuranceRateLabel}
           cartItemId={item.cartItemId}
           onToggle={toggleAssurance}
         />

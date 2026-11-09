@@ -59,7 +59,7 @@ const sampleItem: CartItem = {
   name: 'iPhone 15 Pro Max',
   price: 1500000,
   quantity: 2,
-  condition: 'brand_new',
+  condition: 'new',
   image: 'https://example.com/iphone.jpg',
   brand: 'Apple',
   hasAssurance: true,
@@ -117,11 +117,12 @@ describe('CartPageCard', () => {
     expect(mockRemoveFromCart).toHaveBeenCalledWith('item-123');
   });
 
-  it('triggers onOpenItemNegotiation when negotiable', () => {
+  it('triggers onOpenItemNegotiation when negotiable and hasPriceNegotiation is true', () => {
     const onOpenItemNegotiation = vi.fn();
     render(
       <CartPageCard
         basePath="/ogabassey"
+        hasPriceNegotiation={true}
         item={sampleItem}
         onOpenItemNegotiation={onOpenItemNegotiation}
       />
@@ -130,5 +131,29 @@ describe('CartPageCard', () => {
     const negotiateBtn = screen.getByText('Negotiate');
     fireEvent.click(negotiateBtn);
     expect(onOpenItemNegotiation).toHaveBeenCalledWith(sampleItem);
+  });
+
+  it('renders Free gift and disables quantity increase for quiz vouchers', () => {
+    const onOpenItemNegotiation = vi.fn();
+    const quizItem: CartItem = {
+      ...sampleItem,
+      cartItemId: 'quiz-1',
+      price: 0,
+      quizAwardId: 'award-1',
+      quizVoucherToken: 'token-1',
+    };
+
+    render(
+      <CartPageCard
+        basePath="/ogabassey"
+        hasPriceNegotiation={true}
+        item={quizItem}
+        onOpenItemNegotiation={onOpenItemNegotiation}
+      />
+    );
+
+    expect(screen.getByText('Free gift')).toBeInTheDocument();
+    expect(screen.getByLabelText('Increase quantity')).toBeDisabled();
+    expect(screen.queryByText('Negotiate')).not.toBeInTheDocument();
   });
 });

@@ -169,7 +169,14 @@ jobs:
       - name: Install isolated builder auth typecheck dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
       - name: Run isolated builder auth tests
-        run: pnpm --dir apps/web/tools/builder-auth test
+        id: builder-auth-tests
+        run: |
+          node --test apps/web/tools/builder-auth/ci-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+          pnpm --dir apps/web/tools/builder-auth test
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
       - name: Run Typecheck
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -182,12 +189,12 @@ jobs:
     name: Quality Gate - Test
     needs: [changes]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Full web/mobile test fan-out reached ~15 minutes warm, but cold runs
     # (Turbo remote cache unavailable) measure 31m+ on GitHub-hosted runners —
     # three consecutive 30m timeouts on cold caches. Keep headroom for Turbo
     # summary and Actions post-job cleanup.
-    timeout-minutes: 45
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && 60 || 45 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -203,6 +210,7 @@ jobs:
           node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
       - name: Verify authenticated shipping recovery in PostgreSQL
+        id: shipping-recovery
         env:
           BACI_SHIPPING_QUOTE_POSTGRES: '1'
         run: |
@@ -219,10 +227,13 @@ jobs:
             src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts \
             src/lib/shipping/gigl-external-waybill-link.postgres.test.ts \
             src/lib/shipping/gigl-price-round-100.postgres.test.ts
+      - name: Clean shipping PostgreSQL test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.shipping-recovery.outcome == 'success' || steps.shipping-recovery.outcome == 'failure' || steps.shipping-recovery.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-shipping-ci-containers.mjs
       - name: Run Tests
+        id: test-execution
         env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
           EVENT_NAME: ${{ github.event_name }}
           TEST_PLAN_MODE: ${{ steps.test-plan.outputs.mode }}
           TEST_PLAN_REASON: ${{ steps.test-plan.outputs.reason }}
@@ -258,6 +269,10 @@ jobs:
           fi
 
           node .github/scripts/run-ci-non-web-tests.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.test-execution.outcome == 'success' || steps.test-execution.outcome == 'failure' || steps.test-execution.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
   quality-test-web:
     name: Quality Gate - Test (web shard ${{ matrix.shard }})
@@ -267,6 +282,8 @@ jobs:
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
+    env:
+      BACI_FIXTURE_SCOPE: ${{ matrix.shard }}
     strategy:
       fail-fast: false
       matrix:
@@ -284,9 +301,14 @@ jobs:
       - name: Install isolated builder auth test dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
       - name: Run web vitest shard
+        id: web-shard
         env:
           VITEST_SHARD: ${{ matrix.shard }}
         run: bash .github/scripts/run-ci-web-shard.sh
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.web-shard.outcome == 'success' || steps.web-shard.outcome == 'failure' || steps.web-shard.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
   quality-db-replay:
     name: Quality Gate - DB Replay
@@ -801,11 +823,11 @@ jobs:
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.
     needs: [changes]
-    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Bounded build-time storefront reads can extend page-data collection past
     # 30 minutes on a cold runner. Keep enough headroom for that safe pressure
     # control plus setup and post-job cache/checkout cleanup.
-    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && 75 || 45 }}
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && 75 || 45 }}
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -838,6 +860,7 @@ jobs:
           SUPABASE_JWT_SECRET: placeholder-jwt-secret
       - name: Save Next.js build cache (main branch only)
         if: >
+          runner.environment == 'github-hosted' &&
           needs.changes.outputs.web == 'true' &&
           needs.changes.outputs.test_plan_mode != 'config-smoke' &&
           github.ref == 'refs/heads/main' &&

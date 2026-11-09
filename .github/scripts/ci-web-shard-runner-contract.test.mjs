@@ -35,7 +35,10 @@ test('web shards do not reference secrets and hydrate their full history', () =>
   assert.equal(job.steps[0].with['fetch-depth'], 0);
   assert.equal(job.steps[0].with.filter, '');
   assert.equal(job.steps[0].with['persist-credentials'], false);
-  assert.equal(job.steps.at(-1).run, 'bash .github/scripts/run-ci-web-shard.sh');
+  const shard = job.steps.findIndex((step) => step.id === 'web-shard');
+  assert.equal(job.steps[shard].run, 'bash .github/scripts/run-ci-web-shard.sh');
+  assert.ok(job.steps.findIndex((step) => step.name === 'Clean builder auth test containers') > shard);
+  assert.equal(job.env.BACI_FIXTURE_SCOPE, '${{ matrix.shard }}');
 });
 
 test('only self-hosted shards receive the four-worker limit', () => {

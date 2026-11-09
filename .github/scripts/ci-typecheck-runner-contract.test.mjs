@@ -35,3 +35,27 @@ test('typecheck job does not reference secrets', () => {
   noSecrets(workflow.env);
   noSecrets(job);
 });
+
+test('builder fixture containers are scoped and cleaned after interruption', async () => {
+  const fixtures = await readFile('apps/web/tools/builder-auth/test-fixtures.ts', 'utf8');
+  const api = await readFile('apps/web/tools/builder-auth/data-api.node.test.ts', 'utf8');
+  const draftApi = await readFile('apps/web/tools/builder-auth/draft-api-fixture.ts', 'utf8');
+  assert.match(fixtures, /\.\.\.builderCiDockerArgs\(\)/);
+  assert.match(api, /\.\.\.builderCiDockerArgs\(\)/);
+  assert.match(draftApi, /\.\.\.builderCiDockerArgs\(\)/);
+  const builder = job.steps.find((step) => step.name === 'Run isolated builder auth tests');
+  const cleanup = job.steps.find((step) => step.name === 'Clean builder auth test containers');
+  assert.equal(builder.id, 'builder-auth-tests');
+  assert.match(cleanup.if, /always\(\)/);
+  assert.match(cleanup.if, /self-hosted/);
+  assert.match(cleanup.if, /builder-auth-tests/);
+  assert.match(cleanup.run, /cleanup-builder-ci-containers\.mjs/);
+  for (const [jobId, stepId] of [['quality-test', 'test-execution'], ['quality-test-web', 'web-shard']]) {
+    const webJob = workflow.jobs[jobId];
+    const webCleanup = webJob.steps.find((step) => step.name === 'Clean builder auth test containers');
+    assert.match(webCleanup.if, /always\(\)/);
+    assert.match(webCleanup.if, new RegExp(stepId));
+    assert.match(webCleanup.run, /cleanup-builder-ci-containers\.mjs/);
+  }
+  assert.equal(workflow.jobs['quality-test-web'].env.BACI_FIXTURE_SCOPE, '${{ matrix.shard }}');
+});

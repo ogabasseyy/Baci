@@ -1,53 +1,38 @@
-import { render, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { AccessibilityInfo, Platform } from 'react-native';
 import { Toast } from './Toast';
 
-jest.mock('react-native', () => {
-  const RN = jest.requireActual('react-native');
-
-  // mock AccessibilityInfo
-  RN.AccessibilityInfo.announceForAccessibility = jest.fn();
-
-  return RN;
-});
-
 describe('bugfix: double screen reader announcement in RN toast', () => {
-  let originalOS: typeof Platform.OS;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    originalOS = Platform.OS;
+    jest
+      .spyOn(AccessibilityInfo, 'announceForAccessibility')
+      .mockImplementation();
   });
 
   afterEach(() => {
-    Platform.OS = originalOS;
+    jest.restoreAllMocks();
   });
 
-  it('skips manual announceForAccessibility when OS is android', async () => {
-    Platform.OS = 'android';
+  it('skips manual announceForAccessibility when OS is android', () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
     const { getByRole } = render(
       <Toast message="Test toast" visible={true} onDismiss={() => {}} />
     );
     const toastView = getByRole('alert');
     expect(toastView.props.accessibilityLiveRegion).toBe('assertive');
-
-    await waitFor(() => {
-      expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
-    });
+    expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
   });
 
-  it('invokes manual announceForAccessibility when OS is ios', async () => {
-    Platform.OS = 'ios';
+  it('invokes manual announceForAccessibility when OS is ios', () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
     const { getByRole } = render(
       <Toast message="Test toast" visible={true} onDismiss={() => {}} />
     );
     const toastView = getByRole('alert');
     expect(toastView.props.accessibilityLiveRegion).toBe('assertive');
-
-    await waitFor(() => {
-      expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(
-        'Test toast'
-      );
-    });
+    expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(
+      'Test toast'
+    );
   });
 });

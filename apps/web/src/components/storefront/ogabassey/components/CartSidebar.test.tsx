@@ -390,6 +390,16 @@ describe('CartSidebar', () => {
       screen.getByRole('button', { name: /negotiate total amount/i })
     ).toBeInTheDocument();
   });
+
+  it('displays an error alert when checkout navigation fails', () => {
+    mockRouterPush.mockImplementationOnce(() => {
+      throw new Error('Navigation failed');
+    });
+    render(<CartSidebar />);
+    const checkoutBtn = screen.getByRole('button', { name: /proceed to checkout/i });
+    fireEvent.click(checkoutBtn);
+    expect(screen.getByRole('alert')).toHaveTextContent(/unable to proceed to checkout/i);
+  });
 });
 
 describe('stable logical cart view',()=>{

@@ -10,6 +10,7 @@ export function CartSidebarFooter({
   hasPriceNegotiation,
   hasNonNegotiableCartItem,
   isCheckoutLoading,
+  checkoutError,
   cartHref,
   onNegotiateTotal,
   onCheckout,
@@ -19,6 +20,7 @@ export function CartSidebarFooter({
   hasPriceNegotiation: boolean;
   hasNonNegotiableCartItem: boolean;
   isCheckoutLoading: boolean;
+  checkoutError?: string | null;
   cartHref: Route;
   onNegotiateTotal: () => void;
   onCheckout: () => void;
@@ -39,23 +41,33 @@ export function CartSidebarFooter({
         </button>
       )}
 
-      <button type="button"
-        onClick={onCheckout}
-        disabled={isCheckoutLoading}
-        className="w-full bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group disabled:opacity-70 disabled:cursor-not-allowed"
-      >
-        {isCheckoutLoading ? (
-          <div className="size-5 border-2 border-store-primary-text/30 border-t-store-primary-text rounded-full animate-spin" />
-        ) : (
-          <>
-            Proceed to Checkout
-            <ArrowRight
-              size={20}
-              className="group-hover:translate-x-1 transition-transform"
-            />
-          </>
+      <div>
+        <button type="button"
+          onClick={onCheckout}
+          disabled={isCheckoutLoading}
+          className="w-full bg-store-primary hover:bg-store-primary/90 text-store-primary-text font-bold py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg group disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {isCheckoutLoading ? (
+            <div className="size-5 border-2 border-store-primary-text/30 border-t-store-primary-text rounded-full animate-spin" />
+          ) : (
+            <>
+              Proceed to Checkout
+              <ArrowRight
+                size={20}
+                className="group-hover:translate-x-1 transition-transform"
+              />
+            </>
+          )}
+        </button>
+        {checkoutError && (
+          <p
+            role="alert"
+            className="text-xs text-red-600 font-medium text-center mt-2"
+          >
+            {checkoutError}
+          </p>
         )}
-      </button>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Link

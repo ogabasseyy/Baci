@@ -42,12 +42,19 @@ describe('useDeferredActivation', () => {
     fireEvent.touchStart(button);
     fireEvent.pointerDown(button, { pointerType: 'touch' });
     fireEvent.focusIn(button);
+    fireEvent.touchEnd(button);
 
+    // Fast-forward inside the 500ms touch window: focusin remains suppressed
     await act(async () => {
-      vi.runOnlyPendingTimers();
+      vi.advanceTimersByTime(200);
     });
 
     expect(button).toHaveTextContent('Idle');
+
+    // Advance past the 500ms window: touch flag resets
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
 
     fireEvent.focusIn(button);
 

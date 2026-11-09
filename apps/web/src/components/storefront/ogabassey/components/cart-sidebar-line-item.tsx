@@ -66,6 +66,7 @@ export function CartSidebarLineItem({
         <div className="relative shrink-0">
           {conditionBadge && (
             <span
+              aria-hidden="true"
               className={`pointer-events-none absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-full text-[7.5px] leading-none font-bold uppercase tracking-wider shadow-2xs ${conditionBadge.badgeClassName}`}
             >
               {conditionBadge.label}

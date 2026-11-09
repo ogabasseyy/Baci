@@ -67,11 +67,17 @@ export function useDeferredActivation({
       lastPointerWasTouch = true;
       if (touchResetTimeoutId !== undefined) {
         window.clearTimeout(touchResetTimeoutId);
+        touchResetTimeoutId = undefined;
+      }
+    };
+    const scheduleTouchReset = (delayMs = 500) => {
+      if (touchResetTimeoutId !== undefined) {
+        window.clearTimeout(touchResetTimeoutId);
       }
       touchResetTimeoutId = window.setTimeout(() => {
         touchResetTimeoutId = undefined;
         lastPointerWasTouch = false;
-      }, 0);
+      }, delayMs);
     };
 
     const activate = () => {
@@ -120,18 +126,11 @@ export function useDeferredActivation({
       }, 0);
     };
     const removeInteractionListeners = () => {
-      if (interactionListenerTarget === undefined) {
-        return;
-      }
-
-      interactionListenerTarget.removeEventListener(
-        'touchstart',
-        handleTouchStart
-      );
-      interactionListenerTarget.removeEventListener(
-        'pointerdown',
-        handlePointerDown
-      );
+      if (!interactionListenerTarget) return;
+      interactionListenerTarget.removeEventListener('touchstart', handleTouchStart);
+      interactionListenerTarget.removeEventListener('touchend', handleTouchEnd);
+      interactionListenerTarget.removeEventListener('touchcancel', handleTouchEnd);
+      interactionListenerTarget.removeEventListener('pointerdown', handlePointerDown);
       interactionListenerTarget.removeEventListener('keydown', handleKeyDown);
       interactionListenerTarget.removeEventListener('focusin', handleFocusIn);
     };
@@ -141,11 +140,13 @@ export function useDeferredActivation({
         schedulePostPaintInteractionActivation();
         return;
       }
-
       activate();
     };
     const handleTouchStart = () => {
       markTouchInteraction();
+    };
+    const handleTouchEnd = () => {
+      scheduleTouchReset(500);
     };
     const handlePointerDown = (event: Event) => {
       const pointerType =
@@ -154,17 +155,13 @@ export function useDeferredActivation({
           : undefined;
       if (pointerType === 'touch') {
         markTouchInteraction();
-        if (ignoreTouchInteraction) {
-          return;
-        }
+        scheduleTouchReset(500);
+        if (ignoreTouchInteraction) return;
       } else if (pointerType === 'mouse' || pointerType === 'pen') {
         lastPointerWasTouch = false;
       }
 
-      if (ignoreTouchInteraction && lastPointerWasTouch) {
-        return;
-      }
-
+      if (ignoreTouchInteraction && lastPointerWasTouch) return;
       handleInteraction();
     };
     const handleKeyDown = () => {
@@ -172,26 +169,18 @@ export function useDeferredActivation({
       handleInteraction();
     };
     const handleFocusIn = () => {
-      if (ignoreTouchInteraction && lastPointerWasTouch) {
-        lastPointerWasTouch = false;
-        return;
-      }
-
+      if (ignoreTouchInteraction && lastPointerWasTouch) return;
       handleInteraction();
     };
 
     const scheduleIdleActivation = () => {
-      if (cancelled || !activateOnIdle || idleCallbackId !== undefined) {
-        return;
-      }
-
+      if (cancelled || !activateOnIdle || idleCallbackId !== undefined) return;
       if (typeof window.requestIdleCallback === 'function') {
         idleCallbackId = window.requestIdleCallback(activate, {
           timeout: timeoutMs || 1000,
         });
         return;
       }
-
       idleCallbackId = window.setTimeout(activate, 0);
     };
 
@@ -216,21 +205,12 @@ export function useDeferredActivation({
     if (activateOnInteraction) {
       interactionListenerTarget = interactionTargetRef?.current ?? window;
       if (ignoreTouchInteraction) {
-        interactionListenerTarget.addEventListener(
-          'touchstart',
-          handleTouchStart,
-          { passive: true }
-        );
+        interactionListenerTarget.addEventListener('touchstart', handleTouchStart, { passive: true });
+        interactionListenerTarget.addEventListener('touchend', handleTouchEnd, { passive: true });
+        interactionListenerTarget.addEventListener('touchcancel', handleTouchEnd, { passive: true });
       }
-      interactionListenerTarget.addEventListener(
-        'pointerdown',
-        handlePointerDown,
-        {
-          passive: true,
-        }
-      );
+      interactionListenerTarget.addEventListener('pointerdown', handlePointerDown, { passive: true });
       interactionListenerTarget.addEventListener('keydown', handleKeyDown);
-
       if (interactionListenerTarget !== window) {
         interactionListenerTarget.addEventListener('focusin', handleFocusIn);
       }
@@ -238,11 +218,7 @@ export function useDeferredActivation({
 
     return () => {
       cancelled = true;
-
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       if (idleCallbackId !== undefined) {
         if (typeof window.cancelIdleCallback === 'function') {
           window.cancelIdleCallback(idleCallbackId);
@@ -250,23 +226,10 @@ export function useDeferredActivation({
           window.clearTimeout(idleCallbackId);
         }
       }
-
-      if (interactionFrameId !== undefined) {
-        window.cancelAnimationFrame(interactionFrameId);
-      }
-
-      if (interactionTimeoutId !== undefined) {
-        window.clearTimeout(interactionTimeoutId);
-      }
-
-      if (touchResetTimeoutId !== undefined) {
-        window.clearTimeout(touchResetTimeoutId);
-      }
-
-      if (loadListenerAttached) {
-        window.removeEventListener('load', handleWindowLoad);
-      }
-
+      if (interactionFrameId !== undefined) window.cancelAnimationFrame(interactionFrameId);
+      if (interactionTimeoutId !== undefined) window.clearTimeout(interactionTimeoutId);
+      if (touchResetTimeoutId !== undefined) window.clearTimeout(touchResetTimeoutId);
+      if (loadListenerAttached) window.removeEventListener('load', handleWindowLoad);
       removeInteractionListeners();
     };
   }, [

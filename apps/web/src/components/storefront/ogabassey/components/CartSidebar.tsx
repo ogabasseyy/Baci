@@ -20,6 +20,7 @@ import {
   NegotiationModal,
 } from './NegotiationModal';
 import { useCartSidebarNegotiation } from './use-cart-sidebar-negotiation';
+import { useCartDrawerLifecycle } from './use-cart-drawer-lifecycle';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { isProductNegotiable } from '@baci/shared/lib';
 import {
@@ -75,42 +76,17 @@ export const CartSidebar: React.FC = () => {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
 
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const {
+    isCheckoutLoading,
+    setIsCheckoutLoading,
+    checkoutError,
+    setCheckoutError,
+  } = useCartDrawerLifecycle({
+    isCartOpen,
+    setIsCartOpen,
+  });
   const router = useRouter();
-  const pathname = usePathname();
-  const lastPathnameRef = useRef(pathname);
-  const isCartOpenRef = useRef(isCartOpen);
-  const setIsCartOpenRef = useRef(setIsCartOpen);
   const scheduleTimeout = useSafeTimeout();
-
-  useEffect(() => {
-    isCartOpenRef.current = isCartOpen;
-    setIsCartOpenRef.current = setIsCartOpen;
-  }, [isCartOpen, setIsCartOpen]);
-
-  useEffect(() => {
-    if (lastPathnameRef.current !== pathname) {
-      lastPathnameRef.current = pathname;
-      setIsCheckoutLoading(false);
-      if (isCartOpen) {
-        setIsCartOpen(false);
-      }
-    }
-  }, [pathname, isCartOpen, setIsCartOpen]);
-
-  useEffect(() => {
-    return () => {
-      if (isCartOpenRef.current) {
-        setIsCartOpenRef.current(false);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isCartOpen) {
-      setIsCheckoutLoading(false);
-    }
-  }, [isCartOpen]);
 
   const {
     negotiationState,
@@ -129,67 +105,69 @@ export const CartSidebar: React.FC = () => {
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  // Track a logical cart once per open drawer; catalog hydration can replace row objects.
   const lastCartView = useRef<string | null>(null);
   useEffect(() => {
     if (!isCartOpen || displayCart.length === 0) {
       lastCartView.current = null;
       return;
     }
-    if (
-      isCartOpen &&
-      displayCart.length > 0 &&
-      cartMerchantContextMatches
-    ) {
+    if (isCartOpen && displayCart.length > 0 && cartMerchantContextMatches) {
       const fingerprint = JSON.stringify([
-        merchant?.id, merchant?.payout_currency ?? 'NGN',
-        displayCart.map(item => JSON.stringify([item.id, item.variantId ?? null,
-          item.offerId ?? null, item.condition ?? null,
+        merchant?.id,
+        merchant?.payout_currency ?? 'NGN',
+        displayCart.map((item) => JSON.stringify([
+          item.id, item.variantId ?? null, item.offerId ?? null, item.condition ?? null,
           Object.entries(item.variantAttributes ?? {}).sort(([a], [b]) => a.localeCompare(b)),
-          item.selectedColor ?? null, item.selectedStorage ?? null,
-          item.quantity, item.price,
+          item.selectedColor ?? null, item.selectedStorage ?? null, item.quantity, item.price,
         ])).sort(),
       ]);
       if (lastCartView.current === fingerprint) return;
       lastCartView.current = fingerprint;
-      // Cart items already satisfy the Product shape analytics expects.
       const analyticsProducts = displayCart.map((item) => ({
         product: item,
         quantity: item.quantity,
       }));
-
-      analytics.viewCart(
-        analyticsProducts,
-        merchant?.payout_currency ?? 'NGN',
-        {
-          merchantId: merchant?.id || '',
-          // If we had user data context, we would pass it here
-          // userData: { email: user?.email, ... }
-        }
-      );
+      analytics.viewCart(analyticsProducts, merchant?.payout_currency ?? 'NGN', {
+        merchantId: merchant?.id || '',
+      });
     }
-  }, [
-    isCartOpen,
-    cart,
-    cartMerchantContextMatches,
-    merchant?.id,
-    merchant?.payout_currency,
-  ]);
+  }, [isCartOpen, cart, cartMerchantContextMatches, merchant?.id, merchant?.payout_currency]);
 
   if (!isCartOpen) return null;
 
   const handleCheckout = () => {
+    setCheckoutError(null);
     setIsCheckoutLoading(true);
     // Keep the drawer visible in its loading state while Next.js navigates
     // so the underlying page does not flash before /checkout mounts.
     // The pathname effect above closes the drawer once the route commits.
-    router.push(asRoute(getHref('/checkout')));
-    scheduleTimeout(() => {
+    try {
+      const pushResult = router.push(asRoute(getHref('/checkout')));
+      if (
+        pushResult &&
+        typeof (pushResult as unknown as Promise<unknown>).catch === 'function'
+      ) {
+        (pushResult as unknown as Promise<unknown>).catch(() => {
+          setIsCheckoutLoading(false);
+          setCheckoutError('Unable to proceed to checkout. Please try again.');
+        });
+      }
+    } catch {
       setIsCheckoutLoading(false);
+      setCheckoutError('Unable to proceed to checkout. Please try again.');
+    }
+    scheduleTimeout(() => {
+      setIsCheckoutLoading((current) => {
+        if (current) {
+          setCheckoutError('Checkout is taking longer than expected. Please retry.');
+        }
+        return false;
+      });
     }, 4000);
   };
 
   const handleClose = () => {
+    setCheckoutError(null);
     setIsCheckoutLoading(false);
     setIsCartOpen(false);
   };
@@ -278,6 +256,7 @@ export const CartSidebar: React.FC = () => {
                 hasPriceNegotiation={hasPriceNegotiation}
                 hasNonNegotiableCartItem={hasNonNegotiableCartItem}
                 isCheckoutLoading={isCheckoutLoading}
+                checkoutError={checkoutError}
                 cartHref={asRoute(getHref('/cart'))}
                 onNegotiateTotal={openTotalNegotiation}
                 onCheckout={handleCheckout}

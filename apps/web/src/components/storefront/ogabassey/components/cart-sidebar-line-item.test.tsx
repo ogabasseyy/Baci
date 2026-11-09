@@ -216,8 +216,11 @@ it('shows all saved variant details in the cart drawer', () => {
 
 it('shows a conditioned drawer item exactly once with a formatted label', () => {
   setup(makeItem({ condition: 'open_box' }));
-  expect(screen.getByText('Condition:')).toBeVisible();
-  expect(screen.getAllByText('Open Box')).toHaveLength(1);
+  expect(screen.getByText('Condition:')).toBeInTheDocument();
+  const conditionElements = screen.getAllByText('Open Box');
+  expect(conditionElements).toHaveLength(2);
+  expect(conditionElements.some((el) => el.getAttribute('aria-hidden') === 'true')).toBe(true);
+  expect(conditionElements.some((el) => el.classList.contains('sr-only'))).toBe(true);
   expect(screen.queryByText('open_box')).not.toBeInTheDocument();
 });
 

@@ -276,6 +276,7 @@ export function WalletScreen({
           onResetRedeem: resetRedeemPanel,
           onStartSavings: handleOpenSavings,
           onSubmitPhone: handleSubmitPhone,
+          pinPrompt: <WalletPinSheet colors={colors} {...pinSheetProps} />,
           redeemPoints,
           savingsContributionAmount,
           savingsBalance,
@@ -294,7 +295,6 @@ export function WalletScreen({
         ownerId={customer?.id ?? user.id}
         presentation={presentation}
       />
-      <WalletPinSheet colors={colors} {...pinSheetProps} />
     </>
   );
 }

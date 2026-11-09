@@ -207,6 +207,17 @@ describe('compare schema product helpers', () => {
         slug: 'smartphones',
       },
     });
+    expect(
+      toProductCompareSchemaProduct(
+        {
+          id: 'phone-1',
+          name: 'Galaxy S25',
+          brand: `  ${'Samsung '.repeat(15)}  `,
+          image: '/media/galaxy-s25.avif',
+        },
+        BASE_URL
+      )?.brand
+    ).toHaveLength(70);
   });
 
   it.each([

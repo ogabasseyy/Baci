@@ -8,10 +8,6 @@ export function buildVariantSchemaName(
 ): string {
   // Keep the product title and as many complete option values as fit.
   // Prioritize distinguishing variant attributes before general spec entries.
-  const baseName = Array.from(productName).slice(0, 150).join('');
-  let variantName = baseName;
-  let hasAppendedAttribute = false;
-
   const entries = Object.entries(attributes ?? {});
   const orderedEntries = [
     ...entries.filter(([key]) =>
@@ -22,12 +18,27 @@ export function buildVariantSchemaName(
     ),
   ];
 
+  const orderedValues: string[] = [];
   const seenValues = new Set<string>();
   for (const [, value] of orderedEntries) {
     if (typeof value !== 'string') continue;
     const trimmed = value.trim();
     if (!trimmed || seenValues.has(trimmed)) continue;
     seenValues.add(trimmed);
+    orderedValues.push(trimmed);
+  }
+
+  const firstAttr = orderedValues[0];
+  const firstAttrCodePoints = firstAttr ? Array.from(firstAttr).length : 0;
+  const maxBaseLength =
+    firstAttr && firstAttrCodePoints <= 60
+      ? Math.max(1, 150 - 3 - firstAttrCodePoints)
+      : 150;
+
+  let variantName = Array.from(productName).slice(0, maxBaseLength).join('');
+  let hasAppendedAttribute = false;
+
+  for (const trimmed of orderedValues) {
     const separator = hasAppendedAttribute ? ' / ' : ' - ';
     const candidate = `${variantName}${separator}${trimmed}`;
     if (Array.from(candidate).length <= 150) {

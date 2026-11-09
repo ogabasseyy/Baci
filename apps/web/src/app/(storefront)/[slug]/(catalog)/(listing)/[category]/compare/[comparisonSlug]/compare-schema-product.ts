@@ -201,11 +201,15 @@ export function toProductCompareSchemaProduct(
     return null;
   }
 
+  const brand =
+    typeof record.brand === 'string' && record.brand.trim()
+      ? Array.from(record.brand.trim()).slice(0, 70).join('')
+      : '';
+
   return {
     id,
     name,
-    ...(typeof record.brand === 'string' &&
-      record.brand.trim() && { brand: record.brand.trim() }),
+    ...(brand && { brand }),
     image,
     availability: getStructuredDataAvailability(record),
     category: typeof record.category === 'string' ? record.category : null,

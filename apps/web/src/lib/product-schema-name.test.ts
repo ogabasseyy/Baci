@@ -12,10 +12,31 @@ describe('name', () => {
     ).toBe('Laptop - Silver / 16GB');
   });
 
+  it('prioritizes distinguishing attributes over a fitting specification', () => {
+    expect(
+      buildVariantSchemaName('Laptop', {
+        spec: 'X'.repeat(140),
+        color: 'Silver',
+        ram: '16GB',
+      })
+    ).toBe('Laptop - Silver / 16GB');
+  });
+
   it('uses the dash separator for the first attribute even when the base name is long', () => {
     const longBase = 'A'.repeat(140);
     expect(buildVariantSchemaName(longBase, { color: 'Black' })).toBe(
       `${longBase} - Black`
     );
+  });
+
+  it('reserves room for the first distinguishing attribute when the product name reaches 150 characters', () => {
+    const longBase = 'A'.repeat(150);
+    const blackName = buildVariantSchemaName(longBase, { color: 'Black' });
+    const whiteName = buildVariantSchemaName(longBase, { color: 'White' });
+    expect(blackName.length).toBeLessThanOrEqual(150);
+    expect(whiteName.length).toBeLessThanOrEqual(150);
+    expect(blackName).toMatch(/ - Black$/);
+    expect(whiteName).toMatch(/ - White$/);
+    expect(blackName).not.toBe(whiteName);
   });
 });

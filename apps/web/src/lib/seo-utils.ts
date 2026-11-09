@@ -712,7 +712,11 @@ export function generateProductSchema(
     const customAdditionalProperty = sanitizedCustomSchema.additionalProperty;
     const customSchemaFields = Object.fromEntries(
       Object.entries(sanitizedCustomSchema).filter(
-        ([key]) => key !== 'additionalProperty' && key !== 'description'
+        ([key, value]) =>
+          key !== 'additionalProperty' &&
+          key !== 'description' &&
+          (key !== 'sku' ||
+            (typeof value === 'string' && isValidMerchantIdentifier(value)))
       )
     );
     Object.assign(schema, customSchemaFields);
@@ -791,12 +795,20 @@ export function generateProductSchema(
   // @see https://schema.org/ProductGroup
   if (product.variants && product.variants.length > 0) {
     schema['@type'] = 'ProductGroup';
+    const fallbackGroupId = `group-${
+      Array.from(String(product.id || 'item').replace(/[/\\?#\s\p{C}]/gu, '-'))
+        .slice(0, 44)
+        .join('') || 'item'
+    }`;
     schema.productGroupID = isValidMerchantIdentifier(product.slug)
       ? product.slug
-      : product.id;
+      : isValidMerchantIdentifier(product.id)
+        ? product.id
+        : fallbackGroupId;
 
     const variesBy = getVariantSchemaVariesBy(product.variants);
     if (variesBy.length > 0) schema.variesBy = variesBy;
+    else delete schema.variesBy;
 
     // Shared shipping + return policy for all variant Offers, defined once and
     // referenced by @id (2026 best practice)

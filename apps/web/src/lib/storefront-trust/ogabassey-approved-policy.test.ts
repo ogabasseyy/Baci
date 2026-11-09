@@ -28,6 +28,9 @@ describe('approved policy draft isolation', () => {
     expect(result.shipping_policy?.handling_days_max).toBe(2);
     expect(result.return_policy?.window_days).toBe(14);
     expect(result.shipping_policy?.shipping_fee_type).toBe('calculated');
+    expect(result.shipping_policy?.summary).toBe(
+      'Delivery is handled by GIG Logistics. Shipping is paid, with the delivery fee calculated and confirmed at checkout for your destination. Shipping is not free.'
+    );
   });
 
   it('does not inject a policy into another merchant with no persisted policy', () => {

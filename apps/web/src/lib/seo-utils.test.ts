@@ -766,6 +766,57 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
     });
 
+    it('preserves validated SKU fallback and clears stale custom variesBy when custom schema markup is invalid or incomplete', () => {
+      const singleSchema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          sku: `INVALID SKU ${'x'.repeat(60)}`,
+          schema_markup: {
+            sku: `CUSTOM INVALID SKU ${'y'.repeat(60)}`,
+          } as unknown as Product['schema_markup'],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(singleSchema.sku).toBe('e7d13d26-ef38-4c5b-a616-40d23cf69708');
+
+      const groupSchema = generateProductSchema(
+        makeProduct({
+          id: 'invalid id / with spaces',
+          slug: `product-${'x'.repeat(60)}`,
+          schema_markup: {
+            variesBy: ['https://schema.org/color'],
+          } as unknown as Product['schema_markup'],
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { processor: 'M4' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(groupSchema.variesBy).toBeUndefined();
+      expect(groupSchema.productGroupID).toBe('group-invalid-id---with-spaces');
+      expect(
+        (groupSchema.hasVariant as Record<string, unknown>[])[0]
+          .inProductGroupWithID
+      ).toBe(groupSchema.productGroupID);
+    });
+
     it('does not treat oversized specification text as a variant size', () => {
       const schema = generateProductSchema(
         makeProduct({

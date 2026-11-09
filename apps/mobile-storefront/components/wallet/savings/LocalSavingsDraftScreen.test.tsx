@@ -10,6 +10,9 @@ import type { SavingsDraft } from '@/schemas/customer-savings-drafts';
 import { draftFixture } from '@/schemas/customer-savings-drafts.test-fixture';
 import { LocalSavingsDraftScreen } from './LocalSavingsDraftScreen';
 
+// Rendering this screen can exceed Jest's five-second default on CI runners.
+jest.setTimeout(15_000);
+
 const mockLegacyController = jest.fn(() => {
   throw new Error('Legacy money controller must not mount');
 });

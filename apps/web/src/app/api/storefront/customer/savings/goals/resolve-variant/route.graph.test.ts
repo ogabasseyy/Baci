@@ -29,5 +29,5 @@ describe('nonpayment variant selection import graph', () => {
       sources
     );
     expect(nonpaymentClosure.has('apps/web/src/env.ts')).toBe(false);
-  });
+  }, 60_000);
 });

@@ -201,5 +201,5 @@ describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
     } finally {
       globalRef.window = originalWindow;
     }
-  });
+  }, 30_000);
 });

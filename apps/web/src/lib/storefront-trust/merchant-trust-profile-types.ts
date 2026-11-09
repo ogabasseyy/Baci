@@ -87,6 +87,7 @@ interface MerchantTrustProfileFeatureSettings {
 }
 
 export interface MerchantTrustProfileSource {
+  slug?: string | null;
   template_id?: string | null;
   support_email?: string | null;
   support_phone?: string | null;

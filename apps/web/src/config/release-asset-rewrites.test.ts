@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { convertCustomRouteSource } from '../../../../node_modules/next/dist/server/lib/router-utils/route-types-utils';
 import { DEFAULT_MEDIA_CDN_ORIGIN } from './cdn';
 import {
   getReleaseAssetRewriteRules,
@@ -6,6 +7,16 @@ import {
 } from './release-asset-rewrites';
 
 describe('release-asset-rewrites', () => {
+  it('uses a custom regex parameter so Next.js route typegen during next build skips DynamicRoutes expansion', () => {
+    const rules = getReleaseAssetRewriteRules([
+      '/usr/local/bin/node',
+      '/path/to/next',
+      'build',
+    ]);
+    expect(rules).toHaveLength(1);
+    expect(convertCustomRouteSource(rules[0].source)).toEqual([]);
+  });
+
   it('detects typegen process from argv', () => {
     expect(
       isTypegenProcess(['/usr/local/bin/node', '/path/to/next', 'typegen'])
@@ -35,8 +46,8 @@ describe('release-asset-rewrites', () => {
     ]);
     expect(rules).toEqual([
       {
-        source: '/release-assets/:path*',
-        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+        source: '/release-assets/:path([^?]+)',
+        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
       },
     ]);
   });
@@ -50,8 +61,8 @@ describe('release-asset-rewrites', () => {
     expect(isTypegenProcess(argv)).toBe(false);
     expect(getReleaseAssetRewriteRules(argv)).toEqual([
       {
-        source: '/release-assets/:path*',
-        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+        source: '/release-assets/:path([^?]+)',
+        destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
       },
     ]);
   });

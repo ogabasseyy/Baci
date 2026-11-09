@@ -7,14 +7,18 @@ export function isTypegenProcess(
 }
 
 /**
- * Rewrite rules for public release assets (storefront images, blog assets).
+ * Custom regex parameter (`[^?]+`) for `/release-assets/:path([^?]+)`.
  *
- * During Next.js type generation (`next typegen`), returning catch-all wildcard
- * rewrites pushes Next.js's internal RouteImpl union over TypeScript's recursion
- * depth limit (TS2589) in storefront components that consume dynamic routes.
- * At runtime and during test assertions, the rewrite routes `/release-assets/:path*`
- * to the default media CDN origin.
+ * Unlike `:path*` (which Next.js `convertCustomRouteSource` expands into
+ * `/release-assets/${OptionalCatchAllSlug<T>}` in `.next/types/link.d.ts`
+ * during both `next typegen` and `next build`, pushing `RouteImpl` over
+ * TypeScript's recursion depth limit TS2589), a custom character-class regex
+ * (`[^?]+`) is skipped by `convertCustomRouteSource` while matching the exact
+ * same non-empty release-asset path segments at runtime on Next.js and Vercel.
  */
+export const RELEASE_ASSET_REWRITE_SOURCE = '/release-assets/:path([^?]+)';
+export const RELEASE_ASSET_REWRITE_DESTINATION = `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`;
+
 export function getReleaseAssetRewriteRules(
   argv: readonly string[] = process.argv
 ) {
@@ -23,8 +27,8 @@ export function getReleaseAssetRewriteRules(
   }
   return [
     {
-      source: '/release-assets/:path*',
-      destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+      source: RELEASE_ASSET_REWRITE_SOURCE,
+      destination: RELEASE_ASSET_REWRITE_DESTINATION,
     },
   ];
 }

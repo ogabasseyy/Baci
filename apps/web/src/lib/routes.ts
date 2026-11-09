@@ -1,7 +1,11 @@
 import type { Route as NextRoute } from 'next';
 
-/** Narrowed Next.js Route alias (`Route<never>`) to avoid TS2589 union distribution on `<Link>`. */
-export type DynamicRoute = NextRoute<never>;
+/**
+ * Narrowed Next.js Route alias (`'/' & NextRoute<never>`) so `<Link href={asRoute(...)}>`
+ * infers a single literal type instead of distributing a 700-member `RouteImpl` union
+ * against `DynamicRoutes<infer _>` (which triggers TS2589 in `next build`).
+ */
+export type DynamicRoute = '/' & NextRoute<never>;
 type Route = DynamicRoute;
 
 /**

@@ -68,8 +68,8 @@ describe('next.config rewrites and redirects', () => {
           destination: `${DEFAULT_POSTHOG_INGEST_HOST}/:path*`,
         },
         {
-          source: '/release-assets/:path*',
-          destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path*`,
+          source: '/release-assets/:path([^?]+)',
+          destination: `${DEFAULT_MEDIA_CDN_ORIGIN}/release-assets/:path`,
         },
         {
           source: '/',

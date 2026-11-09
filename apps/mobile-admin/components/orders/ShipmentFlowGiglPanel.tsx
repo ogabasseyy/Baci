@@ -20,6 +20,7 @@ const formatPrice = (amount: number) =>
 // The balance only matters when it cannot cover the delivery.
 function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
   if (!wallet) return [];
+  if (wallet.paidByBaci) return [{ text: 'Paid by Baci' }];
   if (wallet.canBook) return [{ text: 'From your wallet' }];
   return [
     { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
@@ -65,6 +66,7 @@ interface Props {
   wallet: {
     availableBalance: number;
     canBook: boolean;
+    paidByBaci?: boolean;
     shortfall: number;
   } | null;
 }

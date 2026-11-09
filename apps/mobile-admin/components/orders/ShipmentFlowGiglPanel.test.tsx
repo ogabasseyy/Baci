@@ -54,6 +54,25 @@ const base = {
 };
 
 describe('ShipmentFlowGiglPanel', () => {
+  it('shows Paid by Baci instead of wallet balance or top-up for platform-funded merchants', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        wallet={{
+          availableBalance: 0,
+          canBook: true,
+          paidByBaci: true,
+          shortfall: 0,
+        }}
+      />
+    );
+    expect(screen.getByText('₦11,000')).toBeTruthy();
+    expect(screen.getByText('Paid by Baci')).toBeTruthy();
+    expect(screen.queryByText('From your wallet')).toBeNull();
+    expect(screen.queryByText(/Wallet balance|Top up/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fund wallet' })).toBeNull();
+  });
+
   it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
     expect(screen.getByText('GIG')).toBeTruthy();

@@ -23,6 +23,7 @@ import {
 import {
   OgabasseyPdpCriticalCommerceProvider,
   useOgabasseyPdpCriticalCommerce,
+  useOptionalOgabasseyPdpCriticalCommerce,
 } from './critical-commerce-state.client';
 import { OgabasseyPdpCriticalVariantSelectors } from './critical-variant-selectors.client';
 
@@ -31,7 +32,11 @@ export {
   OgabasseyPdpCriticalCommerceConditionFact,
   OgabasseyPdpCriticalConditionBadge,
 } from './critical-commerce-condition.client';
-export { OgabasseyPdpCriticalCommerceProvider } from './critical-commerce-state.client';
+export {
+  OgabasseyPdpCriticalCommerceProvider,
+  useOgabasseyPdpCriticalCommerce,
+  useOptionalOgabasseyPdpCriticalCommerce,
+} from './critical-commerce-state.client';
 
 interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;

@@ -142,12 +142,16 @@ export const CartSidebar: React.FC = () => {
     // so the underlying page does not flash before /checkout mounts.
     // The pathname effect above closes the drawer once the route commits.
     try {
-      const pushResult = router.push(asRoute(getHref('/checkout')));
+      const pushResult: unknown = (router.push as (target: unknown) => unknown)(
+        asRoute(getHref('/checkout'))
+      );
       if (
-        pushResult &&
-        typeof (pushResult as unknown as Promise<unknown>).catch === 'function'
+        typeof pushResult === 'object' &&
+        pushResult !== null &&
+        'catch' in pushResult &&
+        typeof (pushResult as { catch: unknown }).catch === 'function'
       ) {
-        (pushResult as unknown as Promise<unknown>).catch(() => {
+        (pushResult as Promise<unknown>).catch(() => {
           setIsCheckoutLoading(false);
           setCheckoutError('Unable to proceed to checkout. Please try again.');
         });

@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Product as CartProduct } from '@/lib/products';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 
 const cartMocks = vi.hoisted(() => ({
@@ -20,13 +21,13 @@ vi.mock('@/hooks/cart', () => ({
   }),
 }));
 
-const productForCart = {
+const productForCart: CartProduct = {
   condition: 'new',
   has_variants: false,
   id: 'simple-1',
   name: 'Simple Widget',
   price: 5000,
-} as never;
+} as unknown as CartProduct;
 
 describe('useCriticalCommerceCartActions', () => {
   beforeEach(() => {

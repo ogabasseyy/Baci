@@ -41,6 +41,14 @@ describe('buildFeedbackReportEmail', () => {
     expect(email.subject).toBe(`Feedback from Ogabassey: ${'x'.repeat(59)}…`);
   });
 
+  it('keeps carriage returns and control characters out of the subject', () => {
+    const email = buildFeedbackReportEmail(
+      input({ report: { message: 'Orders\tbroken\rSecond line\u0007' } })
+    );
+
+    expect(email.subject).toBe('Feedback from Ogabassey: Orders broken');
+  });
+
   it('lists the store, sender, screen and device in the text body', () => {
     const email = buildFeedbackReportEmail(input());
 

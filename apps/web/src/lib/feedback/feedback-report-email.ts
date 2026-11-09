@@ -28,8 +28,17 @@ export interface FeedbackReportEmail {
 
 const SUBJECT_PREVIEW_LENGTH = 60;
 
+// Line breaks and other control characters never belong in a subject line.
+function isControlCharacter(character: string): boolean {
+  const code = character.charCodeAt(0);
+  return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+}
+
 function subjectPreview(message: string): string {
-  const firstLine = message.split('\n')[0]?.trim() ?? '';
+  const firstLine = Array.from(message.split(/\r?\n|\r/)[0] ?? '')
+    .map((character) => (isControlCharacter(character) ? ' ' : character))
+    .join('')
+    .trim();
   return firstLine.length > SUBJECT_PREVIEW_LENGTH
     ? `${firstLine.slice(0, SUBJECT_PREVIEW_LENGTH - 1)}…`
     : firstLine;

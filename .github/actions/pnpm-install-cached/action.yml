@@ -2,6 +2,10 @@ name: pnpm install with incremental cache
 description: Restore and save pnpm dependency and Turborepo caches with PR security boundaries.
 
 inputs:
+  allow-self-hosted-cache-save:
+    description: 'Allow the trusted deployment runner to save the shared pnpm cache'
+    required: false
+    default: 'false'
   store-dir:
     description: 'Base path for pnpm store; pnpm appends its current store version'
     required: false
@@ -138,6 +142,7 @@ runs:
     # Cache Save Engine: PR branches are strictly RESTORE-ONLY to prevent cache poisoning & save storage limit (10GB)
     - name: Save pnpm store cache (main branch only)
       if: >
+        (runner.environment == 'github-hosted' || inputs.allow-self-hosted-cache-save == 'true') &&
         github.ref == 'refs/heads/main' &&
         github.event_name == 'push' &&
         steps.pnpm-store-cache.outputs.cache-hit != 'true'

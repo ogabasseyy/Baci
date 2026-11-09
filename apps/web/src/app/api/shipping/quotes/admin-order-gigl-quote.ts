@@ -172,13 +172,14 @@ export async function postAdminOrderGiglQuote(
       { status: 503 }
     );
   if (isPreview) {
+    const previewSupabase = auth.supabase;
     const funding = await resolveAdminGiglQuoteFunding(
-      auth.supabase,
+      previewSupabase,
       access.merchantId,
       quote.price,
       async () => {
         const wallet = await readMerchantShippingWalletBalance(
-          auth.supabase,
+          previewSupabase,
           access.merchantId
         );
         return wallet.ok ? wallet.availableBalance : null;

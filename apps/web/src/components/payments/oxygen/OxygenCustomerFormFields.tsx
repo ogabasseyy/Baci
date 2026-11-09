@@ -55,11 +55,13 @@ export function CustomerFormFields({
   saveDraft,
   flushDraft,
   saveBlocked,
+  saveStatus,
 }: CustomerFormProps & {
   initialDraft: OxygenFormDraft | null;
   saveDraft: (draft: OxygenFormDraft) => void;
   flushDraft: () => Promise<boolean>;
   saveBlocked: boolean;
+  saveStatus?: string;
 }) {
   const defaults = initialDraft?.fields ?? {};
   const [step, setStep] = useState(Math.min(initialDraft?.step ?? 0, 1));
@@ -76,6 +78,16 @@ export function CustomerFormFields({
     saveDraft(oxygenCustomerDraft(formRef.current, nextStep));
   }
   const [formError, setFormError] = useState('');
+  useEffect(() => {
+    if (saveStatus === 'saved') {
+      setFormError((current) =>
+        current ===
+        'We could not save your details. Check the message above before continuing.'
+          ? ''
+          : current
+      );
+    }
+  }, [saveStatus]);
   const formErrorId = useId();
   const focusInvalidField = useRef(false);
   const [continuing, setContinuing] = useState<'saving' | 'starting' | null>(
@@ -138,7 +150,12 @@ export function CustomerFormFields({
         continuingRef.current = true;
         setContinuing('saving');
         try {
-          if (workflowId && !(await flushDraft())) return;
+          if (workflowId && !(await flushDraft())) {
+            setFormError(
+              'We could not save your details. Check the message above before continuing.'
+            );
+            return;
+          }
           if (data.get('consent') !== 'on') return;
           const customer = parseOxygenCustomerForm(data, phone);
           if (!customer.success) {

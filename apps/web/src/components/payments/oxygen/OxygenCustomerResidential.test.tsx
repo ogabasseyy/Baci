@@ -28,10 +28,12 @@ it('collects the checkout address and proof beside income, without sending them 
   const submit = vi.fn().mockResolvedValue(true);
   const prepare = vi.fn();
   const save = vi.fn();
+  const flush = vi.fn().mockResolvedValue(true);
   render(
     <CustomerFormFields
       busy={false}
       phone="08000000001"
+      workflowId="60000000-0000-4000-8000-000000000001"
       submit={submit}
       checkoutAddress={{
         street: 'Example Road',
@@ -59,7 +61,7 @@ it('collects the checkout address and proof beside income, without sending them 
         },
       }}
       saveDraft={save}
-      flushDraft={async () => true}
+      flushDraft={flush}
       saveBlocked={false}
     />
   );
@@ -79,6 +81,14 @@ it('collects the checkout address and proof beside income, without sending them 
     )
   );
   fireEvent.click(screen.getByRole('checkbox', { name: /I agree to share/ }));
+  flush.mockResolvedValueOnce(false);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'We could not save your details. Check the message above before continuing.'
+  );
+  expect(submit).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );

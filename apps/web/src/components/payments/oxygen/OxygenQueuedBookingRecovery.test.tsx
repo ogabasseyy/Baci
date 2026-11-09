@@ -221,7 +221,7 @@ it.each([
   });
   release();
   expect(
-    await screen.findByRole('heading', { name: 'Your payment breakdown' })
+    await screen.findByRole('heading', { name: 'Review your payment plan' })
   ).toBeVisible();
   expect(screen.getByText('₦145,000.00')).toBeVisible();
   expect(screen.getAllByText('₦45,000.00')[0]).toBeVisible();

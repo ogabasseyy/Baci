@@ -324,6 +324,10 @@
     {
       "path": "lib/pending-vtu-idempotency-store.ts",
       "justification": "Reviewed web-only MMKV Map-fallback durability probe (Codex R125 P1): Platform.OS web gate with localStorage access check so a non-durable web write reports failure and the pre-POST guard refuses; native always durable. Covered by blocked/accessible regression tests."
+    },
+    {
+      "path": "components/ui/Toast.tsx",
+      "justification": "Reviewed iOS accessibility manual announcement fallback since iOS VoiceOver lacks full support for assertive live regions for dynamic alerts."
     }
   ],
   "knownForbiddenPatterns": []

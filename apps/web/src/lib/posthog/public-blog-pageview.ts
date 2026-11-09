@@ -14,6 +14,7 @@ import {
 } from '@/lib/posthog/persisted-identity';
 import {
   getPublicBlogAttribution,
+  type PublicBlogAttribution,
   resetPublicBlogAttribution,
 } from './public-blog-attribution';
 
@@ -164,7 +165,7 @@ function getOrCreatePublicBlogDistinctId(projectToken: string): string {
 export function resolvePublicBlogPageviewAttribution(
   env: PostHogEnv = DEFAULT_PUBLIC_BLOG_POSTHOG_ENV,
   currentUrl = resolveCurrentUrl()
-): Record<string, string> | null {
+): PublicBlogAttribution | null {
   const projectToken = env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim();
 
   if (

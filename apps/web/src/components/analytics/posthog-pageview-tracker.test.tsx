@@ -11,7 +11,15 @@ const mocks = vi.hoisted(() => ({
   hasPostHogBrowserInitialized: vi.fn(() => false),
   initializePostHogBrowser: vi.fn(),
   resetPublicBlogPageviewDedupe: vi.fn(),
-  resolvePublicBlogPageviewAttribution: vi.fn(() => ({
+  resolvePublicBlogPageviewAttribution: vi.fn<
+    () => {
+      $referrer: string;
+      $referring_domain: string;
+      utm_source?: string;
+      utm_medium?: string;
+      utm_campaign?: string;
+    } | null
+  >(() => ({
     $referrer: '$direct',
     $referring_domain: '$direct',
   })),

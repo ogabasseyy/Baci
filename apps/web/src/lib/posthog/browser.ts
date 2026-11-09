@@ -28,9 +28,11 @@ let postHogLoadedStateCheckAttempts = 0;
 let postHogLoadedStateCheckTimer:
   | ReturnType<typeof globalThis.setTimeout>
   | undefined;
+type PageviewExtraProperties = Record<string, string | undefined> | object;
+
 interface PendingPostHogPageview {
   url: string;
-  properties?: Record<string, string>;
+  properties?: PageviewExtraProperties;
 }
 const pendingPostHogPageviews: PendingPostHogPageview[] = [];
 
@@ -228,7 +230,7 @@ function resolvePostHogPageviewUrl(currentUrl?: string) {
 
 function queuePostHogPageview(
   resolvedUrl: string,
-  properties?: Record<string, string>
+  properties?: PageviewExtraProperties
 ) {
   const lastPending =
     pendingPostHogPageviews[pendingPostHogPageviews.length - 1];
@@ -318,7 +320,7 @@ function flushPendingPostHogPageviews() {
 
 function sendPostHogPageview(
   resolvedUrl: string,
-  properties?: Record<string, string>
+  properties?: PageviewExtraProperties
 ) {
   if (lastCapturedPostHogPageviewUrl === resolvedUrl) {
     return;
@@ -338,7 +340,7 @@ function sendPostHogPageview(
 
 export function capturePostHogPageview(
   currentUrl?: string,
-  properties?: Record<string, string>
+  properties?: PageviewExtraProperties
 ) {
   if (isPostHogBrowserDisabled) {
     return;

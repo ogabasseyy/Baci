@@ -1,6 +1,8 @@
 import 'server-only';
 import {
   type AdvertisedPhoneConstraints,
+  type AdvertisedPhonePriceFacts,
+  type AdvertisedPhoneProduct,
   projectAdvertisedPhonePrices,
 } from './advertised-phone-price-projection';
 import { assertPublicListingProductRows } from './assert-public-listing-product-rows';
@@ -29,12 +31,12 @@ function getRowEffectivePrice(row: Record<string, unknown>): number {
 
 /** Apply display-only facts after the caller has scoped and bounded listing rows. */
 export async function projectStandardListingRows<
-  T extends Record<string, unknown>,
+  T extends AdvertisedPhoneProduct & Record<string, unknown>,
 >(
   merchantId: string,
   rows: T[],
   constraints: StandardListingProjectionOptions = {}
-): Promise<T[]> {
+): Promise<Array<T & AdvertisedPhonePriceFacts>> {
   assertPublicListingProductRows(rows);
   const projected = await projectAdvertisedPhonePrices(
     merchantId,

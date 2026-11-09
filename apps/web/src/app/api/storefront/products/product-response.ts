@@ -30,7 +30,7 @@ export function mapStorefrontProduct(p: RawDbProduct) {
     ? true
     : agentAvailability.is_purchasable;
   const quantityAvailable = hasProjectedInStock
-    ? Math.max(agentAvailability.quantity_available, 1)
+    ? Math.max(agentAvailability.quantity_available ?? 0, 1)
     : agentAvailability.quantity_available;
 
   type ImageInput = string | { url?: string; alt?: string; order?: number };

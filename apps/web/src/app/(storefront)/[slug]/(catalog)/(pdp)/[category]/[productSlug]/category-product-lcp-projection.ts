@@ -59,12 +59,6 @@ export interface LcpRouteProduct {
     stock_quantity: number;
   }>;
   price?: number | null;
-  product_categories?: Array<{
-    categories?:
-      | { name?: string | null; slug?: string | null }
-      | Array<{ name?: string | null; slug?: string | null }>
-      | null;
-  }> | null;
   sale_price?: number | null;
   schema_markup?: Product['schema_markup'];
   slug?: string;
@@ -222,7 +216,6 @@ export function mapCachedProductLcpHintToRouteProduct(
     name: cachedProduct.name,
     offers,
     price: legacyPrices.price,
-    product_categories: cachedProduct.product_categories,
     sale_price: legacyPrices.salePrice,
     schema_markup: cachedProduct.schema_markup as Product['schema_markup'],
     slug: cachedProduct.slug ?? cachedProduct.id,
@@ -245,5 +238,5 @@ export function buildCriticalCommerceRouteProduct(
     max_variant_price: product.max_variant_price ?? undefined,
     min_variant_price: product.min_variant_price ?? undefined,
     price: product.price ?? 0,
-  } as Product;
+  };
 }

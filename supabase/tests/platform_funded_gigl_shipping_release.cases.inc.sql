@@ -163,6 +163,10 @@ BEGIN
   IF public.get_gigl_shipping_funding_mode(v_flagged) IS DISTINCT FROM 'platform' THEN
     RAISE EXCEPTION 'T7: owner of a flagged merchant must resolve platform mode';
   END IF;
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000003');
+  IF public.get_gigl_shipping_funding_mode(v_flagged) IS DISTINCT FROM 'platform' THEN
+    RAISE EXCEPTION 'T7: staff with orders.fulfill must resolve the mode';
+  END IF;
   PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
   BEGIN
     PERFORM public.get_gigl_shipping_funding_mode(v_flagged);
@@ -180,6 +184,76 @@ BEGIN
   END;
 END;
 $t7$;
+
+-- T4b: a flagged merchant with a funded wallet still reserves as platform.
+DO $t4b$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000008';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000008';
+  v_before numeric;
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  UPDATE public.merchant_wallets SET available_balance = 100000 WHERE merchant_id = v_merchant;
+  v_before := pg_temp.wallet_balance(v_merchant);
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  PERFORM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-8');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.funding_source IS DISTINCT FROM 'platform' OR v_row.debit_transaction_id IS NOT NULL
+     OR pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before
+     OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
+    RAISE EXCEPTION 'T4b: a funded flagged merchant must still reserve as platform with no debit';
+  END IF;
+END;
+$t4b$;
+
+-- T5c (control): cancelling a wallet-funded reservation restores the balance
+-- once, with a refund transaction linked to the charge.
+DO $t5c$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000002';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000006';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000006';
+  v_start numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
+  PERFORM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-6');
+  UPDATE public.orders SET shipping_status = 'cancelled' WHERE id = v_order;
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.status IS DISTINCT FROM 'refunded' OR v_row.refund_transaction_id IS NULL
+     OR pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_start THEN
+    RAISE EXCEPTION 'T5c: cancelling a wallet-funded reservation must restore the balance once (balance %, start %)',
+      pg_temp.wallet_balance(v_merchant), v_start;
+  END IF;
+END;
+$t5c$;
+
+-- T5d (control): self-fulfilment of a wallet-funded reservation restores the
+-- balance once.
+DO $t5d$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000002';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000007';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000007';
+  v_start numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
+  PERFORM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-7');
+  PERFORM public.self_fulfill_order_with_wallet_release(
+    v_order, '{"method":"self"}'::jsonb, 'Self-Delivery', NULL
+  );
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.status IS DISTINCT FROM 'refunded' OR v_row.refund_transaction_id IS NULL
+     OR pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_start THEN
+    RAISE EXCEPTION 'T5d: self-fulfilling a wallet-funded reservation must restore the balance once';
+  END IF;
+END;
+$t5d$;
 
 -- T6: the platform charge can never carry a wallet transaction (CHECK).
 DO $t6$

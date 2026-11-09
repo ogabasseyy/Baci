@@ -129,6 +129,10 @@ INSERT INTO auth.users (
   ('b4c10000-0000-4000-8000-000000000002',
     '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
     'platform-funded-control@example.test', 'test', now(), now(), now(),
+    '{}'::jsonb, '{}'::jsonb),
+  ('b4c10000-0000-4000-8000-000000000003',
+    '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+    'platform-funded-staff@example.test', 'test', now(), now(), now(),
     '{}'::jsonb, '{}'::jsonb);
 
 INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
@@ -136,6 +140,14 @@ INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
     'platform-funded-owner@example.test', 'Platform Funded Fixture', 'platform-funded-fixture'),
   ('b4c11000-0000-4000-8000-000000000002', 'b4c10000-0000-4000-8000-000000000002',
     'platform-funded-control@example.test', 'Platform Control Fixture', 'platform-control-fixture');
+
+INSERT INTO public.staff_members (
+  merchant_id, user_id, email, name, role, permissions, status
+) VALUES (
+  'b4c11000-0000-4000-8000-000000000001', 'b4c10000-0000-4000-8000-000000000003',
+  'platform-funded-staff@example.test', 'Platform Funded Staff',
+  'accountant', '{"orders":{"view":true,"fulfill":true}}'::jsonb, 'active'
+);
 
 INSERT INTO public.merchant_wallets (merchant_id, available_balance) VALUES
   ('b4c11000-0000-4000-8000-000000000001', 100000.00),
@@ -152,6 +164,9 @@ BEGIN
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000001', 3); -- refund RPC
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000001', 4); -- reserve
   PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000002', 5); -- control reserve
+  PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000002', 6); -- control cancel
+  PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000002', 7); -- control self-fulfil
+  PERFORM pg_temp.seed_order('b4c11000-0000-4000-8000-000000000001', 8); -- funded-wallet platform reserve
 END;
 $seed_orders$;
 

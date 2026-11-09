@@ -126,6 +126,8 @@ describe('TrustPolicyPageClient', () => {
       screen.getByRole('heading', { level: 1, name: 'Warranty Policy' })
     ).toBeInTheDocument();
     expect(screen.getByText('Coverage')).toBeInTheDocument();
+    expect(screen.queryByText(/usually excludes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unauthorized repairs/i)).not.toBeInTheDocument();
     expect(screen.getAllByText('Manufacturer warranty applies.')).toHaveLength(
       2
     );

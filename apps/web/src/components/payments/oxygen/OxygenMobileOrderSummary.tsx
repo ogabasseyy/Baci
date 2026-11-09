@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { MobileOrderSummary } from '@/components/storefront/ogabassey/components/MobileCheckoutComponents';
 import type { CartItem } from '@/hooks/cart';
 import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
 /** The actual checkout's mobile summary, populated from the saved order. */
 export function OxygenMobileOrderSummary({
@@ -16,8 +17,8 @@ export function OxygenMobileOrderSummary({
     name: item.name,
     quantity: item.quantity,
     price: item.price,
-    image: '/placeholder.svg',
-    imageLarge: '/placeholder.svg',
+    image: oxygenOrderItemImage(item),
+    imageLarge: oxygenOrderItemImage(item),
     imageHint: item.name,
     brand: '',
     description: '',
@@ -29,6 +30,7 @@ export function OxygenMobileOrderSummary({
   }));
   return (
     <MobileOrderSummary
+      currency={order.currency}
       cart={cart}
       cartTotal={order.subtotal}
       deliveryCost={order.shipping_fee}
@@ -38,6 +40,7 @@ export function OxygenMobileOrderSummary({
       payWithWallet={false}
       walletAmountUsed={0}
       remainingAmount={order.total}
+      taxAmount={order.tax_amount}
     />
   );
 }

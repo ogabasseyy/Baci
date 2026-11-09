@@ -18,3 +18,8 @@
     animation: none;
   }
 }
+
+.invalid {
+  outline: 2px solid var(--store-primary);
+  outline-offset: 2px;
+}

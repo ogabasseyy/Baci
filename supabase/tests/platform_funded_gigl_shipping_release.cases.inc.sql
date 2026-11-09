@@ -1,0 +1,136 @@
+-- Cases for platform_funded_gigl_shipping_release.sql (\ir part).
+
+-- T1: cancelling the order releases the platform reservation, no wallet credit.
+DO $t1$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000001';
+  v_charge uuid;
+  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  v_charge := pg_temp.seed_platform_charge(v_merchant, 1, 'tok-1');
+  UPDATE public.orders SET shipping_status = 'cancelled' WHERE id = v_order;
+  SELECT * INTO v_row FROM public.merchant_shipping_charges WHERE id = v_charge;
+  IF v_row.status IS DISTINCT FROM 'refunded' OR v_row.refund_transaction_id IS NOT NULL THEN
+    RAISE EXCEPTION 'T1: cancel must refund the platform charge without a wallet refund (status %, refund tx %)',
+      v_row.status, v_row.refund_transaction_id;
+  END IF;
+  IF pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before
+     OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
+    RAISE EXCEPTION 'T1: cancelling a platform reservation must not move the wallet';
+  END IF;
+END;
+$t1$;
+
+-- T2: self-fulfilment releases the platform reservation, no wallet credit.
+DO $t2$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000002';
+  v_charge uuid;
+  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  v_charge := pg_temp.seed_platform_charge(v_merchant, 2, 'tok-2');
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  PERFORM public.self_fulfill_order_with_wallet_release(
+    v_order, '{"method":"self"}'::jsonb, 'Self-Delivery', NULL
+  );
+  SELECT * INTO v_row FROM public.merchant_shipping_charges WHERE id = v_charge;
+  IF v_row.status IS DISTINCT FROM 'refunded' OR v_row.refund_transaction_id IS NOT NULL THEN
+    RAISE EXCEPTION 'T2: self-fulfil must refund the platform charge without a wallet refund (status %)', v_row.status;
+  END IF;
+  IF pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before
+     OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
+    RAISE EXCEPTION 'T2: self-fulfilling a platform reservation must not move the wallet';
+  END IF;
+END;
+$t2$;
+
+-- T3: the refund RPC credits nothing back for a platform charge.
+DO $t3$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000003';
+  v_charge uuid;
+  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_result text;
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  v_charge := pg_temp.seed_platform_charge(v_merchant, 3, 'tok-3');
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  v_result := public.refund_merchant_shipping_charge(v_charge, 'tok-3', 'TEST');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges WHERE id = v_charge;
+  IF v_result IS DISTINCT FROM 'refunded' OR v_row.status IS DISTINCT FROM 'refunded'
+     OR v_row.refund_transaction_id IS NOT NULL THEN
+    RAISE EXCEPTION 'T3: refund RPC must mark the platform charge refunded without a wallet refund';
+  END IF;
+  IF pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before
+     OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
+    RAISE EXCEPTION 'T3: refunding a platform charge must not move the wallet';
+  END IF;
+END;
+$t3$;
+
+-- T4: a flagged merchant's reserve records a platform charge and debits nothing.
+DO $t4$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000001';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000004';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000004';
+  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_result record;
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000001');
+  SELECT * INTO v_result FROM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-4');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.funding_source IS DISTINCT FROM 'platform'
+     OR v_row.debit_transaction_id IS NOT NULL
+     OR v_row.status IS DISTINCT FROM 'reserved'
+     OR v_result.balance_after IS NOT NULL THEN
+    RAISE EXCEPTION 'T4: flagged reserve must create a reserved platform charge with no debit and NULL balance_after';
+  END IF;
+  IF pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before
+     OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
+    RAISE EXCEPTION 'T4: flagged reserve must not move the wallet';
+  END IF;
+END;
+$t4$;
+
+-- T5 (control): a merchant that is NOT flagged is still debited from its wallet.
+DO $t5$
+DECLARE
+  v_merchant constant uuid := 'b4c11000-0000-4000-8000-000000000002';
+  v_order constant uuid := 'b4c12000-0000-4000-8000-000000000005';
+  v_quote constant uuid := 'b4c13000-0000-4000-8000-000000000005';
+  v_before numeric := pg_temp.wallet_balance(v_merchant);
+  v_row public.merchant_shipping_charges%ROWTYPE;
+BEGIN
+  PERFORM pg_temp.act_as('b4c10000-0000-4000-8000-000000000002');
+  PERFORM public.reserve_merchant_shipping_charge(v_order, v_quote, 'tok-5');
+  SELECT * INTO v_row FROM public.merchant_shipping_charges
+  WHERE order_id = v_order AND shipping_quote_id = v_quote;
+  IF v_row.funding_source IS DISTINCT FROM 'merchant_wallet'
+     OR v_row.debit_transaction_id IS NULL
+     OR pg_temp.wallet_balance(v_merchant) IS DISTINCT FROM v_before - 4500.00 THEN
+    RAISE EXCEPTION 'T5: a non-flagged merchant must still be debited (control)';
+  END IF;
+END;
+$t5$;
+
+-- T6: the platform charge can never carry a wallet transaction (CHECK).
+DO $t6$
+BEGIN
+  BEGIN
+    UPDATE public.merchant_shipping_charges
+    SET debit_transaction_id = (SELECT id FROM public.wallet_transactions LIMIT 1)
+    WHERE funding_source = 'platform';
+    RAISE EXCEPTION 'T6: platform charge accepted a wallet transaction';
+  EXCEPTION WHEN check_violation OR no_data_found THEN
+    NULL;
+  END;
+END;
+$t6$;

@@ -146,6 +146,7 @@ describe('success feedback is bound to confirmed contributions', () => {
   });
 
   it('trusts the server verdict over the client guess on a replayed contribution', async () => {
+    const cancelSavingsReminder = jest.fn(async () => true);
     // ₦1,000 already landed (goal refreshed to ₦1,500 of ₦2,500); the replay
     // says the goal is still active, so no "Goal reached!" at 60%.
     await addSavingsContributionToGoal({
@@ -154,6 +155,7 @@ describe('success feedback is bound to confirmed contributions', () => {
         goalCurrentAmount: 1500,
         goalStatus: 'active',
       }),
+      cancelSavingsReminder,
       goal: { ...goal, current_amount: 1500, target_amount: 2500 },
       rawAmount: '1000',
     });
@@ -161,6 +163,8 @@ describe('success feedback is bound to confirmed contributions', () => {
       'Savings updated',
       "Nice! ₦1,000 added. You're 60% of the way to your iPhone 13. Keep it going!"
     );
+    // The reminder stays: the server says the goal is still active.
+    expect(cancelSavingsReminder).not.toHaveBeenCalled();
   });
 
   it('buzzes once after a confirmed contribution', async () => {

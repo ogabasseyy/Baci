@@ -148,9 +148,15 @@ export async function addSavingsContributionToGoal({
       );
       return;
     }
+    // The server's verdict wins over the client guess, which a replayed
+    // contribution with an already-refreshed goal would get wrong; the same
+    // verdict drives both reminder cleanup and the celebration.
     const confirmed = readConfirmedContribution(contributionResult);
     const goalCompleted =
-      amount >= remainingAmount || confirmed.goalCompleted === true;
+      confirmed.goalCompleted ??
+      (confirmed.savedAfter === undefined
+        ? amount >= remainingAmount
+        : confirmed.savedAfter >= goal.target_amount);
     if (goalCompleted) {
       try {
         await cancelSavingsReminder?.(goal.id);
@@ -168,13 +174,7 @@ export async function addSavingsContributionToGoal({
     const success = buildSavingsSuccessMessage({
       amount,
       goal,
-      // The server's verdict wins over the client guess, which a replayed
-      // contribution with an already-refreshed goal would get wrong.
-      goalCompleted:
-        confirmed.goalCompleted ??
-        (confirmed.savedAfter === undefined
-          ? goalCompleted
-          : confirmed.savedAfter >= goal.target_amount),
+      goalCompleted,
       refreshFailed,
       savedAfter: confirmed.savedAfter,
     });

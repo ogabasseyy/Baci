@@ -8,9 +8,9 @@ export const OGABASSEY_RETURN_POLICY_SUMMARY =
   'Ogabassey accepts returns for devices with technical defects that were not disclosed at purchase, within 14 days of delivery. Contact customer support to arrange the return. Return fees and the return method will be confirmed by support.';
 export const OGABASSEY_WARRANTY_POLICY_SUMMARY =
   'Devices purchased from Ogabassey have a one-year Ogabassey warranty covering issues not caused by the user. The warranty excludes power surges, screen damage and liquid damage. Ogabassey Assurance device protection plans are separate from this warranty and have their own terms. Contact customer support to make a warranty claim.';
-// Existing published shipping policy, verified during the same audit.
+// Owner-confirmed on 2026-11-05: shipping is paid and fulfilled with GIG Logistics.
 export const OGABASSEY_SHIPPING_POLICY_SUMMARY =
-  'Nationwide delivery is available, with free delivery within Lagos where eligible and checkout-confirmed shipping for other Nigerian locations.';
+  'Delivery is handled by GIG Logistics. Shipping is paid, with the delivery fee calculated and confirmed at checkout for your destination. Shipping is not free.';
 
 export function buildOgabasseyApprovedPolicyDraft(
   merchant: MerchantTrustProfileSource

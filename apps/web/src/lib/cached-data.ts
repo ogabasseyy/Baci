@@ -1717,7 +1717,6 @@ async function getCachedCategoryPageProductDetailsChunk({
   }
 
   const sourceProducts = readPublicListingProductRows(data ?? []);
-  const sourceIds = new Set(sourceProducts.map((product) => product.id));
   const advertisedProducts = await projectAdvertisedPhonePrices(
     merchantId,
     sourceProducts,
@@ -1732,7 +1731,8 @@ async function getCachedCategoryPageProductDetailsChunk({
   );
 
   return {
-    missingProductCount: productIds.filter((id) => !sourceIds.has(id)).length,
+    missingProductCount: productIds.filter((id) => !productsById.has(id))
+      .length,
     productSlots: productSlots.filter((product) => product !== null),
     productsQueryFailed: false,
   };

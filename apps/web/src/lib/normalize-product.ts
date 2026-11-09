@@ -183,9 +183,14 @@ export function normalizeProduct(
     stock: raw.stock,
     stock_quantity: raw.stock_quantity,
   });
-  const stock = agentAvailability.stock;
+  const hasProjectedInStock = raw.availability === 'InStock';
+  const stock = hasProjectedInStock
+    ? Math.max(agentAvailability.stock, 1)
+    : agentAvailability.stock;
   const availability: 'InStock' | 'OutOfStock' =
-    agentAvailability.availability === 'in_stock' ? 'InStock' : 'OutOfStock';
+    hasProjectedInStock || agentAvailability.availability === 'in_stock'
+      ? 'InStock'
+      : 'OutOfStock';
 
   return {
     id: raw.id,

@@ -111,7 +111,7 @@ describe('cached listing phone-price projection', () => {
     expect(result.productCount).toBe(1);
   });
 
-  it('removes a restricted-only family from the visible window without inventing an eligible global total', async () => {
+  it('removes a restricted-only family from the visible window and adjusts productCount', async () => {
     seedCategory();
     harness.mockRpc.mockResolvedValue({ data: [variants[0]], error: null });
     const result = await getCachedCategoryPageData(
@@ -122,7 +122,7 @@ describe('cached listing phone-price projection', () => {
       40
     );
     expect(result.products).toEqual([]);
-    expect(result.productCount).toBe(1);
+    expect(result.productCount).toBe(0);
     expect(result.productsQueryFailed).toBe(false);
   });
 

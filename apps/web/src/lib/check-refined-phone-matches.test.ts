@@ -62,6 +62,51 @@ describe('exact refined phone match policy', () => {
     ).toEqual([{ match: cellularMatch, verifiedVariant: cellular }]);
   });
 
+  it('selects an eligible cellular sibling when an unconstrained match hits a Wi-Fi only variant', async () => {
+    const cellular = {
+      ...wifi,
+      id: 'cellular',
+      attributes: { sim_type: 'Physical + eSIM', storage: '128GB' },
+      price_override: 900000,
+      condition: 'used',
+      is_active: true,
+      stock_quantity: 5,
+    };
+    const loader = load().mockResolvedValue({ phone: [wifi, cellular] });
+
+    const checked = await checkRefinedPhoneMatches(
+      'merchant',
+      'iPhone',
+      [match],
+      products,
+      loader
+    );
+
+    expect(checked).toHaveLength(1);
+    expect(checked[0]?.match).toMatchObject({
+      productId: 'phone',
+      variantId: 'cellular',
+      price: 900000,
+      condition: 'used',
+    });
+    expect(checked[0]?.verifiedVariant?.id).toBe('cellular');
+    expect(checked[0]?.restrictedVariant).toBeUndefined();
+  });
+
+  it('drops a Wi-Fi only matched phone when no eligible cellular sibling exists and no Wi-Fi intent is present', async () => {
+    const loader = load().mockResolvedValue({ phone: [wifi] });
+
+    const checked = await checkRefinedPhoneMatches(
+      'merchant',
+      'iPhone',
+      [match],
+      products,
+      loader
+    );
+
+    expect(checked).toEqual([]);
+  });
+
   it('drops a stale or missing matched phone SKU without selecting its sibling', async () => {
     const loader = load().mockResolvedValue({
       phone: [{ ...wifi, id: 'another-sku' }],

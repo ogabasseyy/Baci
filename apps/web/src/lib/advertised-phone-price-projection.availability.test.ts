@@ -3,6 +3,7 @@ import {
   type PublicAdvertisedVariantLoader,
   projectAdvertisedPhonePrices,
 } from './advertised-phone-price-projection';
+import { normalizeProduct } from './normalize-product';
 
 const phone = {
   id: 'iphone16',
@@ -78,5 +79,8 @@ describe('advertised phone price condition and availability projection', () => {
       advertised_price: 900000,
       availability: 'InStock',
     });
+    const normalized = normalizeProduct(projected as never);
+    expect(normalized.availability).toBe('InStock');
+    expect(normalized.stock).toBeGreaterThanOrEqual(1);
   });
 });

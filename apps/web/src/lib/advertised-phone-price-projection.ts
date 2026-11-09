@@ -52,6 +52,104 @@ export interface AdvertisedPhoneConstraints {
   maxPrice?: number;
 }
 
+function getEligibleAdvertisedVariants(
+  product: AdvertisedPhoneProduct,
+  rawVariants: PublicAdvertisedVariant[],
+  merchantId?: string
+) {
+  const value = Number(product.price);
+  const parentStock = getEffectiveStock(product);
+  const parent = {
+    ...product,
+    price: Number.isFinite(value) ? value : 0,
+    stock: parentStock,
+    stock_quantity: parentStock,
+  };
+  const variants = normalizeStorefrontProductVariants(
+    rawVariants.filter((variant) => variant.product_id === product.id),
+    {
+      merchantId,
+      productId: product.id,
+      parentStock: getEffectiveStock(parent),
+    }
+  );
+  const eligible = filterDefaultAdvertisedVariants(
+    projectPublicVariantSelection(parent, variants),
+    product
+  ).filter((variant) => {
+    const option = resolvePublicProductOption(parent, { variant });
+    return (
+      variant.is_purchasable &&
+      typeof option.price === 'number' &&
+      Number.isFinite(option.price) &&
+      option.price > 0
+    );
+  });
+  return { parent, eligible };
+}
+
+function filterConstrainedEligibleVariants(
+  parent: Record<string, unknown>,
+  product: AdvertisedPhoneProduct,
+  eligible: PublicAdvertisedVariant[],
+  constraints: AdvertisedPhoneConstraints = {}
+) {
+  const requestedCondition = normalizeCanonicalProductCondition(
+    constraints.condition
+  );
+  return eligible.filter((variant) => {
+    const option = resolvePublicProductOption(parent, { variant });
+    if (typeof option.price !== 'number') return false;
+    if (
+      constraints.minPrice !== undefined &&
+      option.price < constraints.minPrice
+    ) {
+      return false;
+    }
+    if (
+      constraints.maxPrice !== undefined &&
+      option.price > constraints.maxPrice
+    ) {
+      return false;
+    }
+    if (
+      requestedCondition &&
+      ['new', 'used', 'open_box', 'refurbished'].includes(requestedCondition)
+    ) {
+      const optionCondition = normalizeCanonicalProductCondition(
+        option.condition ?? variant.condition ?? product.condition
+      );
+      if (optionCondition !== requestedCondition) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+export function selectAdvertisedPhoneVariant(
+  product: AdvertisedPhoneProduct,
+  rawVariants: PublicAdvertisedVariant[],
+  constraints: AdvertisedPhoneConstraints = {},
+  merchantId?: string
+) {
+  const { parent, eligible } = getEligibleAdvertisedVariants(
+    product,
+    rawVariants,
+    merchantId
+  );
+  const constrainedEligible = filterConstrainedEligibleVariants(
+    parent,
+    product,
+    eligible,
+    constraints
+  );
+  return resolveDefaultAdvertisedVariantSelection(
+    { ...parent, variants: constrainedEligible },
+    product
+  );
+}
+
 /** Listing-only scalar facts; product.price always remains the checkout base. */
 export async function projectAdvertisedPhonePrices<
   T extends AdvertisedPhoneProduct,
@@ -93,65 +191,20 @@ export async function projectAdvertisedPhonePrices<
   const familyIdSet = new Set(familyIds);
   return products.flatMap<T & AdvertisedPhonePriceFacts>((product) => {
     if (!familyIdSet.has(product.id)) return [product];
-    const value = Number(product.price);
-    const parentStock = getEffectiveStock(product);
-    const parent = {
-      ...product,
-      price: Number.isFinite(value) ? value : 0,
-      stock: parentStock,
-      stock_quantity: parentStock,
-    };
-    const variants = normalizeStorefrontProductVariants(
-      (variantsByProduct[product.id] ?? []).filter(
-        (variant) => variant.product_id === product.id
-      ),
-      {
-        merchantId,
-        productId: product.id,
-        parentStock: getEffectiveStock(parent),
-      }
+    const rawVariants = (variantsByProduct[product.id] ?? []).filter(
+      (variant) => variant.product_id === product.id
     );
-    const eligible = filterDefaultAdvertisedVariants(
-      projectPublicVariantSelection(parent, variants),
-      product
-    ).filter((variant) => {
-      const option = resolvePublicProductOption(parent, { variant });
-      return (
-        variant.is_purchasable &&
-        typeof option.price === 'number' &&
-        Number.isFinite(option.price) &&
-        option.price > 0
-      );
-    });
-    const requestedCondition = normalizeCanonicalProductCondition(
-      constraints.condition
+    const { parent, eligible } = getEligibleAdvertisedVariants(
+      product,
+      rawVariants,
+      merchantId
     );
-    const constrainedEligible = eligible.filter((variant) => {
-      const option = resolvePublicProductOption(parent, { variant });
-      if (typeof option.price !== 'number') return false;
-      if (
-        constraints.minPrice !== undefined &&
-        option.price < constraints.minPrice
-      ) {
-        return false;
-      }
-      if (
-        constraints.maxPrice !== undefined &&
-        option.price > constraints.maxPrice
-      ) {
-        return false;
-      }
-      if (
-        ['new', 'used', 'open_box', 'refurbished'].includes(
-          requestedCondition
-        ) &&
-        option.condition !== requestedCondition
-      ) {
-        return false;
-      }
-      return true;
-    });
-
+    const constrainedEligible = filterConstrainedEligibleVariants(
+      parent,
+      product,
+      eligible,
+      constraints
+    );
     const selected = resolveDefaultAdvertisedVariantSelection(
       { ...parent, variants: constrainedEligible },
       product

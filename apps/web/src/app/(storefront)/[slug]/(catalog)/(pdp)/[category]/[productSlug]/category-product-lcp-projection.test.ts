@@ -72,6 +72,20 @@ describe('cached category PDP projection', () => {
     );
   });
 
+  it('gives primary canonical category precedence over legacy flat category string', () => {
+    const product = mapCachedProductLcpHintToRouteProduct(
+      cachedHint({
+        category: 'Old Legacy Category',
+        categories: {
+          id: 'cat-canonical',
+          name: 'Canonical Smartphones',
+          slug: 'smartphones',
+        },
+      })
+    );
+    expect(product.category).toBe('Canonical Smartphones');
+  });
+
   it('keeps denormalized price ranges only for unmanaged stock and defaults nullable tracking to managed', () => {
     const unmanaged = mapCachedProductLcpHintToRouteProduct(
       cachedHint({
@@ -158,7 +172,7 @@ describe('cached category PDP projection', () => {
     const mixedPhoneHint = cachedHint({
       name: 'iPhone 15',
       category: 'Phones',
-      categories: { id: 'cat-elec', name: 'Electronics', slug: 'electronics' },
+      categories: { id: 'cat-phones', name: 'Phones', slug: 'phones' },
       product_variants: [
         {
           id: 'variant-wifi',

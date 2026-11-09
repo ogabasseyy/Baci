@@ -99,7 +99,7 @@ export function normalizeCategoryPageProducts(
       ...(typeof normalized.has_variants === 'boolean'
         ? { has_variants: normalized.has_variants }
         : {}),
-      ...(product.variant_model
+      ...(normalized.variant_model
         ? { variant_model: normalized.variant_model }
         : {}),
       stock: normalized.stock,

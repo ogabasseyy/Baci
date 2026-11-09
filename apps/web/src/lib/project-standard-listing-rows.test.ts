@@ -94,4 +94,61 @@ describe('standard listing public-price boundary', () => {
       projectStandardListingRows('merchant', [parent])
     ).rejects.toThrow('Public variant read failed');
   });
+
+  it('sorts rows by projected advertised variant prices when sort is price-asc or price-desc', async () => {
+    const parentCheapWithExpensiveVariant = {
+      ...parent,
+      id: 'phone-cheap-parent',
+      price: 400000,
+    };
+    const parentExpensiveWithCheapVariant = {
+      ...parent,
+      id: 'phone-expensive-parent',
+      price: 800000,
+    };
+    loader.mockResolvedValue({
+      'phone-cheap-parent': [
+        {
+          id: 'var-1',
+          product_id: 'phone-cheap-parent',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 750000,
+          condition: 'new',
+          stock_quantity: 2,
+        },
+      ],
+      'phone-expensive-parent': [
+        {
+          id: 'var-2',
+          product_id: 'phone-expensive-parent',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 500000,
+          condition: 'new',
+          stock_quantity: 2,
+        },
+      ],
+    });
+
+    const asc = await projectStandardListingRows(
+      'merchant',
+      [parentCheapWithExpensiveVariant, parentExpensiveWithCheapVariant],
+      { sort: 'price-asc' }
+    );
+    expect(asc.map((r) => r.id)).toEqual([
+      'phone-expensive-parent',
+      'phone-cheap-parent',
+    ]);
+    expect(asc.map((r) => r.advertised_price)).toEqual([500000, 750000]);
+
+    const desc = await projectStandardListingRows(
+      'merchant',
+      [parentCheapWithExpensiveVariant, parentExpensiveWithCheapVariant],
+      { sort: 'price-desc' }
+    );
+    expect(desc.map((r) => r.id)).toEqual([
+      'phone-cheap-parent',
+      'phone-expensive-parent',
+    ]);
+    expect(desc.map((r) => r.advertised_price)).toEqual([750000, 500000]);
+  });
 });

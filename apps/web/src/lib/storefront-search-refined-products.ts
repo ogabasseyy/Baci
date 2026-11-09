@@ -131,7 +131,12 @@ export async function getStorefrontRefinedSearchProducts(args: {
     args.query,
     matches,
     rows,
-    getPublicProductVariantsByProductIds
+    getPublicProductVariantsByProductIds,
+    {
+      condition: args.refinements.condition,
+      minPrice: args.refinements.minPrice,
+      maxPrice: args.refinements.maxPrice,
+    }
   );
   const products = checkedMatches.flatMap(
     ({ match, restrictedVariant, verifiedVariant }) => {

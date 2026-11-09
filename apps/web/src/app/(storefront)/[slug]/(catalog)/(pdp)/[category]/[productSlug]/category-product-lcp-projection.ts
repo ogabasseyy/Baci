@@ -193,7 +193,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     brand: cachedProduct.brand ?? '',
     canonical_url: cachedProduct.canonical_url ?? undefined,
     categories: primaryCategory,
-    category: cachedProduct.category ?? primaryCategory?.name ?? undefined,
+    category: primaryCategory?.name ?? cachedProduct.category ?? undefined,
     category_slug: primaryCategory?.slug,
     color: cachedProduct.color ?? undefined,
     condition: productCondition,

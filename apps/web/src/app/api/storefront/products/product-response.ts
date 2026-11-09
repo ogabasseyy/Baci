@@ -21,6 +21,16 @@ export function mapStorefrontProduct(p: RawDbProduct) {
     stock_quantity: p.stock_quantity,
     low_stock_threshold: p.low_stock_threshold,
   });
+  const hasProjectedInStock = p.availability === 'InStock';
+  const availability = hasProjectedInStock
+    ? 'in_stock'
+    : agentAvailability.availability;
+  const isPurchasable = hasProjectedInStock
+    ? true
+    : agentAvailability.is_purchasable;
+  const quantityAvailable = hasProjectedInStock
+    ? Math.max(agentAvailability.quantity_available, 1)
+    : agentAvailability.quantity_available;
 
   type ImageInput = string | { url?: string; alt?: string; order?: number };
   const rawImages = (p.images as ImageInput[]) || [];
@@ -51,10 +61,10 @@ export function mapStorefrontProduct(p: RawDbProduct) {
     image: normalized.image,
     imageLarge: normalized.imageLarge,
     rating: normalized.rating,
-    availability: agentAvailability.availability,
+    availability,
     inventory_policy: agentAvailability.inventory_policy,
-    is_purchasable: agentAvailability.is_purchasable,
-    quantity_available: agentAvailability.quantity_available,
+    is_purchasable: isPurchasable,
+    quantity_available: quantityAvailable,
     category: normalized.category,
     category_slug: normalized.category_slug,
     brand: normalized.brand || '',

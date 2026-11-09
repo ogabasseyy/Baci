@@ -38,7 +38,11 @@ function hasInMemoryStorefrontFilters(filters: ProductFilters): boolean {
       !storefrontProductFilters.isAllFilter(filters.category)) ||
       (filters.brand && !storefrontProductFilters.isAllFilter(filters.brand)) ||
       (filters.condition &&
-        !storefrontProductFilters.isAllFilter(filters.condition))
+        !storefrontProductFilters.isAllFilter(filters.condition)) ||
+      filters.min_price !== undefined ||
+      filters.max_price !== undefined ||
+      filters.sort === 'price-asc' ||
+      filters.sort === 'price-desc'
   );
 }
 
@@ -142,12 +146,24 @@ function createCachedProductsFetcher(
           }
         }
 
-        if (filters.min_price !== undefined) {
-          query = query.gte('price', filters.min_price);
-        }
-
-        if (filters.max_price !== undefined) {
-          query = query.lte('price', filters.max_price);
+        if (
+          filters.min_price !== undefined ||
+          filters.max_price !== undefined
+        ) {
+          const priceClauses: string[] = [];
+          if (filters.min_price !== undefined) {
+            priceClauses.push(`price.gte.${filters.min_price}`);
+          }
+          if (filters.max_price !== undefined) {
+            priceClauses.push(`price.lte.${filters.max_price}`);
+          }
+          const parentPriceClause =
+            priceClauses.length > 1
+              ? `and(${priceClauses.join(',')})`
+              : priceClauses[0];
+          query = query.or(
+            `${parentPriceClause},has_variants.eq.true,variant_model.eq.sku_matrix`
+          );
         }
 
         if (filters.has_images) {
@@ -203,8 +219,16 @@ function createCachedProductsFetcher(
         const pageSize = getInMemoryFilterPageSize(targetProductCount);
         const filteredProducts: RawStorefrontProductRow[] = [];
         let offset = 0;
+        const needsProjectionBeforeLimit =
+          filters.sort === 'price-asc' ||
+          filters.sort === 'price-desc' ||
+          filters.min_price !== undefined ||
+          filters.max_price !== undefined;
+        const targetCandidateCount = needsProjectionBeforeLimit
+          ? IN_MEMORY_FILTER_DEFAULT_TARGET
+          : targetProductCount;
 
-        while (filteredProducts.length < targetProductCount) {
+        while (filteredProducts.length < targetCandidateCount) {
           const rangeTo = offset + pageSize - 1;
           const requestedCandidateCount = rangeTo - offset + 1;
           const products = await fetchProductRows({
@@ -221,27 +245,35 @@ function createCachedProductsFetcher(
 
           offset += requestedCandidateCount;
         }
-        return (
-          await projectStandardListingRows(
-            merchantId,
-            filteredProducts.slice(0, targetProductCount),
-            {
-              condition: filters.condition,
-              minPrice: filters.min_price,
-              maxPrice: filters.max_price,
-            }
-          )
-        ).map(storefrontProductsRouteData.mapProduct);
+
+        // When in-memory filters or price sort are active, candidate selection is
+        // evaluated across up to IN_MEMORY_FILTER_DEFAULT_TARGET (1000) candidates.
+        const projected = await projectStandardListingRows(
+          merchantId,
+          filteredProducts,
+          {
+            condition: filters.condition,
+            minPrice: filters.min_price,
+            maxPrice: filters.max_price,
+            sort: filters.sort,
+          }
+        );
+        return projected
+          .slice(0, targetProductCount)
+          .map(storefrontProductsRouteData.mapProduct);
       }
 
       const products = await fetchProductRows();
-      return (
-        await projectStandardListingRows(merchantId, products, {
-          condition: filters.condition,
-          minPrice: filters.min_price,
-          maxPrice: filters.max_price,
-        })
-      ).map(storefrontProductsRouteData.mapProduct);
+      const projected = await projectStandardListingRows(merchantId, products, {
+        condition: filters.condition,
+        minPrice: filters.min_price,
+        maxPrice: filters.max_price,
+        sort: filters.sort,
+      });
+      const finalProducts = filters.limit
+        ? projected.slice(0, filters.limit)
+        : projected;
+      return finalProducts.map(storefrontProductsRouteData.mapProduct);
     },
     cacheKeyParts,
     {
@@ -526,14 +558,26 @@ export async function GET(request: NextRequest) {
       const projectedRows = await projectStandardListingRows(
         merchantId,
         filteredRows,
-        { condition, minPrice: min_price, maxPrice: max_price }
+        {
+          condition,
+          minPrice: min_price,
+          maxPrice: max_price,
+          sort: searchSort,
+        }
       );
       const visibleProducts = projectedRows
         .slice(visibleOffset, visibleOffset + requestedLimit)
         .map(storefrontProductsRouteData.mapProduct);
+      const droppedByProjection = Math.max(
+        0,
+        filteredRows.length - projectedRows.length
+      );
       const responseCount = usesInMemoryFilters
         ? projectedRows.length
-        : (dbCount ?? projectedRows.length);
+        : Math.max(
+            projectedRows.length,
+            (dbCount ?? projectedRows.length) - droppedByProjection
+          );
       const effectiveOffset = offset ?? 0;
       const hasMore = effectiveOffset + requestedLimit < responseCount;
 

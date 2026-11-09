@@ -35,6 +35,17 @@ vi.mock('@/hooks/use-currency', () => ({
 }));
 
 describe('MobileOrderSummary', () => {
+  it('uses the merchant contrast token for the wallet switch thumb', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet remainingAmount={0} walletAmountUsed={1000} walletBalance={1000} showWalletControl setPayWithWallet={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    const walletSwitch = screen.getByRole('switch', { name: 'Use wallet credit' });
+    expect(walletSwitch.firstElementChild).toHaveClass('bg-store-primary-text');
+  });
+  it('uses the storefront foreground for the unchecked wallet thumb', () => {
+    render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={1000} showWalletControl setPayWithWallet={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+    expect(screen.getByRole('switch', { name: 'Use wallet credit' }).firstElementChild).toHaveClass('bg-store-background-text');
+  });
   it('uses the saved order currency when one is supplied', () => {
     render(<MobileOrderSummary cart={[]} cartTotal={1000} deliveryCost={0} deliveryMethod={null} giftWrappingCost={0} payWithWallet={false} remainingAmount={1000} walletAmountUsed={0} walletBalance={0} currency="USD" />);
     expect(screen.getByRole('button', { name: /show order summary/i })).toHaveTextContent('$1,000');

@@ -127,7 +127,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                     {showWalletControl && setPayWithWallet && (
                         <div className="flex items-center justify-between gap-4 pb-4 text-store-background-text">
                             <div><p className="text-sm font-semibold">Use wallet credit</p><p className="text-xs text-store-background-text/70">{formatCurrencyAuto(walletBalance)} available</p></div>
-                            <button type="button" role="switch" aria-label="Use wallet credit" aria-checked={walletSelected ?? payWithWallet} onClick={() => setPayWithWallet(!(walletSelected ?? payWithWallet))} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${(walletSelected ?? payWithWallet) ? 'bg-store-primary' : 'bg-store-background-text/30'}`}><span className={`absolute left-1 top-1 size-5 rounded-full bg-white transition-transform ${(walletSelected ?? payWithWallet) ? 'translate-x-5' : ''}`} /></button>
+                            <button type="button" role="switch" aria-label="Use wallet credit" aria-checked={walletSelected ?? payWithWallet} onClick={() => setPayWithWallet(!(walletSelected ?? payWithWallet))} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${(walletSelected ?? payWithWallet) ? 'bg-store-primary' : 'bg-store-background-text/30'}`}><span className={`absolute left-1 top-1 size-5 rounded-full transition-transform ${(walletSelected ?? payWithWallet) ? 'bg-store-primary-text translate-x-5' : 'bg-store-background-text'}`} /></button>
                         </div>
                     )}
 

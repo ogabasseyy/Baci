@@ -33,9 +33,9 @@ is_foreign_agent_path() {
   return 1
 }
 
-# Candidate paths from the transcript (absolute only; `~` expanded).
+# Evidence lines from the transcript (see the .jq file for the format).
 extract_paths() {
-  jq -r -f "$(dirname "$0")/quality-gate-session-paths.jq" "$transcript" 2>/dev/null | sort -u
+  jq -r -f "$(dirname "$0")/quality-gate-session-paths.jq" "$transcript" 2>/dev/null | awk '!seen[$0]++'
 }
 
 # Resolve symlinks (macOS /var -> /private/var) on the deepest existing ancestor.
@@ -48,33 +48,54 @@ canon() {
 
 is_linked_worktree() { [ -f "$1/.git" ]; }
 
+# Map a path to the longest matching worktree of this repo ("" if none/foreign).
+worktree_of() {
+  local cp cw wt best="" bestlen=0
+  cp=$(canon "$1")
+  for wt in "${worktrees[@]}"; do
+    cw=$(canon "$wt")
+    case "$cp" in
+      "$cw"|"$cw"/*) if [ ${#cw} -gt "$bestlen" ]; then best="$wt"; bestlen=${#cw}; fi ;;
+    esac
+  done
+  [ -n "$best" ] || return 0
+  is_foreign_agent_path "$best" && return 0
+  [ -d "$best" ] && printf '%s' "$best"
+}
+
 found=()
-while IFS= read -r p; do
-  [ -n "$p" ] || continue
-  from_cwd=0
-  case "$p" in
-    "CWD"$'\t'*) p="${p#CWD$'\t'}"; from_cwd=1 ;;
+mutated=0
+last_cwd=""
+while IFS=$'\t' read -r kind cwd p; do
+  case "$kind" in
+    M) mutated=1; continue ;;
+    C)
+      last_cwd="$cwd"
+      wt=$(worktree_of "$cwd")
+      # A session that merely STARTED in the main checkout has not touched it;
+      # only linked worktrees count from cwd alone (main handled below).
+      [ -n "$wt" ] && is_linked_worktree "$wt" && found+=("$wt")
+      continue ;;
+    P) ;;
+    *) continue ;;
   esac
+  [ -n "$p" ] || continue
   case "$p" in
     "~") p="$home" ;;
     "~"/*) p="$home/${p#\~/}" ;;
   esac
-  case "$p" in /*) ;; *) continue ;; esac
-  best=""
-  cp=$(canon "$p")
-  for wt in "${worktrees[@]}"; do
-    cw=$(canon "$wt")
-    case "$cp" in
-      "$cw"|"$cw"/*) if [ ${#cw} -gt "${bestlen:-0}" ]; then best="$wt"; bestlen=${#cw}; fi ;;
-    esac
-  done
-  bestlen=0
-  [ -n "$best" ] || continue
-  is_foreign_agent_path "$best" && continue
-  [ -d "$best" ] || continue
-  if [ "$from_cwd" = 1 ] && ! is_linked_worktree "$best"; then continue; fi
-  found+=("$best")
+  # Relative targets resolve against the cwd the command ran in.
+  case "$p" in /*) ;; *) [ -n "$cwd" ] || continue; p="$cwd/$p" ;; esac
+  wt=$(worktree_of "$p")
+  [ -n "$wt" ] && found+=("$wt")
 done < <(extract_paths)
+
+# Work done from the main checkout itself (relative paths, no cd): if nothing
+# else identified a worktree but the session made changes, use its last cwd.
+if [ ${#found[@]} -eq 0 ] && [ "$mutated" = 1 ] && [ -n "$last_cwd" ]; then
+  wt=$(worktree_of "$last_cwd")
+  [ -n "$wt" ] && found+=("$wt")
+fi
 
 [ ${#found[@]} -gt 0 ] && printf '%s\n' "${found[@]}" | sort -u
 exit 0

@@ -21,13 +21,16 @@ source "$(dirname "$0")/quality-gate-environment.sh"
 block() { printf '%s\n' "$1"; exit 1; }
 
 # --- Is there anything of this worktree's own to check? -----------------
+# If the merge-base cannot be computed (no origin/main), do NOT skip: run the
+# full checks without --affected.
 BASE=$(git merge-base HEAD origin/main 2>/dev/null)
 DIRTY=$(git status --porcelain 2>/dev/null | head -1)
-AHEAD=0
-[ -n "$BASE" ] && AHEAD=$(git rev-list --count "$BASE"..HEAD 2>/dev/null || echo 0)
-if [ -z "$DIRTY" ] && [ "${AHEAD:-0}" = "0" ]; then
-  echo "quality-gate: skipped $ACTIVE_DIR (no uncommitted changes, nothing ahead of origin/main)" >&2
-  exit 0
+if [ -n "$BASE" ]; then
+  AHEAD=$(git rev-list --count "$BASE"..HEAD 2>/dev/null || echo 0)
+  if [ -z "$DIRTY" ] && [ "${AHEAD:-0}" = "0" ]; then
+    echo "quality-gate: skipped $ACTIVE_DIR (no uncommitted changes, nothing ahead of origin/main)" >&2
+    exit 0
+  fi
 fi
 
 # Colocated tests for new/modified source files.
@@ -42,11 +45,26 @@ $MISSING_TESTS
 See .ruler/07-testing.md for test requirements."
 fi
 
-# Without installed dependencies nothing can run: report and skip (this is
-# usually somebody's throwaway checkout; PR CI still enforces the checks).
+# Without installed dependencies nothing can run. This worktree is the
+# session's own, so block with a fix-it hint (silently passing would let real
+# failures slip). QUALITY_GATE_SKIP_DEPS=1 is the deliberate escape hatch for
+# dep-less worktrees that rely on PR CI.
 if [ ! -d node_modules ] || [ ! -x node_modules/.bin/turbo ]; then
-  echo "quality-gate: skipped $ACTIVE_DIR (node_modules / turbo not installed; PR CI will check it)" >&2
-  exit 0
+  if [ "${QUALITY_GATE_SKIP_DEPS:-0}" = "1" ]; then
+    echo "quality-gate: skipped $ACTIVE_DIR (no node_modules; QUALITY_GATE_SKIP_DEPS=1)" >&2
+    exit 0
+  fi
+  sparse_install='.github/scripts/pnpm-install-sparse-worktree.sh --frozen-lockfile'
+  if [ -x "$ACTIVE_DIR/ci_scripts/is-dep-less-worktree.sh" ] && sh "$ACTIVE_DIR/ci_scripts/is-dep-less-worktree.sh"; then
+    install_hint="Linked worktree: ensure node_modules symlinks to a full install, or run \`$sparse_install\`"
+  elif [ -x "$ACTIVE_DIR/ci_scripts/is-sparse-checkout.sh" ] && sh "$ACTIVE_DIR/ci_scripts/is-sparse-checkout.sh"; then
+    install_hint="Run \`$sparse_install\` in this sparse worktree"
+  else
+    install_hint="Run \`pnpm install\` in this worktree"
+  fi
+  block "node_modules / turbo not installed in $ACTIVE_DIR. Either:
+  • ${install_hint}, OR
+  • Set QUALITY_GATE_SKIP_DEPS=1 (export it globally if you routinely work in dep-less worktrees and rely on PR CI to enforce the contract)"
 fi
 
 # Turbo command + worktree-aware pnpm configuration.

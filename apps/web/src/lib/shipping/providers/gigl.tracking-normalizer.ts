@@ -100,7 +100,7 @@ function applyLifecycleGuards(
   let seenTransit = false;
   for (const candidate of ordered) {
     const { event } = candidate;
-    const raw = event.rawStatus.trim().toUpperCase();
+    const raw = (event.rawStatus ?? '').trim().toUpperCase();
     const isArrival =
       raw === 'ARF' ||
       (candidate.recognizedStatus === 'in_transit' &&
@@ -221,7 +221,7 @@ export function normalizeGiglTrackingShipment(
     }
   );
 
-  applyLifecycleGuards(candidates, shipment.Destination);
+  applyLifecycleGuards(candidates, shipment.Destination ?? undefined);
 
   const sortedCandidates = [...candidates].sort(
     (left, right) =>

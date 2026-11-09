@@ -65,6 +65,17 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
     });
   });
 
+  it('strips all query parameters from /account/callback when extracting nextTarget', () => {
+    expect(
+      extractStorefrontOAuthCallbackNext(
+        'https://ogabassey.com/account/callback?next=%2Fcheckout&source=banner'
+      )
+    ).toEqual({
+      redirectTo: 'https://ogabassey.com/account/callback',
+      nextTarget: '/checkout',
+    });
+  });
+
   it('validates ?next= against expectedMerchantSlug when supplied', () => {
     expect(
       extractStorefrontOAuthCallbackNext(

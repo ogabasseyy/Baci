@@ -9,3 +9,11 @@ it('enables checkout social sign-in only on verified production hosts', () => {
   expect(supportsCheckoutSocialSignIn('localhost', true)).toBe(false);
   expect(supportsCheckoutSocialSignIn('localhost', false)).toBe(true);
 });
+
+it('enables checkout social sign-in for merchant configured custom domain', () => {
+  expect(supportsCheckoutSocialSignIn('customstore.ng', true, 'customstore.ng')).toBe(true);
+  expect(supportsCheckoutSocialSignIn('www.customstore.ng', true, 'customstore.ng')).toBe(true);
+  expect(supportsCheckoutSocialSignIn('customstore.ng', true, 'https://www.customstore.ng/')).toBe(true);
+  expect(supportsCheckoutSocialSignIn('otherstore.ng', true, 'customstore.ng')).toBe(false);
+  expect(supportsCheckoutSocialSignIn('otherstore.ng', true, null)).toBe(false);
+});

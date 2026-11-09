@@ -81,6 +81,7 @@ export const CartSidebar: React.FC = () => {
     isCheckoutLoading,
     isIdentityOpen,
     setIsIdentityOpen,
+    checkoutError,
   } = useCartCheckout(isCartOpen, setIsCartOpen, getHref('/checkout'));
 
   const {
@@ -217,6 +218,7 @@ export const CartSidebar: React.FC = () => {
                 hasPriceNegotiation={hasPriceNegotiation}
                 hasNonNegotiableCartItem={hasNonNegotiableCartItem}
                 isCheckoutLoading={isCheckoutLoading}
+                checkoutError={checkoutError}
                 cartHref={asRoute(getHref('/cart'))}
                 onNegotiateTotal={openTotalNegotiation}
                 onCheckout={handleCheckout}

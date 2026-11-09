@@ -204,9 +204,11 @@ describe('CheckoutScreen', () => {
     expect(steps).toHaveClass('lg:col-span-8');
     expect(steps).toContainElement(screen.getByText('Delivery saved'));
     expect(steps).toContainElement(screen.getByText('Oxygen application'));
-    expect(
-      screen.getAllByText('Saved order').at(-1)?.parentElement
-    ).toHaveClass('lg:col-span-4');
+    const summaryWrapper = screen
+      .getAllByText('Saved order')
+      .at(-1)?.parentElement;
+    expect(summaryWrapper).toHaveClass('lg:col-span-4');
+    expect(summaryWrapper).not.toHaveClass('hidden');
   });
   it('keeps the saved Oxygen application and its summaries inside checkout', () => {
     render(
@@ -231,7 +233,11 @@ describe('CheckoutScreen', () => {
     expect(mobileSummary).toBeVisible();
     expect(mobileSummary.parentElement).toHaveClass('lg:hidden');
     expect(oxygenStepRegion.parentElement).toHaveClass('lg:col-span-8');
-    expect(oxygenSummaryRegion.parentElement).toHaveClass('lg:col-span-4');
+    expect(oxygenSummaryRegion.parentElement).toHaveClass(
+      'hidden',
+      'lg:block',
+      'lg:col-span-4'
+    );
     expect(oxygenStepRegion.parentElement?.parentElement).toHaveClass(
       'grid',
       'lg:grid-cols-12'

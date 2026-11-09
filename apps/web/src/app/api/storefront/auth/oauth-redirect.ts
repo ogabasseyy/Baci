@@ -86,7 +86,6 @@ export function extractStorefrontOAuthCallbackNext(
       /^\/[^/]+\/account\/callback$/.test(parsed.pathname);
 
     if (nextParam && isCallbackPath) {
-      parsed.searchParams.delete('next');
       let validatedNextTarget: string | null = null;
       try {
         const nextUrl = new URL(nextParam, parsed.origin);
@@ -103,6 +102,7 @@ export function extractStorefrontOAuthCallbackNext(
         // Invalid next URLs are dropped rather than persisted into the cookie.
       }
 
+      parsed.search = '';
       return {
         redirectTo: parsed.toString(),
         nextTarget: validatedNextTarget,

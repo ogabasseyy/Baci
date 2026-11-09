@@ -31,8 +31,14 @@ export function CheckoutIdentityModal({
 }: CheckoutIdentityModalProps) {
   const router = useRouter();
   const merchantContext = useMerchantSafe();
-  const _merchant = merchantContext?.merchant;
-  const socialAvailable = typeof window !== 'undefined' && supportsCheckoutSocialSignIn(window.location.hostname, process.env.NODE_ENV === 'production');
+  const merchant = merchantContext?.merchant;
+  const socialAvailable =
+    typeof window !== 'undefined' &&
+    supportsCheckoutSocialSignIn(
+      window.location.hostname,
+      process.env.NODE_ENV === 'production',
+      merchant?.custom_domain
+    );
   const { checkoutUrl: normalizedCheckoutUrl } =
     buildCheckoutIdentityRoutes(checkoutUrl);
 

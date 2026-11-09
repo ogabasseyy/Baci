@@ -9,8 +9,12 @@ describe('RepairsRecyclingSection', () => {
     expect(
       screen.getByRole('heading', { name: /recycle responsibly/i })
     ).toBeInTheDocument();
-    expect(screen.getByText('Safe Disposal')).toBeInTheDocument();
-    expect(screen.getByText('Glass Recycling')).toBeInTheDocument();
-    expect(screen.getByText('Component Harvest')).toBeInTheDocument();
+    expect(
+      screen.getByText(/contact support before bringing/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/remove personal data before handing over a device/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Glass Recycling')).not.toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@
 
 import type { Route } from 'next';
 import type { ChangeEvent, KeyboardEvent } from 'react';
+import type { ProductVariant } from '@/lib/products';
 import {
   buildDescriptionExcerpt,
   type ConditionType,
@@ -44,6 +45,7 @@ interface ProductInteractionPanelProps {
   selectedAttributes: Record<string, string>;
   selectedColor: number | null;
   selectedCondition: ConditionType;
+  selectedVariant?: ProductVariant | null;
   showColorToast: boolean;
 }
 
@@ -78,6 +80,7 @@ export function ProductInteractionPanel(props: ProductInteractionPanelProps) {
         secondaryColor={props.secondaryColor}
         selectedAttributes={props.selectedAttributes}
         selectedColor={props.selectedColor}
+        selectedVariant={props.selectedVariant}
         showColorToast={props.showColorToast}
       />
       <ProductCartActions

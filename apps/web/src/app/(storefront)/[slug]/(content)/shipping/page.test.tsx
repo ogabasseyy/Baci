@@ -254,6 +254,6 @@ describe('shipping page', () => {
     );
 
     expect(screen.getByText('0 business days')).toBeInTheDocument();
-    expect(screen.getByText('Calculated')).toBeInTheDocument();
+    expect(screen.getByText('Calculated at checkout')).toBeInTheDocument();
   });
 });

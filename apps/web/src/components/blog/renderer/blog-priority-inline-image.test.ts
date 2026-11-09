@@ -68,4 +68,49 @@ describe('findFirstTrustedInlineImage', () => {
       )
     ).toBeNull();
   });
+
+  it('treats content-addressed release media as the first renderable image and returns null', () => {
+    mockIsLegacy.mockReturnValue(false);
+    mockIsTrusted.mockReturnValue(true);
+    const releaseSrc = `/release-assets/${'a'.repeat(64)}.webp`;
+
+    expect(
+      findFirstTrustedInlineImage(docWithImage(releaseSrc), '0')
+    ).toBeNull();
+  });
+
+  it('does not skip an earlier release asset to prioritize a subsequent trusted CDN image', () => {
+    mockIsLegacy.mockReturnValue(false);
+    mockIsTrusted.mockReturnValue(true);
+    const releaseSrc = `/release-assets/${'a'.repeat(64)}.webp`;
+    const docWithBoth = {
+      type: 'doc',
+      content: [
+        { type: 'image', attrs: { src: releaseSrc } },
+        { type: 'image', attrs: { src: IMAGE_SRC } },
+      ],
+    };
+
+    // The first rendered image is the release asset (not a trusted CDN image), so it must
+    // return null rather than prioritizing the second image at 0.1.
+    expect(findFirstTrustedInlineImage(docWithBoth, '0')).toBeNull();
+  });
+
+  it('skips non-canonical release asset paths and finds the next valid trusted image', () => {
+    mockIsLegacy.mockReturnValue(false);
+    mockIsTrusted.mockReturnValue(true);
+    const invalidReleaseSrc = `/release-assets/${'a'.repeat(63)}.webp`;
+    const docWithInvalidFirst = {
+      type: 'doc',
+      content: [
+        { type: 'image', attrs: { src: invalidReleaseSrc } },
+        { type: 'image', attrs: { src: IMAGE_SRC } },
+      ],
+    };
+
+    expect(findFirstTrustedInlineImage(docWithInvalidFirst, '0')).toEqual({
+      src: IMAGE_SRC,
+      nodePath: '0.1',
+    });
+  });
 });

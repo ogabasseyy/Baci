@@ -141,11 +141,14 @@ export async function assertGiglCustomerCheckoutPrepaid(
     return;
   }
 
+  // Stamped customer_checkout orders are judged by settled retention below,
+  // not by the payment-method allow-list: an order whose settlement proves Baci
+  // holds the full tariff must still book (the DB forbids rebinding it to the
+  // wallet). Without settled coverage it is refused and rebinds to the wallet.
   const hasRetentionIntent = hasGiglCheckoutShippingRetention(order);
   const requiresPrepaidShipping =
     paymentStatus !== 'paid' ||
     isPayOnDeliveryPaymentMethod(order.payment_method) ||
-    isGiglCheckoutPaymentWithoutRetainedShipping(paymentMethod) ||
     !hasRetentionIntent;
 
   if (requiresPrepaidShipping) {

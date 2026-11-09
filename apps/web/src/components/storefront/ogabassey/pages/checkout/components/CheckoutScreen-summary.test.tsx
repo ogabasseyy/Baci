@@ -131,7 +131,7 @@ import {
   onConfirmTransfer,
   onDiscountApplied,
   onSignIn,
-} from './CheckoutScreen-summary.fixture';
+} from './CheckoutScreen-summary.test-support';
 
 beforeEach(() => {
   vi.clearAllMocks();

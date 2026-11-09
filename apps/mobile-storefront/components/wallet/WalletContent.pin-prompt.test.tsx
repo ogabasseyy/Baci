@@ -21,7 +21,13 @@ jest.mock('@/hooks/use-product-search', () => ({
 }));
 jest.mock('expo-image', () => ({ Image: () => null }));
 
-const pinPrompt = <Text testID="wallet-pin-prompt">Enter wallet PIN</Text>;
+// A real Modal stands in for WalletPinSheet (which is a ModalSheet), so the
+// test checks Modal-in-Modal nesting rather than plain view placement.
+const pinPrompt = (
+  <Modal transparent visible>
+    <Text testID="wallet-pin-prompt">Enter wallet PIN</Text>
+  </Modal>
+);
 
 function modalsContainingPrompt() {
   return screen
@@ -49,7 +55,7 @@ describe('WalletContent PIN prompt placement', () => {
     act(() => useAuthStore.setState({ user: null, merchantId: null }));
   });
 
-  it('mounts the PIN prompt inside the open savings sheet', () => {
+  it('nests the PIN modal inside the open savings sheet modal', () => {
     render(
       <WalletContent
         {...createWalletContentProps()}
@@ -59,7 +65,8 @@ describe('WalletContent PIN prompt placement', () => {
       />
     );
     expect(screen.getAllByTestId('wallet-pin-prompt')).toHaveLength(1);
-    expect(modalsContainingPrompt()).toHaveLength(1);
+    // The PIN modal itself plus the savings sheet modal that hosts it.
+    expect(modalsContainingPrompt()).toHaveLength(2);
   });
 
   it('mounts the PIN prompt once at the root when the savings sheet is closed', () => {
@@ -71,6 +78,7 @@ describe('WalletContent PIN prompt placement', () => {
       />
     );
     expect(screen.getAllByTestId('wallet-pin-prompt')).toHaveLength(1);
-    expect(modalsContainingPrompt()).toHaveLength(0);
+    // Only the PIN modal itself: it is not nested in any other modal.
+    expect(modalsContainingPrompt()).toHaveLength(1);
   });
 });

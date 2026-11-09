@@ -14,6 +14,12 @@ interface SavingsSuccessInput {
    * over the client snapshot, which may already include a replayed amount.
    */
   savedAfter?: number;
+  /**
+   * False when the goal snapshot may already include this contribution (a
+   * late confirmation after a background refresh). Without savedAfter the
+   * message then leaves out the percentage rather than double-counting.
+   */
+  snapshotExcludesAmount?: boolean;
 }
 
 const REFRESH_HINT = ' Pull to refresh your latest balance.';
@@ -29,6 +35,7 @@ export function buildSavingsSuccessMessage({
   goalCompleted,
   refreshFailed,
   savedAfter,
+  snapshotExcludesAmount = true,
 }: SavingsSuccessInput): { message: string; title: string } {
   const added = formatNgnCurrency(amount);
   const hint = refreshFailed ? REFRESH_HINT : '';
@@ -38,12 +45,13 @@ export function buildSavingsSuccessMessage({
       title: 'Goal reached! 🎉',
     };
   }
+  const confirmedSaved =
+    savedAfter !== undefined && Number.isFinite(savedAfter) ? savedAfter : null;
   const saved =
-    savedAfter !== undefined && Number.isFinite(savedAfter)
-      ? savedAfter
-      : goal.current_amount + amount;
+    confirmedSaved ??
+    (snapshotExcludesAmount ? goal.current_amount + amount : null);
   const percent =
-    goal.target_amount > 0
+    saved !== null && goal.target_amount > 0
       ? Math.min(
           99,
           Math.max(1, Math.floor((saved / goal.target_amount) * 100))
@@ -51,7 +59,7 @@ export function buildSavingsSuccessMessage({
       : null;
   const progress =
     percent === null
-      ? 'Keep it going!'
+      ? `Every naira gets you closer to your ${goal.title}. Keep it going!`
       : `You're ${percent}% of the way to your ${goal.title}. Keep it going!`;
   return {
     message: `Nice! ${added} added. ${progress}${hint}`,

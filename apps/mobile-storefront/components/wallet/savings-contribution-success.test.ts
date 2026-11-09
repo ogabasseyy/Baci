@@ -81,7 +81,9 @@ describe('buildSavingsSuccessMessage', () => {
       goalCompleted: false,
       refreshFailed: false,
     });
-    expect(result.message).toBe('Nice! ₦500 added. Keep it going!');
+    expect(result.message).toBe(
+      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going!'
+    );
   });
 
   it('prefers the server-confirmed balance over the client snapshot', () => {
@@ -96,6 +98,19 @@ describe('buildSavingsSuccessMessage', () => {
       savedAfter: 1500,
     });
     expect(result.message).toContain("You're 30%");
+  });
+
+  it('leaves out the percentage when the snapshot may already include the amount', () => {
+    const result = buildSavingsSuccessMessage({
+      amount: 2000,
+      goal: { ...goal, current_amount: 3000 },
+      goalCompleted: false,
+      refreshFailed: false,
+      snapshotExcludesAmount: false,
+    });
+    expect(result.message).toBe(
+      'Nice! ₦2,000 added. Every naira gets you closer to your iPhone 13. Keep it going!'
+    );
   });
 
   it('adds the refresh hint when the wallet refresh failed', () => {

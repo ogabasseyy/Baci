@@ -35,8 +35,12 @@ export async function checkPendingPrimarySavings(input: {
         const success = buildSavingsSuccessMessage({
           amount,
           goal,
-          goalCompleted: amount >= goal.target_amount - goal.current_amount,
+          // The status endpoint returns no goal balance, and a background
+          // refresh may already include this transfer in the snapshot, so
+          // neither completion nor a percentage is inferred here.
+          goalCompleted: false,
           refreshFailed,
+          snapshotExcludesAmount: false,
         });
         Alert.alert(success.title, success.message);
       } else

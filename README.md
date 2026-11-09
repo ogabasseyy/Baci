@@ -4,6 +4,10 @@
 
 Baci helps African merchants create complete ecommerce storefronts in under 3 minutes and makes those storefronts ready for AI agents to discover, trust, purchase from, and monitor. It combines AI-assisted store creation with agent-readable trust contracts, safe checkout actions, and merchant-facing operational recovery.
 
+## Repository use
+
+Baci repository material is intended for work authorized by Baci's owner or maintainers. Third-party components remain subject to their own licenses; applicable platform terms and legal rights continue to apply.
+
 ## 📚 Documentation
 
 ### Core Resources

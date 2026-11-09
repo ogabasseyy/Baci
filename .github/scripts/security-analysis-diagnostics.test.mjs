@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { parse } from 'yaml';
 import { fileURLToPath } from 'node:url';
 
@@ -201,4 +202,21 @@ test('optional diagnostic failure emits a warning while required scan failures r
   assert.match(failGate.if, /steps\.semgrep_full\.outcome == 'failure'/);
   assert.doesNotMatch(failGate.if, /pg_diagnostic/);
   assert.equal(failGate.run, 'exit 1');
+});
+
+test('optional diagnostic failures extend private SARIF retention without failing the required scan', () => {
+  const steps = parse(workflow).jobs.semgrep.steps;
+  const routing = steps.find((step) => step.name === 'Route SARIF for repository visibility');
+  const expression = routing.with['retention-days'].replace(/^\s*\$\{\{([\s\S]*)\}\}\s*$/, '$1');
+  const names = ['semgrep_pr', 'semgrep_push', 'semgrep_full', 'pg_diagnostic', 'pg_diagnostic_upload'];
+  const evaluate = (failed, status = 'success', skipped = []) => runInNewContext(expression, {
+    job: { status },
+    steps: Object.fromEntries(names.map((name) => [name, { outcome: name === failed ? 'failure' : skipped.includes(name) ? 'skipped' : 'success' }])),
+  }, { timeout: 1000 });
+  assert.equal(evaluate(null), 1);
+  assert.equal(evaluate(null, 'success', ['pg_diagnostic', 'pg_diagnostic_upload']), 1);
+  assert.equal(evaluate(null, 'failure'), 7);
+  for (const name of names) assert.equal(evaluate(name), 7, `${name} must retain evidence for seven days`);
+  const failGate = steps.find((step) => step.name === 'Fail on Semgrep findings or scanner errors');
+  assert.doesNotMatch(failGate.if, /pg_diagnostic/);
 });

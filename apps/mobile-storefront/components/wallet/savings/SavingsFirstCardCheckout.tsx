@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { SavingsSheetTextInput } from '../SavingsSheetTextInput';
 import { savingsCardContributionUtils as money } from './savings-card-contribution-utils';
 import { useSavingsFirstCardCheckout } from './use-savings-first-card-checkout';
 
@@ -90,7 +91,7 @@ export function SavingsFirstCardCheckout({
               ]}
             >
               <Text style={[styles.currency, { color: colors.text }]}>₦</Text>
-              <TextInput
+              <SavingsSheetTextInput
                 accessibilityLabel="New card contribution amount"
                 editable={!checkout.busy}
                 keyboardType="decimal-pad"

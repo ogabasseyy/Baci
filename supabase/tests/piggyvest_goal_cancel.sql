@@ -212,10 +212,12 @@ BEGIN
                     AND trg.tgname = 'primary_goal_cancel_block_unsettled_goal_deletion' AND NOT trg.tgisinternal) THEN
     RAISE EXCEPTION 'deletion guard triggers are missing';
   END IF;
-  -- Funding availability counts a settled refund.
+  -- Funding no longer gates on a local balance, so a settled refund needs no
+  -- availability accounting in the reservation (the refund lands in the
+  -- PiggyVest main wallet, which is the system of record).
   IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
-     NOT LIKE '%goal_cancel_operations%' THEN
-    RAISE EXCEPTION 'funding availability does not count a confirmed goal cancel refund';
+     LIKE '%goal_cancel_operations%' THEN
+    RAISE EXCEPTION 'funding reservation still counts goal cancel refunds against a local balance';
   END IF;
 END
 $catalog$;

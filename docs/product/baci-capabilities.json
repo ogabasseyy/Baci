@@ -1,24 +1,26 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-04T03:35:07+00:00",
-  "source_revision": "7fe1e82ae62268b64c579a34fde39568d68dabd3",
-  "evidence_digest": "f81738a211598985521c35fc7a2227190d14ef60edac8121357dd683ecf93b3e",
-  "claims_digest": "582ba8df0661a943a9b94a024d5e494e777947d7306dd97e5f631f5121614cfb",
-  "review_scope": "Source review: uncertain agentic DVA creation and persistence outcomes retain their claim for reconciliation; stale claims without a confirmed provider outcome require manual review. Merchant protocol claims remain accurate. Reviewed checkout eligibility after CredPal retirement; the listed payment capabilities remain accurate. Oxygen remains local staging QA only; deployment, carrier configuration and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-09T13:20:23+00:00",
+  "source_revision": "efb3ba2de0df089137572bc23bfd2ef5c50dc1b5",
+  "evidence_digest": "ba4611151447925c1a848998a4f8c24e6e136076049303426765c3c8bf22541d",
+  "claims_digest": "855da2fa664a993d34b7b012e816234c91a69b3e6a00e4747297aebd7871113e",
+  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout is restricted to local staging QA and is not enabled for production shoppers. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
         "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
-        "apps/web/src/config/oxygen-storefront-staging.ts"
+        "apps/web/src/config/oxygen-storefront-staging.ts",
+        "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts",
+        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql"
       ]
     },
     {
@@ -197,7 +199,16 @@
         "apps/web/src/app/api/agentic/catalog/search/route.ts",
         "apps/web/src/app/api/agentic/carts/route.ts",
         "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
-        "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+        "apps/web/src/app/api/agentic/orders/[id]/route.ts",
+        "apps/web/src/lib/agentic/checkout.ts",
+        "apps/web/src/lib/agentic/checkout-session-tax.ts",
+        "apps/web/src/lib/agentic/agentic-line-tax.ts",
+        "apps/web/src/lib/agentic/checkout-catalog.ts",
+        "apps/web/src/lib/agentic/checkout-order-tax.ts",
+        "apps/web/src/lib/agentic/checkout-completion-payloads.ts",
+        "apps/web/src/lib/agentic/checkout-totals.ts",
+        "apps/web/src/lib/agentic/ucp-checkout-line-item-adapter.ts",
+        "apps/web/src/lib/agentic/ucp-response-adapters.ts"
       ]
     },
     {

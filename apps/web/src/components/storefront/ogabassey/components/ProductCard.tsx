@@ -12,6 +12,7 @@ import { useV2Saved } from '../providers/v2-saved-context';
 import type { Product } from '../types';
 import { ProductCardImage } from './product-card-image';
 import { ProductCardListView } from './product-card-list-view';
+import { STOREFRONT_PRODUCT_CARD_IMAGE_SIZES } from './product-grid-image-sizes';
 
 interface ProductCardProps {
   product: Product;
@@ -179,7 +180,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="ogabassey-product-card-image-surface relative aspect-square mb-3 md:mb-4 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden z-10 pointer-events-none">
         <ProductCardImage
           product={product}
-          sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+          sizes={STOREFRONT_PRODUCT_CARD_IMAGE_SIZES}
           imagePriority={imagePriority}
           className="object-cover transition-transform duration-500 md:group-hover:scale-105"
         />

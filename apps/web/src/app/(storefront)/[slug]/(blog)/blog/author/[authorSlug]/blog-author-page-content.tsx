@@ -102,6 +102,15 @@ export async function BlogAuthorPageContent({
     currentPage > 1 ? buildAuthorPageUrl(currentPage - 1) : undefined;
   const nextPageUrl =
     currentPage < totalPages ? buildAuthorPageUrl(currentPage + 1) : undefined;
+  const paginationHeadLinks = (
+    <>
+      {currentPage > 1 ? (
+        <meta name="robots" content="noindex, follow" />
+      ) : null}
+      {previousPageUrl ? <link href={previousPageUrl} rel="prev" /> : null}
+      {nextPageUrl ? <link href={nextPageUrl} rel="next" /> : null}
+    </>
+  );
 
   const profilePageSchema = {
     '@context': 'https://schema.org',
@@ -151,8 +160,7 @@ export async function BlogAuthorPageContent({
 
   return (
     <>
-      {previousPageUrl ? <link href={previousPageUrl} rel="prev" /> : null}
-      {nextPageUrl ? <link href={nextPageUrl} rel="next" /> : null}
+      {paginationHeadLinks}
       <JsonLd data={profilePageSchema} />
       <JsonLd data={breadcrumbSchema} />
       {itemListSchema && <JsonLd data={itemListSchema} />}

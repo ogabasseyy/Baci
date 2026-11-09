@@ -1,6 +1,7 @@
 import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import { checkOxygenStorefrontAvailability } from '../check-oxygen-storefront-availability';
 import {
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
   isKlumpUnavailableForGatewayAmount,
@@ -70,7 +71,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
 
   if (
     paymentMethod === 'oxygen' &&
-    (!isOxygenStorefrontStagingEnabled() ||
+    ((!isOxygenStorefrontStagingEnabled() && !(await checkOxygenStorefrontAvailability(merchant.id))) ||
       currency !== 'NGN' ||
       !user ||
       payWithWallet)
@@ -78,7 +79,7 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     toast({
       title: 'Oxygen setup unavailable',
       description:
-        'Sign in and use the full order amount for this staging finance test.',
+        'Sign in and use the full order amount to continue with Oxygen.',
       variant: 'destructive',
     });
     isOrderInFlightRef.current = false;

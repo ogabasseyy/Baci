@@ -37,7 +37,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch', () => ({
   dispatchPrimaryCardSignedCustodyIntake: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () => withCaptureRpc(mocks.legacy()),
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.legacy()),
 }));
 
 import { POST } from './route';
@@ -84,6 +84,9 @@ it.each([
   expect(mocks.intake).toHaveBeenCalledWith({
     rawBody: fixture.rawBody,
     signature: fixture.signature,
+    environment: expect.objectContaining({
+      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
+    }),
   });
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });

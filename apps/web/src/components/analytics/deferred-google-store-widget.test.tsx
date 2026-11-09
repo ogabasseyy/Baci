@@ -362,8 +362,15 @@ describe('DeferredGoogleStoreWidget', () => {
     expect(screen.queryByText(/Widget ogabassey.com/)).not.toBeInTheDocument();
   });
 
-  it('stays suppressed on payment/checkout routes so it never covers the consent UI', async () => {
-    mockPathname = '/checkout';
+  it.each([
+    '/checkout',
+    '/cart',
+    '/order-success',
+    '/products',
+    '/smartphones/iphone-14',
+    '/account',
+  ])('stays suppressed on %s', async (pathname) => {
+    mockPathname = pathname;
     const loadWidgetModule = vi
       .fn()
       .mockResolvedValue(createTestWidgetModule());
@@ -403,6 +410,46 @@ describe('DeferredGoogleStoreWidget', () => {
 
     expect(frame.style.display).toBe('none');
 
+    frame.remove();
+  });
+  it('allows a path-based storefront home and hides an existing badge on navigation', async () => {
+    mockPathname = '/ogabassey/';
+    const loadWidgetModule = vi
+      .fn()
+      .mockResolvedValue(createTestWidgetModule());
+    const view = render(
+      <DeferredGoogleStoreWidget
+        homePath="/ogabassey"
+        enabled
+        loadWidgetModule={loadWidgetModule}
+      />
+    );
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loadWidgetModule).toHaveBeenCalledOnce();
+    const frame = document.createElement('iframe');
+    frame.id = 'merchantwidgetiframe';
+    document.body.appendChild(frame);
+    mockPathname = '/ogabassey/products';
+    view.rerender(
+      <DeferredGoogleStoreWidget
+        homePath="/ogabassey"
+        enabled
+        loadWidgetModule={loadWidgetModule}
+      />
+    );
+    expect(frame.style.display).toBe('none');
+    mockPathname = '/ogabassey';
+    view.rerender(
+      <DeferredGoogleStoreWidget
+        homePath="/ogabassey"
+        enabled
+        loadWidgetModule={loadWidgetModule}
+      />
+    );
+    expect(frame.style.display).toBe('');
     frame.remove();
   });
 });

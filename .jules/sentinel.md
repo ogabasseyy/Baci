@@ -57,3 +57,8 @@
 **Learning:** Supabase array `upsert()` cannot be safely constrained by route-level tenant filters for existing rows; a payload containing another merchant's variant ID can match the primary key before merchant ownership is enforced.
 **Prevention:** Use one transactional Postgres RPC for tenant-scoped bulk variant synchronization. The RPC must validate the product and every existing variant ID against `product_id` + `merchant_id` before any stale visible variants are deleted, preserve hidden inventory-anchor rows, and merge omitted optional fields with the stored row rather than overwriting them with route defaults.
 **Source:** Supabase/Postgres RPC and RLS guidance; OWASP Broken Access Control.
+## 2026-11-08 — Open redirect fix in blog preview
+**Vulnerability:** Open Redirect in `apps/web/src/app/api/blog/exit-preview/route.ts` (OWASP A01:2021 – Broken Access Control / CWE-601: URL Redirection to Untrusted Site)
+**Learning:** Next.js dynamic routing and route handlers are easily prone to open redirects if they accept a URL as a parameter directly without sanitization, like `redirect(searchParams.get('callbackUrl'))`.
+**Prevention:** Use the `sanitizeRelativeRedirectPath` primitive from `@/lib/auth-redirect` to ensure redirects stay on-origin unless explicitly intended to go to known, safe domains.
+**Source:** https://cwe.mitre.org/data/definitions/601.html verified on 2026-11-08

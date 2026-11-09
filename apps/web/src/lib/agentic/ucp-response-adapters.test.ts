@@ -111,6 +111,43 @@ describe('buildUcpCheckoutResponse', () => {
     });
   });
 
+  it('keeps UCP unit prices pre-tax when line totals include VAT', () => {
+    const response = buildUcpCheckoutResponse({
+      line_items: [
+        {
+          base_amount: 2_000,
+          id: 'line_product_1',
+          item: { id: 'product_1', quantity: 2, title: 'Laptop' },
+          subtotal: 2_000,
+          total: 2_150,
+        },
+      ],
+      totals: [
+        { amount: 2_000, display_text: 'Items', type: 'items_base_amount' },
+        { amount: 150, display_text: 'Tax', type: 'tax' },
+        { amount: 2_150, display_text: 'Total', type: 'total' },
+      ],
+    });
+
+    expect(response).toMatchObject({
+      line_items: [
+        {
+          item: { id: 'product_1', price: 1_000, title: 'Laptop' },
+          quantity: 2,
+          totals: [
+            { amount: 2_000, type: 'subtotal' },
+            { amount: 2_150, type: 'total' },
+          ],
+        },
+      ],
+      totals: [
+        { amount: 2_000, type: 'subtotal' },
+        { amount: 150, type: 'tax' },
+        { amount: 2_150, type: 'total' },
+      ],
+    });
+  });
+
   it('ignores malformed totals entries without throwing', () => {
     const response = buildUcpCheckoutResponse({
       line_items: [],
@@ -193,6 +230,43 @@ describe('buildUcpOrderResponse', () => {
         { amount: 150_000, display_text: 'Subtotal', type: 'subtotal' },
         { amount: 2_500, display_text: 'Shipping', type: 'fulfillment' },
         { amount: 152_500, display_text: 'Total', type: 'total' },
+      ],
+    });
+  });
+
+  it('reports order VAT once while keeping the order line price pre-tax', () => {
+    const response = buildUcpOrderResponse({
+      currency: 'NGN',
+      id: 'order_vat',
+      order_items: [
+        {
+          id: 'item_vat',
+          line_extension_amount: 2_000,
+          name: 'Laptop',
+          price: 1_000,
+          product_id: 'product_1',
+          quantity: 2,
+          vat_amount: 150,
+        },
+      ],
+      shipping_fee: 0,
+      subtotal: 2_000,
+      tax_amount: 150,
+      total: 2_150,
+    });
+
+    expect(response).toMatchObject({
+      line_items: [
+        {
+          item: { id: 'product_1', price: 1_000, title: 'Laptop' },
+          quantity: { total: 2 },
+          totals: [{ amount: 2_000, type: 'total' }],
+        },
+      ],
+      totals: [
+        { amount: 2_000, type: 'subtotal' },
+        { amount: 150, type: 'tax' },
+        { amount: 2_150, type: 'total' },
       ],
     });
   });

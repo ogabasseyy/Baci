@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      '6de4f99f7918a670a6c3ab411d4e7016b36a0d073b418426f58a31d94e5ae2e3',
+      'f3929d23238d51b67a3822be852683a7da73ea12701a89e199bd55624a93d2d8',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 615,
+    rowCount: 622,
   });
 });
 
@@ -59,7 +59,14 @@ it('keeps every Oxygen API route on the dynamic origin', async () => {
   const rows = inventory.rows.filter((row) =>
     row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
   );
-  expect(rows).toHaveLength(22);
+  expect(rows).toHaveLength(24);
+  expect(rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
   for (const row of rows) expect(row.decision).toBe('origin_dynamic');
 });
 
@@ -112,4 +119,26 @@ it('keeps the savings goal completion endpoint on the dynamic origin', async () 
       decision: 'origin_dynamic',
     })
   );
+});
+
+it('keeps Chatwoot context endpoints on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/chatwoot/context/'
+    )
+  );
+  expect(rows).toHaveLength(3);
+  expect(rows.map((row) => row.routePattern).sort()).toEqual([
+    '/api/storefront/chatwoot/context/authorize',
+    '/api/storefront/chatwoot/context/challenge',
+    '/api/storefront/chatwoot/context/verify',
+  ]);
+  expect(rows.every((row) => row.decision === 'origin_dynamic')).toBe(true);
 });

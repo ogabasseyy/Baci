@@ -5,7 +5,7 @@ import { fixture, request, verifier } from './guest-oauth.test-support';
 
 it('binds a guest connection to PKCE, resource and the exact registered redirect', async () => {
   const { auth } = fixture();
-  const authorization = await auth.authorize(request);
+  const authorization = await auth.authorize(request, true);
   expect(authorization.state).toBe('client-state');
   expect(authorization.iss).toBe('https://qa.example.com');
   const tokens = await auth.exchange({
@@ -35,7 +35,7 @@ it.each([
 });
 it('does not consume a code on an incorrect PKCE verifier', async () => {
   const { auth } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   await expect(
     auth.exchange({ ...request, code, code_verifier: 'b'.repeat(43) }),
   ).rejects.toThrow();
@@ -45,7 +45,7 @@ it('does not consume a code on an incorrect PKCE verifier', async () => {
 });
 it('rotates refresh tokens and revokes old reuse after the response-recovery grace', async () => {
   const { auth, advance } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const first = await auth.exchange({
     ...request,
     code,
@@ -62,7 +62,7 @@ it('rotates refresh tokens and revokes old reuse after the response-recovery gra
 });
 it('survives service restart without handing credentials to the model', async () => {
   const { auth, options } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const first = await auth.exchange({
     ...request,
     code,
@@ -75,7 +75,7 @@ it('survives service restart without handing credentials to the model', async ()
 });
 it('expires access and absolute guest authority and supports revocation', async () => {
   const { auth, advance } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const tokens = await auth.exchange({
     ...request,
     code,
@@ -95,12 +95,13 @@ it('requires the browser-bound single-use consent before issuing a code', async 
   const pending = await auth.beginConsent(request);
   await expect(auth.completeConsent(pending.id, 'wrong-browser', true)).rejects.toThrow();
   const code = await auth.completeConsent(pending.id, pending.cookie, true);
+  if (!('code' in code)) throw new Error('Expected approved consent');
   expect(code.code).toMatch(/^[a-f0-9]{64}$/);
   await expect(auth.completeConsent(pending.id, pending.cookie, true)).rejects.toThrow();
 });
 it('keeps revocation idempotent', async () => {
   const { auth } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const tokens = await auth.exchange({
     ...request,
     code,
@@ -111,7 +112,7 @@ it('keeps revocation idempotent', async () => {
 });
 it('permits exactly one concurrent code exchange and isolates separate guest grants', async () => {
   const { auth } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const attempts = await Promise.allSettled([
     auth.exchange({ ...request, code, code_verifier: verifier }),
     auth.exchange({ ...request, code, code_verifier: verifier }),
@@ -119,7 +120,7 @@ it('permits exactly one concurrent code exchange and isolates separate guest gra
   expect(attempts.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
   const winner = attempts.find((result) => result.status === 'fulfilled');
   if (!winner || winner.status !== 'fulfilled') throw new Error('No exchange');
-  const secondCode = await auth.authorize(request);
+  const secondCode = await auth.authorize(request, true);
   const second = await auth.exchange({
     ...request,
     code: secondCode.code,
@@ -131,23 +132,23 @@ it('permits exactly one concurrent code exchange and isolates separate guest gra
 });
 it('rejects expired codes and refreshes after the absolute deadline', async () => {
   const { auth, advance } = fixture();
-  const stale = await auth.authorize(request);
+  const stale = await auth.authorize(request, true);
   advance(300001);
   await expect(
     auth.exchange({ ...request, code: stale.code, code_verifier: verifier }),
   ).rejects.toThrow();
-  const fresh = await auth.authorize(request);
+  const fresh = await auth.authorize(request, true);
   const tokens = await auth.exchange({
     ...request,
     code: fresh.code,
     code_verifier: verifier,
   });
-  advance(7 * 86400_000 + 1);
+  advance(90 * 86400_000 + 1);
   await expect(auth.refresh({ ...request, refresh_token: tokens.refresh_token })).rejects.toThrow();
 });
 it('keeps grant expiry within the database cap when the app clock is slightly ahead', async () => {
   const { options } = fixture();
-  const deadline = 1700000000000 + 7 * 86400_000;
+  const deadline = 1700000000000 + 90 * 86400_000;
   const compare = options.store.compareAndSwap.bind(options.store);
   const auth = new GuestOAuth({
     ...options,
@@ -160,14 +161,14 @@ it('keeps grant expiry within the database cap when the app clock is slightly ah
       },
     },
   });
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const token = await auth.exchange({ ...request, code, code_verifier: verifier });
   expect((await auth.verify(token.access_token)).expiresAt).toBeLessThanOrEqual(deadline);
 });
 
 it('returns one committed rotation to concurrent refresh retries', async () => {
   const { auth, options } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const first = await auth.exchange({ ...request, code, code_verifier: verifier });
   const read = options.store.read.bind(options.store);
   let arrivals = 0;
@@ -193,7 +194,7 @@ it('returns one committed rotation to concurrent refresh retries', async () => {
 });
 it('retries a refresh after cart initialization changes only the grant revision', async () => {
   const { auth, options, rows } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const first = await auth.exchange({ ...request, code, code_verifier: verifier });
   const compare = options.store.compareAndSwap.bind(options.store);
   let injected = false;
@@ -212,14 +213,14 @@ it('retries a refresh after cart initialization changes only the grant revision'
   expect((await auth.verify(next.access_token)).cartInitialized).toBe(true);
 });
 
-it('caps refresh history without losing reuse detection', async () => {
+it('fails closed before the refresh generation counter overflows', async () => {
   const { auth, rows } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   let token = await auth.exchange({ ...request, code, code_verifier: verifier });
   const grant = await auth.verify(token.access_token);
   const key = `grant:${grant.id}`;
   const row = rows.get(key)!;
-  rows.set(key, { ...row, value: { ...grant, tokenGenerations: 1023 } });
+  rows.set(key, { ...row, value: { ...grant, tokenGenerations: 0xffff_fffe } });
   token = await auth.refresh({ ...request, refresh_token: token.refresh_token });
   const size = rows.size;
   await expect(auth.refresh({ ...request, refresh_token: token.refresh_token })).rejects.toThrow('invalid_grant');
@@ -237,7 +238,7 @@ it('keeps fifteen active grants compact through a normal seven-day refresh workl
   };
   const tokens = [];
   for (let i = 0; i < 15; i++) {
-    const { code } = await auth.authorize(request);
+    const { code } = await auth.authorize(request, true);
     tokens.push(await auth.exchange({ ...request, code, code_verifier: verifier }));
   }
   for (let cycle = 0; cycle < 670; cycle++) {
@@ -251,7 +252,7 @@ it('keeps fifteen active grants compact through a normal seven-day refresh workl
 });
 it('rejects forged compact refreshes without revoking the legitimate grant', async () => {
   const { auth } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const token = await auth.exchange({ ...request, code, code_verifier: verifier });
   const forged = token.refresh_token.slice(0, -1) + (token.refresh_token.endsWith('a') ? 'b' : 'a');
   await expect(auth.refresh({ ...request, refresh_token: forged })).rejects.toThrow();
@@ -260,7 +261,7 @@ it('rejects forged compact refreshes without revoking the legitimate grant', asy
 });
 it('upgrades existing opaque refresh tokens and preserves their replay revocation', async () => {
   const { auth, rows, options, advance } = fixture();
-  const { code } = await auth.authorize(request);
+  const { code } = await auth.authorize(request, true);
   const first = await auth.exchange({ ...request, code, code_verifier: verifier });
   const grant = await auth.verify(first.access_token);
   const legacy = 'e'.repeat(64);

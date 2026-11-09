@@ -105,7 +105,7 @@ it('offers wallet funding, not bank transfer details, for a manual plan with an 
   expect(screen.queryByText(/bank transfer details/i)).toBeNull();
   expect(screen.queryByText(/plan transfer details/i)).toBeNull();
   fireEvent.press(
-    screen.getByRole('button', { name: 'Fund wallet for savings' })
+    screen.getByRole('button', { name: 'Add money for savings' })
   );
   expect(onFundWallet).toHaveBeenCalledTimes(1);
 });

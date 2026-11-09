@@ -57,11 +57,6 @@ export function createStorefrontComparePageHardStatusResolver(
     if (!dependencies.isEligibleForHardStatusPreflight(request, pathname)) {
       return null;
     }
-    // Preserve attribution/filter/query variants for the route itself; only a
-    // clean canonical document gets a crawler-facing hard status.
-    if (request.nextUrl.search.length > 0) {
-      return null;
-    }
 
     const routeType = dependencies.getRouteType(pathname);
     const contentSegments = dependencies.getStorefrontContentSegments(

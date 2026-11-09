@@ -15,6 +15,7 @@ const SavingsGoalDataSchema = z.object({
   current_amount: z.union([z.number(), z.string()]),
   id: z.string(),
   maturity_date: z.string(),
+  principal_amount: z.union([z.number(), z.string()]).optional(),
   product_id: z.string().nullable().optional(),
   product_snapshot: z.record(z.string(), z.unknown()).nullable().optional(),
   source_mode: z.enum(['manual', 'auto_debit']),
@@ -192,6 +193,10 @@ export function toActiveSavingsGoal({
   const currentAmount = coerceDatabaseNumber(goal.current_amount);
   const targetAmount = coerceDatabaseNumber(goal.target_amount);
   const contributionAmount = coerceDatabaseNumber(goal.contribution_amount);
+  const principalAmount =
+    goal.principal_amount === undefined
+      ? null
+      : coerceDatabaseNumber(goal.principal_amount);
   if (
     currentAmount === null ||
     targetAmount === null ||
@@ -265,6 +270,7 @@ export function toActiveSavingsGoal({
     current_amount: currentAmount,
     id: goal.id,
     maturity_date: goal.maturity_date,
+    ...(principalAmount === null ? {} : { principal_amount: principalAmount }),
     product_condition: productCondition,
     product_image:
       snapshotImage ??

@@ -110,9 +110,7 @@ describe('buildMerchantTrustProfile', () => {
 
   it('returns a sparse profile for an empty trust payload', () => {
     const result = buildMerchantTrustProfile(
-      {
-        trust_profile: {},
-      },
+      { trust_profile: {} },
       'https://ogabassey.com'
     );
 
@@ -124,17 +122,13 @@ describe('buildMerchantTrustProfile', () => {
 
   it('normalizes explicit X URLs to x.com', () => {
     const result = buildMerchantTrustProfile({
-      social_media: {
-        twitter: 'http://x.com/ogabasseyhq',
-      },
+      social_media: { twitter: 'http://x.com/ogabasseyhq' },
     });
 
     expect(result.socialLinks.twitter).toBe('https://x.com/ogabasseyhq');
 
     const rootResult = buildMerchantTrustProfile({
-      social_media: {
-        twitter: 'https://www.x.com',
-      },
+      social_media: { twitter: 'https://www.x.com' },
     });
 
     expect(rootResult.socialLinks.twitter).toBe('https://x.com');
@@ -156,9 +150,7 @@ describe('buildMerchantTrustProfile', () => {
 
   it('preserves absolute URLs for custom social platforms', () => {
     const result = buildMerchantTrustProfile({
-      social_media: {
-        threads: 'https://threads.net/@ogabassey',
-      },
+      social_media: { threads: 'https://threads.net/@ogabassey' },
     });
 
     expect(result.socialLinks.threads).toBe('https://threads.net/@ogabassey');
@@ -206,23 +198,79 @@ describe('buildMerchantTrustProfile', () => {
     expect(result.derivedLinks.shipping).toBe('https://ogabassey.com/shipping');
   });
 
-  it('publishes privacy and terms links for template-backed storefront pages', () => {
-    const result = buildMerchantTrustProfile(
-      {
-        template_id: 'modern-electronics',
-        pages: {
-          privacy: null,
-          terms: null,
-        },
-        trust_profile: {},
-      },
+  it('publishes privacy and terms links for ogabassey template or custom page copy', () => {
+    const ogabassey = buildMerchantTrustProfile(
+      { template_id: 'ogabassey', pages: { privacy: null, terms: null } },
       'https://ogabassey.com'
     );
-
-    expect(result.derivedLinks).toMatchObject({
+    expect(ogabassey.derivedLinks).toMatchObject({
       privacy: 'https://ogabassey.com/privacy',
       terms: 'https://ogabassey.com/terms',
     });
+
+    const withoutCopy = buildMerchantTrustProfile(
+      {
+        template_id: 'modern-electronics',
+        pages: { privacy: null, terms: null },
+      },
+      'https://ogabassey.com'
+    );
+    expect(withoutCopy.derivedLinks.privacy).toBeUndefined();
+    expect(withoutCopy.derivedLinks.terms).toBeUndefined();
+
+    const withEmptyMarkup = buildMerchantTrustProfile(
+      {
+        template_id: 'modern-electronics',
+        pages: { privacy: '<p> </p>', terms: '<p>&nbsp;</p>' },
+      },
+      'https://ogabassey.com'
+    );
+    expect(withEmptyMarkup.derivedLinks.privacy).toBeUndefined();
+    expect(withEmptyMarkup.derivedLinks.terms).toBeUndefined();
+
+    const withCopy = buildMerchantTrustProfile(
+      {
+        template_id: 'modern-electronics',
+        pages: { privacy: 'Privacy', terms: 'Terms' },
+      },
+      'https://ogabassey.com'
+    );
+    expect(withCopy.derivedLinks).toMatchObject({
+      privacy: 'https://ogabassey.com/privacy',
+      terms: 'https://ogabassey.com/terms',
+    });
+  });
+
+  it('publishes derived faq link for ogabassey template or structured faq_items', () => {
+    const ogabasseyResult = buildMerchantTrustProfile(
+      {
+        slug: 'ogabassey',
+        template_id: 'ogabassey',
+        pages: { faq: null },
+      },
+      'https://ogabassey.com'
+    );
+    expect(ogabasseyResult.derivedLinks.faq).toBe('https://ogabassey.com/faq');
+
+    const otherTemplateResult = buildMerchantTrustProfile(
+      {
+        slug: 'other-merchant',
+        template_id: 'ogabassey',
+        pages: { faq: null },
+      },
+      'https://store.usebaci.com'
+    );
+    expect(otherTemplateResult.derivedLinks.faq).toBeUndefined();
+
+    const faqItemsResult = buildMerchantTrustProfile(
+      {
+        faq_items: [{ question: 'Warranty?', answer: '1 year.' }],
+      },
+      'https://store.usebaci.com'
+    );
+    expect(faqItemsResult.derivedLinks.faq).toBe(
+      'https://store.usebaci.com/faq'
+    );
   });
 
   it('normalizes enabled Google review settings into merchant review authority', () => {

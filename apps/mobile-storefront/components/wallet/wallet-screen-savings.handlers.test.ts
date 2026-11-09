@@ -115,7 +115,7 @@ describe('wallet-screen-savings.handlers', () => {
     expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).toHaveBeenCalledWith(
       'Savings updated',
-      'Added ₦500 to your savings goal.'
+      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going!'
     );
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
   });
@@ -145,7 +145,7 @@ describe('wallet-screen-savings.handlers', () => {
     expect(clearIdempotencyKey).toHaveBeenCalledTimes(1);
     expect(Alert.alert).toHaveBeenCalledWith(
       'Savings updated',
-      'Added ₦500 to your savings goal, but wallet refresh failed. Pull to refresh your latest balance.'
+      'Nice! ₦500 added. Every naira gets you closer to your iPhone 13. Keep it going! Pull to refresh your latest balance.'
     );
     expect(Alert.alert).not.toHaveBeenCalledWith(
       'Unable to add savings',

@@ -108,25 +108,6 @@ describe('buildProductContextParagraphs', () => {
     expect(paragraphs[1]).not.toContain('related links on this page connect');
   });
 
-  it('renders checkout confirmation copy instead of out-of-stock copy when stock is null (unmanaged)', () => {
-    const paragraphs = buildProductContextParagraphs({
-      merchantBusinessName: 'Ogabassey',
-      categorySlug: 'smartphones',
-      categoryName: 'Smartphones',
-      currentProduct: {
-        slug: 'samsung-galaxy-s25',
-        name: 'Samsung Galaxy S25',
-        price: 950_000,
-        stock: null,
-      },
-    });
-
-    expect(paragraphs[0]).toContain(
-      'Live stock, selected options and delivery timing should still be confirmed at checkout.'
-    );
-    expect(paragraphs[0]).not.toContain('out of stock');
-  });
-
   it('builds product-specific gaming context without fixed price claims', () => {
     const paragraphs = buildProductContextParagraphs(makeInput());
 

@@ -1,25 +1,14 @@
-import type { Route } from 'next';
+import type { Route as NextRoute } from 'next';
+
+/** Narrowed Next.js Route alias (`Route<never>`) to avoid TS2589 union distribution on `<Link>`. */
+export type DynamicRoute = NextRoute<never>;
+type Route = DynamicRoute;
 
 /**
- * Type-safe route builders for dynamic routes.
- * Use these helpers when constructing dynamic URLs to get compile-time validation
- * when typedRoutes is enabled in next.config.ts.
- *
- * @example
- * ```tsx
- * import { routes } from '@/lib/routes';
- *
- * // Instead of:
- * <Link href={`/${slug}/products/${productSlug}`}>
- *
- * // Use:
- * <Link href={routes.product(slug, productSlug)}>
- * ```
+ * Type-safe route builders for dynamic routes (`typedRoutes: true`).
  */
 export const routes = {
-  // ============================================================
   // Storefront Routes (public merchant store pages)
-  // ============================================================
 
   /** Merchant storefront homepage: /{slug} */
   storefront: (slug: string) => `/${slug}` as Route,
@@ -190,13 +179,14 @@ export function isValidRouteKey(key: string): key is keyof AppRoutes {
 }
 
 /**
- * Cast a dynamic string URL to Route type.
- * Use this for user-provided URLs or dynamic paths that can't be statically validated.
+ * Cast a dynamic internal pathname to the narrowed `DynamicRoute` type.
+ * Use this for internal paths that can't be statically validated at compile time;
+ * use a native `<a>` element for external `https://` URLs.
  *
  * @example
  * ```tsx
- * // For dynamic URLs from CMS or user input
- * <Link href={asRoute(userProvidedUrl)}>Click me</Link>
+ * // For dynamic internal paths from CMS or merchant storefront scoping
+ * <Link href={asRoute(`/${merchantSlug}/${pageSlug}`)}>Read more</Link>
  * ```
  */
 export function asRoute(url: string): Route {

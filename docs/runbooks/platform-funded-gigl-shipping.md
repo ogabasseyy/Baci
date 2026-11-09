@@ -25,5 +25,5 @@ SELECT order_id, status FROM public.merchant_shipping_charges
 WHERE funding_source = 'platform' AND status IN ('booked','needs_reconciliation');
 ```
 
-Confirm cancellation with GIG, then set the charge `status = 'refunded'` as postgres
+Confirm cancellation with GIG, then set the charge as postgres: `UPDATE public.merchant_shipping_charges SET status = 'refunded', failure_code = 'PROVIDER_CANCELLED_MANUAL', refunded_at = now(), updated_at = now() WHERE id = '<charge id>' AND funding_source = 'platform';`
 (no wallet movement; the CHECK forbids wallet transaction ids on platform charges).

@@ -174,6 +174,7 @@ export function ShipmentFlowGiglPanel({
       {selected &&
       quote &&
       wallet &&
+      !wallet.paidByBaci &&
       !wallet.canBook &&
       !fundingAccount &&
       state !== 'funding_pending' ? (

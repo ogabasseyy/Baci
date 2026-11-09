@@ -146,8 +146,9 @@ jobs:
         env:
           TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
           TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo lint --affected
           else
             pnpm turbo lint
@@ -174,12 +175,28 @@ jobs:
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pnpm turbo typecheck --affected
+          # CI type-checks the application graph only: the full web program
+          # (including ~9k test files) peaks near 11 GB and is killed on the
+          # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
+          # delegates to the full `typecheck` for every other package; the full
+          # `pnpm turbo typecheck` stays available locally.
+          set -o pipefail
+          LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
+          STATUS=0
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            pnpm turbo typecheck:ci --affected 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
-            pnpm turbo typecheck
+            pnpm turbo typecheck:ci 2>&1 | tee "$LOG_FILE" || STATUS=$?
           fi
+          {
+            echo "### Typecheck budget"
+            echo '```'
+            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
 
   quality-test:
     name: Quality Gate - Test

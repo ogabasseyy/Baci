@@ -23,7 +23,8 @@
     "check:module-size": "node ./scripts/check-module-size.mjs",
     "lint": "biome check .",
     "test": "node --test config/expo-tab-preload.node-test.mjs && vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:ci": "pnpm run typecheck"
   },
   "dependencies": {
     "@baci/shared": "workspace:*",

@@ -51,6 +51,11 @@ out=$(run_gate "$T/t4")
 [ "$(cat "$CHECK_LOG")" = "$T/wtB" ] || fail "edit in B should check B"
 printf '%s' "$out" | jq -e '.decision=="block"' >/dev/null || fail "B failure should block"
 
+# 4b. missing transcript -> falls back to the starting worktree, not a silent skip
+: > "$CHECK_LOG"
+printf '{"transcript_path":"%s"}' "$T/nope" | CLAUDE_PROJECT_DIR="$T/wtA" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
+[ "$(cat "$CHECK_LOG")" = "$T/wtA" ] || fail "missing transcript should check the starting worktree"
+
 # 5. stop_hook_active -> allow immediately
 : > "$CHECK_LOG"
 out=$(printf '{"stop_hook_active":true,"transcript_path":"%s"}' "$T/t4" | bash "$HOOK_DIR/quality-gate.sh" 2>/dev/null)

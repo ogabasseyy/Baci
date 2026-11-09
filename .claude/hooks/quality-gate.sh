@@ -29,6 +29,17 @@ while IFS= read -r wt; do
   [ -n "$wt" ] && WORKTREES+=("$wt")
 done < <("$HOOK_DIR/quality-gate-session-worktrees.sh" "$TRANSCRIPT" "$PROJECT_DIR")
 
+# No readable transcript: we cannot tell what the session did, so fall back to
+# the worktree the hook was started in (never another agent's, never a guess
+# by mtime) instead of silently disabling every check.
+if [ ${#WORKTREES[@]} -eq 0 ] && { [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; } && [ -d "$PROJECT_DIR" ]; then
+  top=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)
+  case "$top" in
+    "$HOME"/.codex/*|"$HOME"/Documents/Codex/*|"") ;;
+    *) WORKTREES+=("$top") ;;
+  esac
+fi
+
 if [ ${#WORKTREES[@]} -eq 0 ]; then
   echo "quality-gate: no worktree touched by this session; skipping checks" >&2
   exit 0

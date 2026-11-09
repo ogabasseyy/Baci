@@ -9,10 +9,16 @@ import type {
   OrderGiglQuote,
   OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
+import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
 } from './ShipmentOptionCard';
+
+// Typing in the search box must not overwrite the manual fields.
+function ignoreSearchText(_text: string) {
+  return undefined;
+}
 
 const formatPrice = (amount: number) =>
   formatMerchantPrice(amount, { payout_currency: 'NGN' });
@@ -151,6 +157,19 @@ export function ShipmentFlowGiglPanel({
         title="Ship with GIG"
       />
 
+      {missingFields.includes('address') ? (
+        <CheckoutRecoveryAddressInput
+          accessibilityLabel="Search shipping address"
+          address={addressDraft.address ?? ''}
+          onSearchChange={ignoreSearchText}
+          onSelect={(place) => {
+            onAddressFieldChange('address', place.address);
+            if (place.city) onAddressFieldChange('city', place.city);
+            if (place.state) onAddressFieldChange('state', place.state);
+          }}
+          placeholder="Search delivery address"
+        />
+      ) : null}
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>

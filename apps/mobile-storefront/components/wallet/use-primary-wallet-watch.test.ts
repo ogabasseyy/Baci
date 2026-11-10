@@ -12,6 +12,11 @@ import { PRIMARY_CREDIT_POLL_INTERVAL_MS } from './use-primary-wallet-credit-pol
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+// The unknown-answer retry has its own tests; isolate the credit poll here.
+const mockUnknownRetry = jest.fn();
+jest.mock('./use-primary-wallet-unknown-retry', () => ({
+  usePrimaryWalletUnknownRetry: (input: unknown) => mockUnknownRetry(input),
+}));
 
 const base: WalletData = { balance: 900, loyalty_points: 0 };
 type Props = {
@@ -56,6 +61,17 @@ describe('usePrimaryWalletWatch', () => {
       });
     }
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-checks on its own only while the PiggyVest answer is unknown', () => {
+    const { rerender } = setup({ wallet: ready });
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: false, scopeKey: 'user-a:m1' })
+    );
+    rerender({ wallet: unavailable });
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: true, scopeKey: 'user-a:m1' })
+    );
   });
 
   it('keeps the balance while the wallet has no data at all', () => {

@@ -277,4 +277,27 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
   });
+
+  it('hands a deferred PiggyVest head start to the wallet instead of the transfer sheet', async () => {
+    const setCreatedGoalId = jest.fn();
+    const onContinueInWallet = jest.fn();
+    const input = createInput({
+      deferInitialContribution: true,
+      effectiveInitialContribution: 10000,
+      onContinueInWallet,
+      setCreatedGoalId,
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    // The plan is created without debiting the legacy wallet...
+    expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ initialContributionAmount: 0 })
+    );
+    // ...and the head start moves from the wallet's Add to savings sheet.
+    expect(onContinueInWallet).toHaveBeenCalledWith('goal-1', 10000);
+    expect(input.setShowTransferModal).not.toHaveBeenCalledWith(true);
+    expect(input.setShowSuccessModal).not.toHaveBeenCalled();
+    expect(setCreatedGoalId).not.toHaveBeenCalled();
+  });
 });

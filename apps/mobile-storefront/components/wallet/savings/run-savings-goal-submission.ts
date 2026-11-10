@@ -30,6 +30,12 @@ export type UseStartSavingsSubmitInput = {
   contributionValue: number;
   createdGoalId?: string | null;
   deferInitialContribution?: boolean;
+  /**
+   * With a deferred first contribution: instead of the bank-transfer sheet,
+   * hand the created goal and its head start to the wallet, which moves the
+   * money through PiggyVest.
+   */
+  onContinueInWallet?: (goalId: string, amount: number) => void;
   effectiveInitialContribution: number;
   frequency: SavingsFrequency;
   fundingAccount: FundingAccount;
@@ -157,6 +163,16 @@ export async function runSavingsGoalSubmission(
       }
     }
     if (!isCurrent()) return;
+    if (input.deferInitialContribution && input.onContinueInWallet) {
+      input.setShowFundingModal(false);
+      input.setShowPreviewModal(false);
+      input.setFormError(null);
+      input.onContinueInWallet(
+        result.goalId,
+        input.effectiveInitialContribution
+      );
+      return;
+    }
     if (input.deferInitialContribution) {
       input.setCreatedGoalId?.(result.goalId);
       input.setShowFundingModal(false);

@@ -17,6 +17,7 @@ export function useStartSavingsFormFlow({
   contributionValue,
   initialContributionEnabled,
   initialContributionValue,
+  primaryWallet = false,
   refetch,
   selectedFundingOption,
   selectedPaymentMethodId,
@@ -38,6 +39,8 @@ export function useStartSavingsFormFlow({
   contributionValue: number;
   initialContributionEnabled: boolean;
   initialContributionValue: number;
+  /** The customer's spendable wallet is their PiggyVest main wallet. */
+  primaryWallet?: boolean;
   refetch: () => Promise<unknown>;
   selectedFundingOption: SavingsFundingOption;
   selectedPaymentMethodId: string | null | undefined;
@@ -54,6 +57,7 @@ export function useStartSavingsFormFlow({
   sourceMode: SavingsSourceMode;
   submitSavingsGoal: (options?: {
     deferInitialContribution?: boolean;
+    continueInWallet?: boolean;
   }) => Promise<void>;
   targetValue: number;
 }) {
@@ -106,6 +110,21 @@ export function useStartSavingsFormFlow({
 
     if (selectedFundingOption === 'bank_transfer') {
       await submitSavingsGoal({ deferInitialContribution: true });
+      return;
+    }
+
+    // Plan creation can only debit the legacy wallet. A PiggyVest head start
+    // is moved after the plan exists, from the wallet's Add to savings sheet
+    // (which sets up the plan's savings wallet and asks for the wallet PIN).
+    if (
+      primaryWallet &&
+      initialContributionEnabled &&
+      initialContributionValue > 0
+    ) {
+      await submitSavingsGoal({
+        deferInitialContribution: true,
+        continueInWallet: true,
+      });
       return;
     }
 

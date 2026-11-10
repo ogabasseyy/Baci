@@ -1,16 +1,22 @@
 import {
+  recallPrimaryFundingAccount,
+  rememberPrimaryFundingAccount,
+} from './primary-funding-account-memory';
+import {
   readPrimaryFundingAccount,
   type SettledPrimaryFundingAccount,
 } from './resolve-wallet-funding-account';
 
 // The primary provider probe may take up to its 30s network timeout;
 // the wallet load must never wait that long for one funding rail. A
-// stalled probe settles as unknown (surfaced as no account, never a
-// possibly superseded legacy DVA) while the rest of the load
-// proceeds; the next load refetches.
+// stalled or failed probe settles as unknown (never a possibly superseded
+// legacy DVA) while the rest of the load proceeds. Unknown falls back to
+// the last confirmed account read from moments ago (an earlier load, a late
+// answer, or the setup sheet's own check), so a slow PiggyVest never shows a
+// confirmed customer "Create account number" or a ₦0 balance.
 export const PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS = 5000;
 
-export function readPrimaryFundingAccountSoon(
+export async function readPrimaryFundingAccountSoon(
   merchantId: string,
   userId: string
 ): Promise<SettledPrimaryFundingAccount> {
@@ -21,12 +27,15 @@ export function readPrimaryFundingAccountSoon(
       PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
     );
   });
-  return Promise.race([
-    readPrimaryFundingAccount(merchantId, userId).finally(() => {
-      if (timer !== undefined) clearTimeout(timer);
-    }),
-    timeout,
-  ]);
+  const read = readPrimaryFundingAccount(merchantId, userId).then((value) => {
+    if (timer !== undefined) clearTimeout(timer);
+    // Every answer, on time or late, updates the last confirmed read.
+    rememberPrimaryFundingAccount(merchantId, userId, value);
+    return value;
+  });
+  const settled = await Promise.race([read, timeout]);
+  if (settled.status !== 'unavailable') return settled;
+  return recallPrimaryFundingAccount(merchantId, userId) ?? settled;
 }
 
 /** Marks a transient primary read failure, as opposed to an authoritative answer. */

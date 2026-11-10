@@ -50,6 +50,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
   const submitSavingsGoal = async (options?: {
     deferInitialContribution?: boolean;
+    continueInWallet?: boolean;
   }) => {
     if (submitInFlightRef.current) {
       return;
@@ -69,6 +70,19 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         ...input,
         deferInitialContribution:
           options?.deferInitialContribution ?? input.deferInitialContribution,
+        // The head start moves through PiggyVest from the wallet's Add to
+        // savings sheet, prefilled with the amount the customer chose.
+        onContinueInWallet: options?.continueInWallet
+          ? (goalId: string, amount: number) =>
+              router.replace({
+                pathname: '/wallet',
+                params: {
+                  action: 'savings',
+                  savingsGoalId: goalId,
+                  savingsAmount: String(amount),
+                },
+              })
+          : undefined,
       },
       validation,
       () => context.active

@@ -10,6 +10,11 @@ import Colors from '@/constants/Colors';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 
+const mockRemember = jest.fn();
+jest.mock('@/hooks/primary-funding-account-memory', () => ({
+  rememberPrimaryFundingAccount: (...args: unknown[]) => mockRemember(...args),
+}));
+
 jest.mock('@/lib/piggyvest-primary-wallet', () => ({
   piggyvestPrimaryWalletApi: { create: jest.fn(), read: jest.fn() },
 }));
@@ -71,6 +76,16 @@ it('checks for the account number by itself and finishes when it is ready', asyn
     });
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    // The confirmed read is handed to the wallet reload, so a slow reload
+    // cannot leave the card on "Create account number".
+    expect(mockRemember).toHaveBeenCalledWith(
+      '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      'user-a-id',
+      expect.objectContaining({
+        status: 'ready',
+        account: expect.objectContaining({ accountNumber: '0123456789' }),
+      })
+    );
   } finally {
     jest.useRealTimers();
   }

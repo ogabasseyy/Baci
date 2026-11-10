@@ -7,6 +7,11 @@ import {
   jest,
 } from '@jest/globals';
 import {
+  forgetRememberedPrimaryFundingAccounts,
+  REMEMBERED_PRIMARY_READ_TTL_MS,
+  rememberPrimaryFundingAccount,
+} from './primary-funding-account-memory';
+import {
   PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS,
   primaryBalanceField,
   primaryUnavailableField,
@@ -16,6 +21,12 @@ import {
 const mockRead = jest.fn<() => Promise<unknown>>();
 jest.mock('./resolve-wallet-funding-account', () => ({
   readPrimaryFundingAccount: () => mockRead(),
+}));
+let mockAuthUserId: string | null = 'u';
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: {
+    getState: () => ({ user: mockAuthUserId ? { id: mockAuthUserId } : null }),
+  },
 }));
 
 const account = {
@@ -57,6 +68,8 @@ describe('readPrimaryFundingAccountSoon', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockRead.mockReset();
+    mockAuthUserId = 'u';
+    forgetRememberedPrimaryFundingAccounts();
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -74,6 +87,108 @@ describe('readPrimaryFundingAccountSoon', () => {
     const settled = readPrimaryFundingAccountSoon('m', 'u');
     jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
     await expect(settled).resolves.toEqual({ status: 'unavailable' });
+  });
+
+  it('keeps a late confirmed account and answers the next slow load with it', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    mockRead.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const first = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await expect(first).resolves.toEqual({ status: 'unavailable' });
+    answer({ status: 'ready', account, balanceKobo: 5_000_000 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The next load runs slow too: the late answer stands in for it.
+    mockRead.mockReturnValueOnce(new Promise(() => undefined));
+    const second = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await expect(second).resolves.toEqual({
+      status: 'ready',
+      account,
+      balanceKobo: 5_000_000,
+    });
+  });
+
+  it('falls back to a confirmed read handed over by the setup sheet', async () => {
+    rememberPrimaryFundingAccount('m', 'u', {
+      status: 'ready',
+      account,
+      balanceKobo: 0,
+    });
+    mockRead.mockResolvedValue({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'ready',
+      account,
+      balanceKobo: 0,
+    });
+  });
+
+  it('prefers any fresh answer over the remembered one', async () => {
+    rememberPrimaryFundingAccount('m', 'u', {
+      status: 'ready',
+      account,
+      balanceKobo: 1,
+    });
+    mockRead.mockResolvedValueOnce({
+      status: 'ready',
+      account,
+      balanceKobo: 2,
+    });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'ready',
+      account,
+      balanceKobo: 2,
+    });
+    // An authoritative not ready clears it: a closed account never returns.
+    mockRead.mockResolvedValueOnce({ status: 'not_ready' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'not_ready',
+    });
+    mockRead.mockResolvedValueOnce({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('never remembers less than a confirmed account', async () => {
+    rememberPrimaryFundingAccount('m', 'u', {
+      status: 'ready',
+      account: null,
+      balanceKobo: null,
+    });
+    mockRead.mockResolvedValue({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('ignores a remembered read after an account switch or once it is old', async () => {
+    rememberPrimaryFundingAccount('m', 'u', {
+      status: 'ready',
+      account,
+      balanceKobo: 1,
+    });
+    mockAuthUserId = 'someone-else';
+    mockRead.mockResolvedValue({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'unavailable',
+    });
+
+    mockAuthUserId = 'u';
+    rememberPrimaryFundingAccount('m', 'u', {
+      status: 'ready',
+      account,
+      balanceKobo: 1,
+    });
+    jest.advanceTimersByTime(REMEMBERED_PRIMARY_READ_TTL_MS + 1);
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'unavailable',
+    });
   });
 });
 

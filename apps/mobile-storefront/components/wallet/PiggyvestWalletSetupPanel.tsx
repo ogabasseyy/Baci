@@ -3,6 +3,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { rememberPrimaryFundingAccount } from '@/hooks/primary-funding-account-memory';
 import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -97,8 +98,17 @@ export function PiggyvestWalletSetupPanel({
         requestUserId ?? undefined
       );
       if (authUserIdRef.current !== requestUserId) return;
-      if (result.account) onRefresh();
-      else setAwaitingAccount(true);
+      if (result.account) {
+        // Hand this confirmed read to the wallet reload below, so the sheet
+        // closes even when that reload's own PiggyVest read runs slow.
+        if (requestUserId)
+          rememberPrimaryFundingAccount(merchantId, requestUserId, {
+            status: 'ready',
+            account: result.account,
+            balanceKobo: result.balanceKobo ?? null,
+          });
+        onRefresh();
+      } else setAwaitingAccount(true);
     } catch (error) {
       if (authUserIdRef.current !== requestUserId) return;
       if (requestUserId && isPrimaryWalletReviewRequired(error)) {

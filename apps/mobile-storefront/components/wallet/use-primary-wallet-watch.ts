@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { WalletData } from '@/hooks/wallet-query';
 import { usePrimaryWalletCreditPoll } from './use-primary-wallet-credit-poll';
+import { usePrimaryWalletUnknownRetry } from './use-primary-wallet-unknown-retry';
 
 interface PrimaryWalletWatchInput {
   wallet: WalletData | undefined;
@@ -46,6 +47,11 @@ export function usePrimaryWalletWatch({
     wallet && kobo !== null && typeof wallet.primary_balance_kobo !== 'number'
       ? { ...wallet, primary_balance_kobo: kobo }
       : wallet;
+  usePrimaryWalletUnknownRetry({
+    unknown: wallet?.primary_unavailable === true,
+    scopeKey,
+    refetch,
+  });
   usePrimaryWalletCreditPoll({
     balanceKobo: kobo,
     enabled: showFundPanel && kobo !== null,

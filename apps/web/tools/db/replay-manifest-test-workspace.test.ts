@@ -1,6 +1,6 @@
 import { access, rm } from 'node:fs/promises';
 import { setImmediate as nextEventLoopTurn } from 'node:timers/promises';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { createReplayManifestTestWorkspace } from './replay-manifest-test-workspace.test-support';
 
 it('keeps a workspace until its timed-out test operation finishes', async () => {
@@ -8,6 +8,7 @@ it('keeps a workspace until its timed-out test operation finishes', async () => 
     rm(root, { force: true, recursive: true })
   );
   const workspace = createReplayManifestTestWorkspace(removeRoot);
+  onTestFinished(() => workspace.cleanUp(), 120_000);
   const root = await workspace.copyWorkspace();
   let release!: () => void;
   const paused = new Promise<void>((resolve) => {
@@ -41,6 +42,13 @@ it('retains a failed removal for a later cleanup retry', async () => {
     .mockRejectedValueOnce(new Error('temporary removal failure'))
     .mockImplementation((root) => rm(root, { force: true, recursive: true }));
   const workspace = createReplayManifestTestWorkspace(removeRoot);
+  onTestFinished(async () => {
+    removeRoot.mockReset();
+    removeRoot.mockImplementation((root) =>
+      rm(root, { force: true, recursive: true })
+    );
+    await workspace.cleanUp();
+  }, 120_000);
   const root = await workspace.copyWorkspace();
   try {
     await expect(workspace.cleanUp()).rejects.toThrow(

@@ -336,6 +336,11 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setFormError).toHaveBeenLastCalledWith(
       PLAN_CREATED_HEAD_START_PENDING
     );
+    // Said where the customer will see it, not only in the form.
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Plan created',
+      PLAN_CREATED_HEAD_START_PENDING
+    );
   });
 
   it('never prefills the head start on another plan when the reload fails', async () => {
@@ -354,6 +359,11 @@ describe('runSavingsGoalSubmission', () => {
     expect(mockCreateSavingsGoal).toHaveBeenCalled();
     expect(onContinueInWallet).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenLastCalledWith(
+      PLAN_CREATED_HEAD_START_PENDING
+    );
+    // Said where the customer will see it, not only in the form.
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Plan created',
       PLAN_CREATED_HEAD_START_PENDING
     );
   });

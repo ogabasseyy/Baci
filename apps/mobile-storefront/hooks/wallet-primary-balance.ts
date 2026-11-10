@@ -46,6 +46,9 @@ export async function readPrimaryFundingAccountSoon(
       if (timedOut && stored) announceLatePrimaryAnswer(merchantId, userId);
       return value;
     });
+  // Promise.race already handles a read that fails after the budget; the
+  // explicit no-op handler just makes that visible.
+  read.catch(() => undefined);
   const settled = await Promise.race([read, timeout]);
   if (settled.status !== 'unavailable') return settled;
   const recalled = recallPrimaryFundingAccount(merchantId, userId);

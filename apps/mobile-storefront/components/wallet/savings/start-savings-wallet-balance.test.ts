@@ -3,6 +3,7 @@ import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import {
   FRESH_PRIMARY_BALANCE_TIMEOUT_MS,
   readFreshPrimaryBalanceKobo,
+  wholeNairaHeadStart,
 } from './start-savings-wallet-balance';
 
 jest.mock('@/lib/piggyvest-primary-wallet', () => ({
@@ -70,5 +71,18 @@ describe('readFreshPrimaryBalanceKobo', () => {
     mockSignedIn = false;
     expect(await readFreshPrimaryBalanceKobo('m')).toBeNull();
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe('wholeNairaHeadStart', () => {
+  it.each([
+    [10_000, 10_000],
+    [10_000.1, 10_001],
+    [10_000.01, 10_001],
+    // A float artifact never asks for an extra naira.
+    [20_000.0000001, 20_000],
+    [19_999.9999999, 20_000],
+  ])('moves %p naira as %p whole naira', (amount, expected) => {
+    expect(wholeNairaHeadStart(amount)).toBe(expected);
   });
 });

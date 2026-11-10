@@ -206,6 +206,12 @@ export async function runSavingsGoalSubmission(
       if (!isCurrent()) return;
       if (!loaded) {
         input.setFormError(PLAN_CREATED_HEAD_START_PENDING);
+        // The form stays open with no sheet, so say it where it is seen.
+        showAppAlert({
+          title: 'Plan created',
+          message: PLAN_CREATED_HEAD_START_PENDING,
+          variant: 'info',
+        });
         return;
       }
       input.onContinueInWallet(

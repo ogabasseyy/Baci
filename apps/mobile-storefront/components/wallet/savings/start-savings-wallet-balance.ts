@@ -8,6 +8,14 @@ export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
   'Your head start cannot be more than the plan target.';
 export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
   "We couldn't check your wallet balance just now. Please try again.";
+/**
+ * The whole naira the wallet's Add to savings sheet will move for a head
+ * start: rounded to kobo first (dropping float artifacts), then up to naira.
+ */
+export function wholeNairaHeadStart(amount: number): number {
+  return Math.ceil(Math.round(amount * 100) / 100);
+}
+
 /** Same budget as the wallet load: never hang the form on a slow read. */
 export const FRESH_PRIMARY_BALANCE_TIMEOUT_MS = 5000;
 
@@ -45,10 +53,11 @@ export async function readFreshPrimaryBalanceKobo(
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), FRESH_PRIMARY_BALANCE_TIMEOUT_MS);
     });
-    const snapshot = await Promise.race([
-      piggyvestPrimaryWalletApi.read(merchantId, userId),
-      timeout,
-    ]);
+    const read = piggyvestPrimaryWalletApi.read(merchantId, userId);
+    // Promise.race already handles a read that fails after the budget; the
+    // explicit no-op handler just makes that visible.
+    read.catch(() => undefined);
+    const snapshot = await Promise.race([read, timeout]);
     if (!snapshot) return null;
     const { account, balanceKobo } = snapshot;
     if (

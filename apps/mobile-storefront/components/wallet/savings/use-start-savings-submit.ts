@@ -15,6 +15,7 @@ import {
   PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
   readFreshPrimaryBalanceKobo,
+  wholeNairaHeadStart,
 } from './start-savings-wallet-balance';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 import { validateSavingsInput } from './validate-savings-input';
@@ -95,7 +96,8 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       }
       // The wallet's Add to savings sheet moves whole naira, rounding the
       // prefilled amount up: check the amount that will actually move.
-      const headStartKobo = Math.ceil(input.effectiveInitialContribution) * 100;
+      const headStartKobo =
+        wholeNairaHeadStart(input.effectiveInitialContribution) * 100;
       const refusal =
         balanceKobo === null
           ? PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
@@ -125,7 +127,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
                 params: {
                   action: 'savings',
                   savingsGoalId: goalId,
-                  savingsAmount: String(amount),
+                  savingsAmount: String(wholeNairaHeadStart(amount)),
                 },
               })
           : undefined,

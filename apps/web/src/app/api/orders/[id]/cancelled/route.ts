@@ -53,6 +53,7 @@ export async function POST(
       );
     }
     const cancellationReason = parsedBody.data.reason;
+    const refundMode = parsedBody.data.refund;
 
     // Get merchant ID
     const merchantId = await getMerchantIdForApiUser(auth.supabase);
@@ -98,6 +99,7 @@ export async function POST(
       await supabase.rpc('cancel_order_as_merchant', {
         p_order_id: id,
         p_reason: cancellationReason,
+        p_refund_mode: refundMode,
       });
     if (cancellationError) {
       // PostgREST can wrap the raised sentinel with context, so match
@@ -275,7 +277,11 @@ export async function POST(
         success: true,
         alreadyCancelled,
         message: 'Cancellation completed; side effects are queued',
-        sideEffects: { customerEmail: 'queued', refund: 'queued_if_required' },
+        sideEffects: {
+          customerEmail: 'queued',
+          refund:
+            refundMode === 'manual' ? 'manual_required' : 'queued_if_required',
+        },
       },
       { status: 202 }
     );

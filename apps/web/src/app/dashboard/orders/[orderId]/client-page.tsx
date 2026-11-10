@@ -38,6 +38,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { getAutomaticCancelRefundAmount } from '@/lib/orders/get-automatic-cancel-refund-amount';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
   type Order,
@@ -48,6 +49,10 @@ import { getOrderItems, type OrderDetailsItem } from '../order-items';
 import { getOrderSourceLabel } from '../order-source-display';
 import { OrderSourceIcon } from '../order-source-icon';
 import { StatusBadge } from '../status-badge';
+import {
+  CancelOrderDialog,
+  type CancelRefundChoice,
+} from './cancel-order-dialog';
 import ConfirmInsuranceDialog, {
   type ConfirmOrderPayload,
 } from './confirm-insurance-dialog';
@@ -133,6 +138,7 @@ export default function OrderDetailsClientPage({
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = useState(false);
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
   if (!order) {
     return null;
@@ -152,14 +158,23 @@ export default function OrderDetailsClientPage({
     );
   };
 
-  const handleUpdateStatus = async (newStatus: ShippingStatus) => {
+  const handleUpdateStatus = async (
+    newStatus: ShippingStatus,
+    refund?: CancelRefundChoice
+  ) => {
     // If confirming ('Processing'), check if we need the new dialog
     if (newStatus === 'Processing' && order.shippingStatus === 'Pending') {
       setIsConfirmationDialogOpen(true);
       return;
     }
 
-    if (newStatus === 'Canceled') {
+    if (newStatus === 'Canceled' && refund === undefined) {
+      // A paid order with money the worker could refund asks how to refund
+      // in a dialog; everything else keeps the plain confirmation.
+      if (getAutomaticCancelRefundAmount(order) > 0) {
+        setIsCancelDialogOpen(true);
+        return;
+      }
       const warning =
         order.paymentStatus === 'Paid'
           ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
@@ -178,7 +193,11 @@ export default function OrderDetailsClientPage({
       if (newStatus === 'Canceled') {
         await apiPost<{ success: boolean }>(
           `/api/orders/${order.id}/cancelled`,
-          { cancelled_by: 'merchant', confirm_cancellation: true }
+          {
+            cancelled_by: 'merchant',
+            confirm_cancellation: true,
+            ...(refund && { refund }),
+          }
         );
         result = { order: { shipping_status: 'cancelled' } };
       } else {
@@ -202,6 +221,10 @@ export default function OrderDetailsClientPage({
       }));
       toast({
         title: `Order status updated to ${newStatus}`,
+        ...(refund === 'manual' && {
+          description:
+            'Refund pending. Record the refund from the Refund card once you have paid the customer.',
+        }),
       });
     } catch (error) {
       toast({
@@ -329,6 +352,16 @@ export default function OrderDetailsClientPage({
         onClose={() => setIsConfirmationDialogOpen(false)}
         onConfirm={handleConfirmationSubmit}
         orderItems={displayItems}
+      />
+      <CancelOrderDialog
+        isOpen={isCancelDialogOpen}
+        onClose={() => setIsCancelDialogOpen(false)}
+        currency={orderCurrency}
+        refundAmount={getAutomaticCancelRefundAmount(order)}
+        onConfirm={async (refund) => {
+          await handleUpdateStatus('Canceled', refund);
+          setIsCancelDialogOpen(false);
+        }}
       />
       <FulfillmentDialog
         isOpen={isFulfillmentDialogOpen}

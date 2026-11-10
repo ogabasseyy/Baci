@@ -211,21 +211,59 @@ describe('createOrderDetailsStatusActions', () => {
     expect(updateStatus).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Cancel paid order?',
-      expect.stringContaining('starts the customer refund process'),
+      expect.stringContaining('how the customer gets their money back'),
       expect.arrayContaining([
         expect.objectContaining({ style: 'cancel', text: 'Keep Order' }),
-        expect.objectContaining({ style: 'destructive', text: 'Cancel Order' }),
+        expect.objectContaining({
+          style: 'destructive',
+          text: 'Cancel and refund via Paystack',
+        }),
+        expect.objectContaining({
+          style: 'destructive',
+          text: 'Cancel only (I will refund them)',
+        }),
       ])
     );
     expect(vi.mocked(Alert.alert).mock.calls[0]?.[1]).toContain(
       'instead of cancelling again'
     );
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
-    confirmation?.find((button) => button.text === 'Cancel Order')?.onPress?.();
+    confirmation
+      ?.find((button) => button.text === 'Cancel and refund via Paystack')
+      ?.onPress?.();
     await vi.waitFor(() => {
       expect(setSuccessModal).toHaveBeenCalledWith(
         expect.objectContaining({
           subMessage: expect.stringContaining('Check the refund status'),
+        })
+      );
+    });
+    expect(updateStatus).toHaveBeenCalledWith({
+      orderId: expect.any(String),
+      refund: 'automatic',
+      status: 'cancelled',
+    });
+  });
+
+  it('cancels a paid order without an automatic refund when the merchant chooses to refund them', async () => {
+    const { actions, setSuccessModal, updateStatus } =
+      createPaidOrderStatusActions();
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    confirmation
+      ?.find((button) => button.text === 'Cancel only (I will refund them)')
+      ?.onPress?.();
+
+    await vi.waitFor(() => {
+      expect(updateStatus).toHaveBeenCalledWith({
+        orderId: expect.any(String),
+        refund: 'manual',
+        status: 'cancelled',
+      });
+      expect(setSuccessModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subMessage: expect.stringContaining('refund is pending'),
         })
       );
     });

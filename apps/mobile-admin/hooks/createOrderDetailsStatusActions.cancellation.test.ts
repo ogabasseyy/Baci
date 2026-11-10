@@ -53,7 +53,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund via Paystack'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -61,6 +61,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     });
     expect(updateStatus).toHaveBeenCalledWith({
       orderId: 'order-paid',
+      refund: 'automatic',
       status: 'cancelled',
     });
   });
@@ -78,7 +79,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund via Paystack'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -101,7 +102,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund via Paystack'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -122,7 +123,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund via Paystack'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {
@@ -143,7 +144,7 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     await actions.handleStatusUpdate('cancelled');
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     const cancelOrder = confirmation?.find(
-      (button) => button.text === 'Cancel Order'
+      (button) => button.text === 'Cancel and refund via Paystack'
     );
     cancelOrder?.onPress?.();
     await vi.waitFor(() => {

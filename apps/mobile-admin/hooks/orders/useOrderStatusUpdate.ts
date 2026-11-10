@@ -60,8 +60,13 @@ interface OrderStatusContext {
   previousOrders: [readonly unknown[], InfiniteData<OrdersPage> | undefined][];
 }
 
+export type CancellationRefundChoice = 'automatic' | 'manual';
+
 interface OrderStatusVariables {
   orderId: string;
+  // Cancellation only. Omitted means the server default (automatic refund),
+  // which is also what builds that predate this field get.
+  refund?: CancellationRefundChoice;
   status: ShippingStatus;
 }
 
@@ -74,7 +79,8 @@ function unconfirmedShippingResult(): OrderStatusUpdateError {
 
 async function updateOrderStatus(
   orderId: string,
-  status: ShippingStatus
+  status: ShippingStatus,
+  refund?: CancellationRefundChoice
 ): Promise<Order> {
   const isCancellation = status === 'cancelled';
   const url = `${BASE_URL}/api/orders/${orderId}${isCancellation ? '/cancelled' : ''}`;
@@ -91,7 +97,11 @@ async function updateOrderStatus(
       {
         body: JSON.stringify({
           ...(isCancellation
-            ? { cancelled_by: 'merchant', confirm_cancellation: true }
+            ? {
+                cancelled_by: 'merchant',
+                confirm_cancellation: true,
+                ...(refund && { refund }),
+              }
             : { shipping_status: status }),
         }),
         headers: {
@@ -210,12 +220,12 @@ export function useUpdateOrderStatus() {
   const { merchant } = useMerchant();
 
   return useMutation<Order, Error, OrderStatusVariables, OrderStatusContext>({
-    mutationFn: ({ orderId, status }) => {
+    mutationFn: ({ orderId, refund, status }) => {
       if (!merchant?.id) {
         throw new Error('Merchant ID is required');
       }
 
-      return updateOrderStatus(orderId, status);
+      return updateOrderStatus(orderId, status, refund);
     },
     mutationKey: ['updateOrderStatus'],
     retry: false,

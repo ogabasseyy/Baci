@@ -113,6 +113,40 @@ describe('useUpdateOrderStatus', () => {
     );
   });
 
+  it('sends the chosen cancellation refund mode to the audited endpoint', async () => {
+    networkMock.getSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+    });
+    networkMock.fetch.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ success: true }),
+    });
+
+    const mutation = useUpdateOrderStatus() as unknown as {
+      mutationFn: (vars: {
+        orderId: string;
+        refund?: 'automatic' | 'manual';
+        status: string;
+      }) => Promise<unknown>;
+    };
+    await mutation.mutationFn({
+      orderId: 'order-1',
+      refund: 'manual',
+      status: 'cancelled',
+    });
+
+    expect(networkMock.fetch).toHaveBeenCalledWith(
+      'https://example.test/api/orders/order-1/cancelled',
+      expect.objectContaining({
+        body: JSON.stringify({
+          cancelled_by: 'merchant',
+          confirm_cancellation: true,
+          refund: 'manual',
+        }),
+      })
+    );
+  });
+
   it('uses the audited cancellation endpoint instead of the generic patch route', async () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },

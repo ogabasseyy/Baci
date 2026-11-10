@@ -147,6 +147,7 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('cancel_order_as_merchant', {
       p_order_id: 'order-1',
       p_reason: 'Customer requested cancellation',
+      p_refund_mode: 'automatic',
     });
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       'merchant-1',
@@ -169,6 +170,54 @@ describe('POST /api/orders/[id]/cancelled', () => {
       message: 'Cancellation completed; side effects are queued',
       sideEffects: { customerEmail: 'queued', refund: 'queued_if_required' },
     });
+  });
+
+  it('passes a cancel-only choice to the RPC and reports a manual refund', async () => {
+    const { supabase } = createSupabase();
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({
+        cancelled_by: 'merchant',
+        confirm_cancellation: true,
+        refund: 'manual',
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(202);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'cancel_order_as_merchant',
+      expect.objectContaining({ p_refund_mode: 'manual' })
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      sideEffects: { customerEmail: 'queued', refund: 'manual_required' },
+    });
+  });
+
+  it('rejects an unknown refund choice before touching the database', async () => {
+    const { supabase } = createSupabase();
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({
+        cancelled_by: 'merchant',
+        confirm_cancellation: true,
+        refund: 'skip',
+      }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(400);
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it('does not queue or revalidate when the order is no longer cancellable', async () => {

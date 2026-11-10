@@ -241,6 +241,12 @@ DO $$ DECLARE v jsonb; BEGIN
   IF (v ->> 'staleUndelivered')::int <> 0 OR (v ->> 'deadLettered24h')::int <> 1 OR (v ->> 'healthy')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'dead-lettered notice not reported: %', v;
   END IF;
+  -- Unenrolling the merchant clears its share of the alarm at once.
+  UPDATE public.merchants SET premium_features = '["shared_cart"]' WHERE id = '11111111-1111-4111-8111-111111111111';
+  v := public.commerce_cart_publish_health();
+  IF (v ->> 'healthy')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'unenrolled merchant still trips the alarm: %', v;
+  END IF;
 END $$;
 
 -- 8. Privileges, asserted through the catalog.

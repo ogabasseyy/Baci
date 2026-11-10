@@ -36,7 +36,10 @@ AS $$
 DECLARE
   v_id text := pg_catalog.gen_random_uuid()::text;
   v_topic text := 'cart:' || p_merchant_id::text || ':' || p_cart_id::text;
-  -- Routing hint only: no cart contents ever enter a notice.
+  -- Routing hint only: no cart contents ever enter a notice. The id is
+  -- supplied here because realtime.send keeps a caller's `id` and only adds
+  -- one when the payload has none (confirmed against the production function
+  -- and with a live send on 2026-11-10).
   v_payload jsonb := pg_catalog.jsonb_build_object(
     'id', v_id,
     'merchantId', p_merchant_id,
@@ -192,8 +195,15 @@ REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
 -- Health reading for alerting: two counts, no cart or merchant identifiers.
 -- "Stale" is a notice for a live-update merchant still undelivered five
 -- minutes after it was written; with send-on-write and a 30-second sweep
--- that only happens when delivery is broken. Both counts read small partial
--- indexes, so the anon-callable reading stays cheap.
+-- that only happens when delivery is broken. Both counts cover merchants
+-- currently enrolled in live updates only, so unenrolling a merchant clears
+-- its share of the alarm at once. Both read small partial indexes.
+--
+-- The reading is deliberately callable with the public anon key (as
+-- get_merchant_signup_policy_health is): the monitor route must not use a
+-- service-role client, and the result is two platform-wide counts with no
+-- cart, shopper or merchant data. CRON_SECRET gates the alerting route, not
+-- the counts themselves.
 CREATE INDEX IF NOT EXISTS commerce_cart_events_dead_letter_idx
   ON public.commerce_cart_events (dead_letter_at)
   WHERE dead_letter_at IS NOT NULL;
@@ -221,7 +231,10 @@ AS $$
       (
         SELECT pg_catalog.count(*)
         FROM public.commerce_cart_events AS e
+        JOIN public.merchants AS m ON m.id = e.merchant_id
         WHERE e.dead_letter_at > pg_catalog.now() - interval '24 hours'
+          AND m.premium_features
+            @> '["shared_cart","shared_cart_realtime"]'::jsonb
       ) AS dead_lettered_24h
   )
   SELECT pg_catalog.jsonb_build_object(

@@ -216,7 +216,7 @@ describe('createOrderDetailsStatusActions', () => {
         expect.objectContaining({ style: 'cancel', text: 'Keep Order' }),
         expect.objectContaining({
           style: 'destructive',
-          text: 'Cancel and refund via Paystack',
+          text: 'Cancel and refund to original payment method',
         }),
         expect.objectContaining({
           style: 'destructive',
@@ -229,7 +229,10 @@ describe('createOrderDetailsStatusActions', () => {
     );
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     confirmation
-      ?.find((button) => button.text === 'Cancel and refund via Paystack')
+      ?.find(
+        (button) =>
+          button.text === 'Cancel and refund to original payment method'
+      )
       ?.onPress?.();
     await vi.waitFor(() => {
       expect(setSuccessModal).toHaveBeenCalledWith(

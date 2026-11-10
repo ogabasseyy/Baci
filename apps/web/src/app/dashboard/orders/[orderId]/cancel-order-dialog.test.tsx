@@ -18,11 +18,11 @@ function setup() {
 }
 
 describe('CancelOrderDialog', () => {
-  it('defaults to refunding via Paystack and shows the amount', async () => {
+  it('defaults to refunding the original payment method and shows the amount', async () => {
     const { onConfirm } = setup();
     expect(
       screen.getByRole('radio', {
-        name: /cancel and refund .*12,500.* to the customer via paystack/i,
+        name: /cancel and refund .*12,500.* to the customer's original payment method/i,
       })
     ).toBeChecked();
 
@@ -39,5 +39,21 @@ describe('CancelOrderDialog', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
     expect(onConfirm).toHaveBeenCalledWith('manual');
+  });
+
+  it('resets to the automatic default each time it reopens', async () => {
+    const props = {
+      currency: 'NGN',
+      onClose: vi.fn(),
+      onConfirm: vi.fn().mockResolvedValue(undefined),
+      refundAmount: 12500,
+    };
+    const { rerender } = render(<CancelOrderDialog {...props} isOpen />);
+    await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
+    rerender(<CancelOrderDialog {...props} isOpen={false} />);
+    rerender(<CancelOrderDialog {...props} isOpen />);
+    expect(
+      screen.getByRole('radio', { name: /cancel and refund/i })
+    ).toBeChecked();
   });
 });

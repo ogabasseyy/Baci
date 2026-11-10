@@ -20,6 +20,19 @@ describe('getAutomaticCancelRefundAmount', () => {
     ).toBe(8000);
   });
 
+  it('counts legs whose provider refund is pending or done, like the RPC', () => {
+    expect(
+      getAutomaticCancelRefundAmount({
+        paymentStatus: 'Paid',
+        total: 10000,
+        transactions: [
+          leg({ status: 'refund_pending' }),
+          leg({ status: 'refunded' }),
+        ],
+      })
+    ).toBe(10000);
+  });
+
   it('ignores internal, pending, and refund legs', () => {
     expect(
       getAutomaticCancelRefundAmount({

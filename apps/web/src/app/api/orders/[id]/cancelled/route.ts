@@ -115,7 +115,9 @@ export async function POST(
             ? 409
             : cancellationError.code === '42501'
               ? 403
-              : 500;
+              : cancellationError.code === '22023'
+                ? 400
+                : 500;
       return NextResponse.json(
         {
           error: paymentNeedsReconciliation
@@ -126,7 +128,9 @@ export async function POST(
                 ? 'Order not found'
                 : status === 403
                   ? 'You do not have permission to cancel this order.'
-                  : 'Failed to cancel order',
+                  : status === 400
+                    ? 'Invalid refund option.'
+                    : 'Failed to cancel order',
           code: paymentNeedsReconciliation
             ? 'PAYMENT_RECONCILIATION_REQUIRED'
             : status === 409

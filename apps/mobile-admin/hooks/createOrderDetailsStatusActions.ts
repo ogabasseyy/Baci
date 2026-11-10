@@ -166,7 +166,7 @@ export function createOrderDetailsStatusActions({
     const isPaid = order.payment_status === 'paid' || order.amount_paid > 0;
     if (isPaid) {
       // Paid orders choose how the customer is refunded. The default,
-      // first action keeps the automatic Paystack refund.
+      // first action keeps the automatic refund.
       Alert.alert(
         'Cancel paid order?',
         'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.',
@@ -180,7 +180,7 @@ export function createOrderDetailsStatusActions({
             },
           },
           {
-            text: 'Cancel and refund via Paystack',
+            text: 'Cancel and refund to original payment method',
             style: 'destructive',
             onPress: () => {
               void performStatusUpdate(newStatus, 'automatic');

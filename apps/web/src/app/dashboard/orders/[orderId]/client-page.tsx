@@ -161,11 +161,11 @@ export default function OrderDetailsClientPage({
   const handleUpdateStatus = async (
     newStatus: ShippingStatus,
     refund?: CancelRefundChoice
-  ) => {
+  ): Promise<boolean> => {
     // If confirming ('Processing'), check if we need the new dialog
     if (newStatus === 'Processing' && order.shippingStatus === 'Pending') {
       setIsConfirmationDialogOpen(true);
-      return;
+      return false;
     }
 
     if (newStatus === 'Canceled' && refund === undefined) {
@@ -173,13 +173,13 @@ export default function OrderDetailsClientPage({
       // in a dialog; everything else keeps the plain confirmation.
       if (getAutomaticCancelRefundAmount(order) > 0) {
         setIsCancelDialogOpen(true);
-        return;
+        return false;
       }
       const warning =
         order.paymentStatus === 'Paid'
           ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
           : 'Cancel this order and restore its tracked inventory?';
-      if (!window.confirm(warning)) return;
+      if (!window.confirm(warning)) return false;
     }
 
     try {
@@ -226,6 +226,7 @@ export default function OrderDetailsClientPage({
             'Refund pending. Record the refund from the Refund card once you have paid the customer.',
         }),
       });
+      return true;
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -235,6 +236,7 @@ export default function OrderDetailsClientPage({
             ? error.message
             : 'Failed to update order status',
       });
+      return false;
     }
   };
 
@@ -359,8 +361,10 @@ export default function OrderDetailsClientPage({
         currency={orderCurrency}
         refundAmount={getAutomaticCancelRefundAmount(order)}
         onConfirm={async (refund) => {
-          await handleUpdateStatus('Canceled', refund);
-          setIsCancelDialogOpen(false);
+          // Keep the dialog (and the merchant's choice) open on failure.
+          if (await handleUpdateStatus('Canceled', refund)) {
+            setIsCancelDialogOpen(false);
+          }
         }}
       />
       <FulfillmentDialog

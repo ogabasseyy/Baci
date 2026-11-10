@@ -75,7 +75,7 @@ BEGIN
 
   SELECT o.merchant_id, o.shipping_status, o.cancelled_at,
          o.payment_status, o.amount_paid, o.total,
-         o.cancellation_reason, o.cancelled_by
+         o.cancellation_reason, o.cancelled_by, o.cancellation_refund_mode
     INTO v_order
     FROM public.orders o
    WHERE o.id = p_order_id
@@ -298,16 +298,21 @@ BEGIN
   ) VALUES (
     v_order.merchant_id, p_order_id, v_actor, 'order.update',
     'customer_visible',
-    ARRAY['shipping_status', 'cancelled_at', 'cancellation_reason', 'cancelled_by'],
+    ARRAY[
+      'shipping_status', 'cancelled_at', 'cancellation_reason', 'cancelled_by',
+      'cancellation_refund_mode'
+    ],
     jsonb_build_object(
       'shipping_status', v_order.shipping_status,
       'cancelled_at', v_order.cancelled_at,
       'cancellation_reason', v_order.cancellation_reason,
-      'cancelled_by', v_order.cancelled_by
+      'cancelled_by', v_order.cancelled_by,
+      'cancellation_refund_mode', v_order.cancellation_refund_mode
     ),
     jsonb_build_object(
       'shipping_status', 'cancelled', 'cancelled_at', now(),
-      'cancellation_reason', v_reason, 'cancelled_by', 'merchant'
+      'cancellation_reason', v_reason, 'cancelled_by', 'merchant',
+      'cancellation_refund_mode', v_refund_mode
     ),
     jsonb_build_object(
       'operation', 'merchant_order_cancellation',

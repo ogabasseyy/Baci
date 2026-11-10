@@ -220,6 +220,26 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
+  it('maps an invalid refund mode raised by the RPC to 400', async () => {
+    const { supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '22023', message: 'invalid_refund_mode' },
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(request({ confirm_cancellation: true }), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
+  });
+
   it('does not queue or revalidate when the order is no longer cancellable', async () => {
     const { supabase } = createSupabase();
     supabase.rpc.mockResolvedValue({

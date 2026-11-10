@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -34,6 +34,12 @@ export function CancelOrderDialog({
 }) {
   const [choice, setChoice] = useState<CancelRefundChoice>('automatic');
   const [busy, setBusy] = useState(false);
+
+  // The dialog stays mounted between orders; every open starts from the safe
+  // automatic default instead of the previous order's choice.
+  useEffect(() => {
+    if (isOpen) setChoice('automatic');
+  }, [isOpen]);
   const amount = formatDisplayCurrency(refundAmount, currency || 'NGN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -73,7 +79,8 @@ export function CancelOrderDialog({
               className="mt-1"
             />
             <Label htmlFor="cancel-refund-automatic" className="leading-snug">
-              Cancel and refund {amount} to the customer via Paystack
+              Cancel and refund {amount} to the customer&apos;s original payment
+              method
             </Label>
           </div>
           <div className="flex items-start gap-3">

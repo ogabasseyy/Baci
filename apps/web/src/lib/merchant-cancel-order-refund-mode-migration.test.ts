@@ -25,6 +25,15 @@ describe('merchant cancellation refund-mode migration', () => {
     expect(sql).toMatch(/'customer_email', 'failed'/);
   });
 
+  it('records the refund mode as a tracked audit field', () => {
+    expect(sql).toContain("'cancellation_refund_mode'\n    ],");
+    expect(sql).toContain(
+      "'cancellation_refund_mode', v_order.cancellation_refund_mode"
+    );
+    expect(sql).toContain("'cancellation_refund_mode', v_refund_mode\n    ),");
+    expect(sql).toContain('o.cancelled_by, o.cancellation_refund_mode');
+  });
+
   it('stores the mode on the order and keeps the grants exact', () => {
     expect(sql).toContain('cancellation_refund_mode = v_refund_mode');
     expect(sql).toContain(

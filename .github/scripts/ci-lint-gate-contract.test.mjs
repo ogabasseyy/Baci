@@ -39,6 +39,11 @@ test('routes lint to the private runner only for an opted-in private repository 
   assert.equal(lintRunner({ ...trusted, isPrivate: false }, 'timeout-minutes'), 15);
   assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }, 'timeout-minutes'), 15);
   assert.equal(lintRunner({ ...trusted, event: 'merge_group' }, 'timeout-minutes'), 15);
+  for (const variant of [
+    { isPrivate: null }, { enabled: '' }, { enabled: 'false' },
+    { headRepository: '' }, { event: 'pull_request_target' },
+    { event: 'issue_comment' },
+  ]) assert.equal(lintRunner({ ...trusted, ...variant }, 'timeout-minutes'), 15);
   assert.equal(lintRunner({ ...trusted, isPrivate: false }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, isPrivate: null }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, enabled: '' }), 'ubuntu-24.04');
@@ -50,6 +55,36 @@ test('routes lint to the private runner only for an opted-in private repository 
   }
   for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
+  }
+});
+
+test('silent revert guard verifies exact commit objects without persisting or refetching credentials', () => {
+  const job = workflow.jobs['silent-revert-guard'];
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  const verify = job.steps.find((step) => step.name === 'Verify checked-out commit history');
+  const detect = job.steps.find((step) => step.name === 'Detect silent reverts of recent main commits');
+  assert.equal(checkout.with['fetch-depth'], 0);
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha }}');
+  assert.ok(job.steps.indexOf(checkout) < job.steps.indexOf(verify));
+  assert.ok(job.steps.indexOf(verify) < job.steps.indexOf(detect));
+  assert.equal(verify.env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');
+  assert.equal(verify.env.HEAD_SHA, '${{ github.event.pull_request.head.sha }}');
+  assert.equal(detect.env.BASE_SHA, verify.env.BASE_SHA);
+  assert.equal(detect.env.HEAD_SHA, verify.env.HEAD_SHA);
+  assert.doesNotMatch(JSON.stringify(job.steps), /git fetch|secrets\./);
+  for (const [base, head, failGit, success] of [
+    ['a'.repeat(40), 'b'.repeat(40), '', true],
+    ['', 'b'.repeat(40), '', false],
+    ['a'.repeat(40), '-bad', '', false],
+    ['a'.repeat(40), 'b'.repeat(40), 'yes', false],
+  ]) {
+    const script = `git() { [[ "$1" == cat-file && "$2" == -e && -z "$FAIL_GIT" ]] || return 1; printf '%s\\n' "$3"; }; ${verify.run}`;
+    const result = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8', env: { ...process.env, BASE_SHA: base, HEAD_SHA: head, FAIL_GIT: failGit },
+    });
+    assert.equal(result.status === 0, success, result.stderr);
+    if (success) assert.deepEqual(result.stdout.trim().split('\n'), [`${base}^{commit}`, `${head}^{commit}`]);
   }
 });
 

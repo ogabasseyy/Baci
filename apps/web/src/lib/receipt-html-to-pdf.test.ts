@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
   setRequestInterception: vi.fn(),
   executablePath: vi.fn().mockResolvedValue('/tmp/chromium'),
 }));
-vi.mock('node:fs/promises', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:fs/promises')>()),
+vi.mock(import('node:fs/promises'), async (importOriginal) => ({
+  ...(await importOriginal()),
   access: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@sparticuz/chromium', () => ({

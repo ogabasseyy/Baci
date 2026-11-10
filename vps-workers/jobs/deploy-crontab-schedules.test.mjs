@@ -112,6 +112,23 @@ describe('deploy crontab schedules', () => {
     );
   });
 
+  it('schedules the shared-cart notice delivery alarm every five minutes', () => {
+    const deployScript = readDeployScript();
+
+    assert.match(
+      deployScript,
+      /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/cart-notice-health\.lock/
+    );
+    assert.match(
+      deployScript,
+      /\$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/cart-notice-health/
+    );
+    assert.match(
+      deployScript,
+      />> \$REMOTE_DIR\/logs\/cart-notice-health\.log 2>&1/
+    );
+  });
+
   it('schedules the storefront update nudge daily through run-web-cron', () => {
     const deployScript = readDeployScript();
 

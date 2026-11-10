@@ -13,6 +13,7 @@ import {
   getShipmentFlowPrimaryActionLabel,
   isShipmentFlowPrimaryDisabled,
 } from './ShipmentFlowSheet.actions';
+import { runShipmentFlowPrimaryAction } from './ShipmentFlowSheet.primary-action';
 import { styles } from './ShipmentFlowSheet.styles';
 import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
 import { ShipmentFlowSheetPresence } from './ShipmentFlowSheetPresence';
@@ -121,36 +122,24 @@ export function ShipmentFlowSheet({
     if (isBusy) return;
     onStepBack();
   };
-  const handlePrimaryAction = async () => {
-    if (isRecoveryBlocking) return;
-    if (step === 'details') return onContinueFromDetails();
-    if (step === 'rider') return onConfirmSelfFulfillment();
-    if (selectedMode === 'external_waybill') {
-      if (!externalWaybill) return;
-      return externalWaybill.preview?.linkable
-        ? externalWaybill.link()
-        : externalWaybill.check();
-    }
-    // Defence in depth: never start a booking the footer would not allow.
-    if (
-      selectedMode === 'provider' &&
-      (giglShipping ? !canBookGigl : !canUseProvider)
-    ) {
-      return;
-    }
-    if (
-      selectedMode === 'provider' &&
-      giglShipping &&
-      !(await giglShipping.ensureFreshQuoteForConfirmation())
-    ) {
-      return;
-    }
-    const outcome = await onContinueFromMethod();
-    if (outcome === 'review_checkout_quote' && recoveryOrder) {
-      setRecoveryAttempt((attempt) => attempt + 1);
-      setRecoveryRequiredOrderId(recoveryOrder.id);
-    }
-  };
+  const handlePrimaryAction = () =>
+    runShipmentFlowPrimaryAction({
+      canBookGigl,
+      canUseProvider,
+      externalWaybill,
+      giglShipping,
+      isRecoveryBlocking,
+      onConfirmSelfFulfillment,
+      onContinueFromDetails,
+      onContinueFromMethod,
+      onRecoveryRequired: () => {
+        if (!recoveryOrder) return;
+        setRecoveryAttempt((attempt) => attempt + 1);
+        setRecoveryRequiredOrderId(recoveryOrder.id);
+      },
+      selectedMode,
+      step,
+    });
   return (
     <ShipmentFlowSheetPresence
       accessory={

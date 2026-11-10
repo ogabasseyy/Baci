@@ -10,7 +10,7 @@ import type {
   OrderGiglReceiver,
   OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
-import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
+import { ShipmentGiglAddressSearch } from './ShipmentGiglAddressSearch';
 import { ShipmentGiglPreviewCard } from './ShipmentGiglPreviewCard';
 import {
   ShipmentOptionCard,
@@ -172,34 +172,14 @@ export function ShipmentFlowGiglPanel({
         />
       )}
 
-      {bookingAllowed ? null : (
-        <Text style={[panelStyles.note, { color: colors.textSecondary }]}>
-          Ask the store owner or an admin to book GIG for this order.
-        </Text>
-      )}
-
       {/* Preview-only staff may still fill a missing address and retry, so
           they can see a delivery price; nothing here books or charges. */}
       {missingFields.includes('address') ? (
-        <CheckoutRecoveryAddressInput
-          accessibilityLabel="Search shipping address"
+        <ShipmentGiglAddressSearch
           address={addressDraft.address ?? ''}
           disabled={loading}
+          onPlaceSelect={onPlaceSelect}
           onSearchChange={(text) => onAddressFieldChange('address', text)}
-          onSelect={(place) => {
-            const latitude = Number.parseFloat(place.latitude);
-            const longitude = Number.parseFloat(place.longitude);
-            const hasPin =
-              Number.isFinite(latitude) && Number.isFinite(longitude);
-            onPlaceSelect({
-              address: place.address,
-              city: place.city,
-              state: place.state,
-              latitude: hasPin ? latitude : undefined,
-              longitude: hasPin ? longitude : undefined,
-            });
-          }}
-          placeholder="Search delivery address"
         />
       ) : null}
       {missingFields.map((field) => (
@@ -310,7 +290,6 @@ const panelStyles = StyleSheet.create({
   },
   copyRow: { flexDirection: 'row', gap: 8 },
   field: { gap: 6, marginBottom: 10 },
-  note: { marginBottom: 12, paddingHorizontal: 12 },
   input: {
     borderRadius: 10,
     borderWidth: 1,

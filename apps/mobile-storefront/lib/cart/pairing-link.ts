@@ -67,7 +67,8 @@ export function captureCartPairingLink(path: string, config: Config): string {
       ? new URL(path)
       : new URL(path, `https://${config.merchantDomain}`);
   } catch {
-    return /handoff|hid=/i.test(path) ? '/cart' : path;
+    if (/handoff|hid=/i.test(path)) return '/cart';
+    return path.length > MAX_DELIVERY_LENGTH ? '/' : path;
   }
   const fragment = new URLSearchParams(url.hash.slice(1));
   const pairing =

@@ -77,6 +77,10 @@ it('leaves non-pairing deep links for the router instead of sending them to the 
 it('sends an oversized non-pairing delivery to the start screen', () => {
   const oversized = `ogabassey://product/${'a'.repeat(10001)}`;
   expect(captureCartPairingLink(oversized, config)).toBe('/');
+  // A delivery that cannot be parsed as a URL is capped the same way.
+  const malformed = `https://[${'a'.repeat(10001)}`;
+  expect(captureCartPairingLink(malformed, config)).toBe('/');
+  expect(captureCartPairingLink('https://[bad', config)).toBe('https://[bad');
   expect(peekCartPairingLink()).toBeNull();
 });
 

@@ -5,7 +5,10 @@ import type {
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
-import { PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE } from './start-savings-wallet-balance';
+import {
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
+  wholeNairaHeadStart,
+} from './start-savings-wallet-balance';
 
 export {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
@@ -134,7 +137,8 @@ export function useStartSavingsFormFlow({
       // move: the legacy path fails atomically, so this path must too. The
       // plan is created without the head start, so check the target bound
       // the creation request would otherwise have enforced.
-      if (initialContributionValue > targetValue) {
+      // Same whole-naira amount the wallet moves and the submit checks.
+      if (wholeNairaHeadStart(initialContributionValue) > targetValue) {
         setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
         return;
       }

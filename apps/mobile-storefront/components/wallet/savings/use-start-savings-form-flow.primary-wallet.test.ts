@@ -48,6 +48,20 @@ describe('start savings with a PiggyVest wallet', () => {
     });
   });
 
+  it('refuses up front a head start that rounds up past a fractional target', async () => {
+    // ₦10,000.40 moves as ₦10,001, more than the ₦10,000.50 target.
+    const { flow, submitSavingsGoal, input } = createFlow({
+      primaryWallet: true,
+      initialContributionValue: 10_000.4,
+      targetValue: 10_000.5,
+    });
+    await flow.handleFundingContinue();
+    expect(submitSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
+    );
+  });
+
   it('refuses a head start above the plan target, creating nothing', async () => {
     const { flow, submitSavingsGoal, input } = createFlow({
       primaryWallet: true,

@@ -201,7 +201,9 @@ describe('PiggyVest head start balance check at submit', () => {
     act(() => {
       pending = result.current.submitSavingsGoal(primaryOptions);
     });
-    useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    act(() => {
+      useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    });
     await act(async () => {
       answer(5_000_000);
       await pending;
@@ -234,7 +236,9 @@ describe('PiggyVest head start balance check at submit', () => {
       for (let i = 0; i < 10; i += 1) await Promise.resolve();
     });
     expect(createSavingsGoal).toHaveBeenCalled();
-    useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    act(() => {
+      useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    });
     await act(async () => {
       reloaded({
         isError: false,

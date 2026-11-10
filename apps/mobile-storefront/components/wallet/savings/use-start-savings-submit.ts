@@ -29,6 +29,12 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  // The signed-in account, kept current so a mid-submit switch cancels it.
+  const authUserId = useAuthStore((state) => state.user?.id);
+  const authUserIdRef = useRef(authUserId);
+  useEffect(() => {
+    authUserIdRef.current = authUserId;
+  }, [authUserId]);
   // A created plan whose wallet hand-off could not finish, for its account.
   const pendingHandOffRef = useRef<{
     goalId: string;
@@ -86,9 +92,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     setIsSubmitting(true);
     const context = contextRef.current;
     // Bound to the account that submitted: a switch cancels every follow-up.
-    const submittingUserId = useAuthStore.getState().user?.id;
+    const submittingUserId = authUserIdRef.current;
     const stillCurrent = () =>
-      context.active && useAuthStore.getState().user?.id === submittingUserId;
+      context.active && authUserIdRef.current === submittingUserId;
     // A plan already exists for this account but its head start never moved:
     // only the unchanged wallet hand-off may continue it. Any edit, a dropped
     // head start or another funding choice must not create a second plan or
@@ -138,10 +144,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
           : balanceKobo < headStartKobo
             ? PRIMARY_HEAD_START_SHORT_MESSAGE
             : null;
-      // A different account signed in during the read: drop this one.
-      const sameUser = useAuthStore.getState().user?.id === submittingUserId;
-      if (refusal || !context.active || !sameUser) {
-        if (refusal && context.active && sameUser) input.setFormError(refusal);
+      // An edit or a different account during the read drops this one.
+      const current = stillCurrent();
+      if (refusal || !current) {
+        if (refusal && current) input.setFormError(refusal);
         submitInFlightRef.current = false;
         if (mountedRef.current) setIsSubmitting(false);
         return;

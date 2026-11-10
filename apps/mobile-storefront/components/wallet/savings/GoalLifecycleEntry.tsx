@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
   },
-  text: { fontSize: 14, fontWeight: '600' },
+  text: { fontSize: 13, fontWeight: '600' },
   // Cancelling is available but deliberately quiet: a text link, not a button.
   quietLink: {
     alignItems: 'center',
@@ -100,5 +100,5 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 16,
   },
-  quietText: { fontSize: 13, textDecorationLine: 'underline' },
+  quietText: { fontSize: 12, textDecorationLine: 'underline' },
 });

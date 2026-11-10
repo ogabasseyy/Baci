@@ -90,8 +90,8 @@ export function SavingsGoalSetupPrompt({
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
-  question: { fontSize: 16, fontWeight: '600' },
-  body: { fontSize: 14, lineHeight: 21 },
+  question: { fontSize: 14, fontWeight: '600' },
+  body: { fontSize: 13, lineHeight: 21 },
   options: { gap: 8 },
   option: {
     minHeight: 44,

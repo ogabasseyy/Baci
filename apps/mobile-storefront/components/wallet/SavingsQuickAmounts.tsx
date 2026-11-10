@@ -69,5 +69,5 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: SPACING.md,
   },
-  text: { fontSize: 14, fontWeight: '600' },
+  text: { fontSize: 13, fontWeight: '600' },
 });

@@ -80,4 +80,48 @@ describe('alertMerchantOfRefundReview retries', () => {
       );
     });
   });
+
+  describe('undeliverable re-checks', () => {
+    const noChannels = () =>
+      makeSenders({
+        sendPush: vi.fn().mockResolvedValue({ errors: [], failed: 0, sent: 0 }),
+      });
+    const noEmail = { ...merchant, email: null };
+
+    it('restores the prior attempt count instead of consuming a retry', async () => {
+      const supabase = makeSupabase();
+      await expect(
+        alertMerchantOfRefundReview({
+          merchant: noEmail,
+          order,
+          prior: { attempts: 1 },
+          review,
+          senders: noChannels(),
+          supabase: asSupabase(supabase),
+        })
+      ).resolves.toBe('undeliverable');
+      expect(supabase.update).toHaveBeenCalledWith({
+        attempts: 1,
+        last_attempt_at: expect.any(String),
+        undeliverable_at: expect.any(String),
+      });
+    });
+
+    it('does not wait unboundedly on a hung undeliverable write', async () => {
+      vi.useFakeTimers();
+      const supabase = makeSupabase();
+      supabase.confirmEq.mockReturnValue(new Promise(() => {}));
+      const pending = alertMerchantOfRefundReview({
+        deadlineMs: Date.now() + 30_000,
+        merchant: noEmail,
+        order,
+        review,
+        senders: noChannels(),
+        supabase: asSupabase(supabase),
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await expect(pending).resolves.toBe('undeliverable');
+      vi.useRealTimers();
+    });
+  });
 });

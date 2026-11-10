@@ -246,7 +246,7 @@ describe('alertMerchantOfRefundReview', () => {
     await expect(pending).resolves.toBe('uncertain');
   });
 
-  it('closes an undeliverable alert without consuming retries and logs once', async () => {
+  it('parks an undeliverable alert for a long re-check without consuming retries and logs once', async () => {
     const supabase = makeSupabase();
     const senders = makeSenders({
       sendPush: vi.fn().mockResolvedValue({ errors: [], failed: 0, sent: 0 }),
@@ -260,6 +260,11 @@ describe('alertMerchantOfRefundReview', () => {
         supabase: asSupabase(supabase),
       })
     ).resolves.toBe('undeliverable');
+    expect(supabase.update).toHaveBeenCalledWith({
+      attempts: 0,
+      last_attempt_at: expect.any(String),
+      undeliverable_at: expect.any(String),
+    });
     expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
     expect(
       vi

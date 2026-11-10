@@ -25,6 +25,7 @@ export async function claimAlert(
       .update({
         attempts: prior.attempts + 1,
         last_attempt_at: new Date().toISOString(),
+        undeliverable_at: null,
       })
       .eq('review_id', review.id)
       .eq('attempts', prior.attempts)
@@ -73,6 +74,30 @@ export async function confirmClaim(
     logger.error({
       error,
       message: 'Cancellation refund alert could not be confirmed',
+      reviewId,
+    });
+  }
+}
+
+/**
+ * Neither push nor email is available: restore the attempt count (so the
+ * retry cap is not consumed) and stamp undeliverable_at, which puts the
+ * review on the long re-check cool-down instead of the retry path.
+ */
+export async function markUndeliverable(
+  supabase: AlertSupabase,
+  reviewId: string,
+  attempts: number
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('order_cancellation_refund_alerts')
+    .update({ attempts, last_attempt_at: now, undeliverable_at: now })
+    .eq('review_id', reviewId);
+  if (error) {
+    logger.error({
+      error,
+      message: 'Cancellation refund alert could not be marked undeliverable',
       reviewId,
     });
   }

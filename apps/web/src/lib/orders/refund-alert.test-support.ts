@@ -30,7 +30,9 @@ export function makeSupabase(
     select: vi.fn().mockResolvedValue({ data: reclaimed, error: null }),
   };
   const update = vi.fn((values: Record<string, unknown>) =>
-    'confirmed_at' in values ? { eq: confirmEq } : reclaimChain
+    'confirmed_at' in values || typeof values.undeliverable_at === 'string'
+      ? { eq: confirmEq }
+      : reclaimChain
   );
   const del = vi.fn();
   const from = vi.fn(() => ({ delete: del, insert, update }));

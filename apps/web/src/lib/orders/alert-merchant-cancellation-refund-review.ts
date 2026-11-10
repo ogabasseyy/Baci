@@ -1,5 +1,9 @@
 import { logger } from '@/lib/logger';
-import { claimAlert, confirmClaim } from '@/lib/orders/refund-alert-claims';
+import {
+  claimAlert,
+  confirmClaim,
+  markUndeliverable,
+} from '@/lib/orders/refund-alert-claims';
 import { deliverAlert } from '@/lib/orders/refund-alert-delivery';
 import type {
   AlertSupabase,
@@ -19,7 +23,7 @@ const TIMEOUT_GRACE_MS = 2_000;
  * delivered: a channel confirmed. failed: every channel definitely failed.
  * uncertain: ambiguous result or timeout. duplicate: already claimed
  * elsewhere (benign). undeliverable: the merchant has no push device and no
- * email, so retrying cannot help (claim closed without further attempts). deferred: no budget, unclaimed. skipped: the claim or
+ * email, so retrying cannot help (kept unconfirmed, re-checked on a long cool-down without consuming retries). deferred: no budget, unclaimed. skipped: the claim or
  * the attempt itself errored.
  */
 type RefundAlertOutcome =
@@ -30,6 +34,28 @@ type RefundAlertOutcome =
   | 'skipped'
   | 'uncertain'
   | 'undeliverable';
+
+/** Bounded wait for a never-throwing write, within the drain budget. */
+async function awaitWithin(
+  work: Promise<void>,
+  deadlineMs: number | undefined
+): Promise<void> {
+  const ms = Math.max(
+    0,
+    Math.min(
+      TIMEOUT_GRACE_MS,
+      deadlineMs === undefined ? TIMEOUT_GRACE_MS : deadlineMs - Date.now()
+    )
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    work,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]);
+  clearTimeout(timer);
+}
 
 /** Total send attempts per review before the alert is abandoned. */
 export const REFUND_ALERT_RETRY_CAP = 3;
@@ -148,33 +174,18 @@ export async function alertMerchantOfRefundReview({
       clearTimeout(timer);
     }
     // Persist a success seen before the timeout; a later one is best effort.
-    if (confirmation) {
-      // confirmClaim never throws; bound the wait by the remaining budget so
-      // a hung write cannot eat the notification drain's reserve.
-      const confirmMs = Math.max(
-        0,
-        Math.min(
-          TIMEOUT_GRACE_MS,
-          deadlineMs === undefined ? TIMEOUT_GRACE_MS : deadlineMs - Date.now()
-        )
-      );
-      let confirmTimer: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([
-        confirmation,
-        new Promise<void>((resolve) => {
-          confirmTimer = setTimeout(resolve, confirmMs);
-        }),
-      ]);
-      clearTimeout(confirmTimer);
-    }
+    if (confirmation) await awaitWithin(confirmation, deadlineMs);
     if (outcome === 'undeliverable') {
       logger.warn({
         message:
-          'Cancellation refund alert undeliverable: merchant has no push device or email; closing without retries',
+          'Cancellation refund alert undeliverable: merchant has no push device or email; re-checking after a long cool-down without consuming retries',
         orderId: order.id,
         reviewId: review.id,
       });
-      await confirmClaim(supabase, review.id);
+      await awaitWithin(
+        markUndeliverable(supabase, review.id, prior?.attempts ?? 0),
+        deadlineMs
+      );
       return 'undeliverable';
     }
     if (outcome === 'timeout') {

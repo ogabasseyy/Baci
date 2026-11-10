@@ -7,7 +7,11 @@ vi.mock('@/lib/logger', () => ({
 import { logger } from '@/lib/logger';
 import { REFUND_ALERT_RETRY_CAP } from './alert-merchant-cancellation-refund-review';
 import { asSupabase, makeSupabase, order } from './refund-alert.test-support';
-import { claimAlert, confirmClaim } from './refund-alert-claims';
+import {
+  claimAlert,
+  confirmClaim,
+  markUndeliverable,
+} from './refund-alert-claims';
 
 const review = { id: 'review-1' };
 
@@ -56,6 +60,7 @@ describe('claimAlert', () => {
     expect(supabase.update).toHaveBeenCalledWith({
       attempts: 2,
       last_attempt_at: expect.any(String),
+      undeliverable_at: null,
     });
     expect(supabase.reclaimChain.eq).toHaveBeenCalledWith(
       'review_id',
@@ -95,5 +100,18 @@ describe('confirmClaim', () => {
       confirmClaim(asSupabase(supabase), 'review-1')
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('markUndeliverable', () => {
+  it('restores the attempt count and stamps undeliverable_at', async () => {
+    const supabase = makeSupabase();
+    await markUndeliverable(asSupabase(supabase), 'review-1', 0);
+    expect(supabase.update).toHaveBeenCalledWith({
+      attempts: 0,
+      last_attempt_at: expect.any(String),
+      undeliverable_at: expect.any(String),
+    });
+    expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 });

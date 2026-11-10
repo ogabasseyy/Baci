@@ -21,6 +21,8 @@ const REVIEW_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
 // An unconfirmed (uncertain or timed-out) alert is re-driven after this
 // cool-down, at most REFUND_ALERT_RETRY_CAP attempts in total.
 const RETRY_COOLDOWN_MS = 15 * 60_000;
+// Alerts with no usable channel are re-checked this often (no attempts used).
+const UNDELIVERABLE_RECHECK_MS = 24 * 60 * 60_000;
 
 interface OpenReview {
   alert_attempts: number | null;
@@ -62,6 +64,9 @@ async function loadReviewsNeedingAlert(
       p_limit: REVIEW_SCAN_LIMIT,
       p_max_attempts: REFUND_ALERT_RETRY_CAP,
       p_retry_before: new Date(now - RETRY_COOLDOWN_MS).toISOString(),
+      p_undeliverable_before: new Date(
+        now - UNDELIVERABLE_RECHECK_MS
+      ).toISOString(),
       p_since: new Date(now - REVIEW_LOOKBACK_MS).toISOString(),
     }
   );

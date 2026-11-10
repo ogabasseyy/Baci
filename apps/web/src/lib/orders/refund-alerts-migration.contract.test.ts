@@ -49,10 +49,22 @@ describe('order_cancellation_refund_alerts migration contract', () => {
     );
   });
 
-  it('orders never-attempted reviews before cooled-down retries', () => {
+  it('orders never-attempted reviews first and oldest first', () => {
     expect(sql).toMatch(
-      /ORDER BY \(a\.review_id IS NOT NULL\), r\.created_at DESC/
+      /ORDER BY\s+\(a\.review_id IS NOT NULL\),\s+CASE WHEN a\.review_id IS NULL THEN r\.created_at END ASC,\s+r\.created_at DESC/
     );
+  });
+
+  it('re-checks undeliverable alerts on a separate cool-down without attempts', () => {
+    expect(sql).toMatch(/undeliverable_at timestamptz,/);
+    expect(sql).toMatch(
+      /attempts integer NOT NULL DEFAULT 1 CHECK \(attempts >= 0\)/
+    );
+    expect(sql).toMatch(/p_undeliverable_before timestamptz/);
+    expect(sql).toMatch(
+      /a\.undeliverable_at IS NULL\s+AND a\.attempts < p_max_attempts/
+    );
+    expect(sql).toMatch(/a\.undeliverable_at <= p_undeliverable_before/);
   });
 
   it('drops the policy before recreating it', () => {

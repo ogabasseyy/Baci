@@ -24,9 +24,13 @@ CREATE TABLE IF NOT EXISTS public.order_cancellation_refund_alerts (
     REFERENCES public.orders(id) ON DELETE CASCADE,
   merchant_id uuid NOT NULL
     REFERENCES public.merchants(id) ON DELETE CASCADE,
-  attempts integer NOT NULL DEFAULT 1 CHECK (attempts >= 1),
+  attempts integer NOT NULL DEFAULT 1 CHECK (attempts >= 0),
   last_attempt_at timestamptz NOT NULL DEFAULT now(),
   confirmed_at timestamptz,
+  -- Set when neither push nor email was available. Attempts are NOT consumed;
+  -- the review is re-checked after a long cool-down until it leaves the
+  -- lookback window, so a merchant who later adds an email still gets alerted.
+  undeliverable_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -56,7 +60,8 @@ CREATE OR REPLACE FUNCTION public.list_cancellation_refund_reviews_needing_alert
   p_since timestamptz,
   p_retry_before timestamptz,
   p_max_attempts integer,
-  p_limit integer
+  p_limit integer,
+  p_undeliverable_before timestamptz
 )
 RETURNS TABLE (
   id uuid,
@@ -83,19 +88,29 @@ AS $$
       a.review_id IS NULL
       OR (
         a.confirmed_at IS NULL
+        AND a.undeliverable_at IS NULL
         AND a.attempts < p_max_attempts
         AND a.last_attempt_at <= p_retry_before
       )
+      OR (
+        a.confirmed_at IS NULL
+        AND a.undeliverable_at IS NOT NULL
+        AND a.undeliverable_at <= p_undeliverable_before
+      )
     )
-  -- Never-attempted reviews first, then cooled-down retries; newest first
-  -- within each, so retries cannot starve fresh reviews.
-  ORDER BY (a.review_id IS NOT NULL), r.created_at DESC
+  -- Never-attempted reviews first, oldest first (closest to aging out of the
+  -- lookback), then cooled-down retries and long-cool-down undeliverables,
+  -- newest first.
+  ORDER BY
+    (a.review_id IS NOT NULL),
+    CASE WHEN a.review_id IS NULL THEN r.created_at END ASC,
+    r.created_at DESC
   LIMIT LEAST(GREATEST(p_limit, 1), 200);
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.list_cancellation_refund_reviews_needing_alert_v1(
-  timestamptz, timestamptz, integer, integer
+  timestamptz, timestamptz, integer, integer, timestamptz
 ) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.list_cancellation_refund_reviews_needing_alert_v1(
-  timestamptz, timestamptz, integer, integer
+  timestamptz, timestamptz, integer, integer, timestamptz
 ) TO service_role;

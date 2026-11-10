@@ -83,7 +83,11 @@ describe('alertPendingRefundReviews', () => {
     await alertPendingRefundReviews({ senders, supabase: supabase as never });
     expect(supabase.rpc).toHaveBeenCalledWith(
       'list_cancellation_refund_reviews_needing_alert_v1',
-      expect.objectContaining({ p_limit: 50, p_max_attempts: 3 })
+      expect.objectContaining({
+        p_limit: 50,
+        p_max_attempts: 3,
+        p_undeliverable_before: expect.any(String),
+      })
     );
     // The ledger is never read client-side after the limit.
     expect(supabase.from).not.toHaveBeenCalledWith(

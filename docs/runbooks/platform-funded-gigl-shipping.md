@@ -35,6 +35,18 @@ Confirm cancellation with GIG, then set the charge as postgres: `UPDATE public.m
 3. After the charge UPDATE, check the order: `shipment_id`, `tracking_number`, `shipping_status` and the `shipments` row must reflect the cancellation (set the shipment `status = 'cancelled'`), and clear any `shipment_booking_lock_token`.
 4. Re-quote the order in the admin app if it must ship again.
 
+Pre-check (must return exactly one row; proves the three ids belong together):
+
+```sql
+SELECT c.id AS charge_id, c.shipment_id, c.order_id, o.shipping_status
+FROM public.merchant_shipping_charges c
+JOIN public.shipments s ON s.id = c.shipment_id AND s.order_id = c.order_id
+JOIN public.orders o ON o.id = c.order_id AND o.shipment_id = s.id
+WHERE c.id = '<charge id>' AND c.funding_source = 'platform';
+```
+
+The order keeps its `shipping_status` and shipping economics (the quote is still valid for a re-book); change `shipping_status` by hand only if GIG confirmed nothing shipped.
+
 Copy-pasteable transaction (replace the placeholders; every statement must report 1 row):
 
 ```sql

@@ -97,3 +97,14 @@ describe('resolveAdminGiglQuoteFunding', () => {
     ).resolves.toMatchObject({ canBook: true, paidByBaci: true });
   });
 });
+
+describe('bugfix: funding-mode RPC throws', () => {
+  it('falls back to merchant_wallet when the RPC rejects', async () => {
+    const supabase = {
+      rpc: vi.fn().mockRejectedValue(new Error('network abort')),
+    } as never;
+    await expect(readGiglShippingFundingMode(supabase, 'm1')).resolves.toBe(
+      'merchant_wallet'
+    );
+  });
+});

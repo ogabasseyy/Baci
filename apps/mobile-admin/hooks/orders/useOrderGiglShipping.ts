@@ -140,7 +140,7 @@ export function useOrderGiglShipping({
       // Baci-paid: re-resolve funding (a revoked flag must not linger).
       const resolved = await requestQuote(isCurrent);
       if (!isCurrent()) return null;
-      return resolved ? toOrderGiglWalletState(resolved) : walletRef.current;
+      return resolved ? toOrderGiglWalletState(resolved) : null;
     }
     const summary = await getMerchantWalletSummary(context?.signal);
     if (!isCurrent()) return null;

@@ -13,12 +13,16 @@ export async function readGiglShippingFundingMode(
   supabase: SupabaseClient,
   merchantId: string
 ): Promise<GiglShippingFundingMode> {
-  const result = await supabase.rpc('get_gigl_shipping_funding_mode', {
-    p_merchant_id: merchantId,
-  });
-  return !result?.error && result?.data === 'platform'
-    ? 'platform'
-    : 'merchant_wallet';
+  try {
+    const result = await supabase.rpc('get_gigl_shipping_funding_mode', {
+      p_merchant_id: merchantId,
+    });
+    return !result?.error && result?.data === 'platform'
+      ? 'platform'
+      : 'merchant_wallet';
+  } catch {
+    return 'merchant_wallet';
+  }
 }
 
 export type AdminGiglQuoteFunding =

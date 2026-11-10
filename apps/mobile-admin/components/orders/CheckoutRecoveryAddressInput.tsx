@@ -8,10 +8,14 @@ export function CheckoutRecoveryAddressInput({
   onSearchChange,
   address,
   disabled = false,
+  placeholder = 'Search confirmed destination',
+  accessibilityLabel = 'Search confirmed delivery destination',
 }: {
   onSearchChange: (text: string) => void;
   address: string;
   disabled?: boolean;
+  placeholder?: string;
+  accessibilityLabel?: string;
   onSelect: (destination: {
     address: string;
     city: string;
@@ -29,14 +33,14 @@ export function CheckoutRecoveryAddressInput({
   if (!key) return null;
   return (
     <GooglePlacesAutocomplete
-      placeholder="Search confirmed destination"
+      placeholder={placeholder}
       fetchDetails
       keyboardShouldPersistTaps="handled"
       enablePoweredByContainer={false}
       query={{ key, language: 'en', components: 'country:NG' }}
       listViewDisplayed={disabled ? false : 'auto'}
       textInputProps={{
-        accessibilityLabel: 'Search confirmed delivery destination',
+        accessibilityLabel,
         editable: !disabled,
         onChangeText: (text) => {
           if (

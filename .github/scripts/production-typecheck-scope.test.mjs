@@ -17,7 +17,8 @@ test('production typecheck retains every non-test root and strict compiler polic
   const full = parse('tsconfig.json');
   const build = parse('tsconfig.build.json');
   const productionRoots = new Set(build.fileNames);
-  for (const file of full.fileNames.filter(path => !isTest(path))) {
+  // The build regenerates .next/types/link.d.ts, so production reads the prepared copy instead.
+  for (const file of full.fileNames.filter(path => !isTest(path) && !path.endsWith('/.next/types/link.d.ts'))) {
     assert.ok(productionRoots.has(file), `production source lost: ${file}`);
   }
   assert.equal(build.options.strict, true);
@@ -41,6 +42,19 @@ test('production excludes the test graph while the normal typecheck still includ
   const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
   assert.match(manifest.scripts.typecheck, /tsc --noEmit/);
   assert.doesNotMatch(manifest.scripts.typecheck, /tsconfig\.build/);
+});
+
+test('production build checks the prepared typed-route declaration, not the one next build regenerates', () => {
+  const build = JSON.parse(readFileSync(`${web}tsconfig.build.json`, 'utf8'));
+  const full = JSON.parse(readFileSync(`${web}tsconfig.json`, 'utf8'));
+  assert.ok(build.exclude.includes('.next/types/link.d.ts'));
+  assert.deepEqual(build.include, [...full.include, '.typed-navigation/link.d.ts']);
+  const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
+  assert.equal(
+    manifest.scripts.build,
+    'next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build'
+  );
+  assert.doesNotMatch(manifest.scripts['build:ci'], /typegen/);
 });
 
 test('production budgets the native Go compiler without changing the full CI typecheck', () => {

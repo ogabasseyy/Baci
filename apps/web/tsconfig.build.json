@@ -4,8 +4,18 @@
     "checkers": 1,
     "tsBuildInfoFile": ".next/cache/tsconfig.build.tsbuildinfo"
   },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/typecheck/**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".typed-navigation/link.d.ts"
+  ],
   "exclude": [
     "node_modules",
+    ".next/types/link.d.ts",
     "supabase",
     "supabase/**/*",
     "scripts",

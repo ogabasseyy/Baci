@@ -7,7 +7,8 @@ const INTERNAL_PAYMENT_GATEWAYS = new Set([
   'PAY_ON_DELIVERY',
 ]);
 
-// Legacy rows may pad or re-case the gateway; missing or blank stays
+// Legacy rows may pad or re-case the gateway and the ISO currency code (the
+// worker's normalizeRefundMoneyField does the same for both); missing or blank stays
 // external, matching the server's isExternalPaymentGateway.
 const normalizeGateway = (value: unknown): string =>
   String(value ?? '')
@@ -163,7 +164,7 @@ export function getCancelRefundPlan(
         (row) =>
           DONE_REFUND_STATUSES.has(row.status) &&
           (row.payment_transaction_id || soleLegId) === leg.id &&
-          (row.currency ?? null) === (leg.currency ?? null) &&
+          normalizeGateway(row.currency) === normalizeGateway(leg.currency) &&
           normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);

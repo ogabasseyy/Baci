@@ -235,4 +235,23 @@ describe('getAutomaticCancelRefundAmount', () => {
     expect(isPaidStatus('unpaid')).toBe(false);
     expect(isPaidStatus(undefined)).toBe(false);
   });
+
+  it('matches currency codes that differ only by case or padding, like the worker', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 100,
+          currency: ' ngn ',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(0);
+  });
 });

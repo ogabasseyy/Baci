@@ -68,6 +68,26 @@ describe('POST /api/orders/[id]/cancelled refund mode', () => {
     });
   });
 
+  it('sends the automatic mode to the RPC when the refund field is omitted', async () => {
+    const { supabase } = createSupabase();
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ cancelled_by: 'merchant', confirm_cancellation: true }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(202);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'cancel_order_as_merchant',
+      expect.objectContaining({ p_refund_mode: 'automatic' })
+    );
+  });
+
   it('rejects an unknown refund choice before touching the database', async () => {
     const { supabase } = createSupabase();
     mocks.authenticateApiRequest.mockResolvedValue({

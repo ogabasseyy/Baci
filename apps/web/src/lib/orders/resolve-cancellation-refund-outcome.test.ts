@@ -237,4 +237,13 @@ describe('resolveCancellationRefundOutcome', () => {
       resolveCancellationRefundOutcome({ ...manual, supabase })
     ).resolves.toEqual({ outcome: 'unknown' });
   });
+
+  it('reports the currency code normalized like the worker', async () => {
+    const supabase = supabaseWith({
+      ledger: { data: [leg({ currency: ' ngn ' })], error: null },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toMatchObject({ details: { currency: 'NGN' } });
+  });
 });

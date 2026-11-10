@@ -20,26 +20,36 @@ const isCancelRefundChoice = (value: string): value is CancelRefundChoice =>
   value === 'automatic' || value === 'manual';
 
 export function CancelOrderDialog({
+  automaticSupported = true,
+  canCancelOnly = true,
   currency,
   isOpen,
   onClose,
   onConfirm,
   refundAmount,
 }: {
+  /** False when an outstanding leg cannot be refunded by the worker. */
+  automaticSupported?: boolean;
+  /** Owner or orders.refund: the cancel-only path skips the auto refund. */
+  canCancelOnly?: boolean;
   currency: string | null;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (refund: CancelRefundChoice) => Promise<void> | void;
   refundAmount: number;
 }) {
-  const [choice, setChoice] = useState<CancelRefundChoice>('automatic');
+  const defaultChoice: CancelRefundChoice = automaticSupported
+    ? 'automatic'
+    : 'manual';
+  const [choice, setChoice] = useState<CancelRefundChoice>(defaultChoice);
+  const canConfirm = automaticSupported || canCancelOnly;
   const [busy, setBusy] = useState(false);
 
   // The dialog stays mounted between orders; every open starts from the safe
   // automatic default instead of the previous order's choice.
   useEffect(() => {
-    if (isOpen) setChoice('automatic');
-  }, [isOpen]);
+    if (isOpen) setChoice(defaultChoice);
+  }, [isOpen, defaultChoice]);
   const amount = formatDisplayCurrency(refundAmount, currency || 'NGN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -72,29 +82,46 @@ export function CancelOrderDialog({
           }}
           aria-label="Refund option"
         >
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="automatic"
-              id="cancel-refund-automatic"
-              className="mt-1"
-            />
-            <Label htmlFor="cancel-refund-automatic" className="leading-snug">
-              Cancel and refund {amount} to the customer&apos;s original payment
-              method
-            </Label>
-          </div>
-          <div className="flex items-start gap-3">
-            <RadioGroupItem
-              value="manual"
-              id="cancel-refund-manual"
-              className="mt-1"
-            />
-            <Label htmlFor="cancel-refund-manual" className="leading-snug">
-              Cancel only — I&apos;ll refund them another way (cash, transfer,
-              store credit)
-            </Label>
-          </div>
+          {automaticSupported && (
+            <div className="flex items-start gap-3">
+              <RadioGroupItem
+                value="automatic"
+                id="cancel-refund-automatic"
+                className="mt-1"
+              />
+              <Label htmlFor="cancel-refund-automatic" className="leading-snug">
+                Cancel and refund {amount} to the customer&apos;s original
+                payment method
+              </Label>
+            </div>
+          )}
+          {canCancelOnly && (
+            <div className="flex items-start gap-3">
+              <RadioGroupItem
+                value="manual"
+                id="cancel-refund-manual"
+                className="mt-1"
+              />
+              <Label htmlFor="cancel-refund-manual" className="leading-snug">
+                Cancel only — I&apos;ll refund them another way (cash, transfer,
+                store credit)
+              </Label>
+            </div>
+          )}
         </RadioGroup>
+        {!automaticSupported && (
+          <p className="text-sm text-muted-foreground">
+            Part of this payment was not made through Paystack, so Baci cannot
+            refund it automatically. Cancel the order, refund the customer
+            yourself, then record the refund from the Refund card.
+          </p>
+        )}
+        {!canConfirm && (
+          <p className="text-sm text-destructive">
+            You need refund permission to cancel this order. Ask the store
+            owner.
+          </p>
+        )}
         {choice === 'manual' && (
           <p className="text-sm text-muted-foreground">
             No refund will be sent automatically. The order will show as refund
@@ -107,7 +134,7 @@ export function CancelOrderDialog({
           </Button>
           <Button
             variant="destructive"
-            disabled={busy}
+            disabled={busy || !canConfirm}
             onClick={() => void handleConfirm()}
           >
             Cancel order

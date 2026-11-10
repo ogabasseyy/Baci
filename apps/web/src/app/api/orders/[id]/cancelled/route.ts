@@ -142,6 +142,26 @@ export async function POST(
     }
     const alreadyCancelled = !cancellationPerformed;
 
+    // A replay changes nothing, so report the mode the order was actually
+    // cancelled with rather than echoing this request's choice.
+    let effectiveRefundMode: 'automatic' | 'manual' | 'unknown' = refundMode;
+    if (alreadyCancelled) {
+      const { data: persisted, error: persistedError } = await supabase
+        .from('orders')
+        .select('cancellation_refund_mode')
+        .eq('id', id)
+        .eq('merchant_id', merchantId)
+        .maybeSingle();
+      if (persistedError || !persisted) {
+        effectiveRefundMode = 'unknown';
+      } else {
+        effectiveRefundMode =
+          persisted.cancellation_refund_mode === 'manual'
+            ? 'manual'
+            : 'automatic';
+      }
+    }
+
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
       let orderItems: Array<{ product_id?: unknown }> | null = null;
@@ -284,7 +304,11 @@ export async function POST(
         sideEffects: {
           customerEmail: 'queued',
           refund:
-            refundMode === 'manual' ? 'manual_required' : 'queued_if_required',
+            effectiveRefundMode === 'manual'
+              ? 'manual_required'
+              : effectiveRefundMode === 'unknown'
+                ? 'unknown'
+                : 'queued_if_required',
         },
       },
       { status: 202 }

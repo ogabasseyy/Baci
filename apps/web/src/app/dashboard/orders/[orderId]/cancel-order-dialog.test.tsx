@@ -56,4 +56,60 @@ describe('CancelOrderDialog', () => {
       screen.getByRole('radio', { name: /cancel and refund/i })
     ).toBeChecked();
   });
+
+  it('offers only manual handling when a leg cannot be refunded automatically', async () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined);
+    render(
+      <CancelOrderDialog
+        automaticSupported={false}
+        currency="NGN"
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={onConfirm}
+        refundAmount={12500}
+      />
+    );
+    expect(
+      screen.queryByRole('radio', { name: /cancel and refund/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /cancel only/i })).toBeChecked();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    expect(onConfirm).toHaveBeenCalledWith('manual');
+  });
+
+  it('hides cancel-only without refund permission', () => {
+    render(
+      <CancelOrderDialog
+        canCancelOnly={false}
+        currency="NGN"
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        refundAmount={12500}
+      />
+    );
+    expect(
+      screen.queryByRole('radio', { name: /cancel only/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', { name: /cancel and refund/i })
+    ).toBeChecked();
+  });
+
+  it('blocks cancelling when neither option is available to the staff member', () => {
+    render(
+      <CancelOrderDialog
+        automaticSupported={false}
+        canCancelOnly={false}
+        currency="NGN"
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        refundAmount={12500}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Cancel order' })).toBeDisabled();
+    expect(screen.getByText(/need refund permission/i)).toBeVisible();
+  });
 });

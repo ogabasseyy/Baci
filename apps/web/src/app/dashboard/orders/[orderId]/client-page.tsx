@@ -35,10 +35,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import { getAutomaticCancelRefundAmount } from '@/lib/orders/get-automatic-cancel-refund-amount';
+import { getCancelRefundPlan } from '@/lib/orders/get-automatic-cancel-refund-amount';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
   type Order,
@@ -139,6 +140,8 @@ export default function OrderDetailsClientPage({
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const merchantContext = useMerchantSafe();
+  const cancelRefundPlan = getCancelRefundPlan(order);
 
   if (!order) {
     return null;
@@ -171,7 +174,7 @@ export default function OrderDetailsClientPage({
     if (newStatus === 'Canceled' && refund === undefined) {
       // A paid order with money the worker could refund asks how to refund
       // in a dialog; everything else keeps the plain confirmation.
-      if (getAutomaticCancelRefundAmount(order) > 0) {
+      if (getCancelRefundPlan(order).amount > 0) {
         setIsCancelDialogOpen(true);
         return false;
       }
@@ -359,7 +362,11 @@ export default function OrderDetailsClientPage({
         isOpen={isCancelDialogOpen}
         onClose={() => setIsCancelDialogOpen(false)}
         currency={orderCurrency}
-        refundAmount={getAutomaticCancelRefundAmount(order)}
+        refundAmount={cancelRefundPlan.amount}
+        automaticSupported={cancelRefundPlan.automaticSupported}
+        canCancelOnly={
+          merchantContext?.hasPermission('orders', 'refund') ?? true
+        }
         onConfirm={async (refund) => {
           // Keep the dialog (and the merchant's choice) open on failure.
           if (await handleUpdateStatus('Canceled', refund)) {

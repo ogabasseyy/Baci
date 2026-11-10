@@ -44,6 +44,10 @@ function createSupabase() {
     error: null,
   });
   const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
+  const persistedMode = vi.fn().mockResolvedValue({
+    data: { cancellation_refund_mode: 'automatic' },
+    error: null,
+  });
   const productsIn = vi.fn().mockResolvedValue({
     data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
     error: null,
@@ -52,6 +56,15 @@ function createSupabase() {
     from: vi.fn((table: string) => {
       if (table === 'order_items') {
         return { select: vi.fn(() => ({ eq: orderItemsEq })) };
+      }
+      if (table === 'orders') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({ maybeSingle: persistedMode })),
+            })),
+          })),
+        };
       }
       if (table === 'products') {
         return {
@@ -71,7 +84,7 @@ function createSupabase() {
     }),
     rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
   };
-  return { orderItemsEq, productsIn, supabase, variantsIn };
+  return { orderItemsEq, persistedMode, productsIn, supabase, variantsIn };
 }
 
 describe('POST /api/orders/[id]/cancelled', () => {
@@ -330,6 +343,27 @@ describe('POST /api/orders/[id]/cancelled', () => {
       success: true,
     });
   });
+  it('reports the persisted refund mode on a replay instead of echoing the request', async () => {
+    const { persistedMode, supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({ data: false, error: null });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ confirm_cancellation: true, refund: 'manual' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(persistedMode).toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      alreadyCancelled: true,
+      sideEffects: { refund: 'queued_if_required' },
+    });
+  });
+
   it('avoids product and feed cache churn for unlimited-inventory items', async () => {
     const { productsIn, supabase } = createSupabase();
     productsIn.mockResolvedValue({

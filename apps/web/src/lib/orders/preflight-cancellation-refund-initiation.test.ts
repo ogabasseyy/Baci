@@ -62,4 +62,21 @@ describe('preflightCancellationRefundInitiation initiation set', () => {
     expect(result.initiationTransactions).toHaveLength(0);
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
   });
+
+  it('never initiates or provider-checks legs of a cancel-only order', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        order: {
+          ...preflightInput().order,
+          cancellation_refund_mode: 'manual',
+        },
+        transactions: [
+          paystackPayment,
+          { ...paystackPayment, id: 'payment-2', gateway_reference: 'ref-2' },
+        ],
+      })
+    );
+    expect(result.initiationTransactions).toHaveLength(0);
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+  });
 });

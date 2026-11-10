@@ -85,6 +85,10 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: vi.fn(() => ({ toast: vi.fn() })),
 }));
 
+vi.mock('@/hooks/use-merchant-client', () => ({
+  useMerchantSafe: () => ({ hasPermission: () => true }),
+}));
+
 vi.mock('@/lib/api-client', () => ({
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
@@ -386,6 +390,8 @@ describe('OrderDetailsClientPage', () => {
             {
               amount: 5000,
               gateway: 'paystack',
+              gateway_reference: 'ref-1',
+              id: 'leg-1',
               status: 'completed',
               transaction_type: 'payment',
             },

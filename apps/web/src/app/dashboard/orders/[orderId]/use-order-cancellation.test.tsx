@@ -222,4 +222,29 @@ describe('useOrderCancellation', () => {
       })
     );
   });
+
+  it('cancels neutrally when an unlinked in-flight refund cannot be attributed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useOrderCancellation({
+        onCancelled: vi.fn(),
+        order: order({
+          transactions: [
+            paystackLeg,
+            {
+              amount: 5000,
+              gateway: 'paystack',
+              status: 'processing',
+              transaction_type: 'refund',
+            },
+          ],
+        } as Partial<Order>),
+      })
+    );
+    await act(() => result.current.requestCancellation());
+    expect(result.current.dialogProps.isOpen).toBe(false);
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('could not be loaded')
+    );
+  });
 });

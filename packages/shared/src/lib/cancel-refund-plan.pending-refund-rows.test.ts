@@ -160,18 +160,50 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
       expect(plan.inFlightAmount).toBe(100);
     });
 
-    it('ignores an unlinked non-terminal row, as the worker does', () => {
+    it.each([
+      'processing',
+      'pending',
+      'refund_pending',
+    ])('marks the plan unresolved for an unlinked %s refund even with a single payment leg', (status) => {
       const plan = getCancelRefundPlan({
         paymentStatus: 'Paid',
         total: 100,
         transactions: [
           payment100,
-          pendingRow({
+          pendingRow({ payment_transaction_id: undefined, status }),
+        ],
+      });
+      expect(plan.ledgerKnown).toBe(false);
+    });
+
+    it('marks the plan unresolved for an unlinked recoverable failed refund', () => {
+      const plan = getCancelRefundPlan({
+        paymentStatus: 'Paid',
+        total: 100,
+        transactions: [
+          payment100,
+          failed({
+            gateway_reference: '424242',
             payment_transaction_id: undefined,
-            status: 'processing',
           }),
         ],
       });
+      expect(plan.ledgerKnown).toBe(false);
+    });
+
+    it('ignores an unlinked failed refund that can never recover', () => {
+      const plan = getCancelRefundPlan({
+        paymentStatus: 'Paid',
+        total: 100,
+        transactions: [
+          payment100,
+          failed({
+            gateway_reference: 'not-numeric',
+            payment_transaction_id: undefined,
+          }),
+        ],
+      });
+      expect(plan.ledgerKnown).toBe(true);
       expect(plan.amount).toBe(100);
     });
   });

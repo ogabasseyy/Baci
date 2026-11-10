@@ -177,15 +177,17 @@ export function getCancelRefundPlan(
           row.payment_transaction_id === leg.id && isRefundInFlightRow(row)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
-  // An unlinked refund that several legs could own cannot be attributed (the
-  // worker quarantines that order), so the plan cannot say what is owed.
-  const unresolved =
-    legs.length > 1 &&
-    refundRows.some(
-      (row) =>
-        !row.payment_transaction_id &&
-        (DONE_REFUND_STATUSES.has(row.status) || isRefundInFlightRow(row))
-    );
+  // The worker quarantines an order holding refund evidence it cannot
+  // attribute, so the plan cannot say what is owed. An unlinked COMPLETED
+  // refund only stays unattributable when several legs could own it (a sole
+  // leg owns it); unlinked NON-TERMINAL evidence (pending, processing, or a
+  // recoverable failed row) is unattributable even with a single leg.
+  const unresolved = refundRows.some(
+    (row) =>
+      !row.payment_transaction_id &&
+      ((legs.length > 1 && DONE_REFUND_STATUSES.has(row.status)) ||
+        isRefundInFlightRow(row))
+  );
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')
     .map((leg) => {

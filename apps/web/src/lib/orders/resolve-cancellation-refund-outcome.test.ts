@@ -198,4 +198,24 @@ describe('resolveCancellationRefundOutcome', () => {
       resolveCancellationRefundOutcome({ ...manual, supabase })
     ).resolves.toEqual({ outcome: 'unknown' });
   });
+
+  it('reports unknown for an unlinked in-flight refund even with a single payment leg', async () => {
+    const supabase = supabaseWith({
+      ledger: {
+        data: [
+          leg(),
+          leg({
+            id: 'refund-1',
+            payment_transaction_id: null,
+            status: 'processing',
+            transaction_type: 'refund',
+          }),
+        ],
+        error: null,
+      },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
 });

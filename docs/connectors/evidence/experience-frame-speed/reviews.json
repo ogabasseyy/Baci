@@ -1,0 +1,63 @@
+[
+  {
+    "scope": "initial-30",
+    "status": "review_completed",
+    "issues": 0,
+    "reviewedFiles": [
+      "apps/web/src/components/storefront/cookie-consent.module.css",
+      "apps/web/src/components/storefront/cookie-consent.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceFrame.test.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceFrame.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceShell.test.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceShell.tsx",
+      "apps/web/src/components/storefront/experience/experience-commerce-dispatcher.ts",
+      "apps/web/src/components/storefront/experience/experience-frame-types.ts",
+      "apps/web/src/components/storefront/experience/experience-host-dispatcher-static-graph.test.ts",
+      "apps/web/src/components/storefront/experience/experience-host-dispatcher.test.ts",
+      "apps/web/src/components/storefront/experience/experience-host-dispatcher.ts",
+      "apps/web/src/lib/experience/candidate-performance-budget.test.ts",
+      "apps/web/src/lib/experience/candidate-performance-budget.ts",
+      "apps/web/src/lib/experience/catalog-adapter.ts",
+      "apps/web/src/lib/experience/local-build-supervisor.test.ts",
+      "apps/web/src/lib/experience/local-build-supervisor.ts",
+      "apps/web/src/lib/experience/local-prerender-storefront.ts",
+      "apps/web/src/lib/experience/public-render-cache.test.ts",
+      "apps/web/src/lib/experience/public-render-cache.ts",
+      "apps/web/src/lib/experience/public-runtime.test.ts",
+      "apps/web/src/lib/experience/public-runtime.ts",
+      "apps/web/src/lib/experience/tool-dispatcher.performance-budget.test.ts",
+      "apps/web/src/lib/experience/tool-dispatcher.ts",
+      "apps/web/src/schemas/experience-tool-results.ts",
+      "apps/web/tests/experience-commerce/analytics-fixture.integration.test.ts",
+      "apps/web/tests/experience-commerce/analytics-fixture.ts",
+      "apps/web/tests/experience-durable/fixture.ts",
+      "apps/web/tests/experience-durable/storefront.integration.test.ts",
+      "apps/web/tools/experience-runner/published-gateway.ts",
+      "apps/web/tools/experience-runner/published-prerender.test.ts"
+    ],
+    "allowance": "included-free"
+  },
+  {
+    "scope": "presentation-4",
+    "status": "review_completed",
+    "issues": 0,
+    "reviewedFiles": [
+      "apps/web/src/components/storefront/experience/ExperienceFrame.test.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceFrame.tsx",
+      "apps/web/src/components/storefront/experience/ExperienceShell.tsx",
+      "apps/web/src/components/storefront/experience/experience-frame-types.ts"
+    ],
+    "allowance": "included-free"
+  },
+  {
+    "scope": "mcp-wire-3",
+    "status": "review_completed",
+    "issues": 0,
+    "reviewedFiles": [
+      "apps/web/builder-mcp-server/experience-contracts.json",
+      "apps/web/builder-mcp-server/experience-tool-result.test.ts",
+      "apps/web/builder-mcp-server/experience-tool-result.ts"
+    ],
+    "allowance": "included-free"
+  }
+]

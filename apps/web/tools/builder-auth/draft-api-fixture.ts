@@ -65,6 +65,41 @@ export async function startDraftApi(
         headers: req.headers,
       },
       (result) => {
+        // Synthetic fixture only: preserve SQLSTATE for a failed finish RPC,
+        // without logging bearer tokens, request bodies or database details.
+        if (
+          (result.statusCode ?? 0) >= 400 &&
+          req.url === '/rest/v1/rpc/builder_finish_edit'
+        ) {
+          console.error(
+            'Synthetic builder_finish_edit HTTP status:',
+            result.statusCode
+          );
+          let bytes = 0;
+          let body = '';
+          result.on('data', (chunk: Buffer) => {
+            bytes += chunk.length;
+            if (bytes <= 4096) body += chunk.toString('utf8');
+          });
+          result.on('end', () => {
+            try {
+              const value: unknown = JSON.parse(body);
+              if (
+                value &&
+                typeof value === 'object' &&
+                'code' in value &&
+                typeof value.code === 'string' &&
+                /^[A-Z0-9]{5,12}$/.test(value.code)
+              )
+                console.error(
+                  'Synthetic builder_finish_edit SQLSTATE:',
+                  value.code
+                );
+            } catch {
+              /* No raw response details are emitted. */
+            }
+          });
+        }
         res.writeHead(result.statusCode ?? 502, result.headers);
         result.pipe(res);
       }

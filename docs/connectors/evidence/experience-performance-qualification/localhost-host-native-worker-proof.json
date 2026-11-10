@@ -1,0 +1,23 @@
+{
+  "output": {
+    "format": "baci.performance-sample/v1",
+    "policyId": "chromium-native-reference/v1",
+    "browser": "Chromium 153.0.8010.12",
+    "route": "/",
+    "width": 390,
+    "buildDigest": "89eb0a85c0d268e04f79cc11f8f1496d2f82e45f0e34b8d5ca8aa83ed1412abc",
+    "cache": "cold-context",
+    "hostLcpMs": 168,
+    "frameLcpMs": 455.7001953125,
+    "hostCls": 0,
+    "frameCls": 0,
+    "interactionDurationMs": null,
+    "contentVisible": true,
+    "imagesDecoded": true,
+    "consoleErrors": 0,
+    "contaminated": false,
+    "observationWindowMs": 2000
+  },
+  "wallMs": 6981,
+  "jobId": "baci-experience-b619fc6a-c84f-4d3f-bdfa-e6323512f25f"
+}

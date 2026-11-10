@@ -156,6 +156,10 @@
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
       ]
+    },
+    "qualify:experience:release": {
+      "cache": false,
+      "dependsOn": ["^qualify:experience:release"]
     }
   }
 }

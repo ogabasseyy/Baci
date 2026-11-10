@@ -37,7 +37,18 @@ const externalWaybillPersistPath =
 const externalWaybillRoutePath =
   'apps/web/src/app/api/orders/[id]/shipping/gigl-waybill/route.ts';
 
+const quoteRead = 'apps/web/src/lib/shipping/quote-session-capability.ts';
+const storefrontAttest =
+  'apps/web/src/lib/shipping/storefront-quote-attestation.ts';
+const cachedRead = 'apps/web/src/app/api/shipping/quotes/read-cached-quotes.ts';
+
 export const eventPipelineShippingCredentialPaths = [
+  // Fixed read-continuation/provider-attestation signatures; ordinary clients/RLS still enforce access.
+  [quoteRead, proofPath, envPath],
+  [storefrontAttest, proofPath, envPath],
+  [cachedRead, quoteRead, proofPath, envPath],
+  [quotesRoutePath, quoteRead, proofPath, envPath],
+  [giglQuoteRoutePath, quotesRoutePath, quoteRead, proofPath, envPath],
   // Audited fixed-action recovery boundary: authenticated orders.fulfill +
   // orders.edit route, same paid fee, verified destination, DB
   // snapshot/permission/proof rechecks.

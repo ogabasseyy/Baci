@@ -10,6 +10,7 @@ import { getStorefrontShellSnapshotBase } from '@/app/(storefront)/[slug]/storef
 import { OgabasseyPdpProductLcpSkeleton } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-lcp-skeleton';
 import { preloadOgabasseyPdpProductResources } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-resource-hints';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { OgabasseyPdpBelowFoldIsland } from '@/components/storefront/ogabassey/pdp/client-islands';
 import { createCriticalCartProduct } from '@/components/storefront/ogabassey/pdp/critical-cart-product';
 import { OgabasseyPdpCriticalCommerce } from '@/components/storefront/ogabassey/pdp/critical-commerce';
@@ -36,6 +37,10 @@ import {
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
 import type { CurrencyConfig } from '@/lib/currency';
+import { experienceOwnsProductRoute } from '@/lib/experience/product-route-ownership';
+import { loadPublishedExperience } from '@/lib/experience/published-manifest';
+import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
+import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { getKnownOgaBasseyMerchantId } from '@/lib/ogabassey-route-identity';
 import { isPaystackConfigured } from '@/lib/paystack';
@@ -642,6 +647,36 @@ export default async function CategoryProductPage({
     );
   }
 
+  const experience = getExperienceStorefrontRuntime()
+    ? await loadPublishedExperience(merchant)
+    : null;
+  if (
+    experience &&
+    (await experienceOwnsProductRoute(
+      experience.routes,
+      getProductUrl(product),
+      product.slug ?? productSlug
+    ))
+  )
+    return (
+      <ExperienceServerBoundary
+        merchant={merchant}
+        path={getProductUrl(product)}
+        fallback={
+          <main>
+            <h1>{product.name}</h1>
+            <p>
+              {product.price == null
+                ? 'Contact for price'
+                : formatDisplayCurrency(
+                    product.price,
+                    resolveMerchantCurrencyConfig(merchant).code
+                  )}
+            </p>
+          </main>
+        }
+      />
+    );
   const primaryProductImage = product.imageLarge || product.image || null;
   const criticalFallbackProductImage =
     (product as { baseImage?: string | null }).baseImage || primaryProductImage;

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
 import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
 
@@ -17,6 +18,10 @@ export function generateCSP(
     isOxygenPaymentSurface(pathname ?? '', searchParams)
       ? readOxygenHostedOrigins().hosted
       : [];
+  const executionOrigin = getExperienceExecutionOrigin();
+  const builderExperiencePreview = isExperienceBuilderPreviewPath(
+    pathname ?? ''
+  );
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`
@@ -68,7 +73,16 @@ export function generateCSP(
           };
 
   return Object.entries(directives)
-    .map(([key, value]) => (value ? `${key} ${value}` : key).trim())
+    .map(([key, value]) => {
+      const source =
+        key === 'frame-src' &&
+        executionOrigin &&
+        (routeType === 'storefront' ||
+          (routeType === 'admin' && builderExperiencePreview))
+          ? `${value} ${executionOrigin}`
+          : value;
+      return (source ? `${key} ${source}` : key).trim();
+    })
     .join('; ');
 }
 
@@ -101,7 +115,7 @@ export function buildStrictCspResponse(
   isLocal: boolean
 ): { nonce: string; response: NextResponse } {
   const nonce = generateCspNonce();
-  const csp = generateCSP(routeType, isLocal, nonce);
+  const csp = generateCSP(routeType, isLocal, nonce, request.nextUrl.pathname);
   const requestHeaders = buildProxyRequestHeaders(request);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', csp);
@@ -114,4 +128,11 @@ export function buildStrictCspResponse(
       },
     }),
   };
+}
+
+export function isExperienceBuilderPreviewPath(pathname: string) {
+  return (
+    pathname === '/builder/experience' ||
+    pathname.startsWith('/builder/experience/')
+  );
 }

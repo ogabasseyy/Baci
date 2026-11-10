@@ -15,6 +15,7 @@ import {
   type EligibleLineDiscountResult,
   type NegotiationLineInput,
 } from './eligible-line-discount';
+import { monitorNegotiationCostFloor } from './negotiation-cost-floor-monitor';
 import { applyPersistedLineOccurrenceKeys } from './order-negotiation-occurrence-keys';
 
 type VariantPriceRow = {
@@ -218,9 +219,24 @@ export async function computeOrderNegotiationDiscount({
     });
   }
 
-  return applyPersistedLineOccurrenceKeys(
-    computeEligibleLineDiscount(lines, MAX_AUTO_NEGOTIATION_DISCOUNT_RATE),
-    indexedItems,
-    productMap
+  const result = computeEligibleLineDiscount(
+    lines,
+    MAX_AUTO_NEGOTIATION_DISCOUNT_RATE
   );
+  // Observation only (never alters the result): flag accepted discounts that
+  // land under the merchant's cost floor so the exposure can be measured.
+  if (!result.rejectionCode && result.totalDiscount > 0) {
+    await monitorNegotiationCostFloor({
+      supabase,
+      merchantId,
+      lines: lines.map((line) => ({
+        productId: line.productId,
+        catalogUnitPrice: line.catalogUnitPrice,
+        clientUnitPrice: line.clientUnitPrice,
+        negotiable: line.negotiable,
+      })),
+    });
+  }
+
+  return applyPersistedLineOccurrenceKeys(result, indexedItems, productMap);
 }

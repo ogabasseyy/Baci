@@ -64,16 +64,19 @@ export function ModalSheet({
   const { height: slideDistance } = useWindowDimensions();
   const [cardOffset] = useState(() => new Animated.Value(slideDistance));
   const [mounted, setMounted] = useState(visible);
+  // Mark as mounted during render when opening, so the effect below does not
+  // re-run (and restart the opening slide) just to record it.
+  if (visible && !mounted) setMounted(true);
   const notifyClosed = useEffectEvent(() => onClosed?.());
+  const alreadyClosed = useEffectEvent(() => !mounted);
   useEffect(() => {
     if (!fadeBackdrop) return;
     // Already closed (first mount, or a rotation while closed): nothing to
     // animate and no close to report.
-    if (!visible && !mounted) {
+    if (!visible && alreadyClosed()) {
       cardOffset.setValue(slideDistance);
       return;
     }
-    if (visible) setMounted(true);
     const slide = Animated.timing(cardOffset, {
       toValue: visible ? 0 : slideDistance,
       duration: CARD_SLIDE_MS,
@@ -86,7 +89,7 @@ export function ModalSheet({
       }
     });
     return () => slide.stop();
-  }, [fadeBackdrop, visible, mounted, cardOffset, slideDistance]);
+  }, [fadeBackdrop, visible, cardOffset, slideDistance]);
   const modalVisible = fadeBackdrop ? visible || mounted : visible;
   const content = fadeBackdrop ? (
     <Animated.View

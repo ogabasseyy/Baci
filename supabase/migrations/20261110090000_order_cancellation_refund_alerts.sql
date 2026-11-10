@@ -37,6 +37,8 @@ REVOKE ALL ON TABLE public.order_cancellation_refund_alerts
 GRANT SELECT, INSERT, UPDATE ON TABLE public.order_cancellation_refund_alerts
   TO service_role;
 
+DROP POLICY IF EXISTS order_cancellation_refund_alerts_service_role
+  ON public.order_cancellation_refund_alerts;
 CREATE POLICY order_cancellation_refund_alerts_service_role
   ON public.order_cancellation_refund_alerts
   FOR ALL TO service_role USING (true) WITH CHECK (true);

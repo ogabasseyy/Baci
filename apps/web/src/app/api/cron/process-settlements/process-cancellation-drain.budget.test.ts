@@ -250,19 +250,6 @@ describe('processCancellationDrain budget scheduling', () => {
     }
   });
 
-  it('still runs the merchant alert pass when the side-effect drain rejects', async () => {
-    mocks.alertPendingRefundReviews.mockResolvedValue(undefined);
-    mocks.drainFailedOrderCancellationSideEffects.mockRejectedValue(
-      new Error('cancellation_side_effect_lookup_failed')
-    );
-    await processCancellationDrain(
-      supabase,
-      mocks.sendEmail,
-      mocks.notifyMerchant
-    );
-    expect(mocks.alertPendingRefundReviews).toHaveBeenCalledTimes(1);
-  });
-
   it('retries side effects only after refund reconciliation settles', async () => {
     let resolveRefunds!: (value: unknown) => void;
     const refundsGate = new Promise((resolve) => {

@@ -183,6 +183,59 @@ describe('alertPendingRefundReviews', () => {
     expect(mocks.alert).toHaveBeenCalledTimes(1);
   });
 
+  it('returns counts for the pass', async () => {
+    mocks.alert
+      .mockReset()
+      .mockResolvedValueOnce('alerted')
+      .mockResolvedValueOnce('skipped');
+    const supabase = makeSupabase({
+      reviews: [
+        {
+          alert_attempts: null,
+          candidates: [],
+          id: 'r1',
+          merchant_id: 'm1',
+          metadata: {},
+          order_id: 'o1',
+        },
+        {
+          alert_attempts: null,
+          candidates: [],
+          id: 'r3',
+          merchant_id: 'm1',
+          metadata: {},
+          order_id: 'o1',
+        },
+      ],
+    });
+    await expect(
+      alertPendingRefundReviews({ senders, supabase: supabase as never })
+    ).resolves.toEqual({ alerted: 1, attempted: 2, deferred: 0, failed: 1 });
+  });
+
+  it('counts a deferral and stops', async () => {
+    mocks.alert.mockReset().mockResolvedValue('deferred');
+    await expect(
+      alertPendingRefundReviews({ senders, supabase: makeSupabase() as never })
+    ).resolves.toMatchObject({ attempted: 1, deferred: 1 });
+  });
+
+  it('includes the underlying lookup error in the log', async () => {
+    const error = new Error('rpc down');
+    const { logger } = await import('@/lib/logger');
+    const result = await alertPendingRefundReviews({
+      senders,
+      supabase: makeSupabase({ reviewError: error }) as never,
+    });
+    expect(result.failed).toBe(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error,
+        message: expect.stringContaining('lookup failed'),
+      })
+    );
+  });
+
   it('swallows a failed review lookup', async () => {
     mocks.alert.mockReset();
     await expect(
@@ -190,7 +243,7 @@ describe('alertPendingRefundReviews', () => {
         senders,
         supabase: makeSupabase({ reviewError: new Error('db') }) as never,
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ failed: 1 });
     expect(mocks.alert).not.toHaveBeenCalled();
   });
 });

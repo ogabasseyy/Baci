@@ -40,9 +40,16 @@ function isActionable(review: OpenReview): review is ActionableReview {
  * ones. Unconfirmed claims past the cool-down (under the retry cap) come
  * back too, carrying their attempt count.
  */
+export interface RefundAlertPassSummary {
+  alerted: number;
+  attempted: number;
+  deferred: number;
+  failed: number;
+}
+
 async function loadReviewsNeedingAlert(
   supabase: AlertSupabase
-): Promise<ActionableReview[]> {
+): Promise<ActionableReview[] | null> {
   const now = Date.now();
   const { data, error } = await supabase.rpc(
     'list_cancellation_refund_reviews_needing_alert_v1',
@@ -54,8 +61,8 @@ async function loadReviewsNeedingAlert(
     }
   );
   if (error) {
-    logger.error({ message: 'Refund review alert lookup failed' });
-    return [];
+    logger.error({ error, message: 'Refund review alert lookup failed' });
+    return null;
   }
   return ((data ?? []) as OpenReview[]).filter(isActionable);
 }
@@ -81,16 +88,23 @@ export async function alertPendingRefundReviews({
   deadlineMs?: number;
   senders: RefundReviewAlertSenders;
   supabase: AlertSupabase;
-}): Promise<void> {
+}): Promise<RefundAlertPassSummary> {
+  const summary: RefundAlertPassSummary = {
+    alerted: 0,
+    attempted: 0,
+    deferred: 0,
+    failed: 0,
+  };
+  const outOfBudget = () =>
+    deadlineMs !== undefined && deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS;
   try {
-    if (
-      deadlineMs !== undefined &&
-      deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS
-    ) {
-      return;
-    }
+    if (outOfBudget()) return summary;
     const pending = await loadReviewsNeedingAlert(supabase);
-    if (pending.length === 0) return;
+    if (pending === null) {
+      summary.failed += 1;
+      return summary;
+    }
+    if (pending.length === 0 || outOfBudget()) return summary;
     const orderIds = [...new Set(pending.map((r) => r.order_id))];
     const merchantIds = [...new Set(pending.map((r) => r.merchant_id))];
     const [
@@ -104,9 +118,16 @@ export async function alertPendingRefundReviews({
       supabase.from('merchants').select('id, email').in('id', merchantIds),
     ]);
     if (ordersError || merchantsError) {
-      logger.error({ message: 'Refund review alert context lookup failed' });
-      return;
+      logger.error({
+        contextErrors: [ordersError?.message, merchantsError?.message].filter(
+          Boolean
+        ),
+        message: 'Refund review alert context lookup failed',
+      });
+      summary.failed += 1;
+      return summary;
     }
+    if (outOfBudget()) return summary;
     const orderById = new Map(
       (
         (orders ?? []) as Array<{
@@ -122,16 +143,15 @@ export async function alertPendingRefundReviews({
         (m) => [m.id, m]
       )
     );
-    let attempted = 0;
     for (const review of pending) {
-      if (attempted >= MAX_ALERTS_PER_PASS) break;
+      if (summary.attempted >= MAX_ALERTS_PER_PASS) break;
       const order = orderById.get(review.order_id);
       const merchant = merchantById.get(review.merchant_id);
       // Tenant check: the review, order, and merchant must agree.
       if (!order || !merchant || order.merchant_id !== merchant.id) continue;
       // Only reviews actually alerted use a slot, so invalid ones cannot
       // starve older valid reviews.
-      attempted += 1;
+      summary.attempted += 1;
       const result = await alertMerchantOfRefundReview({
         deadlineMs,
         merchant,
@@ -144,9 +164,16 @@ export async function alertPendingRefundReviews({
         senders,
         supabase,
       });
-      if (result === 'deferred') return;
+      if (result === 'alerted') summary.alerted += 1;
+      else if (result === 'skipped') summary.failed += 1;
+      else {
+        summary.deferred += 1;
+        break;
+      }
     }
   } catch (error) {
     logger.error({ error, message: 'Refund review alert pass failed' });
+    summary.failed += 1;
   }
+  return summary;
 }

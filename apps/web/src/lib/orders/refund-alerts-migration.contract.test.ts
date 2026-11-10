@@ -55,6 +55,21 @@ describe('order_cancellation_refund_alerts migration contract', () => {
     );
   });
 
+  it('drops the policy before recreating it', () => {
+    expect(
+      sql.indexOf(
+        'DROP POLICY IF EXISTS order_cancellation_refund_alerts_service_role'
+      )
+    ).toBeGreaterThan(-1);
+    expect(
+      sql.indexOf(
+        'DROP POLICY IF EXISTS order_cancellation_refund_alerts_service_role'
+      )
+    ).toBeLessThan(
+      sql.indexOf('CREATE POLICY order_cancellation_refund_alerts_service_role')
+    );
+  });
+
   it('locks the RPC down to service_role', () => {
     expect(sql).toMatch(/SET search_path = ''/);
     expect(sql).toMatch(

@@ -186,6 +186,17 @@ describe('alertMerchantOfRefundReview', () => {
     expect(supabase.confirmEq).not.toHaveBeenCalled();
   });
 
+  it('does not wait on a hung confirm beyond the budget', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    supabase.confirmEq.mockReturnValue(new Promise(() => {}));
+    const pending = run(supabase, makeSenders(), {
+      deadlineMs: Date.now() + 30_000,
+    });
+    await vi.advanceTimersByTimeAsync(2_500);
+    await expect(pending).resolves.toBe('alerted');
+  });
+
   it('confirms a success that lands after the timeout', async () => {
     vi.useFakeTimers();
     const supabase = makeSupabase();

@@ -86,6 +86,15 @@ describe('deliverAlert', () => {
     expect(body).not.toMatch(/[\r\n]/);
   });
 
+  it('strips HTML metacharacters from the push order number', async () => {
+    const senders = makeSenders();
+    await run(senders, {
+      order: { ...order, order_number: `<b>"1'&2</b>` },
+    }).promise;
+    const data = vi.mocked(senders.sendPush).mock.calls[0][3];
+    expect(data.order_number).toBe('b12/b');
+  });
+
   it('sanitizes labels and falls back to the id when empty', () => {
     expect(sanitizeOrderLabel('A\r\nB C\u0000')).toBe('ABC');
     expect(sanitizeOrderLabel('x'.repeat(100))).toHaveLength(40);

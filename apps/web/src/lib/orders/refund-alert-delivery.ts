@@ -113,7 +113,7 @@ export async function deliverAlert({
             // Reuses the shipped admin deep link: this type opens the order.
             type: 'paystack_refund_needs_attention',
             order_id: order.id,
-            order_number: label,
+            order_number: label.replace(/[<>&"']/g, ''),
           },
           'payments'
         )

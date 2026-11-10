@@ -127,14 +127,22 @@ export async function processCancellationDrain(
   // drain whether it ran, was skipped for budget, or rejected (allSettled
   // above): they have their own refund-phase cutoff and budget check, and
   // never throw, so a backlog cannot starve them.
-  await alertPendingRefundReviews({
+  const merchantRefundAlerts = (await alertPendingRefundReviews({
     deadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
     senders: {
       sendEmail: sendCancellationEmail,
       sendPush: sendMerchantPush,
     },
     supabase,
-  });
+  })) ?? { alerted: 0, attempted: 0, deferred: 0, failed: 0 };
+  if (merchantRefundAlerts.failed > 0) {
+    // Warn only: a persistent lookup/claim problem must stay visible without
+    // pinning the cron red (alerts retry on the next pass).
+    logger.warn({
+      message: 'Merchant refund-review alerts had failures',
+      ...merchantRefundAlerts,
+    });
+  }
   // Budget the serial drain from the remaining invocation time: an
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay
@@ -260,5 +268,6 @@ export async function processCancellationDrain(
     legacyPaystackRefunds: legacyRefundResult.value,
     paystackRefundWatchSweep: watchSweepResult.value,
     paystackRefundNotifications: notificationResult[0].value,
+    merchantRefundAlerts,
   });
 }

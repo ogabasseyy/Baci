@@ -132,7 +132,25 @@ export async function alertMerchantOfRefundReview({
       clearTimeout(timer);
     }
     // Persist a success seen before the timeout; a later one is best effort.
-    if (confirmation) await confirmation;
+    if (confirmation) {
+      // confirmClaim never throws; bound the wait by the remaining budget so
+      // a hung write cannot eat the notification drain's reserve.
+      const confirmMs = Math.max(
+        0,
+        Math.min(
+          TIMEOUT_GRACE_MS,
+          deadlineMs === undefined ? TIMEOUT_GRACE_MS : deadlineMs - Date.now()
+        )
+      );
+      let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        confirmation,
+        new Promise<void>((resolve) => {
+          confirmTimer = setTimeout(resolve, confirmMs);
+        }),
+      ]);
+      clearTimeout(confirmTimer);
+    }
     if (outcome === 'timeout') {
       logger.warn({
         attempt: (prior?.attempts ?? 0) + 1,

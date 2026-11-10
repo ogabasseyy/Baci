@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  alertPendingRefundReviews: vi.fn(),
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
   isRefundVerificationPendingBefore: vi.fn(),
@@ -27,6 +28,9 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
 }));
+vi.mock('@/lib/orders/alert-pending-refund-reviews', () => ({
+  alertPendingRefundReviews: mocks.alertPendingRefundReviews,
+}));
 vi.mock('@/lib/orders/refund-verification-pending', () => ({
   REFUND_VERIFICATION_PROBE_BUDGET_MS: 10_000,
   isRefundVerificationPendingBefore: mocks.isRefundVerificationPendingBefore,
@@ -52,6 +56,7 @@ vi.mock('@/lib/payments/sweep-paystack-refund-recovery-watches', () => ({
   sweepPaystackRefundRecoveryWatches: mocks.sweepPaystackRefundRecoveryWatches,
 }));
 
+import { emptyAlertSummary } from '@/lib/orders/refund-alert.test-support';
 import { processCancellationDrain } from './process-cancellation-drain';
 
 describe('processCancellationDrain budget scheduling', () => {
@@ -62,6 +67,7 @@ describe('processCancellationDrain budget scheduling', () => {
       mock.mockReset();
     }
 
+    mocks.alertPendingRefundReviews.mockResolvedValue(emptyAlertSummary);
     mocks.isRefundVerificationPendingBefore.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],
@@ -211,6 +217,18 @@ describe('processCancellationDrain budget scheduling', () => {
       expect(
         mocks.drainFailedOrderCancellationSideEffects
       ).not.toHaveBeenCalled();
+      // The alert pass has its own budget gate and must still run.
+      expect(mocks.alertPendingRefundReviews).toHaveBeenCalledTimes(1);
+      expect(mocks.alertPendingRefundReviews).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadlineMs: expect.any(Number),
+          senders: expect.objectContaining({
+            sendEmail: mocks.sendEmail,
+            sendPush: mocks.notifyMerchant,
+          }),
+          supabase,
+        })
+      );
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('side-effect drain'),

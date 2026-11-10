@@ -81,7 +81,9 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF NEW.delivered_at IS NOT NULL OR NEW.dead_letter_at IS NOT NULL THEN
+  -- Same eligibility as the sweep: undelivered, not parked, not expired.
+  IF NEW.delivered_at IS NOT NULL OR NEW.dead_letter_at IS NOT NULL
+    OR NEW.expires_at <= pg_catalog.now() THEN
     RETURN NEW;
   END IF;
   IF NOT EXISTS (
@@ -197,7 +199,9 @@ REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
 -- minutes after it was written; with send-on-write and a 30-second sweep
 -- that only happens when delivery is broken. Both counts cover merchants
 -- currently enrolled in live updates only, so unenrolling a merchant clears
--- its share of the alarm at once. Both read small partial indexes.
+-- its share of the alarm at once. The stale count walks the existing
+-- undelivered-rows partial index (commerce_cart_events_outbox_idx), which
+-- holds only unsent notices; the dead-letter count uses the index below.
 --
 -- The reading is deliberately callable with the public anon key (as
 -- get_merchant_signup_policy_health is): the monitor route must not use a

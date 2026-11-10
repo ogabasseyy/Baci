@@ -223,6 +223,16 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- 6c. An already-expired notice is not sent at write time, as in the sweep.
+INSERT INTO public.commerce_cart_events (merchant_id, cart_id, version, operation_id, expires_at)
+VALUES ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 7, 'op-7', now() - interval '1 minute');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM realtime.messages WHERE payload ->> 'operationId' = 'op-7')
+    OR EXISTS (SELECT 1 FROM public.commerce_cart_events WHERE version = 7 AND delivered_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'an expired notice was sent at write time';
+  END IF;
+END $$;
+
 -- 7. Health reading: stale and dead-lettered notices are counted, and only
 --    for live-update merchants.
 DO $$ DECLARE v jsonb; BEGIN

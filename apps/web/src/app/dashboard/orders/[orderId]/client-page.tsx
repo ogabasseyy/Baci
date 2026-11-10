@@ -35,11 +35,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
-import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
+import { apiPatch, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import { getCancelRefundPlan } from '@/lib/orders/get-automatic-cancel-refund-amount';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
   type Order,
@@ -50,10 +48,7 @@ import { getOrderItems, type OrderDetailsItem } from '../order-items';
 import { getOrderSourceLabel } from '../order-source-display';
 import { OrderSourceIcon } from '../order-source-icon';
 import { StatusBadge } from '../status-badge';
-import {
-  CancelOrderDialog,
-  type CancelRefundChoice,
-} from './cancel-order-dialog';
+import { CancelOrderDialog } from './cancel-order-dialog';
 import ConfirmInsuranceDialog, {
   type ConfirmOrderPayload,
 } from './confirm-insurance-dialog';
@@ -61,6 +56,7 @@ import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary
 import { OrderPaymentSummary } from './OrderPaymentSummary';
 import { OrderRefundSection } from './order-refund-section';
 import { ShipmentDetailsCard } from './shipment-details-card';
+import { useOrderCancellation } from './use-order-cancellation';
 
 // Type definitions
 interface OrderDetailsClientPageProps {
@@ -139,10 +135,14 @@ export default function OrderDetailsClientPage({
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = useState(false);
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
-  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
-  const [cancelDialogSession, setCancelDialogSession] = useState(0);
-  const merchantContext = useMerchantSafe();
-  const cancelRefundPlan = getCancelRefundPlan(order);
+  const cancellation = useOrderCancellation({
+    onCancelled: () =>
+      setOrder((prev) => ({
+        ...prev,
+        shippingStatus: fromDbShippingStatus('cancelled'),
+      })),
+    order,
+  });
 
   if (!order) {
     return null;
@@ -162,60 +162,28 @@ export default function OrderDetailsClientPage({
     );
   };
 
-  const handleUpdateStatus = async (
-    newStatus: ShippingStatus,
-    refund?: CancelRefundChoice
-  ): Promise<boolean> => {
+  const handleUpdateStatus = async (newStatus: ShippingStatus) => {
     // If confirming ('Processing'), check if we need the new dialog
     if (newStatus === 'Processing' && order.shippingStatus === 'Pending') {
       setIsConfirmationDialogOpen(true);
-      return false;
+      return;
     }
 
-    if (newStatus === 'Canceled' && refund === undefined) {
-      // A paid order with money the worker could refund asks how to refund
-      // in a dialog; everything else keeps the plain confirmation.
-      if (cancelRefundPlan.amount > 0) {
-        setCancelDialogSession((session) => session + 1);
-        setIsCancelDialogOpen(true);
-        return false;
-      }
-      const warning =
-        order.paymentStatus === 'Paid'
-          ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
-          : 'Cancel this order and restore its tracked inventory?';
-      if (!window.confirm(warning)) return false;
+    if (newStatus === 'Canceled') {
+      await cancellation.requestCancellation();
+      return;
     }
 
     try {
-      let result: {
+      const result = await apiPatch<{
         order: {
           shipping_status: string;
           shipping_provider?: string | null;
           tracking_number?: string | null;
         };
-      };
-      if (newStatus === 'Canceled') {
-        await apiPost<{ success: boolean }>(
-          `/api/orders/${order.id}/cancelled`,
-          {
-            cancelled_by: 'merchant',
-            confirm_cancellation: true,
-            ...(refund && { refund }),
-          }
-        );
-        result = { order: { shipping_status: 'cancelled' } };
-      } else {
-        result = await apiPatch<{
-          order: {
-            shipping_status: string;
-            shipping_provider?: string | null;
-            tracking_number?: string | null;
-          };
-        }>(`/api/orders/${order.id}`, {
-          shipping_status: toDbShippingStatus(newStatus),
-        });
-      }
+      }>(`/api/orders/${order.id}`, {
+        shipping_status: toDbShippingStatus(newStatus),
+      });
 
       setOrder((prev) => ({
         ...prev,
@@ -224,14 +192,7 @@ export default function OrderDetailsClientPage({
           result.order.shipping_provider ?? prev.shipping_provider,
         tracking_number: result.order.tracking_number ?? prev.tracking_number,
       }));
-      toast({
-        title: `Order status updated to ${newStatus}`,
-        ...(refund === 'manual' && {
-          description:
-            'Refund pending. Record the refund from the Refund card once you have paid the customer.',
-        }),
-      });
-      return true;
+      toast({ title: `Order status updated to ${newStatus}` });
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -241,7 +202,6 @@ export default function OrderDetailsClientPage({
             ? error.message
             : 'Failed to update order status',
       });
-      return false;
     }
   };
 
@@ -361,21 +321,9 @@ export default function OrderDetailsClientPage({
         orderItems={displayItems}
       />
       <CancelOrderDialog
-        key={cancelDialogSession}
-        isOpen={isCancelDialogOpen}
-        onClose={() => setIsCancelDialogOpen(false)}
+        key={cancellation.dialogKey}
         currency={orderCurrency}
-        refundAmount={cancelRefundPlan.amount}
-        automaticSupported={cancelRefundPlan.automaticSupported}
-        canCancelOnly={
-          merchantContext?.hasPermission('orders', 'refund') ?? true
-        }
-        onConfirm={async (refund) => {
-          // Keep the dialog (and the merchant's choice) open on failure.
-          if (await handleUpdateStatus('Canceled', refund)) {
-            setIsCancelDialogOpen(false);
-          }
-        }}
+        {...cancellation.dialogProps}
       />
       <FulfillmentDialog
         isOpen={isFulfillmentDialogOpen}

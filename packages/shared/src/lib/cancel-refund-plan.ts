@@ -1,7 +1,25 @@
-import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
-import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
+const INTERNAL_PAYMENT_GATEWAYS = new Set([
+  'WALLET',
+  'SAVINGS',
+  'STORE_CREDIT',
+  'CASH',
+  'MANUAL',
+  'PAY_ON_DELIVERY',
+]);
 
-interface CancelRefundOrder {
+// Legacy rows may pad or re-case the gateway; missing or blank stays
+// external, matching the server's isExternalPaymentGateway.
+const normalizeGateway = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .toUpperCase();
+
+const isExternalGateway = (gateway: string | null): boolean => {
+  const normalized = normalizeGateway(gateway);
+  return normalized === '' || !INTERNAL_PAYMENT_GATEWAYS.has(normalized);
+};
+
+export interface CancelRefundOrder {
   paymentStatus: string;
   total: number;
   transactions?: Array<{
@@ -73,8 +91,7 @@ export function getCancelRefundPlan(
         (row) =>
           row.payment_transaction_id === leg.id &&
           (row.currency ?? null) === (leg.currency ?? null) &&
-          normalizePaymentGateway(row.gateway) ===
-            normalizePaymentGateway(leg.gateway)
+          normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
       .reduce((sum, row) => sum + row.amount, 0);
     return Math.max(leg.amount - covered, 0);
@@ -86,7 +103,7 @@ export function getCancelRefundPlan(
         FUNDED_LEG_STATUSES.has(leg.status) &&
         leg.status !== 'refunded' &&
         leg.amount > 0 &&
-        isExternalPaymentGateway(leg.gateway)
+        isExternalGateway(leg.gateway)
     )
     .map((leg) => ({ leg, remaining: remainingFor(leg) }))
     .filter(({ remaining }) => remaining > 0);
@@ -95,13 +112,7 @@ export function getCancelRefundPlan(
     automaticSupported: outstanding.every(
       ({ leg }) =>
         Boolean(leg.gateway_reference) &&
-        normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
+        normalizeGateway(leg.gateway) === 'PAYSTACK'
     ),
   };
-}
-
-export function getAutomaticCancelRefundAmount(
-  order: CancelRefundOrder
-): number {
-  return getCancelRefundPlan(order).amount;
 }

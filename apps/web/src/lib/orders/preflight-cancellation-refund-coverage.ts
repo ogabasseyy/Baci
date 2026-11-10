@@ -133,8 +133,13 @@ export async function preflightCancellationRefundCoverage({
   // disabling manual recording. Recorded Paystack claims still verify.
   const manualRefundOnly = order.cancellation_refund_mode === 'manual';
   const unsupportedLegs = manualRefundOnly ? [] : uncoveredLegs;
+  // Every leg still uncovered awaits the merchant, Paystack ones included:
+  // otherwise one verified record on a multi-capture order would let the
+  // step complete while the other captures are still unrefunded.
   const merchantOwnedLegIds = manualRefundOnly
-    ? uncoveredLegs.map((transaction) => transaction.id)
+    ? transactions
+        .filter((transaction) => !refundedPaymentIds.has(transaction.id))
+        .map((transaction) => transaction.id)
     : [];
   if (unsupportedLegs.length > 0) {
     const unsupportedReasons = unsupportedRefundReasons(unsupportedLegs);

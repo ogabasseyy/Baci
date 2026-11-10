@@ -51,7 +51,11 @@ export function mapCancellationRpcError(error: {
     };
   }
   if (error.code === '22023' && error.message.includes('invalid_refund_mode')) {
-    return { code: undefined, error: 'Invalid refund option.', status: 400 };
+    return {
+      code: 'INVALID_REFUND_MODE',
+      error: 'Invalid refund option.',
+      status: 400,
+    };
   }
   return { code: undefined, error: 'Failed to cancel order', status: 500 };
 }

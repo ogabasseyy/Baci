@@ -188,4 +188,38 @@ describe('preflightCancellationRefundCoverage', () => {
     ).catch(() => undefined);
     expect(quarantineRefund).toHaveBeenCalled();
   });
+
+  it('keeps an unrefunded Paystack capture awaiting the merchant on a cancel-only order', async () => {
+    const second = {
+      ...paystackPayment,
+      id: 'payment-2',
+      gateway_reference: 'ref-2',
+    };
+    const result = await preflightCancellationRefundCoverage(
+      input({
+        allLegs: [paystackPayment, second],
+        linkLegs: [paystackPayment, second],
+        order: { ...order, cancellation_refund_mode: 'manual' },
+        refundRows: [
+          {
+            amount: paystackPayment.amount,
+            currency: paystackPayment.currency,
+            gateway: 'paystack',
+            gateway_reference: 'refund-1',
+            metadata: {
+              payment_transaction_id: paystackPayment.id,
+              provider_refund_status: 'processed',
+            },
+            status: 'completed',
+          },
+        ],
+        soleCompletedLeg: undefined,
+        transactions: [paystackPayment, second],
+      })
+    ).catch((reason: unknown) => reason);
+    expect(result).not.toBeInstanceOf(Error);
+    const outcome = result as { manualPendingLegIds: Set<string> };
+    expect(outcome.manualPendingLegIds.has('payment-2')).toBe(true);
+    expect(outcome.manualPendingLegIds.has(paystackPayment.id)).toBe(false);
+  });
 });

@@ -80,18 +80,30 @@ export function createOrderDetailsStatusActions({
     }
 
     try {
-      await updateStatus({
+      const result = await updateStatus({
         orderId: order.id,
         status: newStatus,
         ...(refund && { refund }),
       });
       setShowStatusModal(false);
 
+      const refundOutcome =
+        typeof result === 'object' &&
+        result !== null &&
+        'refund_outcome' in result &&
+        typeof result.refund_outcome === 'string'
+          ? result.refund_outcome
+          : undefined;
+      // Prefer what the server reports over the requested choice.
+      const refundIsManual = refundOutcome
+        ? refundOutcome === 'manual_required'
+        : refund === 'manual';
+
       const subMessage =
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
           : newStatus === 'cancelled'
-            ? refund === 'manual'
+            ? refundIsManual
               ? 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.'
               : order.payment_status === 'paid' || order.amount_paid > 0
                 ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
@@ -166,22 +178,34 @@ export function createOrderDetailsStatusActions({
     }
 
     const isPaid = order.payment_status === 'paid' || order.amount_paid > 0;
-    if (isPaid) {
-      // Paid orders choose how the customer is refunded. The safe automatic
-      // refund is listed first (Android positions buttons by order), and the
-      // cancel-only path needs refund permission, which the server enforces.
+    // The plan (outstanding external legs, Paystack-only automatic refunds)
+    // is best effort: unknown keeps the safe default prompt below, and the
+    // server stays the real gate.
+    const plan = order.cancel_refund_plan;
+    const hasRefundChoice = isPaid && (plan === undefined || plan.amount > 0);
+    if (hasRefundChoice) {
+      const automaticSupported = plan?.automaticSupported ?? true;
+      // The safe automatic refund is listed first (Android positions buttons
+      // by order). Cancel-only needs refund permission, which the server
+      // enforces.
       Alert.alert(
         'Cancel paid order?',
-        'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.',
+        automaticSupported
+          ? 'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+          : 'Part of this payment was not made through Paystack, so it cannot be refunded automatically. Cancel the order, refund the customer yourself, then record the refund. Submit once; if the result is unclear, check the order status instead of cancelling again.',
         [
           { text: 'Keep Order', style: 'cancel' },
-          {
-            text: 'Cancel and refund to original payment method',
-            style: 'destructive',
-            onPress: () => {
-              void performStatusUpdate(newStatus, 'automatic');
-            },
-          },
+          ...(automaticSupported
+            ? [
+                {
+                  text: 'Cancel and refund to original payment method',
+                  style: 'destructive' as const,
+                  onPress: () => {
+                    void performStatusUpdate(newStatus, 'automatic');
+                  },
+                },
+              ]
+            : []),
           {
             text: 'Cancel only (I will refund them)',
             style: 'destructive',

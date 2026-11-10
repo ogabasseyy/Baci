@@ -177,3 +177,51 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     });
   });
 });
+
+describe('cancellation refund plan', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hides the automatic refund when an outstanding leg is not Paystack', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: {
+        cancel_refund_plan: { amount: 5000, automaticSupported: false },
+      },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    const buttons = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    expect(buttons?.map((button) => button.text)).toEqual([
+      'Keep Order',
+      'Cancel only (I will refund them)',
+    ]);
+  });
+
+  it('uses the plain confirmation when nothing external is refundable', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: { cancel_refund_plan: { amount: 0, automaticSupported: true } },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    expect(vi.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Cancel order?');
+  });
+
+  it('words the success message from the server refund outcome', async () => {
+    const { actions, setSuccessModal } = createPaidOrderStatusActions({
+      updateStatus: vi
+        .fn()
+        .mockResolvedValue({ refund_outcome: 'queued_if_required' }),
+    });
+    await actions.handleStatusUpdate('cancelled');
+    const buttons = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    buttons
+      ?.find((button) => button.text === 'Cancel only (I will refund them)')
+      ?.onPress?.();
+    await vi.waitFor(() => {
+      expect(setSuccessModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subMessage: expect.stringContaining('Check the refund status'),
+        })
+      );
+    });
+  });
+});

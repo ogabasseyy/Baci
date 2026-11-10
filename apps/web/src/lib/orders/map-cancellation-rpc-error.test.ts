@@ -13,7 +13,7 @@ describe('mapCancellationRpcError', () => {
     ['P0002', 'order_not_found', 404, undefined],
     ['42501', 'order_cancel_forbidden', 403, undefined],
     ['42501', 'order_cancel_refund_forbidden', 403, 'CANCEL_REFUND_FORBIDDEN'],
-    ['22023', 'invalid_refund_mode', 400, undefined],
+    ['22023', 'invalid_refund_mode', 400, 'INVALID_REFUND_MODE'],
     ['XX000', 'boom', 500, undefined],
   ])('maps %s %s', (code, message, status, mapped) => {
     expect(mapCancellationRpcError({ code, message })).toMatchObject({

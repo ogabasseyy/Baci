@@ -28,6 +28,7 @@ export interface OrderDetailsItem {
 export interface OrderDetailsRecord {
   amount_paid: number;
   balance: number;
+  cancel_refund_plan?: { amount: number; automaticSupported: boolean };
   cancelled_at?: string | null;
   created_at: string;
   currency?: string | null;

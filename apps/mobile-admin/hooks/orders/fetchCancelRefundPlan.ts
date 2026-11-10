@@ -1,0 +1,49 @@
+import {
+  type CancelRefundPlan,
+  getCancelRefundPlan,
+} from '@baci/shared/lib/cancel-refund-plan';
+import { supabase } from '@/lib/supabase';
+
+/**
+ * The refund plan a cancellation would face: outstanding external payment
+ * legs and whether the worker can refund them automatically. Best effort —
+ * undefined (unknown) keeps the cancel prompt on its safe default, since the
+ * server remains the real gate.
+ */
+export async function fetchCancelRefundPlan({
+  merchantId,
+  orderId,
+  paymentStatus,
+  total,
+}: {
+  merchantId: string;
+  orderId: string;
+  paymentStatus: string;
+  total: number;
+}): Promise<CancelRefundPlan | undefined> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select(
+      'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id'
+    )
+    .eq('order_id', orderId)
+    .eq('merchant_id', merchantId)
+    .in('transaction_type', ['payment', 'refund']);
+  if (error || !data) return undefined;
+  return getCancelRefundPlan({
+    paymentStatus: paymentStatus === 'paid' ? 'Paid' : paymentStatus,
+    total,
+    transactions: data.map((row) => ({
+      amount: Number(row.amount),
+      currency: row.currency,
+      gateway: row.gateway,
+      gateway_reference: row.gateway_reference,
+      id: row.id,
+      payment_transaction_id: (
+        row as { payment_transaction_id?: string | null }
+      ).payment_transaction_id,
+      status: row.status,
+      transaction_type: row.transaction_type,
+    })),
+  });
+}

@@ -4,6 +4,7 @@ import { createOrderDetailsStatusActions } from './createOrderDetailsStatusActio
 type ActionsParams = Parameters<typeof createOrderDetailsStatusActions>[0];
 
 export function createPaidOrderStatusActions(overrides?: {
+  order?: Partial<NonNullable<ActionsParams['order']>>;
   setSuccessModal?: ActionsParams['setSuccessModal'];
   updateStatus?: ActionsParams['updateStatus'];
 }) {
@@ -28,6 +29,7 @@ export function createPaidOrderStatusActions(overrides?: {
       shipping_status: 'processing',
       total: 5000,
       updated_at: '',
+      ...overrides?.order,
     },
     setShowCreditModal: vi.fn(),
     setShowPaymentOptionModal: vi.fn(),

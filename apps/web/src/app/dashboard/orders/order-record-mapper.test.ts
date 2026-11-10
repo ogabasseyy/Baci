@@ -1,5 +1,5 @@
+import { getCancelRefundPlan } from '@baci/shared/lib/cancel-refund-plan';
 import { describe, expect, it } from 'vitest';
-import { getCancelRefundPlan } from '@/lib/orders/get-automatic-cancel-refund-amount';
 import { mapDashboardOrderRecord } from './order-record-mapper';
 
 const baseOrder = {

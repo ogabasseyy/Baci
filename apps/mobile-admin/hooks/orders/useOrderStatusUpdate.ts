@@ -148,7 +148,22 @@ async function updateOrderStatus(
   }
 
   if (isCancellation) {
-    return { id: orderId, shipping_status: 'cancelled' } as Order;
+    // The server reports what it actually did (a replay keeps the persisted
+    // mode), so callers word the outcome from this, not the request.
+    const sideEffects =
+      payload && typeof payload === 'object' ? payload.sideEffects : undefined;
+    const refundOutcome =
+      sideEffects &&
+      typeof sideEffects === 'object' &&
+      'refund' in sideEffects &&
+      typeof sideEffects.refund === 'string'
+        ? sideEffects.refund
+        : undefined;
+    return {
+      id: orderId,
+      shipping_status: 'cancelled',
+      ...(refundOutcome && { refund_outcome: refundOutcome }),
+    } as Order;
   }
 
   const acknowledgedOrder =

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getAutomaticCancelRefundAmount,
-  getCancelRefundPlan,
-} from './get-automatic-cancel-refund-amount';
+import { getCancelRefundPlan } from './cancel-refund-plan';
+
+const getAutomaticCancelRefundAmount = (
+  order: Parameters<typeof getCancelRefundPlan>[0]
+) => getCancelRefundPlan(order).amount;
 
 const leg = (over: Record<string, unknown> = {}) => ({
   amount: 5000,

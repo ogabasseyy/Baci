@@ -118,6 +118,53 @@ and enrollment gates in the release sequence below.
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
+   Activated in production on 2026-11-10 with the owner's approval.
+5a. Activate bounded retention explicitly (only with the owner's
+   authorization): where pg_cron exists, run
+   `SELECT cron.schedule('commerce-cart-retention', '*/5 * * * *', $cron$SELECT public.cleanup_commerce_carts()$cron$);`
+   `cleanup_commerce_carts()` was written to be run by the cart events
+   worker, which was never installed, so until this job exists nothing
+   deletes expired retry receipts, account-operation receipts, creation
+   requests and outbox events,
+   handoffs expired over a day, non-submitted checkout sessions expired
+   over a day, or submitted checkout sessions older than 90 days, and
+   nothing flips idle carts to `expired`. Each call handles at most 1,000 rows per
+   table, so a backlog drains over successive runs. Flipping an idle cart
+   to `expired` should not take anything away from a shopper: a
+   cart and its guest grant are both created with a seven-day life
+   (`20261012050200_commerce_cart_commands.sql`), and cart access requires
+   an unrevoked, unexpired grant. Grants issued later (pairing, account
+   link) can outlive the cart, so confirm before activating that no
+   active cart past `expires_at` still has a live grant, by running
+   `SELECT count(*) AS expired_active, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.commerce_cart_grants g WHERE g.cart_id = c.id AND g.revoked_at IS NULL AND g.expires_at > now())) AS with_live_grant FROM public.commerce_carts c WHERE c.state = 'active' AND c.expires_at < now();`
+   and requiring `with_live_grant = 0`. The result is time-sensitive:
+   always run it at activation and record the output with the activation
+   evidence. (Dated example only, not current state: on 2026-11-10 it
+   returned `expired_active = 528, with_live_grant = 0`.) `expired_active` is an upper bound on the
+   carts that will flip: the function also skips carts with a live
+   checkout session or a live dispatch hold, so fewer flips than that
+   count is expected, not a fault. Activated in production on 2026-11-10
+   with the owner's approval: the pre-check at 13:03 UTC returned
+   `expired_active = 528, with_live_grant = 0` and no existing job; the
+   first run flipped all 528 carts, and the first scheduled run (13:05
+   UTC) succeeded. It does
+   start the 90-day clock after which the terminal purge deletes the cart.
+   Dispatch-held carts, handoffs and checkout sessions are skipped by the
+   function's own fences. Schedule it as the role that owns the
+   SECURITY DEFINER function, because definer rights follow the function
+   owner: confirm it with
+   `SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.cleanup_commerce_carts()'::regprocedure;`
+   (`postgres` in production, the same role that owns the terminal-purge
+   job). No migration sets that owner explicitly, so it is whichever role
+   applied the chain. This step applies only where pg_cron is installed
+   (`SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'cron'`
+   returns a row); without it there is nothing to schedule. Verify
+   afterwards with
+   `SELECT jobname, schedule, username, active FROM cron.job WHERE jobname = 'commerce-cart-retention';`
+   (expect one active row whose `username` is the function owner). Before
+   activation the same query must return no row. To stop it:
+   `SELECT cron.unschedule('commerce-cart-retention');`
+   Migration application alone never schedules this job.
 6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
 7. Expand only after convergence, checkout-binding and isolation

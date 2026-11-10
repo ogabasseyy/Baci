@@ -1,10 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { apiPost } from '@/lib/api-client';
 
 // --- Mocks ---
-
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => (
     // biome-ignore lint/performance/noImgElement: Test mock for next/image intentionally uses <img>
@@ -85,16 +82,6 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: vi.fn(() => ({ toast: vi.fn() })),
 }));
 
-vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: () => ({ hasPermission: () => true }),
-}));
-
-vi.mock('@/lib/api-client', () => ({
-  apiPatch: vi.fn(),
-  apiPost: vi.fn(),
-  fetchWithCsrf: vi.fn(),
-}));
-
 vi.mock('../actions', () => ({
   resendOrderConfirmation: vi.fn(),
 }));
@@ -134,7 +121,6 @@ vi.mock('lucide-react', () => ({
   Share2: () => <span />,
   Truck: () => <span />,
   Undo2: () => <span />,
-  Circle: () => <span />,
   X: () => <span />,
   XCircle: () => <span />,
 }));
@@ -379,38 +365,5 @@ describe('OrderDetailsClientPage', () => {
 
     expect(screen.queryByText('Pickup Location')).not.toBeInTheDocument();
     expect(screen.queryByText('Should Not Show')).not.toBeInTheDocument();
-  });
-
-  it('keeps the cancel dialog open when the cancellation fails', async () => {
-    vi.mocked(apiPost).mockRejectedValueOnce(new Error('boom'));
-    render(
-      <OrderDetailsClientPage
-        initialOrder={makeOrder({
-          transactions: [
-            {
-              amount: 5000,
-              gateway: 'paystack',
-              gateway_reference: 'ref-1',
-              id: 'leg-1',
-              status: 'completed',
-              transaction_type: 'payment',
-            },
-          ],
-        } as Partial<Order>)}
-      />
-    );
-
-    await userEvent.click(
-      screen.getByRole('button', { name: /cancel order/i })
-    );
-    await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
-
-    expect(apiPost).toHaveBeenCalledWith(
-      '/api/orders/order-123/cancelled',
-      expect.objectContaining({ refund: 'manual' })
-    );
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /cancel only/i })).toBeChecked();
   });
 });

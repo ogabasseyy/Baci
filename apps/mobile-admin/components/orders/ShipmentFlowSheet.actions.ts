@@ -68,8 +68,9 @@ export function isShipmentFlowPrimaryDisabled({
     );
   }
   if (selectedMode !== 'provider') return false;
-  // Booking needs booking rights on every provider path, saved quotes too.
-  if (!giglShipping) return !canUseProvider || !canBookGigl;
+  // canUseProvider already excludes GIG saved quotes the viewer may not book
+  // (getOrderGiglShippingVisibility); other providers keep their own rules.
+  if (!giglShipping) return !canUseProvider;
   return (
     !canBookGigl ||
     !giglShipping.wallet?.canBook ||

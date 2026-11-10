@@ -131,6 +131,13 @@ export function ShipmentFlowSheet({
         ? externalWaybill.link()
         : externalWaybill.check();
     }
+    // Defence in depth: never start a booking the footer would not allow.
+    if (
+      selectedMode === 'provider' &&
+      (giglShipping ? !canBookGigl : !canUseProvider)
+    ) {
+      return;
+    }
     if (
       selectedMode === 'provider' &&
       giglShipping &&

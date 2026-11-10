@@ -45,7 +45,9 @@ export function ShipmentFlowMethodStep({
         <ShipmentOptionCard
           colors={colors}
           description={
-            bookingDenied
+            // Only a GIG quote withheld for lack of booking rights; a saved
+            // quote from another provider stays bookable.
+            bookingDenied && !canUseProvider
               ? `${checkoutPaidShippingLabel ? `Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout. ` : ''}Ask the store owner or an admin to book this shipment.`
               : !canUseProvider
                 ? providerLabel

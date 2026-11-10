@@ -147,7 +147,7 @@ describe('isShipmentFlowPrimaryDisabled', () => {
     ).toBe(false);
   });
 
-  it('keeps a saved-quote Book disabled without booking rights (no wallet state)', () => {
+  it('keeps a saved non-GIG quote bookable without GIG booking rights', () => {
     expect(
       isShipmentFlowPrimaryDisabled({
         ...base,
@@ -156,6 +156,6 @@ describe('isShipmentFlowPrimaryDisabled', () => {
         giglShipping: undefined,
         selectedMode: 'provider',
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 });

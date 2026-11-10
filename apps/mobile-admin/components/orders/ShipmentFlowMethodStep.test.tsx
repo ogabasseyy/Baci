@@ -181,7 +181,7 @@ describe('ShipmentFlowMethodStep', () => {
     render(
       <ShipmentFlowMethodStep
         bookingDenied
-        canUseProvider
+        canUseProvider={false}
         onModeChange={vi.fn()}
         providerLabel="GIG"
         selectedMode="provider"
@@ -192,5 +192,22 @@ describe('ShipmentFlowMethodStep', () => {
       screen.getByText('Ask the store owner or an admin to book this shipment.')
     ).toBeInTheDocument();
     expect(screen.queryByText(/This will book the shipment/i)).toBeNull();
+  });
+
+  it('keeps normal booking copy for another provider when GIG booking is denied', () => {
+    render(
+      <ShipmentFlowMethodStep
+        bookingDenied
+        canUseProvider
+        onModeChange={vi.fn()}
+        providerLabel="Topship"
+        selectedMode="provider"
+      />
+    );
+
+    expect(
+      screen.getByText(/book the shipment with Topship/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Ask the store owner/i)).toBeNull();
   });
 });

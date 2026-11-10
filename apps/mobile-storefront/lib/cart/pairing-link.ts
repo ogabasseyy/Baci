@@ -73,15 +73,15 @@ export function captureCartPairingLink(path: string, config: Config): string {
     fragment.has('hid') ||
     url.searchParams.has('handoff') ||
     url.searchParams.has('hid');
-  if (!pairing) {
-    // Non-pairing deliveries pass through only as relative in-app
-    // paths; absolute or scheme-bearing URLs are reduced to the cart
-    // route instead of being handed back unvalidated as a redirect.
-    const trimmed = path.trim();
-    if (/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\//.test(trimmed)) return '/cart';
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return '/cart';
-    return path;
-  }
+  // Non-pairing deliveries are not this module's concern and go back
+  // to Expo Router untouched. Every home-screen launch arrives here as
+  // the app's own absolute root URL (Linking.createURL('/')), and
+  // deep links, universal links and notification links are absolute
+  // too: rewriting them sent every launch to the cart. The router
+  // only ever maps a delivery's path onto in-app routes, so an
+  // unknown host or scheme resolves to not-found, never an external
+  // open.
+  if (!pairing) return path;
   // A malformed or foreign pairing link must not wipe a valid pending
   // pairing captured moments earlier: the pending link is replaced
   // only after the incoming one fully validates below.

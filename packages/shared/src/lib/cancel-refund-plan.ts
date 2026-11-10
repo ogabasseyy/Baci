@@ -127,6 +127,10 @@ function isRefundInFlightRow(row: {
 // vs 0.8) cannot leave a phantom sliver outstanding.
 const toMinor = (value: number): number => Math.round(value * 100);
 
+function hasPositiveAmount(row: { amount: number }): boolean {
+  return Number.isFinite(row.amount) && row.amount > 0;
+}
+
 /** Paid check that tolerates the case variants stored across apps. */
 export function isPaidStatus(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'paid';
@@ -212,15 +216,25 @@ export function getCancelRefundPlan(
     refundRows
       .filter(
         (row) =>
-          row.payment_transaction_id === leg.id && isRefundInFlightRow(row)
+          row.payment_transaction_id === leg.id &&
+          isRefundInFlightRow(row) &&
+          hasPositiveAmount(row)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
   // Every condition under which the worker quarantines the order for refund
   // evidence it cannot attribute or reconcile leaves the plan unresolved.
-  const unresolved = hasUnresolvedRefundEvidence(
-    order.transactions,
-    order.orderCurrency
+  // A linked in-flight refund row with a zero, negative or non-numeric amount
+  // pins its leg (the SQL pending gate counts it as pending) but cannot be
+  // sized, so it is never summed and the plan is unresolved.
+  const unsizableInFlight = refundRows.some(
+    (row) =>
+      Boolean(row.payment_transaction_id) &&
+      isRefundInFlightRow(row) &&
+      !hasPositiveAmount(row)
   );
+  const unresolved =
+    unsizableInFlight ||
+    hasUnresolvedRefundEvidence(order.transactions, order.orderCurrency);
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')
     .map((leg) => {

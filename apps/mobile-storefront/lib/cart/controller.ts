@@ -1,5 +1,4 @@
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
-import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
 import { createEditQueue } from './controller-edit-queue';
 import { createEditRunner } from './controller-legacy-edit';
@@ -9,6 +8,7 @@ import type {
   NativeSharedCartRef,
 } from './controller-options';
 import { createNativeCartWrite } from './controller-write';
+import { trackTransmission } from './track-transmission';
 
 export type {
   NativeCartControllerOptions,
@@ -227,9 +227,10 @@ export function createNativeCartController(
     options,
     serial,
   });
+  const transmission = trackTransmission(coordinator);
   const operations = createNativeCartWrite({
     accept: (next) => accept(next, true),
-    coordinator,
+    coordinator: transmission.coordinator,
     ensureCart,
     getTerminal: () => terminal,
     getIncoming: () => incoming,
@@ -247,6 +248,7 @@ export function createNativeCartController(
     live: () => Boolean(snapshot) && !terminal && !incoming,
     serial,
     refresh,
+    transmission,
     hasRetainedRequest: () => receipts.read(options.merchantId).then(Boolean),
     notify: options,
     run: createEditRunner(

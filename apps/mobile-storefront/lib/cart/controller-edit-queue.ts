@@ -22,6 +22,8 @@ interface EditQueueDeps {
   serial<T>(run: () => Promise<T>): Promise<T>;
   run(action: SharedCartWrite): Promise<void>;
   refresh(): Promise<void>;
+  /** Whether this edit's own command reached the network. */
+  transmission: { reset(): void; sent(): boolean };
   /** A request is still saved for retry, so it may yet be applied. */
   hasRetainedRequest(): Promise<boolean>;
   notify: Pick<
@@ -45,11 +47,12 @@ export function createEditQueue(deps: EditQueueDeps) {
     const unpin = deps.edits.pin(action);
     return deps.serial(async () => {
       try {
+        deps.transmission.reset();
         if (edit) deps.edits.startRun(edit);
         const resolved = deps.edits.resolve(action);
         if (resolved) {
           await deps.run(resolved);
-          if (edit) deps.notify.onWriteSucceeded?.();
+          deps.notify.onWriteSucceeded?.();
         }
         // The line this tap targeted never reached the cart.
         else
@@ -73,18 +76,27 @@ export function createEditQueue(deps: EditQueueDeps) {
         // The write may have landed; settle against the server inside this
         // slot so nothing else (checkout) runs on a guess.
         let recovered = false;
+        // Recovering a lost cart creation says nothing about an edit never sent.
+        const unsent = outcome === 'unconfirmed' && !deps.transmission.sent();
         if (outcome === 'unconfirmed') {
-          if (edit) deps.edits.markLanded(edit);
+          if (edit && !unsent) deps.edits.markLanded(edit);
           const refreshed = await deps.refresh().then(
             () => true,
             () => false
           );
           // Server truth is on screen and nothing is queued for retry: nothing left to explain.
           recovered =
-            refreshed && !(await deps.hasRetainedRequest().catch(() => true));
+            !unsent &&
+            refreshed &&
+            !(await deps.hasRetainedRequest().catch(() => true));
         }
         if (recovered) deps.notify.onWriteSucceeded?.();
-        else deps.notify.onWriteFailed?.(action, error, outcome);
+        else
+          deps.notify.onWriteFailed?.(
+            action,
+            error,
+            unsent ? 'rolled_back' : outcome
+          );
         throw error;
       } finally {
         unpin();

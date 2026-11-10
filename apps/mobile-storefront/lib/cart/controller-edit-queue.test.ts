@@ -15,6 +15,7 @@ function setup(live = true) {
     serial: <T>(run: () => Promise<T>) => run(),
     run: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
+    transmission: { reset: jest.fn(), sent: jest.fn().mockReturnValue(true) },
     hasRetainedRequest: jest.fn().mockResolvedValue(false),
     notify: { onWriteFailed: jest.fn(), onWriteSucceeded: jest.fn() },
   };
@@ -84,4 +85,25 @@ it('reports an edit blocked behind a saved request as undone, without recovering
     expect.anything(),
     'rolled_back'
   );
+});
+
+it('says the edit was not saved when only a lost cart creation was recovered', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run.mockRejectedValue(new NativeCartError('network', true));
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.refresh).toHaveBeenCalledTimes(1);
+  expect(t.deps.notify.onWriteSucceeded).not.toHaveBeenCalled();
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
+    add,
+    expect.anything(),
+    'rolled_back'
+  );
+});
+
+it('clears the notice after a successful edit that has no screen prediction', async () => {
+  const t = setup();
+  const assurance = { type: 'assurance', id: 'line-1' } as never;
+  await t.enqueue(assurance);
+  expect(t.deps.notify.onWriteSucceeded).toHaveBeenCalledTimes(1);
 });

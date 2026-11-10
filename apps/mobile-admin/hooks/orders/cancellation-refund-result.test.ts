@@ -33,4 +33,26 @@ describe('readCancellationRefundResult', () => {
   ])('returns nothing for a body without side effects (%j)', (payload) => {
     expect(readCancellationRefundResult(payload)).toEqual({});
   });
+
+  it.each([
+    [
+      'a negative remaining amount',
+      { currency: 'NGN', inFlightAmount: 0, remainingAmount: -1 },
+    ],
+    [
+      'a NaN in-flight amount',
+      { currency: 'NGN', inFlightAmount: Number.NaN, remainingAmount: 1 },
+    ],
+    [
+      'a blank currency',
+      { currency: '', inFlightAmount: 0, remainingAmount: 1 },
+    ],
+    ['a non-object', 'oops'],
+  ])('reports unknown without amounts for %s', (_name, refundDetails) => {
+    expect(
+      readCancellationRefundResult({
+        sideEffects: { refund: 'manual_required', refundDetails },
+      })
+    ).toEqual({ refund_outcome: 'unknown' });
+  });
 });

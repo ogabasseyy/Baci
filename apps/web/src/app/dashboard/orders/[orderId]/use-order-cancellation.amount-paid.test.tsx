@@ -76,3 +76,50 @@ describe('useOrderCancellation recorded amount paid', () => {
     );
   });
 });
+
+describe('useOrderCancellation malformed refund details', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.merchant.mockReturnValue({ hasPermission: () => true });
+    mocks.evidence.mockResolvedValue({ data: false, error: null });
+  });
+
+  it.each([
+    [
+      'a negative remaining amount',
+      { currency: 'NGN', inFlightAmount: 0, remainingAmount: -3000 },
+    ],
+    [
+      'a NaN in-flight amount',
+      { currency: 'NGN', inFlightAmount: Number.NaN, remainingAmount: 100 },
+    ],
+    [
+      'a blank currency',
+      { currency: '', inFlightAmount: 100, remainingAmount: 100 },
+    ],
+    [
+      'a string amount',
+      { currency: 'NGN', inFlightAmount: '100', remainingAmount: 100 },
+    ],
+  ])('shows the neutral message, not a hand-refund amount, for %s', async (_name, refundDetails) => {
+    mocks.apiPost.mockResolvedValue({
+      sideEffects: { refund: 'manual_required', refundDetails },
+      success: true,
+    });
+    const { result } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    await act(() => result.current.requestCancellation());
+    await act(() => result.current.dialogProps.onConfirm('manual'));
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringContaining('Check the order'),
+      })
+    );
+    expect(mocks.toast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringMatching(/Refund pending|you only need/),
+      })
+    );
+  });
+});

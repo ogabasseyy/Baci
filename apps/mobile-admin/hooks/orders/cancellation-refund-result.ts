@@ -1,4 +1,4 @@
-import type { Order } from '@baci/shared';
+import { type Order, readCancellationSideEffects } from '@baci/shared';
 
 export interface CancellationRefundDetails {
   currency?: string | null;
@@ -24,17 +24,8 @@ export function readCancellationRefundResult(
     payload && typeof payload === 'object' && 'sideEffects' in payload
       ? payload.sideEffects
       : undefined;
-  if (!sideEffects || typeof sideEffects !== 'object') return {};
-  const outcome =
-    'refund' in sideEffects && typeof sideEffects.refund === 'string'
-      ? sideEffects.refund
-      : undefined;
-  const details =
-    'refundDetails' in sideEffects &&
-    sideEffects.refundDetails &&
-    typeof sideEffects.refundDetails === 'object'
-      ? (sideEffects.refundDetails as CancellationRefundDetails)
-      : undefined;
+  // Malformed details become an `unknown` outcome with no amounts.
+  const { details, outcome } = readCancellationSideEffects(sideEffects);
   return {
     ...(outcome && { refund_outcome: outcome }),
     ...(details && { refund_details: details }),

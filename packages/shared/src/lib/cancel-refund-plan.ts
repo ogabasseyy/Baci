@@ -204,7 +204,7 @@ export function getCancelRefundPlan(
     row.provider_refund_status !== 'processed';
   const coveredFor = (leg: (typeof order.transactions)[number]): number =>
     doneRowsFor(leg)
-      .filter((row) => !isUnverifiedPaystack(row))
+      .filter((row) => !isUnverifiedPaystack(row) && hasPositiveAmount(row))
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
   const awaitingVerification = (
     leg: (typeof order.transactions)[number]
@@ -223,17 +223,13 @@ export function getCancelRefundPlan(
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
   // Every condition under which the worker quarantines the order for refund
   // evidence it cannot attribute or reconcile leaves the plan unresolved.
-  // A linked in-flight refund row with a zero, negative or non-numeric amount
-  // pins its leg (the SQL pending gate counts it as pending) but cannot be
-  // sized, so it is never summed and the plan is unresolved.
-  const unsizableInFlight = refundRows.some(
-    (row) =>
-      Boolean(row.payment_transaction_id) &&
-      isRefundInFlightRow(row) &&
-      !hasPositiveAmount(row)
-  );
+  // Any refund row, whatever its status or link, with a zero, negative or
+  // non-numeric amount is evidence that cannot be sized: it is never summed
+  // (a -20 manual row must not inflate what is owed) and the plan is
+  // unresolved.
+  const unsizableRefund = refundRows.some((row) => !hasPositiveAmount(row));
   const unresolved =
-    unsizableInFlight ||
+    unsizableRefund ||
     hasUnresolvedRefundEvidence(order.transactions, order.orderCurrency);
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')

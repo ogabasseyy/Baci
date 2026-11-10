@@ -1,4 +1,8 @@
-import { getCancelRefundPlan } from '@baci/shared';
+import {
+  type CancellationRefundDetails,
+  getCancelRefundPlan,
+  readCancellationSideEffects,
+} from '@baci/shared';
 import { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
@@ -9,14 +13,7 @@ import type { Order } from '../actions';
 import type { CancelRefundChoice } from './cancel-order-dialog';
 
 interface CancelResponse {
-  sideEffects?: {
-    refund?: string;
-    refundDetails?: {
-      currency: string | null;
-      inFlightAmount: number;
-      remainingAmount: number;
-    };
-  };
+  sideEffects?: unknown;
   success?: boolean;
 }
 
@@ -37,7 +34,7 @@ async function refundEvidenceBlocksChoice(orderId: string): Promise<boolean> {
 }
 
 function manualRefundMessage(
-  details: NonNullable<CancelResponse['sideEffects']>['refundDetails']
+  details: CancellationRefundDetails | undefined
 ): string {
   const record =
     'Record the refund from the Refund card once you have paid the customer.';
@@ -88,7 +85,10 @@ export function useOrderCancellation({
       onCancelled();
       // A replay keeps the persisted mode, so trust the response over the
       // requested choice when it says what it did.
-      const outcome = response?.sideEffects?.refund;
+      // Malformed details arrive as an `unknown` outcome without amounts.
+      const { details, outcome } = readCancellationSideEffects(
+        response?.sideEffects
+      );
       // Only an explicit manual_required (or, with no outcome in the
       // response, the explicit manual choice) may tell the merchant to
       // repay by hand; an unknown outcome stays neutral.
@@ -98,9 +98,7 @@ export function useOrderCancellation({
       toast({
         title: 'Order status updated to Canceled',
         ...(manualRequired && {
-          description: manualRefundMessage(
-            response?.sideEffects?.refundDetails
-          ),
+          description: manualRefundMessage(details),
         }),
         ...(outcome === 'unknown' && {
           description:

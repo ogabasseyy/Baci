@@ -36,21 +36,41 @@ describe('getCancelRefundPlan in-flight refund rows with unusable amounts', () =
     expect(result.inFlightAmount).toBe(100);
   });
 
-  it('ignores a zero-amount row that is provably dead (failed, no identity)', () => {
+  it.each([
+    [
+      'a negative completed manual row',
+      { amount: -20, gateway: 'manual', status: 'completed' },
+    ],
+    [
+      'a zero completed manual row',
+      { amount: 0, gateway: 'manual', status: 'completed' },
+    ],
+    [
+      'a NaN completed manual row',
+      { amount: Number.NaN, gateway: 'manual', status: 'completed' },
+    ],
+    [
+      'a zero verified Paystack row',
+      { amount: 0, provider_refund_status: 'processed', status: 'completed' },
+    ],
+    [
+      'a zero failed row without provider identity',
+      { amount: 0, provider_refund_status: 'failed', status: 'failed' },
+    ],
+    [
+      'a zero unlinked row',
+      { amount: 0, payment_transaction_id: null, status: 'completed' },
+    ],
+  ])('is neutral for %s and never sums it', (_name, over) => {
     const result = getCancelRefundPlan({
       amountPaid: 100,
       orderCurrency: 'NGN',
       paymentStatus: 'Paid',
       total: 100,
-      transactions: [
-        payment100,
-        pendingRow({
-          amount: 0,
-          provider_refund_status: 'failed',
-          status: 'failed',
-        }),
-      ],
+      transactions: [payment100, pendingRow(over)],
     });
-    expect(result.ledgerKnown).toBe(true);
+    expect(result.ledgerKnown).toBe(false);
+    // 100 capture + a -20 row must not read as 120 owed.
+    expect(result.amount).toBeLessThanOrEqual(100);
   });
 });

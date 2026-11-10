@@ -176,10 +176,12 @@ BEGIN
   -- 'manual' leaves the order without a refund step on purpose: the
   -- merchant refunds outside Baci and records it from the Refund card.
   -- The exception is a leg whose provider refund is already pending or
-  -- terminal (e.g. PayPal flips the payment row itself): those still need
-  -- the row so the drain waits for the provider and runs aggregate
-  -- finalization, while the worker never initiates a refund in manual
-  -- mode (the persisted mode suppresses initiation).
+  -- terminal (e.g. PayPal flips the payment row itself), or has its own
+  -- non-terminal refund row (the usual Paystack shape: the payment stays
+  -- completed): those still need the row so the drain waits for the
+  -- provider and runs aggregate finalization, while the worker never
+  -- initiates a refund in manual mode (the persisted mode suppresses
+  -- initiation).
   IF EXISTS (
     SELECT 1 FROM public.transactions t
      WHERE t.order_id = p_order_id
@@ -198,6 +200,25 @@ BEGIN
        AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
        )
+  ) OR (
+    v_refund_mode = 'manual' AND EXISTS (
+      -- Mirrors the worker's awaiting-provider predicate
+      -- (collectAwaitingCancellationRefundLegs): a linked refund row that
+      -- is not terminal, except a definitive provider rejection with no
+      -- provider identity, which can never recover.
+      SELECT 1 FROM public.transactions r
+       WHERE r.order_id = p_order_id
+         AND r.merchant_id = v_order.merchant_id
+         AND r.transaction_type = 'refund'
+         AND r.metadata->>'payment_transaction_id' IS NOT NULL
+         AND r.status NOT IN ('completed', 'refunded')
+         AND NOT (
+           r.status = 'failed'
+           AND r.metadata->>'provider_refund_status' = 'failed'
+           AND COALESCE(r.gateway_reference, '') !~ '^[1-9][0-9]*$'
+           AND COALESCE(r.metadata->>'provider_refund_id', '') !~ '^[1-9][0-9]*$'
+         )
+    )
   ) THEN
     INSERT INTO public.order_cancellation_side_effects (
       order_id, merchant_id, step, status, claim_token, attempts

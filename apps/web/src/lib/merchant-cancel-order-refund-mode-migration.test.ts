@@ -40,6 +40,12 @@ describe('merchant cancellation refund-mode migration', () => {
     expect(sql).toContain('o.cancelled_by, o.cancellation_refund_mode');
   });
 
+  it('also seeds the refund step in manual mode for a separate in-flight refund row', () => {
+    expect(sql).toMatch(
+      /OR \(\s+v_refund_mode = 'manual' AND EXISTS \([\s\S]*?r\.transaction_type = 'refund'[\s\S]*?r\.status NOT IN \('completed', 'refunded'\)[\s\S]*?provider_refund_status' = 'failed'[\s\S]*?\) THEN\s+INSERT INTO public\.order_cancellation_side_effects/
+    );
+  });
+
   it('requires the owner or orders.refund for the cancel-only mode', () => {
     expect(sql).toMatch(
       /IF v_refund_mode = 'manual' AND NOT \([\s\S]*?'orders', 'refund'[\s\S]*?order_cancel_refund_forbidden' USING ERRCODE = '42501'/

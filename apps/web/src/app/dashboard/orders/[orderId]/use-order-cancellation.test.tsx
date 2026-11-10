@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   apiPost: vi.fn(),
+  merchant: vi.fn(),
   toast: vi.fn(),
 }));
 
@@ -11,7 +12,7 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
 vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: () => ({ hasPermission: () => true }),
+  useMerchantSafe: () => mocks.merchant(),
 }));
 
 import type { Order } from '../actions';
@@ -36,7 +37,10 @@ const order = (over: Partial<Order> = {}) =>
   }) as unknown as Order;
 
 describe('useOrderCancellation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.merchant.mockReturnValue({ hasPermission: () => true });
+  });
 
   it('opens the choice dialog when there is money to refund', async () => {
     const { result } = renderHook(() =>
@@ -246,5 +250,20 @@ describe('useOrderCancellation', () => {
     expect(window.confirm).toHaveBeenCalledWith(
       expect.stringContaining('could not be loaded')
     );
+  });
+
+  it('hides cancel-only until the refund permission resolves', () => {
+    mocks.merchant.mockReturnValue(null);
+    const { result } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    expect(result.current.dialogProps.canCancelOnly).toBe(false);
+  });
+
+  it('offers cancel-only once the merchant context grants the refund permission', () => {
+    const { result } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    expect(result.current.dialogProps.canCancelOnly).toBe(true);
   });
 });

@@ -240,4 +240,27 @@ describe('preflightCancellationRefundCoverage', () => {
     );
     expect(quarantineRefund).not.toHaveBeenCalled();
   });
+
+  it('waits for a separate pending refund row on a cancel-only order instead of completing or quarantining', async () => {
+    const error = await preflightCancellationRefundCoverage(
+      input({
+        order: { ...order, cancellation_refund_mode: 'manual' },
+        refundRows: [
+          {
+            amount: paystackPayment.amount,
+            currency: paystackPayment.currency,
+            gateway: 'paystack',
+            gateway_reference: '424242',
+            metadata: { payment_transaction_id: paystackPayment.id },
+            status: 'refund_pending',
+          },
+        ],
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(quarantineRefund).not.toHaveBeenCalled();
+  });
 });

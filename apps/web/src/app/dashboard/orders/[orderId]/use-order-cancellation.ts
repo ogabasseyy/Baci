@@ -137,7 +137,10 @@ export function useOrderCancellation({
     dialogProps: {
       automaticSupported: plan.automaticSupported,
       inFlightAmount: plan.inFlightAmount,
-      canCancelOnly: merchantContext?.hasPermission('orders', 'refund') ?? true,
+      // Fail closed: cancel-only stays hidden until the permission resolves;
+      // the review-labelled automatic action is always available.
+      canCancelOnly:
+        merchantContext?.hasPermission('orders', 'refund') ?? false,
       isOpen,
       onClose: () => setIsOpen(false),
       onConfirm: async (refund: CancelRefundChoice) => {

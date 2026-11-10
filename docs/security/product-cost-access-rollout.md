@@ -133,11 +133,13 @@ this work is not a blanket audit or migration of all cost-bearing tables.
 - Final split-write regressions passed: 55 web route tests and 32 mobile tests.
   An independent review identified the partial-success/cache invalidation issue;
   its remedy was re-reviewed without new findings.
+- Required pre-push monorepo typechecking passed all seven tasks, including the
+  full web/native checks, with hooks enabled. An initially missing workspace
+  dependency was linked in the task-local test environment; the shared install
+  was not changed.
 - Full historical replay is blocked locally by Supabase CLI version mismatch
-  (the repository requires 2.111.0). Aggregate monorepo checks encounter the
-  shared dependency directory's install guard. Mobile typecheck reports a missing
-  existing `@baci/tiktok-business` workspace dependency. CodeRabbit review is
-  unavailable because the configured account has exhausted review capacity.
+  (the repository requires 2.111.0). CodeRabbit full-code review is pending because
+  of the shared CLI review-capacity limit. A preliminary two-file activation
+  documentation/test review raised zero issues but does not cover the code.
 - Full historical replay, monorepo CI and mandatory CodeRabbit review remain
-  release gates. Broad local web typechecking was stopped after prolonged host
-  contention; it did not produce a pass. Focused checks are not a green CI result.
+  release gates. Focused checks are not a green CI result.

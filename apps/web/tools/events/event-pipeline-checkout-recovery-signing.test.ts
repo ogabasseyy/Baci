@@ -38,3 +38,26 @@ it('rejects direct generic signing from the recovery route', () => {
     `${route}: API import graph reaches credential authority`
   );
 });
+
+it('records only normal-RLS storefront read continuation signatures, not generic sibling or direct signer access', () => {
+  const quoteRoute = 'apps/web/src/app/api/shipping/quotes/route.ts';
+  const capability = 'apps/web/src/lib/shipping/quote-session-capability.ts';
+  const graph = sources();
+  graph.set(quoteRoute, "import '@/lib/shipping/quote-session-capability';");
+  graph.set(
+    capability,
+    "import 'server-only'; import './shipping-quote-route-proof';"
+  );
+  expect(
+    serviceAuthorityGraphFindings(graph, [quoteRoute, capability], new Map())
+  ).toEqual([]);
+  const sibling = 'apps/web/src/app/api/shipping/unreviewed/route.ts';
+  graph.set(sibling, "import '@/lib/shipping/quote-session-capability';");
+  expect(serviceAuthorityGraphFindings(graph, [sibling]).join('\n')).toContain(
+    'credential authority'
+  );
+  graph.set(quoteRoute, "import '@/lib/shipping/shipping-quote-route-proof';");
+  expect(
+    serviceAuthorityGraphFindings(graph, [quoteRoute]).join('\n')
+  ).toContain('credential authority');
+});

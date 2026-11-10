@@ -1406,3 +1406,25 @@
   filter: brightness(0) !important;
   /* Force icons to be black */
 }
+
+/* Shared custom-store fallback rules avoid an extra PDP blocking stylesheet. */
+.baci-experience-loading {
+  display: none;
+}
+
+/* Keep the server-rendered catalog available without JavaScript. Hide it
+   before hydration only when the browser can launch the custom experience. */
+@media (scripting: enabled) {
+  [data-experience-pending] > .baci-experience-fallback {
+    display: none;
+  }
+
+  [data-experience-pending] > .baci-experience-loading {
+    display: grid;
+    min-height: 100svh;
+    place-items: center;
+    background: var(--store-background, #fff);
+    color: var(--store-background-text, #111827);
+    font: inherit;
+  }
+}

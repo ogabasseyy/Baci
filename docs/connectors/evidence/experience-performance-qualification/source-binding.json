@@ -1,0 +1,215 @@
+{
+  "baseMain": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "localOnly": true,
+  "committed": false,
+  "files": [
+    {
+      "path": "apps/web/builder-mcp-server/experience-contracts.json",
+      "sha256": "5b27615c47e31e77d66125e188fd49c8bb190805c4f27ecb1034426f2dab8181"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-metadata.ts",
+      "sha256": "93d90cb0ff4454ef6884ca195634c5696e465571e42d6c900eda37bb68ef83db"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.test.tsx",
+      "sha256": "c2bc1137325e15d4df20c05c34860898ee47e2ca5370c54c6ce7462fa44ec2f5"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.tsx",
+      "sha256": "82ad1562d7e48772dc36e84d69c91b45288c36474beb1a99f3f951e383770118"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.test.tsx",
+      "sha256": "c1090350308745205c50070bc9dd3233038431072ec47e0d346f5b6d70964ca2"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.tsx",
+      "sha256": "d8ed6f0dd16f9e25ed0a3fb4eb15bcb814d421650ad233dc06a5b170587581d4"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/cart-types.ts",
+      "sha256": "443bb9c07f799c98e0580603e6426f63eb3ba83f44c87385f19c1bf9773d03dc"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-client-support.ts",
+      "sha256": "d081aa7afbcefe374f9365b132e13044d3a989e32a77fbd9a1b0f4fb9f3fa6c1"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-client.ts",
+      "sha256": "577cbe860cdf1e8ddbb3443ed1144139bbe07e7ea3726e45820329725d7fae81"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-fence.test.ts",
+      "sha256": "8a7d70d39ab47a3ded9197623c5b5b4592e68bacbbcd880031baa023831df5b0"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-hook-support.ts",
+      "sha256": "5de1fc1683e30984967f296ddc693104a45ed42b4126056d97e273ce668216fa"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-reducer.ts",
+      "sha256": "1efad8ad1f09b1d8fcd76f33ca7c6f11f567252b008b257dd0d4ae8dc240b240"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-state.ts",
+      "sha256": "b11d4a3bb078cdb14cc1bacf200d60d8d76fd70910cb190aa60e4eebdbe14e5c"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-delegated-value.test.ts",
+      "sha256": "24fdd9c67113c8198800e6598c2d091e12639f5ee11fd17f39393b4e1ce643e6"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-delegated-value.ts",
+      "sha256": "3095ea9358315c8065ffd86dfbf34a88d54a687b3156c8d20df567de1ffc2421"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-provider.tsx",
+      "sha256": "9f4bd6a6bffb1ee2d21a95bcc663e4af826999a5ccef70c8387513c2dc60a081"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-cart-send-queue.test.ts",
+      "sha256": "13cc138a83a53a3fcfc031b4e2e163d2912d793b8fdb26287f5bd9d625797f52"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-cart-send-queue.ts",
+      "sha256": "f575fe1a64d7b1eb8849398b505be38bc5b29ad813d753cf68629fa44b34a12a"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-shared-cart-runtime.ts",
+      "sha256": "80ce822b460242e82d16c1ed4291a41222b61c2e947b2d0a44f430739bd3b57f"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-shared-cart.ts",
+      "sha256": "0c0079c6819391dfef071514034e12f438b5ea23e8b1c87fa43ce7fcb66e116f"
+    },
+    {
+      "path": "apps/web/src/lib/experience/build-performance-retention.ts",
+      "sha256": "4aac466d273f60deaeb224fd330fb6d152b480a933c5e49197a00933477e184d"
+    },
+    {
+      "path": "apps/web/src/lib/experience/build-performance-types.ts",
+      "sha256": "7b2558c3fa8d873b4f6e9a6c636c3c6fe3f81ccef4d90abdb87725058336d5d8"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.test.ts",
+      "sha256": "402e625b29ae3616565f869fb6dd9a931bc6d8413ab81a7e354a3b3d6368cb0b"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.ts",
+      "sha256": "d82a3caf450189334caa240f7c27305c597417ec88b704c40bfd80793ef53921"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.test.ts",
+      "sha256": "23456467ffeddae92fcf549cc604f78dfdefdcef50ab45133e225ae757675fb2"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.ts",
+      "sha256": "147473967865eddf927797f11f1a3fda78c07a91332f440a9a049acad1edb35b"
+    },
+    {
+      "path": "apps/web/src/lib/experience/experience-bootstrap-fingerprint.test.ts",
+      "sha256": "bd5051285787a6ce7141830683041ee024fef83cd422e110e828e4b380576724"
+    },
+    {
+      "path": "apps/web/src/lib/experience/experience-bootstrap-fingerprint.ts",
+      "sha256": "0af4e0eabde656d901d40e6ed96e559e4e76fb646802f1fe85e67f3301729f37"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.test.ts",
+      "sha256": "08974656af59b112d91a82579c9a2862acea67378649b84b6b38067c02e7fbe2"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.ts",
+      "sha256": "bf9538a152b9165d4ebdf2aa40e2b6af628215e57244e135819adc4c3597ccfd"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-performance-reports.test.ts",
+      "sha256": "a4101ad68ec072bcaaae3995732aff843a75c21db855e66e2042f29afe4ae4fb"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-performance-reports.ts",
+      "sha256": "98eb3b01cde264da6cb754d7361583b523916dc6c2e6844aea3ef68606ee94cd"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-prerender-pipeline.test.ts",
+      "sha256": "93e70607b4d4ed851d0d2e6b6ae0d37f63abbda2269f339c25f606211d3ae929"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+      "sha256": "39000b6f4878c6e445c84d58d61f1d1ae82c3bb746a7d0cc06e6e8637b265e4e"
+    },
+    {
+      "path": "apps/web/src/lib/experience/performance-read.test.ts",
+      "sha256": "3982bbddaf43e4e8977edcc534628868ee208de3ec971693904abf35a2d7e4da"
+    },
+    {
+      "path": "apps/web/src/lib/experience/performance-read.ts",
+      "sha256": "82aeeb7f81dcff7eddb0dbd2a2a89a064f564b9b0c454aad39ba3648478c4e09"
+    },
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.performance-gate.test.ts",
+      "sha256": "29f8fb0fa7efa40d15570245b9a815242f1842710eb12c2431838330283795ad"
+    },
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.ts",
+      "sha256": "6c4d1a66a28f188cd031bbf727c54257c778ab506c3a3da990bd664a4ed160fb"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.ts",
+      "sha256": "ff1e4880a22d5a7d0900b952bf79521af9836fbbd84220eb241def1a536e654a"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.ts",
+      "sha256": "fd730106764c6449133d6f896585a9c3dc86d4a2d3f4e81e523fb3413a90f904"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-tool-results.ts",
+      "sha256": "5cdacad2e7249c2410b6e241e9ec13d0d6ac34e41c9defddc86307324a6788ed"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/prerender-mcp.test.ts",
+      "sha256": "1682df9464f2ec94f6be017a553c9c8c1cbb65a011e2ab26872449832f9d95ca"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-collector.test.ts",
+      "sha256": "19683d9690617764d1afa3557b4ce9eccdb53eb036bc3a4a612eb35103c564c6"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-collector.ts",
+      "sha256": "3a469fb7d088b7c59b6cae56ba70f72a4f4decd8ff904cd10325a5e8a322c9fc"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-observer.test.ts",
+      "sha256": "2186303b3b59133ff30f5825426751aeca113374a01630d75e70cdd5ae4d91b9"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-observer.ts",
+      "sha256": "2592faca2c9e43a6912ecce39748d54840edcd57e9cb5d4f59c850e51e75909c"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-readiness.ts",
+      "sha256": "ee010a024275d1f2432d24e6f01c4b39ba3cc269378c680d9fef50759aebad1e"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/local-oci-executor.ts",
+      "sha256": "a0a0b76d2b0340314e0b6b4ab422d6018bd625b443db0fe0b1749fa66e97e659"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-harness.test.ts",
+      "sha256": "629605c0b73d79ce56fa8e3244c03fcb496a5a44c0931d00aa15135d8e5f8b7c"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-harness.ts",
+      "sha256": "d11470f54ba645bc29a2a9d27ba2b9adf4cc03f0473562da77c8cee1dae64e68"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-worker.ts",
+      "sha256": "8f453fd43e08085d94fd4d586a0aec53a05fcfebfda045d836416ae433dfa53b"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-attempt.test.ts",
+      "sha256": "08154918bf82ea2ab39acb15e9c3769a3b4a68c49bcf909f3f560fd109899e93"
+    }
+  ]
+}

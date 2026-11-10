@@ -1,0 +1,56 @@
+{
+  "report": {
+    "format": "baci.performance-lab/v1",
+    "buildDigest": "3f8e3b73c63377e4e7830c8df0c425a4855dd248a9af63af7cb40ea01263d0c8",
+    "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a",
+    "measuredAt": "2026-10-25T18:44:24.599Z",
+    "renderer": "client",
+    "environment": "local-synthetic",
+    "cwvQualified": false,
+    "releaseQualified": false,
+    "contaminated": true,
+    "browser": "153.0.8010.12",
+    "samples": [
+      {
+        "width": 390,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 2665.60009765625,
+        "hostLcpMs": null,
+        "frameCls": 0,
+        "hostCls": 0,
+        "interactionDurationMs": 192,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      },
+      {
+        "width": 1440,
+        "cache": "cold-context",
+        "route": "/",
+        "frameLcpMs": 3387.699951171875,
+        "hostLcpMs": null,
+        "frameCls": 0,
+        "hostCls": 0,
+        "interactionDurationMs": 744,
+        "contentVisible": true,
+        "imagesDecoded": true,
+        "consoleErrors": 0
+      }
+    ]
+  },
+  "load": {
+    "before": [
+      165.9677734375,
+      159.34033203125,
+      162.30126953125
+    ],
+    "cpuCount": 12,
+    "after": [
+      149.9619140625,
+      156.49169921875,
+      161.16796875
+    ]
+  },
+  "qualification": "diagnostic-only; one cold sample per viewport; no field INP, video or production-host qualification"
+}

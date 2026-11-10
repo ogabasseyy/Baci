@@ -86,6 +86,11 @@ describe('handlePaystackCancellationRefundFailure', () => {
 
     expect(mocks.quarantineRefund).toHaveBeenCalledWith(
       expect.objectContaining({
+        metadata: expect.objectContaining({
+          accepted_refund_ids: [7],
+          provider_error: 'Insufficient balance',
+          provider_error_code: 'HTTP_400',
+        }),
         reason:
           'Some payment legs were accepted for refund, but a later leg failed: Insufficient balance',
       })

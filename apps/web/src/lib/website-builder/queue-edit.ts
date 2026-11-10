@@ -2,9 +2,11 @@ import type {
   BuilderContext,
   UpdateDraftInput,
 } from '@/lib/builder-connector/types';
+import { readExperienceAuthoringMode } from '@/lib/experience/authoring-mode';
 import { builderInputSchemas } from '@/schemas/builder-mcp';
 import { builderQueuedEditResultSchema } from '@/schemas/builder-mcp-results';
 import { checkStore, editBinding, editResult, editRpc } from './edit-rpc';
+import { DraftServiceError } from './mutation-authorization';
 export async function queueStorefrontEdit(
   ctx: BuilderContext,
   input: UpdateDraftInput
@@ -12,6 +14,11 @@ export async function queueStorefrontEdit(
   const binding = editBinding(ctx);
   const parsed = builderInputSchemas.update_storefront_draft.parse(input);
   checkStore(ctx, parsed.storefrontId);
+  if (
+    (await readExperienceAuthoringMode(ctx.supabase, ctx.merchantId)) !==
+    'legacy'
+  )
+    throw new DraftServiceError('UNSUPPORTED_TEMPLATE');
   return editResult(
     builderQueuedEditResultSchema,
     await editRpc(ctx, 'builder_queue_edit', {

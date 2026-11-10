@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { readExperienceAuthoringMode } from '@/lib/experience/authoring-mode';
+import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import {
   builderCreateSchema,
   builderLoadQuerySchema,
@@ -44,6 +46,22 @@ export async function GET(request: NextRequest) {
   );
   if (contextResult.response) {
     return contextResult.response;
+  }
+
+  if (getExperienceOwnerRuntime()?.approval) {
+    const mode = await readExperienceAuthoringMode(
+      contextResult.context.supabase,
+      contextResult.context.merchantId
+    );
+    if (mode !== 'legacy')
+      return NextResponse.json(
+        {
+          authoringMode: mode,
+          canEdit: false,
+          editorUrl: `/builder/experience?merchant=${encodeURIComponent(contextResult.context.merchantId)}`,
+        },
+        { status: mode === 'full-code' ? 200 : 503 }
+      );
   }
 
   const builderPayload = await loadBuilderPayload(

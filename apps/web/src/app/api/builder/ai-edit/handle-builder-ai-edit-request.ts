@@ -1,6 +1,5 @@
 import {
   type BuilderAiEditPlan,
-  type BuilderAiEditRequest,
   builderAiEditContract,
   validateBuilderAiEditComplexity,
 } from '@baci/shared/contracts';
@@ -17,12 +16,16 @@ import { prepareBuilderAiEditPromptResponse } from '@/lib/builder-ai/prepare-bui
 import { runBuilderAiProviderChain } from '@/lib/builder-ai/run-builder-ai-provider-chain';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { admitLegacyExecution } from '@/lib/experience/legacy-execution';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
-import { builderGeminiRequestSchema } from '@/schemas/builder-gemini-request';
+import {
+  isSemanticallyExecutable,
+  parseRequest,
+} from './builder-ai-edit-input';
 import { createBuilderAiProviderErrorResponse } from './create-builder-ai-provider-error-response';
 import { createBuilderAiRateLimitResponse } from './create-builder-ai-rate-limit-response';
 import { getBuilderAiCsrfRequest } from './get-builder-ai-csrf-request';
@@ -64,35 +67,6 @@ function dependencies(): BuilderAiEditHandlerDependencies {
     readBody: readBoundedJsonBody,
     runProviderChain: runBuilderAiProviderChain,
   };
-}
-function isSemanticallyExecutable(
-  plan: BuilderAiEditPlan,
-  request: BuilderAiEditRequest
-): boolean {
-  if (plan.status === 'refused') return true;
-  try {
-    applyBuilderAiEditPlan(request.currentConfig, plan);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function parseRequest(
-  body: unknown,
-  mode: 'legacy' | 'v1'
-): BuilderAiEditRequest | null {
-  if (mode === 'v1') {
-    const parsed = builderAiEditContract.requestSchema.safeParse(body);
-    return parsed.success ? parsed.data : null;
-  }
-  const legacy = builderGeminiRequestSchema.safeParse(body);
-  return legacy.success
-    ? {
-        ...legacy.data,
-        clientRequestId: crypto.randomUUID(),
-        contractVersion: builderAiEditContract.version,
-      }
-    : null;
 }
 
 export async function handleBuilderAiEditRequest(
@@ -169,126 +143,157 @@ export async function handleBuilderAiEditRequest(
   if (!rate.allowed) {
     return createBuilderAiRateLimitResponse(mode, parsed.clientRequestId);
   }
-  const promptResult = prepareBuilderAiEditPromptResponse({
-    currentConfig: parsed.currentConfig,
-    prompt: parsed.prompt,
-    requestId: parsed.clientRequestId,
-  });
-  if ('response' in promptResult) return promptResult.response;
-  const materialized = seams.materializeProviders();
-  if (materialized.providers.length === 0) {
-    return createBuilderAiProviderErrorResponse(
-      { code: 'ai_provider_unavailable' },
-      parsed.clientRequestId
-    );
-  }
-  logBuilderAiEvent('builder_ai_edit_requested', {
-    merchantId: merchant.merchantId,
-    requestId: parsed.clientRequestId,
-    userId: auth.user.id,
-  });
-  let plan: BuilderAiEditPlan;
+  let acknowledge: () => Promise<void>;
   try {
-    plan = await seams.runProviderChain({
-      currentConfig: parsed.currentConfig,
-      deadlineAt: Date.now() + 25_000,
-      logger: {
-        warn: (metadata) => {
-          const errorClass =
-            typeof metadata.errorClass === 'string'
-              ? metadata.errorClass
-              : 'UnknownProviderError';
-          logBuilderAiEvent(
-            errorClass === 'AbortError' || errorClass === 'TimeoutError'
-              ? 'builder_ai_timeout'
-              : 'builder_ai_provider_fallback',
-            {
-              errorClass,
-              merchantId: merchant.merchantId,
-              provider:
-                typeof metadata.provider === 'string'
-                  ? metadata.provider
-                  : 'unknown',
-              requestId: parsed.clientRequestId,
-              userId: auth.user.id,
-            }
-          );
-        },
-      },
-      prompt: promptResult.prompt,
-      providerChain: materialized.providers,
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(24_000)]),
-      validateSemantics: (candidate) =>
-        isSemanticallyExecutable(candidate, parsed),
-    });
-  } catch (error) {
-    logBuilderAiEvent('builder_ai_candidate_rejected', {
-      merchantId: merchant.merchantId,
-      requestId: parsed.clientRequestId,
-      userId: auth.user.id,
-    });
-    return createBuilderAiProviderErrorResponse(error, parsed.clientRequestId);
-  }
-  if (plan.status === 'refused') {
-    logBuilderAiEvent('builder_ai_candidate_rejected', {
-      merchantId: merchant.merchantId,
-      requestId: parsed.clientRequestId,
-      userId: auth.user.id,
-    });
+    acknowledge = await admitLegacyExecution(
+      auth.supabase,
+      merchant.merchantId
+    );
+  } catch {
     return NextResponse.json(
       {
-        code: 'builder_ai_request_not_supported',
-        details: 'This request is not supported',
-        error: 'This request is not supported',
-        requestId: parsed.clientRequestId,
+        error: 'Legacy editing is unavailable for this authoring mode.',
+        code: 'builder_authoring_mode_unavailable',
       },
-      { status: 422 }
+      { status: 409 }
     );
   }
-  const result = applyBuilderAiEditPlan(parsed.currentConfig, plan);
-  const rawMediaWarning = getBuilderAiRawPlanMediaWarning(plan);
-  const candidate = builderAiEditContract.candidateSchema.parse({
-    candidateConfig: result.candidateConfig,
-    clientRequestId: parsed.clientRequestId,
-    contractVersion: builderAiEditContract.version,
-    operations: rawMediaWarning ? [] : plan.operations,
-    summary: plan.summary,
-    warnings: result.warnings,
-  });
-  const hasConfigChanged =
-    JSON.stringify(
-      builderAiEditContract.builderDataSchema.parse(parsed.currentConfig)
-    ) !== JSON.stringify(candidate.candidateConfig);
-  logBuilderAiEvent('builder_ai_candidate_created', {
-    merchantId: merchant.merchantId,
-    operationCount: candidate.operations.length,
-    requestId: parsed.clientRequestId,
-    userId: auth.user.id,
-    warningCount: candidate.warnings.length,
-  });
-  if (mode === 'legacy') {
-    logBuilderAiEvent('legacy_contract_used', {
+  try {
+    const promptResult = prepareBuilderAiEditPromptResponse({
+      currentConfig: parsed.currentConfig,
+      prompt: parsed.prompt,
+      requestId: parsed.clientRequestId,
+    });
+    if ('response' in promptResult) return promptResult.response;
+    const materialized = seams.materializeProviders();
+    if (materialized.providers.length === 0) {
+      return createBuilderAiProviderErrorResponse(
+        { code: 'ai_provider_unavailable' },
+        parsed.clientRequestId
+      );
+    }
+    logBuilderAiEvent('builder_ai_edit_requested', {
       merchantId: merchant.merchantId,
       requestId: parsed.clientRequestId,
       userId: auth.user.id,
     });
-    if (!hasConfigChanged) {
+    let plan: BuilderAiEditPlan;
+    try {
+      plan = await seams.runProviderChain({
+        currentConfig: parsed.currentConfig,
+        deadlineAt: Date.now() + 25_000,
+        logger: {
+          warn: (metadata) => {
+            const errorClass =
+              typeof metadata.errorClass === 'string'
+                ? metadata.errorClass
+                : 'UnknownProviderError';
+            logBuilderAiEvent(
+              errorClass === 'AbortError' || errorClass === 'TimeoutError'
+                ? 'builder_ai_timeout'
+                : 'builder_ai_provider_fallback',
+              {
+                errorClass,
+                merchantId: merchant.merchantId,
+                provider:
+                  typeof metadata.provider === 'string'
+                    ? metadata.provider
+                    : 'unknown',
+                requestId: parsed.clientRequestId,
+                userId: auth.user.id,
+              }
+            );
+          },
+        },
+        prompt: promptResult.prompt,
+        providerChain: materialized.providers,
+        signal: AbortSignal.any([request.signal, AbortSignal.timeout(24_000)]),
+        validateSemantics: (candidate) =>
+          isSemanticallyExecutable(candidate, parsed),
+      });
+    } catch (error) {
+      logBuilderAiEvent('builder_ai_candidate_rejected', {
+        merchantId: merchant.merchantId,
+        requestId: parsed.clientRequestId,
+        userId: auth.user.id,
+      });
+      return createBuilderAiProviderErrorResponse(
+        error,
+        parsed.clientRequestId
+      );
+    }
+    if (plan.status === 'refused') {
+      logBuilderAiEvent('builder_ai_candidate_rejected', {
+        merchantId: merchant.merchantId,
+        requestId: parsed.clientRequestId,
+        userId: auth.user.id,
+      });
       return NextResponse.json(
         {
-          code: 'builder_ai_no_safe_changes',
-          details: candidate.warnings.join(' '),
-          error: 'No safe changes were made',
+          code: 'builder_ai_request_not_supported',
+          details: 'This request is not supported',
+          error: 'This request is not supported',
           requestId: parsed.clientRequestId,
         },
         { status: 422 }
       );
     }
-    return NextResponse.json(
-      { config: candidate.candidateConfig },
-      { headers: { 'X-RateLimit-Remaining': String(rate.remaining) } }
-    );
+    const result = applyBuilderAiEditPlan(parsed.currentConfig, plan);
+    const rawMediaWarning = getBuilderAiRawPlanMediaWarning(plan);
+    const candidate = builderAiEditContract.candidateSchema.parse({
+      candidateConfig: result.candidateConfig,
+      clientRequestId: parsed.clientRequestId,
+      contractVersion: builderAiEditContract.version,
+      operations: rawMediaWarning ? [] : plan.operations,
+      summary: plan.summary,
+      warnings: result.warnings,
+    });
+    const hasConfigChanged =
+      JSON.stringify(
+        builderAiEditContract.builderDataSchema.parse(parsed.currentConfig)
+      ) !== JSON.stringify(candidate.candidateConfig);
+    logBuilderAiEvent('builder_ai_candidate_created', {
+      merchantId: merchant.merchantId,
+      operationCount: candidate.operations.length,
+      requestId: parsed.clientRequestId,
+      userId: auth.user.id,
+      warningCount: candidate.warnings.length,
+    });
+    if (mode === 'legacy') {
+      logBuilderAiEvent('legacy_contract_used', {
+        merchantId: merchant.merchantId,
+        requestId: parsed.clientRequestId,
+        userId: auth.user.id,
+      });
+      if (!hasConfigChanged) {
+        return NextResponse.json(
+          {
+            code: 'builder_ai_no_safe_changes',
+            details: candidate.warnings.join(' '),
+            error: 'No safe changes were made',
+            requestId: parsed.clientRequestId,
+          },
+          { status: 422 }
+        );
+      }
+      return NextResponse.json(
+        { config: candidate.candidateConfig },
+        { headers: { 'X-RateLimit-Remaining': String(rate.remaining) } }
+      );
+    }
+    return NextResponse.json(candidate, {
+      headers: { 'X-RateLimit-Remaining': String(rate.remaining) },
+    });
+  } finally {
+    try {
+      await acknowledge();
+    } catch {
+      // Retain the durable lease. Expiry does not permit unsafe mode entry.
+      logBuilderAiEvent('builder_ai_candidate_rejected', {
+        merchantId: merchant.merchantId,
+        requestId: parsed.clientRequestId,
+        userId: auth.user.id,
+      });
+    }
   }
-  return NextResponse.json(candidate, {
-    headers: { 'X-RateLimit-Remaining': String(rate.remaining) },
-  });
 }

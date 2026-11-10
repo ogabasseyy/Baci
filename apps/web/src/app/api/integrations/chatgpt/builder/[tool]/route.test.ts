@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { POST } from './route';
+import { maxDuration, POST } from './route';
 
 const state = vi.hoisted(() => ({
   linking: true,
@@ -40,4 +40,8 @@ it('passes the original request and awaited tool name to the authenticated gatew
   const req = new Request('https://usebaci.com/api');
   await POST(req, { params: Promise.resolve({ tool: 'list_storefronts' }) });
   expect(state.gateway).toHaveBeenCalledWith(req, 'list_storefronts');
+});
+
+it('keeps the backend execution ceiling aligned with the long build transport', () => {
+  expect(maxDuration).toBe(300);
 });

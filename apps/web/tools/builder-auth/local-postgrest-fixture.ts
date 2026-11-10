@@ -10,6 +10,8 @@ export async function startLocalPostgrest(options: {
   role: string;
   jwks: unknown;
   binary?: string;
+  /** Local fixture diagnostics, never enabled by user-facing runtime. */
+  diagnose?: (status: number, body: string) => void;
 }) {
   if (
     !path.isAbsolute(options.databaseSocket) ||
@@ -42,8 +44,10 @@ export async function startLocalPostgrest(options: {
       PGRST_SERVER_PORT: '0',
       PGRST_LOG_LEVEL: 'crit',
     },
-    stdio: 'ignore',
+    stdio: options.diagnose ? ['ignore', 'pipe', 'pipe'] : 'ignore',
   });
+  child.stdout?.resume();
+  child.stderr?.on('data', (chunk) => options.diagnose?.(500, String(chunk)));
   let exited = false;
   child.once('exit', () => {
     exited = true;
@@ -68,10 +72,25 @@ export async function startLocalPostgrest(options: {
     for (let i = 0; i < 100; i++) {
       if (exited) throw Error('Local Data API process failed');
       ready = await new Promise<boolean>((resolve) => {
-        const req = request({ socketPath, path: '/', method: 'GET' }, (res) => {
-          res.resume();
-          resolve((res.statusCode ?? 500) < 500);
-        });
+        const req = request(
+          {
+            socketPath,
+            path: '/__local_readiness_not_a_relation',
+            method: 'GET',
+          },
+          (res) => {
+            if (options.diagnose) {
+              let body = '';
+              res.on('data', (chunk) => {
+                if (body.length < 4096) body += String(chunk);
+              });
+              res.on('end', () =>
+                options.diagnose?.(res.statusCode ?? 500, body)
+              );
+            } else res.resume();
+            resolve((res.statusCode ?? 500) < 500);
+          }
+        );
         req.on('error', () => resolve(false));
         req.setTimeout(250, () => {
           req.destroy();

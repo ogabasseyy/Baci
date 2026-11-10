@@ -1,0 +1,43 @@
+{
+  "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "reviewCompleted": true,
+  "reviewedFiles": [
+    "apps/web/src/lib/experience/candidate-performance-qualification.test.ts",
+    "apps/web/src/lib/experience/candidate-performance-qualification.ts",
+    "apps/web/src/lib/experience/tool-dispatcher.performance-gate.test.ts",
+    "apps/web/src/lib/experience/tool-dispatcher.ts",
+    "apps/web/src/schemas/experience-performance-worker.ts",
+    "apps/web/src/schemas/experience-performance.ts",
+    "apps/web/src/schemas/experience-route-path.ts"
+  ],
+  "issuesRaised": 1,
+  "severity": "minor",
+  "issue": "Invalid-route test could pass due to unrelated sample-count mismatch",
+  "resolution": "Fixed: separate direct shared-schema assertions for 241-character and double-slash paths; valid 240-character qualifier regression retained",
+  "validation": {
+    "command": "pnpm exec vitest run src/lib/experience/candidate-performance-qualification.test.ts",
+    "tests": 10,
+    "status": "passed",
+    "biome": "passed"
+  },
+  "criticalOrMajorIssuesUnresolved": 0,
+  "sourceCoverage": {
+    "pathsReviewedAcrossBatches": 53,
+    "currentRuntimeFilesWithoutMatchingReceipt": [],
+    "latestTestOnlyCorrectionWithoutPostFixReceipt": [
+      "apps/web/src/lib/experience/candidate-performance-qualification.test.ts"
+    ]
+  },
+  "additionalTestOnlyReview": {
+    "status": "rate-limited",
+    "reportedWait": "7 minutes and 28 seconds",
+    "paidCreditsUsed": false,
+    "latestAttempt": "requested immediate retry; blocked by included allowance",
+    "retryAfterReset": true
+  },
+  "benchmarks": "pending by user instruction",
+  "remoteRunner": "not provisioned",
+  "publishing": false,
+  "orders": false,
+  "payments": false
+}

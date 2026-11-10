@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T19:26:38+00:00",
-  "source_revision": "31cfac83b5721b9f394d346eec0d8f02d17a28cd",
-  "evidence_digest": "75819ddae4723fa7b06e21f170b106089896635e6b1a9de2e237c381f00eae40",
-  "claims_digest": "cc13025204f56f4449f2e39a3d14617b9215d9be8294a812b5d4f57f90ad90fc",
-  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-10T16:48:23+00:00",
+  "source_revision": "76bceee71a3ad77a30056b84c403039ca9d55b69",
+  "evidence_digest": "db6341a343c98ac5bc36d32f4651ee3d8e187b699f4907857a90f3ffcbcb35c8",
+  "claims_digest": "e5556fea0de27376d9cf27e1ab5fcec602453b47fd80b978033e5c634ccdf8d0",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
@@ -215,6 +215,20 @@
         "apps/web/src/lib/agentic/checkout-totals.ts",
         "apps/web/src/lib/agentic/ucp-checkout-line-item-adapter.ts",
         "apps/web/src/lib/agentic/ucp-response-adapters.ts"
+      ]
+    },
+    {
+      "id": "custom-storefront-mcp",
+      "title": "Full-code storefront MCP foundations",
+      "status": "code_evidenced",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "source_refs": [
+        "apps/web/builder-mcp-server/registry.ts",
+        "apps/web/src/lib/experience/production-integration.ts",
+        "apps/web/tools/experience-runner/linux-runner.ts",
+        "apps/web/tools/experience-runner/preview-delivery.ts",
+        "docs/connectors/experience-runner-delivery-qualification.md"
       ]
     },
     {

@@ -40,20 +40,14 @@ test('contact fields have labels, autofill and actionable errors', async ({
   ).toBeFocused();
 });
 
-test('collapsed contact and password controls stay out of keyboard navigation', async ({
-  page,
-}) => {
-  const contactHeader = page.getByRole('button', {
-    name: /Contact Information/,
-  });
-  await expect(contactHeader).toHaveAttribute('aria-expanded', 'true');
+test('guest checkout does not ask for a password', async ({ page }) => {
+  await expect(
+    page.getByRole('button', { name: /Contact Information/ })
+  ).toHaveAttribute('aria-expanded', 'true');
   await expect(
     page.getByLabel('Create a Password', { exact: true })
-  ).not.toBeVisible();
-  await page.getByRole('checkbox', { name: /Save my information/ }).check();
-  const password = page.getByLabel('Create a Password', { exact: true });
-  await expect(password).toBeVisible();
-  await expect(password).toHaveAttribute('autocomplete', 'new-password');
-  await page.getByRole('checkbox', { name: /Save my information/ }).uncheck();
-  await expect(password).not.toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('checkbox', { name: /Save my information/ })
+  ).toHaveCount(0);
 });

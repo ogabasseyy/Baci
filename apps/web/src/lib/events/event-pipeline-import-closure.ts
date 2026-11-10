@@ -2,6 +2,11 @@ import { dirname, extname, normalize } from 'node:path/posix';
 import ts from '@typescript/typescript6';
 import { parseEventPipelineTypeScriptSource } from './event-pipeline-typescript-source';
 
+export type ImportClosureSources = Pick<
+  ReadonlyMap<string, string>,
+  'get' | 'has'
+>;
+
 const moduleSuffixes = [
   '',
   '.ts',
@@ -17,7 +22,7 @@ const moduleSuffixes = [
 function localImportPath(
   importer: string,
   specifier: string,
-  sources: ReadonlyMap<string, string>
+  sources: ImportClosureSources
 ): string | undefined {
   const webSourceRoot = 'apps/web/src';
   const aliasBase =
@@ -57,7 +62,7 @@ function localImportPath(
 
 export function collectProductionImportClosure(
   roots: readonly string[],
-  sources: ReadonlyMap<string, string>
+  sources: ImportClosureSources
 ): Set<string> {
   const closure = new Set<string>();
   const pending = [...roots];

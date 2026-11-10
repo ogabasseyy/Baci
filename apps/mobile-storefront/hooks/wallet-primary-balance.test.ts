@@ -22,6 +22,11 @@ import {
   readPrimaryFundingAccountSoon,
 } from './wallet-primary-balance';
 
+/** Remembers an answer as the newest read, as a fresh read would. */
+const rememberNow = (
+  value: Parameters<typeof rememberPrimaryFundingAccount>[2]
+) => rememberPrimaryFundingAccount('m', 'u', value, beginPrimaryRead('m', 'u'));
+
 const mockRead = jest.fn<() => Promise<unknown>>();
 jest.mock('./resolve-wallet-funding-account', () => ({
   readPrimaryFundingAccount: () => mockRead(),
@@ -32,6 +37,11 @@ jest.mock('@/stores/auth-store', () => ({
     getState: () => ({ user: mockAuthUserId ? { id: mockAuthUserId } : null }),
   },
 }));
+
+/** Lets a late answer run through the read's settle and store steps. */
+async function flushAnswer() {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
+}
 
 const account = {
   accountName: 'Verified',
@@ -86,6 +96,14 @@ describe('readPrimaryFundingAccountSoon', () => {
     });
   });
 
+  it('clears its budget timer when the probe fails', async () => {
+    mockRead.mockRejectedValueOnce(new Error('network'));
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).rejects.toThrow(
+      'network'
+    );
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('settles a stalled probe as unavailable after the budget', async () => {
     mockRead.mockReturnValue(new Promise(() => undefined));
     const settled = readPrimaryFundingAccountSoon('m', 'u');
@@ -120,7 +138,7 @@ describe('readPrimaryFundingAccountSoon', () => {
   });
 
   it('falls back to a confirmed read handed over by the setup sheet', async () => {
-    rememberPrimaryFundingAccount('m', 'u', {
+    rememberNow({
       status: 'ready',
       account,
       balanceKobo: 0,
@@ -135,7 +153,7 @@ describe('readPrimaryFundingAccountSoon', () => {
   });
 
   it('prefers any fresh answer over the remembered one', async () => {
-    rememberPrimaryFundingAccount('m', 'u', {
+    rememberNow({
       status: 'ready',
       account,
       balanceKobo: 1,
@@ -162,7 +180,7 @@ describe('readPrimaryFundingAccountSoon', () => {
   });
 
   it('never remembers less than a confirmed account', async () => {
-    rememberPrimaryFundingAccount('m', 'u', {
+    rememberNow({
       status: 'ready',
       account: null,
       balanceKobo: null,
@@ -174,7 +192,7 @@ describe('readPrimaryFundingAccountSoon', () => {
   });
 
   it('ignores a remembered read after an account switch or once it is old', async () => {
-    rememberPrimaryFundingAccount('m', 'u', {
+    rememberNow({
       status: 'ready',
       account,
       balanceKobo: 1,
@@ -186,7 +204,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     });
 
     mockAuthUserId = 'u';
-    rememberPrimaryFundingAccount('m', 'u', {
+    rememberNow({
       status: 'ready',
       account,
       balanceKobo: 1,
@@ -262,8 +280,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     await load;
     expect(listener).not.toHaveBeenCalled();
     answer({ status: 'ready', account, balanceKobo: 1 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAnswer();
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
@@ -283,8 +300,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
     await load;
     answer({ status: 'ready', account, balanceKobo: 1 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAnswer();
     expect(later).toHaveBeenCalledTimes(1);
   });
 

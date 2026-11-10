@@ -4,14 +4,14 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
-import { readFreshPrimaryBalance } from './start-savings-wallet-balance';
 
-export const PRIMARY_HEAD_START_SHORT_MESSAGE =
-  'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+export {
+  PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_SHORT_MESSAGE,
+} from './start-savings-wallet-balance';
+
 export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
   'Your head start cannot be more than the plan target.';
-export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
-  "We couldn't check your wallet balance just now. Please try again.";
 
 /**
  * Form-flow handlers for the start-savings form: preview validation,
@@ -27,7 +27,6 @@ export function useStartSavingsFormFlow({
   initialContributionValue,
   primaryWallet = false,
   refetch,
-  requiredTopUpAmount = 0,
   selectedFundingOption,
   selectedPaymentMethodId,
   selectedProduct,
@@ -51,8 +50,6 @@ export function useStartSavingsFormFlow({
   /** The customer's spendable wallet is their PiggyVest main wallet. */
   primaryWallet?: boolean;
   refetch: () => Promise<unknown>;
-  /** Head start minus the spendable wallet balance; > 0 means short. */
-  requiredTopUpAmount?: number;
   selectedFundingOption: SavingsFundingOption;
   selectedPaymentMethodId: string | null | undefined;
   selectedProduct: SavingsProductChoice | null;
@@ -69,6 +66,7 @@ export function useStartSavingsFormFlow({
   submitSavingsGoal: (options?: {
     deferInitialContribution?: boolean;
     continueInWallet?: boolean;
+    confirmPrimaryBalance?: boolean;
   }) => Promise<void>;
   targetValue: number;
 }) {
@@ -133,30 +131,19 @@ export function useStartSavingsFormFlow({
       initialContributionValue > 0
     ) {
       // Refuse up front rather than create a plan whose head start cannot
-      // move: the legacy path fails atomically, so this path must too.
-      // The plan is created without the head start, so check the target
-      // bound the creation request would otherwise have enforced.
+      // move: the legacy path fails atomically, so this path must too. The
+      // plan is created without the head start, so check the target bound
+      // the creation request would otherwise have enforced.
       if (initialContributionValue > targetValue) {
         setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
         return;
       }
-      if (requiredTopUpAmount > 0) {
-        setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
-        return;
-      }
-      // The screen's balance may be a stand-in; confirm it fresh first.
-      const freshBalance = await readFreshPrimaryBalance();
-      if (freshBalance === null) {
-        setFormError(PRIMARY_BALANCE_CHECK_FAILED_MESSAGE);
-        return;
-      }
-      if (freshBalance < initialContributionValue) {
-        setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
-        return;
-      }
+      // The balance is confirmed fresh inside the guarded submission, so
+      // a stand-in figure never refuses or allows the head start.
       await submitSavingsGoal({
         deferInitialContribution: true,
         continueInWallet: true,
+        confirmPrimaryBalance: true,
       });
       return;
     }

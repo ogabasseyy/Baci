@@ -14,6 +14,7 @@ import {
 import {
   PRIMARY_UNKNOWN_RETRY_DELAY_MS,
   PRIMARY_UNKNOWN_RETRY_LIMIT,
+  PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS,
   usePrimaryWalletUnknownRetry,
 } from './use-primary-wallet-unknown-retry';
 
@@ -39,6 +40,23 @@ describe('usePrimaryWalletUnknownRetry', () => {
     );
     for (let i = 0; i < PRIMARY_UNKNOWN_RETRY_LIMIT + 2; i += 1) {
       await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    }
+    expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT);
+    // Still unknown (or recalled): keep re-checking, slowly.
+    await tick(PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT + 1);
+  });
+
+  it('bounds reloads from late answers by the quick attempts', async () => {
+    const refetch = jest.fn(async () => undefined);
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+    );
+    // A provider that always answers late announces after every reload.
+    for (let i = 0; i < PRIMARY_UNKNOWN_RETRY_LIMIT + 5; i += 1) {
+      await act(async () => {
+        announceLatePrimaryAnswer();
+      });
     }
     expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT);
   });
@@ -74,6 +92,33 @@ describe('usePrimaryWalletUnknownRetry', () => {
     await act(async () => {
       finish();
     });
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('never starts a second reload while one is running', async () => {
+    let finish: () => void = () => undefined;
+    const refetch = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+    );
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    act(() => {
+      announceLatePrimaryAnswer();
+      announceLatePrimaryAnswer();
+    });
+    // Never two reloads at once.
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish();
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(2);
   });

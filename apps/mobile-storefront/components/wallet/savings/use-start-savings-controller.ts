@@ -201,7 +201,6 @@ export function useStartSavingsController() {
     initialContributionValue,
     primaryWallet,
     refetch,
-    requiredTopUpAmount,
     selectedFundingOption,
     selectedPaymentMethodId,
     selectedProduct,

@@ -32,18 +32,20 @@ export async function readPrimaryFundingAccountSoon(
   });
   // Numbered at start: an answer only counts if no newer read has answered.
   const sequence = beginPrimaryRead(merchantId, userId);
-  const read = readPrimaryFundingAccount(merchantId, userId).then((value) => {
-    if (timer !== undefined) clearTimeout(timer);
-    const stored = rememberPrimaryFundingAccount(
-      merchantId,
-      userId,
-      value,
-      sequence
-    );
-    // This load already gave up: tell the screen a confirmed answer landed.
-    if (timedOut && stored) announceLatePrimaryAnswer();
-    return value;
-  });
+  const read = readPrimaryFundingAccount(merchantId, userId)
+    // Settled either way: the budget timer is no longer needed.
+    .finally(() => clearTimeout(timer))
+    .then((value) => {
+      const stored = rememberPrimaryFundingAccount(
+        merchantId,
+        userId,
+        value,
+        sequence
+      );
+      // This load already gave up: tell the screen a confirmed answer landed.
+      if (timedOut && stored) announceLatePrimaryAnswer();
+      return value;
+    });
   const settled = await Promise.race([read, timeout]);
   if (settled.status !== 'unavailable') return settled;
   const recalled = recallPrimaryFundingAccount(merchantId, userId);

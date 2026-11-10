@@ -1,9 +1,11 @@
 // useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { onLatePrimaryAnswer } from '@/hooks/primary-funding-account-memory';
 
 export const PRIMARY_UNKNOWN_RETRY_DELAY_MS = 4000;
 export const PRIMARY_UNKNOWN_RETRY_LIMIT = 3;
+/** After the quick attempts: a slow, steady re-check while still unknown. */
+export const PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS = 30_000;
 
 interface Input {
   /** The wallet's PiggyVest read came back unknown (slow or failed). */
@@ -15,10 +17,12 @@ interface Input {
 
 /**
  * A slow PiggyVest read leaves the wallet without the customer's account
- * number and balance until something reloads it. While the answer is
- * unknown: reload as soon as a late confirmed answer lands, and otherwise
- * re-check by itself a few times. Each re-check waits for the previous reload
- * to finish, so reloads never overlap and every attempt really runs.
+ * number and balance (or showing one recalled from moments ago) until
+ * something reloads it. While the answer is unknown or recalled: re-check a
+ * few times quickly, reloading as soon as a late confirmed answer lands, then
+ * keep re-checking slowly so a recalled balance never stands for long. Late
+ * answers spend the same quick attempts, so a provider that always answers
+ * late cannot drive a reload loop. One reload runs at a time.
  */
 export function usePrimaryWalletUnknownRetry({
   unknown,
@@ -32,31 +36,38 @@ export function usePrimaryWalletUnknownRetry({
   if (state.scopeKey !== scopeKey || (!unknown && state.attempts !== 0)) {
     setState({ scopeKey, attempts: 0 });
   }
+  const inFlight = useRef(false);
   const retry = useEffectEvent(async (forScope: string) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
       await refetch();
     } catch {
       // A failed reload still spends the attempt; the next one may succeed.
-    } finally {
-      // Spend the attempt only once the reload has settled.
-      setState((current) =>
-        current.scopeKey === forScope
-          ? { scopeKey: forScope, attempts: current.attempts + 1 }
-          : current
-      );
     }
+    inFlight.current = false;
+    // Spend the attempt only once the reload has settled.
+    setState((current) =>
+      current.scopeKey === forScope
+        ? { scopeKey: forScope, attempts: current.attempts + 1 }
+        : current
+    );
   });
   const reloadForLateAnswer = useEffectEvent(() => {
-    if (unknown) void refetch();
+    if (unknown && attempts < PRIMARY_UNKNOWN_RETRY_LIMIT) void retry(scopeKey);
   });
   useEffect(() => onLatePrimaryAnswer(reloadForLateAnswer), []);
   useEffect(() => {
-    if (!unknown || attempts >= PRIMARY_UNKNOWN_RETRY_LIMIT) return;
+    if (!unknown) return;
     // Bound to this scope: an account switch clears it and starts afresh.
     const forScope = scopeKey;
+    const delay =
+      attempts < PRIMARY_UNKNOWN_RETRY_LIMIT
+        ? PRIMARY_UNKNOWN_RETRY_DELAY_MS
+        : PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS;
     const timer = setTimeout(() => {
       void retry(forScope);
-    }, PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    }, delay);
     return () => clearTimeout(timer);
   }, [unknown, attempts, scopeKey]);
 }

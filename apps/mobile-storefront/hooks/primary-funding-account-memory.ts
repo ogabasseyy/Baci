@@ -48,14 +48,14 @@ export function beginPrimaryRead(merchantId: string, userId: string): number {
  * back an account a newer answer cleared. A confirmed account (ready, with an
  * account number) becomes the remembered read; an authoritative "not ready"
  * or "no account yet" clears it; an unknown answer changes nothing. Returns
- * whether a confirmed account was stored. Omitting `sequence` treats the
- * answer as the newest read (for example, the setup sheet's own check).
+ * whether a confirmed account was stored. `sequence` comes from
+ * `beginPrimaryRead`, called when the read started.
  */
 export function rememberPrimaryFundingAccount(
   merchantId: string,
   userId: string,
   value: SettledPrimaryFundingAccount,
-  sequence: number = beginPrimaryRead(merchantId, userId)
+  sequence: number
 ): boolean {
   if (value.status === 'unavailable') return false;
   const state = stateOf(merchantId, userId);

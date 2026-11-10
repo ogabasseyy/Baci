@@ -9,6 +9,11 @@ import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
+import {
+  PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_SHORT_MESSAGE,
+  readFreshPrimaryBalance,
+} from './start-savings-wallet-balance';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 import { validateSavingsInput } from './validate-savings-input';
 
@@ -51,6 +56,8 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const submitSavingsGoal = async (options?: {
     deferInitialContribution?: boolean;
     continueInWallet?: boolean;
+    /** Confirm a fresh PiggyVest balance covers the head start first. */
+    confirmPrimaryBalance?: boolean;
   }) => {
     if (submitInFlightRef.current) {
       return;
@@ -65,6 +72,23 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     const context = contextRef.current;
+    if (options?.confirmPrimaryBalance) {
+      // Inside the guarded lifecycle: no second submit can start, and an
+      // edit to the plan while the balance is read cancels this one.
+      const balance = await readFreshPrimaryBalance(input.activeMerchantId);
+      const refusal =
+        balance === null
+          ? PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
+          : balance < input.effectiveInitialContribution
+            ? PRIMARY_HEAD_START_SHORT_MESSAGE
+            : null;
+      if (refusal || !context.active) {
+        if (refusal && context.active) input.setFormError(refusal);
+        submitInFlightRef.current = false;
+        if (mountedRef.current) setIsSubmitting(false);
+        return;
+      }
+    }
     await runSavingsGoalSubmission(
       {
         ...input,

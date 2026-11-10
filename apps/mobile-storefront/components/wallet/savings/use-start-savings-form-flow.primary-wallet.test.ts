@@ -1,20 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
+import { resolveStartSavingsWalletBalance } from './start-savings-wallet-balance';
 import {
-  readFreshPrimaryBalance,
-  resolveStartSavingsWalletBalance,
-} from './start-savings-wallet-balance';
-import {
-  PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
-  PRIMARY_HEAD_START_SHORT_MESSAGE,
   useStartSavingsFormFlow,
 } from './use-start-savings-form-flow';
-
-jest.mock('./start-savings-wallet-balance', () => ({
-  ...jest.requireActual<object>('./start-savings-wallet-balance'),
-  readFreshPrimaryBalance: jest.fn(async () => 50_000),
-}));
 
 type FlowInput = Parameters<typeof useStartSavingsFormFlow>[0];
 
@@ -54,31 +44,8 @@ describe('start savings with a PiggyVest wallet', () => {
     expect(submitSavingsGoal).toHaveBeenCalledWith({
       deferInitialContribution: true,
       continueInWallet: true,
+      confirmPrimaryBalance: true,
     });
-  });
-
-  it('refuses a head start larger than the PiggyVest balance, creating nothing', async () => {
-    const { flow, submitSavingsGoal, input } = createFlow({
-      primaryWallet: true,
-      requiredTopUpAmount: 2500,
-    });
-    await flow.handleFundingContinue();
-    expect(submitSavingsGoal).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenCalledWith(
-      PRIMARY_HEAD_START_SHORT_MESSAGE
-    );
-  });
-
-  it('refuses when a fresh read shows less than the head start', async () => {
-    jest.mocked(readFreshPrimaryBalance).mockResolvedValueOnce(9_000);
-    const { flow, submitSavingsGoal, input } = createFlow({
-      primaryWallet: true,
-    });
-    await flow.handleFundingContinue();
-    expect(submitSavingsGoal).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenCalledWith(
-      PRIMARY_HEAD_START_SHORT_MESSAGE
-    );
   });
 
   it('refuses a head start above the plan target, creating nothing', async () => {
@@ -91,18 +58,6 @@ describe('start savings with a PiggyVest wallet', () => {
     expect(submitSavingsGoal).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(
       PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
-    );
-  });
-
-  it('creates nothing when the balance cannot be confirmed now', async () => {
-    jest.mocked(readFreshPrimaryBalance).mockResolvedValueOnce(null);
-    const { flow, submitSavingsGoal, input } = createFlow({
-      primaryWallet: true,
-    });
-    await flow.handleFundingContinue();
-    expect(submitSavingsGoal).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenCalledWith(
-      PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
     );
   });
 

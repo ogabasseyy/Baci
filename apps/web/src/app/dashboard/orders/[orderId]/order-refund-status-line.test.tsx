@@ -5,6 +5,7 @@ import { OrderRefundStatusLine } from './order-refund-status-line';
 
 const summary = (over: Partial<RefundSummary>) =>
   ({
+    cancellationRefundMode: 'manual',
     canRecordManual: true,
     remaining: 5000,
     status: 'not_started',
@@ -36,5 +37,24 @@ describe('OrderRefundStatusLine', () => {
     expect(
       screen.getByText(/refund permission needs to refund the customer/i)
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['automatic', 'automatic'],
+    ['unknown', null],
+    ['missing', undefined],
+  ])('keeps neutral copy for a not-started order with %s cancel mode', (_label, mode) => {
+    render(
+      <OrderRefundStatusLine
+        summary={summary({
+          cancellationRefundMode:
+            mode as RefundSummary['cancellationRefundMode'],
+        })}
+      />
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent('Refund pending');
+    expect(
+      screen.queryByText(/no automatic refund was queued/i)
+    ).not.toBeInTheDocument();
   });
 });

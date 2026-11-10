@@ -24,6 +24,8 @@ export interface RefundSummary {
   canRetry: boolean;
   canRecordManual: boolean;
   canManageRefunds: boolean;
+  // Persisted by the cancel RPC; added after masking, absent when unreadable.
+  cancellationRefundMode?: 'automatic' | 'manual' | null;
   events?: Array<{
     id: string;
     action: string;

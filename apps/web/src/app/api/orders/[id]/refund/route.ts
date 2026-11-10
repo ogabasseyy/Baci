@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { attachCancellationRefundMode } from '@/lib/orders/attach-cancellation-refund-mode';
 import { maskRefundWorkerText } from '@/lib/orders/mask-refund-worker-text';
 import { orderRefundSchema } from '@/schemas/order-refund';
 
@@ -191,7 +192,10 @@ async function handle(
       { status: 500 }
     );
   return NextResponse.json(
-    maskRefundWorkerText(data as Record<string, unknown>)
+    await attachCancellationRefundMode(
+      maskRefundWorkerText(data as Record<string, unknown>),
+      { orderId: id, supabase: auth.supabase }
+    )
   );
 }
 

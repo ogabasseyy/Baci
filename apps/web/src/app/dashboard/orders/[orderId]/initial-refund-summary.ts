@@ -1,3 +1,4 @@
+import { attachCancellationRefundMode } from '@/lib/orders/attach-cancellation-refund-mode';
 import { maskRefundWorkerText } from '@/lib/orders/mask-refund-worker-text';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { createClient } from '@/lib/supabase/server';
@@ -21,9 +22,10 @@ export async function getInitialRefundSummary(
       p_order_id: orderId,
     });
     if (error || !data || typeof data !== 'object') return null;
-    return maskRefundWorkerText(
-      data as Record<string, unknown>
-    ) as unknown as RefundSummary;
+    return (await attachCancellationRefundMode(
+      maskRefundWorkerText(data as Record<string, unknown>),
+      { orderId, supabase }
+    )) as unknown as RefundSummary;
   } catch {
     return null;
   }

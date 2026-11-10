@@ -11,7 +11,9 @@ export function OrderRefundStatusLine({ summary }: { summary: RefundSummary }) {
   // Everyone viewing the order sees why it is pending; only the action
   // button (in the panel) is gated on canRecordManual.
   const awaitingManualRefund =
-    summary.status === 'not_started' && summary.remaining > 0;
+    summary.cancellationRefundMode === 'manual' &&
+    summary.status === 'not_started' &&
+    summary.remaining > 0;
   return (
     <>
       <p role="status" className="font-semibold">

@@ -232,4 +232,49 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
     });
     expect(plan.ledgerKnown).toBe(true);
   });
+
+  describe('refund rows linked to a payment this order does not have', () => {
+    it.each([
+      'completed',
+      'refund_pending',
+      'processing',
+      'failed',
+    ])('marks the plan unresolved for a stale-link %s refund', (status) => {
+      const plan = getCancelRefundPlan({
+        paymentStatus: 'Paid',
+        total: 100,
+        transactions: [
+          payment100,
+          pendingRow({ payment_transaction_id: 'pay-gone', status }),
+        ],
+      });
+      expect(plan.ledgerKnown).toBe(false);
+    });
+
+    it('leaves a refund linked to a real funded leg unaffected', () => {
+      const plan = getCancelRefundPlan({
+        paymentStatus: 'Paid',
+        total: 100,
+        transactions: [payment100, pendingRow({ status: 'completed' })],
+      });
+      expect(plan.ledgerKnown).toBe(true);
+      expect(plan.amount).toBe(0);
+    });
+
+    it('accepts a link to a funded leg that is not an external gateway', () => {
+      const plan = getCancelRefundPlan({
+        paymentStatus: 'Paid',
+        total: 100,
+        transactions: [
+          payment100,
+          { ...payment100, gateway: 'wallet', id: 'pay-wallet' },
+          pendingRow({
+            payment_transaction_id: 'pay-wallet',
+            status: 'completed',
+          }),
+        ],
+      });
+      expect(plan.ledgerKnown).toBe(true);
+    });
+  });
 });

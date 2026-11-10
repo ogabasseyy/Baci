@@ -218,4 +218,23 @@ describe('resolveCancellationRefundOutcome', () => {
       resolveCancellationRefundOutcome({ ...manual, supabase })
     ).resolves.toEqual({ outcome: 'unknown' });
   });
+
+  it('reports unknown when a refund is linked to a payment this order does not have', async () => {
+    const supabase = supabaseWith({
+      ledger: {
+        data: [
+          leg(),
+          leg({
+            id: 'refund-1',
+            payment_transaction_id: 'pay-gone',
+            transaction_type: 'refund',
+          }),
+        ],
+        error: null,
+      },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
 });

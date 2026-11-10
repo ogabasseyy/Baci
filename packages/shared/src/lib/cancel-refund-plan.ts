@@ -182,11 +182,24 @@ export function getCancelRefundPlan(
   // refund only stays unattributable when several legs could own it (a sole
   // leg owns it); unlinked NON-TERMINAL evidence (pending, processing, or a
   // recoverable failed row) is unattributable even with a single leg.
-  const unresolved = refundRows.some(
-    (row) =>
-      !row.payment_transaction_id &&
-      ((legs.length > 1 && DONE_REFUND_STATUSES.has(row.status)) ||
-        isRefundInFlightRow(row))
+  // A refund that claims a payment id no funded leg of this order carries is
+  // a stale or cross-order link, which the worker also quarantines
+  // (classifyCancellationRefundLinks): every status counts, as there.
+  const fundedPaymentIds = new Set(
+    order.transactions
+      .filter(
+        (row) =>
+          row.transaction_type === 'payment' &&
+          FUNDED_LEG_STATUSES.has(row.status) &&
+          row.id
+      )
+      .map((row) => row.id)
+  );
+  const unresolved = refundRows.some((row) =>
+    row.payment_transaction_id
+      ? !fundedPaymentIds.has(row.payment_transaction_id)
+      : (legs.length > 1 && DONE_REFUND_STATUSES.has(row.status)) ||
+        isRefundInFlightRow(row)
   );
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')

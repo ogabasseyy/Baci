@@ -64,6 +64,23 @@ export function CancelOrderDialog({
     maximumFractionDigits: 2,
   });
 
+  // Exactly one explanation per state: the selected cancel-only path, else
+  // the review path (worded for whether cancel-only is available), else none.
+  // The in-flight notice below is a separate warning about already-moving
+  // money, not an alternative explanation.
+  let explanation: string | null = null;
+  if (effectiveChoice === 'manual' && canCancelOnly) {
+    explanation = `No refund will be sent automatically for ${
+      inFlightAmount > 0 ? `the remaining ${amount}` : 'this order'
+    }. The order will show as refund pending until you record that refund from its Refund card.`;
+  } else if (refundGoesToReview && canCancelOnly) {
+    explanation =
+      'Baci cannot refund all of this payment automatically (it was not paid through Paystack, or an earlier refund covered only part of it). Send the refund to the store owner for review, or cancel only, refund the customer yourself and record it from the Refund card.';
+  } else if (refundGoesToReview) {
+    explanation =
+      'Baci cannot refund all of this payment automatically (it was not paid through Paystack, or an earlier refund covered only part of it). The order will be cancelled and the refund sent to the store owner for review.';
+  }
+
   const handleConfirm = async () => {
     setBusy(true);
     try {
@@ -118,21 +135,8 @@ export function CancelOrderDialog({
             </div>
           )}
         </RadioGroup>
-        {!automaticSupported && canCancelOnly && (
-          <p className="text-sm text-muted-foreground">
-            Baci cannot refund all of this payment automatically (it was not
-            paid through Paystack, or an earlier refund covered only part of
-            it). Send the refund to the store owner for review, or cancel only,
-            refund the customer yourself and record it from the Refund card.
-          </p>
-        )}
-        {refundGoesToReview && (
-          <p className="text-sm text-muted-foreground">
-            Baci cannot refund all of this payment automatically (it was not
-            paid through Paystack, or an earlier refund covered only part of
-            it). The order will be cancelled and the refund sent to the store
-            owner for review.
-          </p>
+        {explanation && (
+          <p className="text-sm text-muted-foreground">{explanation}</p>
         )}
         {inFlightAmount > 0 && (
           <p className="text-sm text-muted-foreground">
@@ -143,14 +147,6 @@ export function CancelOrderDialog({
             })}{' '}
             is already in progress with the provider. Do not refund that part
             yourself; wait for it to finish.
-          </p>
-        )}
-        {effectiveChoice === 'manual' && canCancelOnly && (
-          <p className="text-sm text-muted-foreground">
-            No refund will be sent automatically for{' '}
-            {inFlightAmount > 0 ? `the remaining ${amount}` : 'this order'}. The
-            order will show as refund pending until you record that refund from
-            its Refund card.
           </p>
         )}
         <DialogFooter>

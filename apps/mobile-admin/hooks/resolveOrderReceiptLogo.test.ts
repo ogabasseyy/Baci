@@ -12,20 +12,145 @@ const mockFetch = vi.mocked(
 
 afterEach(() => vi.resetAllMocks());
 
+const PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4z8AAAAMBAQCc479ZAAAAAElFTkSuQmCC';
+const JPEG =
+  '/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgj/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABykX//Z';
+const WEBP =
+  'UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoBAAEAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=';
+
+function raster(base64: string) {
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+}
+
 describe('resolveOrderReceiptLogo', () => {
-  it('embeds supported raster bytes using their detected MIME type', async () => {
+  it.each([
+    ['image/png', PNG],
+    ['image/jpeg', JPEG],
+    ['image/webp', WEBP],
+  ])('embeds a bounded %s using its detected MIME type', async (type, base64) => {
     mockFetch.mockResolvedValue(
-      new Response(Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10), {
-        headers: { 'content-type': 'image/jpeg' },
+      new Response(raster(base64), {
+        headers: { 'content-type': 'application/octet-stream' },
       })
     );
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({
-      logoUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      logoUrl: `data:${type};base64,${base64}`,
     });
     expect(fetch).toHaveBeenCalledWith(
       logoUrl,
       expect.objectContaining({ redirect: 'error' })
     );
+  });
+
+  it.each([
+    [
+      'PNG',
+      PNG,
+      (view: DataView) => {
+        view.setUint32(16, 3000);
+        view.setUint32(20, 3000);
+      },
+    ],
+    [
+      'JPEG',
+      JPEG,
+      (view: DataView, image: Uint8Array) => {
+        const start = image.findIndex(
+          (byte, index) => byte === 0xff && image[index + 1] === 0xc0
+        );
+        view.setUint16(start + 5, 3000);
+        view.setUint16(start + 7, 3000);
+      },
+    ],
+    [
+      'WebP',
+      WEBP,
+      (view: DataView) => {
+        view.setUint16(26, 3000, true);
+        view.setUint16(28, 3000, true);
+      },
+    ],
+  ] as const)('rejects a %s that claims oversized decoded dimensions', async (_type, base64, patch) => {
+    const image = raster(base64);
+    patch(new DataView(image.buffer), image);
+    mockFetch.mockResolvedValue(new Response(image));
+    expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
+  });
+
+  it('rejects an animated PNG before embedding', async () => {
+    const image = raster(PNG);
+    const animationControl = Uint8Array.of(
+      0,
+      0,
+      0,
+      8,
+      97,
+      99,
+      84,
+      76,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    );
+    const animated = new Uint8Array(image.length + animationControl.length);
+    animated.set(image.subarray(0, 33));
+    animated.set(animationControl, 33);
+    animated.set(image.subarray(33), 33 + animationControl.length);
+    mockFetch.mockResolvedValue(new Response(animated));
+    expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
+  });
+
+  it('rejects WebP animation before embedding', async () => {
+    const image = raster(WEBP);
+    const extendedHeader = Uint8Array.of(
+      86,
+      80,
+      56,
+      88,
+      10,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    );
+    const animated = new Uint8Array(image.length + extendedHeader.length);
+    animated.set(image.subarray(0, 12));
+    animated.set(extendedHeader, 12);
+    animated.set(image.subarray(12), 12 + extendedHeader.length);
+    new DataView(animated.buffer).setUint32(4, animated.length - 8, true);
+    mockFetch.mockResolvedValue(new Response(animated));
+    expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
+  });
+
+  it('preserves sanitized SVG for mobile preview only', async () => {
+    mockFetch.mockResolvedValue(
+      new Response('<svg><script>alert(1)</script><rect /></svg>')
+    );
+    const result = await resolveOrderReceiptLogo(
+      'https://cdn.ogabassey.com/media/logo.svg'
+    );
+    expect(result.logoUrl).toBeNull();
+    expect(result.svgXml).toContain('<rect');
+    expect(result.svgXml).not.toContain('<script');
   });
 
   it('discards oversized bodies without a content length', async () => {

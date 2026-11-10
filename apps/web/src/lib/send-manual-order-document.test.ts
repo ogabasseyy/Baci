@@ -19,8 +19,12 @@ vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
 });
 
 import { database, row } from './manual-order-document.test-utils';
+import { renderHtmlToPdf } from './receipt-html-to-pdf';
 import { sendManualOrderDocument } from './send-manual-order-document';
-import { MANUAL_DOC_FALLBACK_CEILING_MS } from './zeptomail-send-budget';
+import {
+  ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS,
+  zeptomailSendAdmissionBudgetMs,
+} from './zeptomail-send-budget';
 
 describe('send manual order document', () => {
   beforeEach(() => {
@@ -31,9 +35,56 @@ describe('send manual order document', () => {
     });
   });
 
+  it('defers a late manual document before rendering or claiming a token', async () => {
+    const db = database();
+    const request = {
+      supabase: db.client,
+      row,
+      invocationDeadline: Date.now() + 15_000,
+    };
+    await expect(sendManualOrderDocument(request)).rejects.toThrow(
+      'transport budget'
+    );
+    expect(renderHtmlToPdf).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(
+      db.rpc.mock.calls.some(
+        ([fn]) => fn === 'create_manual_order_document_claim'
+      )
+    ).toBe(false);
+  });
+
+  it('defers an invoice when rendering consumes the remaining send budget', async () => {
+    const db = database();
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    vi.mocked(renderHtmlToPdf).mockImplementationOnce(async () => {
+      clock.mockReturnValue(now + 13_000);
+      return new TextEncoder().encode('%PDF-TEST');
+    });
+    try {
+      await expect(
+        sendManualOrderDocument({
+          supabase: db.client,
+          row,
+          invocationDeadline: now + 60_000,
+        })
+      ).rejects.toThrow('transport budget');
+      expect(renderHtmlToPdf).toHaveBeenCalledOnce();
+      expect(sendEmail).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('sends the shared receipt PDF attachment, a claim link and tenant-scoped email audit metadata', async () => {
     const db = database();
-    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    const invocationDeadline = Date.now() + 60_000;
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+      invocationDeadline,
+    });
     expect(result.status).toBe('sent');
     // Tenant scoping rides the claim-bound snapshot RPC: the outbox id
     // plus the worker's claim owner, never request-selected table filters.
@@ -43,12 +94,14 @@ describe('send manual order document', () => {
     });
     const message = sendEmail.mock.calls[0][0];
     expect(message.to).toBe('ada@example.com');
-    // The platform fallback is bounded by a static single-attempt ceiling
-    // past the 60s worker: without it the fallback would run unbounded.
-    expect(message.fallbackDeadlineMs).toBeGreaterThan(Date.now());
-    expect(message.fallbackDeadlineMs).toBeLessThanOrEqual(
-      Date.now() + MANUAL_DOC_FALLBACK_CEILING_MS
+    expect(renderHtmlToPdf).toHaveBeenCalledWith(
+      expect.any(String),
+      invocationDeadline - zeptomailSendAdmissionBudgetMs(1)
     );
+    expect(message.fallbackDeadlineMs).toBe(
+      invocationDeadline - ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS
+    );
+    expect(message.signal).toBeInstanceOf(AbortSignal);
     expect(message.subject).toBe('Your receipt is ready - #ORD-42');
     expect(message.htmlContent).toMatch(
       /https:\/\/ogabassey.usebaci.com\/receipts\/claim\/[a-f0-9]{64}/

@@ -20,19 +20,155 @@ function trustedLogoUrl(value: string) {
   return null;
 }
 
-function rasterType(bytes: Uint8Array) {
-  const prefix = (...signature: number[]) =>
-    signature.every((byte, index) => bytes[index] === byte);
-  if (prefix(137, 80, 78, 71, 13, 10, 26, 10)) return 'image/png';
-  if (prefix(255, 216, 255)) return 'image/jpeg';
+const MAX_LOGO_PIXELS = 4_000_000;
+
+function dimensionsFit(width: number, height: number) {
+  return width > 0 && height > 0 && width * height <= MAX_LOGO_PIXELS;
+}
+
+function pngFits(data: DataView) {
   if (
-    prefix(82, 73, 70, 70) &&
-    bytes[8] === 87 &&
-    bytes[9] === 69 &&
-    bytes[10] === 66 &&
-    bytes[11] === 80
-  )
-    return 'image/webp';
+    data.byteLength < 33 ||
+    data.getUint32(8) !== 13 ||
+    data.getUint32(12) !== 0x49484452 || // IHDR
+    !dimensionsFit(data.getUint32(16), data.getUint32(20))
+  ) {
+    return false;
+  }
+
+  let hasImage = false;
+  for (let offset = 33; offset + 12 <= data.byteLength; ) {
+    const size = data.getUint32(offset);
+    const type = data.getUint32(offset + 4);
+    offset += size + 12; // length, type, contents and CRC
+    if (offset > data.byteLength) return false;
+    if (
+      type === 0x49484452 || // duplicate IHDR
+      type === 0x6163544c || // acTL
+      type === 0x6663544c || // fcTL
+      type === 0x66644154 // fdAT
+    ) {
+      return false;
+    }
+    if (type === 0x49444154 && size > 0) hasImage = true; // IDAT
+    if (type === 0x49454e44) {
+      // IEND
+      return size === 0 && offset === data.byteLength && hasImage;
+    }
+  }
+  return false;
+}
+
+function jpegFits(data: DataView) {
+  if (data.getUint16(data.byteLength - 2) !== 0xffd9) return false;
+  let hasFrame = false;
+  for (let offset = 2; offset + 4 <= data.byteLength; ) {
+    if (data.getUint8(offset++) !== 0xff) return false;
+    while (offset < data.byteLength && data.getUint8(offset) === 0xff) offset++;
+    if (offset + 3 > data.byteLength) return false;
+    const marker = data.getUint8(offset++);
+    const size = data.getUint16(offset);
+    if (size < 2 || offset + size > data.byteLength) return false;
+    if (marker === 0xda) return hasFrame && offset + size < data.byteLength - 2; // SOS
+    if (
+      marker === 0xe2 &&
+      size >= 6 &&
+      data.getUint32(offset + 2) === 0x4d504600
+    ) {
+      return false; // MPO contains multiple images.
+    }
+    const isFrame =
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      marker !== 0xc4 &&
+      marker !== 0xc8 &&
+      marker !== 0xcc;
+    if (isFrame) {
+      if (
+        hasFrame ||
+        size < 8 ||
+        !dimensionsFit(data.getUint16(offset + 5), data.getUint16(offset + 3))
+      )
+        return false;
+      hasFrame = true;
+    }
+    offset += size;
+  }
+  return false;
+}
+
+function getUint24LE(data: DataView, offset: number) {
+  return data.getUint16(offset, true) + data.getUint8(offset + 2) * 65536;
+}
+
+function webpFits(data: DataView) {
+  if (data.getUint32(4, true) + 8 !== data.byteLength) return false;
+
+  let hasFrame = false;
+  let offset = 12;
+  while (offset + 8 <= data.byteLength) {
+    const type = data.getUint32(offset);
+    const size = data.getUint32(offset + 4, true);
+    const start = offset + 8;
+    offset = start + size + (size % 2);
+    if (offset > data.byteLength) return false;
+    switch (type) {
+      case 0x414e494d: // ANIM
+      case 0x414e4d46: // ANMF
+        return false;
+      case 0x56503858: // VP8X
+        if (
+          start !== 20 ||
+          size !== 10 ||
+          (data.getUint8(start) & 2) !== 0 ||
+          !dimensionsFit(
+            1 + getUint24LE(data, start + 4),
+            1 + getUint24LE(data, start + 7)
+          )
+        ) {
+          return false;
+        }
+        break;
+      case 0x56503820: // VP8 (lossy)
+        if (
+          hasFrame ||
+          size < 10 ||
+          data.getUint8(start + 3) !== 0x9d ||
+          data.getUint16(start + 4) !== 0x012a ||
+          !dimensionsFit(
+            data.getUint16(start + 6, true) & 0x3fff,
+            data.getUint16(start + 8, true) & 0x3fff
+          )
+        ) {
+          return false;
+        }
+        hasFrame = true;
+        break;
+      case 0x5650384c: {
+        // VP8L (lossless)
+        if (hasFrame || size < 5 || data.getUint8(start) !== 0x2f) return false;
+        const bits = data.getUint32(start + 1, true);
+        if (!dimensionsFit(1 + (bits & 0x3fff), 1 + ((bits >>> 14) & 0x3fff)))
+          return false;
+        hasFrame = true;
+        break;
+      }
+    }
+  }
+  return hasFrame && offset === data.byteLength;
+}
+
+/** Check the encoded dimensions and animation flags without decoding pixels. */
+function rasterType(bytes: Uint8Array) {
+  if (bytes.byteLength < 12) return null;
+  const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (data.getUint32(0) === 0x89504e47 && data.getUint32(4) === 0x0d0a1a0a) {
+    return pngFits(data) ? 'image/png' : null;
+  }
+  if (data.getUint16(0) === 0xffd8) return jpegFits(data) ? 'image/jpeg' : null;
+  if (data.getUint32(0) === 0x52494646 && data.getUint32(8) === 0x57454250) {
+    return webpFits(data) ? 'image/webp' : null;
+  }
   return null;
 }
 
@@ -79,6 +215,8 @@ export async function resolveOrderReceiptLogo(
       reader.releaseLock();
     }
     const logo = bytes.subarray(0, size);
+    // Preserve the sanitized SVG preview in mobile. Server PDFs accept only
+    // bounded single-image rasters, so an SVG uses the seller-name fallback there.
     if (url.pathname.toLowerCase().endsWith('.svg')) {
       const svgXml = sanitizeSvg(new TextDecoder().decode(logo));
       return svgXml ? { logoUrl: null, svgXml } : absent;

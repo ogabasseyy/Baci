@@ -98,8 +98,7 @@ const batchSizeSchema = createCronBatchSizeSchema({
 });
 
 export async function GET(request: Request) {
-  // Keep time for outbox retry bookkeeping after a timed-out render.
-  const renderDeadline = Date.now() + (maxDuration - 15) * 1000;
+  const invocationDeadline = Date.now() + maxDuration * 1000;
   if (!hasValidCronSecret(request.headers, getCronSecret())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -190,7 +189,7 @@ export async function GET(request: Request) {
       supabase,
       rows,
       summary,
-      renderDeadline
+      invocationDeadline
     );
   } catch (error) {
     logger.error({

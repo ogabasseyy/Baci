@@ -20,7 +20,8 @@ interface BanksResponse {
  */
 export function paystackBanksQueryOptions(timeout?: number) {
   return {
-    queryKey: ['paystack-banks'] as const,
+    queryKey:
+      timeout === undefined ? ['paystack-banks'] : ['paystack-banks', timeout],
     queryFn: async () => {
       const data = await apiClient<BanksResponse>('/api/paystack/banks', {
         requiresAuth: false,

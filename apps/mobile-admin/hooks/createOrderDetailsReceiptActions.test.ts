@@ -1,9 +1,6 @@
-import { Alert } from 'react-native';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  fetch: vi.fn(),
-  apiClient: vi.fn(),
   from: vi.fn(),
   printToFileAsync: vi.fn(),
   resolveVirtualAccount: vi.fn(),
@@ -20,8 +17,10 @@ vi.mock('@/lib/query-client', async () => {
   return { queryClient: new QueryClient() };
 });
 
-vi.mock('@/lib/api-client', () => ({ apiClient: mocks.apiClient }));
-vi.mock('expo/fetch', () => ({ fetch: mocks.fetch }));
+vi.mock('@/lib/api-client', () => ({ apiClient: vi.fn() }));
+vi.mock('./resolveOrderReceiptLogo', () => ({
+  resolveOrderReceiptLogo: async () => ({ logoUrl: null }),
+}));
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -51,10 +50,6 @@ vi.mock('expo-file-system', () => ({
       this.uri = uri;
     }
 
-    base64() {
-      return 'ZmFrZQ==';
-    }
-
     delete() {
       this.exists = false;
     }
@@ -68,12 +63,7 @@ vi.mock('expo-file-system', () => ({
           ? destination
           : (destination.uri ?? this.uri);
     }
-
-    static downloadFileAsync() {
-      return new MockFile('file:///tmp/logo.png');
-    }
   },
-  Paths: { cache: '/tmp' },
 }));
 
 import { createOrderDetailsReceiptActions } from './createOrderDetailsReceiptActions';
@@ -81,7 +71,6 @@ import { createOrderDetailsReceiptActions } from './createOrderDetailsReceiptAct
 describe('createOrderDetailsReceiptActions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('fetch', mocks.fetch);
     mocks.resolveVirtualAccount.mockResolvedValue(null);
     mocks.from.mockReturnValue({
       select: vi.fn().mockReturnValue({
@@ -94,10 +83,6 @@ describe('createOrderDetailsReceiptActions', () => {
       uri: 'file:///tmp/receipt.pdf',
     });
     mocks.shareAsync.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   it('keeps merchant terms when the merchant pages query returns an error', async () => {
@@ -198,61 +183,6 @@ describe('createOrderDetailsReceiptActions', () => {
     expect(setShowReceiptPreview).toHaveBeenCalledWith(true);
     expect(setIsGeneratingReceipt).toHaveBeenLastCalledWith(false);
   });
-  it('shows the directory bank as manual confirmation when a DVA is unavailable', async () => {
-    mocks.resolveVirtualAccount.mockResolvedValueOnce(null);
-    mocks.apiClient.mockResolvedValueOnce({
-      banks: [{ code: '50211', name: 'Kuda Bank' }],
-    });
-    const setIsGeneratingReceipt = vi.fn();
-    const setReceiptHtml = vi.fn();
-    const setShowReceiptPreview = vi.fn();
-
-    const actions = createOrderDetailsReceiptActions({
-      isGeneratingReceipt: false,
-      merchant: {
-        business_name: 'Baci',
-        email: 'merchant@example.com',
-        id: 'merchant-1',
-        bank_code: '50211',
-        bank_name: 'Unknown Bank',
-        bank_account_number: '1234567890',
-      },
-      order: {
-        amount_paid: 0,
-        balance: 15000,
-        created_at: '2024-01-01T00:00:00.000Z',
-        customer_email: 'customer@example.com',
-        customer_name: 'Ada',
-        customer_phone: '08030000000',
-        discount_amount: 0,
-        id: 'order-1',
-        items: [],
-        order_number: 'ORD-1',
-        payment_status: 'pending',
-        shipping_address: null,
-        shipping_status: 'pending',
-        total: 15000,
-        updated_at: '2024-01-01T00:00:00.000Z',
-      },
-      receiptHtml: '',
-      setIsGeneratingReceipt,
-      setReceiptHtml,
-      setShowReceiptPreview,
-    });
-
-    await actions.handleSendReceipt();
-    expect(setReceiptHtml.mock.calls[0]?.[0]).toContain('Manual Confirmation');
-    expect(setReceiptHtml.mock.calls[0]?.[0]).toContain('Kuda Bank');
-    expect(setReceiptHtml.mock.calls[0]?.[0]).not.toContain(
-      'Automatic Confirmation'
-    );
-
-    expect(setIsGeneratingReceipt).toHaveBeenNthCalledWith(1, true);
-    expect(setReceiptHtml).toHaveBeenCalledWith(expect.any(String));
-    expect(setShowReceiptPreview).toHaveBeenCalledWith(true);
-    expect(setIsGeneratingReceipt).toHaveBeenLastCalledWith(false);
-  });
-
   it('includes saved fulfillment identifiers in the generated receipt html', async () => {
     const setReceiptHtml = vi.fn();
 
@@ -419,54 +349,6 @@ describe('createOrderDetailsReceiptActions', () => {
         'By shopping with us, you agree to our terms and conditions and return policies stated below.'
       )
     );
-  });
-
-  it('sanitizes fetched svg logos before previewing the receipt', async () => {
-    mocks.fetch.mockResolvedValue(
-      new Response('<svg><script>alert(1)</script><rect /></svg>')
-    );
-    const setReceiptHtml = vi.fn();
-
-    const actions = createOrderDetailsReceiptActions({
-      isGeneratingReceipt: false,
-      merchant: {
-        business_name: 'Baci',
-        email: 'merchant@example.com',
-        id: 'merchant-1',
-        logo_url: 'https://cdn.ogabassey.com/media/logo.svg',
-      },
-      order: {
-        amount_paid: 0,
-        balance: 15000,
-        created_at: '2024-01-01T00:00:00.000Z',
-        customer_email: 'customer@example.com',
-        customer_name: 'Ada',
-        customer_phone: '08030000000',
-        discount_amount: 0,
-        id: 'order-1',
-        items: [],
-        order_number: 'ORD-1',
-        payment_status: 'pending',
-        shipping_address: null,
-        shipping_status: 'pending',
-        total: 15000,
-        updated_at: '2024-01-01T00:00:00.000Z',
-      },
-      receiptHtml: '',
-      setIsGeneratingReceipt: vi.fn(),
-      setReceiptHtml,
-      setShowReceiptPreview: vi.fn(),
-    });
-
-    await actions.handleSendReceipt();
-
-    expect(setReceiptHtml).toHaveBeenCalledWith(
-      expect.not.stringContaining('<script>')
-    );
-    expect(setReceiptHtml).toHaveBeenCalledWith(
-      expect.stringContaining('<svg')
-    );
-    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('shares the generated receipt pdf when receipt html is available', async () => {

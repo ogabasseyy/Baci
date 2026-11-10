@@ -132,7 +132,7 @@ describe('GET /api/cron/order-notifications worker dispatch', () => {
 
     expect(response.status).toBe(200);
     expect(mockSendManualOrderDocument).toHaveBeenCalledWith({
-      renderDeadline: expect.any(Number),
+      invocationDeadline: expect.any(Number),
       supabase: mockSupabase,
       row: expect.objectContaining(row),
     });

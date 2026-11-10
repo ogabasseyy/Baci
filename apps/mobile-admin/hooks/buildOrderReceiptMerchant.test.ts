@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@/lib/api-client';
 import { queryClient } from '@/lib/query-client';
 import { buildOrderReceiptMerchant } from './buildOrderReceiptMerchant';
+import { paystackBanksQueryOptions } from './usePaystackBanks';
 
 vi.mock('@/lib/query-client', async () => {
   const { QueryClient } = await import('@tanstack/react-query');
@@ -33,6 +34,30 @@ describe('buildOrderReceiptMerchant', () => {
     expect(second.bank_name).toBe('Verified Bank');
     expect((await build()).bank_name).toBe('Verified Bank');
     expect(apiClient).toHaveBeenCalledOnce();
+  });
+
+  it('isolates the receipt request from the bank picker cache', async () => {
+    vi.mocked(apiClient)
+      .mockResolvedValueOnce({
+        banks: [{ code: 'new-bank', name: 'Picker Bank' }],
+      })
+      .mockResolvedValueOnce({
+        banks: [{ code: 'new-bank', name: 'Receipt Bank' }],
+      });
+    const pickerOptions = paystackBanksQueryOptions();
+    await queryClient.fetchQuery(pickerOptions);
+
+    const result = await buildOrderReceiptMerchant(
+      merchant,
+      null,
+      undefined,
+      true
+    );
+
+    expect(result.bank_name).toBe('Receipt Bank');
+    expect(queryClient.getQueryData(pickerOptions.queryKey)).toEqual([
+      { code: 'new-bank', name: 'Picker Bank' },
+    ]);
   });
 
   it('does not invent a bank name for an unmatched code', async () => {

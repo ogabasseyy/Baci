@@ -90,7 +90,10 @@ type Guardable = {
  * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
  * run, and an arrival scan also marks the parcel reaching its destination.
  * Walk the events oldest-first: MSHC is only out-for-delivery once the parcel
- * reached the destination; earlier it is the pickup rider en route.
+ * reached the destination or has already moved through GIG centres (centre
+ * names rarely equal the destination city, e.g. IKEJA for LAGOS, so absence
+ * of a name match is not evidence of first-mile); before any movement it is
+ * the pickup rider en route.
  */
 function applyLifecycleGuards(
   candidates: Guardable[],
@@ -100,6 +103,7 @@ function applyLifecycleGuards(
     (a, b) => a.event.timestamp.getTime() - b.event.timestamp.getTime()
   );
   let arrived = false;
+  let movedThroughNetwork = false;
   for (const candidate of ordered) {
     const { event } = candidate;
     const raw = (event.rawStatus ?? '').trim().toUpperCase();
@@ -112,10 +116,16 @@ function applyLifecycleGuards(
     if (isArrival) {
       arrived = true;
       event.rawStatus = GIGL_ARRIVED_IN_CITY_RAW_STATUS;
-    } else if (raw === 'MSHC' && !arrived) {
+    } else if (raw === 'MSHC' && !arrived && !movedThroughNetwork) {
       event.status = 'pickup_scheduled';
       event.rawStatus = GIGL_PICKUP_EN_ROUTE_RAW_STATUS;
       candidate.recognizedStatus = 'pickup_scheduled';
+    }
+    if (
+      candidate.recognizedStatus === 'in_transit' ||
+      candidate.recognizedStatus === 'picked_up'
+    ) {
+      movedThroughNetwork = true;
     }
   }
 }

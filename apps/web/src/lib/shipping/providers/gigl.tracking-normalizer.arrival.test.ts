@@ -196,18 +196,33 @@ describe('review hardening: destination matching', () => {
   it('does not treat a departure from the destination city as arrival', () => {
     expect(run('ABUJA', 'WUSE ABUJA (Wuse)', 'DSC')).toBe('DSC');
   });
-  it('keeps MSHC as pickup en route when the destination is unknown, even after transit events', () => {
+  it('treats MSHC after the parcel moved through centres as out_for_delivery even when the centre name differs from the destination (IKEJA vs LAGOS)', () => {
     const result = normalizeGiglTrackingShipment(
       {
         Waybill: 'W10',
+        Destination: 'LAGOS',
         MobileShipmentTrackings: [
-          event('DPC', '10:00:00'),
+          event('DPC', '10:00:00', { Location: 'IKEJA 2 (IKEJA)' }),
           event('MSHC', '11:00:00'),
         ],
       },
       'W10',
       OBSERVED_AT
     );
-    expect(result.status).not.toBe('out_for_delivery');
+    expect(result.status).toBe('out_for_delivery');
+  });
+  it('demotes MSHC before any movement even when the destination is unknown', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W11',
+        MobileShipmentTrackings: [
+          event('MAPT', '10:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W11',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('pickup_scheduled');
   });
 });

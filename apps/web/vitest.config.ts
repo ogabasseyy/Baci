@@ -37,6 +37,10 @@ const reactDomServerPath = appRequire.resolve('react-dom/server');
 const sharedPackagePath = path.resolve(__dirname, '../../packages/shared/src');
 const sharedAliases = [
   {
+    find: /^@baci\/shared\/experience$/,
+    replacement: path.join(sharedPackagePath, 'experience/index.ts'),
+  },
+  {
     find: /^@baci\/shared$/,
     replacement: path.join(sharedPackagePath, 'index.ts'),
   },
@@ -109,6 +113,17 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       'tools/builder-auth/*.node.test.ts',
+      'experience-runtime/*.test.mjs',
+      'tools/experience-runner/**',
+      'tools/experience-sql/**',
+      'tests/experience-authoring/**',
+      'tests/experience-performance/**',
+      'tests/experience-durable/**',
+      'tests/experience-lifecycle/**',
+      'tests/experience-commerce/**/*.node.test.ts',
+      'tests/experience-commerce/**/*.integration.test.ts',
+      'tests/builder-chatgpt/experience-upload.test.ts',
+      'tests/experience-browser/**/*.test.ts',
       // These node:test suites run in the dedicated synthetic handoff workflow.
       'tools/chatwoot-handoff-ci/*.test.mjs',
     ],

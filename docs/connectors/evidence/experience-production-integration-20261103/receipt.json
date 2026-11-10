@@ -1,0 +1,144 @@
+{
+  "createdAt": "2026-11-03T14:50:51.606809+00:00",
+  "baseMain": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
+  "worktree": "/Users/mac/.codex/worktrees/experience-recovery/Baci-app",
+  "profileInstalledInApplication": false,
+  "productionActivated": false,
+  "publishingReady": false,
+  "releaseQualified": false,
+  "cwvQualified": false,
+  "checks": {
+    "web": {
+      "files": 12,
+      "passed": 59
+    },
+    "runner": {
+      "files": 10,
+      "passed": 37,
+      "includesLiveHttpsSemanticCapture": true
+    },
+    "sdk": {
+      "files": 4,
+      "passed": 11,
+      "typecheck": "passed",
+      "bundleKiB": 10.6
+    },
+    "liveNormalRole": {
+      "tests": 2,
+      "passed": 2,
+      "browserCells": 12,
+      "engines": [
+        "chromium",
+        "firefox",
+        "webkit"
+      ],
+      "widths": [
+        390,
+        1440
+      ],
+      "parentOrigins": [
+        "canonical-merchant",
+        "exact-Baci-preview"
+      ],
+      "httpsTransport": "intercepted entirely inside offline sandbox; deployed TLS unqualified",
+      "normalOwnerRls": true,
+      "wrongOwnerDenied": true,
+      "normalAnonymousLiveness": true,
+      "anonymousTableReadsDenied": true,
+      "sessionRevocationEnforced": true,
+      "publicationHeads": 0,
+      "finalizedCompanionRecovery": true,
+      "databaseBuildsAfterRepair": 1,
+      "currentMainSerialRetry": "passed",
+      "oneConcurrentRun": "RUNNER_UNAVAILABLE; cause not confirmed; no budget/deadline changes"
+    },
+    "httpsSemanticCapture": {
+      "red": "runner rejected the failed capture before the frame-origin fix",
+      "green": "real offline HTTPS frame semantic extraction passed"
+    },
+    "typecheckScopes": [
+      "experience-commerce",
+      "experience-runner",
+      "experience-authoring"
+    ],
+    "biome": {
+      "files": 57,
+      "status": "passed"
+    },
+    "migrationSourceHashes": "matched both registries",
+    "regressions": [
+      "HTTPS semantic extraction",
+      "clock skew",
+      "public render capacity reservation",
+      "post-finalization companion recovery",
+      "read-only performance scope",
+      "transient failure cleanup"
+    ],
+    "finalMainSmoke": {
+      "files": 3,
+      "passed": 19,
+      "baseMain": "7a2f3cc9b1f610d33b5c6da49147166f814e2404"
+    },
+    "validationScopeNote": "Full functional matrix at 932a38e; final PiggyVest/Turbo refresh left experience runtime bytes unchanged; affected smoke/type/config checks rerun."
+  },
+  "review": {
+    "provider": "CodeRabbit",
+    "paidCreditsEnabled": false,
+    "initial": "completed_with_warnings",
+    "issues": 7,
+    "fixedIssuesIncludingDuplicates": 6,
+    "declinedIssues": 1,
+    "declinedReason": "Unconditional IF EXISTS/CREATE OR REPLACE would hide an unexpected schema instead of preserving the intended assertion; current repository instructions allow assertion-preserving guards.",
+    "directoryFollowup": "too_many_files:154>150",
+    "configuredFinalRetry": "rate_limit",
+    "retryWaitReported": "13 minutes and 9 seconds",
+    "finalAllClear": false,
+    "completedIncludedReviews": 3,
+    "rawIssuesByCompletedReview": [
+      7,
+      4,
+      4
+    ],
+    "validIssuesAddressed": true,
+    "reason": "Post-review fixes are regression-tested; final immutable commit/candidate-wide CI and review remain pending.",
+    "lastCompletedOutcome": "completed",
+    "lastCompletedHead": "932a38e053f7b123a5d137298a2e26c0dc87c156"
+  },
+  "boundaries": {
+    "hostedMigrationsApplied": 0,
+    "publicationActions": 0,
+    "ordersCreated": 0,
+    "paymentsMade": 0,
+    "productionChanges": 0,
+    "aiProviderCalls": 0,
+    "publishingFeatureFlagsChanged": false,
+    "protectedProxyOrEnvironmentFilesChanged": false
+  },
+  "pending": [
+    "final candidate commit and required candidate-wide CI/review",
+    "qualified production Linux installation, scoped verifier, HTTPS and worker startup",
+    "HTTPS performance-reference harness adaptation and clean CWV",
+    "separately authorized rollout"
+  ],
+  "sourceInventorySha256": "e4c2b366ba909b66d360e3630b649957808186c2f409b7e998097b47d5226115",
+  "updatedAt": "2026-11-03T16:00:55.911856+00:00",
+  "initialBaseMain": "930ecba11c54073caec652e2257e02be2ce80532",
+  "mainRefresh": {
+    "commit": "932a38e053f7b123a5d137298a2e26c0dc87c156",
+    "files": 143,
+    "overlappingFiles": 0
+  },
+  "finalMainRefresh": {
+    "commit": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
+    "files": 69,
+    "overlap": [
+      "turbo.json"
+    ],
+    "resolution": "three-way merge; retained both upstream environment entry and experience qualification task"
+  },
+  "functionalProofBase": "932a38e053f7b123a5d137298a2e26c0dc87c156",
+  "retention": {
+    "localRecoveryRef": "refs/codex-recovery/experience-production-main-7a2f3cc-20261103T160312Z",
+    "independentBackup": "/Users/mac/Documents/Baci-design-research/experience-production-integration-20261103T145212Z/final-7a2f3cc-20261103T160312Z"
+  }
+}

@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { eventPipelineBoundaryManifest } from '../../src/lib/events/event-pipeline-boundary-manifest';
-import { collectProductionImportClosure } from '../../src/lib/events/event-pipeline-import-closure';
+import {
+  collectProductionImportClosure,
+  type ImportClosureSources,
+} from '../../src/lib/events/event-pipeline-import-closure';
 import { analyticsDeliveryAuthorityManifest } from './analytics-delivery-authority-manifest';
 import { readGitIndexSources } from './event-pipeline-git-content';
 import { readGitSourceSnapshot } from './event-pipeline-git-source-snapshot';
@@ -63,7 +66,7 @@ function sourcePaths(root: string): string[] {
 
 function collect(
   root = repoRoot(),
-  sources = readGitSourceSnapshot(root).sources,
+  sources: ImportClosureSources = readGitSourceSnapshot.forImportClosure(root),
   frozenBaseSha = FROZEN_EVENT_PIPELINE_BASE_SHA
 ) {
   const fixtureRelativePath =
@@ -85,16 +88,26 @@ function collect(
     eventPipelineBoundaryManifest.productionRoots,
     sources
   );
+  // Inventory additions and deletions directly: similarity matching is costly
+  // across a large baseline and hides the old path of renamed authority code.
   const dynamicPaths = [
     ...gitPaths(root, [
       'diff',
+      '--no-renames',
       '--name-only',
       '-z',
       `${frozenBaseSha}...HEAD`,
       '--',
     ]),
-    ...gitPaths(root, ['diff', '--cached', '--name-only', '-z', '--']),
-    ...gitPaths(root, ['diff', '--name-only', '-z', '--']),
+    ...gitPaths(root, [
+      'diff',
+      '--no-renames',
+      '--cached',
+      '--name-only',
+      '-z',
+      '--',
+    ]),
+    ...gitPaths(root, ['diff', '--no-renames', '--name-only', '-z', '--']),
     ...gitPaths(root, [
       'ls-files',
       '--others',

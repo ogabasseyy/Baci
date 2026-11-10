@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T16:48:23+00:00",
-  "source_revision": "76bceee71a3ad77a30056b84c403039ca9d55b69",
-  "evidence_digest": "db6341a343c98ac5bc36d32f4651ee3d8e187b699f4907857a90f3ffcbcb35c8",
-  "claims_digest": "e5556fea0de27376d9cf27e1ab5fcec602453b47fd80b978033e5c634ccdf8d0",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-10T20:07:37+00:00",
+  "source_revision": "d3f01eba74955c374ee15b11b3d596bd81fed9ef",
+  "evidence_digest": "81db2213317850264934d2cb3f4a791cbc16e8cfc33e6ca2df6c926e7f2695da",
+  "claims_digest": "5fcf72411e3de79fa72244a73e5b4d1d7d08555c64adf6e2b1c3a6e1d73bcd85",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Invoice previews and PDFs share the merchant template. Dispatch rechecks both displayed bank accounts and seller registration. Chromium packaging and route configuration have focused source checks.",
   "capabilities": [
     {
       "id": "payments",

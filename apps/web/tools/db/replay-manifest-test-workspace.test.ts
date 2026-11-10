@@ -1,4 +1,5 @@
 import { access, rm } from 'node:fs/promises';
+import { setImmediate as nextEventLoopTurn } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { createReplayManifestTestWorkspace } from './replay-manifest-test-workspace.test-support';
 
@@ -19,7 +20,7 @@ it('keeps a workspace until its timed-out test operation finishes', async () => 
   const cleanup = workspace.cleanUp();
   let outcomes: PromiseSettledResult<unknown>[] = [];
   try {
-    await Promise.resolve();
+    await nextEventLoopTurn();
     expect(removeRoot).not.toHaveBeenCalled();
     await expect(access(root)).resolves.toBeUndefined();
   } finally {

@@ -77,6 +77,21 @@ describe('merchant cancellation refund-mode migration', () => {
     );
   });
 
+  it("answers a missing order with the same error as another merchant's order", () => {
+    const wrapper = sql.slice(
+      sql.indexOf(
+        'CREATE OR REPLACE FUNCTION public.order_has_unresolved_refund_evidence('
+      )
+    );
+    // Existence oracle guard: not-found must raise the membership gate's
+    // refund_forbidden / 42501, never a distinguishable order_not_found.
+    expect(wrapper).toContain(
+      "IF v_merchant_id IS NULL THEN\n    RAISE EXCEPTION 'refund_forbidden' USING ERRCODE = '42501';"
+    );
+    expect(wrapper).not.toContain('order_not_found');
+    expect(wrapper).not.toContain('P0002');
+  });
+
   it('requires the owner or orders.refund for the cancel-only mode', () => {
     expect(sql).toMatch(
       /IF v_refund_mode = 'manual' AND NOT \([\s\S]*?'orders', 'refund'[\s\S]*?order_cancel_refund_forbidden' USING ERRCODE = '42501'/

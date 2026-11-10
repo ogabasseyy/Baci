@@ -202,6 +202,8 @@ export async function fetchOrderById(
     amount_paid: amountPaid,
     balance,
     cancel_refund_plan: await fetchCancelRefundPlan({
+      // The stored column, not the effective total: it is what the worker caps on.
+      amountPaid: order.amount_paid,
       currency: order.currency,
       merchantId,
       orderId,

@@ -8,12 +8,15 @@ import { supabase } from '@/lib/supabase';
  * server remains the real gate.
  */
 export async function fetchCancelRefundPlan({
+  amountPaid,
   currency,
   merchantId,
   orderId,
   paymentStatus,
   total,
 }: {
+  /** orders.amount_paid as stored; null/undefined when missing or unreadable. */
+  amountPaid?: number | string | null;
   currency?: string | null;
   merchantId: string;
   orderId: string;
@@ -38,7 +41,12 @@ export async function fetchCancelRefundPlan({
       { p_order_id: orderId }
     );
     if (evidenceError) return undefined;
+    const recordedPaid =
+      amountPaid === null || amountPaid === undefined || amountPaid === ''
+        ? null
+        : Number(amountPaid);
     const plan = getCancelRefundPlan({
+      amountPaid: recordedPaid,
       orderCurrency: currency,
       // Stored statuses vary in case; the plan expects the display form.
       paymentStatus:

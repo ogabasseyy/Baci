@@ -68,7 +68,7 @@ export async function resolveCancellationRefundOutcome({
     // plan's currency check. A failed read reports unknown.
     const { data: orderRow, error: orderError } = await supabase
       .from('orders')
-      .select('currency')
+      .select('currency, amount_paid')
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
       .maybeSingle();
@@ -106,6 +106,11 @@ export async function resolveCancellationRefundOutcome({
     const plan = getCancelRefundPlan({
       // A blank order currency defaults to NGN inside the plan, like the
       // worker's preflight gate.
+      // Recorded paid amount: outstanding captures above it are unreconciled.
+      amountPaid:
+        orderRow.amount_paid === null || orderRow.amount_paid === undefined
+          ? null
+          : Number(orderRow.amount_paid),
       orderCurrency: orderRow.currency,
       paymentStatus: 'Paid',
       total: 0,

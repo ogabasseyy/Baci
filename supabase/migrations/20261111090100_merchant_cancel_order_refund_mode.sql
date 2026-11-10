@@ -263,8 +263,11 @@ BEGIN
   END IF;
   SELECT o.merchant_id INTO v_merchant_id
     FROM public.orders o WHERE o.id = p_order_id;
+  -- A missing order must be indistinguishable from another merchant's order
+  -- (the membership gate raises refund_forbidden / 42501), or this wrapper
+  -- becomes an order-existence oracle.
   IF v_merchant_id IS NULL THEN
-    RAISE EXCEPTION 'order_not_found' USING ERRCODE = 'P0002';
+    RAISE EXCEPTION 'refund_forbidden' USING ERRCODE = '42501';
   END IF;
   RETURN private.unresolved_order_movement_evidence_v1(
     p_order_id, v_merchant_id

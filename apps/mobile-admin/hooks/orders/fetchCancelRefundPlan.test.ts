@@ -23,6 +23,7 @@ import { getCancelRefundPlan } from '@baci/shared';
 import { fetchCancelRefundPlan } from './fetchCancelRefundPlan';
 
 const args = {
+  amountPaid: 5000,
   merchantId: 'm1',
   orderId: 'o1',
   paymentStatus: 'paid',
@@ -120,5 +121,48 @@ describe('fetchCancelRefundPlan', () => {
     mocks.result.mockResolvedValue({ data: [], error: null });
     mocks.evidence.mockResolvedValue({ data: null, error: { message: 'x' } });
     await expect(fetchCancelRefundPlan(args)).resolves.toBeUndefined();
+  });
+
+  it('passes the stored amount paid and goes neutral when it is missing', async () => {
+    mocks.result.mockResolvedValue({
+      data: [
+        {
+          amount: 5000,
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: 'ref',
+          id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+      ],
+      error: null,
+    });
+    await fetchCancelRefundPlan({ ...args, amountPaid: '5000.00' });
+    expect(getCancelRefundPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ amountPaid: 5000 })
+    );
+    await expect(
+      fetchCancelRefundPlan({ ...args, amountPaid: null })
+    ).resolves.toMatchObject({ ledgerKnown: false });
+  });
+
+  it('goes neutral when captures exceed the stored amount paid', async () => {
+    const capture = (id: string) => ({
+      amount: 100,
+      currency: 'NGN',
+      gateway: 'paystack',
+      gateway_reference: id,
+      id,
+      status: 'completed',
+      transaction_type: 'payment',
+    });
+    mocks.result.mockResolvedValue({
+      data: [capture('c1'), capture('c2')],
+      error: null,
+    });
+    await expect(
+      fetchCancelRefundPlan({ ...args, amountPaid: 100 })
+    ).resolves.toMatchObject({ ledgerKnown: false });
   });
 });

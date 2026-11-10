@@ -68,6 +68,8 @@ export function useOrderCancellation({
   const merchantContext = useMerchantSafe();
   const plan = getCancelRefundPlan({
     ...order,
+    // Missing means unreadable: the plan then stays neutral.
+    amountPaid: order.amountPaid ?? null,
     orderCurrency: order.currency,
   });
   const [isOpen, setIsOpen] = useState(false);

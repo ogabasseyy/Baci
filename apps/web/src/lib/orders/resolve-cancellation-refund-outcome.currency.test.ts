@@ -51,7 +51,11 @@ describe('resolveCancellationRefundOutcome currency and evidence gates', () => {
   it('defaults a blank order currency to NGN like the worker', async () => {
     const supabase = supabaseWith({
       mode: {
-        data: { cancellation_refund_mode: 'manual', currency: '' },
+        data: {
+          amount_paid: 5000,
+          cancellation_refund_mode: 'manual',
+          currency: '',
+        },
         error: null,
       },
     });

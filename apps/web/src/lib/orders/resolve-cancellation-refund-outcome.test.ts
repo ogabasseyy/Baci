@@ -105,7 +105,10 @@ describe('resolveCancellationRefundOutcome', () => {
         ],
         error: null,
       },
-      mode: { data: { cancellation_refund_mode: 'manual' }, error: null },
+      mode: {
+        data: { amount_paid: 5000, cancellation_refund_mode: 'manual' },
+        error: null,
+      },
     });
     await expect(
       resolveCancellationRefundOutcome({

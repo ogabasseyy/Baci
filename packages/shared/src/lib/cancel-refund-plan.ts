@@ -1,4 +1,5 @@
 import { hasUnresolvedRefundEvidence } from './cancel-refund-attribution';
+import { exceedsRecordedPaid } from './cancel-refund-paid-cap';
 
 const INTERNAL_PAYMENT_GATEWAYS = new Set([
   'WALLET',
@@ -23,6 +24,14 @@ const isExternalGateway = (gateway: string | null): boolean => {
 };
 
 export interface CancelRefundOrder {
+  /**
+   * The order's recorded paid amount (orders.amount_paid). Pass a number when
+   * it was read, and `null` when it is missing or unreadable (the plan is then
+   * unresolved). Outstanding captures above it are an overfunded or
+   * unreconciled ledger that the worker quarantines, so the plan is neutral.
+   * Omitted only by callers that cannot know the order row.
+   */
+  amountPaid?: number | null;
   /** Order currency; blank defaults to NGN like the worker. */
   orderCurrency?: string | null;
   paymentStatus: string;
@@ -114,6 +123,10 @@ function isRefundInFlightRow(row: {
   return true;
 }
 
+// Money math runs in integer minor units so float remainders (0.1 + 0.7
+// vs 0.8) cannot leave a phantom sliver outstanding.
+const toMinor = (value: number): number => Math.round(value * 100);
+
 /** Paid check that tolerates the case variants stored across apps. */
 export function isPaidStatus(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'paid';
@@ -144,9 +157,6 @@ export function getCancelRefundPlan(
       ledgerKnown: false,
     };
   }
-  // Money math runs in integer minor units so float remainders (0.1 + 0.7
-  // vs 0.8) cannot leave a phantom sliver outstanding.
-  const toMinor = (value: number): number => Math.round(value * 100);
   const legs = order.transactions.filter(
     (leg) =>
       leg.transaction_type === 'payment' &&
@@ -233,11 +243,29 @@ export function getCancelRefundPlan(
       (normalizeGateway(leg.currency) === '' ||
         normalizeGateway(leg.currency) !== orderCurrencyCode)
   );
+  const overfunded =
+    order.amountPaid !== undefined &&
+    exceedsRecordedPaid({
+      amountPaid: order.amountPaid,
+      // Funded non-wallet legs in the order currency (effective_amount_paid_v1).
+      derivedPaidMinor: order.transactions
+        .filter(
+          (leg) =>
+            leg.transaction_type === 'payment' &&
+            FUNDED_LEG_STATUSES.has(leg.status) &&
+            normalizeGateway(leg.currency) === orderCurrencyCode &&
+            !['WALLET', 'SAVINGS'].includes(normalizeGateway(leg.gateway))
+        )
+        .reduce((sum, leg) => sum + toMinor(leg.amount), 0),
+      outstandingMinor: entries
+        .filter(({ covered, leg }) => toMinor(leg.amount) - covered > 0)
+        .reduce((sum, { leg }) => sum + toMinor(leg.amount), 0),
+    });
   return {
     amount: outstanding.reduce((sum, { owed }) => sum + owed, 0) / 100,
     inFlightAmount:
       entries.reduce((sum, { inFlightMinor }) => sum + inFlightMinor, 0) / 100,
-    ledgerKnown: !unresolved && !currencyMismatch,
+    ledgerKnown: !unresolved && !currencyMismatch && !overfunded,
     // A partially covered leg (or one with a refund already in flight) is a
     // coverage mismatch to the worker, which withholds it for review
     // instead of refunding the remainder.

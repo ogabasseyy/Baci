@@ -199,4 +199,15 @@ describe('mapDashboardOrderRecord', () => {
 
     expect(result.currency).toBeNull();
   });
+
+  it('maps the recorded amount paid, null when absent or unreadable', () => {
+    const map = (amount_paid: unknown) =>
+      mapDashboardOrderRecord({ ...baseOrder, amount_paid } as never, {
+        orderItemImageMap: new Map(),
+      }).amountPaid;
+    expect(map('5000.50')).toBe(5000.5);
+    expect(map(null)).toBeNull();
+    expect(map(undefined)).toBeNull();
+    expect(map('abc')).toBeNull();
+  });
 });

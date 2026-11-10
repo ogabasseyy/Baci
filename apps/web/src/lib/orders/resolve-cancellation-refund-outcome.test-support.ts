@@ -16,7 +16,11 @@ export function supabaseWith({
   evidence = { data: false, error: null } as unknown,
   ledger = { data: [leg()], error: null } as unknown,
   mode = {
-    data: { cancellation_refund_mode: 'automatic', currency: 'NGN' },
+    data: {
+      amount_paid: 5000,
+      cancellation_refund_mode: 'automatic',
+      currency: 'NGN',
+    },
     error: null,
   },
 }: {

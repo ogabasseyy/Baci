@@ -26,6 +26,7 @@ export interface DashboardOrderRecord {
   tax_basis?: string | null;
   discount_amount?: string | number | null;
   currency?: string | null;
+  amount_paid?: string | number | null;
   shipping_status: string;
   payment_status: string;
   payment_method: string | null;
@@ -72,6 +73,12 @@ interface MapDashboardOrderRecordOptions {
   transactions?: readonly DashboardTransactionRecord[] | null;
 }
 
+function parseRecordedAmountPaid(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function formatStatus(status: string): string {
   if (!status) return 'Pending';
   return status
@@ -96,6 +103,8 @@ export function mapDashboardOrderRecord(
     total: Number.parseFloat(order.total),
     ...mapOrderFinancialFields(order),
     currency: order.currency?.trim() || null,
+    // Recorded paid amount for the cancel plan; null when absent or unreadable.
+    amountPaid: parseRecordedAmountPaid(order.amount_paid),
     shippingStatus: formatStatus(order.shipping_status) as ShippingStatus,
     paymentStatus: formatStatus(order.payment_status) as PaymentStatus,
     paymentMethod: order.payment_method,

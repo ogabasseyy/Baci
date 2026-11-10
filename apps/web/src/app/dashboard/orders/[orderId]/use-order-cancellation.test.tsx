@@ -35,6 +35,7 @@ const paystackLeg = {
 const order = (over: Partial<Order> = {}) =>
   ({
     id: 'order-1',
+    amountPaid: 5000,
     paymentStatus: 'Paid',
     total: 5000,
     transactions: [paystackLeg],

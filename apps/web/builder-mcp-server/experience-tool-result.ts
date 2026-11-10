@@ -1,7 +1,10 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
-import { experienceError } from '../src/schemas/experience-tool-results';
+import {
+  experienceError,
+  experienceMcpResultEnvelope,
+} from '../src/schemas/experience-tool-results';
 import type { ExperienceToolName } from '../src/schemas/experience-tools';
 import { experienceWireOutput } from './experience-contracts';
 import type { createExperienceEvidenceClient } from './experience-evidence-client';
@@ -20,13 +23,7 @@ export async function experienceMcpToolResult(
   const json = JSON.stringify(result);
   if (Buffer.byteLength(json) > 98304)
     return experienceMcpToolResult(name, experienceError('QUOTA_EXCEEDED'));
-  const envelope = z
-    .object({
-      status: z.enum(['ok', 'error']),
-      value: z.record(z.string(), z.unknown()).optional(),
-      code: z.string().optional(),
-    })
-    .parse(result);
+  const envelope = experienceMcpResultEnvelope.parse(result);
   const content: CallToolResult['content'] = [{ type: 'text', text: json }];
   if (name === 'read_experience_evidence' && envelope.status === 'ok') {
     if (

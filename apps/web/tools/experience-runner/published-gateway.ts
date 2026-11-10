@@ -5,6 +5,7 @@ import { digestBytes } from '../../src/lib/experience/manifest-digest';
 import type { Resource } from '../../src/lib/experience/private-prerender-document';
 import type { createPublicOutputReader } from '../../src/lib/experience/public-output-reader';
 import { normalizeExperiencePath } from '../../src/lib/experience/route-ownership';
+import { rewriteCssAssetUrls } from './rewrite-css-asset-urls';
 export async function startPublishedGateway(
   reader: ReturnType<typeof createPublicOutputReader>,
   hostOrigin: string,
@@ -59,12 +60,13 @@ export async function startPublishedGateway(
         if (!f) throw Error('NOT_FOUND');
         let bytes = Buffer.from(f.bytes);
         if (filePath === 'app.css') {
-          let text = bytes.toString('utf8');
-          for (const asset of head.assets ?? [])
-            text = text
-              .split(`/assets/${asset.assetId}`)
-              .join(`/published/${slug}/${build}/assets/${asset.assetId}`);
-          bytes = Buffer.from(text);
+          bytes = Buffer.from(
+            rewriteCssAssetUrls(
+              bytes.toString('utf8'),
+              `/published/${slug}/${build}`,
+              (head.assets ?? []).map((asset) => asset.assetId)
+            )
+          );
         }
         return { ...f, bytes, digest: digestBytes(bytes) };
       };

@@ -4,7 +4,10 @@ import { digestBytes } from '../../src/lib/experience/manifest-digest';
 import type { createPublicOutputReader } from '../../src/lib/experience/public-output-reader';
 import { createProductionPublishedDelivery } from './published-delivery';
 
-function fixture() {
+function fixture(
+  assets: { assetId: string }[] = [],
+  css = 'body{color:black}'
+) {
   let active = true;
   const hostOrigin = 'https://shop.merchant.test';
   const executionOrigin = 'https://output.baci-runtime.test';
@@ -12,13 +15,11 @@ function fixture() {
   const reader = {
     manifest: vi.fn(async () =>
       active
-        ? { merchantId: 'synthetic', buildDigest, hostOrigin, assets: [] }
+        ? { merchantId: 'synthetic', buildDigest, hostOrigin, assets }
         : null
     ),
     read: vi.fn(async (_slug: string, _build: string, path: string) => {
-      const bytes = Buffer.from(
-        path === 'app.js' ? 'export{}' : 'body{color:black}'
-      );
+      const bytes = Buffer.from(path === 'app.js' ? 'export{}' : css);
       return {
         path,
         bytes,
@@ -116,4 +117,19 @@ it('rejects active SSR markup and arbitrary files, origins, query fields and mut
     ),
   ])
     expect((await f.deliver(request)).status).toBe(404);
+});
+
+it('rewrites duplicate and prefix-sharing declared CSS asset IDs exactly once', async () => {
+  const assetId = 'a'.repeat(64);
+  const longerId = `${assetId}-variant`;
+  const f = fixture(
+    [{ assetId }, { assetId }, { assetId: longerId }],
+    `a{background:url(/assets/${assetId})}b{background:url("/assets/${longerId}")}`
+  );
+  const response = await f.deliver(new Request(`${f.base}app.css`));
+  expect(response.status).toBe(200);
+  const base = new URL(f.base).pathname;
+  expect(await response.text()).toBe(
+    `a{background:url(${base}assets/${assetId})}b{background:url("${base}assets/${longerId}")}`
+  );
 });

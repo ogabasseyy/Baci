@@ -30,14 +30,4 @@ export function performanceOrigins(value: string) {
     transport: 'http-loopback' as const,
   };
 }
-/** Rewrite whole known asset references, never arbitrary authored text prefixes. */
-export function performanceCss(
-  css: string,
-  base: string,
-  assetIds: readonly string[]
-) {
-  const urls = new Map(
-    assetIds.map((id) => [`/assets/${id}`, `${base}/assets/${id}`])
-  );
-  return css.replace(/\/assets\/[^"'()\s]+/g, (path) => urls.get(path) ?? path);
-}
+export { rewriteCssAssetUrls as performanceCss } from './rewrite-css-asset-urls';

@@ -7,6 +7,7 @@ import {
 import { productionDeliveryOrigins } from '../../src/lib/experience/production-origins';
 import type { createPublicOutputReader } from '../../src/lib/experience/public-output-reader';
 import { normalizeExperiencePath } from '../../src/lib/experience/route-ownership';
+import { rewriteCssAssetUrls } from './rewrite-css-asset-urls';
 
 /** Public output projection under normal anonymous RLS. This does not publish or
  * change a merchant pointer. Rendering is explicitly injected and must execute in
@@ -69,14 +70,13 @@ export function createProductionPublishedDelivery(config: {
         if (!file) throw Error('NOT_FOUND');
         let bytes = Buffer.from(file.bytes);
         if (filePath === 'app.css') {
-          let css = bytes.toString('utf8');
-          for (const asset of head.assets ?? [])
-            css = css
-              .split(`/assets/${asset.assetId}`)
-              .join(
-                `/published/${slug}/${buildDigest}/assets/${asset.assetId}`
-              );
-          bytes = Buffer.from(css);
+          bytes = Buffer.from(
+            rewriteCssAssetUrls(
+              bytes.toString('utf8'),
+              `/published/${slug}/${buildDigest}`,
+              (head.assets ?? []).map((asset) => asset.assetId)
+            )
+          );
         }
         return { ...file, bytes, digest: digestBytes(bytes) };
       };

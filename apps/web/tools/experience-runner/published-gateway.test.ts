@@ -74,3 +74,36 @@ it('refuses output compiled for a different parent origin', async () => {
     await gateway.close();
   }
 });
+
+it('serves CSS for duplicate declared assets without doubling the published prefix', async () => {
+  const build = 'a'.repeat(64);
+  const assetId = 'b'.repeat(64);
+  const hostOrigin = 'http://127.0.0.1:43174';
+  const bytes = Buffer.from(`a{background:url('/assets/${assetId}')}`);
+  const gateway = await startPublishedGateway(
+    {
+      manifest: async () => ({
+        buildDigest: build,
+        hostOrigin,
+        assets: [{ assetId }, { assetId }],
+      }),
+      read: async () => ({
+        path: 'app.css',
+        bytes,
+        mime: 'text/css',
+        digest: digestBytes(bytes),
+      }),
+    } as never,
+    hostOrigin
+  );
+  try {
+    const base = `/published/qa1/${build}`;
+    const response = await fetch(`${gateway.origin}${base}/app.css`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(
+      `a{background:url('${base}/assets/${assetId}')}`
+    );
+  } finally {
+    await gateway.close();
+  }
+});

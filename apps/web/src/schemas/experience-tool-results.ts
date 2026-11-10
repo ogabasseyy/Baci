@@ -99,3 +99,10 @@ export function experiencePerformanceQualificationError(
     error: 'Experience request unavailable.',
   };
 }
+
+/** Narrow projection for MCP assembly after validating the wire result. */
+export const experienceMcpResultEnvelope = z.object({
+  status: z.enum(['ok', 'error']),
+  value: z.record(z.string(), z.unknown()).optional(),
+  code: z.string().optional(),
+});

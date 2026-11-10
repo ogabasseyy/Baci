@@ -97,3 +97,22 @@ it('requires a valid reason for qualification failures and rejects budget-only f
     expect(experienceToolResult.safeParse(invalid).success).toBe(false);
   }
 });
+
+it('projects only the fields used for MCP result assembly', async () => {
+  const { experienceMcpResultEnvelope } = await import(
+    './experience-tool-results'
+  );
+  expect(
+    experienceMcpResultEnvelope.parse({
+      status: 'error',
+      code: 'INSUFFICIENT_SCOPE',
+      error: message,
+    })
+  ).toEqual({ status: 'error', code: 'INSUFFICIENT_SCOPE' });
+  expect(
+    experienceMcpResultEnvelope.safeParse({ status: 'ok', value: [] }).success
+  ).toBe(false);
+  expect(
+    experienceMcpResultEnvelope.safeParse({ status: 'unexpected' }).success
+  ).toBe(false);
+});

@@ -119,6 +119,10 @@ export async function processCancellationDrain(
           refundDeadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
           limit: sideEffectLimit,
           sendCancellationEmail,
+          refundAlertSenders: {
+            sendEmail: sendCancellationEmail,
+            sendPush: sendMerchantPush,
+          },
           supabase,
         }),
       ]);

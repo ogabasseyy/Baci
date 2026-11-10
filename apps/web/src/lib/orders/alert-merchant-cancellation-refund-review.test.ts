@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/env', () => ({ getAppUrl: () => 'https://app.example.com' }));
+vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }));
+
+import { logger } from '@/lib/logger';
 
 import {
   alertMerchantOfRefundReview,
@@ -23,14 +25,30 @@ const review = {
   id: 'review-1',
 };
 
-function makeSupabase(insertError: { code: string } | null = null) {
+function makeSupabase(
+  insertError: { code: string } | null = null,
+  reclaimed: unknown[] = [{ review_id: 'review-1' }]
+) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const deleteEq = vi.fn().mockResolvedValue({ error: null });
+  const confirmEq = vi.fn().mockResolvedValue({ error: null });
+  const reclaimSelect = vi
+    .fn()
+    .mockResolvedValue({ data: reclaimed, error: null });
+  const reclaimChain = {
+    eq: vi.fn(() => reclaimChain),
+    is: vi.fn(() => reclaimChain),
+    select: reclaimSelect,
+  };
+  const update = vi.fn((values: Record<string, unknown>) =>
+    'confirmed_at' in values ? { eq: confirmEq } : reclaimChain
+  );
   const from = vi.fn(() => ({
     delete: vi.fn(() => ({ eq: deleteEq })),
     insert,
+    update,
   }));
-  return { deleteEq, from, insert };
+  return { confirmEq, deleteEq, from, insert, reclaimChain, update };
 }
 
 function makeSenders(
@@ -46,7 +64,11 @@ function makeSenders(
 async function run(
   supabase: ReturnType<typeof makeSupabase>,
   senders: RefundReviewAlertSenders,
-  extra: { deadlineMs?: number; review?: typeof review } = {}
+  extra: {
+    deadlineMs?: number;
+    prior?: { attempts: number } | null;
+    review?: typeof review & { metadata?: unknown };
+  } = {}
 ) {
   return alertMerchantOfRefundReview({
     merchant,
@@ -60,11 +82,25 @@ async function run(
 
 afterEach(() => vi.useRealTimers());
 
+it('falls back to the root domain when the app URL is unset', async () => {
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
+  const senders = makeSenders();
+  await run(makeSupabase(), senders);
+  expect(vi.mocked(senders.sendEmail).mock.calls[0][0].textContent).toContain(
+    'https://usebaci.com/dashboard/orders/order-1'
+  );
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');
+});
+
 describe('alertMerchantOfRefundReview', () => {
   it('pushes and emails once with the order deep link', async () => {
     const supabase = makeSupabase();
     const senders = makeSenders();
-    await expect(run(supabase, senders)).resolves.toBe('alerted');
+    await expect(
+      run(supabase, senders, {
+        review: { ...review, metadata: { ambiguous_initiation: false } },
+      })
+    ).resolves.toBe('alerted');
     expect(supabase.insert).toHaveBeenCalledWith({
       merchant_id: 'merchant-1',
       order_id: 'order-1',
@@ -193,5 +229,140 @@ describe('alertMerchantOfRefundReview', () => {
     finish({ sent: 0 });
     await vi.advanceTimersByTimeAsync(0);
     expect(supabase.deleteEq).not.toHaveBeenCalled();
+    // Unconfirmed: left for the pending pass to re-drive after cool-down.
+    expect(supabase.confirmEq).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: 1,
+        message: expect.stringContaining('timed out'),
+      })
+    );
+  });
+
+  it('confirms the claim once an alert is delivered', async () => {
+    const supabase = makeSupabase();
+    await run(supabase, makeSenders());
+    expect(supabase.update).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmed_at: expect.any(String) })
+    );
+    expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
+  });
+
+  it('keeps the claim when email reports an unknown outcome', async () => {
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi
+        .fn()
+        .mockResolvedValue({ deliveryOutcome: 'unknown', success: false }),
+      sendPush: vi.fn().mockResolvedValue({ sent: 0 }),
+    });
+    await expect(run(supabase, senders)).resolves.toBe('alerted');
+    expect(supabase.deleteEq).not.toHaveBeenCalled();
+    expect(supabase.confirmEq).not.toHaveBeenCalled();
+  });
+
+  it('still releases the claim for a definite email failure', async () => {
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
+      sendPush: vi.fn().mockResolvedValue({ sent: 0 }),
+    });
+    await run(supabase, senders);
+    expect(supabase.deleteEq).toHaveBeenCalledWith('review_id', 'review-1');
+  });
+
+  describe('re-driving an unconfirmed claim', () => {
+    it('re-claims with compare-and-set on the attempt count', async () => {
+      const supabase = makeSupabase();
+      const senders = makeSenders();
+      await expect(
+        run(supabase, senders, { prior: { attempts: 2 } })
+      ).resolves.toBe('alerted');
+      expect(supabase.insert).not.toHaveBeenCalled();
+      expect(supabase.update).toHaveBeenCalledWith(
+        expect.objectContaining({ attempts: 3 })
+      );
+      expect(supabase.reclaimChain.eq).toHaveBeenCalledWith('attempts', 2);
+      expect(supabase.reclaimChain.is).toHaveBeenCalledWith(
+        'confirmed_at',
+        null
+      );
+      expect(senders.sendPush).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips when another worker won the re-claim', async () => {
+      const senders = makeSenders();
+      await expect(
+        run(makeSupabase(null, []), senders, { prior: { attempts: 1 } })
+      ).resolves.toBe('skipped');
+      expect(senders.sendPush).not.toHaveBeenCalled();
+    });
+
+    it('logs a terminal error when the final retry is still unconfirmed', async () => {
+      const senders = makeSenders({
+        sendEmail: vi.fn().mockResolvedValue({ success: false }),
+        sendPush: vi.fn().mockResolvedValue({ sent: 0 }),
+      });
+      await run(makeSupabase(), senders, { prior: { attempts: 2 } });
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('abandoned'),
+          reviewId: 'review-1',
+        })
+      );
+    });
+
+    it('keeps the row (counting the attempt) when a retry definitively fails', async () => {
+      const supabase = makeSupabase();
+      const senders = makeSenders({
+        sendEmail: vi.fn().mockResolvedValue({ success: false }),
+        sendPush: vi.fn().mockResolvedValue({ sent: 0 }),
+      });
+      await run(supabase, senders, { prior: { attempts: 1 } });
+      expect(supabase.deleteEq).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('alert copy', () => {
+    const bodyFor = async (metadata: unknown) => {
+      const senders = makeSenders();
+      await run(makeSupabase(), senders, { review: { ...review, metadata } });
+      return vi.mocked(senders.sendPush).mock.calls[0].slice(1, 3) as [
+        string,
+        string,
+      ];
+    };
+
+    it('tells the merchant to refund manually only on a definite rejection', async () => {
+      const [title, body] = await bodyFor({ ambiguous_initiation: false });
+      expect(title).toBe('Refund needs attention');
+      expect(body).toContain("couldn't be completed automatically");
+      expect(body).toContain('refund manually');
+    });
+
+    it.each([
+      ['ambiguous initiation', { ambiguous_initiation: true }],
+      [
+        'accepted provider refund id',
+        {
+          ambiguous_initiation: false,
+          provider_refund_id: '123',
+        },
+      ],
+      [
+        'reference-only provider event',
+        {
+          audit_record_failed: true,
+          reference_only_refund_event: true,
+        },
+      ],
+      ['missing metadata', null],
+    ])('asks for a Paystack check, not a manual refund, for %s', async (_n, metadata) => {
+      const [title, body] = await bodyFor(metadata);
+      expect(title).toBe('Refund needs your review');
+      expect(body).toContain('check Paystack before refunding again');
+      expect(body).not.toContain('refund manually');
+      expect(body).not.toContain("couldn't be completed");
+    });
   });
 });

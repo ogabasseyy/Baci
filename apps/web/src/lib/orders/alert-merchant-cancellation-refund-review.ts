@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { buildRefundReviewAlertCopy } from '@/lib/orders/refund-review-alert-copy';
 import { reviewAmountText } from '@/lib/orders/refund-review-amount';
 import { escapeHtmlAttribute, escapeHtmlText } from '@/lib/sanitize';
 
@@ -29,7 +30,7 @@ export interface RefundReviewAlertSenders {
       metadata: Record<string, string>;
       orderId: string;
     };
-  }) => Promise<{ success: boolean }>;
+  }) => Promise<{ deliveryOutcome?: 'unknown'; success: boolean }>;
   sendPush: (
     merchantId: string,
     title: string,
@@ -44,19 +45,55 @@ export interface RefundReviewAlertSenders {
   }>;
 }
 
-async function loadDefaultSenders(): Promise<RefundReviewAlertSenders> {
-  const [{ notifyMerchant }, { sendEmail }] = await Promise.all([
-    import('@/lib/expo-push'),
-    import('@/lib/zeptomail'),
-  ]);
-  return { sendEmail, sendPush: notifyMerchant };
+/**
+ * Read straight from the public build-time variable (as the cancellation
+ * email builder does) instead of importing the env module, which would pull
+ * credential authority into the cron worker's import graph.
+ */
+function dashboardBaseUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  const base =
+    configured ||
+    `https://${process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com'}`;
+  return base.replace(/\/$/, '');
 }
 
+/** Ledger state of a review whose earlier alert was never confirmed. */
+export interface PriorAlertAttempt {
+  attempts: number;
+}
+
+export type AlertSupabase = Pick<SupabaseClient, 'from' | 'rpc'>;
+
 async function claimAlert(
-  supabase: Pick<SupabaseClient, 'from'>,
+  supabase: AlertSupabase,
   review: { id: string },
-  order: RefundReviewAlertOrder
+  order: RefundReviewAlertOrder,
+  prior: PriorAlertAttempt | null
 ): Promise<boolean> {
+  if (prior) {
+    // Re-drive of an unconfirmed claim: compare-and-set on the attempt
+    // count so two workers cannot both re-send.
+    const { data, error } = await supabase
+      .from('order_cancellation_refund_alerts')
+      .update({
+        attempts: prior.attempts + 1,
+        last_attempt_at: new Date().toISOString(),
+      })
+      .eq('review_id', review.id)
+      .eq('attempts', prior.attempts)
+      .is('confirmed_at', null)
+      .select('review_id');
+    if (error) {
+      logger.error({
+        message: 'Cancellation refund alert re-claim failed',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+      return false;
+    }
+    return Array.isArray(data) && data.length > 0;
+  }
   const { error } = await supabase
     .from('order_cancellation_refund_alerts')
     .insert({
@@ -75,8 +112,25 @@ async function claimAlert(
   return false;
 }
 
+async function confirmClaim(
+  supabase: AlertSupabase,
+  reviewId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('order_cancellation_refund_alerts')
+    .update({ confirmed_at: new Date().toISOString() })
+    .eq('review_id', reviewId);
+  if (error) {
+    // Left unconfirmed, the review can be re-driven once after cool-down.
+    logger.error({
+      message: 'Cancellation refund alert could not be confirmed',
+      reviewId,
+    });
+  }
+}
+
 async function releaseClaim(
-  supabase: Pick<SupabaseClient, 'from'>,
+  supabase: AlertSupabase,
   reviewId: string
 ): Promise<void> {
   const { error } = await supabase
@@ -91,7 +145,7 @@ async function releaseClaim(
   }
 }
 
-type ChannelOutcome = 'delivered' | 'failed' | 'uncertain';
+type ChannelOutcome = 'delivered' | 'failed' | 'timeout' | 'uncertain';
 
 /**
  * Mirrors attempt-merchant-refund-push: a rejection means dispatch never
@@ -122,14 +176,17 @@ async function sendAlert({
 }: {
   merchant: RefundReviewAlertMerchant;
   order: RefundReviewAlertOrder;
-  review: { candidates: unknown };
+  review: { candidates: unknown; metadata?: unknown };
   senders: RefundReviewAlertSenders;
 }): Promise<ChannelOutcome> {
   const label = order.order_number ?? order.id.slice(0, 8);
   const amount = reviewAmountText(review.candidates, order.currency);
   const amountText = amount === null ? '' : ` (${amount})`;
-  const title = 'Refund needs attention';
-  const body = `Refund for order #${label}${amountText} couldn't be completed automatically. Open the order to refund manually.`;
+  const { body, title } = buildRefundReviewAlertCopy({
+    amountText,
+    label,
+    metadata: review.metadata,
+  });
   // Channels run concurrently so a hung push cannot starve the email.
   const sendPush = async (): Promise<ChannelOutcome> => {
     try {
@@ -159,8 +216,7 @@ async function sendAlert({
   const sendEmail = async (): Promise<ChannelOutcome> => {
     if (!merchant.email) return 'failed';
     try {
-      const { getAppUrl } = await import('@/env');
-      const link = `${getAppUrl().replace(/\/$/, '')}/dashboard/orders/${encodeURIComponent(order.id)}`;
+      const link = `${dashboardBaseUrl()}/dashboard/orders/${encodeURIComponent(order.id)}`;
       const result = await senders.sendEmail({
         auditContext: {
           merchantId: merchant.id,
@@ -173,7 +229,9 @@ async function sendAlert({
         textContent: `${body}\n\n${link}`,
         to: merchant.email,
       });
-      return result.success ? 'delivered' : 'failed';
+      if (result.success) return 'delivered';
+      // The provider may have accepted an email it reported as unknown.
+      return result.deliveryOutcome === 'unknown' ? 'uncertain' : 'failed';
     } catch (error) {
       logger.error({
         error,
@@ -197,23 +255,33 @@ async function sendAlert({
     : 'failed';
 }
 
+/** Total send attempts per review before the alert is abandoned. */
+export const REFUND_ALERT_RETRY_CAP = 3;
+
 /** Below this much remaining phase budget the alert is deferred, unclaimed. */
 export const MIN_ALERT_BUDGET_MS = 8_000;
 
 /**
- * Tell the merchant once about one open refund review. The claim row
- * (one per review) makes it idempotent across drain passes. Never throws
- * and is bounded by both a per-alert timeout and `deadlineMs` (the drain
- * phase cutoff): with too little budget it defers WITHOUT claiming, so a
- * later pass retries. The claim is released only when nothing was
- * delivered and nothing is uncertain; an uncertain or timed-out send keeps
- * it so the merchant is not alerted twice. The decision is taken here,
- * after settlement or timeout, never by an orphaned send.
+ * Tell the merchant about one open refund review. The claim row (one per
+ * review) makes it idempotent across drain passes. Never throws and is
+ * bounded by both a per-alert timeout and `deadlineMs` (the drain phase
+ * cutoff): with too little budget it defers WITHOUT claiming, so a later
+ * pass retries.
+ *
+ * Outcomes: delivered marks the claim confirmed. A definite first-attempt
+ * failure releases the claim. An uncertain or timed-out send keeps the
+ * claim UNCONFIRMED (attempt count and timestamp recorded in the ledger),
+ * so it is not re-sent immediately but the pending pass re-drives it after
+ * a cool-down, up to a retry cap: a send that ultimately failed is never
+ * silently lost. `prior` is the ledger state of such an unconfirmed claim.
+ * A timeout is logged distinctly; its orphaned send may still land, which
+ * the capped retry accepts as a possible duplicate over a lost alert.
  */
 export async function alertMerchantOfRefundReview({
   deadlineMs,
   merchant,
   order,
+  prior = null,
   review,
   senders,
   supabase,
@@ -221,9 +289,10 @@ export async function alertMerchantOfRefundReview({
   deadlineMs?: number;
   merchant: RefundReviewAlertMerchant;
   order: RefundReviewAlertOrder;
-  review: { candidates: unknown; id: string };
-  senders?: RefundReviewAlertSenders;
-  supabase: Pick<SupabaseClient, 'from'>;
+  prior?: PriorAlertAttempt | null;
+  review: { candidates: unknown; id: string; metadata?: unknown };
+  senders: RefundReviewAlertSenders;
+  supabase: AlertSupabase;
 }): Promise<'alerted' | 'deferred' | 'skipped'> {
   try {
     const remainingMs =
@@ -231,16 +300,15 @@ export async function alertMerchantOfRefundReview({
         ? Number.POSITIVE_INFINITY
         : deadlineMs - Date.now();
     if (remainingMs < MIN_ALERT_BUDGET_MS) return 'deferred';
-    if (!(await claimAlert(supabase, review, order))) return 'skipped';
+    if (!(await claimAlert(supabase, review, order, prior))) return 'skipped';
     let timer: ReturnType<typeof setTimeout> | undefined;
     let outcome: ChannelOutcome;
     try {
-      const resolved = senders ?? (await loadDefaultSenders());
       outcome = await Promise.race([
-        sendAlert({ merchant, order, review, senders: resolved }),
+        sendAlert({ merchant, order, review, senders }),
         new Promise<ChannelOutcome>((resolve) => {
           timer = setTimeout(
-            () => resolve('uncertain'),
+            () => resolve('timeout'),
             Math.min(ALERT_TIMEOUT_MS, remainingMs)
           );
         }),
@@ -255,7 +323,32 @@ export async function alertMerchantOfRefundReview({
     } finally {
       clearTimeout(timer);
     }
-    if (outcome === 'failed') await releaseClaim(supabase, review.id);
+    if (outcome === 'delivered') {
+      await confirmClaim(supabase, review.id);
+    } else if (outcome === 'timeout') {
+      logger.warn({
+        attempt: (prior?.attempts ?? 0) + 1,
+        message:
+          'Cancellation refund alert timed out; unconfirmed, will be re-driven after cool-down',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+    } else if (outcome === 'failed' && !prior) {
+      await releaseClaim(supabase, review.id);
+    }
+    if (
+      outcome !== 'delivered' &&
+      prior &&
+      prior.attempts + 1 >= REFUND_ALERT_RETRY_CAP
+    ) {
+      // Terminal: the listing RPC stops returning the row at the cap.
+      logger.error({
+        message:
+          'Cancellation refund alert abandoned after retry cap without confirmed delivery',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+    }
     return 'alerted';
   } catch (error) {
     logger.error({

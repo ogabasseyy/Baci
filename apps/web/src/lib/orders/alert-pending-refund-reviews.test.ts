@@ -7,6 +7,7 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('@/lib/orders/alert-merchant-cancellation-refund-review', () => ({
   alertMerchantOfRefundReview: mocks.alert,
   MIN_ALERT_BUDGET_MS: 8_000,
+  REFUND_ALERT_RETRY_CAP: 3,
 }));
 
 import { alertPendingRefundReviews } from './alert-pending-refund-reviews';
@@ -22,19 +23,28 @@ function chain(result: unknown) {
 }
 
 function makeSupabase({
-  alerted = [] as string[],
   reviewError = null as Error | null,
   reviews = [
-    { candidates: [], id: 'r1', merchant_id: 'm1', order_id: 'o1' },
-    { candidates: [], id: 'r2', merchant_id: 'm1', order_id: 'o2' },
-  ],
+    {
+      alert_attempts: null,
+      candidates: [],
+      id: 'r1',
+      merchant_id: 'm1',
+      metadata: {},
+      order_id: 'o1',
+    },
+    {
+      alert_attempts: null,
+      candidates: [],
+      id: 'r2',
+      merchant_id: 'm1',
+      metadata: {},
+      order_id: 'o2',
+    },
+  ] as Record<string, unknown>[],
 } = {}) {
   const tables: Record<string, unknown> = {
     merchants: chain({ data: [{ email: 'a@b.c', id: 'm1' }], error: null }),
-    order_cancellation_refund_alerts: chain({
-      data: alerted.map((review_id) => ({ review_id })),
-      error: null,
-    }),
     orders: chain({
       data: [
         { currency: 'NGN', id: 'o1', merchant_id: 'm1', order_number: '1' },
@@ -42,51 +52,91 @@ function makeSupabase({
       ],
       error: null,
     }),
-    reconciliation_review: chain({ data: reviews, error: reviewError }),
   };
-  return { from: vi.fn((t: string) => tables[t]) };
+  return {
+    from: vi.fn((t: string) => tables[t]),
+    rpc: vi.fn().mockResolvedValue({ data: reviews, error: reviewError }),
+  };
 }
+
+const senders = { sendEmail: vi.fn(), sendPush: vi.fn() };
 
 describe('alertPendingRefundReviews', () => {
   it('alerts unalerted open reviews, skipping tenant mismatches', async () => {
     mocks.alert.mockReset().mockResolvedValue('alerted');
-    await alertPendingRefundReviews({ supabase: makeSupabase() as never });
+    await alertPendingRefundReviews({
+      senders,
+      supabase: makeSupabase() as never,
+    });
     expect(mocks.alert).toHaveBeenCalledTimes(1);
     expect(mocks.alert.mock.calls[0][0]).toMatchObject({
       merchant: { email: 'a@b.c', id: 'm1' },
       order: { id: 'o1' },
+      prior: null,
       review: { id: 'r1' },
     });
   });
 
-  it('retries a review whose earlier alert was released, not ones already alerted', async () => {
-    const reviews = [
-      { candidates: [], id: 'r1', merchant_id: 'm1', order_id: 'o1' },
-    ];
+  it('anti-joins alerted reviews in SQL before the scan limit', async () => {
+    mocks.alert.mockReset().mockResolvedValue('alerted');
+    const supabase = makeSupabase();
+    await alertPendingRefundReviews({ senders, supabase: supabase as never });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'list_cancellation_refund_reviews_needing_alert_v1',
+      expect.objectContaining({ p_limit: 50, p_max_attempts: 3 })
+    );
+    // The ledger is never read client-side after the limit.
+    expect(supabase.from).not.toHaveBeenCalledWith(
+      'order_cancellation_refund_alerts'
+    );
+  });
+
+  it('re-drives an unconfirmed claim with its prior attempt count', async () => {
     mocks.alert.mockReset().mockResolvedValue('alerted');
     await alertPendingRefundReviews({
-      supabase: makeSupabase({ alerted: ['r1'], reviews }) as never,
+      senders,
+      supabase: makeSupabase({
+        reviews: [
+          {
+            alert_attempts: 2,
+            candidates: [],
+            id: 'r1',
+            merchant_id: 'm1',
+            metadata: { ambiguous_initiation: true },
+            order_id: 'o1',
+          },
+        ],
+      }) as never,
     });
-    expect(mocks.alert).not.toHaveBeenCalled();
-    await alertPendingRefundReviews({
-      supabase: makeSupabase({ reviews }) as never,
+    expect(mocks.alert.mock.calls[0][0]).toMatchObject({
+      prior: { attempts: 2 },
+      review: { id: 'r1', metadata: { ambiguous_initiation: true } },
     });
-    expect(mocks.alert).toHaveBeenCalledTimes(1);
   });
 
   it('does not let invalid reviews use up the per-pass alert slots', async () => {
     mocks.alert.mockReset().mockResolvedValue('alerted');
     const invalid = ['a', 'b', 'c'].map((id) => ({
+      alert_attempts: null,
       candidates: [],
       id,
       merchant_id: 'm1',
+      metadata: {},
       order_id: 'o2',
     }));
     await alertPendingRefundReviews({
+      senders,
       supabase: makeSupabase({
         reviews: [
           ...invalid,
-          { candidates: [], id: 'valid', merchant_id: 'm1', order_id: 'o1' },
+          {
+            alert_attempts: null,
+            candidates: [],
+            id: 'valid',
+            merchant_id: 'm1',
+            metadata: {},
+            order_id: 'o1',
+          },
         ],
       }) as never,
     });
@@ -100,6 +150,7 @@ describe('alertPendingRefundReviews', () => {
     mocks.alert.mockReset();
     const supabase = makeSupabase();
     await alertPendingRefundReviews({
+      senders,
       deadlineMs: Date.now() + 1_000,
       supabase: supabase as never,
     });
@@ -110,11 +161,25 @@ describe('alertPendingRefundReviews', () => {
     mocks.alert.mockReset().mockResolvedValue('deferred');
     const supabase = makeSupabase({
       reviews: [
-        { candidates: [], id: 'r1', merchant_id: 'm1', order_id: 'o1' },
-        { candidates: [], id: 'r3', merchant_id: 'm1', order_id: 'o1' },
+        {
+          alert_attempts: null,
+          candidates: [],
+          id: 'r1',
+          merchant_id: 'm1',
+          metadata: {},
+          order_id: 'o1',
+        },
+        {
+          alert_attempts: null,
+          candidates: [],
+          id: 'r3',
+          merchant_id: 'm1',
+          metadata: {},
+          order_id: 'o1',
+        },
       ],
     });
-    await alertPendingRefundReviews({ supabase: supabase as never });
+    await alertPendingRefundReviews({ senders, supabase: supabase as never });
     expect(mocks.alert).toHaveBeenCalledTimes(1);
   });
 
@@ -122,6 +187,7 @@ describe('alertPendingRefundReviews', () => {
     mocks.alert.mockReset();
     await expect(
       alertPendingRefundReviews({
+        senders,
         supabase: makeSupabase({ reviewError: new Error('db') }) as never,
       })
     ).resolves.toBeUndefined();

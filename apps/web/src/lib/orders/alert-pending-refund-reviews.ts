@@ -1,12 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import {
+  type AlertSupabase,
   alertMerchantOfRefundReview,
   MIN_ALERT_BUDGET_MS,
+  REFUND_ALERT_RETRY_CAP,
   type RefundReviewAlertSenders,
 } from '@/lib/orders/alert-merchant-cancellation-refund-review';
 
-const REVIEW_ISSUE_TYPE = 'order_cancellation_refund_requires_review';
 // Open reviews examined per pass (newest first) and alerts attempted per
 // pass: keeps the cron cost to a few indexed reads plus a bounded number
 // of sends.
@@ -16,10 +16,16 @@ const MAX_ALERTS_PER_PASS = 3;
 // do not page merchants about them retroactively.
 const REVIEW_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
 
+// An unconfirmed (uncertain or timed-out) alert is re-driven after this
+// cool-down, at most REFUND_ALERT_RETRY_CAP attempts in total.
+const RETRY_COOLDOWN_MS = 15 * 60_000;
+
 interface OpenReview {
+  alert_attempts: number | null;
   candidates: unknown;
   id: string;
   merchant_id: string | null;
+  metadata: unknown;
   order_id: string | null;
 }
 type ActionableReview = OpenReview & { merchant_id: string; order_id: string };
@@ -28,43 +34,36 @@ function isActionable(review: OpenReview): review is ActionableReview {
   return Boolean(review.order_id && review.merchant_id);
 }
 
-async function loadUnalertedReviews(
-  supabase: Pick<SupabaseClient, 'from'>
+/**
+ * The anti-join against the alert ledger happens in SQL, before the scan
+ * limit, so already-alerted reviews can never crowd out older unalerted
+ * ones. Unconfirmed claims past the cool-down (under the retry cap) come
+ * back too, carrying their attempt count.
+ */
+async function loadReviewsNeedingAlert(
+  supabase: AlertSupabase
 ): Promise<ActionableReview[]> {
-  const { data, error } = await supabase
-    .from('reconciliation_review')
-    .select('id, order_id, merchant_id, candidates')
-    .eq('issue_type', REVIEW_ISSUE_TYPE)
-    .is('resolved_at', null)
-    .gte('created_at', new Date(Date.now() - REVIEW_LOOKBACK_MS).toISOString())
-    .order('created_at', { ascending: false })
-    .limit(REVIEW_SCAN_LIMIT);
+  const now = Date.now();
+  const { data, error } = await supabase.rpc(
+    'list_cancellation_refund_reviews_needing_alert_v1',
+    {
+      p_limit: REVIEW_SCAN_LIMIT,
+      p_max_attempts: REFUND_ALERT_RETRY_CAP,
+      p_retry_before: new Date(now - RETRY_COOLDOWN_MS).toISOString(),
+      p_since: new Date(now - REVIEW_LOOKBACK_MS).toISOString(),
+    }
+  );
   if (error) {
     logger.error({ message: 'Refund review alert lookup failed' });
     return [];
   }
-  const reviews = ((data ?? []) as OpenReview[]).filter(isActionable);
-  if (reviews.length === 0) return [];
-  const { data: alerted, error: alertedError } = await supabase
-    .from('order_cancellation_refund_alerts')
-    .select('review_id')
-    .in(
-      'review_id',
-      reviews.map((review) => review.id)
-    );
-  if (alertedError) {
-    logger.error({ message: 'Refund review alert ledger lookup failed' });
-    return [];
-  }
-  const done = new Set(
-    ((alerted ?? []) as Array<{ review_id: string }>).map((r) => r.review_id)
-  );
-  return reviews.filter((review) => !done.has(review.id));
+  return ((data ?? []) as OpenReview[]).filter(isActionable);
 }
 
 /**
  * Alert merchants about open cancellation-refund reviews that have no
- * alert claim yet. Runs independently of the refund step: filing a review
+ * confirmed alert (never claimed, or claimed but uncertain past the
+ * cool-down and under the retry cap). Runs independently of the refund step: filing a review
  * terminalizes the step as delivery_uncertain (and stale-claim quarantine
  * does the same), so those steps never re-run and cannot carry a retry.
  * Instead every drain pass re-scans recent open reviews, which makes a
@@ -80,8 +79,8 @@ export async function alertPendingRefundReviews({
   supabase,
 }: {
   deadlineMs?: number;
-  senders?: RefundReviewAlertSenders;
-  supabase: Pick<SupabaseClient, 'from'>;
+  senders: RefundReviewAlertSenders;
+  supabase: AlertSupabase;
 }): Promise<void> {
   try {
     if (
@@ -90,7 +89,7 @@ export async function alertPendingRefundReviews({
     ) {
       return;
     }
-    const pending = await loadUnalertedReviews(supabase);
+    const pending = await loadReviewsNeedingAlert(supabase);
     if (pending.length === 0) return;
     const orderIds = [...new Set(pending.map((r) => r.order_id))];
     const merchantIds = [...new Set(pending.map((r) => r.merchant_id))];
@@ -137,6 +136,10 @@ export async function alertPendingRefundReviews({
         deadlineMs,
         merchant,
         order,
+        prior:
+          review.alert_attempts === null
+            ? null
+            : { attempts: review.alert_attempts },
         review,
         senders,
         supabase,

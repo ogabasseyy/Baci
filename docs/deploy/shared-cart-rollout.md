@@ -140,7 +140,10 @@ and enrollment gates in the release sequence below.
    and requiring `with_live_grant = 0`. In production on 2026-11-10 it
    returned `expired_active = 528, with_live_grant = 0`; the result is
    time-sensitive, so re-run it at activation and record the output with
-   the activation evidence. It does
+   the activation evidence. `expired_active` is an upper bound on the
+   carts that will flip: the function also skips carts with a live
+   checkout session or a live dispatch hold, so fewer flips than that
+   count is expected, not a fault. It does
    start the 90-day clock after which the terminal purge deletes the cart.
    Dispatch-held carts, handoffs and checkout sessions are skipped by the
    function's own fences. Schedule it as the database owner (`postgres`,

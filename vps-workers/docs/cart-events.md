@@ -29,6 +29,10 @@ Because this worker is not installed, that retention pass does not run from
 here. The supported way to run it is the pg_cron job in step 5a of
 `docs/deploy/shared-cart-rollout.md`, which calls the same
 `cleanup_commerce_carts()` function on the same five-minute cadence.
+Keep exactly one of the two enabled. If this worker is ever installed with
+`COMMERCE_CART_EVENTS_ENABLED=true`, unschedule the `commerce-cart-retention`
+pg_cron job first (check `cron.job`); running both is not harmful, because the
+function is bounded and idempotent, but it doubles the work and lock traffic.
 
 Each publisher batch and due cleanup constructs a fresh scoped client. Use
 `COMMERCE_CART_WORKER_JWT_FILE` to let the existing token rotator replace a token

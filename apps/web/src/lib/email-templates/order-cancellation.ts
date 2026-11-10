@@ -207,7 +207,7 @@ export function generateOrderCancellationText(
   const refundSection =
     data.refundAmount > 0
       ? `
-REFUND INFORMATION
+REFUND INFORMATION (PENDING)
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
 Refund Due (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
 If you have already paid, the store will arrange any refund due, up to this amount, to your original payment method. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.

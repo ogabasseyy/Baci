@@ -123,5 +123,6 @@ describe('cancellation refund status wording', () => {
     expect(html).not.toMatch(/within \d+ business days/i);
     expect(html).not.toMatch(/will refund/i);
     expect(text).not.toMatch(/will refund/i);
+    expect(text).toContain('REFUND INFORMATION (PENDING)');
   });
 });

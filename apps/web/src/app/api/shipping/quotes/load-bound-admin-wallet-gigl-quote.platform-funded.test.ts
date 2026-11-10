@@ -50,4 +50,40 @@ describe('loadBoundAdminWalletGiglQuoteResponse for platform-funded merchants', 
       expect.anything()
     );
   });
+
+  it('bugfix: forces a fresh quote when a reserved platform charge outlives the revoked flag', async () => {
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'quote-1',
+          provider: 'GIGL',
+          service_tier: 'Express',
+          carrier_name: 'GIG Logistics',
+          price: 4500,
+          currency: 'NGN',
+          estimated_days: 1,
+          expires_at: '2999-01-01T00:00:00.000Z',
+          provider_rate_id: 'rate-1',
+          is_station_pickup: false,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'reserved', funding_source: 'platform' },
+        error: null,
+      });
+    const limit = vi.fn(() => ({ maybeSingle }));
+    const order = vi.fn(() => ({ limit }));
+    const eq = vi.fn(() => ({ eq, order, maybeSingle }));
+    const rpc = vi.fn(async () => ({ data: 'merchant_wallet', error: null }));
+    const supabase = {
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })),
+      rpc,
+    } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];
+
+    await expect(
+      loadBoundAdminWalletGiglQuoteResponse(supabase, 'merchant-1', 'quote-1')
+    ).resolves.toBeNull();
+  });
 });

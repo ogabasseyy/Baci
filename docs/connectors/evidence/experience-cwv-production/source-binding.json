@@ -1,0 +1,43 @@
+{
+  "baseMain": "c2e351bec25e8ecd8dbd958a57edf5827632f663",
+  "files": {
+    "apps/web/src/app/builder/experience/approve/page.tsx": "74707d198afd55e317a40003b5bbff5a0e3cf8d3f1b3606e8bbd2b34791a59a4",
+    "apps/web/src/app/builder/experience/approve/page.test.tsx": "aea84c31f5a675969c39cc61dfdc79b1aef2b893c95c8560d7868e0f82561696",
+    "apps/web/src/app/builder/experience/approve/approval-content.tsx": "c4f6477cda3ccea0ba29fc39afb85cc56f2ee16ffc7bdba8967e2a737e38e45f",
+    "apps/web/src/app/builder/experience/approve/page-stream.test.tsx": "62163d3c23c46ed43b2c5bd8c3ac8e55e454a125a59d71939fa5c4c61d2fc41f",
+    "apps/web/src/app/builder/experience/preview/page.tsx": "560e82316136e6a07d54f04312aeb68eb29425526650b387e5f6646ac096cff6",
+    "apps/web/src/app/builder/experience/preview/page.test.tsx": "78bc436bd75addf5e5e7360e840c82d7f6644866cb467decd2af5f7496cbd64c",
+    "apps/web/src/app/builder/experience/preview/preview-content.tsx": "f01aada2b24fd5900a7a84ab89e872bd1a48f551b9bdc90a1a070aa6d164d0d9",
+    "apps/web/src/app/builder/experience/page.tsx": "226348a3a2d8c2215745586d4ae0cbe01bef46972b40ddc6b8acbf676eb98e1d",
+    "apps/web/src/app/builder/experience/page.test.tsx": "844d4abecddbb8adb2317f1debbb79074976ddebdd4b27a65f9aed92ceb19139",
+    "apps/web/src/app/builder/experience/workspace-content.tsx": "b4029a12c2f5d37c709861d65899f53306357d58b802952afb549671f3b99c40",
+    "apps/web/src/components/storefront/experience/experience-host-runtime.ts": "e2723086eba79ee74b5aeb5007fe4fcc01b4c4d89d535ed8cee5573527c3c323",
+    "apps/web/src/components/storefront/experience/experience-host-runtime.test.ts": "28441cbc1e06c0093cff6ae43e5c18260c6233444d8ce97325e526512fdbbc77",
+    "apps/web/src/lib/cart/merchant-resolution.ts": "8214eb191cf2ff6c62dd9abc77dcb23ae115fe8d80e46063a956b4de19c02e71",
+    "apps/web/src/lib/cart/merchant-resolution.test.ts": "4a1cd473a4dd0490add1b6466bd1a2246075c5551bdaa732ee06a97c725439c9"
+  },
+  "review": {
+    "type": "complete",
+    "status": "review_completed",
+    "findings": 0,
+    "reviewedFiles": [
+      "apps/web/src/app/builder/experience/approve/approval-content.tsx",
+      "apps/web/src/app/builder/experience/approve/page-stream.test.tsx",
+      "apps/web/src/app/builder/experience/approve/page.test.tsx",
+      "apps/web/src/app/builder/experience/approve/page.tsx",
+      "apps/web/src/app/builder/experience/page.test.tsx",
+      "apps/web/src/app/builder/experience/page.tsx",
+      "apps/web/src/app/builder/experience/preview/page.test.tsx",
+      "apps/web/src/app/builder/experience/preview/page.tsx",
+      "apps/web/src/app/builder/experience/preview/preview-content.tsx",
+      "apps/web/src/app/builder/experience/workspace-content.tsx",
+      "apps/web/src/components/storefront/experience/experience-host-runtime.test.ts",
+      "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+      "apps/web/src/lib/cart/merchant-resolution.test.ts",
+      "apps/web/src/lib/cart/merchant-resolution.ts"
+    ],
+    "outcome": "completed",
+    "message": "Review completed"
+  },
+  "scope": "three owner-page streaming boundaries, bounded admission refresh, exact host/port merchant selection"
+}

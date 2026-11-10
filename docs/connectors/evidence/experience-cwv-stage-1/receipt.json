@@ -1,0 +1,41 @@
+{
+  "prototypeOnly": true,
+  "releaseQualified": false,
+  "coreWebVitalsQualified": false,
+  "baseMain": "7f711eea1f6a27cb24005e03511b3c8b64aa9aa7",
+  "sourceDigest": "c96c8ef8abb6e3f9cd173d4e11616be594db9f5046375d2fa381603f1ddfb700",
+  "javascriptDigest": "9f93088fa7d5b1378a6538bf7afb53dcc2ab7543d481395220f2d7bdd8edd2e8",
+  "cssDigest": "f54e65d8ee041fda75234297dbb1d4ad45120690493e78684f45efba7ddefbec",
+  "routes": [
+    {
+      "path": "/",
+      "filename": "index.html",
+      "htmlDigest": "0ac706d241b59e8ac8b32b6a337e6f4d30fc39df8f5e230e96571935530dc8b0",
+      "catalogRevision": "f582c43fd463afda3929684db9fd80224204ad8fb0d86d89e569319de4278373",
+      "jobId": "baci-experience-ffeaae4e-a92e-4e98-abc8-1807e269e11e"
+    },
+    {
+      "path": "/collections/all",
+      "filename": "acd0b3f1859723f1.html",
+      "htmlDigest": "f4a8227af508460cea82d120d45912bd87af0d0be1da1c51d14503bff22dd34a",
+      "catalogRevision": "f582c43fd463afda3929684db9fd80224204ad8fb0d86d89e569319de4278373",
+      "jobId": "baci-experience-9ca3eecf-8e65-4ed8-8493-53c909ad9dff"
+    },
+    {
+      "path": "/phones/synthetic-device",
+      "filename": "c69d3da5f3e80e5e.html",
+      "htmlDigest": "ea12a1e622e0c0a4a4b762256a64c4ea8000dbd54cca19c118508a96f747de0d",
+      "catalogRevision": "2bf2170ee4fe2af36a561247fbe92480740aeb37f5f63d6cd7be246c1c608030",
+      "jobId": "baci-experience-8a777db6-cfe0-46e0-b136-6e0940e5d0d3"
+    },
+    {
+      "path": "/pages/story",
+      "filename": "200ccafa66560564.html",
+      "htmlDigest": "852e49908f223d2a2682491491c449682e34b8006ad6614c85c6bf6b6bf868d9",
+      "catalogRevision": "f582c43fd463afda3929684db9fd80224204ad8fb0d86d89e569319de4278373",
+      "jobId": "baci-experience-271243e0-b39b-48ea-a608-c679362a0f44"
+    }
+  ],
+  "orders": 0,
+  "aiProviderCalls": 0
+}

@@ -4,6 +4,7 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { getCartCookieEpoch } from './cart-cross-tab-lock';
 import type { createSharedCart } from './shared-cart-client';
+import type { SharedCartExperienceEntry } from './shared-cart-command-port';
 import type {
   AdoptOutcome,
   UseSharedCartOptions,
@@ -27,6 +28,18 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   const [state, dispatch] = useReducer(
     sharedCartReducer,
     initialSharedCartState
+  );
+
+  const experienceEntriesRef = useRef(
+    new Map<string, SharedCartExperienceEntry>()
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Merchant/session changes must retire observers even though cleanup reads only refs.
+  useEffect(
+    () => () => {
+      for (const entry of experienceEntriesRef.current.values()) entry.deny();
+      experienceEntriesRef.current.clear();
+    },
+    [sessionGeneration, merchantId, merchantSlug]
   );
 
   const [hydrated, setHydrated] = useState(false);
@@ -102,6 +115,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
 
   const optionsRef = useRef({ merchantId, merchantSlug });
   return {
+    experienceEntriesRef,
     merchantId,
     merchantSlug,
     sessionGeneration,

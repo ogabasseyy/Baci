@@ -103,7 +103,9 @@ separation and the explicit `ignoreBuildErrors: false` setting.
 type check, so the typed-route preparation that `pnpm typecheck` applies in
 place cannot survive there. The `build` script therefore runs `next typegen`
 and writes the prepared declaration to `.typed-navigation/link.d.ts`;
-`tsconfig.build.json` includes that copy and excludes the regenerated file.
+`tsconfig.build.json` lists that copy under `files` and excludes the
+regenerated file, so a build that skipped the preparation fails with TS6053
+instead of silently dropping typed-route checks.
 `build:ci` compiles without type checking, so only a production build
 exercises this path: a TS2589 in a deploy with green PR checks means the two
 have drifted.

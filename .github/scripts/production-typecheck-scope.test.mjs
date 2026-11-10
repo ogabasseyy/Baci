@@ -46,10 +46,15 @@ test('production excludes the test graph while the normal typecheck still includ
 
 test('production build checks the prepared typed-route declaration, not the one next build regenerates', () => {
   const build = JSON.parse(readFileSync(`${web}tsconfig.build.json`, 'utf8'));
-  const full = JSON.parse(readFileSync(`${web}tsconfig.json`, 'utf8'));
   assert.ok(build.exclude.includes('.next/types/link.d.ts'));
-  assert.deepEqual(build.include, [...full.include, '.typed-navigation/link.d.ts']);
+  // `files` (not `include`) so a missing copy is TS6053 instead of silently unchecked routes;
+  // `include` stays inherited so production cannot drift from the full typecheck roots.
+  assert.deepEqual(build.files, ['.typed-navigation/link.d.ts']);
+  assert.equal(build.include, undefined);
   const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
+  // The copy comes from `next typegen`, where release-asset rewrites are empty; `next build` adds them.
+  // That is equivalent only while those rewrites contribute no typed routes (pinned in
+  // release-asset-rewrites.test.ts). A rewrite that expands into routes must be prepared at build time.
   assert.equal(
     manifest.scripts.build,
     'next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build'

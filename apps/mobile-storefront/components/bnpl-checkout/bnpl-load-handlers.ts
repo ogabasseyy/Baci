@@ -1,3 +1,4 @@
+import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import type { BNPLCheckoutStatus } from './use-bnpl-checkout-controller';
 
 export function createBNPLLoadHandlers(input: {
@@ -18,11 +19,13 @@ export function createBNPLLoadHandlers(input: {
         input.statusRef.current === 'success'
       )
         return;
+      recordCrashBreadcrumb('bnpl:webview:load_start');
       input.setErrorMessage(null);
       input.scheduleLoadTimeout();
       input.setCheckoutStatus('loading');
     },
     handleLoadEnd: () => {
+      recordCrashBreadcrumb('bnpl:webview:load_end');
       input.clearPendingLoadTimeout();
       input.setCheckoutStatus((currentStatus) =>
         currentStatus === 'error' || currentStatus === 'success'

@@ -95,7 +95,20 @@ BEGIN
         SELECT 1 FROM private.platform_funded_gigl_merchants AS flag
         WHERE flag.merchant_id = v_order.merchant_id AND flag.enabled
       ) THEN
-        RAISE EXCEPTION 'platform_funding_revoked' USING ERRCODE = '22023';
+        -- Release the unconsumed reservation (no wallet movement) and report it
+        -- as refunded so the caller asks for a fresh quote; raising would roll
+        -- the release back and the quote-replacement trigger would then keep
+        -- blocking re-quoting while the reservation stays 'reserved'.
+        UPDATE public.merchant_shipping_charges AS charge
+        SET status = 'refunded',
+            failure_code = 'PLATFORM_FUNDING_REVOKED',
+            refunded_at = now(),
+            updated_at = now()
+        WHERE charge.id = v_existing.id
+        RETURNING charge.status INTO v_charge_status;
+        RETURN QUERY SELECT v_existing.id, v_existing.charged_amount,
+          NULL::numeric, v_charge_status;
+        RETURN;
       END IF;
       IF NOT (
         v_is_owner

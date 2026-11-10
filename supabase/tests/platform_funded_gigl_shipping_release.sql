@@ -179,5 +179,6 @@ END;
 $seed_orders$;
 
 \ir platform_funded_gigl_shipping_release.cases.inc.sql
+\ir platform_funded_gigl_shipping_revoked.cases.inc.sql
 
 ROLLBACK;

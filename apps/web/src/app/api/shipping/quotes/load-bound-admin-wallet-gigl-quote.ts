@@ -1,9 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import {
-  readGiglShippingFundingMode,
-  resolveAdminGiglQuoteFunding,
-} from '@/lib/shipping/gigl-shipping-funding-mode';
+import { resolveAdminGiglQuoteFunding } from '@/lib/shipping/gigl-shipping-funding-mode';
 import { assertQuoteItemsMatchOrder } from '@/lib/shipping/international-quote-items-match';
 import {
   assertQuoteReceiverMatchesOrder,
@@ -129,17 +126,6 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
   // A refunded charge keeps the order bound to the old quote, but booking that
   // quote again returns MERCHANT_WALLET_CHARGE_REFUNDED. Force a new quote.
   if (latestCharge?.status === 'refunded') {
-    return null;
-  }
-
-  // An unconsumed platform reservation cannot be booked once the owner flag is
-  // revoked (the reserve RPC rejects it): force a fresh quote instead of
-  // advertising a booking that cannot succeed.
-  if (
-    latestCharge?.status === 'reserved' &&
-    latestCharge.funding_source === 'platform' &&
-    (await readGiglShippingFundingMode(supabase, merchantId)) !== 'platform'
-  ) {
     return null;
   }
 

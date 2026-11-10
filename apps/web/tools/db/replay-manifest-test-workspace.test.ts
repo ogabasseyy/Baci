@@ -9,7 +9,7 @@ it('keeps a workspace until its timed-out test operation finishes', async () => 
   );
   const workspace = createReplayManifestTestWorkspace(removeRoot);
   onTestFinished(() => workspace.cleanUp(), 120_000);
-  const root = await workspace.copyWorkspace();
+  const root = await workspace.run(() => workspace.copyWorkspace());
   let release!: () => void;
   const paused = new Promise<void>((resolve) => {
     release = resolve;
@@ -49,7 +49,7 @@ it('retains a failed removal for a later cleanup retry', async () => {
     );
     await workspace.cleanUp();
   }, 120_000);
-  const root = await workspace.copyWorkspace();
+  const root = await workspace.run(() => workspace.copyWorkspace());
   try {
     await expect(workspace.cleanUp()).rejects.toThrow(
       'temporary removal failure'

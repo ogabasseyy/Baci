@@ -59,7 +59,7 @@ SET status = 'refunded', failure_code = 'PROVIDER_CANCELLED_MANUAL',
 WHERE id = '<charge id>' AND funding_source = 'platform'
   AND order_id = '<order id>' AND shipment_id = '<shipment id>'
   AND status IN ('booked','needs_reconciliation');
-UPDATE public.shipments SET status = 'cancelled', updated_at = now()
+UPDATE public.shipments SET status = 'cancelled', cancelled_at = now(), updated_at = now()
 WHERE id = '<shipment id>' AND order_id = '<order id>';
 UPDATE public.orders
 SET shipment_id = NULL, tracking_number = NULL,

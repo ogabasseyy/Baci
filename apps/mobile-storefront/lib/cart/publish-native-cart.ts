@@ -34,5 +34,7 @@ export function publishNativeCart(
     checkoutReview: changedCart
       ? null
       : useNativeSharedCartStore.getState().checkoutReview,
+    // A failure explained for the previous cart means nothing for a new one.
+    ...(changedCart ? { writeNotice: null } : {}),
   });
 }

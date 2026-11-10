@@ -33,3 +33,12 @@ it('keeps checkout review and generation when the same cart is republished', () 
     id: 'keep',
   });
 });
+
+it('drops a stale failure notice when a different cart replaces the old one', () => {
+  publishNativeCart(snapshot('c1'), { items: [], metadataReady: true });
+  useNativeSharedCartStore.setState({ writeNotice: 'old failure' });
+  publishNativeCart(snapshot('c1'), { items: [], metadataReady: true });
+  expect(useNativeSharedCartStore.getState().writeNotice).toBe('old failure');
+  publishNativeCart(snapshot('c2'), { items: [], metadataReady: true });
+  expect(useNativeSharedCartStore.getState().writeNotice).toBeNull();
+});

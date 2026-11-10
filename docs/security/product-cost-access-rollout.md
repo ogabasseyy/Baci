@@ -137,9 +137,13 @@ this work is not a blanket audit or migration of all cost-bearing tables.
   full web/native checks, with hooks enabled. An initially missing workspace
   dependency was linked in the task-local test environment; the shared install
   was not changed.
+- CodeRabbit reviewed the full 45-file combined stack and raised one minor issue:
+  missing mobile preflight rows used `single()` rather than `maybeSingle()`. Both
+  preflights were corrected; the 19-test regression suite and Biome passed. The
+  correction-only re-review is blocked by the shared CLI rate limit and can be
+  retried after its reported ten-minute reset.
 - Full historical replay is blocked locally by Supabase CLI version mismatch
-  (the repository requires 2.111.0). CodeRabbit full-code review is pending because
-  of the shared CLI review-capacity limit. A preliminary two-file activation
-  documentation/test review raised zero issues but does not cover the code.
-- Full historical replay, monorepo CI and mandatory CodeRabbit review remain
-  release gates. Focused checks are not a green CI result.
+  (the repository requires 2.111.0). A manually dispatched full CI run is checking
+  the stacked draft because automatic quality gates only target main.
+- Full historical replay, monorepo CI and final review remain release gates.
+  Focused checks are not a green CI result.

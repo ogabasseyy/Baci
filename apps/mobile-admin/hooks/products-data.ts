@@ -72,7 +72,7 @@ export async function updateProductStock(
     .select('id, slug, category')
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .single();
+    .maybeSingle();
   if (accessError || !previousProduct) {
     throw new Error(accessError?.message ?? 'Product is not accessible');
   }
@@ -126,7 +126,7 @@ export async function updateProductStatus(
     .select('id, slug, category')
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .single();
+    .maybeSingle();
   if (accessError || !previousProduct) {
     throw new Error(accessError?.message ?? 'Product is not accessible');
   }

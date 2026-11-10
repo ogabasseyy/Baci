@@ -77,7 +77,7 @@ describe('renderLogoHtml', () => {
     );
     expect(html).toContain('<div class="logo-fallback">Seller &amp; Co</div>');
   });
-  it('uses an encoded and escaped placeholder URL for broken logo images', () => {
+  it('keeps the seller-name fallback local when the logo fails', () => {
     const html = renderLogoHtml(
       createReceiptMerchant({
         logo_url: 'https://cdn.example.com/logo.png',
@@ -86,9 +86,9 @@ describe('renderLogoHtml', () => {
       undefined
     );
 
-    expect(html).toContain(
-      'onerror="this.onerror=null;this.src=\'https://placehold.co/200x80?text=Bad%20%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E\'"'
-    );
+    expect(html).not.toContain('onerror=');
+    expect(html).not.toContain('placehold.co');
+    expect(html).toContain('class="logo-fallback"');
     expect(html).not.toContain('Bad "><script>');
   });
 });

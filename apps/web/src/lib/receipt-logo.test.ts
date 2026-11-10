@@ -25,6 +25,7 @@ const baseMerchant = {
 
 describe('receipt logo safety', () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -92,6 +93,7 @@ describe('receipt logo safety', () => {
   });
 
   it('allows existing Supabase images bucket logo URLs', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project-ref.supabase.co');
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(
         Buffer.from(
@@ -125,6 +127,20 @@ describe('receipt logo safety', () => {
         signal: expect.any(AbortSignal),
       })
     );
+  });
+
+  it('rejects a public logo from a different Supabase project', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project-ref.supabase.co');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(
+      resolveReceiptLogoDataUri({
+        ...baseMerchant,
+        logo_url:
+          'https://other.supabase.co/storage/v1/object/public/images/logo.png',
+      })
+    ).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('rejects Supabase logo URLs outside the public logo allowlist', async () => {

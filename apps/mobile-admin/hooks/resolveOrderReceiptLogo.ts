@@ -1,5 +1,6 @@
 import { sanitizeSvg } from '@baci/shared';
 import { fetch } from 'expo/fetch';
+import { getConfiguredSupabaseUrl } from '@/lib/supabase-config';
 
 const MAX_LOGO_BYTES = 256 * 1024;
 const LOGO_TIMEOUT_MS = 5000;
@@ -10,10 +11,16 @@ function trustedLogoUrl(value: string) {
     return null;
   }
   if (
-    (url.hostname === 'cdn.ogabassey.com' &&
-      url.pathname.startsWith('/media/')) ||
-    (url.hostname.endsWith('.supabase.co') &&
-      /^\/storage\/v1\/object\/public\/(media|images)\//.test(url.pathname))
+    url.hostname === 'cdn.ogabassey.com' &&
+    url.pathname.startsWith('/media/')
+  ) {
+    return url;
+  }
+  const configuredUrl = getConfiguredSupabaseUrl();
+  if (
+    configuredUrl &&
+    url.origin === new URL(configuredUrl).origin &&
+    /^\/storage\/v1\/object\/public\/(media|images)\//.test(url.pathname)
   ) {
     return url;
   }

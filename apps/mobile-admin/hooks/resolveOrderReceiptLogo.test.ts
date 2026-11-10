@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveOrderReceiptLogo } from './resolveOrderReceiptLogo';
 
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
+vi.mock('@/lib/supabase-config', () => ({
+  getConfiguredSupabaseUrl: () => 'https://project-ref.supabase.co',
+}));
 
 const logoUrl = 'https://cdn.ogabassey.com/media/logo.png';
 
@@ -180,6 +183,18 @@ describe('resolveOrderReceiptLogo', () => {
   it('discards invalid image content', async () => {
     mockFetch.mockResolvedValue(new Response('<script>alert(1)</script>'));
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
+  });
+
+  it('fetches configured Supabase public logos and rejects other projects', async () => {
+    mockFetch.mockResolvedValue(new Response(raster(PNG)));
+    const path = '/storage/v1/object/public/images/logo.png';
+    await expect(
+      resolveOrderReceiptLogo(`https://other.supabase.co${path}`)
+    ).resolves.toEqual({ logoUrl: null });
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(
+      resolveOrderReceiptLogo(`https://project-ref.supabase.co${path}`)
+    ).resolves.toEqual({ logoUrl: `data:image/png;base64,${PNG}` });
   });
 
   it('does not fetch logos outside trusted public media paths', async () => {

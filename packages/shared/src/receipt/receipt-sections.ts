@@ -1,4 +1,4 @@
-import { escapeHtml, escapeJsString } from './escape-html';
+import { escapeHtml } from './escape-html';
 import { canonicalizeTransactionPaymentMethod } from './manual-order-document-gates';
 import {
   reconcileAssuranceTaxSubtotals,
@@ -27,11 +27,7 @@ export function renderLogoHtml(
   }
 
   if (merchant.logo_url) {
-    const fallbackLogoUrl = `https://placehold.co/200x80?text=${encodeURIComponent(
-      storeName
-    )}`;
-    const fallbackLogoUrlForJs = escapeHtml(escapeJsString(fallbackLogoUrl));
-    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.onerror=null;this.src='${fallbackLogoUrlForJs}'">${sellerName}`;
+    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;">${sellerName}`;
   }
 
   return sellerName;
@@ -42,7 +38,8 @@ export function renderFinancialSummaryLines(
   merchant: ReceiptMerchant,
   formatMoney: MoneyFormatter,
   statusColor: string,
-  isPaid: boolean
+  isPaid: boolean,
+  isReceipt: boolean
 ): string[] {
   const summaryLines: string[] = [
     `<div class="sum-row"><span>Subtotal</span><span>${formatMoney(getReceiptDisplaySubtotal(order, merchant))}</span></div>`,
@@ -65,9 +62,10 @@ export function renderFinancialSummaryLines(
   }
 
   if (shouldShowVatLine(order, merchant)) {
-    const chargedRows = order.tax_subtotals?.filter(
-      (row) => row && (row.tax_amount ?? 0) > 0
-    );
+    // Receipts disclose the stored amount only. Invoice tax rows are mutable.
+    const chargedRows = isReceipt
+      ? undefined
+      : order.tax_subtotals?.filter((row) => row && (row.tax_amount ?? 0) > 0);
     const vatRate = chargedRows?.[0]?.vat_rate;
     const singleHistoricalRate =
       typeof vatRate === 'number' &&

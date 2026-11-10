@@ -139,6 +139,38 @@ describe('invoice HTML PDF isolation', () => {
     expect(mocks.launch).toHaveBeenCalledTimes(2);
   });
 
+  it('releases expired waiting jobs without waiting for the active renderer', async () => {
+    vi.useFakeTimers();
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<Uint8Array>();
+    mocks.pdf.mockImplementationOnce(() => {
+      started.resolve();
+      return held.promise;
+    });
+    const active = renderHtmlToPdf('<html>active</html>');
+    try {
+      await started.promise;
+      const expired = Array.from({ length: 7 }, () =>
+        expect(
+          renderHtmlToPdf('<html>expired</html>', Date.now() + 10)
+        ).rejects.toThrow('deadline')
+      );
+      await vi.advanceTimersByTimeAsync(10);
+      await Promise.all(expired);
+      const replacement = renderHtmlToPdf('<html>replacement</html>');
+      const resolved = expect(replacement).resolves.toEqual(
+        new Uint8Array([1, 2])
+      );
+      held.resolve(new Uint8Array([1, 2]));
+      await resolved;
+      expect(mocks.launch).toHaveBeenCalledTimes(2);
+    } finally {
+      held.resolve(new Uint8Array([1, 2]));
+      await active;
+      vi.useRealTimers();
+    }
+  });
+
   it('returns retryable 503 when the packaged Chromium executable is unavailable', async () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', {

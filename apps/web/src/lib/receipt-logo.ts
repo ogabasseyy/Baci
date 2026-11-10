@@ -5,13 +5,11 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 const MAX_LOGO_BYTES = 256 * 1024;
 const MAX_LOGO_DATA_URI_LENGTH = MAX_LOGO_BYTES * 2;
 const LOGO_FETCH_TIMEOUT_MS = 5000;
-const SUPABASE_HOST_SUFFIX = '.supabase.co';
 const SUPABASE_PUBLIC_LOGO_PREFIXES = [
   '/storage/v1/object/public/media/',
   '/storage/v1/object/public/images/',
 ];
 const MEDIA_CDN_PUBLIC_PREFIX = '/media/';
-const TRUSTED_MEDIA_CDN_HOSTNAME = new URL(DEFAULT_MEDIA_CDN_ORIGIN).hostname;
 
 function isSupportedLogoContentType(contentType: string) {
   return (
@@ -23,23 +21,29 @@ function isSupportedLogoContentType(contentType: string) {
 }
 
 function isTrustedLogoUrl(parsedUrl: URL) {
-  if (parsedUrl.protocol !== 'https:') {
+  if (
+    parsedUrl.protocol !== 'https:' ||
+    parsedUrl.username ||
+    parsedUrl.password
+  ) {
     return false;
   }
 
-  const hostname = parsedUrl.hostname.toLowerCase();
   if (
-    hostname === TRUSTED_MEDIA_CDN_HOSTNAME &&
+    parsedUrl.origin === DEFAULT_MEDIA_CDN_ORIGIN &&
     parsedUrl.pathname.startsWith(MEDIA_CDN_PUBLIC_PREFIX)
   ) {
     return true;
   }
 
-  return (
-    hostname.endsWith(SUPABASE_HOST_SUFFIX) &&
-    SUPABASE_PUBLIC_LOGO_PREFIXES.some((prefix) =>
-      parsedUrl.pathname.startsWith(prefix)
-    )
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  return Boolean(
+    configuredUrl &&
+      URL.canParse(configuredUrl) &&
+      parsedUrl.origin === new URL(configuredUrl).origin &&
+      SUPABASE_PUBLIC_LOGO_PREFIXES.some((prefix) =>
+        parsedUrl.pathname.startsWith(prefix)
+      )
   );
 }
 

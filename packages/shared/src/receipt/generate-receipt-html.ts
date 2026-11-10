@@ -241,7 +241,8 @@ export function generateReceiptHtml(
       merchant,
       formatMoney,
       statusConfig.color,
-      isPaid
+      isPaid,
+      isPaid && !forceInvoice
     ),
     termsHtml: renderTermsHtml(merchant, options),
     timeStr,

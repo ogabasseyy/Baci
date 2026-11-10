@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { serializedInventoryDynamicDdl } from './serialized_variant_inventory_concurrency_contract_dynamic_ddl.mjs';
 
@@ -50,4 +51,28 @@ test('still fails closed for multiple privilege statements with an unresolved ta
   END $$;`;
 
   assert.equal(hasDynamicPrivilegeDdl(source, signature), true);
+});
+
+test('scopes the frozen invoice dispatch ACL to its own function', () => {
+  const migration = readFileSync(
+    new URL(
+      '../migrations/20261110150000_recheck_both_invoice_payment_cards.sql',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  assert.equal(hasDynamicPrivilegeDdl(migration, signature), false);
+  assert.equal(
+    hasDynamicPrivilegeDdl(
+      migration,
+      'public.mark_manual_document_dispatch_started_v2(uuid)'
+    ),
+    true
+  );
+
+  const altered = migration.replace(
+    "shared_dispatch_name text := 'public.mark_manual_document_dispatch_started_v2'",
+    "shared_dispatch_name text := 'private.fixture'"
+  );
+  assert.equal(hasDynamicPrivilegeDdl(altered, signature), true);
 });

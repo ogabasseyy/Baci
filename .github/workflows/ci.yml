@@ -713,10 +713,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Fetch base branch history
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --filter=blob:none --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      # Full checkout includes the base history. The guard reads the
+      # event's pinned base commit without an unauthenticated second fetch.
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { serializedInventoryDefinitionPatches } from './serialized_variant_inventory_concurrency_contract_definition_patches.mjs';
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 
@@ -265,7 +266,27 @@ function executesUntracedDefinitionTransform(
   return false;
 }
 
+const FROZEN_INVOICE_ACL_DIGEST =
+  '73dbde7b8b20165711ee222e30978b4fe2c17f7f457074140de0d67fb3184fd0';
+const INVOICE_ACL_TARGET = 'public.mark_manual_document_dispatch_started_v2';
+
+function canScopeFrozenInvoiceAcl(source, signature) {
+  return (
+    source.includes(`shared_dispatch_name text := '${INVOICE_ACL_TARGET}'`) &&
+    ![INVOICE_ACL_TARGET, 'mark_manual_document_dispatch_started_v2'].includes(
+      signature
+        .trim()
+        .replace(/\([^()]*\)\s*$/, '')
+        .replaceAll('"', '')
+        .toLowerCase()
+    ) &&
+    createHash('sha256').update(source).digest('hex') ===
+      FROZEN_INVOICE_ACL_DIGEST
+  );
+}
+
 export const serializedInventoryDynamicTaint = {
   assignedExecutePayloads,
+  canScopeFrozenInvoiceAcl,
   executesUntracedDefinitionTransform,
 };

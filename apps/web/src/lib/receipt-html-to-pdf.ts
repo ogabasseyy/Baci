@@ -4,10 +4,19 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 
 const RENDER_TIMEOUT_MS = 30_000;
-// Bound browser memory per worker. Each job closes its isolated browser even on failure.
-let renderQueue: Promise<unknown> = Promise.resolve();
-let pendingRenders = 0;
 const MAX_PENDING_RENDERS = 8;
+const waitingRenders: Array<() => Promise<void>> = [];
+let rendering = false;
+
+function drainQueue() {
+  const next = waitingRenders.shift();
+  if (!next) return;
+  rendering = true;
+  void next().finally(() => {
+    rendering = false;
+    drainQueue();
+  });
+}
 
 class ReceiptPdfUnavailableError extends Error {}
 
@@ -60,7 +69,7 @@ async function localChromePath() {
 }
 
 /** Limit both queue wait and rendering so an outbox caller can release its lease. */
-export async function renderHtmlToPdf(
+export function renderHtmlToPdf(
   html: string,
   workerDeadline?: number
 ): Promise<Uint8Array> {
@@ -68,37 +77,33 @@ export async function renderHtmlToPdf(
     Date.now() + RENDER_TIMEOUT_MS,
     workerDeadline ?? Number.POSITIVE_INFINITY
   );
-  const timeout = remainingTime(deadline);
-  if (pendingRenders >= MAX_PENDING_RENDERS)
-    throw new ReceiptPdfUnavailableError('Invoice PDF renderer is busy');
-  const controller = new AbortController();
-  pendingRenders += 1;
-  const result = renderQueue
-    .then(() => {
-      remainingTime(deadline);
-      return renderDocument(html, deadline, controller.signal);
-    })
-    .finally(() => {
-      pendingRenders -= 1;
-    });
-  renderQueue = result.catch(() => undefined);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      result,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          const error = new ReceiptPdfUnavailableError(
-            'Invoice PDF render deadline exceeded'
-          );
-          reject(error);
-          controller.abort(error);
-        }, timeout);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return new Promise((resolve, reject) => {
+    const timeout = remainingTime(deadline);
+    if (waitingRenders.length + Number(rendering) >= MAX_PENDING_RENDERS)
+      throw new ReceiptPdfUnavailableError('Invoice PDF renderer is busy');
+    const controller = new AbortController();
+    const run = async () => {
+      try {
+        remainingTime(deadline);
+        resolve(await renderDocument(html, deadline, controller.signal));
+      } catch (error) {
+        reject(error);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const timer = setTimeout(() => {
+      const index = waitingRenders.indexOf(run);
+      if (index >= 0) waitingRenders.splice(index, 1);
+      const error = new ReceiptPdfUnavailableError(
+        'Invoice PDF render deadline exceeded'
+      );
+      reject(error);
+      controller.abort(error);
+    }, timeout);
+    waitingRenders.push(run);
+    if (!rendering) drainQueue();
+  });
 }
 
 async function launchReceiptBrowser(deadline: number, signal: AbortSignal) {

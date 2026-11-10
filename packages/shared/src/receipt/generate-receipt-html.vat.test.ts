@@ -17,10 +17,30 @@ describe('generateReceiptHtml VAT summary', () => {
       createReceiptMerchant({
         vat_registration_status: 'registered',
         vat_rate: 7.5,
-      })
+      }),
+      { documentKind: 'invoice' }
     );
     expect(html).toContain('VAT (20%)');
     expect(html).not.toContain('VAT (7.5%)');
+  });
+
+  it('keeps paid receipts independent of mutable invoice tax rows', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        subtotal: 100,
+        tax_amount: 20,
+        total: 120,
+        amount_paid: 120,
+        payment_status: 'paid',
+        tax_subtotals: [{ vat_rate: 20, tax_amount: 20, taxable_amount: 100 }],
+      }),
+      createReceiptMerchant({
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      })
+    );
+    expect(html).toContain('<span>VAT</span><span>₦20.00</span>');
+    expect(html).not.toContain('VAT (20%)');
   });
 
   it('does not show stale VAT when the order total excludes the tax amount', () => {

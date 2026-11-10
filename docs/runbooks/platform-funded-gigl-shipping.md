@@ -68,3 +68,5 @@ SET shipment_id = NULL, tracking_number = NULL,
 WHERE id = '<order id>' AND shipment_id = '<shipment id>';
 -- COMMIT only if all three updates affected exactly one row; otherwise ROLLBACK.
 ```
+
+Before COMMIT, a second person must review the pre-check output and the ticket link holding GIG's written confirmation.

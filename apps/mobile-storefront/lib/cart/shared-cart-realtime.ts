@@ -44,6 +44,8 @@ export function startSharedCartRealtime(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let highestHint = 0;
   let failures = 0;
+  let inFlight = false;
+  let queued: { hint?: number; any: boolean } | null = null;
 
   const live = (run: number) =>
     alive && run === epoch && options.isCurrent() && isForeground();
@@ -62,7 +64,17 @@ export function startSharedCartRealtime(
       /* Recovery stays HTTP based. */
     }
   }
+  /** One refresh at a time; hints that arrive meanwhile collapse into at most one follow-up. */
   function refresh(hint?: number): void {
+    if (inFlight) {
+      queued = {
+        hint:
+          hint === undefined ? undefined : Math.max(hint, queued?.hint ?? 0),
+        any: (queued?.any ?? false) || hint === undefined,
+      };
+      return;
+    }
+    inFlight = true;
     const originCart = options.getCartId();
     void options
       .refresh()
@@ -72,7 +84,19 @@ export function startSharedCartRealtime(
         if (hint !== undefined && options.getCartId() === originCart)
           highestHint = Math.max(highestHint, hint);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .then(() => {
+        inFlight = false;
+        const next = queued;
+        queued = null;
+        if (
+          alive &&
+          next &&
+          (next.any ||
+            (next.hint ?? 0) > Math.max(options.getVersion(), highestHint))
+        )
+          refresh(next.hint);
+      });
   }
   async function connect(): Promise<void> {
     // Take the epoch before yielding, or an overlapping connect would adopt

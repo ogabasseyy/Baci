@@ -42,6 +42,10 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
+jest.mock('@/lib/supabase', () => ({
+  ...jest.requireActual('@/lib/supabase'),
+  getSupabaseRealtimeConfig: () => ({ url: 'https://p.test', key: 'k' }),
+}));
 jest.mock('@/lib/cart/shared-cart-realtime-transport', () => ({
   createNativeRealtimeDeps: jest.fn(() => ({})),
 }));

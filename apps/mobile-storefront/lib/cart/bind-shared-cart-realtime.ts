@@ -1,3 +1,4 @@
+import { getSupabaseRealtimeConfig } from '@/lib/supabase';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { startSharedCartRealtime } from './shared-cart-realtime';
 import { createNativeRealtimeDeps } from './shared-cart-realtime-transport';
@@ -11,6 +12,8 @@ export function bindSharedCartRealtime(config: {
   isCurrent(): boolean;
   refresh(): Promise<void>;
 }): () => void {
+  // A build without project credentials stays on polling instead of retrying forever.
+  if (!getSupabaseRealtimeConfig()) return () => undefined;
   const realtime = startSharedCartRealtime(
     {
       merchantId: config.merchantId,

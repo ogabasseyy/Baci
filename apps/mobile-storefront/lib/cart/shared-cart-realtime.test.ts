@@ -245,3 +245,36 @@ it('accepts a grant whose topic differs only by case', async () => {
   expect(t.deps.connect).toHaveBeenCalledTimes(1);
   t.handle.stop();
 });
+
+it('keeps one refresh in flight and folds a burst into one follow-up', async () => {
+  const t = setup();
+  await flush();
+  let done: () => void = () => undefined;
+  t.refresh.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (done = resolve))
+  );
+  for (const version of [4, 5, 6, 7, 8]) t.emit(event(version));
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(1);
+  done();
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(2);
+  t.handle.stop();
+});
+
+it('skips the follow-up when the first refresh already reached the newest version', async () => {
+  const t = setup();
+  await flush();
+  let done: () => void = () => undefined;
+  t.refresh.mockImplementationOnce(() => {
+    t.state.version = 8;
+    return new Promise<void>((resolve) => (done = resolve));
+  });
+  t.emit(event(4));
+  t.emit(event(8));
+  await flush();
+  done();
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(1);
+  t.handle.stop();
+});

@@ -78,9 +78,8 @@ export function captureCartPairingLink(path: string, config: Config): string {
   // the app's own absolute root URL (Linking.createURL('/')), and
   // deep links, universal links and notification links are absolute
   // too: rewriting them sent every launch to the cart. The router
-  // only ever maps a delivery's path onto in-app routes, so an
-  // unknown host or scheme resolves to not-found, never an external
-  // open.
+  // discards a delivery's scheme and host and only maps its path onto
+  // in-app routes, so no delivery can open anything outside the app.
   if (!pairing) return path;
   // A malformed or foreign pairing link must not wipe a valid pending
   // pairing captured moments earlier: the pending link is replaced

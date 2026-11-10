@@ -1,7 +1,17 @@
 import { render } from '@testing-library/react-native';
 import { useCartStore } from '@/stores/cart-store';
+import type { CartItem } from '@/stores/cart-store.types';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
+
+const deviceItem: CartItem = {
+  id: 'line-1',
+  product_id: '33333333-3333-4333-8333-333333333333',
+  slug: 'phone',
+  name: 'Phone',
+  price: 100000,
+  quantity: 1,
+};
 
 beforeEach(() => {
   useCartStore.setState({ items: [] });
@@ -35,7 +45,7 @@ it('shows a plain syncing message while the cart is still loading', () => {
   expect(empty.getByText('Syncing your cart…')).toBeTruthy();
   expect(empty.queryByText(/refresh before checkout/)).toBeNull();
   empty.unmount();
-  useCartStore.setState({ items: [{ id: 'line-1' } as never] });
+  useCartStore.setState({ items: [deviceItem] });
   const withItems = render(<SharedCartStatusPanel />);
   expect(withItems.getByText('Syncing your cart…')).toBeTruthy();
   expect(
@@ -45,7 +55,7 @@ it('shows a plain syncing message while the cart is still loading', () => {
   ).toBeNull();
 });
 it('still offers to connect device items once loading has settled', () => {
-  useCartStore.setState({ items: [{ id: 'line-1' } as never] });
+  useCartStore.setState({ items: [deviceItem] });
   useNativeSharedCartStore.setState({
     status: 'ready',
     snapshot: null,

@@ -1,0 +1,3222 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-10-26T17:56:46.079Z",
+  "image": "sitespeedio/sitespeed.io:42.7.0@sha256:3b89ded94e75faf09d34a9f0921d621d470564dcee7c7f51bf2297d701451f71",
+  "baseUrl": "http://localhost:43178",
+  "samplesPerCell": 3,
+  "sequential": true,
+  "diagnosticStress": false,
+  "cpuThrottleRate": null,
+  "freshDockerContainerPerSample": true,
+  "cwvQualification": false,
+  "fieldInp": false,
+  "connectivity": {
+    "profile": "native",
+    "throttling": false
+  },
+  "rows": [
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 1,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 21833,
+      "hostLcpMs": 1460,
+      "frameLcpMs": 696,
+      "frameLcpFromHostMs": 1215.2998046875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:46:47.189Z",
+          "loadAverage": [
+            32.97900390625,
+            30.79931640625,
+            27.28125
+          ],
+          "loadAveragePerCpu": [
+            2.7482503255208335,
+            2.5666097005208335,
+            2.2734375
+          ],
+          "freeMemoryBytes": 12209717248,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:46:52.190Z",
+          "loadAverage": [
+            33.541015625,
+            30.95166015625,
+            27.35546875
+          ],
+          "loadAveragePerCpu": [
+            2.7950846354166665,
+            2.5793050130208335,
+            2.2796223958333335
+          ],
+          "freeMemoryBytes": 8817917952,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:46:57.191Z",
+          "loadAverage": [
+            31.41552734375,
+            30.5537109375,
+            27.23583984375
+          ],
+          "loadAveragePerCpu": [
+            2.6179606119791665,
+            2.546142578125,
+            2.2696533203125
+          ],
+          "freeMemoryBytes": 9686499328,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:02.192Z",
+          "loadAverage": [
+            29.6201171875,
+            30.19580078125,
+            27.12890625
+          ],
+          "loadAveragePerCpu": [
+            2.4683430989583335,
+            2.5163167317708335,
+            2.2607421875
+          ],
+          "freeMemoryBytes": 13151141888,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:07.192Z",
+          "loadAverage": [
+            29.08984375,
+            30.076171875,
+            27.1044921875
+          ],
+          "loadAveragePerCpu": [
+            2.4241536458333335,
+            2.50634765625,
+            2.2587076822916665
+          ],
+          "freeMemoryBytes": 12607455232,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:09.022Z",
+          "loadAverage": [
+            29.08984375,
+            30.076171875,
+            27.1044921875
+          ],
+          "loadAveragePerCpu": [
+            2.4241536458333335,
+            2.50634765625,
+            2.2587076822916665
+          ],
+          "freeMemoryBytes": 12877447168,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 2,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 21228,
+      "hostLcpMs": 1172,
+      "frameLcpMs": 676,
+      "frameLcpFromHostMs": 1062.89990234375,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:47:09.027Z",
+          "loadAverage": [
+            29.08984375,
+            30.076171875,
+            27.1044921875
+          ],
+          "loadAveragePerCpu": [
+            2.4241536458333335,
+            2.50634765625,
+            2.2587076822916665
+          ],
+          "freeMemoryBytes": 12874874880,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:14.028Z",
+          "loadAverage": [
+            29.88330078125,
+            30.22412109375,
+            27.173828125
+          ],
+          "loadAveragePerCpu": [
+            2.4902750651041665,
+            2.5186767578125,
+            2.2644856770833335
+          ],
+          "freeMemoryBytes": 12180635648,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:19.030Z",
+          "loadAverage": [
+            30.1328125,
+            30.27001953125,
+            27.20751953125
+          ],
+          "loadAveragePerCpu": [
+            2.5110677083333335,
+            2.5225016276041665,
+            2.2672932942708335
+          ],
+          "freeMemoryBytes": 12666912768,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:24.031Z",
+          "loadAverage": [
+            28.9208984375,
+            30.01611328125,
+            27.1357421875
+          ],
+          "loadAveragePerCpu": [
+            2.4100748697916665,
+            2.5013427734375,
+            2.2613118489583335
+          ],
+          "freeMemoryBytes": 12954533888,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:29.034Z",
+          "loadAverage": [
+            26.9248046875,
+            29.583984375,
+            27
+          ],
+          "loadAveragePerCpu": [
+            2.2437337239583335,
+            2.46533203125,
+            2.25
+          ],
+          "freeMemoryBytes": 12793200640,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:30.255Z",
+          "loadAverage": [
+            26.9306640625,
+            29.541015625,
+            27
+          ],
+          "loadAveragePerCpu": [
+            2.2442220052083335,
+            2.4617513020833335,
+            2.25
+          ],
+          "freeMemoryBytes": 12780093440,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 3,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20628,
+      "hostLcpMs": 1172,
+      "frameLcpMs": 596,
+      "frameLcpFromHostMs": 981.199951171875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:47:30.257Z",
+          "loadAverage": [
+            26.9306640625,
+            29.541015625,
+            27
+          ],
+          "loadAveragePerCpu": [
+            2.2442220052083335,
+            2.4617513020833335,
+            2.25
+          ],
+          "freeMemoryBytes": 12780093440,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:35.259Z",
+          "loadAverage": [
+            25.09423828125,
+            29.11669921875,
+            26.865234375
+          ],
+          "loadAveragePerCpu": [
+            2.0911865234375,
+            2.4263916015625,
+            2.23876953125
+          ],
+          "freeMemoryBytes": 13610450944,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:40.260Z",
+          "loadAverage": [
+            23.80517578125,
+            28.78271484375,
+            26.76025390625
+          ],
+          "loadAveragePerCpu": [
+            1.9837646484375,
+            2.3985595703125,
+            2.2300211588541665
+          ],
+          "freeMemoryBytes": 13453361152,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:45.260Z",
+          "loadAverage": [
+            22.298828125,
+            28.3876953125,
+            26.63232421875
+          ],
+          "loadAveragePerCpu": [
+            1.8582356770833333,
+            2.3656412760416665,
+            2.2193603515625
+          ],
+          "freeMemoryBytes": 13476773888,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:50.263Z",
+          "loadAverage": [
+            21.6337890625,
+            28.1484375,
+            26.55810546875
+          ],
+          "loadAveragePerCpu": [
+            1.8028157552083333,
+            2.345703125,
+            2.2131754557291665
+          ],
+          "freeMemoryBytes": 13248479232,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:50.885Z",
+          "loadAverage": [
+            21.6337890625,
+            28.1484375,
+            26.55810546875
+          ],
+          "loadAveragePerCpu": [
+            1.8028157552083333,
+            2.345703125,
+            2.2131754557291665
+          ],
+          "freeMemoryBytes": 13303185408,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 1,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 19836,
+      "hostLcpMs": 1152,
+      "frameLcpMs": 532,
+      "frameLcpFromHostMs": 927.5,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:47:50.889Z",
+          "loadAverage": [
+            21.6337890625,
+            28.1484375,
+            26.55810546875
+          ],
+          "loadAveragePerCpu": [
+            1.8028157552083333,
+            2.345703125,
+            2.2131754557291665
+          ],
+          "freeMemoryBytes": 13303267328,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:47:55.890Z",
+          "loadAverage": [
+            20.2216796875,
+            27.7470703125,
+            26.42578125
+          ],
+          "loadAveragePerCpu": [
+            1.6851399739583333,
+            2.312255859375,
+            2.2021484375
+          ],
+          "freeMemoryBytes": 13295878144,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:00.891Z",
+          "loadAverage": [
+            19.80322265625,
+            27.53515625,
+            26.3583984375
+          ],
+          "loadAveragePerCpu": [
+            1.6502685546875,
+            2.2945963541666665,
+            2.196533203125
+          ],
+          "freeMemoryBytes": 13183614976,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:05.892Z",
+          "loadAverage": [
+            18.69775390625,
+            27.17724609375,
+            26.23876953125
+          ],
+          "loadAveragePerCpu": [
+            1.5581461588541667,
+            2.2647705078125,
+            2.1865641276041665
+          ],
+          "freeMemoryBytes": 13118865408,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:10.725Z",
+          "loadAverage": [
+            18.6416015625,
+            27.0244140625,
+            26.1904296875
+          ],
+          "loadAveragePerCpu": [
+            1.553466796875,
+            2.2520345052083335,
+            2.1825358072916665
+          ],
+          "freeMemoryBytes": 13069942784,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 2,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20466,
+      "hostLcpMs": 1136,
+      "frameLcpMs": 616,
+      "frameLcpFromHostMs": 991.5,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:48:10.727Z",
+          "loadAverage": [
+            18.6416015625,
+            27.0244140625,
+            26.1904296875
+          ],
+          "loadAveragePerCpu": [
+            1.553466796875,
+            2.2520345052083335,
+            2.1825358072916665
+          ],
+          "freeMemoryBytes": 13069975552,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:15.728Z",
+          "loadAverage": [
+            18.349609375,
+            26.82470703125,
+            26.12451171875
+          ],
+          "loadAveragePerCpu": [
+            1.5291341145833333,
+            2.2353922526041665,
+            2.1770426432291665
+          ],
+          "freeMemoryBytes": 13060587520,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:20.729Z",
+          "loadAverage": [
+            17.2001953125,
+            26.4453125,
+            25.99462890625
+          ],
+          "loadAveragePerCpu": [
+            1.433349609375,
+            2.2037760416666665,
+            2.1662190755208335
+          ],
+          "freeMemoryBytes": 13448577024,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:25.729Z",
+          "loadAverage": [
+            16.22314453125,
+            26.0888671875,
+            25.87158203125
+          ],
+          "loadAveragePerCpu": [
+            1.3519287109375,
+            2.174072265625,
+            2.1559651692708335
+          ],
+          "freeMemoryBytes": 13422821376,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:30.731Z",
+          "loadAverage": [
+            15.8046875,
+            25.837890625,
+            25.7841796875
+          ],
+          "loadAveragePerCpu": [
+            1.3170572916666667,
+            2.1531575520833335,
+            2.148681640625
+          ],
+          "freeMemoryBytes": 13397131264,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:31.193Z",
+          "loadAverage": [
+            15.8046875,
+            25.837890625,
+            25.7841796875
+          ],
+          "loadAveragePerCpu": [
+            1.3170572916666667,
+            2.1531575520833335,
+            2.148681640625
+          ],
+          "freeMemoryBytes": 13398278144,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 3,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 19856,
+      "hostLcpMs": 1148,
+      "frameLcpMs": 616,
+      "frameLcpFromHostMs": 1044,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:48:31.196Z",
+          "loadAverage": [
+            15.8046875,
+            25.837890625,
+            25.7841796875
+          ],
+          "loadAveragePerCpu": [
+            1.3170572916666667,
+            2.1531575520833335,
+            2.148681640625
+          ],
+          "freeMemoryBytes": 13398278144,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:36.196Z",
+          "loadAverage": [
+            17.021484375,
+            25.92333984375,
+            25.814453125
+          ],
+          "loadAveragePerCpu": [
+            1.41845703125,
+            2.1602783203125,
+            2.1512044270833335
+          ],
+          "freeMemoryBytes": 13373341696,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:41.196Z",
+          "loadAverage": [
+            16.05859375,
+            25.57568359375,
+            25.6923828125
+          ],
+          "loadAveragePerCpu": [
+            1.3382161458333333,
+            2.1313069661458335,
+            2.1410319010416665
+          ],
+          "freeMemoryBytes": 13429620736,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:46.197Z",
+          "loadAverage": [
+            15.4931640625,
+            25.30029296875,
+            25.59423828125
+          ],
+          "loadAveragePerCpu": [
+            1.2910970052083333,
+            2.1083577473958335,
+            2.1328531901041665
+          ],
+          "freeMemoryBytes": 13342605312,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:51.052Z",
+          "loadAverage": [
+            14.65283203125,
+            24.962890625,
+            25.47314453125
+          ],
+          "loadAveragePerCpu": [
+            1.2210693359375,
+            2.0802408854166665,
+            2.1227620442708335
+          ],
+          "freeMemoryBytes": 13268074496,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 1,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20561,
+      "hostLcpMs": 1440,
+      "frameLcpMs": 536,
+      "frameLcpFromHostMs": 996.699951171875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:48:51.055Z",
+          "loadAverage": [
+            14.65283203125,
+            24.962890625,
+            25.47314453125
+          ],
+          "loadAveragePerCpu": [
+            1.2210693359375,
+            2.0802408854166665,
+            2.1227620442708335
+          ],
+          "freeMemoryBytes": 13268156416,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:48:56.056Z",
+          "loadAverage": [
+            14.76025390625,
+            24.81396484375,
+            25.41748046875
+          ],
+          "loadAveragePerCpu": [
+            1.2300211588541667,
+            2.0678304036458335,
+            2.1181233723958335
+          ],
+          "freeMemoryBytes": 13220823040,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:01.057Z",
+          "loadAverage": [
+            14.05859375,
+            24.50146484375,
+            25.30322265625
+          ],
+          "loadAveragePerCpu": [
+            1.1715494791666667,
+            2.0417887369791665,
+            2.1086018880208335
+          ],
+          "freeMemoryBytes": 13102432256,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:06.059Z",
+          "loadAverage": [
+            13.4931640625,
+            24.21044921875,
+            25.19580078125
+          ],
+          "loadAveragePerCpu": [
+            1.1244303385416667,
+            2.0175374348958335,
+            2.0996500651041665
+          ],
+          "freeMemoryBytes": 12957417472,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:11.058Z",
+          "loadAverage": [
+            12.73291015625,
+            23.87451171875,
+            25.0712890625
+          ],
+          "loadAveragePerCpu": [
+            1.0610758463541667,
+            1.9895426432291667,
+            2.0892740885416665
+          ],
+          "freeMemoryBytes": 13014695936,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:11.616Z",
+          "loadAverage": [
+            12.73291015625,
+            23.87451171875,
+            25.0712890625
+          ],
+          "loadAveragePerCpu": [
+            1.0610758463541667,
+            1.9895426432291667,
+            2.0892740885416665
+          ],
+          "freeMemoryBytes": 13021446144,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 2,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 19889,
+      "hostLcpMs": 1152,
+      "frameLcpMs": 660,
+      "frameLcpFromHostMs": 1045,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:49:11.618Z",
+          "loadAverage": [
+            12.73291015625,
+            23.87451171875,
+            25.0712890625
+          ],
+          "loadAveragePerCpu": [
+            1.0610758463541667,
+            1.9895426432291667,
+            2.0892740885416665
+          ],
+          "freeMemoryBytes": 13019693056,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:16.618Z",
+          "loadAverage": [
+            13.07421875,
+            23.76025390625,
+            25.02392578125
+          ],
+          "loadAveragePerCpu": [
+            1.0895182291666667,
+            1.9800211588541667,
+            2.0853271484375
+          ],
+          "freeMemoryBytes": 12597051392,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:21.620Z",
+          "loadAverage": [
+            12.34716796875,
+            23.43212890625,
+            24.900390625
+          ],
+          "loadAveragePerCpu": [
+            1.0289306640625,
+            1.9526774088541667,
+            2.0750325520833335
+          ],
+          "freeMemoryBytes": 12578013184,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:26.620Z",
+          "loadAverage": [
+            15.6826171875,
+            23.939453125,
+            25.07080078125
+          ],
+          "loadAveragePerCpu": [
+            1.306884765625,
+            1.9949544270833333,
+            2.0892333984375
+          ],
+          "freeMemoryBytes": 12489359360,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:31.507Z",
+          "loadAverage": [
+            15.3876953125,
+            23.7412109375,
+            24.994140625
+          ],
+          "loadAveragePerCpu": [
+            1.2823079427083333,
+            1.9784342447916667,
+            2.0828450520833335
+          ],
+          "freeMemoryBytes": 12087476224,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 3,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20150,
+      "hostLcpMs": 1156,
+      "frameLcpMs": 588,
+      "frameLcpFromHostMs": 958.10009765625,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:49:31.509Z",
+          "loadAverage": [
+            15.3876953125,
+            23.7412109375,
+            24.994140625
+          ],
+          "loadAveragePerCpu": [
+            1.2823079427083333,
+            1.9784342447916667,
+            2.0828450520833335
+          ],
+          "freeMemoryBytes": 12087705600,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:36.510Z",
+          "loadAverage": [
+            18.4794921875,
+            24.2431640625,
+            25.1640625
+          ],
+          "loadAveragePerCpu": [
+            1.5399576822916667,
+            2.020263671875,
+            2.0970052083333335
+          ],
+          "freeMemoryBytes": 12710838272,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:41.511Z",
+          "loadAverage": [
+            17.56005859375,
+            23.95654296875,
+            25.0576171875
+          ],
+          "loadAveragePerCpu": [
+            1.4633382161458333,
+            1.9963785807291667,
+            2.088134765625
+          ],
+          "freeMemoryBytes": 12713345024,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:46.511Z",
+          "loadAverage": [
+            17.19482421875,
+            23.7744140625,
+            24.98681640625
+          ],
+          "loadAveragePerCpu": [
+            1.4329020182291667,
+            1.981201171875,
+            2.0822347005208335
+          ],
+          "freeMemoryBytes": 12733382656,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:51.513Z",
+          "loadAverage": [
+            17.09912109375,
+            23.64501953125,
+            24.93408203125
+          ],
+          "loadAveragePerCpu": [
+            1.4249267578125,
+            1.9704182942708333,
+            2.0778401692708335
+          ],
+          "freeMemoryBytes": 12647120896,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:51.659Z",
+          "loadAverage": [
+            17.09912109375,
+            23.64501953125,
+            24.93408203125
+          ],
+          "loadAveragePerCpu": [
+            1.4249267578125,
+            1.9704182942708333,
+            2.0778401692708335
+          ],
+          "freeMemoryBytes": 12707348480,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 1,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20809,
+      "hostLcpMs": 1176,
+      "frameLcpMs": 532,
+      "frameLcpFromHostMs": 922.599853515625,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:49:51.662Z",
+          "loadAverage": [
+            17.09912109375,
+            23.64501953125,
+            24.93408203125
+          ],
+          "loadAveragePerCpu": [
+            1.4249267578125,
+            1.9704182942708333,
+            2.0778401692708335
+          ],
+          "freeMemoryBytes": 12707414016,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:49:56.663Z",
+          "loadAverage": [
+            16.6904296875,
+            23.45166015625,
+            24.85791015625
+          ],
+          "loadAveragePerCpu": [
+            1.390869140625,
+            1.9543050130208333,
+            2.0714925130208335
+          ],
+          "freeMemoryBytes": 12685393920,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:01.664Z",
+          "loadAverage": [
+            16.314453125,
+            23.26123046875,
+            24.7822265625
+          ],
+          "loadAveragePerCpu": [
+            1.3595377604166667,
+            1.9384358723958333,
+            2.065185546875
+          ],
+          "freeMemoryBytes": 12573310976,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:06.665Z",
+          "loadAverage": [
+            15.328125,
+            22.94140625,
+            24.66015625
+          ],
+          "loadAveragePerCpu": [
+            1.27734375,
+            1.9117838541666667,
+            2.0550130208333335
+          ],
+          "freeMemoryBytes": 12602589184,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:11.666Z",
+          "loadAverage": [
+            14.5810546875,
+            22.65966796875,
+            24.55078125
+          ],
+          "loadAveragePerCpu": [
+            1.215087890625,
+            1.8883056640625,
+            2.0458984375
+          ],
+          "freeMemoryBytes": 12645122048,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:12.471Z",
+          "loadAverage": [
+            14.5810546875,
+            22.65966796875,
+            24.55078125
+          ],
+          "loadAveragePerCpu": [
+            1.215087890625,
+            1.8883056640625,
+            2.0458984375
+          ],
+          "freeMemoryBytes": 12606357504,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 2,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20711,
+      "hostLcpMs": 1176,
+      "frameLcpMs": 516,
+      "frameLcpFromHostMs": 907.300048828125,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:50:12.473Z",
+          "loadAverage": [
+            14.5810546875,
+            22.65966796875,
+            24.55078125
+          ],
+          "loadAveragePerCpu": [
+            1.215087890625,
+            1.8883056640625,
+            2.0458984375
+          ],
+          "freeMemoryBytes": 12606390272,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:17.475Z",
+          "loadAverage": [
+            13.6533203125,
+            22.3330078125,
+            24.42431640625
+          ],
+          "loadAveragePerCpu": [
+            1.1377766927083333,
+            1.861083984375,
+            2.0353597005208335
+          ],
+          "freeMemoryBytes": 12635422720,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:22.476Z",
+          "loadAverage": [
+            12.7998046875,
+            22.01171875,
+            24.29833984375
+          ],
+          "loadAveragePerCpu": [
+            1.066650390625,
+            1.8343098958333333,
+            2.0248616536458335
+          ],
+          "freeMemoryBytes": 12586270720,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:27.477Z",
+          "loadAverage": [
+            12.3349609375,
+            21.76220703125,
+            24.19677734375
+          ],
+          "loadAveragePerCpu": [
+            1.0279134114583333,
+            1.8135172526041667,
+            2.0163981119791665
+          ],
+          "freeMemoryBytes": 12668731392,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:32.478Z",
+          "loadAverage": [
+            11.58740234375,
+            21.45068359375,
+            24.072265625
+          ],
+          "loadAveragePerCpu": [
+            0.9656168619791666,
+            1.7875569661458333,
+            2.0060221354166665
+          ],
+          "freeMemoryBytes": 12544835584,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:33.184Z",
+          "loadAverage": [
+            11.58740234375,
+            21.45068359375,
+            24.072265625
+          ],
+          "loadAveragePerCpu": [
+            0.9656168619791666,
+            1.7875569661458333,
+            2.0060221354166665
+          ],
+          "freeMemoryBytes": 12467863552,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 3,
+      "expectedViewportWidth": 390,
+      "actualViewport": {
+        "height": 844,
+        "width": 390
+      },
+      "wallMs": 20921,
+      "hostLcpMs": 1172,
+      "frameLcpMs": 504,
+      "frameLcpFromHostMs": 877.5,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:50:33.188Z",
+          "loadAverage": [
+            11.58740234375,
+            21.45068359375,
+            24.072265625
+          ],
+          "loadAveragePerCpu": [
+            0.9656168619791666,
+            1.7875569661458333,
+            2.0060221354166665
+          ],
+          "freeMemoryBytes": 12466044928,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:38.189Z",
+          "loadAverage": [
+            11.1396484375,
+            21.19384765625,
+            23.96630859375
+          ],
+          "loadAveragePerCpu": [
+            0.9283040364583334,
+            1.7661539713541667,
+            1.9971923828125
+          ],
+          "freeMemoryBytes": 12372885504,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:43.190Z",
+          "loadAverage": [
+            13.93115234375,
+            21.60546875,
+            24.09521484375
+          ],
+          "loadAveragePerCpu": [
+            1.1609293619791667,
+            1.8004557291666667,
+            2.0079345703125
+          ],
+          "freeMemoryBytes": 12435128320,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:48.191Z",
+          "loadAverage": [
+            13.5361328125,
+            21.39599609375,
+            24.00634765625
+          ],
+          "loadAveragePerCpu": [
+            1.1280110677083333,
+            1.7829996744791667,
+            2.0005289713541665
+          ],
+          "freeMemoryBytes": 12405260288,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:53.192Z",
+          "loadAverage": [
+            13.6533203125,
+            21.28955078125,
+            23.953125
+          ],
+          "loadAveragePerCpu": [
+            1.1377766927083333,
+            1.7741292317708333,
+            1.99609375
+          ],
+          "freeMemoryBytes": 12421038080,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:54.109Z",
+          "loadAverage": [
+            13.6533203125,
+            21.28955078125,
+            23.953125
+          ],
+          "loadAveragePerCpu": [
+            1.1377766927083333,
+            1.7741292317708333,
+            1.99609375
+          ],
+          "freeMemoryBytes": 12379996160,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 1,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 21767,
+      "hostLcpMs": 1220,
+      "frameLcpMs": 512,
+      "frameLcpFromHostMs": 898.900146484375,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:50:54.111Z",
+          "loadAverage": [
+            13.6533203125,
+            21.28955078125,
+            23.953125
+          ],
+          "loadAveragePerCpu": [
+            1.1377766927083333,
+            1.7741292317708333,
+            1.99609375
+          ],
+          "freeMemoryBytes": 12380028928,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:50:59.113Z",
+          "loadAverage": [
+            13.1201171875,
+            21.05224609375,
+            23.853515625
+          ],
+          "loadAveragePerCpu": [
+            1.0933430989583333,
+            1.7543538411458333,
+            1.98779296875
+          ],
+          "freeMemoryBytes": 12301156352,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:04.114Z",
+          "loadAverage": [
+            12.5498046875,
+            20.80224609375,
+            23.74853515625
+          ],
+          "loadAveragePerCpu": [
+            1.0458170572916667,
+            1.7335205078125,
+            1.9790445963541667
+          ],
+          "freeMemoryBytes": 12359811072,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:09.115Z",
+          "loadAverage": [
+            12.02490234375,
+            20.55615234375,
+            23.64453125
+          ],
+          "loadAveragePerCpu": [
+            1.0020751953125,
+            1.7130126953125,
+            1.9703776041666667
+          ],
+          "freeMemoryBytes": 12176965632,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:14.116Z",
+          "loadAverage": [
+            12.5029296875,
+            20.513671875,
+            23.611328125
+          ],
+          "loadAveragePerCpu": [
+            1.0419108072916667,
+            1.70947265625,
+            1.9676106770833333
+          ],
+          "freeMemoryBytes": 12215320576,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:15.878Z",
+          "loadAverage": [
+            11.90185546875,
+            20.255859375,
+            23.501953125
+          ],
+          "loadAveragePerCpu": [
+            0.9918212890625,
+            1.68798828125,
+            1.95849609375
+          ],
+          "freeMemoryBytes": 12157648896,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 2,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 22918,
+      "hostLcpMs": 1188,
+      "frameLcpMs": 584,
+      "frameLcpFromHostMs": 970.300048828125,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:51:15.881Z",
+          "loadAverage": [
+            11.90185546875,
+            20.255859375,
+            23.501953125
+          ],
+          "loadAveragePerCpu": [
+            0.9918212890625,
+            1.68798828125,
+            1.95849609375
+          ],
+          "freeMemoryBytes": 12156682240,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:20.882Z",
+          "loadAverage": [
+            11.34912109375,
+            20.00244140625,
+            23.39306640625
+          ],
+          "loadAveragePerCpu": [
+            0.9457600911458334,
+            1.6668701171875,
+            1.9494222005208333
+          ],
+          "freeMemoryBytes": 11520081920,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:25.883Z",
+          "loadAverage": [
+            10.68017578125,
+            19.7197265625,
+            23.2734375
+          ],
+          "loadAveragePerCpu": [
+            0.8900146484375,
+            1.643310546875,
+            1.939453125
+          ],
+          "freeMemoryBytes": 11758878720,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:30.884Z",
+          "loadAverage": [
+            10.70556640625,
+            19.57470703125,
+            23.201171875
+          ],
+          "loadAveragePerCpu": [
+            0.8921305338541666,
+            1.6312255859375,
+            1.9334309895833333
+          ],
+          "freeMemoryBytes": 11180376064,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:35.885Z",
+          "loadAverage": [
+            10.32861328125,
+            19.34912109375,
+            23.10009765625
+          ],
+          "loadAveragePerCpu": [
+            0.8607177734375,
+            1.6124267578125,
+            1.9250081380208333
+          ],
+          "freeMemoryBytes": 10845241344,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:38.799Z",
+          "loadAverage": [
+            10.32861328125,
+            19.34912109375,
+            23.10009765625
+          ],
+          "loadAveragePerCpu": [
+            0.8607177734375,
+            1.6124267578125,
+            1.9250081380208333
+          ],
+          "freeMemoryBytes": 11035164672,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "home",
+      "path": "/qa1",
+      "sample": 3,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 21795,
+      "hostLcpMs": 1188,
+      "frameLcpMs": 660,
+      "frameLcpFromHostMs": 1037.699951171875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:51:38.802Z",
+          "loadAverage": [
+            10.32861328125,
+            19.34912109375,
+            23.10009765625
+          ],
+          "loadAveragePerCpu": [
+            0.8607177734375,
+            1.6124267578125,
+            1.9250081380208333
+          ],
+          "freeMemoryBytes": 11031166976,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:43.802Z",
+          "loadAverage": [
+            10.78271484375,
+            19.29345703125,
+            23.05810546875
+          ],
+          "loadAveragePerCpu": [
+            0.8985595703125,
+            1.6077880859375,
+            1.9215087890625
+          ],
+          "freeMemoryBytes": 10313547776,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:48.804Z",
+          "loadAverage": [
+            10.3193359375,
+            19.05615234375,
+            22.9521484375
+          ],
+          "loadAveragePerCpu": [
+            0.8599446614583334,
+            1.5880126953125,
+            1.9126790364583333
+          ],
+          "freeMemoryBytes": 10704224256,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:53.805Z",
+          "loadAverage": [
+            11.09423828125,
+            19.07177734375,
+            22.9345703125
+          ],
+          "loadAveragePerCpu": [
+            0.9245198567708334,
+            1.5893147786458333,
+            1.9112141927083333
+          ],
+          "freeMemoryBytes": 10527031296,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:51:58.805Z",
+          "loadAverage": [
+            11.24658203125,
+            18.970703125,
+            22.8759765625
+          ],
+          "loadAveragePerCpu": [
+            0.9372151692708334,
+            1.5808919270833333,
+            1.9063313802083333
+          ],
+          "freeMemoryBytes": 10396663808,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:00.597Z",
+          "loadAverage": [
+            12.267578125,
+            19.0537109375,
+            22.88232421875
+          ],
+          "loadAveragePerCpu": [
+            1.0222981770833333,
+            1.5878092447916667,
+            1.9068603515625
+          ],
+          "freeMemoryBytes": 10287153152,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 1,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 21898,
+      "hostLcpMs": 1204,
+      "frameLcpMs": 572,
+      "frameLcpFromHostMs": 954,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:52:00.600Z",
+          "loadAverage": [
+            12.267578125,
+            19.0537109375,
+            22.88232421875
+          ],
+          "loadAveragePerCpu": [
+            1.0222981770833333,
+            1.5878092447916667,
+            1.9068603515625
+          ],
+          "freeMemoryBytes": 10285170688,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:05.601Z",
+          "loadAverage": [
+            11.60546875,
+            18.8037109375,
+            22.771484375
+          ],
+          "loadAveragePerCpu": [
+            0.9671223958333334,
+            1.5669759114583333,
+            1.8976236979166667
+          ],
+          "freeMemoryBytes": 10424778752,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:10.601Z",
+          "loadAverage": [
+            11.716796875,
+            18.70703125,
+            22.7138671875
+          ],
+          "loadAveragePerCpu": [
+            0.9763997395833334,
+            1.5589192708333333,
+            1.892822265625
+          ],
+          "freeMemoryBytes": 11488542720,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:15.602Z",
+          "loadAverage": [
+            11.3388671875,
+            18.51220703125,
+            22.62158203125
+          ],
+          "loadAveragePerCpu": [
+            0.9449055989583334,
+            1.5426839192708333,
+            1.8851318359375
+          ],
+          "freeMemoryBytes": 11462574080,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:20.604Z",
+          "loadAverage": [
+            11.3916015625,
+            18.40380859375,
+            22.55908203125
+          ],
+          "loadAveragePerCpu": [
+            0.9493001302083334,
+            1.5336507161458333,
+            1.8799235026041667
+          ],
+          "freeMemoryBytes": 11465768960,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:22.498Z",
+          "loadAverage": [
+            11.3916015625,
+            18.40380859375,
+            22.55908203125
+          ],
+          "loadAveragePerCpu": [
+            0.9493001302083334,
+            1.5336507161458333,
+            1.8799235026041667
+          ],
+          "freeMemoryBytes": 11453300736,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 2,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 22286,
+      "hostLcpMs": 1192,
+      "frameLcpMs": 532,
+      "frameLcpFromHostMs": 922.2998046875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:52:22.501Z",
+          "loadAverage": [
+            11.3916015625,
+            18.40380859375,
+            22.55908203125
+          ],
+          "loadAveragePerCpu": [
+            0.9493001302083334,
+            1.5336507161458333,
+            1.8799235026041667
+          ],
+          "freeMemoryBytes": 11453644800,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:27.501Z",
+          "loadAverage": [
+            11.19970703125,
+            18.24755859375,
+            22.4794921875
+          ],
+          "loadAveragePerCpu": [
+            0.9333089192708334,
+            1.5206298828125,
+            1.873291015625
+          ],
+          "freeMemoryBytes": 11446632448,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:32.502Z",
+          "loadAverage": [
+            10.703125,
+            18.02734375,
+            22.376953125
+          ],
+          "loadAveragePerCpu": [
+            0.8919270833333334,
+            1.5022786458333333,
+            1.86474609375
+          ],
+          "freeMemoryBytes": 11491852288,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:37.503Z",
+          "loadAverage": [
+            11.52734375,
+            18.07666015625,
+            22.36865234375
+          ],
+          "loadAveragePerCpu": [
+            0.9606119791666666,
+            1.5063883463541667,
+            1.8640543619791667
+          ],
+          "freeMemoryBytes": 12167151616,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:42.504Z",
+          "loadAverage": [
+            12.36572265625,
+            18.1416015625,
+            22.3662109375
+          ],
+          "loadAveragePerCpu": [
+            1.0304768880208333,
+            1.5118001302083333,
+            1.8638509114583333
+          ],
+          "freeMemoryBytes": 12107677696,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:44.787Z",
+          "loadAverage": [
+            12.36572265625,
+            18.1416015625,
+            22.3662109375
+          ],
+          "loadAveragePerCpu": [
+            1.0304768880208333,
+            1.5118001302083333,
+            1.8638509114583333
+          ],
+          "freeMemoryBytes": 12123308032,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "collection",
+      "path": "/qa1/collections/all",
+      "sample": 3,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 24142,
+      "hostLcpMs": 1176,
+      "frameLcpMs": 536,
+      "frameLcpFromHostMs": 942.800048828125,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:52:44.789Z",
+          "loadAverage": [
+            12.36572265625,
+            18.1416015625,
+            22.3662109375
+          ],
+          "loadAveragePerCpu": [
+            1.0304768880208333,
+            1.5118001302083333,
+            1.8638509114583333
+          ],
+          "freeMemoryBytes": 12123340800,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:49.790Z",
+          "loadAverage": [
+            12.01611328125,
+            17.97314453125,
+            22.28173828125
+          ],
+          "loadAveragePerCpu": [
+            1.0013427734375,
+            1.4977620442708333,
+            1.8568115234375
+          ],
+          "freeMemoryBytes": 11975983104,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:54.791Z",
+          "loadAverage": [
+            11.5341796875,
+            17.77392578125,
+            22.18603515625
+          ],
+          "loadAveragePerCpu": [
+            0.961181640625,
+            1.4811604817708333,
+            1.8488362630208333
+          ],
+          "freeMemoryBytes": 11981127680,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:52:59.792Z",
+          "loadAverage": [
+            10.7705078125,
+            17.51171875,
+            22.0673828125
+          ],
+          "loadAveragePerCpu": [
+            0.8975423177083334,
+            1.4593098958333333,
+            1.8389485677083333
+          ],
+          "freeMemoryBytes": 11971264512,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:04.794Z",
+          "loadAverage": [
+            10.30810546875,
+            17.3037109375,
+            21.96728515625
+          ],
+          "loadAveragePerCpu": [
+            0.8590087890625,
+            1.4419759114583333,
+            1.8306070963541667
+          ],
+          "freeMemoryBytes": 10408558592,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:08.931Z",
+          "loadAverage": [
+            12.205078125,
+            17.58056640625,
+            22.03759765625
+          ],
+          "loadAveragePerCpu": [
+            1.01708984375,
+            1.4650472005208333,
+            1.8364664713541667
+          ],
+          "freeMemoryBytes": 10328489984,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 1,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 40155,
+      "hostLcpMs": 1428,
+      "frameLcpMs": 716,
+      "frameLcpFromHostMs": 1200.800048828125,
+      "hostCls": 0.0000462962962962963,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:53:08.934Z",
+          "loadAverage": [
+            12.205078125,
+            17.58056640625,
+            22.03759765625
+          ],
+          "loadAveragePerCpu": [
+            1.01708984375,
+            1.4650472005208333,
+            1.8364664713541667
+          ],
+          "freeMemoryBytes": 10312335360,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:13.936Z",
+          "loadAverage": [
+            13.8701171875,
+            17.83642578125,
+            22.1015625
+          ],
+          "loadAveragePerCpu": [
+            1.1558430989583333,
+            1.4863688151041667,
+            1.841796875
+          ],
+          "freeMemoryBytes": 10782326784,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:18.937Z",
+          "loadAverage": [
+            14.12060546875,
+            17.822265625,
+            22.0712890625
+          ],
+          "loadAveragePerCpu": [
+            1.1767171223958333,
+            1.4851888020833333,
+            1.8392740885416667
+          ],
+          "freeMemoryBytes": 10682040320,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:23.942Z",
+          "loadAverage": [
+            13.79052734375,
+            17.6923828125,
+            22.00048828125
+          ],
+          "loadAveragePerCpu": [
+            1.1492106119791667,
+            1.474365234375,
+            1.8333740234375
+          ],
+          "freeMemoryBytes": 10058416128,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:28.943Z",
+          "loadAverage": [
+            17.01025390625,
+            18.294921875,
+            22.1875
+          ],
+          "loadAveragePerCpu": [
+            1.4175211588541667,
+            1.5245768229166667,
+            1.8489583333333333
+          ],
+          "freeMemoryBytes": 8622522368,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:33.944Z",
+          "loadAverage": [
+            21.65380859375,
+            19.23583984375,
+            22.49658203125
+          ],
+          "loadAveragePerCpu": [
+            1.8044840494791667,
+            1.6029866536458333,
+            1.8747151692708333
+          ],
+          "freeMemoryBytes": 6309150720,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:38.947Z",
+          "loadAverage": [
+            26.72607421875,
+            20.3271484375,
+            22.86279296875
+          ],
+          "loadAveragePerCpu": [
+            2.2271728515625,
+            1.6939290364583333,
+            1.9052327473958333
+          ],
+          "freeMemoryBytes": 3479928832,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:43.951Z",
+          "loadAverage": [
+            37.87841796875,
+            22.7451171875,
+            23.701171875
+          ],
+          "loadAveragePerCpu": [
+            3.1565348307291665,
+            1.8954264322916667,
+            1.97509765625
+          ],
+          "freeMemoryBytes": 2296397824,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:48.951Z",
+          "loadAverage": [
+            49.0185546875,
+            25.3056640625,
+            24.59912109375
+          ],
+          "loadAveragePerCpu": [
+            4.084879557291667,
+            2.1088053385416665,
+            2.0499267578125
+          ],
+          "freeMemoryBytes": 1691729920,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:49.089Z",
+          "loadAverage": [
+            49.0185546875,
+            25.3056640625,
+            24.59912109375
+          ],
+          "loadAveragePerCpu": [
+            4.084879557291667,
+            2.1088053385416665,
+            2.0499267578125
+          ],
+          "freeMemoryBytes": 1659748352,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 2,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 31977,
+      "hostLcpMs": 1324,
+      "frameLcpMs": 1152,
+      "frameLcpFromHostMs": 1895.10009765625,
+      "hostCls": 0.0000462962962962963,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:53:49.093Z",
+          "loadAverage": [
+            49.0185546875,
+            25.3056640625,
+            24.59912109375
+          ],
+          "loadAveragePerCpu": [
+            4.084879557291667,
+            2.1088053385416665,
+            2.0499267578125
+          ],
+          "freeMemoryBytes": 1653030912,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:54.093Z",
+          "loadAverage": [
+            58.6259765625,
+            27.69091796875,
+            25.44482421875
+          ],
+          "loadAveragePerCpu": [
+            4.885498046875,
+            2.3075764973958335,
+            2.1204020182291665
+          ],
+          "freeMemoryBytes": 1319256064,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:53:59.094Z",
+          "loadAverage": [
+            68.98583984375,
+            30.35205078125,
+            26.39697265625
+          ],
+          "loadAveragePerCpu": [
+            5.748819986979167,
+            2.5293375651041665,
+            2.1997477213541665
+          ],
+          "freeMemoryBytes": 686407680,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:04.095Z",
+          "loadAverage": [
+            74.35205078125,
+            32.10595703125,
+            27.0390625
+          ],
+          "loadAveragePerCpu": [
+            6.196004231770833,
+            2.6754964192708335,
+            2.2532552083333335
+          ],
+          "freeMemoryBytes": 146604032,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:09.095Z",
+          "loadAverage": [
+            80.00927734375,
+            33.97998046875,
+            27.72998046875
+          ],
+          "loadAveragePerCpu": [
+            6.667439778645833,
+            2.8316650390625,
+            2.3108317057291665
+          ],
+          "freeMemoryBytes": 1692581888,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:14.100Z",
+          "loadAverage": [
+            76.48486328125,
+            34.01318359375,
+            27.7783203125
+          ],
+          "loadAveragePerCpu": [
+            6.373738606770833,
+            2.8344319661458335,
+            2.3148600260416665
+          ],
+          "freeMemoryBytes": 1251459072,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:19.102Z",
+          "loadAverage": [
+            76.36572265625,
+            34.693359375,
+            28.0546875
+          ],
+          "loadAveragePerCpu": [
+            6.363810221354167,
+            2.89111328125,
+            2.337890625
+          ],
+          "freeMemoryBytes": 203620352,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:21.070Z",
+          "loadAverage": [
+            73.77392578125,
+            34.84765625,
+            28.14794921875
+          ],
+          "loadAveragePerCpu": [
+            6.1478271484375,
+            2.9039713541666665,
+            2.3456624348958335
+          ],
+          "freeMemoryBytes": 751976448,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "product",
+      "path": "/qa1/phones/synthetic-device",
+      "sample": 3,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 33934,
+      "hostLcpMs": 1208,
+      "frameLcpMs": 900,
+      "frameLcpFromHostMs": 1575.7998046875,
+      "hostCls": 0.0000462962962962963,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:54:21.073Z",
+          "loadAverage": [
+            73.77392578125,
+            34.84765625,
+            28.14794921875
+          ],
+          "loadAveragePerCpu": [
+            6.1478271484375,
+            2.9039713541666665,
+            2.3456624348958335
+          ],
+          "freeMemoryBytes": 751976448,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:26.076Z",
+          "loadAverage": [
+            70.3486328125,
+            34.78369140625,
+            28.16455078125
+          ],
+          "loadAveragePerCpu": [
+            5.862386067708333,
+            2.8986409505208335,
+            2.3470458984375
+          ],
+          "freeMemoryBytes": 332840960,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:31.077Z",
+          "loadAverage": [
+            68.798828125,
+            35.052734375,
+            28.29833984375
+          ],
+          "loadAveragePerCpu": [
+            5.733235677083333,
+            2.9210611979166665,
+            2.3581949869791665
+          ],
+          "freeMemoryBytes": 115277824,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:36.078Z",
+          "loadAverage": [
+            67.212890625,
+            35.2841796875,
+            28.41943359375
+          ],
+          "loadAveragePerCpu": [
+            5.60107421875,
+            2.9403483072916665,
+            2.3682861328125
+          ],
+          "freeMemoryBytes": 223543296,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:41.079Z",
+          "loadAverage": [
+            64.79345703125,
+            35.3125,
+            28.46923828125
+          ],
+          "loadAveragePerCpu": [
+            5.399454752604167,
+            2.9427083333333335,
+            2.3724365234375
+          ],
+          "freeMemoryBytes": 246906880,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:46.082Z",
+          "loadAverage": [
+            62.2470703125,
+            35.27392578125,
+            28.49560546875
+          ],
+          "loadAveragePerCpu": [
+            5.187255859375,
+            2.9394938151041665,
+            2.3746337890625
+          ],
+          "freeMemoryBytes": 335183872,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:51.085Z",
+          "loadAverage": [
+            60.94580078125,
+            35.45166015625,
+            28.59814453125
+          ],
+          "loadAveragePerCpu": [
+            5.078816731770833,
+            2.9543050130208335,
+            2.3831787109375
+          ],
+          "freeMemoryBytes": 269582336,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:54:55.007Z",
+          "loadAverage": [
+            60.94580078125,
+            35.45166015625,
+            28.59814453125
+          ],
+          "loadAveragePerCpu": [
+            5.078816731770833,
+            2.9543050130208335,
+            2.3831787109375
+          ],
+          "freeMemoryBytes": 445038592,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 1,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 26516,
+      "hostLcpMs": 1412,
+      "frameLcpMs": 1024,
+      "frameLcpFromHostMs": 1504.699951171875,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:54:55.012Z",
+          "loadAverage": [
+            60.94580078125,
+            35.45166015625,
+            28.59814453125
+          ],
+          "loadAveragePerCpu": [
+            5.078816731770833,
+            2.9543050130208335,
+            2.3831787109375
+          ],
+          "freeMemoryBytes": 442859520,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:00.013Z",
+          "loadAverage": [
+            59.10791015625,
+            35.49365234375,
+            28.65283203125
+          ],
+          "loadAveragePerCpu": [
+            4.9256591796875,
+            2.9578043619791665,
+            2.3877360026041665
+          ],
+          "freeMemoryBytes": 182075392,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:05.014Z",
+          "loadAverage": [
+            56.37646484375,
+            35.3193359375,
+            28.63134765625
+          ],
+          "loadAveragePerCpu": [
+            4.698038736979167,
+            2.9432779947916665,
+            2.3859456380208335
+          ],
+          "freeMemoryBytes": 12576489472,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:10.016Z",
+          "loadAverage": [
+            52.98291015625,
+            34.96533203125,
+            28.54541015625
+          ],
+          "loadAveragePerCpu": [
+            4.415242513020833,
+            2.9137776692708335,
+            2.3787841796875
+          ],
+          "freeMemoryBytes": 12117491712,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:15.017Z",
+          "loadAverage": [
+            50.50146484375,
+            34.75,
+            28.5068359375
+          ],
+          "loadAveragePerCpu": [
+            4.208455403645833,
+            2.8958333333333335,
+            2.3755696614583335
+          ],
+          "freeMemoryBytes": 11759960064,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:20.019Z",
+          "loadAverage": [
+            47.818359375,
+            34.455078125,
+            28.43896484375
+          ],
+          "loadAveragePerCpu": [
+            3.98486328125,
+            2.8712565104166665,
+            2.3699137369791665
+          ],
+          "freeMemoryBytes": 11176312832,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:21.528Z",
+          "loadAverage": [
+            45.59033203125,
+            34.21484375,
+            28.38916015625
+          ],
+          "loadAveragePerCpu": [
+            3.7991943359375,
+            2.8512369791666665,
+            2.3657633463541665
+          ],
+          "freeMemoryBytes": 11009605632,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 2,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 44832,
+      "hostLcpMs": 1360,
+      "frameLcpMs": 832,
+      "frameLcpFromHostMs": 1257.900146484375,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:55:21.531Z",
+          "loadAverage": [
+            45.59033203125,
+            34.21484375,
+            28.38916015625
+          ],
+          "loadAveragePerCpu": [
+            3.7991943359375,
+            2.8512369791666665,
+            2.3657633463541665
+          ],
+          "freeMemoryBytes": 11009196032,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:26.532Z",
+          "loadAverage": [
+            43.060546875,
+            33.87890625,
+            28.3046875
+          ],
+          "loadAveragePerCpu": [
+            3.58837890625,
+            2.8232421875,
+            2.3587239583333335
+          ],
+          "freeMemoryBytes": 9887203328,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:31.533Z",
+          "loadAverage": [
+            44.8974609375,
+            34.412109375,
+            28.525390625
+          ],
+          "loadAveragePerCpu": [
+            3.741455078125,
+            2.86767578125,
+            2.3771158854166665
+          ],
+          "freeMemoryBytes": 6089785344,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:36.534Z",
+          "loadAverage": [
+            47.7080078125,
+            35.16845703125,
+            28.82666015625
+          ],
+          "loadAveragePerCpu": [
+            3.9756673177083335,
+            2.9307047526041665,
+            2.4022216796875
+          ],
+          "freeMemoryBytes": 5472862208,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:41.536Z",
+          "loadAverage": [
+            49.97314453125,
+            35.84619140625,
+            29.10302734375
+          ],
+          "loadAveragePerCpu": [
+            4.1644287109375,
+            2.9871826171875,
+            2.4252522786458335
+          ],
+          "freeMemoryBytes": 5757272064,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:46.539Z",
+          "loadAverage": [
+            54.21923828125,
+            36.9609375,
+            29.53564453125
+          ],
+          "loadAveragePerCpu": [
+            4.518269856770833,
+            3.080078125,
+            2.4613037109375
+          ],
+          "freeMemoryBytes": 5288574976,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:51.541Z",
+          "loadAverage": [
+            59.24658203125,
+            38.28955078125,
+            30.0478515625
+          ],
+          "loadAveragePerCpu": [
+            4.937215169270833,
+            3.1907958984375,
+            2.5039876302083335
+          ],
+          "freeMemoryBytes": 5016829952,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:55:56.543Z",
+          "loadAverage": [
+            62.349609375,
+            39.28076171875,
+            30.44580078125
+          ],
+          "loadAveragePerCpu": [
+            5.19580078125,
+            3.2733968098958335,
+            2.5371500651041665
+          ],
+          "freeMemoryBytes": 4175462400,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:01.543Z",
+          "loadAverage": [
+            76.9755859375,
+            42.69580078125,
+            31.70263671875
+          ],
+          "loadAveragePerCpu": [
+            6.414632161458333,
+            3.5579833984375,
+            2.6418863932291665
+          ],
+          "freeMemoryBytes": 4267982848,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:06.363Z",
+          "loadAverage": [
+            95.1552734375,
+            47.03369140625,
+            33.2978515625
+          ],
+          "loadAveragePerCpu": [
+            7.929606119791667,
+            3.9194742838541665,
+            2.7748209635416665
+          ],
+          "freeMemoryBytes": 3678584832,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "story",
+      "path": "/qa1/pages/story",
+      "sample": 3,
+      "expectedViewportWidth": 1440,
+      "actualViewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "wallMs": 39710,
+      "hostLcpMs": 1240,
+      "frameLcpMs": 1388,
+      "frameLcpFromHostMs": 1830.599853515625,
+      "hostCls": 0,
+      "frameCls": 0,
+      "hostLoadSamples": [
+        {
+          "at": "2026-10-26T17:56:06.366Z",
+          "loadAverage": [
+            95.1552734375,
+            47.03369140625,
+            33.2978515625
+          ],
+          "loadAveragePerCpu": [
+            7.929606119791667,
+            3.9194742838541665,
+            2.7748209635416665
+          ],
+          "freeMemoryBytes": 3673391104,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:11.366Z",
+          "loadAverage": [
+            107.234375,
+            50.33642578125,
+            34.5439453125
+          ],
+          "loadAveragePerCpu": [
+            8.936197916666666,
+            4.1947021484375,
+            2.878662109375
+          ],
+          "freeMemoryBytes": 3624861696,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:16.367Z",
+          "loadAverage": [
+            105.37353515625,
+            50.89501953125,
+            34.83349609375
+          ],
+          "loadAveragePerCpu": [
+            8.7811279296875,
+            4.241251627604167,
+            2.9027913411458335
+          ],
+          "freeMemoryBytes": 3105554432,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:21.368Z",
+          "loadAverage": [
+            110.22802734375,
+            52.8056640625,
+            35.6015625
+          ],
+          "loadAveragePerCpu": [
+            9.1856689453125,
+            4.400472005208333,
+            2.966796875
+          ],
+          "freeMemoryBytes": 2916253696,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:26.369Z",
+          "loadAverage": [
+            114.05322265625,
+            54.5517578125,
+            36.318359375
+          ],
+          "loadAveragePerCpu": [
+            9.504435221354166,
+            4.545979817708333,
+            3.0265299479166665
+          ],
+          "freeMemoryBytes": 1759150080,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:31.370Z",
+          "loadAverage": [
+            113.16796875,
+            55.35595703125,
+            36.708984375
+          ],
+          "loadAveragePerCpu": [
+            9.4306640625,
+            4.612996419270833,
+            3.05908203125
+          ],
+          "freeMemoryBytes": 2409496576,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:36.371Z",
+          "loadAverage": [
+            114.115234375,
+            56.51171875,
+            37.22607421875
+          ],
+          "loadAveragePerCpu": [
+            9.509602864583334,
+            4.709309895833333,
+            3.1021728515625
+          ],
+          "freeMemoryBytes": 2669101056,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:41.373Z",
+          "loadAverage": [
+            118.67041015625,
+            58.412109375,
+            38.009765625
+          ],
+          "loadAveragePerCpu": [
+            9.889200846354166,
+            4.86767578125,
+            3.16748046875
+          ],
+          "freeMemoryBytes": 3724525568,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        },
+        {
+          "at": "2026-10-26T17:56:46.076Z",
+          "loadAverage": [
+            110.04833984375,
+            57.62451171875,
+            37.85107421875
+          ],
+          "loadAveragePerCpu": [
+            9.170694986979166,
+            4.802042643229167,
+            3.1542561848958335
+          ],
+          "freeMemoryBytes": 3629858816,
+          "totalMemoryBytes": 103079215104,
+          "cpuCount": 12
+        }
+      ],
+      "harFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/browsertime.har"
+      ],
+      "videoFiles": [
+        "sitespeed/pages/localhost/orbit-local-production/data/video/1.mp4"
+      ]
+    }
+  ],
+  "aggregates": [
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "home",
+      "samples": 3,
+      "medianWallMs": 21228,
+      "medianHostLcpMs": 1172,
+      "medianFrameLcpMs": 676,
+      "medianFrameLcpFromHostMs": 1062.89990234375,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "collection",
+      "samples": 3,
+      "medianWallMs": 19856,
+      "medianHostLcpMs": 1148,
+      "medianFrameLcpMs": 616,
+      "medianFrameLcpFromHostMs": 991.5,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "product",
+      "samples": 3,
+      "medianWallMs": 20150,
+      "medianHostLcpMs": 1156,
+      "medianFrameLcpMs": 588,
+      "medianFrameLcpFromHostMs": 996.699951171875,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "mobile-iphone-12-pro",
+      "route": "story",
+      "samples": 3,
+      "medianWallMs": 20809,
+      "medianHostLcpMs": 1176,
+      "medianFrameLcpMs": 516,
+      "medianFrameLcpFromHostMs": 907.300048828125,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "home",
+      "samples": 3,
+      "medianWallMs": 21795,
+      "medianHostLcpMs": 1188,
+      "medianFrameLcpMs": 584,
+      "medianFrameLcpFromHostMs": 970.300048828125,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "collection",
+      "samples": 3,
+      "medianWallMs": 22286,
+      "medianHostLcpMs": 1192,
+      "medianFrameLcpMs": 536,
+      "medianFrameLcpFromHostMs": 942.800048828125,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "product",
+      "samples": 3,
+      "medianWallMs": 33934,
+      "medianHostLcpMs": 1324,
+      "medianFrameLcpMs": 900,
+      "medianFrameLcpFromHostMs": 1575.7998046875,
+      "medianHostCls": 0.0000462962962962963,
+      "medianFrameCls": 0
+    },
+    {
+      "profile": "desktop-1440",
+      "route": "story",
+      "samples": 3,
+      "medianWallMs": 39710,
+      "medianHostLcpMs": 1360,
+      "medianFrameLcpMs": 1024,
+      "medianFrameLcpFromHostMs": 1504.699951171875,
+      "medianHostCls": 0,
+      "medianFrameCls": 0
+    }
+  ],
+  "notes": "Lab timings are diagnostic under native connectivity with device emulation only. Host load samples record possible local contention; no Core Web Vitals pass or sub-2-second target is asserted."
+}

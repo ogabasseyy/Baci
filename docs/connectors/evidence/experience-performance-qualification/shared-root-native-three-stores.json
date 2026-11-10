@@ -1,0 +1,252 @@
+{
+  "diagnosticOnly": true,
+  "main": "de0e4a5f2fab01aa06964293d0c713fbea07ae6b",
+  "results": [
+    {
+      "name": "editorial-fashion",
+      "width": 390,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 390,
+          "buildDigest": "48789f9ce541118a6c16259552da0f5585897bf8b26adfca954538af02471c50",
+          "cache": "cold-context",
+          "hostLcpMs": 324,
+          "frameLcpMs": 492.5,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 324,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 284,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 7391,
+        "jobId": "baci-experience-6110cbbe-6cb1-4182-9ab4-db73d6a1c0ad"
+      }
+    },
+    {
+      "name": "editorial-fashion",
+      "width": 1440,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 1440,
+          "buildDigest": "48789f9ce541118a6c16259552da0f5585897bf8b26adfca954538af02471c50",
+          "cache": "cold-context",
+          "hostLcpMs": 320,
+          "frameLcpMs": 806.400146484375,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 320,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 568,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 10056,
+        "jobId": "baci-experience-a38b1db5-21ff-4edb-978d-462263721d7b"
+      }
+    },
+    {
+      "name": "device-configurator",
+      "width": 390,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 390,
+          "buildDigest": "f81abb928a4e46e583057479ede914aca1f9b7ce185ee5caa0727417ce316204",
+          "cache": "cold-context",
+          "hostLcpMs": 416,
+          "frameLcpMs": 886.5,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 416,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 560,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 8988,
+        "jobId": "baci-experience-5ad2ddc5-8812-4896-b944-83c91cebd884"
+      }
+    },
+    {
+      "name": "device-configurator",
+      "width": 1440,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 1440,
+          "buildDigest": "f81abb928a4e46e583057479ede914aca1f9b7ce185ee5caa0727417ce316204",
+          "cache": "cold-context",
+          "hostLcpMs": 248,
+          "frameLcpMs": 368.800048828125,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 248,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 212,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 8942,
+        "jobId": "baci-experience-6c9defb6-d2d4-4cca-a951-40b66df8ff90"
+      }
+    },
+    {
+      "name": "motion-studio",
+      "width": 390,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 390,
+          "buildDigest": "48150f837b476c1bcecae2d385f2bd4da11b674dd8d26ac5eb196da1fed710ed",
+          "cache": "cold-context",
+          "hostLcpMs": 388,
+          "frameLcpMs": 577.800048828125,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 388,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 320,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 11691,
+        "jobId": "baci-experience-2c10c074-107c-4530-ae65-d9f26a612fd4"
+      }
+    },
+    {
+      "name": "motion-studio",
+      "width": 1440,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 1440,
+          "buildDigest": "48150f837b476c1bcecae2d385f2bd4da11b674dd8d26ac5eb196da1fed710ed",
+          "cache": "cold-context",
+          "hostLcpMs": 280,
+          "frameLcpMs": 422,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 280,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 252,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 12759,
+        "jobId": "baci-experience-aaf8094b-0e63-49b0-bdda-d6af8c9740bc"
+      }
+    }
+  ]
+}

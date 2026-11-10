@@ -1,3 +1,14 @@
+const execution = vi.hoisted(() => ({
+  acknowledge: vi.fn(async () => {}),
+  admit: vi.fn(),
+}));
+vi.mock('@/lib/experience/legacy-execution', () => ({
+  admitLegacyExecution: async () => {
+    await execution.admit();
+    return execution.acknowledge;
+  },
+}));
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { BuilderContext } from '@/lib/builder-connector/types';
@@ -131,4 +142,108 @@ it('invalid stored source is terminal without invoking a provider or waiting for
     p_outcome: 'failed',
     p_candidate: null,
   });
+});
+it('timeout does not acknowledge cancellation while the provider promise is still running', async () => {
+  const s = setup();
+  const controller = new AbortController();
+  const timer = vi
+    .spyOn(AbortSignal, 'timeout')
+    .mockReturnValue(controller.signal);
+  let release!: (v: unknown) => void;
+  let started!: () => void;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  s.generate.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+        started();
+      })
+  );
+  execution.acknowledge.mockClear();
+  try {
+    const operation = runStorefrontEdit(s.ctx, s.lease, s);
+    await began;
+    controller.abort();
+    await operation;
+    expect(execution.acknowledge).not.toHaveBeenCalled();
+    release({ status: 'refused' });
+    await vi.waitFor(() =>
+      expect(execution.acknowledge).toHaveBeenCalledOnce()
+    );
+  } finally {
+    timer.mockRestore();
+  }
+});
+
+it('starts the provider timeout only after asynchronous legacy execution admission', async () => {
+  const s = setup();
+  let admit: (() => void) | undefined;
+  execution.admit.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        admit = resolve;
+      })
+  );
+  const timer = vi.spyOn(AbortSignal, 'timeout');
+  const operation = runStorefrontEdit(s.ctx, s.lease, s);
+  try {
+    await vi.waitFor(() => expect(admit).toBeDefined());
+    expect(timer).not.toHaveBeenCalled();
+  } finally {
+    admit?.();
+    await operation;
+    timer.mockRestore();
+  }
+});
+
+it('finishes transiently when the provider deadline signal is already aborted', async () => {
+  const s = setup();
+  const controller = new AbortController();
+  controller.abort();
+  const timer = vi
+    .spyOn(AbortSignal, 'timeout')
+    .mockReturnValue(controller.signal);
+  s.generate.mockImplementation(() => new Promise(() => {}));
+  const operation = runStorefrontEdit(s.ctx, s.lease, s);
+  try {
+    await vi.waitFor(
+      () =>
+        expect(s.rpc).toHaveBeenCalledWith(
+          'builder_finish_edit',
+          expect.objectContaining({ p_outcome: 'transient', p_candidate: null })
+        ),
+      { timeout: 500 }
+    );
+    await operation;
+  } finally {
+    timer.mockRestore();
+  }
+});
+
+it('waits for settled-provider acknowledgement before finalizing on another RLS connection', async () => {
+  const s = setup();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  execution.acknowledge.mockClear();
+  execution.acknowledge.mockImplementationOnce(() => pending);
+  const result = runStorefrontEdit(s.ctx, s.lease, s);
+  try {
+    await vi.waitFor(() =>
+      expect(execution.acknowledge).toHaveBeenCalledOnce()
+    );
+    expect(s.rpc.mock.calls.map((call) => call[0])).not.toContain(
+      'builder_finish_edit'
+    );
+  } finally {
+    release();
+    await result;
+  }
+  expect(s.rpc).toHaveBeenCalledWith(
+    'builder_finish_edit',
+    expect.objectContaining({ p_outcome: 'ready' })
+  );
 });

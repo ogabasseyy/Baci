@@ -1,0 +1,2469 @@
+{
+  "base": "225f6a0a69dc0299fd9323c699302da59d75075a",
+  "sourceInventoryDigest": "36f3734f9100a1869f78eaf83acb6ec16ece6dbd10a97b6b17df5e03b9223be2",
+  "wholeFeatureReviewed": false,
+  "scopeNote": "File-path coverage only. Later fixes do not inherit a clean review. Evidence artifacts require consistency checks; file coverage is not semantic approval.",
+  "completedReceipts": [
+    {
+      "log": "/tmp/experience-candidate-free-review-experience-core.ndjson",
+      "receiptSha256": "739413eb991931923386d1b769294e1c74b9dcfd51d2072b6cbab3f8c9be486c",
+      "reviewedFiles": 145,
+      "issues": 2
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-app-retry.ndjson",
+      "receiptSha256": "aaf48e2814ebb39e3bde7b9de6a97ff4dcb7cde86e68381f194f1d436f166219",
+      "reviewedFiles": 80,
+      "issues": 9
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-core-postfix.ndjson",
+      "receiptSha256": "449058c4e6d4552d1f2bb7eb28835be9da505046b2ad8d9ada375270919a2c93",
+      "reviewedFiles": 146,
+      "issues": 2
+    },
+    {
+      "log": "/tmp/experience-candidate-free-review-runner.ndjson",
+      "receiptSha256": "a5d5961627abe6d75314e7bd8032ecb5742f3dc17f6065d4f3f2b04fc94047ee",
+      "reviewedFiles": 63,
+      "issues": 1
+    }
+  ],
+  "coveredPaths": [
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/collections/[handle]/page.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(listing)/products/products-page-content.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/category-product-experience-fallback.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/category-product-route-control.ts",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/products/[productSlug]/product-page-resolution.ts",
+    "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/products/[productSlug]/product-page-runtime.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/page.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/(content)/pages/[...experiencePath]/page.tsx",
+    "apps/web/src/app/(storefront)/[slug]/experience-storefront-layout.test.tsx",
+    "apps/web/src/app/(storefront)/[slug]/experience-storefront-layout.tsx",
+    "apps/web/src/app/(storefront)/[slug]/storefront-page-content.tsx",
+    "apps/web/src/app/(storefront)/[slug]/storefront-shell-frame.tsx",
+    "apps/web/src/app/api/builder-experience/approval/route.test.ts",
+    "apps/web/src/app/api/builder-experience/approval/route.ts",
+    "apps/web/src/app/api/builder-experience/preview/route.test.ts",
+    "apps/web/src/app/api/builder-experience/preview/route.ts",
+    "apps/web/src/app/api/builder-experience/request/route.test.ts",
+    "apps/web/src/app/api/builder-experience/request/route.ts",
+    "apps/web/src/app/api/builder-experience/source/route.test.ts",
+    "apps/web/src/app/api/builder-experience/source/route.ts",
+    "apps/web/src/app/api/builder/ai-edit/builder-ai-edit-input.ts",
+    "apps/web/src/app/api/builder/ai-edit/experience-no-ai.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.duplicate-ids.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.events.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.failures.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/handle-builder-ai-edit-request.ts",
+    "apps/web/src/app/api/builder/ai-edit/legacy-compatibility.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/route.authorization.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/route.provider-errors.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/route.test.ts",
+    "apps/web/src/app/api/builder/ai-edit/route.validation.test.ts",
+    "apps/web/src/app/api/builder/builder-draft-mutations.ts",
+    "apps/web/src/app/api/builder/gemini/route.legacy-auth-csrf.test.ts",
+    "apps/web/src/app/api/builder/route.ts",
+    "apps/web/src/app/api/integrations/chatgpt/builder/[tool]/route.ts",
+    "apps/web/src/app/api/integrations/chatgpt/experience-evidence/[evidenceId]/route.test.ts",
+    "apps/web/src/app/api/integrations/chatgpt/experience-evidence/[evidenceId]/route.ts",
+    "apps/web/src/app/api/shipping/quotes/read-cached-quotes.test.ts",
+    "apps/web/src/app/api/shipping/quotes/read-cached-quotes.ts",
+    "apps/web/src/app/api/shipping/quotes/route.legacy-mobile.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.merchant-context.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.merchant-fallback.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.merchant-rates.body-only.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.merchant-rates.test-fixtures.ts",
+    "apps/web/src/app/api/shipping/quotes/route.merchant-rates.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.normal-client.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.test.ts",
+    "apps/web/src/app/api/shipping/quotes/route.ts",
+    "apps/web/src/app/api/storefront/cart/continuity/route.test.ts",
+    "apps/web/src/app/api/storefront/cart/continuity/route.ts",
+    "apps/web/src/app/api/storefront/experience/catalog/route.test.ts",
+    "apps/web/src/app/api/storefront/experience/catalog/route.ts",
+    "apps/web/src/app/api/storefront/experience/launch/route.test.ts",
+    "apps/web/src/app/api/storefront/experience/launch/route.ts",
+    "apps/web/src/app/api/storefront/experience/state/route.test.ts",
+    "apps/web/src/app/api/storefront/experience/state/route.ts",
+    "apps/web/src/app/builder/experience/approve/approval-client.test.tsx",
+    "apps/web/src/app/builder/experience/approve/approval-client.tsx",
+    "apps/web/src/app/builder/experience/approve/approval-content.tsx",
+    "apps/web/src/app/builder/experience/approve/page-stream.test.tsx",
+    "apps/web/src/app/builder/experience/approve/page.test.tsx",
+    "apps/web/src/app/builder/experience/approve/page.tsx",
+    "apps/web/src/app/builder/experience/page.test.tsx",
+    "apps/web/src/app/builder/experience/page.tsx",
+    "apps/web/src/app/builder/experience/preview/page.test.tsx",
+    "apps/web/src/app/builder/experience/preview/page.tsx",
+    "apps/web/src/app/builder/experience/preview/preview-client.test.tsx",
+    "apps/web/src/app/builder/experience/preview/preview-client.tsx",
+    "apps/web/src/app/builder/experience/preview/preview-content.tsx",
+    "apps/web/src/app/builder/experience/workspace-client.test.tsx",
+    "apps/web/src/app/builder/experience/workspace-client.tsx",
+    "apps/web/src/app/builder/experience/workspace-content.tsx",
+    "apps/web/src/app/builder/page.tsx",
+    "apps/web/src/lib/experience/approval-service.test.ts",
+    "apps/web/src/lib/experience/approval-service.ts",
+    "apps/web/src/lib/experience/asset-service.test.ts",
+    "apps/web/src/lib/experience/asset-service.ts",
+    "apps/web/src/lib/experience/authoring-mode.test.ts",
+    "apps/web/src/lib/experience/authoring-mode.ts",
+    "apps/web/src/lib/experience/authorization.test.ts",
+    "apps/web/src/lib/experience/authorization.ts",
+    "apps/web/src/lib/experience/build-performance-retention.ts",
+    "apps/web/src/lib/experience/build-performance-types.ts",
+    "apps/web/src/lib/experience/build-service.test.ts",
+    "apps/web/src/lib/experience/build-service.ts",
+    "apps/web/src/lib/experience/candidate-performance-budget.test.ts",
+    "apps/web/src/lib/experience/candidate-performance-budget.ts",
+    "apps/web/src/lib/experience/candidate-performance-measurement-types.ts",
+    "apps/web/src/lib/experience/candidate-performance-measurement.test.ts",
+    "apps/web/src/lib/experience/candidate-performance-measurement.ts",
+    "apps/web/src/lib/experience/candidate-performance-qualification.test.ts",
+    "apps/web/src/lib/experience/candidate-performance-qualification.ts",
+    "apps/web/src/lib/experience/catalog-adapter.test.ts",
+    "apps/web/src/lib/experience/catalog-adapter.ts",
+    "apps/web/src/lib/experience/catalog-revision.test.ts",
+    "apps/web/src/lib/experience/catalog-revision.ts",
+    "apps/web/src/lib/experience/commerce-context.test.ts",
+    "apps/web/src/lib/experience/commerce-context.ts",
+    "apps/web/src/lib/experience/compiled-candidate.test.ts",
+    "apps/web/src/lib/experience/compiled-candidate.ts",
+    "apps/web/src/lib/experience/compose-runtime.test.ts",
+    "apps/web/src/lib/experience/compose-runtime.ts",
+    "apps/web/src/lib/experience/draft-apply.test.ts",
+    "apps/web/src/lib/experience/draft-apply.ts",
+    "apps/web/src/lib/experience/evidence-read.test.ts",
+    "apps/web/src/lib/experience/evidence-read.ts",
+    "apps/web/src/lib/experience/evidence-runtime.test.ts",
+    "apps/web/src/lib/experience/evidence-runtime.ts",
+    "apps/web/src/lib/experience/experience-bootstrap-fingerprint.test.ts",
+    "apps/web/src/lib/experience/experience-bootstrap-fingerprint.ts",
+    "apps/web/src/lib/experience/finalize-build.test.ts",
+    "apps/web/src/lib/experience/finalize-build.ts",
+    "apps/web/src/lib/experience/fresh-product.test.ts",
+    "apps/web/src/lib/experience/fresh-product.ts",
+    "apps/web/src/lib/experience/independent-approval-verifier.test.ts",
+    "apps/web/src/lib/experience/independent-approval-verifier.ts",
+    "apps/web/src/lib/experience/job-sweeper.test.ts",
+    "apps/web/src/lib/experience/job-sweeper.ts",
+    "apps/web/src/lib/experience/legacy-execution.test.ts",
+    "apps/web/src/lib/experience/legacy-execution.ts",
+    "apps/web/src/lib/experience/local-build-supervisor-types.ts",
+    "apps/web/src/lib/experience/local-build-supervisor.test.ts",
+    "apps/web/src/lib/experience/local-build-supervisor.ts",
+    "apps/web/src/lib/experience/local-owner-runtime.test.ts",
+    "apps/web/src/lib/experience/local-owner-runtime.ts",
+    "apps/web/src/lib/experience/local-performance-reports.test.ts",
+    "apps/web/src/lib/experience/local-performance-reports.ts",
+    "apps/web/src/lib/experience/local-prerender-pipeline.test.ts",
+    "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+    "apps/web/src/lib/experience/local-prerender-storefront.test.ts",
+    "apps/web/src/lib/experience/local-prerender-storefront.ts",
+    "apps/web/src/lib/experience/local-profile.ts",
+    "apps/web/src/lib/experience/manifest-digest.test.ts",
+    "apps/web/src/lib/experience/manifest-digest.ts",
+    "apps/web/src/lib/experience/mode-exit-service.ts",
+    "apps/web/src/lib/experience/native-builder-guard.test.ts",
+    "apps/web/src/lib/experience/native-builder-guard.ts",
+    "apps/web/src/lib/experience/owner-approval-handler.test.ts",
+    "apps/web/src/lib/experience/owner-approval-handler.ts",
+    "apps/web/src/lib/experience/owner-lifecycle-runtime.test.ts",
+    "apps/web/src/lib/experience/owner-lifecycle-runtime.ts",
+    "apps/web/src/lib/experience/owner-request.ts",
+    "apps/web/src/lib/experience/owner-runtime.test.ts",
+    "apps/web/src/lib/experience/owner-runtime.ts",
+    "apps/web/src/lib/experience/performance-read.test.ts",
+    "apps/web/src/lib/experience/performance-read.ts",
+    "apps/web/src/lib/experience/prerender-preview.test.ts",
+    "apps/web/src/lib/experience/prerender-preview.ts",
+    "apps/web/src/lib/experience/preview-launch.test.ts",
+    "apps/web/src/lib/experience/preview-launch.ts",
+    "apps/web/src/lib/experience/preview-prerender-vault.test.ts",
+    "apps/web/src/lib/experience/preview-resource.test.ts",
+    "apps/web/src/lib/experience/preview-resource.ts",
+    "apps/web/src/lib/experience/preview-service.test.ts",
+    "apps/web/src/lib/experience/preview-service.ts",
+    "apps/web/src/lib/experience/private-capture-service.ts",
+    "apps/web/src/lib/experience/private-prerender-document.test.ts",
+    "apps/web/src/lib/experience/private-prerender-document.ts",
+    "apps/web/src/lib/experience/profile-validation.ts",
+    "apps/web/src/lib/experience/public-bootstrap.test.ts",
+    "apps/web/src/lib/experience/public-bootstrap.ts",
+    "apps/web/src/lib/experience/public-output-reader.test.ts",
+    "apps/web/src/lib/experience/public-output-reader.ts",
+    "apps/web/src/lib/experience/public-render-cache.test.ts",
+    "apps/web/src/lib/experience/public-render-cache.ts",
+    "apps/web/src/lib/experience/public-request.test.ts",
+    "apps/web/src/lib/experience/public-request.ts",
+    "apps/web/src/lib/experience/public-response-budget.test.ts",
+    "apps/web/src/lib/experience/public-response-budget.ts",
+    "apps/web/src/lib/experience/public-runtime.test.ts",
+    "apps/web/src/lib/experience/public-runtime.ts",
+    "apps/web/src/lib/experience/public-snapshot.test.ts",
+    "apps/web/src/lib/experience/public-snapshot.ts",
+    "apps/web/src/lib/experience/public-verifier.test.ts",
+    "apps/web/src/lib/experience/public-verifier.ts",
+    "apps/web/src/lib/experience/publication-service.test.ts",
+    "apps/web/src/lib/experience/publication-service.ts",
+    "apps/web/src/lib/experience/published-manifest.test.ts",
+    "apps/web/src/lib/experience/published-manifest.ts",
+    "apps/web/src/lib/experience/published-request-context.test.ts",
+    "apps/web/src/lib/experience/published-request-context.ts",
+    "apps/web/src/lib/experience/published-resource.test.ts",
+    "apps/web/src/lib/experience/published-resource.ts",
+    "apps/web/src/lib/experience/published-state.test.ts",
+    "apps/web/src/lib/experience/published-state.ts",
+    "apps/web/src/lib/experience/repository.test.ts",
+    "apps/web/src/lib/experience/repository.ts",
+    "apps/web/src/lib/experience/rollback-service.ts",
+    "apps/web/src/lib/experience/route-data-revision.test.ts",
+    "apps/web/src/lib/experience/route-data-revision.ts",
+    "apps/web/src/lib/experience/route-ownership.test.ts",
+    "apps/web/src/lib/experience/route-ownership.ts",
+    "apps/web/src/lib/experience/route-resolver.test.ts",
+    "apps/web/src/lib/experience/route-resolver.ts",
+    "apps/web/src/lib/experience/semantic-data.test.ts",
+    "apps/web/src/lib/experience/semantic-data.ts",
+    "apps/web/src/lib/experience/snapshot-freshness.test.ts",
+    "apps/web/src/lib/experience/snapshot-freshness.ts",
+    "apps/web/src/lib/experience/snapshot-key.test.ts",
+    "apps/web/src/lib/experience/snapshot-key.ts",
+    "apps/web/src/lib/experience/snapshot-service.test.ts",
+    "apps/web/src/lib/experience/snapshot-service.ts",
+    "apps/web/src/lib/experience/source-candidate.test.ts",
+    "apps/web/src/lib/experience/source-candidate.ts",
+    "apps/web/src/lib/experience/source-inspection.test.ts",
+    "apps/web/src/lib/experience/source-inspection.ts",
+    "apps/web/src/lib/experience/source-service.test.ts",
+    "apps/web/src/lib/experience/source-service.ts",
+    "apps/web/src/lib/experience/storefront-runtime.test.ts",
+    "apps/web/src/lib/experience/storefront-runtime.ts",
+    "apps/web/src/lib/experience/tool-dispatcher.performance-budget.test.ts",
+    "apps/web/src/lib/experience/tool-dispatcher.performance-gate.test.ts",
+    "apps/web/src/lib/experience/tool-dispatcher.ts",
+    "apps/web/src/lib/experience/tool-gateway.ts",
+    "apps/web/src/lib/experience/tool-policy.ts",
+    "apps/web/src/lib/experience/upload-service.test.ts",
+    "apps/web/src/lib/experience/upload-service.ts",
+    "apps/web/src/lib/experience/visual-evidence.test.ts",
+    "apps/web/src/lib/experience/visual-evidence.ts",
+    "apps/web/tools/experience-runner/browser-process-policy.test.ts",
+    "apps/web/tools/experience-runner/browser-process-policy.ts",
+    "apps/web/tools/experience-runner/bundle-source.test.ts",
+    "apps/web/tools/experience-runner/bundle-source.ts",
+    "apps/web/tools/experience-runner/capture-route.test.ts",
+    "apps/web/tools/experience-runner/capture-route.ts",
+    "apps/web/tools/experience-runner/docker-executor.test.ts",
+    "apps/web/tools/experience-runner/docker-executor.ts",
+    "apps/web/tools/experience-runner/durable-prerender-artifacts.test.ts",
+    "apps/web/tools/experience-runner/durable-prerender-artifacts.ts",
+    "apps/web/tools/experience-runner/extract-semantic-tree.ts",
+    "apps/web/tools/experience-runner/generate-tool-contracts.ts",
+    "apps/web/tools/experience-runner/isolated-performance-collector-types.ts",
+    "apps/web/tools/experience-runner/isolated-performance-collector.test.ts",
+    "apps/web/tools/experience-runner/isolated-performance-collector.ts",
+    "apps/web/tools/experience-runner/isolated-performance-observer.test.ts",
+    "apps/web/tools/experience-runner/isolated-performance-observer.ts",
+    "apps/web/tools/experience-runner/isolated-performance-readiness.test.ts",
+    "apps/web/tools/experience-runner/isolated-performance-readiness.ts",
+    "apps/web/tools/experience-runner/local-oci-executor.stdin.test.ts",
+    "apps/web/tools/experience-runner/local-oci-executor.test.ts",
+    "apps/web/tools/experience-runner/local-oci-executor.ts",
+    "apps/web/tools/experience-runner/materialize-assets.test.ts",
+    "apps/web/tools/experience-runner/materialize-assets.ts",
+    "apps/web/tools/experience-runner/oci-policy.test.ts",
+    "apps/web/tools/experience-runner/oci-policy.ts",
+    "apps/web/tools/experience-runner/output-receiver.test.ts",
+    "apps/web/tools/experience-runner/output-receiver.ts",
+    "apps/web/tools/experience-runner/package-catalog.ts",
+    "apps/web/tools/experience-runner/performance-harness.test.ts",
+    "apps/web/tools/experience-runner/performance-harness.ts",
+    "apps/web/tools/experience-runner/performance-worker.test.ts",
+    "apps/web/tools/experience-runner/performance-worker.ts",
+    "apps/web/tools/experience-runner/prerender-artifacts.test.ts",
+    "apps/web/tools/experience-runner/prerender-artifacts.ts",
+    "apps/web/tools/experience-runner/prerender-build-worker.mjs",
+    "apps/web/tools/experience-runner/prerender-build-worker.test.ts",
+    "apps/web/tools/experience-runner/prerender-runtime-entry.test.ts",
+    "apps/web/tools/experience-runner/prerender-runtime-entry.ts",
+    "apps/web/tools/experience-runner/prerender-source.test.ts",
+    "apps/web/tools/experience-runner/preview-gateway.test.ts",
+    "apps/web/tools/experience-runner/preview-gateway.ts",
+    "apps/web/tools/experience-runner/preview-origin.test.ts",
+    "apps/web/tools/experience-runner/preview-origin.ts",
+    "apps/web/tools/experience-runner/private-build-payload.test.ts",
+    "apps/web/tools/experience-runner/private-build-payload.ts",
+    "apps/web/tools/experience-runner/published-gateway.test.ts",
+    "apps/web/tools/experience-runner/published-gateway.ts",
+    "apps/web/tools/experience-runner/published-prerender.test.ts",
+    "apps/web/tools/experience-runner/qualify-release.mjs",
+    "apps/web/tools/experience-runner/qualify-release.test.ts",
+    "apps/web/tools/experience-runner/qualify-sandbox.test.ts",
+    "apps/web/tools/experience-runner/qualify-sandbox.ts",
+    "apps/web/tools/experience-runner/release-manifest.test.ts",
+    "apps/web/tools/experience-runner/release-manifest.ts",
+    "apps/web/tools/experience-runner/sandbox-policy.test.ts",
+    "apps/web/tools/experience-runner/sandbox-policy.ts",
+    "apps/web/tools/experience-runner/sandbox-supervisor.test.ts",
+    "apps/web/tools/experience-runner/sandbox-supervisor.ts",
+    "apps/web/tools/experience-runner/semantic-snapshot.test.ts",
+    "apps/web/tools/experience-runner/semantic-snapshot.ts",
+    "apps/web/tools/experience-runner/transient-output-store.test.ts",
+    "apps/web/tools/experience-runner/transient-output-store.ts"
+  ],
+  "remainingSourceFiles": [
+    {
+      "path": ".github/filters/ci.yml",
+      "sha256": "c73d39f919bc82e6f6fd7570e521b0b232b50328e3e19ccdc8d8a0c432764f4c"
+    },
+    {
+      "path": ".github/scripts/experience-runner-ci.test.mjs",
+      "sha256": "c7eb5251af40d78cef9676f8cce4d4a7cd70873d6bde74fdef75a0a08e9230b9"
+    },
+    {
+      "path": ".github/scripts/resolve-ci-test-plan.mjs",
+      "sha256": "0329fa82ec1ee8da94ecd64ccf7480a73b3bc930e355c219b91cee31d2133a29"
+    },
+    {
+      "path": ".github/scripts/tools-worker-typecheck-contract.test.mjs",
+      "sha256": "2df70aa7558175e6d52d0e326ba6642ff25d8f1f297d294685f81845efb61de6"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "678192b6787c65ba98e3b0f94639da67b580fc4ceb629c492e101b12ff4ec130"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/backend-client.ts",
+      "sha256": "d4b1adf29865325c22d61f5a16865ac0c977214d680fb3d5fc83a47a6b894ede"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-contracts.json",
+      "sha256": "5b27615c47e31e77d66125e188fd49c8bb190805c4f27ecb1034426f2dab8181"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-contracts.ts",
+      "sha256": "06a490be7d6f56677fb439c1a15e84217a0beac949e322f29b9efc2facd738d9"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-evidence-client.test.ts",
+      "sha256": "e420f8e205e9ae8b5bea9d44ac753bf14f566d1e245a5a9cfda99c06c3889b8c"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-evidence-client.ts",
+      "sha256": "b1b3f766a1bd94addeb2d7da8bd98b2673e1b230b12bf0cf01a72f177d90f0b7"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-metadata.ts",
+      "sha256": "93d90cb0ff4454ef6884ca195634c5696e465571e42d6c900eda37bb68ef83db"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-registry.test.ts",
+      "sha256": "538ef2411b2cd928ee3966e90dd50ebe9687892b5d2554f209b3a4f2c76728f5"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-tool-result.test.ts",
+      "sha256": "cad9adbf4d1c511a144bcc0632f874ef95df6c9fd78a8de54d19b15433e11d1b"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-tool-result.ts",
+      "sha256": "597b3c886e55e4865121dbc86f353e850b595c881ed07b46d73c0a9e742304a1"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/registry.ts",
+      "sha256": "e526aeb216c671ec5fcfcb9f67052c2bdcfcced1516e80ed210527647ee34e2b"
+    },
+    {
+      "path": "apps/web/experience-runtime/build.mjs",
+      "sha256": "27b4886a46970bf64ffb3081123def19059e19f54b15b1af5d38447dc57b2d3b"
+    },
+    {
+      "path": "apps/web/experience-runtime/runtime-boundary.test.tsx",
+      "sha256": "398ad6416aa32f9da4bc50f996a2f76ad1b006756ef47d7b9e5a5abdbe00aa3e"
+    },
+    {
+      "path": "apps/web/experience-runtime/runtime-boundary.tsx",
+      "sha256": "fc7a9f3a4dfe13d7cb7eab675582c7c7b0bff4dd4d25620d037a04fe4fe3532a"
+    },
+    {
+      "path": "apps/web/next.config.test.ts",
+      "sha256": "d303281cd1361a830f3f2658141f9909909f6e8a3b52f6d90606a286d76db603"
+    },
+    {
+      "path": "apps/web/package.json",
+      "sha256": "55ec34a94846c8dd378b1239898b1487f411ab88da79e6b149f9fd7eeae83958"
+    },
+    {
+      "path": "apps/web/src/app/builder/page.test.tsx",
+      "sha256": "1c4c4e5f0aa3d307f28659ed9b68e939db28f5c1ebbef3cf44caa0af89455447"
+    },
+    {
+      "path": "apps/web/src/components/storefront/cookie-consent.module.css",
+      "sha256": "4695d9a9eb1061a56270543f2c4927aeddcaf5fdeceae674d69fccac09cc5e76"
+    },
+    {
+      "path": "apps/web/src/components/storefront/cookie-consent.tsx",
+      "sha256": "e1444b050ead86a5e860e2ed951c62ffac4bc3d779f208e9bc41f83dfd139360"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.test.tsx",
+      "sha256": "3b746a21f1a1780f9a30a802bb0fb3c2b009ff4b5ab9bf1541fb650743c2fe9b"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.tsx",
+      "sha256": "8dba6e849494482880815928ef7bb3040ef284e9e552e87461764fa5048c9805"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceFrame.test.tsx",
+      "sha256": "4959edf20ce6408f0a5161699bdf287d1ae9a34e99e5fc34f190d78e9902d132"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceFrame.tsx",
+      "sha256": "6af7084ee49bb43cd5ddf995cd3dafd13330c936c978d06138d40baa758bdef4"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceNavigationPresentation.test.tsx",
+      "sha256": "ad271450f8f49afe2a41de1e3a9a7231d2d225d229ed98a78f91c5b98df5b945"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceNavigationPresentation.tsx",
+      "sha256": "00f1235c67f21a290d43f29dbc5167d5fef8cc1f1bab5e53febaf56d3568216e"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperiencePreviewNavigation.test.tsx",
+      "sha256": "553533edf879e815e4ed1b4f42b7323bc9ca1e612038b71b32cbc4c38215ed9d"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperiencePreviewNavigation.tsx",
+      "sha256": "0ce93228901084d921e58d8dd40848b3389472989ae04ce6b2c936200f6d5f98"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceRouteBoundary.module.css",
+      "sha256": "69f366c644e2a9b93864b78120b8f765523bf882b49e864c22365d992daa63be"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceRouteBoundary.test.tsx",
+      "sha256": "dea1f2961775669f9df2432fdf47f68a0e86304b95b42cb155b61c6fe2c0f90d"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceRouteBoundary.tsx",
+      "sha256": "5ea69bee6f5f7dcda67a8aecd68716045989d3e0bbaf6c9b66cbded415ce76a5"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceSemanticFallback.test.tsx",
+      "sha256": "03fdf40714341118837a0f99478f52c22c3ead1057fce67ff32908e066eea7e6"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceSemanticFallback.tsx",
+      "sha256": "381e4537c39d37851dc0947193836ebb1b7a010350fd70c6a0c413831b48ed51"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceShell.test.tsx",
+      "sha256": "e3b7041b417f68f72598b5be8863389261db2077cf4a5ad2fbf8f489ca4d7a6f"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceShell.tsx",
+      "sha256": "4d688944c3759a15c7d0b72667f9a9bef5bedd927a5ecf98038b5197e8e7c424"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceUnavailable.test.tsx",
+      "sha256": "8b73e43c7a8e7c11afbd01940e5a7f612820c7246e54cc83d30a734a98d12982"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceUnavailable.tsx",
+      "sha256": "5e10387fedecc9dad29ab2e8f7ec957ff5504eaacc54e4de50bab301811f49a7"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-admission.test.ts",
+      "sha256": "dd170f27a1a489afddf6c0bab63dff67442e6803589a3adf650fb2f9e2584581"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-admission.ts",
+      "sha256": "bd36a4cfd7b5bcc8e7611c5662132a2c1bcc98ee650659618c86be7f69310f9c"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-cart-adapter.test.ts",
+      "sha256": "4271aae3e07365fc553cf49ff8a66d04b627bc47498c30664be728a536eeee46"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-cart-adapter.ts",
+      "sha256": "648746ea1de8f8b841439287e468e31c41d89fab06436cbb6f96fe3fb1c4727e"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-commerce-dispatcher.test.ts",
+      "sha256": "3b94f0f190e180f7369926434f084c1c7937c5301ebc2abdb7dd687656afe253"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-commerce-dispatcher.ts",
+      "sha256": "0079f0fee0881d40115d383d72403760df7b4b36315125d8241f6b95bff1cf33"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-frame-dispatcher.test.ts",
+      "sha256": "615fcf2c10ff3aca881a5a2b2f629be3fd0166a70433e6e8fe2fa30d48a842de"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-frame-dispatcher.ts",
+      "sha256": "4fccba9fb48860356c55a461cf3d656bd76b784cf46092149decf41e549c2dc0"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-frame-types.ts",
+      "sha256": "6c55212dd8bead6104ad1e24dab65cf1e3a710518bfe8077f84f750198b4c2b6"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-dispatcher-static-graph.test.ts",
+      "sha256": "8faa5f2ddc2d7595d501cce1184681bb7499515956bf29a2f4ca532f9f9e442e"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-dispatcher.test.ts",
+      "sha256": "b22cb33c5c91b61333c4e9b6b39a623d955466f7b3bfc3a4fe2f1d0ebdce4592"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-dispatcher.ts",
+      "sha256": "a06318d5748ac42919b08330cf1d01da9a35e81b5ae3cac1003ead7767e4ab9e"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-runtime.test.ts",
+      "sha256": "28441cbc1e06c0093cff6ae43e5c18260c6233444d8ce97325e526512fdbbc77"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+      "sha256": "e2723086eba79ee74b5aeb5007fe4fcc01b4c4d89d535ed8cee5573527c3c323"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-launch-channel.test.ts",
+      "sha256": "a5f76e4e865bd7d170111dd25729d5305f7a25e6e06946e9d1b8bcdb5175ddf1"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-launch-channel.ts",
+      "sha256": "e834e2542597907cccc0ad637844e77502a217c9ae579b144e8a7b91013d4757"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-launch-client.test.ts",
+      "sha256": "cd0448407765eb409c72859e2aaa734d3f720f3600d80f9588c7c41badf62ec3"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-launch-client.ts",
+      "sha256": "65ae10c348bc73b783fd4c535897afd7c0f5847bd21a2117c535d2bd8235c3dd"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-navigation-open.test.ts",
+      "sha256": "237c5a81b9afecb40a7cbb0484c5c10448d4474dcd85b492936f514b6e5dd0d2"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-navigation-open.ts",
+      "sha256": "49722eebad4800be84ac0532e1454308f7972b44e716ebfb413a8a6f86740a80"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-pending-ledger.test.ts",
+      "sha256": "90a06bf25bad5ddb863b3f7e87b31dd2207e5cc96a8e3eaa14dc768a75211881"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-pending-ledger.ts",
+      "sha256": "e5930813577b3dfadf1b69e43fa574bd1accba7423401aae88c3d6f6801ff60d"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-port.test.ts",
+      "sha256": "64a2a64baf4f8d04412777eb2ba64b88395c9aa38fa0af6c1721871fec51a5d8"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-port.ts",
+      "sha256": "314bd6d3ad575800cc159d99e33bdd0a333b875940c822b1067ce8d0a84c96e2"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-preview-dispatch.test.ts",
+      "sha256": "51ba115907749da4d8dedf770a8d47d603a527b640bed3ac0a63f532673a7a88"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-preview-dispatch.ts",
+      "sha256": "2e1f78570cc6f0992e969cad04fad9e6ab7a593aed4b9c150552ba386128dcf0"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-publication-watch.test.ts",
+      "sha256": "235b476935cc75c0fa7a008879a3dbe48f0367572462682aa175f61d5088fa0b"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-publication-watch.ts",
+      "sha256": "02fcb16c32e3a43cefe2afc5f4238e23694c5a54c9f0eac86f0fd528bf12b720"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-route-coordinator.test.ts",
+      "sha256": "41ccbce346b417407b683bc17635bb79fd74ae8284512de1dcbbab244735950e"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-route-coordinator.ts",
+      "sha256": "a88c381276bcbc6564121721ef12730ed67dd1eadc6382af95d2164b038efc8c"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-server-boundary.test.tsx",
+      "sha256": "a498babc48746fe3dafa28ab1ec5dd58b2d3b47b2ff2ca9b50c9780234bcfe79"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-server-boundary.tsx",
+      "sha256": "1291b4587dfaad2034c1845c533fe207f706f754a0dea0112a2a30d2be8a59ca"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-shell-context.test.tsx",
+      "sha256": "49bf4f9e3f0d98abc6b54785c63c2aa486cbda294015e3a404407bd4595c9f05"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-shell-context.ts",
+      "sha256": "1e024538fb8fef7fc9cdbd2fb3fdf742b8161b4165aa59d92dad096106c0abfa"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-shell-controller.test.ts",
+      "sha256": "f0384e609be3fe6d827329bcace483be461ff600fd93d3bc6914929859ca5b50"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-shell-controller.ts",
+      "sha256": "3896b7cd6c28ff77b7f2d1d4a5cf7062fd37eca022ec079c7ef49b3eea0ac180"
+    },
+    {
+      "path": "apps/web/src/config/storefront-route-segments.ts",
+      "sha256": "901729bd9e964f3dfb15dd0be84c71726402a6941f1712a4171152837bc7b416"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/cart-types.ts",
+      "sha256": "443bb9c07f799c98e0580603e6426f63eb3ba83f44c87385f19c1bf9773d03dc"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/experience-queue-observer.test.ts",
+      "sha256": "cd5dfd20a295c984868cc9807ed877e805bedbc655a1022558cb2dfed869b049"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/experience-queue-observer.ts",
+      "sha256": "0c0cbe524c0688094232150b66fab2bcb30f6713a1b41a43ec28e39cee59a892"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/persist-shared-cart-display.test.ts",
+      "sha256": "b857747cde276e9e6d243eda23449211a14e5162e8283fbf6a39dd20d1a7c855"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/persist-shared-cart-display.ts",
+      "sha256": "9efcce78f651d56767de30e48ea8c9a800b6c67aaedbaf3266d2923392fb6230"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-assurance-overlay.test.ts",
+      "sha256": "f306cd22ecdac5713f6b01a09279ddce2f2725b38202b0829a1702e3e50ce42e"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-assurance-overlay.ts",
+      "sha256": "a8824eb2ad65666ce530904ec627f983c29c4cedeb3ec37c4a747370b3b44a2d"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-attempt.test.ts",
+      "sha256": "08154918bf82ea2ab39acb15e9c3769a3b4a68c49bcf909f3f560fd109899e93"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-client-support.ts",
+      "sha256": "d081aa7afbcefe374f9365b132e13044d3a989e32a77fbd9a1b0f4fb9f3fa6c1"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-client-types.ts",
+      "sha256": "9a1d49fb389432e664cf4c31508dcb7cd69ed2bf32e224f2be79133d601297f4"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-client.ts",
+      "sha256": "040237b7919590ea1636399efaf4d26e14ad3ca2398c18698a21f0905fd89464"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-command-mapping.test.ts",
+      "sha256": "8080a3d559d65e7d51a97ff4372cc3a95d99e15f3b1f190d196e5c35f825d13c"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-command-mapping.ts",
+      "sha256": "54504abd9cf888e953db3842ab1b5ef64054adbe418d6dcf55f2212f68c1c432"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-command-port.replay.test.ts",
+      "sha256": "90c442e766855281c2bfe64739ea49106cd6d44f2688226e4bead6b713c7d954"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-command-port.test.ts",
+      "sha256": "b81b6f13384fbf62fe319f3375bd69bee84a42d73af871164c0c9e447896856f"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-command-port.ts",
+      "sha256": "a3d57c07465b0362d06484be9741fccee6cf508a5bfb03b3941883910ca14cb1"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-fence.test.ts",
+      "sha256": "b743e08a38fb2107875f63974a6ae9e16269c7f2446c8c818c20f5d7a547800b"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-runtime.test.ts",
+      "sha256": "5be1d098039934d6bdf25a011c2b56a20be5d23af61942b10711961ba3dc6f94"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-runtime.ts",
+      "sha256": "b0f477eaf6ffaa589ec5bad48d519a56b6d2141b5368b29f5b29c28585d76235"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-types.ts",
+      "sha256": "290a7e671ac1ae1215b855e723dec2efbcfd42b7abea39596fe32b147e995248"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-hook-support.ts",
+      "sha256": "5de1fc1683e30984967f296ddc693104a45ed42b4126056d97e273ce668216fa"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-operation-receipts.test.ts",
+      "sha256": "3fc885a908a6d2feb137955c73234547d9d9e2d55ba8062377e0dc228ec21785"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-operation-receipts.ts",
+      "sha256": "8000d4bc576a3ff410d5bf9ec799369e950c134cfce50882c66991426774824f"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-reducer.test.ts",
+      "sha256": "5d0b43b0f0533c811fc53347d99dca3655a0704b6a46e167c2bec31d5019c836"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-reducer.ts",
+      "sha256": "1efad8ad1f09b1d8fcd76f33ca7c6f11f567252b008b257dd0d4ae8dc240b240"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-state.ts",
+      "sha256": "b11d4a3bb078cdb14cc1bacf200d60d8d76fd70910cb190aa60e4eebdbe14e5c"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-delegated-value.test.ts",
+      "sha256": "24fdd9c67113c8198800e6598c2d091e12639f5ee11fd17f39393b4e1ce643e6"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-delegated-value.ts",
+      "sha256": "3095ea9358315c8065ffd86dfbf34a88d54a687b3156c8d20df567de1ffc2421"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/storefront-cart-provider.tsx",
+      "sha256": "9f4bd6a6bffb1ee2d21a95bcc663e4af826999a5ccef70c8387513c2dc60a081"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-cart-send-queue.test.ts",
+      "sha256": "13cc138a83a53a3fcfc031b4e2e163d2912d793b8fdb26287f5bd9d625797f52"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-cart-send-queue.ts",
+      "sha256": "f575fe1a64d7b1eb8849398b505be38bc5b29ad813d753cf68629fa44b34a12a"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-shared-cart-runtime.ts",
+      "sha256": "80ce822b460242e82d16c1ed4291a41222b61c2e947b2d0a44f430739bd3b57f"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/use-shared-cart.ts",
+      "sha256": "0c0079c6819391dfef071514034e12f438b5ea23e8b1c87fa43ce7fcb66e116f"
+    },
+    {
+      "path": "apps/web/src/instrumentation-experience-boot.test.ts",
+      "sha256": "950d31dcbc9747a3737fc8cdd9694826d20844f03c26be636db17aae924adbae"
+    },
+    {
+      "path": "apps/web/src/instrumentation-experience-boot.ts",
+      "sha256": "b25dad324a47f09f2490b22664e1c4c73e1cab75790aafead6d093e76c989dd7"
+    },
+    {
+      "path": "apps/web/src/instrumentation.ts",
+      "sha256": "b7f245342a0cc3198856910a2f3dea0871eb4ce412859828be94dd3270455060"
+    },
+    {
+      "path": "apps/web/src/lib/api-attempt-policy.test.ts",
+      "sha256": "2fcc002b4ed6df0d169be4cf8871e46d011915546e9c0fc10a86f60b63e73cc4"
+    },
+    {
+      "path": "apps/web/src/lib/api-attempt-policy.ts",
+      "sha256": "a02928f292febb45f6301b74f61161eb5cfb6c7ff91a8f3cf88f4356d90fc6d6"
+    },
+    {
+      "path": "apps/web/src/lib/api-client-attempt.test.ts",
+      "sha256": "78e0ec398dfc7849136bc32fefa1452045cd1fc42127b1a5072b8dfec91efcae"
+    },
+    {
+      "path": "apps/web/src/lib/api-client.ts",
+      "sha256": "def33ab52dda304cfe98d08506a8c2cf1eeb3ba342320d7cef9b094a3ad54256"
+    },
+    {
+      "path": "apps/web/src/lib/cart/experience-cart-continuity.test.ts",
+      "sha256": "8ff69656282d8528e379f6ed9862767f68a8582b4ad38e6c37ed808b5fbde691"
+    },
+    {
+      "path": "apps/web/src/lib/cart/experience-cart-continuity.ts",
+      "sha256": "d4eed72765468ea3351547c9facbe5d03d2412ad4e743a9b5257efb2043ad890"
+    },
+    {
+      "path": "apps/web/src/lib/cart/merchant-resolution-types.ts",
+      "sha256": "8a213ba8b39d6b99b27d74a529e21a09ce7338bb5eae44797caabe68ff14a4cb"
+    },
+    {
+      "path": "apps/web/src/lib/cart/merchant-resolution.test.ts",
+      "sha256": "4a1cd473a4dd0490add1b6466bd1a2246075c5551bdaa732ee06a97c725439c9"
+    },
+    {
+      "path": "apps/web/src/lib/cart/merchant-resolution.ts",
+      "sha256": "27c11d51805a3a5d01f857d086d4bfcd2900141e6fcace5a06453c622a337032"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-cart-credential-paths.test.ts",
+      "sha256": "5db3cfb26085019982df38c7a32758fe83822e4882c190c2a4cefbc4081679db"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-cart-credential-paths.ts",
+      "sha256": "5429c809726d45292cc85d112c1385114818bbe8b58c78dc7a714e52700dceaf"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-import-closure.ts",
+      "sha256": "6e4fe58f80d8d5e370242a0bb370ce3342fadaee0f8fa67bc60430e1490088ad"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-shipping-credential-paths.test.ts",
+      "sha256": "6d7b1ff48f0d20b823149b8d924c49f81decc74bc3637da1cb29733d241810bd"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-shipping-credential-paths.ts",
+      "sha256": "1453a5b17b1b62f2077360a9893b14bdc2db11b6e6b6bdbea4aba2228a232783"
+    },
+    {
+      "path": "apps/web/src/lib/shared-exports-resolution.test.ts",
+      "sha256": "da0a5681e6c4377278dee8b73031a9b935f272aac2389d85282b3bc0800bff6b"
+    },
+    {
+      "path": "apps/web/src/lib/shipping/quote-session-capability.test.ts",
+      "sha256": "58828bf07aa9fbb1eae00cb091022a6ebf3f780f37c2b61d911a789960436e70"
+    },
+    {
+      "path": "apps/web/src/lib/shipping/quote-session-capability.ts",
+      "sha256": "b6169db94cdfea250e9ff447fb1f8eb5e9c7b95fe91ff4b1fa987d74b10f0555"
+    },
+    {
+      "path": "apps/web/src/lib/shipping/storefront-quote-attestation.test.ts",
+      "sha256": "c2af554b452d6aedf0c86a6c1b77d48d63477647108036cde165ed1883e0a044"
+    },
+    {
+      "path": "apps/web/src/lib/shipping/storefront-quote-attestation.ts",
+      "sha256": "5e913976a9d6ea9a606f63fa96b82999b198511386ca036e58cd8de382e52ccf"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/browser-private-drafts.ts",
+      "sha256": "18042a3679d5194060f2b4aef322811e119b8124d5b07efad1622a98377c3356"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/edit-service.test-support.ts",
+      "sha256": "8451aea9d0ea8c6f4bbbfdf8759071219811274c9a19d96be171fbe635a1cc23"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/experience-no-ai.test.ts",
+      "sha256": "35ae5311afd3cdca0d571f0cc5c5a120fa2a8366f16137443abb116724073d39"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/preview.test.ts",
+      "sha256": "740772c203b35cab84313d58b3f39393d6660abc42143f77d06df7187634150a"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/preview.ts",
+      "sha256": "7d18bed6316f8c741e27ebb727ca6d061d7c68906a743c2e9356c831267e7536"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/queue-edit.ts",
+      "sha256": "d4d6e50effb195aaebe96af29600da7c4574bfe78ab8d293750472773ca6ca35"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/read-storefront.ts",
+      "sha256": "37732fce6cd73fdcc53cf2678c5f288e9b3600b4da0e8f03a6f43f3768dbd119"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/run-edit.test.ts",
+      "sha256": "9063fcadae346def87a4d154987a9cfd9af5984dba1f3e8a496792732b193e3c"
+    },
+    {
+      "path": "apps/web/src/lib/website-builder/run-edit.ts",
+      "sha256": "c28f85b076c1d7923e3a5caafad92af21cb19bd0fbd85a18d38e054856f6d048"
+    },
+    {
+      "path": "apps/web/src/schemas/connector-tool-names.ts",
+      "sha256": "b614067c2967497122777447d66df09b0e8715050d53f12f7b783aacc723d06a"
+    },
+    {
+      "path": "apps/web/src/schemas/connector-tools.test.ts",
+      "sha256": "c0a66c4addae98b15e8b30a732298212a0f9f5306402c444a1526a2175a89eb7"
+    },
+    {
+      "path": "apps/web/src/schemas/connector-tools.ts",
+      "sha256": "209e698486fc7a8289b9c7171e83ba798e11b8960e07a25e1b5f8ada2c51ba0b"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-assets.test.ts",
+      "sha256": "1cfb34236b773c646e6e52d1920b1c822b1e5ce4e424840faa14342bcca632f8"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-assets.ts",
+      "sha256": "15346dce1495e5b2ac6a001cb0a38e7a5f8d9e8951963cc620d11f21193d3c26"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-bridge.test.ts",
+      "sha256": "7c29e8fa44fff4350de8ae20e988c55a27de16fc19597ae531fdc3e5b3d4e3e3"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-bridge.ts",
+      "sha256": "761b6104d076a05bc53bbe1bb0051d276752c84eae37b2bef690527391143b4a"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-cart-command.test.ts",
+      "sha256": "2acb96a1cbe11d4402c210cfb8d76481e23122e151c8e053a0819a5fb0e31cfc"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-cart-command.ts",
+      "sha256": "451a297450df011715f487d95d21b31fa74a0d98c4925be9d85938f5faf74cd0"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-cart-continuity.test.ts",
+      "sha256": "ce917318d5c6ababbe0640f2cd02caab6fb8134baf5e16b484df43b2503da72e"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-cart-continuity.ts",
+      "sha256": "eea604765385b7a06f3e15a2870564235347a2084926c47972adc4c79b0fdd8d"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-catalog.test.ts",
+      "sha256": "ea2ee1d4e868ed496b931d51d40c6e8875c43211dce7420196c8429c611bd3fd"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-catalog.ts",
+      "sha256": "647dbcdd7e6428ba5b139564ea7540e1ddf41d64b06f2ce5daaec84e6bdce884"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-job.test.ts",
+      "sha256": "aca73faf7d0708ca2ab7b6b6bf43c89de080e80a98f0b3a9f0370852d3a12840"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-job.ts",
+      "sha256": "6696494ac418cf326f4cad445e77e80a39621ece14a0efb0197b50735c901cf2"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-manifest.test.ts",
+      "sha256": "1e02ef9002731f1ed08467e691e98ed62cfd11b9e28966d252821ae0d55038cb"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-manifest.ts",
+      "sha256": "5d0909fecc70ae09bb24abbb6a158cbca3ac74b1c8eb60091ca24524c3aacf7b"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-mode-exit.ts",
+      "sha256": "6f31ed9ee50978142e2d47937dd829676cb06b7a66eebba79851f31db0062d10"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.test.ts",
+      "sha256": "64075122f5cb3e17226bae63f2dccfc50aa6655fd1dbf29cc62d805ad44671f1"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.ts",
+      "sha256": "34437198576b323e1fa0f52718a8574b1d2767fa3a510d437d8a61fca68d7e24"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.test.ts",
+      "sha256": "0187dcf4a4f622d0c1576cbb7961a67f4d79e7c0f969f37a2f91d4d1fcbfb730"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.ts",
+      "sha256": "a4dea1afce33e7b504dbdedb286ed616efbb6c085a92d14dd805ee88ede416a0"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-preview.test.ts",
+      "sha256": "5a8c25d90406133b8671500b84b8121d2520daf68304047e80375f202b665a20"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-preview.ts",
+      "sha256": "7bc4722987ced1ec60cd28ba560af52042bf388420ce9b532ff83d8bf7dcd158"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-public-request.test.ts",
+      "sha256": "8182bd2a643e5dc9ea02f2e85a2b32b6244e9333b62b8fcd7a1000bfe79f533c"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-public-request.ts",
+      "sha256": "b9a8669be91f5e947c68d81a14fa0d4e2893deea4f1f8f50a28f38f7787dfc51"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-publication.ts",
+      "sha256": "ea2dc55a42094d49efd7a57ed53de4f4b489aa57a26307ee2f8b964f018540c0"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-published.test.ts",
+      "sha256": "2b16b10aa11fe154697e485027aada38e52a09b07a306c0f8f0e946ab1df2f87"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-published.ts",
+      "sha256": "d1a5404d4a54acd29bdb233cc846e8c008b49f166e9ad67ab59b3f4a9049acdb"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-route-path.test.ts",
+      "sha256": "a660205fbbc571f2474b4dc83f7178ca298787301a3960d94a8fccab655c3fff"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-route-path.ts",
+      "sha256": "f16854c283edfe5d015a5cc1d7966a154ac050d527c988dbedfa5b03983b5938"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-snapshot.test.ts",
+      "sha256": "20731fa380bdd0266892091736c7cd9f0f07664c10551f71f44028c39aa52efb"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-snapshot.ts",
+      "sha256": "e0f360567fc4a9164602bc0bdd94275c4d83020ad06329763595bf639e906b79"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-source-candidate.ts",
+      "sha256": "4ca835b306fb3c62e8870224a0703f5c43ffe53879cf0394e61190c6703aafe5"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-tool-results.ts",
+      "sha256": "5cdacad2e7249c2410b6e241e9ec13d0d6ac34e41c9defddc86307324a6788ed"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-tools.ts",
+      "sha256": "27c7664fffc8ededb1c42590e3cf0d0cf833e75e92dab7aab835661a4197a921"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-upload.test.ts",
+      "sha256": "6afcf983c33107c84078dc8381328ee74f6f794821eee333cb0705c8e6c11096"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-upload.ts",
+      "sha256": "3388f3599264132ed31bd275762db8c883803802710dbb185caa812892b4d74a"
+    },
+    {
+      "path": "apps/web/src/schemas/storefront-shipping-quote.test.ts",
+      "sha256": "ae89158a106ff8fc55ea6ca1a0f80c5d60dca3afa7f80822dd8871c44ed81eee"
+    },
+    {
+      "path": "apps/web/src/schemas/storefront-shipping-quote.ts",
+      "sha256": "c1335a5c45d62e548826fbc017b92e3677bdbde2e3bb73118499a11e97b68e15"
+    },
+    {
+      "path": "apps/web/tests/builder-chatgpt/experience-no-ai.test.ts",
+      "sha256": "742e91d808b4e9a476d07d7250a8689615dcc90df4208b3be00452a18290b1c8"
+    },
+    {
+      "path": "apps/web/tests/builder-chatgpt/experience-upload.test.ts",
+      "sha256": "84017fe260793ea39ac58a9f00a3081bfe5ba008e11a7e741dd494e710f92c6e"
+    },
+    {
+      "path": "apps/web/tests/builder-chatgpt/lifecycle.test-utils.ts",
+      "sha256": "e31ed4bedb3d2a0abc709b56927b972be5756b5a63c718c1664a12182d352b67"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/data-fixture-cleanup.test.ts",
+      "sha256": "d26aa970f1c872de492ac7408b6da7c4cc9129b648bb237d6104379c2c9669e9"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/data-fixture.test-support.ts",
+      "sha256": "e3fd5d170b25a011f5fdcea4b425cbf6ff022ab1f05d4c4399f680e0aefe5a4c"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/data-fixture.test.ts",
+      "sha256": "101ad602d73acf2caa1b8c3ea999ed472e63e8c58079a4d545bbd2e633696ba6"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/private-lifecycle.test.ts",
+      "sha256": "19c851b32c6a3039b350a03e01cf6b3323bc6ffa395931e0cfb058c2fa512b64"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/browser-checks.ts",
+      "sha256": "4e7f4af7000064ee24f4960ccb2241229519f72c804fcdcf0142115d9a850807"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-fixture.ts",
+      "sha256": "7c0982f9a3f31fd4cd5ae5c5feb638ed40e4e0234a4118d39f116ed3a9986773"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-host.tsx",
+      "sha256": "7e3123244aa7830f4f811968e60826fa67622e84f9361e06de70215e921fc982"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-qualification.pw.ts",
+      "sha256": "9d4fa5052b9fab92d7928aacd5430d2f8443d94ec309725611a3d2106f6f73ef"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-worker.test.ts",
+      "sha256": "0460aaa0b4ef9442862fb44d715c4eb68b63cc3493a2ee7739509f54454ae717"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-worker.ts",
+      "sha256": "e80b121c9fc0873f0180b7985771550955beee3a42b3bf4d222c1d97827ff9fd"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-c-motion-qualification.pw.ts",
+      "sha256": "f4cbb269b2f22f815c25a75de8749f9c2ec2d60c4f8defe20350eec59bb7013b"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-c-qualification.pw.ts",
+      "sha256": "2fae657836f9f28833019ea48c7c0a2c01b5d6f71db4e6726a7b624fbca1b20e"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/compile-worker.mjs",
+      "sha256": "bc461a1d5e5dd98528afbb8d4c1b65c98bfb3ac40329a4574a666cdbec40e4e8"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/device-configurator/Experience.tsx",
+      "sha256": "6dcc11f3f26bc08dfc748ed5dced8d019e30e848823d096ef8d0679da712c3e7"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/device-configurator/style.css",
+      "sha256": "2b3317034b58efa73dc2bd832824127549cddfe18683f1516910882aea750b59"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/editorial-fashion/Experience.tsx",
+      "sha256": "c2ea969d8f47aedb2207fe1751a47e8d05e8e36794c4f016557a4fbd9f22a69e"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/editorial-fashion/style.css",
+      "sha256": "e4fc66f69f2b8fe4902accd0fc49cf60c79b387f4250645bd07dc818d99fcb3f"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/fixture-contract.test.ts",
+      "sha256": "0506b0db7d53f728fdeb69069182f6703a0558c2047fdb179caf8a1a2803e9d6"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/motion-studio/Experience.tsx",
+      "sha256": "676f7bf9f3f7c50e0f724a3562f3928a96fd7fe14a3ddbc36d187dba6c9475f5"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/motion-studio/style.css",
+      "sha256": "2b3317034b58efa73dc2bd832824127549cddfe18683f1516910882aea750b59"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/qualification-commerce.tsx",
+      "sha256": "05ea47cc984d8347878d1594b8c50083924fd7d784f859a54d2f227f2bed2d73"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/qualification-fixtures.ts",
+      "sha256": "dc57de7f2abadb56f25db47ce75f098673d3e28778e6e0728e02b3fd373628d6"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/fixtures/styles.d.ts",
+      "sha256": "672e2b59bc67bfa961a5ee12ab03dd133702ddfd66df2306f9d1ee35d959da1b"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/harness-fixture.test.ts",
+      "sha256": "90916e7dac9f90d49f6a707ae87a18602885c4c42c3180dfbf94cdc5ff8e1075"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/harness-fixture.ts",
+      "sha256": "c673a47ea19d22a84c26095d0f53464d45884a544cef161e8f3a12578efcbb2a"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/harness-server.test.ts",
+      "sha256": "84bb87fb0d4b81b2394518d4e6e497960bf891444cbec970eb15073470d317dc"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/harness-server.ts",
+      "sha256": "ca6295056008165b9d2b0d699c238408723c0a5ec4b9cfe038ef92e254ed9a88"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/interaction-qualification.pw.ts",
+      "sha256": "350807b13f8f32dcaa96c79af46e7f45ea2316a908ca0d9b620a0264efc833c9"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/interaction-worker.ts",
+      "sha256": "5c45c32a1dabd319c7b5484238ebed3a675377006e1f344527e6c33139eab483"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/native-link-checks.test.ts",
+      "sha256": "c5d335ff1ffd594f249654c1391f63f338e36842048173993c2abbe177d5eb3d"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/native-link-checks.ts",
+      "sha256": "4214ccc561624ff60e927052e6868c579f56a23ee5121ee189d9184ee50d76b7"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/persist-qualification-image.test.ts",
+      "sha256": "865e4795e2cb1c97cfe08a34b4ab94bd708d2ac21de6534f1c1a2462bd6acaa0"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/persist-qualification-image.ts",
+      "sha256": "4b448e489063308f44f6c6a46b383c51b4ad1803a42688cd3bfb2bbb98abae02"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/playwright.config.ts",
+      "sha256": "6b9764edcb89e321f4188e0f21e86ee0f63a712539efa2b254132149ee7eff4b"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/qualification-entry.tsx.txt",
+      "sha256": "db6cfaaa45c5fe2b1ff737f78eab615ea37bf6a5879af09624f36782e865b77f"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/qualification.pw.ts",
+      "sha256": "9f13ff1e00563062027964d1d796a22814041c22850cbd32a04769c0a262a762"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/analytics-fixture.integration.test.ts",
+      "sha256": "0b0386fa626bfbbd9369d3606ae92f1dae69102d5b911e168634b19453baad3d"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/analytics-fixture.ts",
+      "sha256": "c3eb791b2e16771d7a92e3229d3ec81df0f343c3f0cfd8ab36613da65615a106"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/cart-engine-fixture.test.ts",
+      "sha256": "c893d68e7222c99c68b2b6cfbe914d8771d9db851e3605505252defa8ce22a10"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/cart-engine-fixture.ts",
+      "sha256": "80e9d503b130dcf216989d8b0250f407c1f0c5e4e4e1e016489b58b461e60cb9"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/cart-engine.node.test.ts",
+      "sha256": "c66fff50751bbd62b9a84367f799ba945f7d9d57ade14b84df8818bb55129614"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/catalog-fixture.node.test.ts",
+      "sha256": "9da71b3fc49b24e6c5f2257aba4d8d860267225de50768eb5aff25cd30c65d44"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/catalog-fixture.ts",
+      "sha256": "7576be6a37a16d3a4333e6b3c2bf8a18d4ec80274ac1ad9bc398664d59c33257"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/commerce-catalog.sql",
+      "sha256": "33d4df474e9f1a3f6c01dd60884d94ec6ec6b7842a1f97650b4bac157c8cd2f6"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/compile-fixture.test.ts",
+      "sha256": "49f5eff823b458f85a9e464f11e51c3baa2237b424630526b0b63d6c53e334d3"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/data-api-upstream-error.test.ts",
+      "sha256": "22a03ee5cb977e96c77a611f889ffa6e678617168a90ce69e7620ec6d41aa405"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/data-api.node.test.ts",
+      "sha256": "f3dcdc2b24ae4be3273b1a63ab9bee4d0a0b95595eb3c757be58aa1ef6d176c8"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/data-api.ts",
+      "sha256": "1c4bc96a9209a37237e3aa0dde60c6aba076a9bf297c6c8af877466575d13675"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/local-process-guard.mjs",
+      "sha256": "52ab562b7eaedce237421f383091b034c337c1e176d8867337a999f5bc03e994"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/local-process-policy.mjs",
+      "sha256": "8b8eb0e6a969ac256cb757c3fe5d23c3055917beff629e00c6389948ed0b0373"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/local-process-policy.test.ts",
+      "sha256": "9bb7c58a4a536c3f5d46c704395202d0e40a45de1e1869a9f6b8f2e171269d2a"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/package.json",
+      "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/polished-storefront.css",
+      "sha256": "323091a8fd37dd491fe46616767e7f9fe719a0296a224c46dee54aa4a597ff68"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/polished-storefront.test.tsx",
+      "sha256": "a7a35c8fe82d736e6bcf65abe0acd36174780c3c39e02336e499cb01c20d104a"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/polished-storefront.tsx.txt",
+      "sha256": "fae3e10a31f72e64156541bb6ae1315fb271edc4f021e25c618ec161de598eaf"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/public-runtime.integration.test.ts",
+      "sha256": "3c8bc8f133a3644429906d000902be33bcbff2598156c375925b04757d75441d"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/quote-fixture.ts",
+      "sha256": "778ebb3bf5420987241993f2f4f395b9fd8ab6cee6e373a99135027fca9a532b"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/runtime-profile.ts",
+      "sha256": "cee02a69a137bb5043186ae0b2a0b074a9e6c756ec65e0767e0b276c1c03085f"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/seed-output.ts",
+      "sha256": "2fa7c855920ad66c7b88000f5453d0d4bb68b6d1bbd6adbc2662dc2f7e923e5b"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/serve-local.ts",
+      "sha256": "6d05a2f0af5afd5f3ddecf9e72949f5370072361212d0c9d74fb8bd6cdc2b9b6"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/shipping-route.integration.test.ts",
+      "sha256": "0e796341bcdfab9912f80766bb83fcc7e0bd99cc80a8e558cc6947cc447f529b"
+    },
+    {
+      "path": "apps/web/tests/experience-commerce/storefront-fixture.ts",
+      "sha256": "df2efcfb1d9ba4d22d5340d7509259f7dba961476eb896f35fe9f2e50647f193"
+    },
+    {
+      "path": "apps/web/tests/experience-durable/fixture.ts",
+      "sha256": "61064cb6889c3fb35fb9d7ff7a90bc545af6782d02d95003e290076c0372faec"
+    },
+    {
+      "path": "apps/web/tests/experience-durable/public-browser-worker.ts",
+      "sha256": "f6021dd86385f5a42d163ec124c5448710d3077b96761dcc0d7a27aa94e6020f"
+    },
+    {
+      "path": "apps/web/tests/experience-durable/public-browser.test.ts",
+      "sha256": "7f78bf3f10f5af947089a02ab342615fa4844c6487e87dbea7d2d1bccb8a5752"
+    },
+    {
+      "path": "apps/web/tests/experience-durable/storefront.integration.test.ts",
+      "sha256": "79a773777d30e52af30e896cca1af2fe4ca1a9cfee0c198a0a04b987e7c065ef"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/artifact-evidence.ts",
+      "sha256": "41841e2d543e5fd70005389b4f569644f8ef84cc649bd83225815692bc730589"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/data-client.test-support.ts",
+      "sha256": "f11a459cf31c9cf1b9ce038b0ace34936674f606dcf3aa40cd2d09abe76eb30f"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/mcp-http.test.ts",
+      "sha256": "c7db5de08cd3fe5a85dd71ab71e74ca8d9dea7e3ebe2d03505873aedae46b6b6"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/negative.test.ts",
+      "sha256": "cac583d30535f76ee05b2ab547878075aa445a85c3b854bafb6921dbd0a40142"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/performance-mcp.test.ts",
+      "sha256": "3a4cf4547d465d4a547e9d676e407fba810ded1f6289a2d4661994cfe084a343"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/prerender-mcp.test.ts",
+      "sha256": "1682df9464f2ec94f6be017a553c9c8c1cbb65a011e2ab26872449832f9d95ca"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/publication.test.ts",
+      "sha256": "b8e9808e975052d82e925785aa8d83e5aba8ab3464caa6c2800d77dec3d34606"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/rollback-build.test-support.ts",
+      "sha256": "6e14f4f45e05448a6d6dadd243d79e16b2bc0a6201b3c03ee1287953100c65d9"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/rollback-retention.test.ts",
+      "sha256": "dc781fe6a6058c7d4ce8ae95355f13c0e2618974b1396809067b4713b88f4332"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/sql-setup-cleanup.test.ts",
+      "sha256": "8f3b622967e68da9f5e4915f74cf4a8c5935b6b3f43c92dda24f4c1b41e4e42e"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/sql-transaction-recovery.test.ts",
+      "sha256": "774d2aeb5de463ca60ac051d0641068c8d773378aea68987374d461cc7420c7d"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/sql.test-support.ts",
+      "sha256": "38f6b0d24e76a2c6afd36a7edea6023c1a0c824e1a6859a5b0a510abd9cb18cc"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/verifier-transaction.test.ts",
+      "sha256": "c2d250ea1173b1989ea5b4332f886e7ea27b4cb8dbfa3718e142f000f09e9584"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/verifier-transaction.ts",
+      "sha256": "c4e6318142de8ff1718c6eab27a718111674266cc44849eaafa65c68bc88b409"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/benchmark.test.ts",
+      "sha256": "9f4344e7f785b547d9add36d3a9e2d9402967f10552ad39f4baff67fcf7d3fd3"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/bounded-input.mjs",
+      "sha256": "72ee477a231f3c677f4cabe4778af1e247d75944adb49aa933793296943c0644"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/bounded-input.test.ts",
+      "sha256": "b12bc69868396abf87706f8d7105c6591c4fffbf2fa7189242fbf739a297c13f"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/lab-observers.test.ts",
+      "sha256": "0501cd27ee1d80d4b278d513a65b3be8b5feab97716bbf170678014792043c40"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/lab-observers.ts",
+      "sha256": "bde4558425261e20a28fbfd9d7b7260b0b34d78cfe1be18fbbbfcabd7c3b075c"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/measured-mcp.test.ts",
+      "sha256": "d03f15ef897f9448505e31b8372960e8366605e99877ac4e5d50bcca7657cc90"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prepare-prototype.test.ts",
+      "sha256": "29013a233ae3647a4311c9185a18fb45ed0d6c9fde7fb3cf14781a9e1ca8ed9b"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-browser-worker.ts",
+      "sha256": "5af18e365c010ac2d16de3094ba94dcb491951da46978a5b769b763434fcca63"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-browser.test.ts",
+      "sha256": "5d2e1ef3a638d30fcd178c806ed6d0c68d7927a704e024fa062c0cd233bf6395"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-document.test.ts",
+      "sha256": "69dba353f61aab68ee5f59ccc7947fe64c1435cb8594d5dd7be05b868438ad4b"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-document.ts",
+      "sha256": "cef775ca40562f1d68b44fb7b00d5f612e03322815af09c32806c49590b9e5c0"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/prerender-worker.mjs",
+      "sha256": "8015c509d9cafe6e200f40315af057687982fd0c9314b78a61d931065e351a4e"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/private-preview-browser-worker.ts",
+      "sha256": "799262c9872338c97482bd167695d5f88f1198fb639ddd1e36f1755f792136cd"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/private-preview-browser.test.ts",
+      "sha256": "2f3e44aaef3fee613a6f89f439ed5eff5f728d627caf9454386a6339da7d5beb"
+    },
+    {
+      "path": "apps/web/tests/experience-performance/serve-prototype.mts",
+      "sha256": "4253bb68fb57bd5579fa1ec1b8055b5e7d5685d80643c869fc53ce3587a3406e"
+    },
+    {
+      "path": "apps/web/tools/builder-auth/local-postgrest-fixture.ts",
+      "sha256": "86514cdf0a1c06c405f04c49f91c9475618904da8ca57cc11bb30a26365136ca"
+    },
+    {
+      "path": "apps/web/tools/builder-auth/publication-service-journey.test.ts",
+      "sha256": "31f4f2a4aaa7a34a7b7d572de3cdfefc0bf0724708d3ea9e59f2b0934c24ea80"
+    },
+    {
+      "path": "apps/web/tools/builder-auth/publication-test-support.ts",
+      "sha256": "b59c89a7f6d032d4bb1cc267ef8cec2d5c725a214371687fa9212982fa981165"
+    },
+    {
+      "path": "apps/web/tools/builder-preview-spike/authenticated-create-edit.test.ts",
+      "sha256": "c121b4c9fb1bc8d2e61eb3013b3e292cd4a06d968d44a7b056ae0d68cf4b924a"
+    },
+    {
+      "path": "apps/web/tools/cost/create-storefront-edge-inventory-cli.test.ts",
+      "sha256": "d996f22ee65d87ae8d2da49fb37107d9b120a90e195259cf0540f3ef66482106"
+    },
+    {
+      "path": "apps/web/tools/cost/storefront-edge-entrypoint-classifications.test.ts",
+      "sha256": "d938c25833978b6cad161892430a135038cd1b61231a1952d2e8b83175056e40"
+    },
+    {
+      "path": "apps/web/tools/cost/storefront-edge-entrypoint-classifications.ts",
+      "sha256": "789dd4d09295193ac8db1baa202d0e8125b493be3c6e9af21f452b31f777ab5d"
+    },
+    {
+      "path": "apps/web/tools/cost/storefront-edge-source-authority.test.ts",
+      "sha256": "6bfe874dde443815bc0dee5570c4476bb8424b7074d112e475671708ab8c2d19"
+    },
+    {
+      "path": "apps/web/tools/cost/validate-storefront-edge-inventory.squash-ancestry.test.ts",
+      "sha256": "85fa366a46878dac6e2f21320299e539a76fbde59c32fbf5d8b278b13b4a692e"
+    },
+    {
+      "path": "apps/web/tools/cost/validate-storefront-edge-inventory.test.ts",
+      "sha256": "542b06b37ccd22e32ad30f53cd6ca1ec4ea7000e4106f6ad0d553dd2d102c1cb"
+    },
+    {
+      "path": "apps/web/tools/db/expected-builder-pending-sources.test-support.ts",
+      "sha256": "3a1e32c66893fb71a7c21e55435971e4282383e6ea5bef227374a22b8810c07b"
+    },
+    {
+      "path": "apps/web/tools/db/supabase-history-replay-builder-pending-sources.ts",
+      "sha256": "5185f81a7599c3fe161f2d16da75680cde2147e38982418c35e3949e523b7d66"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-checkout-recovery-signing.test.ts",
+      "sha256": "4615dff455b4fab17b91e13671ae2c438bd15574802c1bd85c440e4681c90672"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-git-content.batch.test.ts",
+      "sha256": "8c53da4beb14c18fe1fa4f3d836cc1276b43e897a711d3488dfd64bba0a23643"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-git-content.ts",
+      "sha256": "06bb8635382dfa2dfed2b3a6590886986ee2b9fe62544213adfb5e92bb8b90d2"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-git-source-snapshot.test.ts",
+      "sha256": "99cd691a28d13fb37d5eb4b85e03598c77aa251d322eee8e6f43a49d8d4e9209"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-git-source-snapshot.ts",
+      "sha256": "bb2b4460cf63e68247cc7570b119dc21ccc3e1dbfad0d41490b8a26b1bdd3f34"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-governed-paths.test.ts",
+      "sha256": "183f0a7fbfb2a877e53f5fffed7a0f41d0c777b4e4ba21710d7474e97440ba3e"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-governed-paths.ts",
+      "sha256": "d1a40178d4ec21270f9b3a07ef3be5f0f9c758d511412cfdfa10877b6d3d8d20"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-service-authority-cart.test.ts",
+      "sha256": "373b2d25783fe1974d2edba03c779b2f51f38b7766ebc0fcd325d70f69b40a6d"
+    },
+    {
+      "path": "apps/web/tools/events/runtime-contract-integration-suites.ts",
+      "sha256": "0bc2db776a8cbbc03931c716a367616b1d56e9bbc71eeedc34cb77d0e5e09c20"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/catalog-generation.node.test.ts",
+      "sha256": "b0e440ad72d6b6a317aa8fa2c174e9b637cc8103829f5be597c51acf2d0e868a"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/commands.mjs",
+      "sha256": "2d30c826480acd73988067b53bb2128866ce98b9d47afaa7c6bc7086b18c714d"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/commands.test.mjs",
+      "sha256": "4539c99b8ee96e7a0d534e7657fe6e9d174aeefecaf2cfaf668d2d4151f72454"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/draft-approval.node.test.ts",
+      "sha256": "5f581ff2b181f56e39d5ea59f625d8a70eda3e2d1e4739a5164ebd8f0fab9a2a"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/fixture.node.test.ts",
+      "sha256": "7387cf40938d46597e50746a5433b8c44f96fea5af82c813789c15db65975388"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/fixture.ts",
+      "sha256": "fb033c64fc6543309254bda8f68e0ba4faceb838ad6db1944c20cefe1416844f"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/jobs.node.test.ts",
+      "sha256": "03f87005d4bf06f61a9deb1cbbe9e54a5dedf35fbb53dd917e63baf1f59e0f38"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/local-env.mjs",
+      "sha256": "8d15e6aa214b5099c9868af3c179616c246fa74e41257b158583f0d1d807b34a"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/local-env.test.mjs",
+      "sha256": "cff1bed0504fe67c13526361c0efcd0b0dcbbafec65847d3989763b78350de36"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/package.json",
+      "sha256": "609158e6c5fbc237939fa3ddf7faab80ab690bdc0c8d584414a885130103c4e8"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/private-foundation.node.test.ts",
+      "sha256": "bc3e58a4126fc4b0d079d70e26f85993b81ffe0756f95f32b6ba68fd9560d71f"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/public-read.node.test.ts",
+      "sha256": "0783436f108912a626105ae2ca5389910aa2ff8d5430dfc9a591b7f4e3795a5a"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/qualify-private.mjs",
+      "sha256": "1aecf8537e269313566e4b0744dc26b186fc0421e040068ee742bb5c8688cc79"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/qualify-private.test.mjs",
+      "sha256": "a4686a35a099779b47333854aa3f3859af858b9fd201c994b46d03d8d145a31f"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/run.mjs",
+      "sha256": "af5146581f8e4bc39de99c45d4f07bdea7abf1417a894a6c2541e11d9b4116ec"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/run.test.mjs",
+      "sha256": "63b9dadc5389ff3d9da11abb0331abd536f37856ed62e0c8a5428feb736aa021"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/snapshots.node.test.ts",
+      "sha256": "6c62fb0ce775235da3b08882a64a1dc5b84110b34e526127b12d85d69f25fa40"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/storefront-quotes.node.test.ts",
+      "sha256": "cc28a4e9bd32c328fc048ee6fe1c22acd4b258b1dfcb30154d673a2d97522347"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/upload.node.test.ts",
+      "sha256": "8eb15bda58e3b5aa62ed826343c39b71da62c155ae3116ca75ec71ff88a9a69a"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-authoring.json",
+      "sha256": "9f7009455eba79eb7a94fa2c9ab050e89d5bdca87ed6d4e86f14fb26c03b1446"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-commerce.json",
+      "sha256": "2c75567b34d23a6104db3f907646c6b5baa8619eda36a2ca5571c7abbe3a4136"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-durable.json",
+      "sha256": "92ee1b7d5e61634a844fbdcf5795ddaa6e4ddd95b3e6e654f7d45e20ae47a970"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-performance.json",
+      "sha256": "2619a1fdff8b7c8e9a9a4b834aa809cda27b216a7ce23561515c4b9f554254d2"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-runner.json",
+      "sha256": "c2d8dd31afdbea946fa8988dced0fcccff930300e8ff52a1538817fc48d62ddb"
+    },
+    {
+      "path": "apps/web/vitest.config.ts",
+      "sha256": "340528feb9b4a901a307135de77132bfd4dca00079fe27b4973bca988c4ff542"
+    },
+    {
+      "path": "apps/web/vitest.experience-authoring.config.ts",
+      "sha256": "8782b02bb5aa5907053ddc7124c98bbdfc1836dcd1e9d59bc15b9f1b39e10060"
+    },
+    {
+      "path": "apps/web/vitest.experience-commerce.config.ts",
+      "sha256": "80c5f52df9cf1ad1a50e680d5db95eeb6dc6a7ffe0f1572dcc4ded97ae8951e6"
+    },
+    {
+      "path": "apps/web/vitest.experience-durable-browser.config.ts",
+      "sha256": "71ff986410c0ceb29e208fdcead6c7658d7b049c770cf5d389c1a17fb04d3e6e"
+    },
+    {
+      "path": "apps/web/vitest.experience-durable.config.ts",
+      "sha256": "523e6fa5055c7ad9917f94f52987cf711c53172ef3c1b06df97f2807aa0583ad"
+    },
+    {
+      "path": "apps/web/vitest.experience-lifecycle.config.ts",
+      "sha256": "e00520e9f7db3fdd8c0380105119f39bb4bc154a0928705c495e50b31f923217"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance-benchmark.config.ts",
+      "sha256": "75a5ea82f2d1a45fea7451bdaf678f97bc37d065d5d8ae3a54a149b5f28643e4"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance-browser.config.ts",
+      "sha256": "c2f32833e375ecc09509da405a6bf483e0e0563a704b2d9ac45330efb030d62f"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance-mcp.config.ts",
+      "sha256": "5962a81fc2a634304814c0d448df3fd6077a7ce7a10a49a1cb8c25c09577f547"
+    },
+    {
+      "path": "apps/web/vitest.experience-performance.config.ts",
+      "sha256": "4caedae314941fbe22a3dd061bda57a4910658a525f674c53396cc453d8d64df"
+    },
+    {
+      "path": "apps/web/vitest.experience-prerender-browser.config.ts",
+      "sha256": "a37cb9522bf086d748a65525a4f487e9d0c005641da659a43c3713ce8fe8427c"
+    },
+    {
+      "path": "apps/web/vitest.experience-runner.config.ts",
+      "sha256": "02857ea7946a6b8625c08865eb00c473ad94ee09f43c5b99c9bf57c7c6dd1e76"
+    },
+    {
+      "path": "apps/web/vitest.experience-storage.config.ts",
+      "sha256": "18706f5eb757584d1cdaeff3d283f5ca6554a5048d606c364e8154da87388692"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/compiled/app.css",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/compiled/app.js",
+      "sha256": "1aae82dec55eb878cd242fe40273c24a454278f728fda821dd5d75b428548c7d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/mcp-build.manifest.json",
+      "sha256": "cd3d14fcf46bef409f8a2b79e6673610826cd118f9b98c02d0824a94ab3ee4a2"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/mcp-http-lifecycle.json",
+      "sha256": "a449a9d66418459d39944caa15849fa5893659a39019c7edad93bfe816c6b21a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/mcp-native-preview.png",
+      "sha256": "77c8fafd4098f2140332ce6c042487c61b0feccd9f5016ce88aef0920f4d45e1"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/app.css",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/app.js",
+      "sha256": "b5fd0cf1d534eb32f37762317cba3787ab3ea4cab496cbeec1d47f55852f9ce0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/collection.png",
+      "sha256": "75910f3e385ce4b7b0a0ba0df16645f10423c36efa7902178edf0f9a99b998cf"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/editorial.png",
+      "sha256": "77cc817720e249cb556ecf933a3d00ae16a77f70910a2ed65efbbc70430fe88c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/home.png",
+      "sha256": "15e76631c7526812465050228d347a70af15b07db9462246f5c6f61ce051181c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/manifest.json",
+      "sha256": "253fb0d7b68058f2f5b4bea28cf12912302c16da44437d66bc871db34cef37c8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/product.png",
+      "sha256": "d254fe15adcb0dea970e2cefbe5f5eeb5a28ece392211887f7bbad794f440a53"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/current/source.tsx",
+      "sha256": "d96085a23bad8b85d499c3886ef70581833a8dc092388d6452a7bef9f34febb1"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/app.css",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/app.js",
+      "sha256": "8a8a9a5add3526a7ed4a0d51165ab8466136e9e66b92b57a5dbdede3cfd02215"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/collection.png",
+      "sha256": "2f8f457fe1fafc4dcdd28eef2c238da85194e635b10faea9562a9553a9f6cc91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/editorial.png",
+      "sha256": "1f1de7b79ff333e380c243144e06ffc1a2f998b7ff2112977d8c336c56843da3"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/home.png",
+      "sha256": "f0bcb61c26bac0378ec346f561a5684affa7d28ba652e779172e00a9aeef1c77"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/manifest.json",
+      "sha256": "583ee561c686919b9e5d18b70b86485aaa4a1b265432330233fa572e4f6ab74d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/product.png",
+      "sha256": "12a5c7c835373fb18c9ecb868c23a89ba66ca019392cf1b4bd207e4c50ea3e96"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/previous/source.tsx",
+      "sha256": "c87df5d26d2b87db4f87168294d9d2b7360e7767f63a7334605a65dbcc4d78b7"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/rollback/rollback-receipt.json",
+      "sha256": "e22b2634266782f0aa3e5a4ba2f5a27686c668b70534b4d2a652a37369fa80cd"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-checkpoint-d/source/app.tsx",
+      "sha256": "1dfa2487b510f6997d3c015e7b54ed19a2fb736ea333db24c00e5764480afd9b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/README.md",
+      "sha256": "338b35a2ab6982697c88f2f01d305329e598152672067f88d7b40dd1f6b6dfe2"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/benchmark-summary.json",
+      "sha256": "bef7222a5c340a04d565d36a0f7a607664b489107e93a80a770e13f4c19ac595"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/filmstrip-mobile-0800.png",
+      "sha256": "29c8a10f25305daea67e95c8bca99cc9f2addb8b9b37789bfaa044cd632a9a52"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/filmstrip-mobile-4000.png",
+      "sha256": "5d87c37cdb92c49d3064b204a901d1d735615981ebf7fb48aa47d1373f818e91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/frame-desktop.json",
+      "sha256": "aae3d68ca9cc84c1a06985531d85172e659b33ade2e57af47a085b5737a026dd"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/frame-mobile.json",
+      "sha256": "e93446f3de2961e5c5a1b8f3232a6064f466f1f9c9229ef69711768320748c05"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/host-load-final.json",
+      "sha256": "bd91fc7d6f13eb400d231962aa8acb68268a1aba7a44d3babb8a967f477c09aa"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/migration-source-binding.json",
+      "sha256": "2dc0a04ecf8fb55857f7a09b6ecaa217455a162084d4e74fa227dccba416b29d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/orbit-production-mobile.png",
+      "sha256": "103f07c0ae02f23f7cda48eaf8d44174655b75761e0b9f19346928b8627da502"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/source-binding.json",
+      "sha256": "415fc3b30048f8a1a581d50000a0000a3a7280cd0df3a76a2edd222b221bce18"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-production/validation.json",
+      "sha256": "fc7d6741e8c1dc09e21676381b47685fe31ed338c68488c53f740aaa0f22efb0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/README.md",
+      "sha256": "7022f13044d39757989352e30b06b79ec20e16e38a4312ad7bd92234e97f99f0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/browser-1440.json",
+      "sha256": "70db2c9e6f9e29b0d5e4db75ca64c4f63973ea3575fe5c487413ff42bb07a005"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/browser-390.json",
+      "sha256": "b4417db98d0e532d9a60007269379717d0fcf4fb916afa61c695ff15fc4c363d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/no-js-1440.png",
+      "sha256": "6d432c669bba25fdb2a8393fa25957972af5b709956ad04b1867dbe8d51967c7"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/no-js-390.png",
+      "sha256": "1de0b2c050f96a4c5d21fdcb2146f68d28aeb7cc74e5414ecfbd6ec84a71e80d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/receipt.json",
+      "sha256": "fc87b37123ff5985b0d1cc0c8e297f358cce08c53d567dbdd7478699e913e614"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-1/source-binding.json",
+      "sha256": "51bc34d42dafca54ca584341c6b098302bfd9f1e904b79beefb8f323a166b41a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/README.md",
+      "sha256": "4172d7bd21f472dfb2464ae5c723235cdcc0be6c7aa58acc964ced50de0144ac"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-client-1440.json",
+      "sha256": "cda90e9853bb61039889376ef0f075af50c41fe0175bc82e4a81a83b7d8d11af"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-client-390.json",
+      "sha256": "9fab99877d6fb4dc9b4d208d92e60d4721d65324f47d6657e4eb7385065bc144"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-client-report.json",
+      "sha256": "b59bf635d0bbe7ebe1135ad538f497b2d26afd38b865f618d01a47a1ddd306fc"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-1440.json",
+      "sha256": "4256a6a80ed83a7c276b792026708d03f60ebbbe540da5989c4ddb1309402818"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-1440.png",
+      "sha256": "d778da779314d6e9f056f6c224d3a9960dca844f08d92353f0ddf6cf2e5c70a5"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-390.json",
+      "sha256": "2ccd68204b3a76fc3ee4e76502cc1d2c607161f327dada60f600b7e4e3b89a2b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-390.png",
+      "sha256": "9ce2779b4c7f873bf20bb8cfc22b628010c012b056c1acb5a5c23546db780f1f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/lab-prerender-report.json",
+      "sha256": "5513e1d88690db01b7a360f2990601d6ded1458f24053c946e83dd64da1e5a86"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-cwv-stage-2/source-binding.json",
+      "sha256": "0d69bc45cbb42480b1f85abfffd59fde9e6e894f8a0b6a6618dceab652f1b0bb"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/README.md",
+      "sha256": "9e3c195d1e6b3c15c3815a8ba0eb8de45ccb6330bd741a3313db74229d501b17"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-1440.png",
+      "sha256": "1f7352bac9f5cf5336140b5d0611f4ea36fa72704e84419f4c26ad993093f1b9"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-390.png",
+      "sha256": "35ecf43003f728f54920a60f5f0dd269c0e2176316bcb01a43bc9af92832db91"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-browser-1440.json",
+      "sha256": "c7fe2969362abc2bb4855dc8a443e454efa4e2ce8ea6132c44622fb32d4dd1c7"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-browser-390.json",
+      "sha256": "53da277f4c216f1d97a39d95ef9927c942bb306416573960cb807deeec0de28c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-no-js-1440.png",
+      "sha256": "5f8497de01c54a98b0fb5e25f6b2d3e0b86ad9a2d4e3b1467b16b332a5dbdfcb"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/public-no-js-390.png",
+      "sha256": "354ecbec9321c1cf316fc8507fdfe0be0936ac119e32dc05d8f80f813e69b7c2"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/review.json",
+      "sha256": "41bbe372104b063c30b66f46661e38a23b7b5030cc4e4d7d4402d7996c37d111"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-durable-delivery/source-binding.json",
+      "sha256": "eb290d27d755f9a8f096e99659dfcccb23d412f5c49bcd6eec6e2366524fee47"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/README.md",
+      "sha256": "e82e3dc5f45faae8d16f10ccb5a39412ec2275527d503b0356642ac9c8b43922"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/browser-diagnostics.json",
+      "sha256": "345f4d8819c2764b7038f4712bfb7a8d541a038bb9bd182d2ed56cad14b456c9"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/checkout-proof.json",
+      "sha256": "a63ad23295e47f49034fb8066f87a3d5c9eae05bf6c176abf0f9f826d9d75c5d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/reviews.json",
+      "sha256": "7c111348cbebdb537a4b4a8c4c8fd0e14e92402d6bf4528e108511e010334598"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/source-binding.json",
+      "sha256": "d903e8b2ea4a8bbc58899ef0d791802c2bed7c13ccf9452a31f6d8e1b90c93e6"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-frame-speed/validation.json",
+      "sha256": "2f46e009f2a9e29ff3376a7b8df11804534b148944255cc2f9cb919c07a10926"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/BENCHMARK-HOST-OPTIONS.md",
+      "sha256": "43adb874fccb735d097e9ed0976e903ac20a046a2368fe17eeea7015cd001306"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/LOCAL-ROLLOUT-PLAN.md",
+      "sha256": "0dce6b04c38c9bb35f9c4501db66d55b3c57e0d765c0cea118294ba50487db7c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/README.md",
+      "sha256": "d552380ac746459c7ad145f48f111ff06f0f591aaa38b567d2447a5692f727b5"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/adversarial-native-proof.json",
+      "sha256": "5a92319c4d0c152bb7c7e9274985d3889e23c3925c7bfa15cbbc25946b13a423"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/benchmark-now-report.json",
+      "sha256": "266f35f2a525e168a16224073f5344713cb7da994893df2abaebf8e676e83bc8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/benchmark-now-source-binding.json",
+      "sha256": "f133f124a2fc6fda255bd2d7f468417ef6fc6ec69928409098b89b2a7ce483c9"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/benchmark-now.md",
+      "sha256": "a231d6ceca3b2809e85e51a8f0a574c00371a377349e2b0de216dcb8974ca29e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/coderabbit-partial.ndjson",
+      "sha256": "f6a877fecb78b91b2b6dc5c0d353c64b9f72944e84cf9166613b2d0034f7f54c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/current-main-checkout-proof.json",
+      "sha256": "5e03d35dc0168bc25c3d042a00e6f2de9a4af2aacc2fbf3f2646b82acdcf42aa"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-cart-2026-10-26.ndjson",
+      "sha256": "0877621cfaac2e4efef984d597a981dcc59e9febe5b4a3cd5809c2d3a527118e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-fixes-completed.ndjson",
+      "sha256": "ac55e53f6e955955b9957130a37ec09ec3785f36dffa6c8c20e6a98c9073e0ff"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-followup-results-2026-10-26.json",
+      "sha256": "4f9b7c68a3cc0bb9e52c105b08b3187edfbef15f566cb0c341057d636e9d509c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-followup-scope-2026-10-26.json",
+      "sha256": "af3157e979dad8f1c1d1d0bba6c009028e1958f7c6ab08ba535ac691fa3c19f6"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-gate-2026-10-26.ndjson",
+      "sha256": "3f5fa2ffd00d8de1b5a1b9cdb23b1185086ec021bd048b1862d5e664be43135f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-gate-completed-2026-10-26.ndjson",
+      "sha256": "f537c04830eb71e9b7e0f8fe8cc7440469f5441213df6fab69655d6db5bb02cd"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-gate-completed-source.json",
+      "sha256": "42d34f327a2e9f0c9b740c5245b48bc5f6d57e10b0924068cc2570de1439dcd8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-only-status.json",
+      "sha256": "6f7e9334458c1ca69a84ef97ebce106e4d822416b64de15431ec5c13d8b3636e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-runner-2026-10-26.ndjson",
+      "sha256": "92a788ea131c4e5c8c036258bc9a4d3e210ab84fd1377109116f670a1888bc67"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/free-review-test-only-limit.ndjson",
+      "sha256": "60261e6ca06299cf0408877bba1b3e6111d32ccbb43b79a4324577be88a737b6"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/idle-preflight-2026-10-26.json",
+      "sha256": "812632e5ac00652d60dfcf0d8fd36ee2c0d7067f602b958606e9aab4d233e8d8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/local-matrix-2026-10-26.json",
+      "sha256": "892221f355f91f55e631a5068dc36ab60f1be0e27227c9b1b6ba0222bfe5c44b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/local-matrix-2026-10-26.md",
+      "sha256": "742c77f66f63655f234838f39bd086dd6e3a093c713995224cd32f2b7952b99b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/localhost-host-native-worker-proof.json",
+      "sha256": "50ca0a68c0de7ab3e6582b9225325aef02a13ff0544935a60f0e164f912bf51a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/localhost-host-proof.json",
+      "sha256": "3e174923e2bbb00a431960c62010e985f21f0da17db4f9f58d59234a10720db4"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/native-worker-proof.json",
+      "sha256": "b4d6dc8cba212cbdec79ed3d68a3181f3dab6923074e5306f9d76e271d1af22a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-benchmark.json",
+      "sha256": "f21a0656e4c2fe9522811c7c5b39043a24335d4bf9c61d61834271fda93aaada"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-benchmark.md",
+      "sha256": "e6e9001e72f61390b99e81cd0c1a0f0cf44a9b61cca9f1837f9c06793d2461ef"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-binding.json",
+      "sha256": "ec0d99449cedc621bcc1657a21db9d98b1f6a7d264a1afdb4807bfafcb35c1c8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-checkout.json",
+      "sha256": "d7cc350dc697655b0920182a5a0dc220f3b2eb164b4219bf308cbe761b8bac75"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-checkout-final-review.png",
+      "sha256": "6034e96ed442c45682d4edc071f90993164ad19bb64bc22e10fc06204af7a67f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-checkout-handoff.png",
+      "sha256": "aa08c8656ad90f9a61a85de08be4ef5fd530ce451827af7095931b96ed5b2189"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-desktop-storefront-home.png",
+      "sha256": "ddb7267864d3ef5c2e7b8b0b049c5e544fced24f8a365997bc518b66db82dd2f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-free-review.ndjson",
+      "sha256": "d67f9d18760f78cb7727b8916bcca8ed58bfccdbf7d4a4ba9c581c0b2670b034"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-checkout-final-review.png",
+      "sha256": "528b34cc182055a12bc1c47fe8f0407c9736d19e20d89bfc590d67d21d42ec24"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-checkout-handoff.png",
+      "sha256": "8bb72e91cfe9da43dda412ab119235e3986def8fc612844c1683d69cb5734c4b"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-mobile-storefront-home.png",
+      "sha256": "2569e95c05d850678c3970adc49eefffcd3c8b7ad24234e33b0ae5d3f3cd89b1"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-review-allowance.json",
+      "sha256": "786628b33afc3edb3d762f00a2fdb8a756ec89527f46fa0281c2c90f22adc26f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit-rebuild-validation.md",
+      "sha256": "2b5ff94fb729f7b1cdcf0749a8ae83d1d6536c7b790e08db9e511088305439f8"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/orbit.png",
+      "sha256": "d307554679fb53a68472026a36437f3832e529da639c85192d59aaa3bbdb3d67"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/pending-free-review-scope.json",
+      "sha256": "9e82a6ad013199fb0f933e5fea2117ad56b93cd451d8b302bebf0a918c5d932c"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/remote-host-audit-2026-10-26.json",
+      "sha256": "1762d421132fc22dc786b001e43aea8608f7d497709df0ebb944f334ef3aeacf"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/remote-phase-review-scope.json",
+      "sha256": "7700fd5c3f1cdcd53c73b4b1e2a45978ce76719c87d3f6783e888f52394e556f"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-fixes.md",
+      "sha256": "16c81a6b0360552237d27708368ae5286df966f12d852ec8bdb7c8d820ce8e2d"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-free-review.ndjson",
+      "sha256": "b2e09f3adaf22ff0496d9dcd7c9c6994cc515be13cb7db670198ff546e781c86"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-monorepo-typecheck.log",
+      "sha256": "34b3cbad53d6e69e00612be7109956f3732ed9a80c6e8314d729c769fe6e2505"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-native-three-stores.json",
+      "sha256": "6bf5a4267a5c2bd5435a0d0444abbd15850f6187105fdbaac284b93a24ed8713"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-native-three-stores.mts",
+      "sha256": "a8e36670c511cfedf4690cffc0e76e8d5e2ac535f971bfb89f832a51b9835ed0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-native-visible-shift.json",
+      "sha256": "d7e8bc821ae2f2151e321751e9b126faa65b17007a9f28c4b063aaf64d4fe0fd"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-native-visible-shift.mts",
+      "sha256": "394a01069096fbfa5867bd05cbdf1efe67cfa9a50b905766d8770381e15d69cf"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/shared-root-source-binding.json",
+      "sha256": "e3a2cd9a56b4ea201bd1fef28ff384a442b6f41de2c4ac307a608b9b11d41dc6"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/source-binding.json",
+      "sha256": "f8f636cd4a33f4fa07821ef7ae904f5164bd325ac268dd63022ddd94f0d344e0"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/test-only-rereview-latest.ndjson",
+      "sha256": "5376b4e246eb61c071a919555232edf91d72bf82a994c440d5971e500c3bbfea"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-performance-qualification/validation.json",
+      "sha256": "7040c2032be91ecac334fbf5b37f8c984f5f0125b09538e055fbaf5fc66d5576"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/README.md",
+      "sha256": "dcb34cfa2eb7ee177773ad6fce0c6d7d17e2baa035076575867d774865365a7a"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-1440.png",
+      "sha256": "c2e4f90b14c1053db25ebba81152d75dc821167e79f3db6afdd1cdcc7a182da4"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-390.png",
+      "sha256": "3b69cf9c2b5c17342a294b87ae64ec6cbf6372ad88cd8634a51f10d54b272805"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-browser-1440.json",
+      "sha256": "1a4c55f7d989b56afd8ced723bba0bf2f2e5d765d63a3d4b0c04d6f42527fe61"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-browser-390.json",
+      "sha256": "279552b65cbbbd51cffc80d59285fcf83064d17034d06904348c1052eccbff49"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-no-js-1440.png",
+      "sha256": "e95470cdc4ef76cfedcca03c07bfdc7e16df9ccd865d2be6078f03017b1b5c6e"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/private-no-js-390.png",
+      "sha256": "0167dc93263d516e95b6088ad5e5bdabacf69af1614615a7fe14f559127ce236"
+    },
+    {
+      "path": "docs/connectors/evidence/experience-prerender-mcp/source-binding.json",
+      "sha256": "f07012e88dfe74633f387a9ee13cf2f4829c253919a754077a9559be627e75f5"
+    },
+    {
+      "path": "docs/connectors/experience-cwv-research-2026-10-25.md",
+      "sha256": "4b51628081e62ea03d2345809c3953eba85ac232ba99d8d11149a84b0b494c9e"
+    },
+    {
+      "path": "docs/connectors/experience-release-runbook.md",
+      "sha256": "6dcc91a594138bee4a1167b0aad19205907c4882567a031ea7278ba96dc4fdf3"
+    },
+    {
+      "path": "packages/experience-sdk/.gitignore",
+      "sha256": "fe56da5f27d174b011ca65d2c1c9be83ca19ce1428e1594f8ed3ca037e8814ed"
+    },
+    {
+      "path": "packages/experience-sdk/package.json",
+      "sha256": "e07575d2d581327f5d7bd0e0d2fb49549b1e4ad68490679974bb40bfa9f383dc"
+    },
+    {
+      "path": "packages/experience-sdk/src/Link.test.tsx",
+      "sha256": "f0124f0174fc725cd2ace1453832baaf56b24109a64ac004390b29ef67237cad"
+    },
+    {
+      "path": "packages/experience-sdk/src/Link.tsx",
+      "sha256": "1d0db098abc818a4293fdecff359f08a7143bb2aa67feee8ba2b2cbfb12b3da4"
+    },
+    {
+      "path": "packages/experience-sdk/src/channel.test.ts",
+      "sha256": "8e878f61b759ce9393a460a8aceaeea558b94f83d1c434da7874d07d44254896"
+    },
+    {
+      "path": "packages/experience-sdk/src/channel.ts",
+      "sha256": "c8e57daaaa33f322b8d69dc563c46db152890b41873ee6440bd376371ee330fc"
+    },
+    {
+      "path": "packages/experience-sdk/src/client.test.ts",
+      "sha256": "10b4b7a6290131cb00aad1cbf5bfc74415b9290610e54441f22da448d06d50a4"
+    },
+    {
+      "path": "packages/experience-sdk/src/client.ts",
+      "sha256": "04263c49fdec40ec1fd3b2c64989979756f409d26172cbeafbae393f88762de2"
+    },
+    {
+      "path": "packages/experience-sdk/src/index.ts",
+      "sha256": "812cf2886f19cb177ef06198b4c1756abc73dbf08aa06cd37d61ce88611f3afa"
+    },
+    {
+      "path": "packages/experience-sdk/src/mock-commerce.ts",
+      "sha256": "4199313601741eb2e8a589a1085cf0d912716f94f026d637886d41c364d12c4c"
+    },
+    {
+      "path": "packages/experience-sdk/src/provider.test.tsx",
+      "sha256": "ad525a662d360344a1c50b00d29e1fe7fc232716a6dcb190fb7cec3df35e3414"
+    },
+    {
+      "path": "packages/experience-sdk/src/provider.tsx",
+      "sha256": "a2edfb67652cef405736ac4e9936a305482592e8bcb39c42a8b56e3867695481"
+    },
+    {
+      "path": "packages/experience-sdk/tsconfig.json",
+      "sha256": "15bf14e88d5485bd364639f49648fda8a24716d86cf9d457c15e27c0a456bfb3"
+    },
+    {
+      "path": "packages/experience-sdk/vitest.config.ts",
+      "sha256": "20dceb12714d50d353594cf205240dabbc900b643082eaa22e197da896692d51"
+    },
+    {
+      "path": "packages/shared/package.json",
+      "sha256": "917c53794bf0dbf294f8697664b516158f94ec7726edb5dea05ae52cc2bbe492"
+    },
+    {
+      "path": "packages/shared/src/experience/index.ts",
+      "sha256": "3436fa01142db59f829360b25da8be235a5f8eabd25952ad43f308c1ec61d9a7"
+    },
+    {
+      "path": "packages/shared/src/experience/limits.ts",
+      "sha256": "3847e471fadbc5f3817b14021e6c660ffb892bf60fb97d7fde4b40675bf327e4"
+    },
+    {
+      "path": "packages/shared/src/experience/route-state.test.ts",
+      "sha256": "1732c5c1f774e14ae818755ffb25ca58c77f1028f94e8b91405be03d84500420"
+    },
+    {
+      "path": "packages/shared/src/experience/route-state.ts",
+      "sha256": "d9de31e0b50a5f0b0d507b05e2be4019c89c6dfe59b15cea33f00746f62e37d0"
+    },
+    {
+      "path": "packages/shared/src/experience/source-digest.test.ts",
+      "sha256": "762d8420d7321d89830c02455ab353bdbdae1859cf49d964cb644b8a33031380"
+    },
+    {
+      "path": "packages/shared/src/experience/source-digest.ts",
+      "sha256": "40291e44a8777c64331b8f8edb3471d87cc31030e185bfb8070c9147c7db709d"
+    },
+    {
+      "path": "packages/shared/src/experience/types.ts",
+      "sha256": "2b548f64a8831df54f9dc9f4e8c13caab0d7738f9c202b5b2f43f14b7ace1fc7"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "07c8a72fb6da6858e90bb60e9f9b36f22052c944596421918ccbf05da1ed5f13"
+    },
+    {
+      "path": "supabase/migrations/20261024072905_experience_private_foundation.sql",
+      "sha256": "4a98cd777da4b65119636a1f9e75ef2edc25ee87d1c03a295d057dc942eee360"
+    },
+    {
+      "path": "supabase/migrations/20261024073157_experience_private_uploads.sql",
+      "sha256": "4fd9533ca01adcb82306e73125ff5dc6721a0b4e2ae7edbc88581a36c693af32"
+    },
+    {
+      "path": "supabase/migrations/20261024073533_experience_job_and_draft_lifecycle.sql",
+      "sha256": "b029a451b63e743e899dd3923a32de4fd84934c97eec8c0278dab6e1228bb5ae"
+    },
+    {
+      "path": "supabase/migrations/20261024074638_experience_private_preview.sql",
+      "sha256": "ffe06916f139a014095c8010149278a4adaf7a799fa63a1e26c3a2a34adeac58"
+    },
+    {
+      "path": "supabase/migrations/20261024120000_experience_catalog_generations.sql",
+      "sha256": "cfb36ec9c489c3141f1c15238a6cc20d023d50a68686c54c2b31608e5fe91d76"
+    },
+    {
+      "path": "supabase/migrations/20261024124000_experience_public_read_projection.sql",
+      "sha256": "d1513e4fa2e1d150b2158ba5f1b495e983aeab3f0ad0f8a2bc66c7e3d0efe402"
+    },
+    {
+      "path": "supabase/migrations/20261024130000_experience_verified_snapshots.sql",
+      "sha256": "09097e3ca5d72bef2fdccf6c495f3dd93db2c04786e396e2277f1e0c75b89e83"
+    },
+    {
+      "path": "supabase/migrations/20261024160001_attested_storefront_shipping_quotes.sql",
+      "sha256": "e75a496af90c009826ea6de507196c258c16c7da38f73bfa37610b5c454a5d63"
+    },
+    {
+      "path": "supabase/migrations/20261024171619_experience_owner_intents.sql",
+      "sha256": "262d11ae00a331e9c71470d11ad603cad60b0ed741b360f5eaa8ed9a1ba2e19a"
+    },
+    {
+      "path": "supabase/migrations/20261024172102_experience_legacy_mode_guards.sql",
+      "sha256": "eebdc09c480a2e2b84b018d6588053dd2a6e6b4d06bafb44c17a8c2348dce3de"
+    },
+    {
+      "path": "supabase/migrations/20261024180212_experience_lifecycle_foundation.sql",
+      "sha256": "fb1a57edeb5ad3924097965907355ddb6205b6e615623979d99d2d33ff724acc"
+    },
+    {
+      "path": "supabase/migrations/20261024180213_experience_lifecycle_transactions.sql",
+      "sha256": "989c6bafe4293db28c6bf38b319be99f5a1df7f259a5b0e5b27ac5b36c4dafe4"
+    },
+    {
+      "path": "supabase/migrations/20261024180250_experience_mode_exit_effects.sql",
+      "sha256": "0c6f055b3d050f7512b04760269eba6fbe403420730e06b5035cd514f7a52a05"
+    },
+    {
+      "path": "supabase/migrations/20261025060500_experience_upload_manifest_validation.sql",
+      "sha256": "ffdae2ac04ef652da84621c4dd7afa6b63c3894e72a9314b8ec144cdb83d84dd"
+    },
+    {
+      "path": "supabase/migrations/20261025220000_experience_public_prerender_binding.sql",
+      "sha256": "7df06303b0cd0802c24c66589667a00de8f690d37a966bd89fa058a2d3d31e21"
+    },
+    {
+      "path": "supabase/tests/experience/private-foundation.sql",
+      "sha256": "9187ff06a641c47b5f1a3ba5e666b6a4ed2351e80ede957f6726a8f65e8b2d24"
+    },
+    {
+      "path": "turbo.json",
+      "sha256": "7cfa330c57dddb64832336cab2cc10d03f99b162fdb9891b99e3c289d3d14239"
+    }
+  ],
+  "remainingGroups": {
+    "apps/web/src/components": 55,
+    "docs/connectors/evidence/experience-performance-qualification": 53,
+    "apps/web/src/schemas": 40,
+    "apps/web/src/hooks": 33,
+    "apps/web/tests/experience-browser": 33,
+    "apps/web/src/lib": 28,
+    "apps/web/tests/experience-commerce": 26,
+    "docs/connectors/evidence/experience-checkpoint-d": 23,
+    "apps/web/tools/experience-sql": 19,
+    "apps/web/tests/experience-performance": 15,
+    "apps/web/tests/experience-lifecycle": 14,
+    "docs/connectors/evidence/experience-cwv-production": 11,
+    "docs/connectors/evidence/experience-cwv-stage-2": 10,
+    "apps/web/tools/events": 9,
+    "docs/connectors/evidence/experience-durable-delivery": 9,
+    "docs/connectors/evidence/experience-prerender-mcp": 8,
+    "docs/connectors/evidence/experience-cwv-stage-1": 7,
+    "packages/shared/src/experience": 7,
+    "apps/web/tools/cost": 6,
+    "docs/connectors/evidence/experience-frame-speed": 6,
+    "apps/web/tests/experience-authoring": 4,
+    "apps/web/tests/experience-durable": 4,
+    "apps/web/tests/builder-chatgpt": 3,
+    "apps/web/tools/builder-auth": 3,
+    "apps/web/tools/db": 2,
+    ".github/filters/ci.yml": 1,
+    ".github/scripts/experience-runner-ci.test.mjs": 1,
+    ".github/scripts/resolve-ci-test-plan.mjs": 1,
+    ".github/scripts/tools-worker-typecheck-contract.test.mjs": 1,
+    ".github/workflows/ci.yml": 1,
+    "apps/web/builder-mcp-server/backend-client.ts": 1,
+    "apps/web/builder-mcp-server/experience-contracts.json": 1,
+    "apps/web/builder-mcp-server/experience-contracts.ts": 1,
+    "apps/web/builder-mcp-server/experience-evidence-client.test.ts": 1,
+    "apps/web/builder-mcp-server/experience-evidence-client.ts": 1,
+    "apps/web/builder-mcp-server/experience-metadata.ts": 1,
+    "apps/web/builder-mcp-server/experience-registry.test.ts": 1,
+    "apps/web/builder-mcp-server/experience-tool-result.test.ts": 1,
+    "apps/web/builder-mcp-server/experience-tool-result.ts": 1,
+    "apps/web/builder-mcp-server/registry.ts": 1,
+    "apps/web/experience-runtime/build.mjs": 1,
+    "apps/web/experience-runtime/runtime-boundary.test.tsx": 1,
+    "apps/web/experience-runtime/runtime-boundary.tsx": 1,
+    "apps/web/next.config.test.ts": 1,
+    "apps/web/package.json": 1,
+    "apps/web/src/app": 1,
+    "apps/web/src/config": 1,
+    "apps/web/src/instrumentation-experience-boot.test.ts": 1,
+    "apps/web/src/instrumentation-experience-boot.ts": 1,
+    "apps/web/src/instrumentation.ts": 1,
+    "apps/web/tools/builder-preview-spike": 1,
+    "apps/web/tsconfig.experience-authoring.json": 1,
+    "apps/web/tsconfig.experience-commerce.json": 1,
+    "apps/web/tsconfig.experience-durable.json": 1,
+    "apps/web/tsconfig.experience-performance.json": 1,
+    "apps/web/tsconfig.experience-runner.json": 1,
+    "apps/web/vitest.config.ts": 1,
+    "apps/web/vitest.experience-authoring.config.ts": 1,
+    "apps/web/vitest.experience-commerce.config.ts": 1,
+    "apps/web/vitest.experience-durable-browser.config.ts": 1,
+    "apps/web/vitest.experience-durable.config.ts": 1,
+    "apps/web/vitest.experience-lifecycle.config.ts": 1,
+    "apps/web/vitest.experience-performance-benchmark.config.ts": 1,
+    "apps/web/vitest.experience-performance-browser.config.ts": 1,
+    "apps/web/vitest.experience-performance-mcp.config.ts": 1,
+    "apps/web/vitest.experience-performance.config.ts": 1,
+    "apps/web/vitest.experience-prerender-browser.config.ts": 1,
+    "apps/web/vitest.experience-runner.config.ts": 1,
+    "apps/web/vitest.experience-storage.config.ts": 1,
+    "docs/connectors/experience-cwv-research-2026-10-25.md": 1,
+    "docs/connectors/experience-release-runbook.md": 1,
+    "packages/experience-sdk/.gitignore": 1,
+    "packages/experience-sdk/package.json": 1,
+    "packages/experience-sdk/src/Link.test.tsx": 1,
+    "packages/experience-sdk/src/Link.tsx": 1,
+    "packages/experience-sdk/src/channel.test.ts": 1,
+    "packages/experience-sdk/src/channel.ts": 1,
+    "packages/experience-sdk/src/client.test.ts": 1,
+    "packages/experience-sdk/src/client.ts": 1,
+    "packages/experience-sdk/src/index.ts": 1,
+    "packages/experience-sdk/src/mock-commerce.ts": 1,
+    "packages/experience-sdk/src/provider.test.tsx": 1,
+    "packages/experience-sdk/src/provider.tsx": 1,
+    "packages/experience-sdk/tsconfig.json": 1,
+    "packages/experience-sdk/vitest.config.ts": 1,
+    "packages/shared/package.json": 1,
+    "pnpm-lock.yaml": 1,
+    "supabase/migrations/20261024072905_experience_private_foundation.sql": 1,
+    "supabase/migrations/20261024073157_experience_private_uploads.sql": 1,
+    "supabase/migrations/20261024073533_experience_job_and_draft_lifecycle.sql": 1,
+    "supabase/migrations/20261024074638_experience_private_preview.sql": 1,
+    "supabase/migrations/20261024120000_experience_catalog_generations.sql": 1,
+    "supabase/migrations/20261024124000_experience_public_read_projection.sql": 1,
+    "supabase/migrations/20261024130000_experience_verified_snapshots.sql": 1,
+    "supabase/migrations/20261024160001_attested_storefront_shipping_quotes.sql": 1,
+    "supabase/migrations/20261024171619_experience_owner_intents.sql": 1,
+    "supabase/migrations/20261024172102_experience_legacy_mode_guards.sql": 1,
+    "supabase/migrations/20261024180212_experience_lifecycle_foundation.sql": 1,
+    "supabase/migrations/20261024180213_experience_lifecycle_transactions.sql": 1,
+    "supabase/migrations/20261024180250_experience_mode_exit_effects.sql": 1,
+    "supabase/migrations/20261025060500_experience_upload_manifest_validation.sql": 1,
+    "supabase/migrations/20261025220000_experience_public_prerender_binding.sql": 1,
+    "supabase/tests/experience/private-foundation.sql": 1,
+    "turbo.json": 1
+  },
+  "priorityScopes": [
+    "supabase",
+    "apps/web/src/components",
+    "apps/web/src/hooks",
+    "apps/web/src/schemas",
+    "apps/web/builder-mcp-server",
+    "packages/shared",
+    "packages/experience-sdk"
+  ],
+  "freeOnly": true
+}

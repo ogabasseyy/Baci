@@ -1,0 +1,119 @@
+{
+  "main": "29b41494c9cba1ee3c05c7d51ebc0d84909d7a68",
+  "files": [
+    {
+      "path": "apps/web/builder-mcp-server/experience-contracts.json",
+      "sha256": "5b27615c47e31e77d66125e188fd49c8bb190805c4f27ecb1034426f2dab8181"
+    },
+    {
+      "path": "apps/web/builder-mcp-server/experience-metadata.ts",
+      "sha256": "93d90cb0ff4454ef6884ca195634c5696e465571e42d6c900eda37bb68ef83db"
+    },
+    {
+      "path": "apps/web/src/lib/experience/build-performance-retention.ts",
+      "sha256": "4aac466d273f60deaeb224fd330fb6d152b480a933c5e49197a00933477e184d"
+    },
+    {
+      "path": "apps/web/src/lib/experience/build-performance-types.ts",
+      "sha256": "7b2558c3fa8d873b4f6e9a6c636c3c6fe3f81ccef4d90abdb87725058336d5d8"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.test.ts",
+      "sha256": "402e625b29ae3616565f869fb6dd9a931bc6d8413ab81a7e354a3b3d6368cb0b"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-measurement.ts",
+      "sha256": "d82a3caf450189334caa240f7c27305c597417ec88b704c40bfd80793ef53921"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.test.ts",
+      "sha256": "23456467ffeddae92fcf549cc604f78dfdefdcef50ab45133e225ae757675fb2"
+    },
+    {
+      "path": "apps/web/src/lib/experience/candidate-performance-qualification.ts",
+      "sha256": "147473967865eddf927797f11f1a3fda78c07a91332f440a9a049acad1edb35b"
+    },
+    {
+      "path": "apps/web/src/lib/experience/experience-bootstrap-fingerprint.test.ts",
+      "sha256": "bd5051285787a6ce7141830683041ee024fef83cd422e110e828e4b380576724"
+    },
+    {
+      "path": "apps/web/src/lib/experience/experience-bootstrap-fingerprint.ts",
+      "sha256": "0af4e0eabde656d901d40e6ed96e559e4e76fb646802f1fe85e67f3301729f37"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.test.ts",
+      "sha256": "08974656af59b112d91a82579c9a2862acea67378649b84b6b38067c02e7fbe2"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.ts",
+      "sha256": "bf9538a152b9165d4ebdf2aa40e2b6af628215e57244e135819adc4c3597ccfd"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-performance-reports.test.ts",
+      "sha256": "a4101ad68ec072bcaaae3995732aff843a75c21db855e66e2042f29afe4ae4fb"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-performance-reports.ts",
+      "sha256": "98eb3b01cde264da6cb754d7361583b523916dc6c2e6844aea3ef68606ee94cd"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-prerender-pipeline.test.ts",
+      "sha256": "50b3eb9a4b3dbca4fe7da3eb08cdb9bc374f987e714eb6eeeaf94f4bb79c78cc"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+      "sha256": "39000b6f4878c6e445c84d58d61f1d1ae82c3bb746a7d0cc06e6e8637b265e4e"
+    },
+    {
+      "path": "apps/web/src/lib/experience/performance-read.test.ts",
+      "sha256": "3982bbddaf43e4e8977edcc534628868ee208de3ec971693904abf35a2d7e4da"
+    },
+    {
+      "path": "apps/web/src/lib/experience/performance-read.ts",
+      "sha256": "82aeeb7f81dcff7eddb0dbd2a2a89a064f564b9b0c454aad39ba3648478c4e09"
+    },
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.performance-gate.test.ts",
+      "sha256": "29f8fb0fa7efa40d15570245b9a815242f1842710eb12c2431838330283795ad"
+    },
+    {
+      "path": "apps/web/src/lib/experience/tool-dispatcher.ts",
+      "sha256": "6c4d1a66a28f188cd031bbf727c54257c778ab506c3a3da990bd664a4ed160fb"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance.ts",
+      "sha256": "fd730106764c6449133d6f896585a9c3dc86d4a2d3f4e81e523fb3413a90f904"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-tool-results.ts",
+      "sha256": "5cdacad2e7249c2410b6e241e9ec13d0d6ac34e41c9defddc86307324a6788ed"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/prerender-mcp.test.ts",
+      "sha256": "1682df9464f2ec94f6be017a553c9c8c1cbb65a011e2ab26872449832f9d95ca"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-performance-worker.ts",
+      "sha256": "0445c63c47e5fd8e5feac64b85750dc42ca379b6a58b800fb0df8926841b086f"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/performance-harness.test.ts",
+      "sha256": "48a02e052bcbca2d6d2c5af62378dcca699f3d74300d5972b21f15a731633538"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/isolated-performance-collector.test.ts",
+      "sha256": "24c601a79369398b84336dca2d2dd8ebb8003b0258c1c2ec3ad2dbe1a37d854d"
+    },
+    {
+      "path": "apps/web/src/hooks/cart/shared-cart-experience-fence.test.ts",
+      "sha256": "b743e08a38fb2107875f63974a6ae9e16269c7f2446c8c818c20f5d7a547800b"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(commerce)/checkout/resolved-checkout-page.test.tsx",
+      "sha256": "63afbd00d29850ea4b1b50702bdd9e978fb20ce92495131e108d7df016fc68cb"
+    }
+  ],
+  "temporaryReviewCopy": "/tmp/experience-free-review-20261026/gate",
+  "freeOnly": true
+}

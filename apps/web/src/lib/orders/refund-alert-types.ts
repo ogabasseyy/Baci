@@ -46,4 +46,10 @@ export interface PriorAlertAttempt {
 
 export type AlertSupabase = Pick<SupabaseClient, 'from' | 'rpc'>;
 
-export type ChannelOutcome = 'delivered' | 'failed' | 'timeout' | 'uncertain';
+export type ChannelOutcome =
+  | 'delivered'
+  | 'failed'
+  | 'skipped'
+  | 'timeout'
+  | 'uncertain'
+  | 'undeliverable';

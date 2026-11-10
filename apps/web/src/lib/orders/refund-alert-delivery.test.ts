@@ -86,15 +86,6 @@ describe('deliverAlert', () => {
     expect(body).not.toMatch(/[\r\n]/);
   });
 
-  it('strips HTML metacharacters from the push order number', async () => {
-    const senders = makeSenders();
-    await run(senders, {
-      order: { ...order, order_number: `<b>"1'&2</b>` },
-    }).promise;
-    const data = vi.mocked(senders.sendPush).mock.calls[0][3];
-    expect(data.order_number).toBe('b12/b');
-  });
-
   it('strips all Unicode control and format characters from labels', () => {
     // C1 control, bidi override/isolate, BOM, zero-width space, LS/PS
     expect(
@@ -102,13 +93,13 @@ describe('deliverAlert', () => {
     ).toBe('ABCDEFG');
   });
 
-  it('uses the same metacharacter-free label in push copy and payload', async () => {
+  it('keeps the push payload order number faithful but strips metacharacters from visible copy', async () => {
     const senders = makeSenders();
     await run(senders, {
       order: { ...order, order_number: `<b>"1'&2` },
     }).promise;
     const [, , body, data] = vi.mocked(senders.sendPush).mock.calls[0];
-    expect(data.order_number).toBe('b12');
+    expect(data.order_number).toBe(`<b>"1'&2`);
     expect(body).toContain('order #b12');
     expect(body).not.toMatch(/[<>&"]/);
     // The email keeps HTML escaping for its subject/link text.
@@ -147,6 +138,37 @@ describe('deliverAlert', () => {
       sendPush: vi.fn().mockResolvedValue({ sent: 0 }),
     });
     await expect(run(senders).promise).resolves.toBe('uncertain');
+  });
+
+  it('treats a missing merchant email as skipped, not failed', async () => {
+    const senders = makeSenders({
+      sendPush: vi.fn().mockRejectedValue(new Error('expo down')),
+    });
+    const onDelivered = vi.fn();
+    const outcome = await deliverAlert({
+      merchant: { ...merchant, email: null },
+      onDelivered,
+      order,
+      review,
+      senders,
+    });
+    expect(senders.sendEmail).not.toHaveBeenCalled();
+    // push really failed, so the alert stays retryable
+    expect(outcome).toBe('failed');
+  });
+
+  it('is undeliverable when there is neither a push device nor an email', async () => {
+    const senders = makeSenders({
+      sendPush: vi.fn().mockResolvedValue({ errors: [], failed: 0, sent: 0 }),
+    });
+    const outcome = await deliverAlert({
+      merchant: { ...merchant, email: null },
+      onDelivered: vi.fn(),
+      order,
+      review,
+      senders,
+    });
+    expect(outcome).toBe('undeliverable');
   });
 
   it('classifies an email throw as failed (documented no-dispatch boundary)', async () => {

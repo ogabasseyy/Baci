@@ -57,6 +57,7 @@ export const emptyAlertSummary: RefundAlertPassSummary = {
   duplicate: 0,
   failed: 0,
   uncertain: 0,
+  undeliverable: 0,
 };
 
 /** Module mock factory for suites that only need the alert pass to no-op. */

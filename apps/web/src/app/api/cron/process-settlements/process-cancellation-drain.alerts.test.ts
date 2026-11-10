@@ -66,6 +66,7 @@ const counts: RefundAlertPassSummary = {
   duplicate: 0,
   failed: 1,
   uncertain: 1,
+  undeliverable: 0,
 };
 
 describe('processCancellationDrain merchant alerts', () => {

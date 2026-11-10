@@ -49,6 +49,7 @@ export interface RefundAlertPassSummary {
   duplicate: number;
   failed: number;
   uncertain: number;
+  undeliverable: number;
 }
 
 async function loadReviewsNeedingAlert(
@@ -100,6 +101,7 @@ export async function alertPendingRefundReviews({
     duplicate: 0,
     failed: 0,
     uncertain: 0,
+    undeliverable: 0,
   };
   const outOfBudget = () =>
     deadlineMs !== undefined && deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS;
@@ -177,6 +179,7 @@ export async function alertPendingRefundReviews({
       if (result === 'delivered') summary.alerted += 1;
       else if (result === 'failed' || result === 'skipped') summary.failed += 1;
       else if (result === 'uncertain') summary.uncertain += 1;
+      else if (result === 'undeliverable') summary.undeliverable += 1;
       else if (result === 'deferred') {
         summary.deferred += 1;
         break;

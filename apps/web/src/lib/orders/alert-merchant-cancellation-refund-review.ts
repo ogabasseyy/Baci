@@ -18,7 +18,8 @@ const TIMEOUT_GRACE_MS = 2_000;
 /**
  * delivered: a channel confirmed. failed: every channel definitely failed.
  * uncertain: ambiguous result or timeout. duplicate: already claimed
- * elsewhere (benign). deferred: no budget, unclaimed. skipped: the claim or
+ * elsewhere (benign). undeliverable: the merchant has no push device and no
+ * email, so retrying cannot help (claim closed without further attempts). deferred: no budget, unclaimed. skipped: the claim or
  * the attempt itself errored.
  */
 type RefundAlertOutcome =
@@ -27,7 +28,8 @@ type RefundAlertOutcome =
   | 'duplicate'
   | 'failed'
   | 'skipped'
-  | 'uncertain';
+  | 'uncertain'
+  | 'undeliverable';
 
 /** Total send attempts per review before the alert is abandoned. */
 export const REFUND_ALERT_RETRY_CAP = 3;
@@ -102,7 +104,13 @@ export async function alertMerchantOfRefundReview({
         new Promise<ChannelOutcome>((resolve) => {
           timer = setTimeout(
             () => resolve('timeout'),
-            Math.min(ALERT_TIMEOUT_MS, remainingMs)
+            // Absolute deadline, recomputed after the (possibly slow) claim.
+            Math.min(
+              ALERT_TIMEOUT_MS,
+              deadlineMs === undefined
+                ? ALERT_TIMEOUT_MS
+                : Math.max(0, deadlineMs - Date.now())
+            )
           );
         }),
       ]);
@@ -158,6 +166,16 @@ export async function alertMerchantOfRefundReview({
         }),
       ]);
       clearTimeout(confirmTimer);
+    }
+    if (outcome === 'undeliverable') {
+      logger.warn({
+        message:
+          'Cancellation refund alert undeliverable: merchant has no push device or email; closing without retries',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+      await confirmClaim(supabase, review.id);
+      return 'undeliverable';
     }
     if (outcome === 'timeout') {
       logger.warn({

@@ -218,6 +218,7 @@ describe('alertPendingRefundReviews', () => {
       duplicate: 0,
       failed: 1,
       uncertain: 1,
+      undeliverable: 0,
     });
   });
 
@@ -249,6 +250,7 @@ describe('alertPendingRefundReviews', () => {
       duplicate: 4,
       failed: 0,
       uncertain: 0,
+      undeliverable: 0,
     });
   });
 

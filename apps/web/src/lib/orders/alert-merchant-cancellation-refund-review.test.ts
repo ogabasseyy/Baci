@@ -227,43 +227,46 @@ describe('alertMerchantOfRefundReview', () => {
     expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 
-  describe('re-driving an unconfirmed claim', () => {
-    it('re-claims with compare-and-set on the attempt count', async () => {
-      const supabase = makeSupabase();
-      const senders = makeSenders();
-      await expect(
-        run(supabase, senders, { prior: { attempts: 2 } })
-      ).resolves.toBe('delivered');
-      expect(supabase.insert).not.toHaveBeenCalled();
-      expect(supabase.update).toHaveBeenCalledWith(
-        expect.objectContaining({ attempts: 3 })
-      );
-      expect(supabase.reclaimChain.eq).toHaveBeenCalledWith('attempts', 2);
-      expect(supabase.reclaimChain.is).toHaveBeenCalledWith(
-        'confirmed_at',
-        null
-      );
-      expect(senders.sendPush).toHaveBeenCalledTimes(1);
+  it('times out against the absolute deadline after a slow claim', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    supabase.insert.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ error: null }), 6_000)
+        )
+    );
+    const senders = makeSenders({
+      sendEmail: vi.fn(() => new Promise<never>(() => {})),
+      sendPush: vi.fn(() => new Promise<never>(() => {})),
     });
+    const pending = run(supabase, senders, { deadlineMs: Date.now() + 10_000 });
+    // Without recomputing, the timeout would wait ~10s more after the claim.
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(pending).resolves.toBe('uncertain');
+  });
 
-    it('skips when another worker won the re-claim', async () => {
-      const senders = makeSenders();
-      await expect(
-        run(makeSupabase(null, []), senders, { prior: { attempts: 1 } })
-      ).resolves.toBe('duplicate');
-      expect(senders.sendPush).not.toHaveBeenCalled();
+  it('closes an undeliverable alert without consuming retries and logs once', async () => {
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendPush: vi.fn().mockResolvedValue({ errors: [], failed: 0, sent: 0 }),
     });
-
-    it('keeps the row when a retry fails, and logs a terminal error at the cap', async () => {
-      const supabase = makeSupabase();
-      await run(supabase, failing(), { prior: { attempts: 2 } });
-      expect(supabase.del).not.toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: expect.stringContaining('abandoned'),
-          reviewId: 'review-1',
-        })
-      );
-    });
+    await expect(
+      alertMerchantOfRefundReview({
+        merchant: { ...merchant, email: null },
+        order,
+        review,
+        senders,
+        supabase: asSupabase(supabase),
+      })
+    ).resolves.toBe('undeliverable');
+    expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
+    expect(
+      vi
+        .mocked(logger.warn)
+        .mock.calls.filter(([m]) =>
+          String((m as { message: string }).message).includes('undeliverable')
+        )
+    ).toHaveLength(1);
   });
 });

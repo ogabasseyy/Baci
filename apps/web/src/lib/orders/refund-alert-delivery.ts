@@ -55,7 +55,11 @@ function classifyPush(push: {
   ) {
     return 'uncertain';
   }
-  return push.sent > 0 ? 'delivered' : 'failed';
+  if (push.sent > 0) return 'delivered';
+  // No devices and no error: the channel is unavailable, not failing.
+  return (push.failed ?? 0) === 0 && (push.errors?.length ?? 0) === 0
+    ? 'skipped'
+    : 'failed';
 }
 
 /**
@@ -111,7 +115,7 @@ export async function deliverAlert({
             // Reuses the shipped admin deep link: this type opens the order.
             type: 'paystack_refund_needs_attention',
             order_id: order.id,
-            order_number: copyLabel,
+            order_number: label,
           },
           'payments'
         )
@@ -126,7 +130,7 @@ export async function deliverAlert({
     }
   };
   const sendEmail = async (): Promise<ChannelOutcome> => {
-    if (!merchant.email) return 'failed';
+    if (!merchant.email) return 'skipped';
     try {
       const link = `${dashboardBaseUrl()}/dashboard/orders/${encodeURIComponent(order.id)}`;
       const result = await senders.sendEmail({
@@ -162,7 +166,11 @@ export async function deliverAlert({
   if (pushOutcome === 'delivered' || emailOutcome === 'delivered') {
     return 'delivered';
   }
-  return pushOutcome === 'uncertain' || emailOutcome === 'uncertain'
-    ? 'uncertain'
+  if (pushOutcome === 'uncertain' || emailOutcome === 'uncertain') {
+    return 'uncertain';
+  }
+  // Both channels unavailable (no devices, no email): retrying cannot help.
+  return pushOutcome === 'skipped' && emailOutcome === 'skipped'
+    ? 'undeliverable'
     : 'failed';
 }

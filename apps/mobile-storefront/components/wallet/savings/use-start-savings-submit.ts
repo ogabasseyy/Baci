@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
+import { useAuthStore } from '@/stores/auth-store';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
@@ -73,6 +74,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     setIsSubmitting(true);
     const context = contextRef.current;
     if (options?.confirmPrimaryBalance) {
+      const submittingUserId = useAuthStore.getState().user?.id;
       // Inside the guarded lifecycle: no second submit can start, and an
       // edit to the plan while the balance is read cancels this one.
       const balanceKobo = await readFreshPrimaryBalanceKobo(
@@ -88,8 +90,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
           : balanceKobo < headStartKobo
             ? PRIMARY_HEAD_START_SHORT_MESSAGE
             : null;
-      if (refusal || !context.active) {
-        if (refusal && context.active) input.setFormError(refusal);
+      // A different account signed in during the read: drop this one.
+      const sameUser = useAuthStore.getState().user?.id === submittingUserId;
+      if (refusal || !context.active || !sameUser) {
+        if (refusal && context.active && sameUser) input.setFormError(refusal);
         submitInFlightRef.current = false;
         if (mountedRef.current) setIsSubmitting(false);
         return;

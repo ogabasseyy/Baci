@@ -55,12 +55,19 @@ describe('usePrimaryWalletWatch', () => {
     const { result, rerender, refetch } = setup({ wallet: ready });
     rerender({ wallet: unavailable });
     expect(result.current?.primary_balance_kobo).toBe(500000);
+    // Kept, not fresh: marked so nothing treats it as current.
+    expect(result.current?.primary_stale).toBe(true);
     for (let i = 0; i < 2; i += 1) {
       await act(async () => {
         jest.advanceTimersByTime(PRIMARY_CREDIT_POLL_INTERVAL_MS);
       });
     }
     expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('never marks a fresh balance as kept', () => {
+    const { result } = setup({ wallet: ready });
+    expect(result.current?.primary_stale).toBeUndefined();
   });
 
   it('re-checks on its own only while the PiggyVest answer is unknown', () => {

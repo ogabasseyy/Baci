@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { createSavingsGoal } from '@/lib/customer-savings';
+import { useAuthStore } from '@/stores/auth-store';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
@@ -105,6 +106,30 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(createSavingsGoal).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(message);
     expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it('drops the submission when another account signs in during the check', async () => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
+    let answer: (value: number) => void = () => undefined;
+    readBalance.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const input = createInput();
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.submitSavingsGoal(primaryOptions);
+    });
+    useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    await act(async () => {
+      answer(5_000_000);
+      await pending;
+    });
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).not.toHaveBeenCalled();
+    useAuthStore.setState({ user: null } as never);
   });
 
   it('drops the submission when the plan is edited during the check', async () => {

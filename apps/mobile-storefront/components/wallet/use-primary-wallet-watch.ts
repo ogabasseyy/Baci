@@ -45,7 +45,9 @@ export function usePrimaryWalletWatch({
   }
   const effective =
     wallet && kobo !== null && typeof wallet.primary_balance_kobo !== 'number'
-      ? { ...wallet, primary_balance_kobo: kobo }
+      ? // A kept balance, not a fresh answer: marked so nothing treats it
+        // as current (any money decision re-reads PiggyVest fresh).
+        { ...wallet, primary_balance_kobo: kobo, primary_stale: true }
       : wallet;
   usePrimaryWalletUnknownRetry({
     // A recalled balance is shown but still re-checked until fresh.

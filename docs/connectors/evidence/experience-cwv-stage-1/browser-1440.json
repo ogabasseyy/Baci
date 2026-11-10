@@ -1,0 +1,22 @@
+{
+  "functionalOnly": true,
+  "cwvQualified": false,
+  "width": 1440,
+  "noJsHeading": "Life, with\na little orbit.",
+  "baselineNoJsHeadingCount": 0,
+  "images": [
+    {
+      "complete": true,
+      "width": 240
+    },
+    {
+      "complete": true,
+      "width": 240
+    }
+  ],
+  "hydration": "ready",
+  "colorInteraction": "Ink",
+  "errors": [],
+  "jobId": "baci-experience-2ad45f2d-c5a0-4136-8b68-da1b40f3cbef",
+  "wallMs": 25361
+}

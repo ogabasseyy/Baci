@@ -15,6 +15,7 @@ interface RateLimitMatch {
 }
 
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
+  '/api/storefront/experience': { maxRequests: 240, windowMs: 60_000 },
   // Submission writes have their own budget; typing and result reads do not consume it.
   '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
   // Search assistance is an expensive public AI call — keep it at the same

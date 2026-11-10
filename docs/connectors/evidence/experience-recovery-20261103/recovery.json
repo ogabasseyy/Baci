@@ -1,0 +1,181 @@
+{
+  "date": "2026-11-03",
+  "base": "a22bf2cceeac3de81919f011bbb85c691e69e7e7",
+  "featurePreviousBase": "ad20cb5c4974eb303183c5440d35dc1554721a21",
+  "upstreamCommitCount": 103,
+  "branch": "codex/experience-recovery-20261103",
+  "sourceStash": "230760e6f0a87fa802c85512ac4d1e097e320625",
+  "laterSourceTree": "c1a7cdc35c7b3957f3262b4db72523ad778cf741",
+  "retainedTreeRef": "refs/codex-recovery/experience-20261028-source-tree",
+  "savedInventoryFiles": 803,
+  "missingSavedSourceFiles": [],
+  "differencesFromSavedInventory": [
+    {
+      "path": ".github/filters/ci.yml",
+      "reason": "current-main reconciliation",
+      "savedSha256": "c73d39f919bc82e6f6fd7570e521b0b232b50328e3e19ccdc8d8a0c432764f4c",
+      "currentSha256": "d6fbda064b3b211493a280a0db78513fa4ea69bfa3a6d672b5ed909b22a10eec"
+    },
+    {
+      "path": ".github/scripts/resolve-ci-test-plan.mjs",
+      "reason": "current-main reconciliation",
+      "savedSha256": "0329fa82ec1ee8da94ecd64ccf7480a73b3bc930e355c219b91cee31d2133a29",
+      "currentSha256": "db260e30e7f73c5554571e6129bc7d1652db43bf2f29ccf9ce270c3664607239"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "reason": "current-main reconciliation",
+      "savedSha256": "678192b6787c65ba98e3b0f94639da67b580fc4ceb629c492e101b12ff4ec130",
+      "currentSha256": "d1d87d18ee0aa1c292b67093ecfc8f8e7ed2ecf84e40ebd4450e98be7822849a"
+    },
+    {
+      "path": "apps/web/next.config.test.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "d303281cd1361a830f3f2658141f9909909f6e8a3b52f6d90606a286d76db603",
+      "currentSha256": "95aa0d9d49f06bf7671a954621bff91b016117f765a0d7103fb3165fa7b1ecd5"
+    },
+    {
+      "path": "apps/web/package.json",
+      "reason": "current-main reconciliation",
+      "savedSha256": "55ec34a94846c8dd378b1239898b1487f411ab88da79e6b149f9fd7eeae83958",
+      "currentSha256": "9429203e398d620eb7c072a6629762f23c9e6ff768affd1dbfc57949eb2349a0"
+    },
+    {
+      "path": "apps/web/src/app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx",
+      "reason": "current-main reconciliation",
+      "savedSha256": "8c5b6cf1c279bb6ac663b1ac8b0c504db6790a825477e353eed84474fbd57f7a",
+      "currentSha256": "22a3dd661bd6a81b7c7f5d767b249945a0ffbb3e3dcf3c9f32d7172f1d4cab91"
+    },
+    {
+      "path": "apps/web/src/app/api/shipping/quotes/route.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "c1ebff7480bf5078c35b36b17ccef4277a792af4c9e3587bcba1b900b9b498ba",
+      "currentSha256": "b0d2fd090133ea63814d5941f273bdf1e3d4fa42b5eb8698148031c2efa4730b"
+    },
+    {
+      "path": "apps/web/src/components/storefront/cookie-consent.tsx",
+      "reason": "current-main reconciliation",
+      "savedSha256": "e1444b050ead86a5e860e2ed951c62ffac4bc3d779f208e9bc41f83dfd139360",
+      "currentSha256": "49e2c6322df529b70f78c58e1eebc74a7409bf9ce61945fd5e9274bbed945a84"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.test.tsx",
+      "reason": "verified recovery/review fix",
+      "savedSha256": "d974fc99ee3120912a001767b9b93b20b2b67cbd69ac80b39db9d17f86b2dde2",
+      "currentSha256": "cdbe98c35f37574c26fa67211f323c21f97b83e834c24b973bbcf7ca9e6dd639"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/ExperienceEngineFallback.tsx",
+      "reason": "verified recovery/review fix",
+      "savedSha256": "e1b75c3e87d453e3c78ac1e2ebae200250db6ef37fa59c874bb2204b500ff929",
+      "currentSha256": "a4d654caeebe45555ce6d73a66398f564ed116b669476c0a50d18c60fc040fa0"
+    },
+    {
+      "path": "apps/web/src/components/storefront/experience/experience-host-runtime.ts",
+      "reason": "verified recovery/review fix",
+      "savedSha256": "e2723086eba79ee74b5aeb5007fe4fcc01b4c4d89d535ed8cee5573527c3c323",
+      "currentSha256": "44f8504a6d5b78120427b17d3572c7b038110cadd61529408aee74789d6781ad"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-cart-credential-paths.test.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "5db3cfb26085019982df38c7a32758fe83822e4882c190c2a4cefbc4081679db",
+      "currentSha256": "54d156da270e2657e39d0ed53ee21f5506e14307373b95543177d24277be4585"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-cart-credential-paths.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "5429c809726d45292cc85d112c1385114818bbe8b58c78dc7a714e52700dceaf",
+      "currentSha256": "4dbca28abc293ee586ba94ddda00d90c6b5493f9b077c4ce006ac611205fc0e3"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-shipping-credential-paths.test.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "6d7b1ff48f0d20b823149b8d924c49f81decc74bc3637da1cb29733d241810bd",
+      "currentSha256": "11e9d044e0ffdab9af85caa9f3806626cf37c9f5441886c47a4972db6cddd800"
+    },
+    {
+      "path": "apps/web/src/lib/events/event-pipeline-shipping-credential-paths.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "1453a5b17b1b62f2077360a9893b14bdc2db11b6e6b6bdbea4aba2228a232783",
+      "currentSha256": "73dc97383c5e795de41cf1d8cf71b78e7168aa15c444c94af163cbd56efeba08"
+    },
+    {
+      "path": "apps/web/tools/events/event-pipeline-service-authority-cart.test.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "373b2d25783fe1974d2edba03c779b2f51f38b7766ebc0fcd325d70f69b40a6d",
+      "currentSha256": "6a3cae72c1ab462f3a7d6ff0d320dd85427c2cd7cb8bd40844d00d1cb7dcb31c"
+    },
+    {
+      "path": "apps/web/tools/events/runtime-contract-integration-suites.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "0bc2db776a8cbbc03931c716a367616b1d56e9bbc71eeedc34cb77d0e5e09c20",
+      "currentSha256": "c1fc608e54484803920925ccfcaf26facd0f9e03cd6c4816930cbda17bb46b23"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/draft-approval.node.test.ts",
+      "reason": "verified recovery/review fix",
+      "savedSha256": "2a2d40199c5df21aa17907e3ca03c6b126be1e288f705e92ee1665a86b05e5ae",
+      "currentSha256": "2fe6581894145b6d0e494dcc8e94066339bb5773b7354d041823197801090563"
+    },
+    {
+      "path": "apps/web/vitest.config.ts",
+      "reason": "current-main reconciliation",
+      "savedSha256": "340528feb9b4a901a307135de77132bfd4dca00079fe27b4973bca988c4ff542",
+      "currentSha256": "474f1d06e2b53cb1b23063d249938fee1fc07da8242e0b24f610c5168277f3ac"
+    },
+    {
+      "path": "packages/experience-sdk/vitest.config.ts",
+      "reason": "verified recovery/review fix",
+      "savedSha256": "20dceb12714d50d353594cf205240dabbc900b643082eaa22e197da896692d51",
+      "currentSha256": "0ec3158e54a07132fe67703feed821c97c3bedfbe8820d4e63fee15858408c3a"
+    },
+    {
+      "path": "packages/shared/package.json",
+      "reason": "current-main reconciliation",
+      "savedSha256": "917c53794bf0dbf294f8697664b516158f94ec7726edb5dea05ae52cc2bbe492",
+      "currentSha256": "7f9870525f7c99165450b7efb1b057652d7090eba5647455fe51abd8143536cc"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "reason": "current-main reconciliation",
+      "savedSha256": "07c8a72fb6da6858e90bb60e9f9b36f22052c944596421918ccbf05da1ed5f13",
+      "currentSha256": "e5f0ef7f455dfc7d904532e53571513231d9b2790578c3585c5a845e2d3ccc50"
+    },
+    {
+      "path": "turbo.json",
+      "reason": "current-main reconciliation",
+      "savedSha256": "7cfa330c57dddb64832336cab2cc10d03f99b162fdb9891b99e3c289d3d14239",
+      "currentSha256": "6e83b099aa09c2bf0981a73c421eaaed293e659a4577c2642a778d97cd5eb201"
+    }
+  ],
+  "additionalRecoveredSourceFiles": [
+    "apps/web/src/lib/agentic/agentic-dva-caller-contract.test.ts",
+    "apps/web/src/lib/agentic/agentic-dva-caller-source-files.test-support.ts",
+    "apps/web/src/lib/agentic/agentic-dva-caller-source-files.test.ts"
+  ],
+  "collectorRecovery": "Original agent patch events replayed with exact context matching; current-main caller assertions retained.",
+  "orbitArchive": {
+    "path": "/Users/mac/Documents/Baci-design-research/orbit-ogabassey-concept-2026-10-25",
+    "filesVerified": 17,
+    "mismatches": 0
+  },
+  "boundaries": {
+    "localOnly": true,
+    "syntheticData": true,
+    "normalAuthRls": true,
+    "published": false,
+    "ordersCreated": false,
+    "paymentsMade": false,
+    "paidAiUsed": false,
+    "protectedFilesChanged": false
+  },
+  "candidateCommit": null,
+  "releaseQualified": false,
+  "finalMainRefresh": {
+    "from": "d8c5282fce937fde17341eb916f9ab1901389021",
+    "to": "a22bf2cceeac3de81919f011bbb85c691e69e7e7",
+    "method": "fast-forward with no conflicts",
+    "scope": "48 disjoint PiggyVest sandbox-proof tooling files; no feature overlap or provider execution"
+  }
+}

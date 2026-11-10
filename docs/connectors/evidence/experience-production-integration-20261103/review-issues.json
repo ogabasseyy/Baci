@@ -1,0 +1,98 @@
+{
+  "reviews": [
+    {
+      "log": "experience-production-free-review-first.ndjson",
+      "outcome": "completed_with_warnings",
+      "issues": [
+        {
+          "severity": "minor",
+          "fileName": "supabase/migrations/20261103161500_experience_https_build_origins.sql",
+          "title": "Add the required existence guards to the DDL."
+        },
+        {
+          "severity": "minor",
+          "fileName": "docs/superpowers/plans/2026-11-03-experience-production-integration.md",
+          "title": "Hyphenate the compound modifier."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/src/lib/experience/local-build-supervisor.ts",
+          "title": "Split this file: it now has 323 lines."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/tools/experience-runner/runner-transport.ts",
+          "title": "Shorten the request TTL: the full 90 s TTL leaves no tolerance for clock skew."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/tests/experience-browser/checkpoint-b-worker.ts",
+          "title": "Fix the semantic-capture frame lookup: it uses the loopback origin even in virtual HTTPS mode."
+        },
+        {
+          "severity": "minor",
+          "fileName": "apps/web/tools/experience-runner/runner-transport.ts",
+          "title": "Add clock-skew tolerance by shortening the request TTL."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/tests/experience-browser/checkpoint-b-worker.ts",
+          "title": "Match the semantic-capture frame on `executionOrigin`, not the loopback origin."
+        }
+      ]
+    },
+    {
+      "log": "experience-production-free-review-final.ndjson",
+      "outcome": "completed",
+      "issues": [
+        {
+          "severity": "trivial",
+          "fileName": "supabase/migrations/20261103161500_experience_https_build_origins.sql",
+          "title": "Use `IF EXISTS` on the dropped constraints."
+        },
+        {
+          "severity": "trivial",
+          "fileName": "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+          "title": "Replace the `as` assertions with a real narrowing guard."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/src/lib/experience/production-storefront.ts",
+          "title": "Reserve runner capacity for public renders."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/src/lib/experience/local-build-supervisor.ts",
+          "title": "Make post-finalization renderer retention recoverable."
+        }
+      ]
+    },
+    {
+      "log": "experience-production-free-review-current-main.ndjson",
+      "outcome": "completed",
+      "issues": [
+        {
+          "severity": "minor",
+          "fileName": "supabase/migrations/20261103161500_experience_https_build_origins.sql",
+          "title": "Use `IF EXISTS` and replace-safe DDL in the new migration, as the repository requires."
+        },
+        {
+          "severity": "minor",
+          "fileName": "apps/web/src/lib/experience/local-build-supervisor.ts",
+          "title": "Remove the transient candidate on every failure path, not only on success."
+        },
+        {
+          "severity": "major",
+          "fileName": "apps/web/src/lib/experience/production-integration.ts",
+          "title": "Pass the read scope into `pipelineFor` for `readPerformance`."
+        },
+        {
+          "severity": "minor",
+          "fileName": "apps/web/src/lib/experience/local-build-supervisor.ts",
+          "title": "Remove the staged candidate on every failure path."
+        }
+      ]
+    }
+  ],
+  "disposition": "Valid issues fixed and regression-tested; DDL guard suggestions declined with rationale in README. No final immutable-candidate all-clear."
+}

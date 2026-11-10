@@ -16,7 +16,12 @@ import {
   normalizeHeader,
   requestHost,
 } from './merchant-host';
-import type { CartMerchantContext } from './principal';
+import type {
+  CartRouteMerchant,
+  MerchantResolutionError,
+  MerchantRpcClient,
+  ResolveCartMerchantDeps,
+} from './merchant-resolution-types';
 
 export {
   isPrivateLanHost,
@@ -25,36 +30,12 @@ export {
   requestHost,
 } from './merchant-host';
 
-export interface CartRouteMerchant extends CartMerchantContext {
-  customDomain: string | null;
-}
-
-export type MerchantResolutionError =
-  | 'merchant_unresolved'
-  | 'merchant_unavailable'
-  | 'temporarily_unavailable';
-
-export interface MerchantRpcClient {
-  rpc(
-    functionName: 'resolve_storefront_auth_merchant',
-    args: { p_identifier: string }
-  ): PromiseLike<{ data: unknown; error: unknown }>;
-}
-
-export interface ResolveCartMerchantDeps {
-  rpcClient: MerchantRpcClient;
-  resolveAlias: (slug: string) => Promise<string | null>;
-  rootDomain?: string;
-  /** Teardown-only: revocation stays possible after unpublishing. */
-  allowUnpublished?: boolean;
-  /** Pre-parsed merchantSlug hint from the JSON body, if any. */
-  bodyHint?: string | null;
-  /** Enrollment lookup; when provided, resolution fails closed unless
-   * the merchant carries the shared_cart feature. */
-  loadMerchantFeatures?: (
-    merchantId: string
-  ) => Promise<MerchantFeatureSource | null>;
-}
+export type {
+  CartRouteMerchant,
+  MerchantResolutionError,
+  MerchantRpcClient,
+  ResolveCartMerchantDeps,
+} from './merchant-resolution-types';
 
 /**
  * Enrollment lookup backed by the public merchants read (the same
@@ -245,8 +226,10 @@ export async function resolveCartMerchant(
           .filter(Boolean)[0]
           ?.toLowerCase();
         hintAllowed =
-          refererUrl.host.toLowerCase() === host &&
-          refererSlug === hintCandidate;
+          refererUrl.host.toLowerCase() ===
+            (request.headers.get('host') ?? new URL(request.url).host)
+              .trim()
+              .toLowerCase() && refererSlug === hintCandidate;
       } catch {
         hintAllowed = false;
       }

@@ -1,0 +1,156 @@
+{
+  "date": "2026-11-03",
+  "base": "a22bf2cceeac3de81919f011bbb85c691e69e7e7",
+  "candidateCommit": null,
+  "sourceInventoryDigest": "31fbe5494804660a0715c298c1c1e0a3880841ead8b469796cfb0f01cdc1df33",
+  "sourceFilesVerified": 827,
+  "nextBuildId": "yLQfYjpS6MWjA5cwAO2e8",
+  "nextVersion": "16.4.1",
+  "mode": "local-production-build",
+  "synthetic": true,
+  "normalAuthRls": true,
+  "fixture": {
+    "host": "http://localhost:43178",
+    "gateway": "http://127.0.0.1:43179",
+    "apiPort": 57410,
+    "synthetic": true,
+    "preparedRenders": 4,
+    "buildDigest": "5be46b50ba0b6b3fd14cc16de08ce34ec480cc5a522263820a2d3dfbb3fcb183",
+    "sourceDigest": "33713d9bc14e2568e511b118729729a8b5d26744c35b6d3335a6a542aebb240a"
+  },
+  "runscVersion": "release-20261019.0",
+  "compilerNode": "24.21.0",
+  "captureNode": "24.20.0",
+  "playwright": "1.63.0",
+  "sandboxChecks": {
+    "compileTests": 1,
+    "privateAuthoringFiles": 3,
+    "privateAuthoringTests": 4,
+    "status": "passed"
+  },
+  "checkout": {
+    "desktop": "final review; Place Order enabled but never clicked",
+    "mobile": "final review; Place Order enabled but never clicked",
+    "ordersInDisposableDatabase": 0,
+    "paymentSubmitted": false,
+    "carrierProviderQuoteQualification": false,
+    "addressMode": "manual synthetic address; merchant rate only; autocomplete key absent",
+    "transientRateUi": "One fast multi-field edit showed the retry card. Refresh returned HTTP 200; a subsequent single-field address edit refreshed automatically with HTTP 200. Retained rather than omitted.",
+    "csrfWarning": "Initial launch reported missing CSRF token and initialized it normally; protection retained."
+  },
+  "benchmark": {
+    "samples": 24,
+    "cells": 8,
+    "perCell": 3,
+    "failedCaptureCells": 0,
+    "contaminatedSamples": 24,
+    "browser": [
+      {
+        "name": "Chrome",
+        "version": "151.0.7922.169"
+      }
+    ],
+    "image": "sitespeedio/sitespeed.io:42.7.0@sha256:3b89ded94e75faf09d34a9f0921d621d470564dcee7c7f51bf2297d701451f71",
+    "containerCpuLimit": 2,
+    "network": "native; no throttling",
+    "cache": "disabled per navigation; backend prepared/warm",
+    "cleanLoadThresholdPerCpu": 0.8,
+    "visualVideo": false,
+    "interactionScope": "Illustration colour interaction where present; event-duration diagnostics, not field INP",
+    "aggregates": [
+      {
+        "width": 390,
+        "route": "/qa1",
+        "samples": 3,
+        "medianCompositeLcpMs": 1416,
+        "nearestRankP75CompositeLcpMs": 1898.5,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 390,
+        "route": "/qa1/collections/all",
+        "samples": 3,
+        "medianCompositeLcpMs": 1914.8,
+        "nearestRankP75CompositeLcpMs": 3083,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 390,
+        "route": "/qa1/phones/synthetic-device",
+        "samples": 3,
+        "medianCompositeLcpMs": 3235.2,
+        "nearestRankP75CompositeLcpMs": 7728.4,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 390,
+        "route": "/qa1/pages/story",
+        "samples": 3,
+        "medianCompositeLcpMs": 1632.6,
+        "nearestRankP75CompositeLcpMs": 1820,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 1440,
+        "route": "/qa1",
+        "samples": 3,
+        "medianCompositeLcpMs": 2396,
+        "nearestRankP75CompositeLcpMs": 2640,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 1440,
+        "route": "/qa1/collections/all",
+        "samples": 3,
+        "medianCompositeLcpMs": 1640,
+        "nearestRankP75CompositeLcpMs": 2024,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 1440,
+        "route": "/qa1/phones/synthetic-device",
+        "samples": 3,
+        "medianCompositeLcpMs": 1256,
+        "nearestRankP75CompositeLcpMs": 1288,
+        "maxRawCls": 0,
+        "maxPostPaintCls": 0,
+        "allContaminated": true
+      },
+      {
+        "width": 1440,
+        "route": "/qa1/pages/story",
+        "samples": 3,
+        "medianCompositeLcpMs": 1832,
+        "nearestRankP75CompositeLcpMs": 2169.2,
+        "maxRawCls": 4.62962962962963e-05,
+        "maxPostPaintCls": 4.62962962962963e-05,
+        "allContaminated": true
+      }
+    ]
+  },
+  "releaseQualified": false,
+  "cwvQualified": false,
+  "publishingReady": false,
+  "published": false,
+  "hostedMigrationsApplied": false,
+  "productionChanged": false,
+  "paidAiUsed": false,
+  "remainingGates": [
+    "Uncontaminated representative mobile/desktop timing qualification; current captures exceed some LCP targets under load.",
+    "Production runtime composition and isolated execution/delivery origin adapter: current composer explicitly rejects production.",
+    "Reviewed immutable candidate and required exact-head CI/full release checks.",
+    "Separately approved schema/config rollout, deployment and publication."
+  ]
+}

@@ -4,28 +4,13 @@ import type {
   CartWarning,
 } from '@baci/shared/cart';
 import { isCartErrorCode } from '@baci/shared/cart';
-export type SharedCartFetchResult =
-  | { ok: true; snapshot: CartSnapshot; warnings: CartWarning[] }
-  | {
-      ok: false;
-      code: CartErrorCode;
-      snapshot: CartSnapshot | null;
-      retryable: boolean;
-    };
 
-export type SharedCartMutationResult =
-  | {
-      ok: true;
-      snapshot: CartSnapshot;
-      replayed: boolean;
-      warnings: CartWarning[];
-    }
-  | {
-      ok: false;
-      code: CartErrorCode;
-      snapshot: CartSnapshot | null;
-      retryable: boolean;
-    };
+export type {
+  SharedCartFetchResult,
+  SharedCartMutationResult,
+} from './shared-cart-client-types';
+
+import type { SharedCartFetchResult } from './shared-cart-client-types';
 
 export const RETRYABLE_CODES: ReadonlySet<CartErrorCode> = new Set([
   'rate_limited',

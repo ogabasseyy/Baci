@@ -1,0 +1,29 @@
+{
+  "format": "private-prerender-browser/v1",
+  "width": 390,
+  "noJsContent": true,
+  "hydration": "ready",
+  "customInteraction": "Count 1",
+  "clickState": {
+    "box": {
+      "x": 8,
+      "y": 113.875,
+      "width": 62.703125,
+      "height": 21,
+      "top": 113.875,
+      "right": 70.703125,
+      "bottom": 134.875,
+      "left": 8
+    },
+    "inert": false,
+    "htmlState": "ready",
+    "visibility": "visible"
+  },
+  "errors": [],
+  "sourceDigest": "2df0ed0a5006c1fd4c48ac0a08f8bf81f7c129809dccd6f161dcad7d4bdefe95",
+  "buildDigest": "a8b5af843010f97decc1cbc68a960d2d63349ee6dc7e24f222754ec32c081e4b",
+  "cwvQualified": false,
+  "privatePreviewCommerce": "existing Baci preview dispatcher; synthetic only",
+  "jobId": "baci-experience-4e75f426-4ccf-4a73-b8a5-099cbdd7a604",
+  "wallMs": 1882
+}

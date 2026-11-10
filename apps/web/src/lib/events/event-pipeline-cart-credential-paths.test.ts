@@ -2,7 +2,13 @@ import { expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths as paths } from './event-pipeline-cart-credential-paths';
 
 it('records only exact cart scoped-signing paths, not service factories', () => {
-  expect(paths).toHaveLength(26);
+  expect(paths).toHaveLength(27);
+  expect(paths).toContainEqual([
+    'apps/web/src/app/api/storefront/cart/continuity/route.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ]);
   expect(new Set(paths.map((p) => JSON.stringify(p))).size).toBe(paths.length);
   for (const path of paths) {
     if (

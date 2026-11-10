@@ -27,6 +27,7 @@ export const actions = {
 export const props = {
   ...actions,
   canBookGigl: true,
+  isGiglOrder: true,
   recoveryOrder: order,
   canUseProvider: canUseSelectedShippingProvider(order),
   fulfillmentDetails: { imei: '', serialNumber: '', items: [] },

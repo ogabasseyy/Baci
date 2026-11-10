@@ -40,6 +40,7 @@ export function gigl(canBook: boolean, error: string | null = null) {
 
 export const base = {
   canBookGigl: true,
+  isGiglOrder: true,
   canUseProvider: false,
   fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
   fulfillmentItemIndex: 0,

@@ -30,6 +30,7 @@ export function ShipmentFlowSheet({
   recoveryOrder,
   canBookGigl,
   canUseProvider,
+  isGiglOrder = false,
   checkoutPaidShippingLabel,
   externalWaybill,
   fulfillmentDetails,
@@ -213,7 +214,7 @@ export function ShipmentFlowSheet({
             ) : null}
             {step === 'method' ? (
               <ShipmentFlowMethodStep
-                bookingDenied={!canBookGigl}
+                bookingDenied={isGiglOrder && !canBookGigl}
                 canUseProvider={canUseProvider}
                 checkoutPaidShippingLabel={checkoutPaidShippingLabel}
                 externalWaybill={externalWaybill}

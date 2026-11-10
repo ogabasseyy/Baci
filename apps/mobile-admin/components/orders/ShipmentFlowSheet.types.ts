@@ -16,6 +16,8 @@ export interface ShipmentFlowSheetProps {
    */
   canBookGigl: boolean;
   canUseProvider: boolean;
+  /** The order ships with GIG; only then can GIG booking rights withhold it. */
+  isGiglOrder?: boolean;
   checkoutPaidShippingLabel?: string | null;
   /** Attach a waybill booked in GIG's own app; omitted when GIG is off. */
   externalWaybill?: OrderGiglExternalWaybill;

@@ -210,4 +210,20 @@ describe('ShipmentFlowMethodStep', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Ask the store owner/i)).toBeNull();
   });
+
+  it('keeps the missing-quote explanation for another provider when GIG booking is denied', () => {
+    render(
+      <ShipmentFlowMethodStep
+        canUseProvider={false}
+        onModeChange={vi.fn()}
+        providerLabel="Topship"
+        selectedMode="provider"
+      />
+    );
+
+    expect(
+      screen.getByText(/Topship was selected for checkout/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Ask the store owner/i)).toBeNull();
+  });
 });

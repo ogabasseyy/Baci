@@ -66,6 +66,7 @@ export function OrderDetailsScreenModals({
         recoveryOrder={order}
         canBookGigl={controller.canBookGigl}
         canUseProvider={controller.providerBookingAvailable}
+        isGiglOrder={order.shipping_provider?.trim().toUpperCase() === 'GIGL'}
         checkoutPaidShippingLabel={
           checkoutPaidShippingFee === null
             ? null

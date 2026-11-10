@@ -6,6 +6,7 @@ import {
 } from './start-savings-wallet-balance';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
   useStartSavingsFormFlow,
 } from './use-start-savings-form-flow';
@@ -77,6 +78,19 @@ describe('start savings with a PiggyVest wallet', () => {
     expect(submitSavingsGoal).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(
       PRIMARY_HEAD_START_SHORT_MESSAGE
+    );
+  });
+
+  it('refuses a head start above the plan target, creating nothing', async () => {
+    const { flow, submitSavingsGoal, input } = createFlow({
+      primaryWallet: true,
+      initialContributionValue: 20_000,
+      targetValue: 10_000,
+    });
+    await flow.handleFundingContinue();
+    expect(submitSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
     );
   });
 

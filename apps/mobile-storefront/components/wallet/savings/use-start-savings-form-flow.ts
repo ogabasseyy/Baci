@@ -8,6 +8,8 @@ import { readFreshPrimaryBalance } from './start-savings-wallet-balance';
 
 export const PRIMARY_HEAD_START_SHORT_MESSAGE =
   'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
+  'Your head start cannot be more than the plan target.';
 export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
   "We couldn't check your wallet balance just now. Please try again.";
 
@@ -132,6 +134,12 @@ export function useStartSavingsFormFlow({
     ) {
       // Refuse up front rather than create a plan whose head start cannot
       // move: the legacy path fails atomically, so this path must too.
+      // The plan is created without the head start, so check the target
+      // bound the creation request would otherwise have enforced.
+      if (initialContributionValue > targetValue) {
+        setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
+        return;
+      }
       if (requiredTopUpAmount > 0) {
         setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
         return;

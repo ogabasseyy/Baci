@@ -46,7 +46,20 @@ export async function readPrimaryFundingAccountSoon(
   });
   const settled = await Promise.race([read, timeout]);
   if (settled.status !== 'unavailable') return settled;
-  return recallPrimaryFundingAccount(merchantId, userId) ?? settled;
+  const recalled = recallPrimaryFundingAccount(merchantId, userId);
+  return recalled ? { ...recalled, recalled: true } : settled;
+}
+
+/**
+ * Marks a balance recalled from moments ago in place of a fresh read, so the
+ * wallet shows it but keeps re-checking until a fresh answer lands.
+ */
+export function primaryStaleField(primary: SettledPrimaryFundingAccount): {
+  primary_stale?: true;
+} {
+  return primary.status === 'ready' && primary.recalled
+    ? { primary_stale: true }
+    : {};
 }
 
 /** Marks a transient primary read failure, as opposed to an authoritative answer. */

@@ -48,7 +48,9 @@ export function usePrimaryWalletWatch({
       ? { ...wallet, primary_balance_kobo: kobo }
       : wallet;
   usePrimaryWalletUnknownRetry({
-    unknown: wallet?.primary_unavailable === true,
+    // A recalled balance is shown but still re-checked until fresh.
+    unknown:
+      wallet?.primary_unavailable === true || wallet?.primary_stale === true,
     scopeKey,
     refetch,
   });

@@ -17,6 +17,7 @@ import {
 import {
   PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS,
   primaryBalanceField,
+  primaryStaleField,
   primaryUnavailableField,
   readPrimaryFundingAccountSoon,
 } from './wallet-primary-balance';
@@ -114,6 +115,7 @@ describe('readPrimaryFundingAccountSoon', () => {
       status: 'ready',
       account,
       balanceKobo: 5_000_000,
+      recalled: true,
     });
   });
 
@@ -128,6 +130,7 @@ describe('readPrimaryFundingAccountSoon', () => {
       status: 'ready',
       account,
       balanceKobo: 0,
+      recalled: true,
     });
   });
 
@@ -220,6 +223,7 @@ describe('readPrimaryFundingAccountSoon', () => {
       status: 'ready',
       account,
       balanceKobo: 4_000_000,
+      recalled: true,
     });
   });
 
@@ -304,6 +308,23 @@ describe('readPrimaryFundingAccountSoon', () => {
     expect(recallPrimaryFundingAccount('m', 'u')).toMatchObject({
       balanceKobo: 900,
     });
+  });
+});
+
+describe('primaryStaleField', () => {
+  it('marks only a recalled stand-in, never a fresh answer', () => {
+    expect(
+      primaryStaleField({
+        status: 'ready',
+        account,
+        balanceKobo: 1,
+        recalled: true,
+      })
+    ).toEqual({ primary_stale: true });
+    expect(
+      primaryStaleField({ status: 'ready', account, balanceKobo: 1 })
+    ).toEqual({});
+    expect(primaryStaleField({ status: 'unavailable' })).toEqual({});
   });
 });
 

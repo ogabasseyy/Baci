@@ -74,6 +74,16 @@ describe('usePrimaryWalletWatch', () => {
     );
   });
 
+  it('keeps re-checking while it shows a recalled balance', () => {
+    const { result } = setup({ wallet: { ...ready, primary_stale: true } });
+    expect(result.current?.primary_balance_kobo).toBe(
+      ready.primary_balance_kobo
+    );
+    expect(mockUnknownRetry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unknown: true })
+    );
+  });
+
   it('keeps the balance while the wallet has no data at all', () => {
     const { result, rerender } = setup({ wallet: ready });
     rerender({ wallet: undefined });

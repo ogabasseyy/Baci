@@ -16,6 +16,9 @@ export type SettledPrimaryFundingAccount =
       account: PrimarySnapshot['account'];
       // Kobo; null when the snapshot is not ready (no account yet).
       balanceKobo: number | null;
+      // A remembered answer standing in for a fresh read that ran slow or
+      // failed: shown, but still re-checked.
+      recalled?: true;
     }
   // Primary definitively has no account for this customer (server
   // unconfigured, or enabled but never provisioned): the legacy

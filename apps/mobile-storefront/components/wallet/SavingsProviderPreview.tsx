@@ -13,7 +13,7 @@ export function SavingsProviderPreview() {
         style={styles.badge}
       >
         <Text style={styles.label}>Powered by</Text>
-        <PiggyVestLogo width={76} />
+        <PiggyVestLogo width={62} />
       </View>
     </View>
   );
@@ -25,11 +25,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 6,
-    borderRadius: 12,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
     backgroundColor: '#F5F5F5',
   },
-  label: { color: '#525252', fontSize: 9, lineHeight: 15 },
+  label: { color: '#525252', fontSize: 8, lineHeight: 12 },
 });

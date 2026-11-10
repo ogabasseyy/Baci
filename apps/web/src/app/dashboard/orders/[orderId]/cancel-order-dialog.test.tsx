@@ -97,7 +97,8 @@ describe('CancelOrderDialog', () => {
     ).toBeChecked();
   });
 
-  it('blocks cancelling when neither option is available to the staff member', () => {
+  it('lets staff without refund permission cancel and send the refund to review', async () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined);
     render(
       <CancelOrderDialog
         automaticSupported={false}
@@ -105,11 +106,23 @@ describe('CancelOrderDialog', () => {
         currency="NGN"
         isOpen
         onClose={vi.fn()}
-        onConfirm={vi.fn()}
+        onConfirm={onConfirm}
         refundAmount={12500}
       />
     );
-    expect(screen.getByRole('button', { name: 'Cancel order' })).toBeDisabled();
-    expect(screen.getByText(/need refund permission/i)).toBeVisible();
+    expect(
+      screen.getByRole('radio', {
+        name: /send the .*12,500.* refund to review/i,
+      })
+    ).toBeChecked();
+    expect(
+      screen.queryByRole('radio', { name: /cancel only/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/sent to the store owner for review/i)
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    expect(onConfirm).toHaveBeenCalledWith('automatic');
   });
 });

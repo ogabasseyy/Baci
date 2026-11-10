@@ -8,10 +8,10 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
  * refunded or forgotten.
  */
 export function OrderRefundStatusLine({ summary }: { summary: RefundSummary }) {
+  // Everyone viewing the order sees why it is pending; only the action
+  // button (in the panel) is gated on canRecordManual.
   const awaitingManualRefund =
-    summary.status === 'not_started' &&
-    summary.remaining > 0 &&
-    summary.canRecordManual === true;
+    summary.status === 'not_started' && summary.remaining > 0;
   return (
     <>
       <p role="status" className="font-semibold">
@@ -21,8 +21,10 @@ export function OrderRefundStatusLine({ summary }: { summary: RefundSummary }) {
       </p>
       {awaitingManualRefund && (
         <p className="text-sm">
-          No automatic refund was queued for this cancellation. Refund the
-          customer yourself, then record it with Record manual refund.
+          No automatic refund was queued for this cancellation.
+          {summary.canRecordManual === true
+            ? ' Refund the customer yourself, then record it with Record manual refund.'
+            : ' The store owner or staff with refund permission needs to refund the customer and record it.'}
         </p>
       )}
     </>

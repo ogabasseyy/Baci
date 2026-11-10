@@ -28,10 +28,13 @@ describe('OrderRefundStatusLine', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('keeps the neutral label when manual recording is unavailable', () => {
+  it('explains the pending refund to viewers who cannot record it', () => {
     render(
       <OrderRefundStatusLine summary={summary({ canRecordManual: false })} />
     );
-    expect(screen.getByRole('status')).not.toHaveTextContent('Refund pending');
+    expect(screen.getByRole('status')).toHaveTextContent('Refund pending');
+    expect(
+      screen.getByText(/refund permission needs to refund the customer/i)
+    ).toBeInTheDocument();
   });
 });

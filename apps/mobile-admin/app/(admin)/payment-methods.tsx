@@ -289,7 +289,11 @@ export default function PaymentMethodsScreen() {
             style={[styles.manageButton, { backgroundColor: colors.primary }]}
             onPress={handleManagePayments}
           >
-            <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+            <Ionicons
+              name="settings-outline"
+              size={20}
+              color={colors.textOnPrimary}
+            />
             <Text style={styles.manageButtonText}>Advanced Settings</Text>
           </Pressable>
         </ScrollView>

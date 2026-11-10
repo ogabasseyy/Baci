@@ -40,9 +40,20 @@ describe('merchant cancellation refund-mode migration', () => {
     expect(sql).toContain('o.cancelled_by, o.cancellation_refund_mode');
   });
 
-  it('also seeds the refund step in manual mode for a separate in-flight refund row', () => {
-    expect(sql).toMatch(
-      /OR \(\s+v_refund_mode = 'manual' AND EXISTS \([\s\S]*?r\.transaction_type = 'refund'[\s\S]*?r\.status NOT IN \('completed', 'refunded'\)[\s\S]*?provider_refund_status' = 'failed'[\s\S]*?\) THEN\s+INSERT INTO public\.order_cancellation_side_effects/
+  it('also seeds the refund step in manual mode when the order has any refund row, terminal included', () => {
+    const branch = sql.slice(
+      sql.indexOf("v_refund_mode = 'manual' AND EXISTS ("),
+      sql.indexOf(
+        'INSERT INTO public.order_cancellation_side_effects',
+        sql.indexOf("v_refund_mode = 'manual' AND EXISTS (")
+      )
+    );
+    expect(branch).toContain("r.transaction_type = 'refund'");
+    // No status allow-list: terminal refund rows seed it too.
+    expect(branch).not.toContain("r.status NOT IN ('completed', 'refunded')");
+    // Only a dead rejection (no provider identity) is exempt.
+    expect(branch).toContain(
+      "r.metadata->>'provider_refund_status' = 'failed'"
     );
   });
 

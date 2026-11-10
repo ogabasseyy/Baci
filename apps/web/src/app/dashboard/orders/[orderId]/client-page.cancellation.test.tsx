@@ -177,6 +177,7 @@ describe('OrderDetailsClientPage cancellation', () => {
           transactions: [
             {
               amount: 5000,
+              currency: 'NGN',
               gateway: 'paystack',
               gateway_reference: 'ref-1',
               id: 'leg-1',

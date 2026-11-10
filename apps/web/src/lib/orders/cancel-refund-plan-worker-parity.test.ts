@@ -65,7 +65,24 @@ function workerQuarantines(rows: Row[], orderCurrency: string): boolean {
   const mismatched = match.mismatchedTransactions.filter(
     (leg) => !match.unverifiedLinkedLegIds.has(leg.id)
   );
+  // preflightCancellationRefundInitiation: open initiation legs whose
+  // currency is blank or differs from the order's quarantine for review.
+  const mismatchedIds = new Set(match.mismatchedTransactions.map((l) => l.id));
+  const orderCcy = String(orderCurrency).trim().toUpperCase() || 'NGN';
+  const currencyQuarantine = transactions.some(
+    (leg) =>
+      !match.refundedPaymentIds.has(leg.id) &&
+      !mismatchedIds.has(leg.id) &&
+      !match.manualLinkedLegIds.has(leg.id) &&
+      (String(leg.currency ?? '')
+        .trim()
+        .toUpperCase() === '' ||
+        String(leg.currency ?? '')
+          .trim()
+          .toUpperCase() !== orderCcy)
+  );
   return (
+    currencyQuarantine ||
     invalidLinkReason !== null ||
     match.unattributedUnlinkedCount > 0 ||
     (unlinkedRefunds.length > 0 && !soleCovered) ||
@@ -219,6 +236,17 @@ const cases: [string, Row[], boolean][] = [
     true,
   ],
   ['unlinked manual refund', [pay(), unlinked({ gateway: 'manual' })], true],
+  [
+    'a second open leg in another currency',
+    [pay(), pay({ currency: 'USD', id: 'pay-2' })],
+    true,
+  ],
+  ['an open leg with no currency', [pay({ currency: null })], true],
+  [
+    'an open leg in another currency than the order',
+    [pay({ currency: 'USD' })],
+    true,
+  ],
   [
     'unlinked refund covering the completed leg beside a refunded sibling',
     [pay(), pay({ id: 'pay-2', status: 'refunded' }), unlinked()],

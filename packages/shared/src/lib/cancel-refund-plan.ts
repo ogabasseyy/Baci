@@ -209,11 +209,21 @@ export function getCancelRefundPlan(
       return { covered, inFlightMinor, leg, owed: open - inFlightMinor };
     });
   const outstanding = entries.filter(({ owed }) => owed > 0);
+  // Never sum different currencies: an open leg with a blank currency, or one
+  // that differs from the order's (blank defaults to NGN), is what
+  // preflightCancellationRefundInitiation quarantines for review.
+  const orderCurrencyCode = normalizeGateway(order.orderCurrency) || 'NGN';
+  const currencyMismatch = entries.some(
+    ({ inFlightMinor, leg, owed }) =>
+      owed + inFlightMinor > 0 &&
+      (normalizeGateway(leg.currency) === '' ||
+        normalizeGateway(leg.currency) !== orderCurrencyCode)
+  );
   return {
     amount: outstanding.reduce((sum, { owed }) => sum + owed, 0) / 100,
     inFlightAmount:
       entries.reduce((sum, { inFlightMinor }) => sum + inFlightMinor, 0) / 100,
-    ledgerKnown: !unresolved,
+    ledgerKnown: !unresolved && !currencyMismatch,
     // A partially covered leg (or one with a refund already in flight) is a
     // coverage mismatch to the worker, which withholds it for review
     // instead of refunding the remainder.

@@ -263,4 +263,28 @@ describe('preflightCancellationRefundCoverage', () => {
     );
     expect(quarantineRefund).not.toHaveBeenCalled();
   });
+
+  it('lets a cancel-only order with fully verified refund coverage reach finalization', async () => {
+    const result = await preflightCancellationRefundCoverage(
+      input({
+        order: { ...order, cancellation_refund_mode: 'manual' },
+        refundRows: [
+          {
+            amount: paystackPayment.amount,
+            currency: paystackPayment.currency,
+            gateway: 'paystack',
+            gateway_reference: '424242',
+            metadata: {
+              payment_transaction_id: paystackPayment.id,
+              provider_refund_status: 'processed',
+            },
+            status: 'completed',
+          },
+        ],
+      })
+    );
+    expect(result.refundedPaymentIds.has(paystackPayment.id)).toBe(true);
+    expect(result.manualPendingLegIds.size).toBe(0);
+    expect(quarantineRefund).not.toHaveBeenCalled();
+  });
 });

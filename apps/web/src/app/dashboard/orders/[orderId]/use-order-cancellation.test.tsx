@@ -24,6 +24,7 @@ import { useOrderCancellation } from './use-order-cancellation';
 
 const paystackLeg = {
   amount: 5000,
+  currency: 'NGN',
   gateway: 'paystack',
   gateway_reference: 'ref-1',
   id: 'leg-1',
@@ -133,6 +134,7 @@ describe('useOrderCancellation', () => {
             { ...paystackLeg, amount: 100 },
             {
               amount: 20,
+              currency: 'NGN',
               gateway: 'paystack',
               payment_transaction_id: 'leg-1',
               status: 'completed',

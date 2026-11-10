@@ -40,7 +40,8 @@ it.each([
         goal={{
           contribution_amount: 500,
           contribution_frequency: 'weekly',
-          current_amount: 0,
+          // Some progress, so the branded progress card is shown.
+          current_amount: 62500,
           id: 'goal-keyboard',
           maturity_date: '2026-09-30',
           product_condition: 'New',
@@ -75,7 +76,7 @@ it.each([
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress details' })
     ).toHaveStyle({ backgroundColor: BRAND.primaryAlpha12 });
-    expect(screen.getByText('Every naira counts')).toHaveStyle({
+    expect(screen.getByText('A quarter of the way!')).toHaveStyle({
       color: BRAND.primary,
     });
     expect(

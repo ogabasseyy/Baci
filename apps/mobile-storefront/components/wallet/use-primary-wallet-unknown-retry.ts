@@ -39,16 +39,21 @@ export function usePrimaryWalletUnknownRetry({
   if (state.scopeKey !== scopeKey || (!unknown && state.attempts !== 0)) {
     setState({ scopeKey, attempts: 0 });
   }
+  // The ref blocks a second start within one tick; the state re-arms the
+  // timer once any reload (even an older account's) has settled.
   const inFlight = useRef(false);
+  const [reloading, setReloading] = useState(false);
   const retry = useEffectEvent(async (forScope: string) => {
     if (inFlight.current) return;
     inFlight.current = true;
+    setReloading(true);
     try {
       await refetch();
     } catch {
       // A failed reload still spends the attempt; the next one may succeed.
     }
     inFlight.current = false;
+    setReloading(false);
     // Spend the attempt only once the reload has settled.
     setState((current) =>
       current.scopeKey === forScope
@@ -63,6 +68,7 @@ export function usePrimaryWalletUnknownRetry({
   useEffect(() => {
     if (
       !unknown ||
+      reloading ||
       attempts >= PRIMARY_UNKNOWN_RETRY_LIMIT + PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT
     )
       return;
@@ -76,5 +82,5 @@ export function usePrimaryWalletUnknownRetry({
       void retry(forScope);
     }, delay);
     return () => clearTimeout(timer);
-  }, [unknown, attempts, scopeKey]);
+  }, [unknown, reloading, attempts, scopeKey]);
 }

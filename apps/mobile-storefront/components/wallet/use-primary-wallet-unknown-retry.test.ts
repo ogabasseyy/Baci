@@ -159,6 +159,35 @@ describe('usePrimaryWalletUnknownRetry', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('re-arms for a new account once an older reload finishes', async () => {
+    let finish: () => void = () => undefined;
+    const refetch = jest
+      .fn<() => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          })
+      )
+      .mockResolvedValue(undefined);
+    const { rerender } = renderHook(
+      ({ scopeKey }: { scopeKey: string }) =>
+        usePrimaryWalletUnknownRetry({ unknown: true, scopeKey, refetch }),
+      { initialProps: { scopeKey: 'a' } }
+    );
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    rerender({ scopeKey: 'b' });
+    // Account b waits while a's reload is still running.
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 2);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish();
+    });
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
   it('restarts the wait when the signed-in account changes', async () => {
     const refetch = jest.fn(async () => undefined);
     const { rerender } = renderHook(

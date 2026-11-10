@@ -1,4 +1,6 @@
--- REGRESSION TEST: anon must not be able to read public.products.cost_price.
+-- REGRESSION TEST (stage 1 of 2): negotiation floor RPC invariants.
+-- This does NOT assert anon cannot read products.cost_price; that assertion
+-- ships with stage 2 (products_anon_column_grants_guard.sql).
 --
 -- Stage 1 (additive): locks the invariants of
 -- 20261110090000_negotiation_cost_floor_rpc.sql. The anon column-grant checks
@@ -17,7 +19,7 @@ BEGIN;
 
 DO $$
 BEGIN
-  -- 3. authenticated + service_role unchanged (merchant dashboards keep working).
+  -- 1. authenticated + service_role unchanged (merchant dashboards keep working).
   IF NOT has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') THEN
     RAISE EXCEPTION 'authenticated lost SELECT on products.cost_price (not in scope)';
   END IF;
@@ -25,7 +27,7 @@ BEGIN
     RAISE EXCEPTION 'service_role lost SELECT on products.cost_price';
   END IF;
 
-  -- 4. product_variants.cost_price was never anon-readable by policy; keep it so.
+  -- 2. product_variants.cost_price was never anon-readable by policy; keep it so.
   IF EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public' AND tablename = 'product_variants'
@@ -35,7 +37,7 @@ BEGIN
     RAISE EXCEPTION 'product_variants gained an anon/public SELECT policy';
   END IF;
 
-  -- 5. Negotiation floor RPC: privileges and no leakage for unknown products.
+  -- 3. Negotiation floor RPC: privileges and no leakage for unknown products.
   IF NOT has_function_privilege('anon', 'public.get_negotiation_cost_floor_price(uuid, uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'anon cannot execute get_negotiation_cost_floor_price';
   END IF;

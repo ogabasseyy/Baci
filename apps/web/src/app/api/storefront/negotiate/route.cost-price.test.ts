@@ -61,5 +61,19 @@ describe('storefront negotiate cost_price containment', () => {
       expect(body.status).toBe('final');
       expect(body.counterOffer).toBe(1089);
     });
+
+    it('does not need the floor RPC for non-negotiable products', async () => {
+      const { response, body, rpc } = await callNegotiate(
+        { ...product, brand: 'Tecno', name: 'Tecno Spark 20' },
+        500,
+        1,
+        undefined,
+        { data: null, error: { message: 'function not found' } }
+      );
+
+      expect(response.status).toBe(200);
+      expect(body.status).toBe('final');
+      expect(rpc).not.toHaveBeenCalled();
+    });
   });
 });

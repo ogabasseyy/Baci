@@ -77,38 +77,43 @@ export async function POST(request: NextRequest) {
       });
 
     const originalPrice = product.price;
-    // Auto-accept floor: never below cost margin, and never deeper than the
-    // shared 2% auto-negotiation cap. products.cost_price is not readable by
-    // shoppers, so the database computes the cost-based part and returns only
-    // the floor. Fail closed: without it we could accept a below-cost offer.
-    const { data: costFloor, error: costFloorError } = await supabase.rpc(
-      'get_negotiation_cost_floor_price',
-      { p_product_id: product.id, p_merchant_id: product.merchant_id }
-    );
-    const costFloorPrice = Number(costFloor);
-    if (
-      costFloorError ||
-      costFloor == null ||
-      !Number.isFinite(costFloorPrice)
-    ) {
-      console.error('Negotiation cost floor lookup error:', costFloorError);
-      return NextResponse.json(
-        { error: 'Failed to process negotiation' },
-        { status: 500 }
-      );
-    }
-    const minAcceptablePrice = Math.max(
-      costFloorPrice,
-      originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
-    );
-
-    const attemptNumber = validatedData.attemptNumber;
-    const offeredPrice = validatedData.offeredPrice;
-
     const isNegotiable = isProductNegotiable({
       brand: product.brand,
       name: product.name,
     });
+
+    // Auto-accept floor: never below cost margin, and never deeper than the
+    // shared 2% auto-negotiation cap. products.cost_price is not readable by
+    // shoppers, so the database computes the cost-based part and returns only
+    // the floor. Fail closed: without it we could accept a below-cost offer.
+    // Only negotiable products need the floor, so a missing RPC cannot break
+    // the non-negotiable 'best price' path.
+    let minAcceptablePrice = originalPrice;
+    if (isNegotiable) {
+      const { data: costFloor, error: costFloorError } = await supabase.rpc(
+        'get_negotiation_cost_floor_price',
+        { p_product_id: product.id, p_merchant_id: product.merchant_id }
+      );
+      const costFloorPrice = Number(costFloor);
+      if (
+        costFloorError ||
+        costFloor == null ||
+        !Number.isFinite(costFloorPrice)
+      ) {
+        console.error('Negotiation cost floor lookup error:', costFloorError);
+        return NextResponse.json(
+          { error: 'Failed to process negotiation' },
+          { status: 500 }
+        );
+      }
+      minAcceptablePrice = Math.max(
+        costFloorPrice,
+        originalPrice * (1 - MAX_AUTO_NEGOTIATION_DISCOUNT_RATE)
+      );
+    }
+
+    const attemptNumber = validatedData.attemptNumber;
+    const offeredPrice = validatedData.offeredPrice;
 
     let result: NegotiationResult;
 

@@ -111,8 +111,9 @@ export async function handlePaystackCancellationRefundFailure({
         ambiguous_initiation: isAmbiguousFailure,
       },
       order,
-      reason:
-        'Some payment legs were accepted for refund, but a later leg failed',
+      reason: providerError
+        ? `Some payment legs were accepted for refund, but a later leg failed: ${providerError}`
+        : 'Some payment legs were accepted for refund, but a later leg failed',
       supabase,
       transactions: [transaction],
     });

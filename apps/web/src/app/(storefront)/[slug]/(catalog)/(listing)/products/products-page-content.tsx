@@ -22,7 +22,6 @@ import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import {
   parseStorefrontPageParam,
-  STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT,
   STOREFRONT_PRODUCTS_PER_PAGE,
 } from '@/lib/storefront-pagination';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
@@ -58,18 +57,13 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
 
   const showMaintainedLinkModules = merchant.id === OGABASSEY_MERCHANT_ID;
 
-  const [categoryResult, currentProductIndex, firstPageProductIndex] =
-    await Promise.all([
-      getStorefrontCategories(merchant.id),
-      getCachedStorefrontProductIndex(merchant.id, {
-        page: currentPage,
-        limit: STOREFRONT_PRODUCTS_PER_PAGE,
-      }),
-      getCachedStorefrontProductIndex(merchant.id, {
-        page: 1,
-        limit: STOREFRONT_PRODUCTS_PER_PAGE,
-      }),
-    ]);
+  const [categoryResult, currentProductIndex] = await Promise.all([
+    getStorefrontCategories(merchant.id),
+    getCachedStorefrontProductIndex(merchant.id, {
+      page: currentPage,
+      limit: STOREFRONT_PRODUCTS_PER_PAGE,
+    }),
+  ]);
   const { categories } = categoryResult;
   const totalPages = Math.max(1, currentProductIndex.totalPages || 1);
 
@@ -144,12 +138,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
     currentProductIndex.totalCount === 0
       ? 0
       : rangeStart + currentProductIndex.products.length - 1;
-  const deepLinkProducts =
-    currentPage > 1
-      ? firstPageProductIndex.products
-          .filter((product) => product.slug)
-          .slice(0, 18)
-      : [];
 
   return (
     <>
@@ -158,18 +146,35 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
 
       <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-20 pt-6">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-          <nav className="flex items-center gap-2 text-sm text-store-background-text/55">
-            <Link
-              href={asRoute(pathPrefix || '/')}
-              prefetch={false}
-              className="transition-colors hover:text-store-primary"
-            >
-              Home
-            </Link>
-            <span aria-hidden="true">/</span>
-            <span className="font-medium text-store-background-text">
-              Products
-            </span>
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-2 text-sm text-store-background-text/55"
+          >
+            <ol className="flex flex-wrap items-center gap-2">
+              <li>
+                <Link
+                  href={asRoute(pathPrefix || '/')}
+                  prefetch={false}
+                  className="transition-colors hover:text-store-primary"
+                >
+                  Home
+                </Link>
+              </li>
+              <li className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="text-store-background-text/40"
+                >
+                  /
+                </span>
+                <span
+                  aria-current="page"
+                  className="font-medium text-store-background-text"
+                >
+                  Products
+                </span>
+              </li>
+            </ol>
           </nav>
 
           <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -182,7 +187,10 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
               </p>
             </div>
 
-            <p className="text-sm text-store-background-text/50">
+            <p
+              aria-live="polite"
+              className="text-sm text-store-background-text/50"
+            >
               Showing {rangeStart}-{rangeEnd} of{' '}
               {currentProductIndex.totalCount} products
             </p>
@@ -219,55 +227,38 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
             </div>
           ) : (
             <>
-              {deepLinkProducts.length > 0 && (
-                <section className="mt-8 rounded-3xl border border-store-background-text/10 bg-store-background p-5 shadow-sm">
-                  <h2 className="text-lg font-semibold text-store-background-text">
-                    Popular Product Links
-                  </h2>
-                  <ul className="mt-4 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                    {deepLinkProducts.map((product) => {
-                      const categorySlug =
-                        canonicalizeCategorySlug(product.category_slug) ??
-                        'products';
-                      const href =
-                        categorySlug === 'products'
-                          ? `${pathPrefix}/products/${product.slug}`
-                          : `${pathPrefix}/${categorySlug}/${product.slug}`;
-
-                      return (
-                        <li key={`deep-link-${product.id}`}>
-                          <Link
-                            href={asRoute(href)}
-                            prefetch={false}
-                            className="text-sm font-medium text-store-primary underline-offset-4 hover:underline"
-                          >
-                            {product.name}
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-
-              <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                {currentProductIndex.products.map((product) => (
-                  <ProductIndexCard
-                    key={product.id}
-                    formattedPrice={formatProductPrice(product.price)}
-                    pathPrefix={pathPrefix}
-                    product={product}
-                  />
-                ))}
-              </div>
+              <section
+                aria-labelledby="products-catalog-heading"
+                className="mt-10"
+              >
+                <h2 id="products-catalog-heading" className="sr-only">
+                  Product Catalog
+                </h2>
+                {/* biome-ignore lint/a11y/useSemanticElements: WAI-ARIA group container for product cards with aria-posinset and aria-setsize */}
+                <div
+                  role="group"
+                  aria-labelledby="products-catalog-heading"
+                  className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
+                >
+                  {currentProductIndex.products.map((product, index) => (
+                    <ProductIndexCard
+                      key={product.id}
+                      formattedPrice={formatProductPrice(product.price)}
+                      pathPrefix={pathPrefix}
+                      posInSet={rangeStart + index}
+                      product={product}
+                      setSize={currentProductIndex.totalCount}
+                    />
+                  ))}
+                </div>
+              </section>
 
               <StorefrontPagination
                 ariaLabel="Products pagination"
                 basePath={`${pathPrefix}/products`}
-                crawlDiscoveryAllPagesThreshold={
-                  STOREFRONT_CRAWL_DISCOVERY_PRODUCT_PAGE_LIMIT
-                }
+                crawlDiscoveryAllPagesThreshold={20}
                 crawlDiscoveryLabel="Browse product index pages"
+                crawlDiscoveryMaxLinks={24}
                 crawlDiscoveryPageLabel="Products page"
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -276,7 +267,7 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
           )}
           {/* These links are independently streamed SEO enrichment. Keep them
               after the catalog so their late arrival cannot push painted cards. */}
-          {showMaintainedLinkModules && (
+          {showMaintainedLinkModules && currentPage === 1 && (
             <Suspense fallback={null}>
               <ProductsPageDeferredLinkModules
                 baseUrl={baseUrl}

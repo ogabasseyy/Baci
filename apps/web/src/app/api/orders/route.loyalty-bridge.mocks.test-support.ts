@@ -6,6 +6,7 @@
 import { vi } from 'vitest';
 
 const mockCreateAdminClient = vi.hoisted(() => vi.fn());
+const mockCreateAnonClient = vi.hoisted(() => vi.fn());
 const mockCreateLoyaltyResolverServiceClient = vi.hoisted(() => vi.fn());
 const mockAfter = vi.hoisted(() => vi.fn((cb: () => unknown) => cb()));
 
@@ -42,17 +43,29 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
-// Issue #3696: resolveLoyaltyCheckoutCode builds its own branded
-// resolver client (the resolver RPC lost anon EXECUTE), so the
-// harness wires the branded factory to an override-driven fake too.
-// NOTE: the anon factory is deliberately NOT mocked here. Evaluated twice:
-// a bare `{}` mock breaks seven tests (500s where 400s expected), and so
-// does a faithful rejecting-maybeSingle fake — the suite depends on the
-// real client's full method surface in ways implicit to its fixtures.
-// Construction uses env-mocked URL/key material and the suite runs in
-// 17ms with no network traffic, so the real factory is benign here.
+// The resolver uses separate clients for the loyalty RPC and the public
+// merchant currency preview. Both must remain deterministic in this suite.
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: mockCreateAnonClient,
+}));
+
 vi.mock('@/lib/loyalty/server-resolver-client', () => ({
   createLoyaltyResolverServiceClient: mockCreateLoyaltyResolverServiceClient,
+}));
+
+// The one anon read on this path is the fixed-code currency preview, a
+// real `merchants` fetch to the mocked URL: it fails, postgrest-js retries
+// after 1s+2s+4s, and the preview then counts the code as current. That
+// cost 7s per test (10s timeouts in CI). Answer "current" directly, the
+// same outcome, with no network; the order wrapper's currency gate stays
+// covered by the error-mapping cases.
+// Exported so a test can override it to false and cover the stale-currency
+// preview branch; clearAllMocks keeps this default implementation.
+const mockIsLoyaltyCodeCurrencyCurrent = vi.hoisted(() =>
+  vi.fn(async () => true)
+);
+vi.mock('@/lib/checkout/is-loyalty-code-currency-current', () => ({
+  isLoyaltyCodeCurrencyCurrent: mockIsLoyaltyCodeCurrencyCurrent,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -156,4 +169,9 @@ vi.mock('@/lib/shipping/providers/gigl', () => ({
 export const { POST } = await import('./route');
 export const { authenticateApiRequest } = await import('@/lib/api-auth');
 export const { NextRequest } = await import('next/server');
-export { mockCreateAdminClient, mockCreateLoyaltyResolverServiceClient };
+export {
+  mockCreateAdminClient,
+  mockCreateAnonClient,
+  mockCreateLoyaltyResolverServiceClient,
+  mockIsLoyaltyCodeCurrencyCurrent,
+};

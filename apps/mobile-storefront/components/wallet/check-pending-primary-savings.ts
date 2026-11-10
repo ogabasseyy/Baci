@@ -1,7 +1,11 @@
 import { Alert } from 'react-native';
+import { triggerHaptic } from '@/hooks/use-haptics';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
 
 export async function checkPendingPrimarySavings(input: {
+  /** The goal as it stood before this confirmation. */
+  goal?: WalletActiveSavingsGoal | null;
   merchantId?: string;
   operationId: string;
   clearOperation: () => void;
@@ -18,11 +22,27 @@ export async function checkPendingPrimarySavings(input: {
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();
-      await input.refetchWallet().catch(() => undefined);
-      Alert.alert(
-        'Savings updated',
-        'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+      triggerHaptic('success');
+      const refreshFailed = await input.refetchWallet().then(
+        () => false,
+        () => true
       );
+      // The status endpoint returns neither the amount nor the goal balance,
+      // and the amount field may have been edited since the transfer began,
+      // so the cheer names the goal without an amount or percentage.
+      const { goal } = input;
+      if (goal) {
+        Alert.alert(
+          'Savings updated',
+          `Nice! PiggyVest confirmed your savings. Every naira gets you closer to your ${goal.title}. Keep it going!${
+            refreshFailed ? ' Pull to refresh your latest balance.' : ''
+          }`
+        );
+      } else
+        Alert.alert(
+          'Savings updated',
+          'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+        );
     } else if (result.status === 'cancelled') {
       input.clearOperation();
       await input.refetchWallet().catch(() => undefined);
@@ -36,12 +56,14 @@ export async function checkPendingPrimarySavings(input: {
         'Your savings will update after PiggyVest confirms the transfer. No new payment has been started.'
       );
   } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: unknown }).code === 'CONTRIBUTION_NOT_FOUND'
-    ) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+    // SAVINGS_MERCHANT_NOT_PRIMARY is derived from runtime config, not the
+    // provider record, so it never releases a primary id: it falls through to
+    // the ambiguous branch below and the operation is kept.
+    if (code === 'CONTRIBUTION_NOT_FOUND') {
       // Authoritative absence: the server joins the status read to the
       // caller's own intent, so not_found means this identity never
       // reserved this operation id (the initial POST died on CSRF,

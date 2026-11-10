@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { PiggyvestIntakeClient } from '@/lib/piggyvest/intake-client.types';
 import { normalizePiggyvestSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
 import { emitPiggyvestWebhookAlert } from '@/lib/piggyvest/webhook-alerts';
 import { captureVerifiedDelivery } from '@/lib/piggyvest/webhook-capture';
@@ -7,7 +8,6 @@ import {
   type PiggyvestWebhookKeyFamily,
   verifyPiggyvestWebhookSecrets,
 } from '@/lib/piggyvest/webhook-secret-union';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import type { PiggyvestCaptureResult } from '@/schemas/piggyvest/webhook-capture';
 
 /**
@@ -59,7 +59,7 @@ function reject(body: Record<string, unknown>, status: number): AdmitResult {
 export async function admitPiggyvestDelivery(input: {
   request: Pick<Request, 'headers'>;
   rawBody: Buffer;
-  createClient: () => PiggyvestIntakeServiceClient;
+  createClient: () => PiggyvestIntakeClient;
 }): Promise<AdmitResult> {
   const signatureHeader = input.request.headers.get('x-pvb-signature');
   const verification = verifyPiggyvestWebhookSecrets({

@@ -108,6 +108,41 @@ describe('createReplayCommand', () => {
     );
   });
 
+  it('preserves SQLSTATE from psql sqlstate-only diagnostics with CRLF', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      "#!/bin/sh\nprintf 'psql:/owned/secret.sql:88: ERROR:  P1003\\r\\n' >&2\nexit 1\n",
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    await expect(runCommand(psql, [])).rejects.toThrow(
+      /^psql failed: non-zero-exit \(line=88,sqlstate=P1003\)$/
+    );
+  });
+
+  it.each([
+    ['ERROR:  permission denied for function secret_name', 'permission-denied'],
+    [
+      'ERROR:  function private.secret_name(uuid) does not exist',
+      'undefined-function',
+    ],
+    ['ERROR:  Anonymous draft save executed', 'anonymous-draft-save-executed'],
+  ])('classifies only approved psql error categories without leaking values', async (message, reason) => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`psql:/owned/secret.sql:88: ${message}\nprivate-token=secret`)});process.exit(1);\n`,
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    await expect(runCommand(psql, [])).rejects.toMatchObject({
+      message: `psql failed: non-zero-exit (line=88,reason=${reason})`,
+    });
+  });
+
   it.each([
     ['failed to connect to postgres: connection refused', 'connection-refused'],
     ['failed to pull image from private registry', 'image-pull'],

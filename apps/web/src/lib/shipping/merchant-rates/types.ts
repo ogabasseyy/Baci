@@ -113,4 +113,6 @@ export interface StorefrontShippingRatesPayload {
    * an explicit merchant choice to disable every carrier.
    */
   enabledProviderCodes?: ShippingProviderCode[];
+  /** Monotonic merchant shipping config revision from the same RPC snapshot. */
+  shippingConfigRevision?: string;
 }

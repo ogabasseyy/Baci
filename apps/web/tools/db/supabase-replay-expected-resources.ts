@@ -60,20 +60,61 @@ export async function inspectSupabaseReplayResources(
       throw new Error('Docker replay resource output is invalid');
     }
   };
-  const [containers, volumes, networks] = await Promise.all([
-    rows(
-      ['ps', '-a', '--filter', filter, '--format', '{{json .}}'],
-      ['Labels', 'Names', 'Image']
-    ),
-    rows(
-      ['volume', 'ls', '--filter', filter, '--format', '{{json .}}'],
-      ['Labels', 'Name']
-    ),
-    rows(
-      ['network', 'ls', '--filter', filter, '--format', '{{json .}}'],
-      ['Labels', 'Name']
-    ),
-  ]);
+  const volumeNames = [
+    `supabase_db_${projectId}`,
+    `supabase_edge_runtime_${projectId}`,
+  ];
+  const [containers, volumes, networks, ...exactVolumeGroups] =
+    await Promise.all([
+      rows(
+        ['ps', '-a', '--filter', filter, '--format', '{{json .}}'],
+        ['Labels', 'Names', 'Image']
+      ),
+      rows(
+        ['volume', 'ls', '--filter', filter, '--format', '{{json .}}'],
+        ['Labels', 'Name']
+      ),
+      rows(
+        ['network', 'ls', '--filter', filter, '--format', '{{json .}}'],
+        ['Labels', 'Name']
+      ),
+      // Existing volumes can lack our label; check both exact names independently.
+      ...volumeNames.map((name) =>
+        rows(
+          [
+            'volume',
+            'ls',
+            '--filter',
+            `name=^${name}$`,
+            '--format',
+            '{{json .}}',
+          ],
+          ['Labels', 'Name']
+        )
+      ),
+    ]);
+  for (const [index, exactVolumes] of exactVolumeGroups.entries()) {
+    const expectedName = volumeNames[index];
+    if (
+      exactVolumes.length > 1 ||
+      exactVolumes.some((row) => row.Name !== expectedName)
+    ) {
+      throw new Error('Docker replay resource output is invalid');
+    }
+    for (const exact of exactVolumes) {
+      const prior = volumes.find((row) => row.Name === exact.Name);
+      if (prior) {
+        const first = dockerLabels(prior.Labels);
+        const second = dockerLabels(exact.Labels);
+        if (
+          Object.keys(first).length !== Object.keys(second).length ||
+          Object.keys(first).some((key) => first[key] !== second[key])
+        ) {
+          throw new Error('Docker replay resource output is invalid');
+        }
+      } else volumes.push(exact);
+    }
+  }
   const observed = (row: Record<string, string>, key: string) => ({
     labels: dockerLabels(row.Labels ?? ''),
     name: row[key] ?? '',
@@ -88,7 +129,7 @@ export async function inspectSupabaseReplayResources(
   };
 }
 
-const DATABASE_IMAGE = 'public.ecr.aws/supabase/postgres:17.6.1.106';
+const DATABASE_IMAGE = 'public.ecr.aws/supabase/postgres:17.6.1.156';
 const PROJECT_ID = /^[a-z0-9][a-z0-9_-]{2,62}$/;
 
 export function expectedSupabaseReplayResources(
@@ -117,26 +158,26 @@ function assertResourceList(
   observed: ObservedResource[],
   expectedNames: readonly string[],
   projectId: string,
-  allowPartial: boolean
+  allowPartial: boolean,
+  kind: 'container' | 'volume' | 'network',
+  optionalNames: readonly string[] = []
 ): void {
   const names = observed.map(({ labels, name }) => {
     if (
       labels[SUPABASE_PROJECT_LABEL] !== projectId ||
-      !expectedNames.includes(name)
+      (!expectedNames.includes(name) && !optionalNames.includes(name))
     ) {
-      throw new Error();
+      throw new ResourceMismatch(`${kind}-unexpected`);
     }
     return name;
   });
-  if (
-    new Set(names).size !== names.length ||
-    (!allowPartial &&
-      (names.length !== expectedNames.length ||
-        expectedNames.some((name) => !names.includes(name))))
-  ) {
-    throw new Error();
-  }
+  if (new Set(names).size !== names.length)
+    throw new ResourceMismatch(`${kind}-duplicate`);
+  if (!allowPartial && expectedNames.some((name) => !names.includes(name)))
+    throw new ResourceMismatch(`${kind}-missing`);
 }
+
+class ResourceMismatch extends Error {}
 
 export function assertSupabaseReplayResources(
   observed: ObservedSupabaseReplayResources,
@@ -151,7 +192,8 @@ export function assertSupabaseReplayResources(
       observed.containers,
       [...expectedContainers.keys()],
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'container'
     );
     for (const container of observed.containers) {
       const expectedContainer = expectedContainers.get(container.name);
@@ -159,22 +201,29 @@ export function assertSupabaseReplayResources(
         !expectedContainer ||
         (expectedContainer.image && container.image !== expectedContainer.image)
       ) {
-        throw new Error();
+        throw new ResourceMismatch('container-image');
       }
     }
     assertResourceList(
       observed.volumes,
       expected.volumes,
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'volume',
+      // CLI 2.111 may create this best-effort pg-delta cache volume while
+      // bootstrapping. It carries the same exact project ownership label.
+      [`supabase_edge_runtime_${options.projectId}`]
     );
     assertResourceList(
       observed.networks,
       expected.networks,
       options.projectId,
-      options.allowPartial
+      options.allowPartial,
+      'network'
     );
-  } catch {
-    throw new Error('Supabase replay resource verification failed');
+  } catch (error) {
+    throw new Error(
+      `Supabase replay resource verification failed${error instanceof ResourceMismatch ? ` (${error.message})` : ''}`
+    );
   }
 }

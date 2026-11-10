@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { URL as FileURL, fileURLToPath } from 'node:url';
@@ -44,6 +45,7 @@ describe('ChatGPT worker database boundary', () => {
       `${path}: unauthorized merchant_chatgpt_ads_credentials column capi_key`
     );
   });
+  // The full Git source inventory can take over 30 seconds under CI load.
   it('keeps pure URL formatting independent of the storefront data loader', () => {
     // Include every real local intermediate, so a helper or barrel cannot hide
     // a transitive dependency on the storefront data loader.
@@ -52,5 +54,5 @@ describe('ChatGPT worker database boundary', () => {
     expect(sources.has('apps/web/src/lib/cached-data.ts')).toBe(true);
     const closure = collectProductionImportClosure([urlPath], sources);
     expect(closure.has('apps/web/src/lib/cached-data.ts')).toBe(false);
-  });
+  }, 90_000);
 });

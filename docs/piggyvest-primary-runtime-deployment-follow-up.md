@@ -76,6 +76,52 @@ Primary onboarding requires all of these server-only settings:
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`
 
+### Vercel connectivity: Supavisor session-mode pooler
+
+The direct host `db.<ref>.supabase.co` is IPv6-only and Vercel functions
+cannot reach IPv6. On Vercel, point the executors at the Supabase pooler:
+
+- `PIGGYVEST_PRIMARY_DB_HOST` = the pooler host
+  (`aws-0-<region>.pooler.supabase.com`; copy it from the Supabase Connect
+  dialog), `PIGGYVEST_PRIMARY_DB_PORT` = `5432` (session mode). Never `6543`:
+  transaction mode would break session verification and the per-delivery
+  connection reuse.
+- `PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF` = the 20-character project ref.
+  When set, every PiggyVest restricted-login executor connects as
+  `<login>.<ref>` (Supavisor requirement). The database session user is still
+  the bare role, so session verification is unchanged. A malformed ref is
+  refused (fail closed). When unset, behaviour is the direct-host default.
+- Supavisor is not documented to forward startup `options`, so in pooler mode
+  the executors send no startup options and instead run
+  `SET search_path TO pg_catalog; SET statement_timeout = 2500; SET lock_timeout = 1500`
+  right after connecting, before session verification.
+- TLS stays verify-full with `PIGGYVEST_PRIMARY_DB_CA`. The CA bundle must
+  cover the pooler host's certificate chain (use the Supabase CA bundle that
+  validates the pooler host).
+
+### Vercel connectivity: TCP passthrough forwarder (end-to-end TLS)
+
+The shared pooler fails the executors' end-to-end TLS check
+(`pg_stat_ssl.ssl=false` on the pooler to Postgres hop). The alternative is a
+TCP passthrough forwarder on the VPS (which has IPv6 to the database), exposed
+as `pg-relay.usebaci.com`. The Postgres TLS handshake passes through untouched,
+so TLS is end to end. Settings:
+
+- `PIGGYVEST_PRIMARY_DB_HOST` = `pg-relay.usebaci.com`
+- `PIGGYVEST_PRIMARY_DB_PORT` = the forwarder port (`15432`, see the VPS PR)
+- `PIGGYVEST_PRIMARY_DB_TLS_SERVER_NAME` = `db.aivqthbxdshhltbwipbr.supabase.co`
+- `PIGGYVEST_PRIMARY_DB_POOLER_PROJECT_REF` must be unset. Setting both it and
+  the server name is refused (fail closed), as is a server name that is not
+  `db.<20-char ref>.supabase.co`.
+- `PIGGYVEST_PRIMARY_DB_CA` is unchanged (Supabase Root 2021 CA).
+
+In this mode the login is the bare role and the startup settings are the
+direct-mode ones. The executors still verify the certificate (`rejectUnauthorized`
+stays true) but check its name against the configured Supabase host instead of
+the relay host, using `ssl.checkServerIdentity` (node-postgres overwrites
+`ssl.servername` with the connect host, so that option cannot be used). A
+certificate for `pg-relay.usebaci.com` is rejected.
+
 `VERCEL_ENV=production` requires primary environment `production`; all other
 deployment values permit only `staging`. The database host must satisfy the
 runtime DNS-host schema. The CA must verify the actual endpoint; executors
@@ -86,6 +132,58 @@ Goal provisioning additionally requires
 `PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD`. It deliberately inherits all
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
+
+### Client build floors and onboarding rollout cohort (gate not wired yet)
+
+`apps/web/src/lib/piggyvest/primary-client-capability.ts` and
+`primary-onboarding-capability.ts` hold the build-aware capability gate; no route calls it yet. When wired, it reads:
+
+- `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
+  `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
+  build (iOS `CFBundleVersion`, Android `versionCode`) allowed to use the
+  primary wallet, as a positive whole number with no spaces. While either is
+  unset or malformed every build is refused, whatever the cohort. The owner
+  sets them only after the release that sends the build headers passes App
+  Review. Clients send `X-Baci-Client-Platform` (`ios` or `android`) and
+  `X-Baci-Client-Build`; a missing or malformed pair counts as an old build.
+  A refusal uses `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, which
+  released builds already treat as "use the legacy flow" (never the base
+  `PIGGYVEST_NOT_READY`, which they cache merchant-wide); a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+- A floor proves only the native build. What reads wallet responses is the
+  JavaScript bundle, and an over-the-air update can replace it: the Android
+  runtime version is shared by every `versionCode`, so one Android update
+  reaches every build, and an iOS export targets one build's runtime. Never
+  publish or export an update whose source predates the wallet response
+  contract that the builds at or above a floor rely on. If an update
+  rollback must cross such a contract change, first unset both floors (or
+  raise them past every affected build), and set them again only after the
+  forward fix ships. This rule belongs on the storefront release checklist
+  (P9-mobile-build-header-pilot-removal); a later change may instead have
+  the client send a contract number compiled into the bundle, so the gate
+  keys on the JavaScript rather than the native build.
+- `piggyvest_primary.rollout_cohort` (migration 20261103012500), keyed by
+  merchant and customer. It ships empty and only a privileged operator adds
+  rows. A customer with no primary onboarding may start one only while
+  listed and while every readiness reader in
+  `primary-readiness-registry.ts` reports ready; none is registered yet, so
+  onboarding stays closed. A customer whose wallet is verified, or whose
+  onboarding is in flight (an intent or mapping not yet released), needs
+  only the build floor: removing them from the cohort, or a reader dropping
+  to not ready, never strands a provider-side wallet. Route wiring admits an
+  in-flight customer to resume that onboarding only, never a fresh claim.
+  Include
+  `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
+  verified grants; it returns only a boolean for the scoped customer.
+- Claim-time binding (route wiring PR, P4-capability-gate-routes). A `fresh`
+  verdict is a point-in-time read, not a token. The wiring must re-run
+  `resolvePrimaryOnboardingCapability` immediately before dispatching the
+  claim, and a follow-up migration must make `claim_onboarding(jsonb,text)`
+  re-check `rollout_cohort` membership inside its own transaction, so a
+  customer removed from the cohort between the gate and the claim cannot
+  create a backed wallet. Until both land no route calls the gate.
+- Refusal codes. Gate refusals are per customer or per build, so they use
+  only `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, never the base
+  `PIGGYVEST_NOT_READY` that released storefront builds cache merchant-wide.
 
 ## Restricted database preparation
 

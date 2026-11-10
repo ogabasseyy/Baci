@@ -4,6 +4,8 @@ import { deterministicTestUuid } from './deterministic-test-data.test-support';
 import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { describeDelivery } from './webhook-capture';
 import type { DrainDeps } from './webhook-capture-drain';
+import { scriptedCaptureExecutor } from './webhook-capture-pg-executor.test-support';
+import { createPgCaptureQueue } from './webhook-capture-queue';
 
 /**
  * Shared fixtures for the capture drain suites. The suites keep their own
@@ -50,6 +52,46 @@ export const inflow = JSON.stringify({
   eventData: { transaction_id: 'txn-77', amount: 1000 },
 });
 
+/** A bank inflow the receiver's event schema accepts; only the ids vary. */
+export const schemaValidInflow = (
+  eventId: string,
+  eventType = 'bank-transfer.inflow.success',
+  transactionId = `txn-${eventId}`
+) =>
+  JSON.stringify({
+    eventId,
+    eventType,
+    eventCategory: 'inflow_transaction',
+    customer_id: 'fixture-customer',
+    pvb_reference: 'fixture-pvb-reference',
+    pvb_wallet: 'fixture-wallet',
+    eventData: {
+      id: `data-${eventId}`,
+      customer_id: 'fixture-customer',
+      destination_wallet_id: 'fixture-conduit',
+      type: 'inter',
+      category: 'bank_transfer_inflow',
+      amount: 10000,
+      currency: 'NGN',
+      narration: '',
+      ip_address: '',
+      transaction_id: transactionId,
+      timestamp: '2026-10-07T10:00:00.000Z',
+      status: 'COMPLETED',
+      third_party_reference: '',
+      initiator_reference: '',
+      internal_reference: '',
+      provider: 'fixture-bank',
+      destination_wallet_balance: 10000,
+      destination_wallet_ledger_balance: 10000,
+      destination_transaction_balance: 10000,
+      reference: `reference-${eventId}`,
+      recipient_bank_account_number: '0123456789',
+      sender_name: 'Fixture sender',
+      fee: 0,
+    },
+  });
+
 export interface ResolvedCall {
   id: string;
   state: string;
@@ -57,22 +99,33 @@ export interface ResolvedCall {
 }
 
 /**
- * Drain dependencies over an in-memory queue. `state` is read lazily, at
- * resolve and verify time, so a test may replace its `env` after building
- * the deps exactly as it could with module-level variables.
+ * Drain dependencies whose claim and resolve go through the worker host's
+ * pg queue over a scripted executor double, so every drain suite also runs
+ * the statement mapping and the row parsing the dedicated drain login
+ * uses. `state` is read lazily, at resolve and verify time, so a test may
+ * replace its `env` after building the deps exactly as it could with
+ * module-level variables.
  */
 export function drainDeps(
   state: () => { env: NodeJS.ProcessEnv; resolved: ResolvedCall[] },
   claimed: PiggyvestClaimedCapture[][],
   process: DrainDeps['process']
 ): DrainDeps {
-  const queue = [...claimed];
+  const queue = createPgCaptureQueue(
+    scriptedCaptureExecutor(claimed, (call) => {
+      state().resolved.push({
+        id: call.id,
+        state: call.state,
+        error: call.error,
+      });
+      return true;
+    })
+  );
   return {
-    claim: () => Promise.resolve(queue.shift() ?? []),
-    resolve: (id, _token, status, error) => {
-      state().resolved.push({ id, state: status, error });
-      return Promise.resolve(true);
-    },
+    claim: (limit) => queue.claim(limit),
+    renew: (id, token) => queue.renew(id, token),
+    resolve: (id, token, status, error) =>
+      queue.resolve(id, token, status, error),
     verify: (input) =>
       verifyStoredPiggyvestDelivery({ ...input, env: state().env, now: NOW }),
     process,

@@ -254,9 +254,16 @@ results and add production net interest, including per-goal kobo consumed by
 mobile's existing savings display projection. They do not change `current_amount`
 or ordinary wallet balances. The earlier pure progress helper remains unused;
 the database RPC/trigger paths, not that helper, provide runtime integration.
-`get_customer_savings_notifications` exposes one paid-interest notice per payout:
-“Your savings grew by ₦X in paid interest. Keep going!” Any reversal voids that
-original amount notice; parent completion reversal behavior remains intact.
+`get_customer_savings_notifications` exposes one paid-interest notice per payout,
+titled “Your savings just grew 🎉”: “₦X interest added to your savings.” followed
+by the goal's progress after the credit (principal plus net paid interest, the
+same per-goal interest the savings display adds, so interest reserved for a
+purchase is left out until it is released), for example “You’re now 35% of the
+way there.” (migration 20261102214500). At or past the target the notice says
+“Open your savings to see your latest balance.” and never claims the goal is
+reached: only the parent completion notice announces that, and it is voided if
+a reversal undoes completion. Any reversal voids that original amount notice;
+parent completion reversal behavior remains intact.
 
 The new production SQL fixture loads real primary, provisioning, ledger and
 engagement storage/events migrations with synthetic base tables and provider

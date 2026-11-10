@@ -106,7 +106,12 @@ export default defineConfig({
     noExternal: true,
   },
   test: {
-    exclude: [...configDefaults.exclude, 'tools/builder-auth/*.node.test.ts'],
+    exclude: [
+      ...configDefaults.exclude,
+      'tools/builder-auth/*.node.test.ts',
+      // These node:test suites run in the dedicated synthetic handoff workflow.
+      'tools/chatwoot-handoff-ci/*.test.mjs',
+    ],
     environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,

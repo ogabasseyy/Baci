@@ -39,7 +39,8 @@ function row(overrides: Record<string, unknown> = {}): DrainCandidateRow {
       created_at: '2026-01-01T00:00:00.000Z',
       gateway: 'paystack',
       gateway_reference: 'REF-1',
-      gateway_response: { status: 'success' },
+      // Production Baci-collected shape: the split fields are present.
+      gateway_response: { fees_split: null, status: 'success', subaccount: {} },
       id: 'txn-1',
       merchant_id: 'merchant-1',
       metadata: null,
@@ -117,7 +118,11 @@ describe('drainFailedPaidOrderSideEffectRow', () => {
         actor: 'cron:reconcile-gateway-paid-orders:drain',
         emailMaxAttemptsPerSender: 1,
         gateway: 'paystack',
-        gatewayResponse: { status: 'success' },
+        gatewayResponse: {
+          fees_split: null,
+          status: 'success',
+          subaccount: {},
+        },
         orderId: 'order-1',
         reference: 'REF-1',
       })
@@ -144,6 +149,29 @@ describe('drainFailedPaidOrderSideEffectRow', () => {
     );
     expect(finalizePayment).toHaveBeenCalledWith(
       expect.objectContaining({ gatewayResponse: { status: 'success' } })
+    );
+  });
+
+  it('re-verifies a stored Paystack payload that lacks the split fields, so settlement can classify it', async () => {
+    // Without subaccount/fees_split, settlement would fail closed forever;
+    // a fresh verification always carries both.
+    const { drain, finalizePayment } = harness();
+    const fresh = { fees_split: null, status: 'success', subaccount: {} };
+    mocks.verifyGatewayCharge.mockResolvedValue({ ok: true, response: fresh });
+    finalizePayment.mockResolvedValue({ kind: 'completed' });
+
+    await expect(
+      drain(row({ gateway_response: { status: 'success' } }))
+    ).resolves.toEqual({ action: 'drained' });
+
+    expect(mocks.verifyGatewayCharge).toHaveBeenCalledWith(
+      'paystack',
+      'REF-1',
+      undefined,
+      undefined
+    );
+    expect(finalizePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ gatewayResponse: fresh })
     );
   });
 

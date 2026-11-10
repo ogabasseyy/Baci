@@ -65,14 +65,14 @@ function SavingsReviewContent({ colors, controller }: StartSavingsModalsProps) {
         <Text
           style={{
             color: BRAND.primary,
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: '700',
             letterSpacing: 1,
           }}
         >
           YOUR NEXT UPGRADE
         </Text>
-        <Text style={{ color: colors.text, fontSize: 21, fontWeight: '700' }}>
+        <Text style={{ color: colors.text, fontSize: 19, fontWeight: '700' }}>
           {controller.selectedProduct?.name ?? 'Your device'}
         </Text>
         {controller.selectedProduct?.variantLabel ? (
@@ -81,7 +81,7 @@ function SavingsReviewContent({ colors, controller }: StartSavingsModalsProps) {
           </Text>
         ) : null}
         <Text style={{ color: colors.textSecondary }}>Plan target</Text>
-        <Text style={{ color: colors.text, fontSize: 30, fontWeight: '700' }}>
+        <Text style={{ color: colors.text, fontSize: 27, fontWeight: '700' }}>
           {formatNgnCurrency(controller.targetValue)}
         </Text>
         <View

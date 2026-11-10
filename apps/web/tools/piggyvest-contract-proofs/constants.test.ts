@@ -3,6 +3,8 @@ import {
   AMOUNTS_KOBO,
   FEE_RESERVE_KOBO,
   FUNDING_FLOOR_KOBO,
+  LIVE_MAX_POLLS,
+  LIVE_POLL_INTERVAL_MS,
   MAX_MUTATION_KOBO,
   MAX_RUN_TOTAL_KOBO,
   MUTATION_CAPABLE_MODES,
@@ -11,6 +13,7 @@ import {
   RECORDING_ACCOUNT_EMAIL,
   RECORDING_ACCOUNT_NORMALISED_MARKERS,
   RUN_MODES,
+  S8_OUTFLOWS_KOBO,
   SANDBOX_HOST,
   SANDBOX_ORIGIN,
 } from './constants';
@@ -78,13 +81,62 @@ describe('money limits', () => {
   });
 
   it('sets the funding floor above every planned outflow plus a fee reserve', () => {
+    // Proofs 2 (transfer + duplicate-reference re-send), 4 (transfer + bank
+    // outflow) and 8 (main to goal) all draw on the main wallet.
     expect(PLANNED_OUTFLOWS_KOBO).toBe(
-      AMOUNTS_KOBO.walletTransfer * 2 + AMOUNTS_KOBO.bankOutflow
+      AMOUNTS_KOBO.walletTransfer * 4 +
+        AMOUNTS_KOBO.bankOutflow +
+        S8_OUTFLOWS_KOBO
     );
     expect(FEE_RESERVE_KOBO).toBeGreaterThan(0);
     expect(FUNDING_FLOOR_KOBO).toBe(PLANNED_OUTFLOWS_KOBO + FEE_RESERVE_KOBO);
     // The old floor (3 transfers) left nothing for the bank fee.
     expect(FUNDING_FLOOR_KOBO).toBeGreaterThan(AMOUNTS_KOBO.walletTransfer * 3);
     expect(AMOUNTS_KOBO.fundMain).toBeGreaterThan(FUNDING_FLOOR_KOBO);
+  });
+
+  it('funds the house wallet with enough for the collection-to-main transfer', () => {
+    expect(AMOUNTS_KOBO.fundHouse).toBeGreaterThan(AMOUNTS_KOBO.walletTransfer);
+    // A main deposit that no other main-wallet credit shares, so its row is unambiguous.
+    const otherMainCredits: number[] = [
+      AMOUNTS_KOBO.fundMain,
+      AMOUNTS_KOBO.walletTransfer,
+      AMOUNTS_KOBO.fundGoal,
+    ];
+    expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.depositMain);
+  });
+
+  it('budgets the S8 first pass: fund-goal, a wire-level second tap and the timed-out submit', () => {
+    expect(S8_OUTFLOWS_KOBO).toBe(
+      AMOUNTS_KOBO.s8FundGoal * 2 + AMOUNTS_KOBO.s8TimeoutTransfer
+    );
+    // The S8 deposit row must be told apart from every other main-wallet credit.
+    const otherMainCredits: number[] = [
+      AMOUNTS_KOBO.fundMain,
+      AMOUNTS_KOBO.walletTransfer,
+      AMOUNTS_KOBO.fundGoal,
+      AMOUNTS_KOBO.depositMain,
+      AMOUNTS_KOBO.s8FundGoal,
+      AMOUNTS_KOBO.s8TimeoutTransfer,
+    ];
+    expect(otherMainCredits).not.toContain(AMOUNTS_KOBO.s8DepositMain);
+    expect(AMOUNTS_KOBO.fundMain).toBeGreaterThan(FUNDING_FLOOR_KOBO);
+  });
+});
+
+describe('live polling window', () => {
+  it('gives each sandbox wait a budget of about two minutes', () => {
+    // 2026-11-03 live runs: a ₦10,000 test funding never credited in one run,
+    // and a goal credit landed an hour late in another, while the same calls
+    // settled in under 20s on later runs. 30s (15 x 2s) misread slow
+    // settlement as unsettled. A loop that sleeps after each read last
+    // observes one interval before the budget ends, so require that point
+    // to clear 100s.
+    expect(LIVE_POLL_INTERVAL_MS * (LIVE_MAX_POLLS - 1)).toBeGreaterThanOrEqual(
+      100_000
+    );
+    // Not so long that every stable-balance check (which always runs all
+    // rounds) makes a run take hours.
+    expect(LIVE_POLL_INTERVAL_MS * LIVE_MAX_POLLS).toBeLessThanOrEqual(300_000);
   });
 });

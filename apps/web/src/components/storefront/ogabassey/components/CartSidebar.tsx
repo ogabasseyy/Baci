@@ -1,18 +1,18 @@
 'use client';
 
 import { ShoppingBag, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import type React from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { useSafeTimeout } from '@/hooks/use-safe-timeout';
 import { analytics } from '@/lib/analytics';
 import { asRoute } from '@/lib/routes';
 import { AdUnit } from './AdUnit';
 // import { ActionTooltip } from './Tooltip';
 import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
 import { CartSidebarFooter } from './cart-sidebar-footer';
+import { CheckoutIdentityModal } from './CheckoutIdentityModal';
+import { useCartCheckout } from './use-cart-checkout';
 import { CartSidebarLineItem } from './cart-sidebar-line-item';
 import { EmptyState } from './empty-state';
 import {
@@ -75,9 +75,7 @@ export const CartSidebar: React.FC = () => {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
 
-  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
-  const router = useRouter();
-  const scheduleTimeout = useSafeTimeout();
+  const { closeCart, handleCheckout, isCheckoutLoading, isIdentityOpen, setIsIdentityOpen } = useCartCheckout(isCartOpen, setIsCartOpen, getHref('/checkout'));
 
   const {
     negotiationState,
@@ -145,34 +143,19 @@ export const CartSidebar: React.FC = () => {
 
   if (!isCartOpen) return null;
 
-  const handleCheckout = async () => {
-    setIsCheckoutLoading(true);
-    // Close the sidebar first to prevent it staying open
-    setIsCartOpen(false);
-    // Navigate to checkout
-    router.push(asRoute(getHref('/checkout')));
-    // Reset loading state after a delay (in case user comes back).
-    // The reset is dropped when navigation unmounted the sidebar.
-    scheduleTimeout(() => {
-      setIsCheckoutLoading(false);
-    }, 2000);
-  };
-
-  const handleClose = () => {
-    setIsCartOpen(false);
-  };
+  const handleClose = closeCart;
 
   return (
     <>
-      {/* High Z-Index to cover Mobile Footer (z-40) */}
-      <div className="fixed inset-0 z-60 overflow-hidden">
+      {/* Keep all cart actions above the mobile footer (z-70). */}
+      <div className="fixed inset-0 z-80 overflow-hidden">
         {/* Backdrop */}
         <button
           type="button"
           aria-label="Dismiss cart backdrop"
           tabIndex={-1}
           className="absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs transition-opacity"
-          onClick={() => setIsCartOpen(false)}
+          onClick={closeCart}
         />
 
         {/* Sidebar Panel - SWIPES FROM RIGHT */}
@@ -188,7 +171,7 @@ export const CartSidebar: React.FC = () => {
                 </span>
               </h2>
               <button type="button"
-                onClick={() => setIsCartOpen(false)}
+                onClick={closeCart}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-store-primary"
                 aria-label="Close cart"
               >
@@ -207,7 +190,7 @@ export const CartSidebar: React.FC = () => {
                     title="Your cart is empty"
                     description="Add an item to your cart and it will appear here."
                     actionLabel="Start Shopping"
-                    onAction={() => setIsCartOpen(false)}
+                    onAction={closeCart}
                   />
                 </div>
               ) : (
@@ -239,7 +222,7 @@ export const CartSidebar: React.FC = () => {
               )}
             </div>
 
-            {/* Footer / Checkout */}
+            {/* Cart totals; delivery costs are handled in checkout. */}
             {displayCart.length > 0 && (
               <CartSidebarFooter
                 total={displayCartTotal}
@@ -256,6 +239,7 @@ export const CartSidebar: React.FC = () => {
         </div>
       </div>
 
+      <CheckoutIdentityModal isOpen={isIdentityOpen} onClose={() => setIsIdentityOpen(false)} checkoutUrl={getHref('/checkout')} onProceed={closeCart} />
       {/* Negotiation Modal — only render when merchant context is available */}
       {negotiationState && cartMerchantContextMatches && merchant?.id && (
         <NegotiationModal

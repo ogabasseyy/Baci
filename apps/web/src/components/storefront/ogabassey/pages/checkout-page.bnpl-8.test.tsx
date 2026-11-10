@@ -5,10 +5,8 @@ import {
   expect,
   fireEvent,
   it,
-  mockCaptureCheckoutFunnelEventOnce,
   mockCaptureClientEvent,
   openCreditDirectCheckout,
-  openCredPalCheckout,
   renderCheckoutWithStoreRates,
   screen,
   useCart,
@@ -19,7 +17,7 @@ import {
   waitFor,
 } from './checkout-page-test-support';
 
-it('tracks payment failures from Credit Direct and CredPal callbacks', async () => {
+it('tracks payment failures from Credit Direct callbacks', async () => {
   const paymentErrorEvents: unknown[][] = [];
   mockCaptureClientEvent.mockImplementation((...args: unknown[]) => {
     if (args[0] === 'payment_failed') paymentErrorEvents.push(args);
@@ -128,9 +126,7 @@ it('tracks payment failures from Credit Direct and CredPal callbacks', async () 
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
     await continueToPaymentAfterPickupCheck();
     if (tab === 'installments')
-      fireEvent.click(
-        screen.getByRole('button', { name: /pay in installments/i })
-      );
+      fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
     const paymentLabel = method.replace('_', ' ');
     const paymentRadio = screen
       .getAllByRole('radio', { name: new RegExp(paymentLabel, 'i') })
@@ -162,61 +158,6 @@ it('tracks payment failures from Credit Direct and CredPal callbacks', async () 
       await act(async () => {
         options?.onError?.('declined');
       });
-    } else if (method === 'credpal') {
-      await waitFor(() => expect(openCredPalCheckout).toHaveBeenCalled());
-      const options = vi.mocked(openCredPalCheckout).mock.calls.at(-1)?.[0];
-      expect(options).toBeDefined();
-      // Matched error: the widget loaded (payment_started), then failed.
-      await act(async () => {
-        options?.onLoad?.();
-      });
-      await act(async () => {
-        options?.onError?.({ success: false, message: 'declined' });
-      });
-      mockCaptureCheckoutFunnelEventOnce.mockClear();
-      await act(async () => {
-        await options?.onSuccess?.({
-          order_no: 'credpal-order-pending',
-          item: 'Test Product',
-          amount: 5000,
-          status: 'pending',
-          channel: 'web',
-          customer: {
-            full_name: 'Ada Buyer',
-            email: 'ada@example.com',
-            phone_no: '+2348123456789',
-          },
-          created_at: '2026-09-14T00:00:00.000Z',
-        });
-      });
-      expect(mockCaptureCheckoutFunnelEventOnce).not.toHaveBeenCalledWith(
-        'payment_completed',
-        expect.anything(),
-        expect.anything()
-      );
-      // Pending applications still reach the success experience.
-      expect(clearCart).toHaveBeenCalled();
-      expect(routerPush).toHaveBeenCalledWith(
-        expect.stringContaining('/order-success?')
-      );
-      expect(routerPush).toHaveBeenCalledWith(
-        expect.stringContaining('credpalStatus=pending')
-      );
-      await act(async () => {
-        await options?.onSuccess?.({
-          order_no: 'credpal-order-1',
-          item: 'Test Product',
-          amount: 5000,
-          status: 'success',
-          channel: 'web',
-          customer: {
-            full_name: 'Ada Buyer',
-            email: 'ada@example.com',
-            phone_no: '+2348123456789',
-          },
-          created_at: '2026-09-14T00:00:00.000Z',
-        });
-      });
     } else {
       await waitFor(() =>
         expect(fetchMock).toHaveBeenCalledWith(
@@ -233,21 +174,12 @@ it('tracks payment failures from Credit Direct and CredPal callbacks', async () 
   // ever ready, so there is no opened flow to match (covered by the
   // bank-transfer initialization test above).
   await submitAndCapture('installments', 'credit_direct');
-  await submitAndCapture('installments', 'credpal');
 
-  expect(paymentErrorEvents).toHaveLength(2);
+  expect(paymentErrorEvents).toHaveLength(1);
   expect(
     paymentErrorEvents.map(
       ([, properties]) => (properties as Record<string, unknown>).payment_method
     )
-  ).toEqual(['credit_direct', 'credpal']);
-  expect(mockCaptureCheckoutFunnelEventOnce).toHaveBeenCalledWith(
-    'payment_completed',
-    'order-credpal',
-    expect.objectContaining({
-      payment_method: 'credpal',
-      reference: 'credpal-order-1',
-    })
-  );
+  ).toEqual(['credit_direct']);
   vi.unstubAllEnvs();
 });

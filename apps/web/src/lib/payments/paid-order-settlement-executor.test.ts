@@ -29,7 +29,7 @@ const transaction: PaidOrderSideEffectTransaction = {
 
 const stepContext: StepContext = {
   consistency: { consistent: true },
-  gatewayResponse: { fees: 30_000 },
+  gatewayResponse: { fees: 30_000, fees_split: null, subaccount: {} },
   order: {
     discount_amount: 0,
     gift_wrapping_fee: 0,
@@ -85,6 +85,7 @@ describe('buildSettlementExecutor', () => {
       p_gross_amount: 20_000,
       p_merchant_id: 'merchant-1',
       p_metadata: {
+        paystack_collection: 'integration',
         paystack_reference: 'PSK_REF_1',
         verified_gateway_fee: 250,
       },

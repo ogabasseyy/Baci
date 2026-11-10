@@ -117,9 +117,8 @@ describe('HeroDesktopGrid', () => {
     expect(
       screen.getByRole('region', { name: 'Featured products' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Samsung Galaxy A27 5G' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Samsung Galaxy A27 5G')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByText('₦50,000')).toBeInTheDocument();
 
     const bigLink = screen.getByRole('link', {
@@ -205,12 +204,11 @@ describe('HeroDesktopGrid', () => {
       '/ogabassey/smartphones/itel-power-80-128gb-4gb'
     );
 
-    expect(
-      screen.getByRole('heading', { name: 'Itel IT2160' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Itel IT2160')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     // 4th slide must not render (big + 2 side cards only).
     expect(
-      screen.queryByRole('heading', { name: 'Should Not Render' })
+      screen.queryByText('Should Not Render')
     ).not.toBeInTheDocument();
   });
 

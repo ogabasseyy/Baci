@@ -6,7 +6,7 @@ import { BlogContentRenderer } from '@/components/blog/renderer/BlogContentRende
 import { TableOfContents } from '@/components/blog/table-of-contents';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewriting';
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
 import { BlogLegacyContent } from './BlogLegacyContent';
@@ -176,29 +176,32 @@ export async function BlogPostBody({
           Share this article:
         </span>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on Twitter (opens in new tab)"
             >
               Twitter
             </a>
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on LinkedIn (opens in new tab)"
             >
               LinkedIn
             </a>
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on Facebook (opens in new tab)"
             >
               Facebook
             </a>
@@ -233,9 +236,9 @@ export async function BlogPostBody({
                         {related.category}
                       </Badge>
                     )}
-                    <CardTitle className="line-clamp-2 text-lg transition-colors group-hover:text-primary">
+                    <h3 className="line-clamp-2 text-lg font-semibold leading-none tracking-tight transition-colors group-hover:text-primary">
                       {related.title}
-                    </CardTitle>
+                    </h3>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">

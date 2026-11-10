@@ -167,7 +167,9 @@ it('keeps actual validated primary provisioning and explicit interest consent in
     screen.getByRole('checkbox', { name: 'Earn interest on this plan' })
   );
   await act(async () => {
-    fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check plan readiness' })
+    );
   });
   expect(mockFetch).toHaveBeenCalledTimes(1);
   expect(mockFetch).toHaveBeenCalledWith({
@@ -212,7 +214,9 @@ it('does not display an account from a foreign goal returned to the real primary
   });
   await openGoal();
   await act(async () => {
-    fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check plan readiness' })
+    );
   });
   expect(mockFetch).toHaveBeenCalledTimes(1);
   expect(screen.queryByText('1234567890')).toBeNull();

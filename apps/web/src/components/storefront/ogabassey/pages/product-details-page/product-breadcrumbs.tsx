@@ -24,47 +24,52 @@ export function ProductBreadcrumbs({
   const categoryHref = asRoute(
     `${basePath}/${categorySlug}`.replace(/\/{2,}/g, '/')
   );
-  const productHref = asRoute(
-    `${basePath}/${categorySlug}/${productData.slug || ''}`.replace(
-      /\/{2,}/g,
-      '/'
-    )
-  );
 
   return (
-    <nav aria-label="Breadcrumb" className="mb-8 flex items-center overflow-x-auto whitespace-nowrap pb-2 text-sm text-store-background-text/70">
-      <Link
-        href={homeHref}
-        prefetch={false}
-        className="transition-colors md:hover:text-store-primary"
-      >
-        Home
-      </Link>
-      <ChevronRight
-        size={16}
-        className="mx-2"
-        aria-hidden="true"
-        role="presentation"
-      />
-      <Link
-        href={categoryHref}
-        prefetch={false}
-        className="transition-colors md:hover:text-store-primary"
-      >
-        {categoryLabel}
-      </Link>
-      <ChevronRight
-        size={16}
-        className="mx-2"
-        aria-hidden="true"
-        role="presentation"
-      />
-      <span
-        aria-current="page"
-        className="font-medium text-store-background-text"
-      >
-        {productData.name}
-      </span>
+    <nav
+      aria-label="Breadcrumb"
+      className="mb-8 flex items-center overflow-x-auto whitespace-nowrap pb-2 text-sm text-store-background-text/70"
+    >
+      <ol className="flex items-center">
+        <li>
+          <Link
+            href={homeHref}
+            prefetch={false}
+            className="transition-colors md:hover:text-store-primary"
+          >
+            Home
+          </Link>
+        </li>
+        <li className="flex items-center">
+          <ChevronRight
+            size={16}
+            className="mx-2"
+            aria-hidden="true"
+            role="presentation"
+          />
+          <Link
+            href={categoryHref}
+            prefetch={false}
+            className="transition-colors md:hover:text-store-primary"
+          >
+            {categoryLabel}
+          </Link>
+        </li>
+        <li className="flex items-center">
+          <ChevronRight
+            size={16}
+            className="mx-2"
+            aria-hidden="true"
+            role="presentation"
+          />
+          <span
+            aria-current="page"
+            className="font-medium text-store-background-text"
+          >
+            {productData.name}
+          </span>
+        </li>
+      </ol>
     </nav>
   );
 }

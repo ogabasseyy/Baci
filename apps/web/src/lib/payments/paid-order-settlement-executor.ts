@@ -7,6 +7,7 @@ import type {
   ServiceRoleClient,
 } from '@/lib/payments/paid-order-side-effect-types';
 import { toNumber } from '@/lib/payments/paid-order-side-effect-utils';
+import { resolveSettlementRpcRouting } from '@/lib/payments/resolve-settlement-rpc-routing';
 import { extractVerifiedGatewayFeeNgn } from '@/lib/payments/verified-gateway-fee';
 import { calculatePlatformFee } from '@/lib/paystack';
 import { moneyInputSchema } from '@/schemas/paid-order-side-effects';
@@ -206,6 +207,15 @@ export function buildSettlementExecutor(args: {
         `Settlement fees exceed gross amount: gatewayFee=${normalizedGatewayFee}, platformFee=${validatedPlatformFee}, grossAmount=${normalizedGrossAmount}`
       );
     }
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: ctx.gatewayResponse,
+      grossAmountKobo,
+      isRedvaultDirectSettlement:
+        validatedArgs.orderPaymentMethod?.trim().toLowerCase() ===
+        'uba_redvault',
+      settlementGateway: validatedArgs.settlementGateway,
+      useGiglSettlementRpc,
+    });
     const metadata = {
       [`${validatedArgs.settlementGateway}_reference`]:
         validatedArgs.externalGatewayReference,
@@ -216,25 +226,11 @@ export function buildSettlementExecutor(args: {
             retained_shipping_amount: retainedShippingAmount,
           }
         : {}),
+      ...routing.extraMetadata,
     };
 
-    // REDVAULT split sales pay the merchant share straight to the Paystack
-    // subaccount, so the standard RPC would double-pay by additionally
-    // crediting the Baci wallet. The direct variant records the same
-    // informational row with no wallet movement. REDVAULT wins over GIGL:
-    // the GIGL wrapper delegates to the wallet-crediting primitive, so a
-    // GIGL-shipped split sale uses the direct-split GIGL variant that keeps
-    // the retained-shipping accounting without the wallet credit.
-    const isRedvaultDirectSettlement =
-      validatedArgs.orderPaymentMethod?.trim().toLowerCase() === 'uba_redvault';
-    const settlementRpc = isRedvaultDirectSettlement
-      ? useGiglSettlementRpc
-        ? 'record_uba_redvault_direct_settlement_gigl_v1'
-        : 'record_uba_redvault_direct_settlement'
-      : useGiglSettlementRpc
-        ? 'record_merchant_settlement_gigl_v1'
-        : 'record_merchant_settlement';
-    const { error } = await validatedArgs.supabase.rpc(settlementRpc, {
+    const { error } = await validatedArgs.supabase.rpc(routing.rpc, {
+      ...routing.extraParams,
       p_description: `Order payment via ${validatedArgs.settlementGateway}`,
       p_gateway: validatedArgs.settlementGateway,
       p_gateway_fee: normalizedGatewayFee,

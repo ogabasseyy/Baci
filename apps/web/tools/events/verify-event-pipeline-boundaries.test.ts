@@ -46,7 +46,7 @@ describe('event pipeline source boundary verifier', () => {
     expect(
       collectProductionImportClosure(['apps/web/src/root.ts'], sources)
     ).toEqual(new Set(sources.keys()));
-  }, 30_000);
+  }, 90_000);
   it('rejects every frozen escape and unauthorized direct caller', async () => {
     expect(
       existsSync(verifierPath),

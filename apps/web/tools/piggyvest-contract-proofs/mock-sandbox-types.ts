@@ -11,6 +11,8 @@ import type { PagingMode } from './mock-paging';
 
 export interface MockOptions {
   repostReturnsOriginalDefault: boolean;
+  /** What returnIfExist matches an existing customer on (a same-BVN create under another identifier). */
+  customerMatchOn: 'bvn_or_email' | 'email_only';
   echoThirdPartyIdentifierOnCreate: boolean;
   customerListContainer: 'paginatedPayload' | 'edges' | 'array';
   customerListEchoesIdentifier: boolean;
@@ -27,6 +29,8 @@ export interface MockOptions {
   depositFeeBorneByWallet: boolean;
   transferFeeKobo: number;
   bankFeeKobo: number;
+  /** A wallet transfer that repeats an earlier reference: refused, or booked as a second transfer. */
+  duplicateReference: 'reject' | 'accept';
   w2wIncrementsCounter: boolean;
   bankIncrementsCounter: boolean;
   counterScope: 'wallet' | 'customer';
@@ -58,6 +62,8 @@ export interface MockOptions {
   customerPayoutWallet: 'accepted' | 'rejected';
   subAccountAcceptsPayout: boolean;
   subWalletInheritsPayout: boolean;
+  /** A sub-wallet created with no payout of its own pays itself (wins over inheritance). */
+  subWalletPaysItselfWhenUnset: boolean;
   payoutReadback: 'fields' | 'none' | 'accrual_only';
   /** Sub-wallet readbacks drop the payout field while the main wallet keeps it. */
   goalReadbackOmitsPayout: boolean;
@@ -65,6 +71,7 @@ export interface MockOptions {
 
 export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   repostReturnsOriginalDefault: true,
+  customerMatchOn: 'bvn_or_email',
   echoThirdPartyIdentifierOnCreate: false,
   customerListContainer: 'paginatedPayload',
   customerListEchoesIdentifier: true,
@@ -79,6 +86,7 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   depositFeeBorneByWallet: true,
   transferFeeKobo: 0,
   bankFeeKobo: 5_000,
+  duplicateReference: 'reject',
   w2wIncrementsCounter: false,
   bankIncrementsCounter: true,
   counterScope: 'wallet',
@@ -99,6 +107,7 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   customerPayoutWallet: 'accepted',
   subAccountAcceptsPayout: true,
   subWalletInheritsPayout: false,
+  subWalletPaysItselfWhenUnset: false,
   payoutReadback: 'fields',
   goalReadbackOmitsPayout: false,
 };

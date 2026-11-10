@@ -263,4 +263,15 @@ describe('CategoryHubSections', () => {
       screen.getAllByText(/Battery\.|Camera\./).map((node) => node.textContent)
     ).toEqual(['Camera.', 'Battery.']);
   });
+
+  it('gives comparison and buyer guide links 44px minimum touch target height', () => {
+    render(<CategoryHubSections hub={richModel} />);
+
+    expect(
+      screen.getByRole('link', { name: 'Apple Pro vs Samsung Ultra' })
+    ).toHaveClass('min-h-11', 'inline-flex', 'items-center');
+    expect(
+      screen.getByRole('link', { name: 'Best Phones in Nigeria' })
+    ).toHaveClass('min-h-11', 'inline-flex', 'items-center');
+  });
 });

@@ -8,7 +8,14 @@ import {
 } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { WalletContent } from './WalletContent';
+import { setWalletTestCustomer } from './wallet-auth.test-support';
 import { createWalletContentProps } from './wallet-content.test-utils';
+
+let restoreCustomer: () => void;
+beforeEach(() => {
+  restoreCustomer = setWalletTestCustomer();
+});
+afterEach(() => restoreCustomer());
 
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
@@ -82,6 +89,10 @@ it('renders savings progress modal and wires manual contribution actions', async
   render(
     <WalletContent
       {...props}
+      activeSavingsGoal={{
+        ...props.activeSavingsGoal,
+        product_variant_label: 'Color: Black · Storage: 256GB',
+      }}
       savingsContributionAmount="500"
       spendableBalance={1000}
       showSavingsProgress
@@ -90,8 +101,11 @@ it('renders savings progress modal and wires manual contribution actions', async
 
   expect(screen.getAllByText('Add to savings').length).toBeGreaterThan(0);
   expect(screen.getByText('50%')).toBeOnTheScreen();
-  expect(screen.getByText('Condition: Used')).toBeOnTheScreen();
-  expect(screen.getAllByText('Storage: 256GB')).toHaveLength(2);
+  expect(screen.getAllByLabelText('Device condition: Used')).toHaveLength(2);
+  expect(screen.getAllByText('256GB')).toHaveLength(2);
+  expect(
+    screen.getAllByRole('image', { name: 'Device colour: Black' })
+  ).toHaveLength(2);
 
   fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
   fireEvent.press(

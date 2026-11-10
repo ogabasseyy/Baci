@@ -1,18 +1,19 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { Alert, RefreshControl } from 'react-native';
+import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import type Colors from '@/constants/Colors';
-import { useProductSearch } from '@/hooks/use-product-search';
 import { useWalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Product } from '@/types/product';
+import { useSavingsDeviceSwap } from './use-savings-device-swap';
 import { WalletActionsRow } from './WalletActionsRow';
 import { WalletFundModal } from './WalletFundModal';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
 import { WalletHeroSection } from './WalletHeroSection';
+import { WalletPrimaryContext } from './WalletPrimaryContext';
 import { WalletRedeemPanel } from './WalletRedeemPanel';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 import { WalletSavingsPlanCard } from './WalletSavingsPlanCard';
@@ -46,6 +47,9 @@ export interface WalletContentProps {
   fundReturnTo?: WalletReturnHref;
   isAddingSavingsContribution: boolean;
   hasPendingSavingsContribution?: boolean;
+  goalAwaitingSettlement?: boolean;
+  /** The wallet query's last-updated time: re-reads the goal readiness gate. */
+  walletUpdatedAt?: number;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   isRedeemPending: boolean;
@@ -53,6 +57,7 @@ export interface WalletContentProps {
   loyaltyPoints: number;
   loyaltyTier?: string | null;
   needsPhone: boolean;
+  primaryReady?: boolean;
   onCreateFundingAccount: () => void;
   onChangeFundAmount: (value: string) => void;
   onChangeRedeemPoints: (value: string) => void;
@@ -73,6 +78,11 @@ export interface WalletContentProps {
   onQuickSave: () => void;
   onRefresh: () => void;
   onResetFund: () => void;
+  /**
+   * The wallet PIN prompt. It is mounted inside the savings sheet while that
+   * sheet is open (iOS cannot stack sibling modals), and at the root otherwise.
+   */
+  pinPrompt?: ReactNode;
   onResetRedeem: () => void;
   onStartSavings: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
@@ -144,40 +154,23 @@ export function WalletContent(props: WalletContentProps) {
     returnTo: fundReturnTo,
     transactions,
   });
-  const [showSavingsDeviceSwap, setShowSavingsDeviceSwap] = useState(false);
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =
     useState(false);
-  const [savingsDeviceSearch, setSavingsDeviceSearch] = useState('');
-  const [isChangingSavingsDevice, setIsChangingSavingsDevice] = useState(false);
-  const trimmedSavingsDeviceSearch = savingsDeviceSearch.trim();
   const {
-    products: savingsDeviceProducts,
-    isLoading: isSavingsDeviceLoading,
+    isChangingSavingsDevice,
+    isSavingsDeviceLoading,
     resolveProduct,
-  } = useProductSearch({
-    enabled: showSavingsDeviceSwap,
-    limit: 8,
-    search: trimmedSavingsDeviceSearch || undefined,
-  });
-  const handleSelectSavingsDevice = async (
-    product: Product,
-    variantId?: string | null
-  ) => {
-    setIsChangingSavingsDevice(true);
-    try {
-      const didChange = await onChangeSavingsDevice(product, variantId);
-      if (didChange) {
-        setShowSavingsDeviceSwap(false);
-        setSavingsDeviceSearch('');
-      }
-    } catch {
-      Alert.alert('Unable to change device', 'Please try again in a moment.');
-    }
-    setIsChangingSavingsDevice(false);
-  };
+    savingsDeviceProducts,
+    savingsDeviceSearch,
+    setSavingsDeviceSearch,
+    setShowSavingsDeviceSwap,
+    showSavingsDeviceSwap,
+    handleSelectSavingsDevice,
+  } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
-    <>
+    <WalletPrimaryContext.Provider value={props.primaryReady === true}>
       <AppKeyboardAwareScrollView
         testID="wallet-scroll"
         contentContainerStyle={contentContainerStyle}
@@ -193,8 +186,6 @@ export function WalletContent(props: WalletContentProps) {
         }
       >
         <WalletHeroSection
-          activeSavingsGoal={activeSavingsGoal}
-          isRefetching={isRefetching}
           canCreateFundingAccount={canCreateFundingAccount}
           createFundingAccountUnavailableMessage={
             createFundingAccountUnavailableMessage
@@ -210,6 +201,7 @@ export function WalletContent(props: WalletContentProps) {
           loyaltyTier={loyaltyTier}
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
+          onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           savingsBalance={savingsBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
@@ -217,6 +209,7 @@ export function WalletContent(props: WalletContentProps) {
         {activeSavingsGoal ? (
           <WalletSavingsPlanCard
             colors={colors}
+            awaitingSettlement={props.goalAwaitingSettlement}
             goal={activeSavingsGoal}
             onOpen={onStartSavings}
           />
@@ -235,7 +228,8 @@ export function WalletContent(props: WalletContentProps) {
           onManageCards={onManageCards}
           onQuickSave={onQuickSave}
           onStartSavings={onStartSavings}
-          showPrimaryAction={!activeSavingsGoal}
+          // Start Savings now lives inside the wallet card.
+          showPrimaryAction={false}
           showQuickSave={false}
         />
         {showRedeemPanel ? (
@@ -258,6 +252,7 @@ export function WalletContent(props: WalletContentProps) {
         goal={activeSavingsGoal}
         isAdding={isAddingSavingsContribution}
         hasPendingContribution={props.hasPendingSavingsContribution}
+        walletUpdatedAt={props.walletUpdatedAt}
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
         onAddSavings={onAddSavingsContribution}
@@ -266,6 +261,7 @@ export function WalletContent(props: WalletContentProps) {
         onFundWallet={onFundSavingsWallet}
         onRefreshWallet={async () => onRefresh()}
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
+        overlay={savingsSheetOpen ? props.pinPrompt : null}
         visible={showSavingsProgress}
         walletBalance={spendableBalance}
       />
@@ -294,6 +290,7 @@ export function WalletContent(props: WalletContentProps) {
         }
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
-    </>
+      {savingsSheetOpen ? null : props.pinPrompt}
+    </WalletPrimaryContext.Provider>
   );
 }

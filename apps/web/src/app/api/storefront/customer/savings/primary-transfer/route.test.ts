@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { PATCH, POST } from './route';
@@ -40,6 +41,7 @@ const body = {
   goalId: '22222222-2222-4222-8222-222222222222',
   operationId: '33333333-3333-4333-8333-333333333333',
   amountKobo: 2000,
+  pinProof: createHash('sha256').update('s5-route-proof').digest('hex'),
 };
 function request(input: unknown = body) {
   return new NextRequest(
@@ -118,6 +120,49 @@ it('drains status recovery through the recovery runtime after rollback', async (
     expect.objectContaining({ operationId: body.operationId })
   );
 });
+it('answers SAVINGS_NOT_READY (503) for a status read when no runtime exists at all', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.recovery.mockReturnValue(null);
+  const response = await PATCH(
+    request({ merchantId, operationId: body.operationId })
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'SAVINGS_NOT_READY' });
+  expect(checkStatus).not.toHaveBeenCalled();
+});
+it('answers SAVINGS_MERCHANT_NOT_PRIMARY (409) when the runtime belongs to another merchant', async () => {
+  const response = await PATCH(
+    request({
+      merchantId: '99999999-9999-4999-8999-999999999999',
+      operationId: body.operationId,
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+  });
+  expect(checkStatus).not.toHaveBeenCalled();
+  expect(mocks.identity).not.toHaveBeenCalled();
+});
+it('also answers SAVINGS_MERCHANT_NOT_PRIMARY through the recovery runtime', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.recovery.mockReturnValue({
+    merchantId,
+    businessId: 'business',
+    providerToken: 'test-only',
+    configuration: { integrationId: 'integration', environment: 'staging' },
+  });
+  const response = await PATCH(
+    request({
+      merchantId: '99999999-9999-4999-8999-999999999999',
+      operationId: body.operationId,
+    })
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    code: 'SAVINGS_MERCHANT_NOT_PRIMARY',
+  });
+});
 it('checks auth before configuration or transfer processing', async () => {
   mocks.auth.mockResolvedValue({ user: null });
   expect((await POST(request())).status).toBe(401);
@@ -158,8 +203,60 @@ it('returns pending and binds the request to the authenticated customer', async 
         operationId: body.operationId,
         amountKobo: 2000,
       },
+      pinProof: body.pinProof,
     })
   );
+});
+it('lets the database decide a request with no proof, so merchants without PIN checking keep funding', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.submit.mockResolvedValue({ status: 'pending' });
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(202);
+  expect(mocks.submit).toHaveBeenCalledWith(
+    expect.objectContaining({ pinProof: '' })
+  );
+});
+it('asks for the PIN when the database says a proof is missing', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.submit.mockResolvedValue({ status: 'pin_refused', reason: 'missing' });
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: 'PIN_PROOF_REQUIRED' });
+});
+it('keeps the not-ready answer ahead of the PIN requirement so legacy funding can take over', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.runtime.mockReturnValue(null);
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'SAVINGS_NOT_READY' });
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('keeps the savings-disabled answer ahead of the PIN requirement', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.features.mockResolvedValue({
+    autoDebitEnabled: true,
+    paystackEnabled: true,
+    savingsEnabled: false,
+  });
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    code: 'CUSTOMER_SAVINGS_DISABLED',
+  });
+});
+it('rejects a malformed PIN proof as invalid input', async () => {
+  const response = await POST(request({ ...body, pinProof: 'not-hex' }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: 'INVALID_INPUT' });
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('maps a refused PIN proof to a retry-with-PIN response and never reports a transfer', async () => {
+  mocks.submit.mockResolvedValue({ status: 'pin_refused', reason: 'expired' });
+  const response = await POST(request());
+  expect(response.status).toBe(403);
+  const payload = await response.json();
+  expect(payload).toMatchObject({ code: 'PIN_PROOF_REFUSED' });
+  expect(JSON.stringify(payload)).not.toContain('expired');
 });
 it('does not expose database errors or start a fallback payment', async () => {
   mocks.submit.mockRejectedValue(new Error('private database detail'));

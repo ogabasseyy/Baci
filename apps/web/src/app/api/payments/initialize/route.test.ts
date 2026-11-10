@@ -169,6 +169,8 @@ function createMockSupabase() {
               : null,
           error: null,
         });
+      if (name === 'get_order_paystack_split_retained_shipping_kobo')
+        return Promise.resolve({ data: 0, error: null });
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
@@ -176,7 +178,7 @@ function createMockSupabase() {
       if (name === 'reserve_storefront_redvault_payment_attempt_v3')
         return Promise.resolve(redvaultAttemptReserveResults.shift());
       if (
-        name === 'claim_storefront_redvault_payment_attempt_initialization_v3'
+        name === 'claim_storefront_redvault_payment_attempt_initialization_v4'
       )
         return Promise.resolve(redvaultAttemptClaimResults.shift());
       if (
@@ -258,10 +260,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({
-    ...createMockSupabase(),
-    ...createMockAdminClient(),
-  }),
+  createClient: () => ({ ...createMockSupabase(), ...createMockAdminClient() }),
 }));
 
 // ---- Import handler AFTER mocks ----
@@ -522,6 +521,7 @@ describe('POST /api/payments/initialize', () => {
               authorization_url: null,
               bank_code: '033',
               initialization_claimed: true,
+              initialization_fresh: true,
               paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
               platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
@@ -657,6 +657,7 @@ describe('POST /api/payments/initialize', () => {
               authorization_url: null,
               bank_code: '033',
               initialization_claimed: true,
+              initialization_fresh: true,
               paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
               platform_fee_kobo: 10000,
               reference: 'RV-attempt-1',
@@ -985,7 +986,7 @@ describe('POST /api/payments/initialize', () => {
       expect(json.authorization_url).toBe('https://paystack.com/pay/abc');
     });
 
-    it('redacts payment payload logs without mutating the Paystack request payload', async () => {
+    it('never logs raw request fields without mutating the Paystack request payload', async () => {
       const logSpy = vi
         .spyOn(console, 'log')
         .mockImplementation(() => undefined);
@@ -995,7 +996,11 @@ describe('POST /api/payments/initialize', () => {
 
       try {
         const res = await POST(
-          makeRequest({ ...validBody, gateway: 'paystack' })
+          makeRequest({
+            ...validBody,
+            gateway: 'paystack',
+            unknown_private_field: 'private-sentinel',
+          })
         );
         const json = await res.json();
         const loggedOutput = logSpy.mock.calls
@@ -1004,11 +1009,9 @@ describe('POST /api/payments/initialize', () => {
 
         expect(res.status).toBe(200);
         expect(json.success).toBe(true);
-        expect(loggedOutput).toContain('[PaymentInit] Raw Request Body:');
+        expect(loggedOutput).not.toContain('private-sentinel');
+        expect(loggedOutput).not.toContain('[PaymentInit] Raw Request Body:');
         expect(loggedOutput).toContain('[PaymentInit] Paystack Phone Debug:');
-        expect(loggedOutput).toContain('"customer_email":"[REDACTED]"');
-        expect(loggedOutput).toContain('"customer_phone":"[REDACTED]"');
-        expect(loggedOutput).toContain('"billing_address":"[REDACTED]"');
         expect(loggedOutput).toContain('"original_phone":"[REDACTED]"');
         expect(loggedOutput).toContain('"formatted_phone":"[REDACTED]"');
         expect(loggedOutput).not.toContain('customer@example.com');
@@ -1370,9 +1373,19 @@ describe('POST /api/payments/initialize', () => {
   });
 
   describe('bnpl gateways', () => {
+    it('rejects retired CredPal before creating a transaction', async () => {
+      const res = await POST(makeRequest({ ...validBody, gateway: 'credpal' }));
+      expect(res.status).toBe(410);
+      expect(await res.json()).toMatchObject({ code: 'GATEWAY_RETIRED' });
+      expect(
+        rpcCalls.filter(({ name }) => name === 'create_payment_transaction')
+      ).toHaveLength(0);
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(mockInitializeKorapay).not.toHaveBeenCalled();
+    });
+
     it.each([
       'credit_direct',
-      'credpal',
     ] as const)('uses the request origin for %s BNPL launcher URLs', async (gateway) => {
       const res = await POST(makeRequest({ ...validBody, gateway }));
       const json = await res.json();

@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'ae630f7e127b680c8b4e447748d03c54334095ef0b71c16b37db364068f61179',
+      'b8ef9e4bd1d9f136659bfca7403009edda271afc5d49cd970c8e9a077ce85415',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 585,
+    rowCount: 622,
   });
 });
 
@@ -46,4 +46,99 @@ it('keeps every private cart endpoint on the dynamic origin', async () => {
     ])
   );
   for (const row of cartRows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps every Oxygen API route on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith('apps/web/src/app/api/payments/oxygen/')
+  );
+  expect(rows).toHaveLength(24);
+  expect(rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps wallet PIN routes on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/customer/wallet-pin/'
+    )
+  );
+  expect(rows).toHaveLength(4);
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+});
+
+it('keeps the savings PIN verification endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  expect(inventory.rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
+});
+
+it('keeps the savings goal completion endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  expect(inventory.rows).toContainEqual(
+    expect.objectContaining({
+      sourcePath:
+        'apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts',
+      decision: 'origin_dynamic',
+    })
+  );
+});
+
+it('keeps Chatwoot context endpoints on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const rows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith(
+      'apps/web/src/app/api/storefront/chatwoot/context/'
+    )
+  );
+  expect(rows).toHaveLength(3);
+  expect(rows.map((row) => row.routePattern).sort()).toEqual([
+    '/api/storefront/chatwoot/context/authorize',
+    '/api/storefront/chatwoot/context/challenge',
+    '/api/storefront/chatwoot/context/verify',
+  ]);
+  expect(rows.every((row) => row.decision === 'origin_dynamic')).toBe(true);
 });

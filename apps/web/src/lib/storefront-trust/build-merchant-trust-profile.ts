@@ -1,11 +1,14 @@
 import type { RegisteredAddress } from '@baci/shared';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { normalizeGooglePlaceId } from '@/lib/google-place-id-normalization';
+import { hasPublishableFaqContent } from '@/lib/has-publishable-faq-content';
 import { isSocialPlatform, normalizeSocialUrl } from '@/lib/social';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileRouteLinks,
   MerchantTrustProfileSource,
 } from './merchant-trust-profile-types';
+import { buildOgabasseyApprovedPolicyDraft } from './ogabassey-approved-policy';
 
 function normalizeString(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -32,7 +35,12 @@ function buildDerivedLink(
 
 function hasMeaningfulContent(value: unknown): boolean {
   if (typeof value === 'string') {
-    return value.trim().length > 0;
+    return (
+      value
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;|&#160;/gi, ' ')
+        .trim().length > 0
+    );
   }
 
   if (Array.isArray(value)) {
@@ -133,10 +141,7 @@ function buildDerivedLinks(
   profile: MerchantTrustProfile
 ): MerchantTrustProfileRouteLinks {
   const derivedLinks: MerchantTrustProfileRouteLinks = {};
-  const hasTemplatePolicyPages =
-    !!merchant.template_id &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
+  const templateHasPolicyPage = merchant.template_id === OGABASSEY_TEMPLATE_ID;
 
   if (hasMeaningfulContent(merchant.about_page)) {
     derivedLinks.about = buildDerivedLink(normalizedBaseUrl, '/about');
@@ -146,15 +151,15 @@ function buildDerivedLinks(
     derivedLinks.contact = buildDerivedLink(normalizedBaseUrl, '/contact');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.privacy) || hasTemplatePolicyPages) {
+  if (hasMeaningfulContent(merchant.pages?.privacy) || templateHasPolicyPage) {
     derivedLinks.privacy = buildDerivedLink(normalizedBaseUrl, '/privacy');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.terms) || hasTemplatePolicyPages) {
+  if (hasMeaningfulContent(merchant.pages?.terms) || templateHasPolicyPage) {
     derivedLinks.terms = buildDerivedLink(normalizedBaseUrl, '/terms');
   }
 
-  if (hasMeaningfulContent(merchant.pages?.faq)) {
+  if (hasPublishableFaqContent(merchant)) {
     derivedLinks.faq = buildDerivedLink(normalizedBaseUrl, '/faq');
   }
 
@@ -177,7 +182,7 @@ export function buildMerchantTrustProfile(
   merchant: MerchantTrustProfileSource,
   baseUrl?: string
 ): MerchantTrustProfile {
-  const trustProfile = merchant.trust_profile ?? {};
+  const trustProfile = buildOgabasseyApprovedPolicyDraft(merchant);
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 
   const result: MerchantTrustProfile = {

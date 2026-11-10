@@ -1,3 +1,4 @@
+import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import { fundWallet } from './wallet-screen.handlers';
 
@@ -29,6 +30,34 @@ describe('startSavingsWalletTopUp', () => {
           '/wallet?action=savings&savingsGoalId=goal%26other%3D1&savingsAmount=500',
         setIsFundPending,
       })
+    );
+  });
+
+  it('tops up at least the wallet minimum while keeping the smaller intended contribution', async () => {
+    await startSavingsWalletTopUp({
+      fundAmount: '25',
+      goalId: 'goal-1',
+      setIsFundPending: jest.fn(),
+    });
+
+    expect(fundWallet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fundAmount: String(WALLET_TOP_UP_MIN_AMOUNT),
+        walletReturnTo:
+          '/wallet?action=savings&savingsGoalId=goal-1&savingsAmount=25',
+      })
+    );
+  });
+
+  it('leaves a contribution at or above the minimum unchanged', async () => {
+    await startSavingsWalletTopUp({
+      fundAmount: String(WALLET_TOP_UP_MIN_AMOUNT),
+      goalId: 'goal-1',
+      setIsFundPending: jest.fn(),
+    });
+
+    expect(fundWallet).toHaveBeenCalledWith(
+      expect.objectContaining({ fundAmount: String(WALLET_TOP_UP_MIN_AMOUNT) })
     );
   });
 

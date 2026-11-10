@@ -69,6 +69,12 @@ describe('buildProductSemanticModel', () => {
             brand: 'Yodha',
             price: 5000,
           }),
+          makeCandidate({
+            slug: 'saree-set',
+            name: 'Saree Set',
+            brand: 'Anokhi',
+            price: 2600,
+          }),
         ],
       })
     );
@@ -114,10 +120,10 @@ describe('buildProductSemanticModel', () => {
     });
   });
 
-  it('renders explicitly product-linked guides even without cluster metadata', () => {
+  it('boosts explicitly product-linked guides only when they pass category and relevance checks', () => {
     const currentProduct = makeCandidate({
-      slug: 'lenovo-legion',
-      name: 'Lenovo Legion',
+      slug: 'lenovo-thinkpad',
+      name: 'Lenovo ThinkPad',
       brand: 'Lenovo',
       price: 3_500_000,
       category_slug: 'laptops',
@@ -130,7 +136,49 @@ describe('buildProductSemanticModel', () => {
         inventory: [currentProduct],
         guidePosts: [
           {
-            slug: 'lenovo-legion-warranty-support',
+            slug: 'lenovo-thinkpad-warranty-support',
+            title: 'Lenovo ThinkPad Warranty Support Buying Guide',
+            excerpt: null,
+            category: 'Laptops',
+            tags: ['laptops', 'lenovo'],
+            keywords: ['buyer guide'],
+            featured_image_url: null,
+            published_at: '2026-04-01T09:00:00.000Z',
+            reading_time_minutes: 3,
+          },
+          {
+            slug: 'best-laptops-in-nigeria',
+            title: 'Best Laptops in Nigeria',
+            excerpt: 'Student and office laptop picks.',
+            category: 'Laptops',
+            tags: ['laptops', 'lenovo'],
+            keywords: ['buyer guide'],
+            featured_image_url: null,
+            published_at: '2026-04-02T09:00:00.000Z',
+            reading_time_minutes: 5,
+          },
+        ],
+        priorityGuidePostSlugs: ['lenovo-thinkpad-warranty-support'],
+      })
+    );
+
+    expect(model.guideLinks[0]).toEqual({
+      href: 'https://ogabassey.com/blog/lenovo-thinkpad-warranty-support',
+      title: 'Lenovo ThinkPad Warranty Support Buying Guide',
+      description: '3 minute guide',
+      kind: 'buyer-guide',
+    });
+
+    // An unclustered / cross-category guide in priorityGuidePostSlugs must be rejected
+    const unclusteredModel = buildProductSemanticModel(
+      makeInput({
+        categorySlug: 'laptops',
+        categoryName: 'Laptops',
+        currentProduct,
+        inventory: [currentProduct],
+        guidePosts: [
+          {
+            slug: 'unrelated-warranty-support',
             title: 'Warranty Support Checklist',
             excerpt: null,
             category: 'Support',
@@ -140,18 +188,11 @@ describe('buildProductSemanticModel', () => {
             published_at: '2026-04-01T09:00:00.000Z',
             reading_time_minutes: 3,
           },
-          ...publishedGuidePosts,
         ],
-        priorityGuidePostSlugs: ['lenovo-legion-warranty-support'],
+        priorityGuidePostSlugs: ['unrelated-warranty-support'],
       })
     );
-
-    expect(model.guideLinks[0]).toEqual({
-      href: 'https://ogabassey.com/blog/lenovo-legion-warranty-support',
-      title: 'Warranty Support Checklist',
-      description: '3 minute guide',
-      kind: 'buyer-guide',
-    });
+    expect(unclusteredModel.guideLinks).toEqual([]);
   });
 
   it('falls back to Nigerian currency for semantic trust bullets', () => {

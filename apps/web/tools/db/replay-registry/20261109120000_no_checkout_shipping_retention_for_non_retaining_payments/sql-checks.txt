@@ -1,0 +1,1 @@
+supabase/tests/gigl_non_retaining_payment_no_checkout_stamp.sql

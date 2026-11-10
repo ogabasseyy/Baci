@@ -100,3 +100,22 @@ it('requires verified accounts only in ready responses and keeps payout claims o
     schemas.response.safeParse({ ...response, interestEnabled: true }).success
   ).toBe(false);
 });
+it('accepts a setup request with an explicit, absent or boolean choice only', () => {
+  const base = {
+    merchantId: provisioningFixture.scope.merchantId,
+    goalId: provisioningFixture.goalId,
+  };
+  expect(schemas.setupRequest.safeParse(base).success).toBe(true);
+  expect(
+    schemas.setupRequest.safeParse({ ...base, interestAccepted: false }).success
+  ).toBe(true);
+  for (const bad of [
+    { interestAccepted: 'false' },
+    { interestAccepted: null },
+    { enableInterestAccrual: true },
+    { customerId: 'foreign' },
+  ])
+    expect(schemas.setupRequest.safeParse({ ...base, ...bad }).success).toBe(
+      false
+    );
+});

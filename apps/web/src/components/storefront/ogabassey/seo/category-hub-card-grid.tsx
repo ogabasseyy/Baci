@@ -9,6 +9,11 @@ function buildHeadingId(title: string) {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
 
+function getDisambiguatedAriaLabel(label: string): string | undefined {
+  const expanded = label.replace(/(\w)\s*\+(?=[\s,.;:!?)]|$)/g, '$1 Plus');
+  return expanded !== label ? `${label} (${expanded})` : undefined;
+}
+
 export function CategoryHubCardGrid({
   title,
   cards,
@@ -38,6 +43,7 @@ export function CategoryHubCardGrid({
             <h4 className="ogabassey-category-hub-card-grid__title">
               <a
                 href={card.href}
+                aria-label={getDisambiguatedAriaLabel(card.title)}
                 className="ogabassey-category-hub-card__link"
               >
                 {card.title}
@@ -50,6 +56,7 @@ export function CategoryHubCardGrid({
               <div className="ogabassey-category-hub-card-grid__secondary">
                 <a
                   href={card.secondaryHref}
+                  aria-label={getDisambiguatedAriaLabel(card.secondaryLabel)}
                   className="ogabassey-category-hub-card__link"
                 >
                   {card.secondaryLabel}

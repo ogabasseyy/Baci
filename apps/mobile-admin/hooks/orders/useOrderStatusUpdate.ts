@@ -42,6 +42,8 @@ const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
 // Only errors traced to lookup/validation before carrier submission belong
 // here. A new server/proxy code alone does not prove that booking failed.
 const DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES = new Set([
+  // Refused before any carrier submission (payment/funding check).
+  'GIGL_REQUIRES_PREPAID_OR_WALLET',
   'SHIPMENT_BOOKING_LOCK_FAILED',
   'MERCHANT_LOOKUP_FAILED',
   'MERCHANT_SENDER_REQUIRED',
@@ -137,6 +139,7 @@ async function updateOrderStatus(
     // at any HTTP status; preserve other business rejections below.
     if (
       status === 'shipped' &&
+      !DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES.has(errorCode ?? '') &&
       (UNCONFIRMED_SHIPPING_ERROR_CODES.has(errorCode ?? '') ||
         (response.status >= 500 &&
           response.status <= 599 &&

@@ -29,6 +29,7 @@ export function gigl(canBook: boolean, error: string | null = null) {
     startTransferPoll: vi.fn(),
     state: error ? ('error' as const) : ('ready' as const),
     updateAddressField: vi.fn(),
+    selectAddressPlace: vi.fn(),
     wallet: {
       availableBalance: canBook ? 11000 : 1000,
       canBook,

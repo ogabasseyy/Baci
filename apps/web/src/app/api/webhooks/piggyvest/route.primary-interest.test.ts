@@ -41,7 +41,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
   dispatchPrimaryWalletPaidInterestInbox: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () => withCaptureRpc(mocks.legacy()),
+  createPiggyvestIntakeClient: () => withCaptureRpc(mocks.legacy()),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -95,6 +95,9 @@ it.each([
   expect(mocks.intake).toHaveBeenCalledWith({
     rawBody: Buffer.from(rawBody),
     signature: expect.any(String),
+    env: expect.objectContaining({
+      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
+    }),
   });
   expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
@@ -127,6 +130,9 @@ it.each([
   expect(mocks.dispatch).toHaveBeenCalledWith({
     rawBody: Buffer.from(rawBody),
     signature: expect.any(String),
+    env: expect.objectContaining({
+      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: 'true',
+    }),
   });
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });

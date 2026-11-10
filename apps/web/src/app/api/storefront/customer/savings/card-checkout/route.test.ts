@@ -71,6 +71,7 @@ beforeEach(() => {
   mocks.runtime.mockReturnValue({
     publicOrigin: origin,
     mutationsEnabled: true,
+    refreshEnabled: true,
     customer: () => ({
       capability: mocks.capability,
       refresh: mocks.refresh,
@@ -109,6 +110,27 @@ describe('first-card savings checkout HTTP boundary', () => {
     });
   });
 
+  it('keeps refresh available while the kill switch refuses new checkouts', async () => {
+    mocks.runtime.mockReturnValue({
+      publicOrigin: origin,
+      mutationsEnabled: false,
+      refreshEnabled: true,
+      customer: () => ({ refresh: mocks.refresh, start: mocks.start }),
+    });
+
+    const started = await POST(
+      request({ body: fixture.customerRequest, method: 'POST' })
+    );
+    const refreshed = await PATCH(
+      request({ body: fixture.customerSelection, method: 'PATCH' })
+    );
+
+    expect(started.status).toBe(503);
+    expect(refreshed.status).toBe(200);
+    expect(mocks.start).not.toHaveBeenCalled();
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     undefined,
     false,
@@ -117,6 +139,7 @@ describe('first-card savings checkout HTTP boundary', () => {
     mocks.runtime.mockReturnValue({
       publicOrigin: origin,
       mutationsEnabled,
+      refreshEnabled: mutationsEnabled,
       customer,
     });
 

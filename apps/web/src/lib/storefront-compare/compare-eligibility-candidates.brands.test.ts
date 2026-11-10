@@ -150,4 +150,102 @@ describe('compare eligibility candidate builders', () => {
     });
     expect(sonyFirst?.canonicalSlug).toBe('playstation-vs-xbox');
   });
+
+  it('rejects placeholder brands (Gaming, Generic, N/A, NA, Unknown) from candidate eligibility', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'smartphones',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `gaming-phone-${i}`,
+          name: `Gaming Phone ${i}`,
+          brand: i === 0 ? 'Gaming' : i === 1 ? 'N/A' : 'NA',
+          price: 500_000,
+          product_key_specs: {
+            ram_gb: 12,
+            storage_gb: 256,
+            refresh_rate: '144Hz',
+          },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `generic-phone-${i}`,
+          name: `Generic Phone ${i}`,
+          brand: 'Generic',
+          price: 450_000,
+          product_key_specs: {
+            ram_gb: 8,
+            storage_gb: 128,
+            refresh_rate: '60Hz',
+          },
+        })),
+      ],
+    });
+    expect(candidate).toBeNull();
+  });
+
+  it('rejects placeholder brands from contributing to price-band indexability', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: {
+        slug: 'under-500k',
+        label: 'Under ₦500k',
+        ceiling: 500_000,
+      },
+      products: [
+        { slug: 'p1', name: 'P1', brand: 'Gaming', price: 200_000 },
+        { slug: 'p2', name: 'P2', brand: 'Generic', price: 250_000 },
+        { slug: 'p3', name: 'P3', brand: 'Other', price: 300_000 },
+        { slug: 'p4', name: 'P4', brand: 'Unknown', price: 350_000 },
+        { slug: 'p5', name: 'P5', brand: 'N/A', price: 400_000 },
+        { slug: 'p6', name: 'P6', brand: 'NA', price: 450_000 },
+      ],
+    });
+    expect(candidate.activeProductCount).toBe(6);
+    expect(candidate.differentiatingSpecCount).toBe(0);
+    expect(candidate.isIndexable).toBe(false);
+  });
+
+  it('rejects canonical placeholder aliases (e.g. Game -> gaming) in brand compare', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'gaming',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `game-${i}`,
+          name: `Game ${i}`,
+          brand: 'Game',
+          price: 50_000,
+          product_key_specs: { platform: 'PS5', genre: 'Action' },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `playstation-${i}`,
+          name: `PlayStation ${i}`,
+          brand: 'PlayStation',
+          price: 500_000,
+          product_key_specs: { platform: 'PS5', storage_gb: 1000 },
+        })),
+      ],
+    });
+    expect(candidate).toBeNull();
+  });
+
+  it('counts only valid brands when a price band mixes valid and placeholder brands', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: {
+        slug: 'under-500k',
+        label: 'Under ₦500k',
+        ceiling: 500_000,
+      },
+      products: [
+        { slug: 'v1', name: 'V1', brand: 'Samsung', price: 200_000 },
+        { slug: 'v2', name: 'V2', brand: 'Apple', price: 250_000 },
+        { slug: 'p1', name: 'P1', brand: 'Generic.Brand', price: 300_000 },
+        { slug: 'p2', name: 'P2', brand: 'Unknown Products', price: 350_000 },
+        { slug: 'p3', name: 'P3', brand: 'N/A', price: 400_000 },
+        { slug: 'p4', name: 'P4', brand: 'Other', price: 450_000 },
+      ],
+    });
+    expect(candidate.activeProductCount).toBe(6);
+    expect(candidate.differentiatingSpecCount).toBe(2);
+    expect(candidate.isIndexable).toBe(false);
+  });
 });

@@ -10,10 +10,12 @@ import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 // These paths expose CRON_SECRET-gated wrappers that delegate to the underlying
 // scheduled work. The VPS worker must not call OAuth callbacks.
 const WEB_CRON_CONFIG = new Map([
+  ['/api/cron/oxygen-callback-reconciliation', { method: 'GET', timeoutMs: 360_000 }],
   ['/api/cron/drain-cache-invalidations', { method: 'GET', timeoutMs: 90_000 }],
   ['/api/ai-jobs/worker', { method: 'GET', timeoutMs: 15 * 60_000 }],
   ['/api/cron/alert-stuck-bnpl', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/merchant-signup-health', { method: 'GET', timeoutMs: 60_000 }],
+  ['/api/cron/cart-notice-health', { method: 'GET', timeoutMs: 60_000 }],
   ['/api/cron/cleanup-orders', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-settlements', { method: 'POST', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-redvault-refunds', { method: 'POST', timeoutMs: 5 * 60_000 }],
@@ -45,6 +47,12 @@ const WEB_CRON_CONFIG = new Map([
   [
     '/api/cron/agentic-commerce-health',
     { method: 'GET', timeoutMs: 5 * 60_000 },
+  ],
+  [
+    // Read-only PiggyVest reconciliation; inert until its own switch is on.
+    // 6-min client timeout gives headroom over the route's 300s maxDuration.
+    '/api/cron/piggyvest-daily-reconciliation',
+    { method: 'GET', timeoutMs: 6 * 60_000 },
   ],
   ['/api/cron/wallet-payouts', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/order-notifications', { method: 'GET', timeoutMs: 5 * 60_000 }],

@@ -6,6 +6,7 @@ export const giglPanelActions = {
   onRefreshFundingAccount: vi.fn(),
   onModeChange: vi.fn(),
   onRetryQuote: vi.fn(),
+  onPlaceSelect: vi.fn(),
   onTransferred: vi.fn(),
 };
 

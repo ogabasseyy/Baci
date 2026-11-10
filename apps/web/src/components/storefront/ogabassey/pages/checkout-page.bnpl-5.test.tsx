@@ -1,17 +1,10 @@
 import {
-  driveFreshBNPLPlaceOrder,
-  paymentStartedCalls,
-  renderFreshBNPLCheckout,
-} from './checkout-page-bnpl.test-support';
-import {
   act,
   continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  mockCaptureClientEvent,
-  openCredPalCheckout,
   renderCheckoutWithStoreRates,
   screen,
   useCart,
@@ -19,93 +12,8 @@ import {
   usePersistedForm,
   useRouter,
   vi,
-  waitFor,
   walletFundedTransferMock,
 } from './checkout-page-test-support';
-
-it('tracks payment_failed when CredPal errors after the widget loads', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-matched-error',
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onLoad?.();
-    });
-    await waitFor(() => {
-      expect(paymentStartedCalls()).toHaveLength(1);
-    });
-
-    await act(async () => {
-      callArgs?.onError?.({ success: false, message: 'declined' });
-    });
-
-    await waitFor(() => {
-      expect(
-        mockCaptureClientEvent.mock.calls.some(
-          ([event]) => event === 'payment_failed'
-        )
-      ).toBe(true);
-    });
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
-});
-
-it('closes a CredPal failure at the canonical order total, not the residual due', async () => {
-  vi.stubEnv('NEXT_PUBLIC_CREDPAL_KEY', 'pk_test_credpal');
-  const { fetchMock } = renderFreshBNPLCheckout({
-    featureSettings: { credpal_enabled: true },
-    orderId: 'order-credpal-canonical-total',
-    // Canonical total above the 5750 residual gateway due.
-    orderTotal: 6000,
-  });
-
-  try {
-    await driveFreshBNPLPlaceOrder(/credpal/i);
-
-    await waitFor(() => {
-      expect(openCredPalCheckout).toHaveBeenCalled();
-    });
-    const callArgs = vi.mocked(openCredPalCheckout).mock.calls[0]?.[0];
-    await act(async () => {
-      callArgs?.onLoad?.();
-    });
-    await waitFor(() => {
-      expect(paymentStartedCalls()).toHaveLength(1);
-    });
-
-    await act(async () => {
-      callArgs?.onError?.({ success: false, message: 'declined' });
-    });
-
-    await waitFor(() => {
-      expect(
-        mockCaptureClientEvent.mock.calls.some(
-          ([event]) => event === 'payment_failed'
-        )
-      ).toBe(true);
-    });
-    const failure = mockCaptureClientEvent.mock.calls.find(
-      ([event]) => event === 'payment_failed'
-    );
-    expect(failure?.[1]).toEqual(
-      expect.objectContaining({ reason: 'credpal_error', total: 6000 })
-    );
-  } finally {
-    fetchMock.mockRestore();
-    vi.unstubAllEnvs();
-  }
-});
 
 it('records payment_completed before redirecting a paid wallet-funded transfer', async () => {
   const routerPush = vi.fn();

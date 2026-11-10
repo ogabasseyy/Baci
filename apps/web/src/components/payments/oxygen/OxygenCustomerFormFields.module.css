@@ -1,0 +1,25 @@
+.enter {
+  animation: enter-step 140ms ease-out;
+}
+
+@keyframes enter-step {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter {
+    animation: none;
+  }
+}
+
+.invalid {
+  outline: 2px solid var(--store-primary);
+  outline-offset: 2px;
+}

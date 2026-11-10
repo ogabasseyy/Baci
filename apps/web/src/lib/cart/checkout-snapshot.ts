@@ -6,6 +6,8 @@ import { isRecord } from './repository-envelope';
 export interface CartCheckoutLine {
   id: string;
   productId: string;
+  /** Server-sourced reviewed catalog name; omitted by older deployments. */
+  productName?: string | null;
   variantId: string | null;
   condition: string | null;
   options: Record<string, string>;
@@ -60,6 +62,8 @@ export type PrepareCartCheckoutResult =
       replayed: boolean;
       sessionReused: boolean;
       sessionExpiresAt: string;
+      /** PostgreSQL transaction clock paired with the expiry above. */
+      databaseNow: string;
       /** Live grant expiry after the prepare-time extension; the
        * renewed session proof is capped at this instant. */
       grantExpiresAt: string;
@@ -143,6 +147,17 @@ function parseLine(value: unknown): CartCheckoutLine | null {
     options: parseOptions(value.options),
     priceChanged: value.priceChanged,
     productId: value.productId,
+    ...(value.productName === undefined
+      ? {}
+      : {
+          productName:
+            value.productName === null
+              ? null
+              : typeof value.productName === 'string' &&
+                  Array.from(value.productName).length <= 200
+                ? value.productName
+                : null,
+        }),
     quantity: value.quantity,
     stockQty: value.stockQty,
     unavailableReason:

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { CartItem } from '@/hooks/cart';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { CartItem } from '@/hooks/cart';
 import { CartPageLineItem } from './cart-page-line-item';
 
 vi.mock('next/link', () => ({
@@ -67,7 +68,10 @@ const cartItem = {
 function renderLineItem(
   overrides: Partial<CartItem> = {},
   propOverrides: Partial<
-    Pick<React.ComponentProps<typeof CartPageLineItem>, 'shippingInsuranceEnabled'>
+    Pick<
+      React.ComponentProps<typeof CartPageLineItem>,
+      'shippingInsuranceEnabled' | 'hasPriceNegotiation'
+    >
   > = {}
 ) {
   const props = {
@@ -144,9 +148,61 @@ describe('CartPageLineItem', () => {
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
+
+  it('explains lost protection on the routed cart page and restores it', () => {
+    function CartLine() {
+      const [hasAssurance, setHasAssurance] = useState(true);
+      return (
+        <CartPageLineItem
+          hasPriceNegotiation={false}
+          item={{ ...cartItem, hasAssurance }}
+          merchantSlug="ogabassey"
+          onOpenItemNegotiation={vi.fn()}
+          onRemove={vi.fn()}
+          onToggleAssurance={() => setHasAssurance((current) => !current)}
+          onUpdateQuantity={vi.fn()}
+          productHref="/test-store/electronics/test-gadget"
+          shippingInsuranceEnabled
+        />
+      );
+    }
+
+    render(<CartLine />);
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+
+    fireEvent.click(screen.getByRole('checkbox'));
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /won’t include screen and liquid damage protection/i
+    );
+    expect(screen.getByText(/screen protector/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Assurance back' }));
+
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
 });
 
 it('shows the exact saved variant on the full cart page', () => {
-  renderLineItem({ variantAttributes: { storage: '512GB', sim_type: 'Physical + eSIM', color: 'Silver' } });
-  for (const value of ['Storage:', '512GB', 'SIM type:', 'Physical + eSIM', 'Condition:', 'Colour:', 'Silver']) expect(screen.getByText(value)).toBeVisible();
+  renderLineItem({
+    variantAttributes: {
+      storage: '512GB',
+      sim_type: 'Physical + eSIM',
+      color: 'Silver',
+    },
+  });
+  for (const value of ['512GB', 'Physical + eSIM', 'Silver'])
+    expect(screen.getByText(value)).toBeVisible();
+  expect(screen.getByText('Storage:')).toHaveClass('sr-only');
+});
+
+it('omits the empty extras area when protection and negotiation are unavailable', () => {
+  renderLineItem(
+    { hasAssurance: false },
+    { shippingInsuranceEnabled: false, hasPriceNegotiation: false }
+  );
+  expect(
+    screen.queryByRole('group', { name: 'Product extras' })
+  ).not.toBeInTheDocument();
 });

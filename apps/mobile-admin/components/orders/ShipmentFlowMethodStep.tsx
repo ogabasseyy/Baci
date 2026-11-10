@@ -45,8 +45,8 @@ export function ShipmentFlowMethodStep({
         <ShipmentOptionCard
           colors={colors}
           description={
-            bookingDenied && checkoutPaidShippingLabel
-              ? `Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout. Ask the store owner or an admin to book GIG for this order.`
+            bookingDenied
+              ? `${checkoutPaidShippingLabel ? `Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout. ` : ''}Ask the store owner or an admin to book this shipment.`
               : !canUseProvider
                 ? providerLabel
                   ? `${providerLabel} was selected for checkout, but this order does not have a saved quote to book against anymore.`

@@ -130,7 +130,7 @@ describe('ShipmentFlowSheet checkout-paid GIG for staff without booking rights',
 
     expect(screen.getByText(/Customer paid ₦4,500/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Ask the store owner or an admin to book GIG/)
+      screen.getByText(/Ask the store owner or an admin to book this shipment/)
     ).toBeInTheDocument();
     expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
     expect(

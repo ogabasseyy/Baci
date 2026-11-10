@@ -146,4 +146,16 @@ describe('isShipmentFlowPrimaryDisabled', () => {
       })
     ).toBe(false);
   });
+
+  it('keeps a saved-quote Book disabled without booking rights (no wallet state)', () => {
+    expect(
+      isShipmentFlowPrimaryDisabled({
+        ...base,
+        canBookGigl: false,
+        canUseProvider: true,
+        giglShipping: undefined,
+        selectedMode: 'provider',
+      })
+    ).toBe(true);
+  });
 });

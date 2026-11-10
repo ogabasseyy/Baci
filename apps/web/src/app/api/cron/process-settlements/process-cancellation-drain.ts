@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { alertPendingRefundReviews } from '@/lib/orders/alert-pending-refund-reviews';
 import {
   CAPPED_RECONCILE_PHASE_MS,
   cancellationDrainDeadlineMs,
@@ -119,13 +120,21 @@ export async function processCancellationDrain(
           refundDeadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
           limit: sideEffectLimit,
           sendCancellationEmail,
-          refundAlertSenders: {
-            sendEmail: sendCancellationEmail,
-            sendPush: sendMerchantPush,
-          },
           supabase,
         }),
       ]);
+  // Merchant alerts for open refund reviews run after the side-effect
+  // drain whether it ran, was skipped for budget, or rejected (allSettled
+  // above): they have their own refund-phase cutoff and budget check, and
+  // never throw, so a backlog cannot starve them.
+  await alertPendingRefundReviews({
+    deadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
+    senders: {
+      sendEmail: sendCancellationEmail,
+      sendPush: sendMerchantPush,
+    },
+    supabase,
+  });
   // Budget the serial drain from the remaining invocation time: an
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay

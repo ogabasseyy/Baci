@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  alertPendingRefundReviews: vi.fn(),
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
   isRefundVerificationPendingBefore: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock('@/lib/zeptomail', () => ({
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
+}));
+vi.mock('@/lib/orders/alert-pending-refund-reviews', () => ({
+  alertPendingRefundReviews: mocks.alertPendingRefundReviews,
 }));
 vi.mock('@/lib/orders/refund-verification-pending', () => ({
   REFUND_VERIFICATION_PROBE_BUDGET_MS: 10_000,
@@ -211,6 +215,18 @@ describe('processCancellationDrain budget scheduling', () => {
       expect(
         mocks.drainFailedOrderCancellationSideEffects
       ).not.toHaveBeenCalled();
+      // The alert pass has its own budget gate and must still run.
+      expect(mocks.alertPendingRefundReviews).toHaveBeenCalledTimes(1);
+      expect(mocks.alertPendingRefundReviews).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadlineMs: expect.any(Number),
+          senders: expect.objectContaining({
+            sendEmail: mocks.sendEmail,
+            sendPush: mocks.notifyMerchant,
+          }),
+          supabase,
+        })
+      );
       expect(mocks.loggerWarn).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('side-effect drain'),
@@ -232,6 +248,19 @@ describe('processCancellationDrain budget scheduling', () => {
     } finally {
       now.mockRestore();
     }
+  });
+
+  it('still runs the merchant alert pass when the side-effect drain rejects', async () => {
+    mocks.alertPendingRefundReviews.mockResolvedValue(undefined);
+    mocks.drainFailedOrderCancellationSideEffects.mockRejectedValue(
+      new Error('cancellation_side_effect_lookup_failed')
+    );
+    await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
+    expect(mocks.alertPendingRefundReviews).toHaveBeenCalledTimes(1);
   });
 
   it('retries side effects only after refund reconciliation settles', async () => {

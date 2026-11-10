@@ -132,6 +132,60 @@ describe('alertMerchantOfRefundReview', () => {
     expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 
+  it('confirms before returning when a late success lands within the grace period', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
+      sendPush: vi.fn(
+        () =>
+          new Promise<{ sent: number }>((resolve) => {
+            setTimeout(() => resolve({ sent: 1 }), 16_000);
+          })
+      ),
+    });
+    const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
+    await vi.advanceTimersByTimeAsync(17_000);
+    await expect(pending).resolves.toBe('alerted');
+    expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
+  });
+
+  it('returns unconfirmed when the success lands beyond the grace period', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
+      sendPush: vi.fn(
+        () =>
+          new Promise<{ sent: number }>((resolve) => {
+            setTimeout(() => resolve({ sent: 1 }), 25_000);
+          })
+      ),
+    });
+    const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
+    await vi.advanceTimersByTimeAsync(18_000);
+    await expect(pending).resolves.toBe('alerted');
+    expect(supabase.confirmEq).not.toHaveBeenCalled();
+  });
+
+  it('does not let a late rejection escape the timed-out delivery', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
+      sendPush: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            setTimeout(() => reject(new Error('late')), 16_000);
+          })
+      ),
+    });
+    const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await expect(pending).resolves.toBe('alerted');
+    expect(supabase.confirmEq).not.toHaveBeenCalled();
+  });
+
   it('confirms a success that lands after the timeout', async () => {
     vi.useFakeTimers();
     const supabase = makeSupabase();

@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
-import type { RefundReviewAlertSenders } from '@/lib/orders/alert-merchant-cancellation-refund-review';
-import { alertPendingRefundReviews } from '@/lib/orders/alert-pending-refund-reviews';
 import { CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS } from '@/lib/orders/cancellation-drain-deadline';
 import { EMAIL_ATTEMPTS_PER_SENDER } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { executeOrderCancellationSideEffect } from '@/lib/orders/execute-order-cancellation-side-effect';
@@ -42,47 +40,21 @@ export interface CancellationSideEffectDrainSummary {
 const MERCHANT_SELECT =
   'id, business_name, slug, support_email, email_sender_name, email, tax_identification_number, cac_rc_number';
 
-export async function drainFailedOrderCancellationSideEffects(
-  args: DrainFailedOrderCancellationSideEffectsArgs
-): Promise<CancellationSideEffectDrainSummary> {
-  try {
-    return await drainSideEffects(args);
-  } finally {
-    // Merchant alerts for open refund reviews are independent of the
-    // side-effect lookups: run them even when the drain throws (the
-    // original error still propagates), inside the refund phase cutoff so
-    // the notification drain keeps its window. Never throws.
-    // Senders are injected by the worker (not imported here) to keep
-    // provider and admin authority out of this module's import graph.
-    if (args.refundAlertSenders) {
-      await alertPendingRefundReviews({
-        deadlineMs: args.refundDeadlineMs ?? args.deadlineMs,
-        senders: args.refundAlertSenders,
-        supabase: args.supabase,
-      });
-    }
-  }
-}
-
-interface DrainFailedOrderCancellationSideEffectsArgs {
-  supabase: SupabaseClient;
-  deadlineMs?: number;
-  emailDeadlineMs?: number;
-  refundDeadlineMs?: number;
-  limit?: number;
-  sendCancellationEmail: CancellationEmailSender;
-  /** Enables merchant alerts for open refund reviews when provided. */
-  refundAlertSenders?: RefundReviewAlertSenders;
-}
-
-async function drainSideEffects({
+export async function drainFailedOrderCancellationSideEffects({
   supabase,
   deadlineMs,
   emailDeadlineMs,
   refundDeadlineMs,
   limit = CANCELLATION_DRAIN_FETCH_LIMIT,
   sendCancellationEmail,
-}: DrainFailedOrderCancellationSideEffectsArgs): Promise<CancellationSideEffectDrainSummary> {
+}: {
+  supabase: SupabaseClient;
+  deadlineMs?: number;
+  emailDeadlineMs?: number;
+  refundDeadlineMs?: number;
+  limit?: number;
+  sendCancellationEmail: CancellationEmailSender;
+}): Promise<CancellationSideEffectDrainSummary> {
   const summary: CancellationSideEffectDrainSummary = {
     drained: [],
     failed: [],

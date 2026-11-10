@@ -19,6 +19,9 @@ export type {
 };
 
 const ALERT_TIMEOUT_MS = 15_000;
+// After the outer timeout, wait this long (within the drain budget) for the
+// detached delivery so a just-late success is confirmed before returning.
+const TIMEOUT_GRACE_MS = 2_000;
 
 /** Total send attempts per review before the alert is abandoned. */
 export const REFUND_ALERT_RETRY_CAP = 3;
@@ -70,16 +73,24 @@ export async function alertMerchantOfRefundReview({
     let outcome: ChannelOutcome;
     let confirmation: Promise<void> | undefined;
     try {
+      const delivery = deliverAlert({
+        merchant,
+        onDelivered: () => {
+          confirmation = confirmClaim(supabase, review.id);
+        },
+        order,
+        review,
+        senders,
+      }).catch((error): ChannelOutcome => {
+        logger.error({
+          error,
+          message: 'Cancellation refund alert delivery rejected',
+          orderId: order.id,
+        });
+        return 'failed';
+      });
       outcome = await Promise.race([
-        deliverAlert({
-          merchant,
-          onDelivered: () => {
-            confirmation = confirmClaim(supabase, review.id);
-          },
-          order,
-          review,
-          senders,
-        }),
+        delivery,
         new Promise<ChannelOutcome>((resolve) => {
           timer = setTimeout(
             () => resolve('timeout'),
@@ -87,6 +98,29 @@ export async function alertMerchantOfRefundReview({
           );
         }),
       ]);
+      if (outcome === 'timeout') {
+        // Bounded grace for the loser; its rejection is already caught.
+        const graceMs = Math.max(
+          0,
+          Math.min(
+            TIMEOUT_GRACE_MS,
+            deadlineMs === undefined
+              ? TIMEOUT_GRACE_MS
+              : deadlineMs - Date.now()
+          )
+        );
+        if (graceMs > 0) {
+          let graceTimer: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([
+            delivery,
+            new Promise<void>((resolve) => {
+              graceTimer = setTimeout(resolve, graceMs);
+            }),
+          ]);
+          clearTimeout(graceTimer);
+        }
+        if (confirmation) outcome = 'delivered';
+      }
     } catch (error) {
       logger.error({
         error,

@@ -15,7 +15,19 @@ describe('order_cancellation_refund_alerts migration contract', () => {
     expect(sql).toMatch(/attempts integer NOT NULL DEFAULT 1/);
     expect(sql).toMatch(/last_attempt_at timestamptz NOT NULL DEFAULT now\(\)/);
     expect(sql).toMatch(/confirmed_at timestamptz,/);
-    expect(sql).toMatch(/GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE/);
+    expect(sql).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE/);
+    expect(sql).not.toMatch(/GRANT[^;]*DELETE/);
+  });
+
+  it('cascades from orders and merchants, with indexed foreign keys', () => {
+    expect(sql).toMatch(/REFERENCES public\.orders\(id\) ON DELETE CASCADE/);
+    expect(sql).toMatch(/REFERENCES public\.merchants\(id\) ON DELETE CASCADE/);
+    expect(sql).toMatch(
+      /alerts_order_idx\s+ON public\.order_cancellation_refund_alerts \(order_id\)/
+    );
+    expect(sql).toMatch(
+      /alerts_merchant_idx\s+ON public\.order_cancellation_refund_alerts \(merchant_id\)/
+    );
   });
 
   it('lists reviews with an anti-join applied before the limit', () => {

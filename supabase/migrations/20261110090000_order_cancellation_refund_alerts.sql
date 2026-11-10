@@ -20,8 +20,10 @@
 CREATE TABLE IF NOT EXISTS public.order_cancellation_refund_alerts (
   review_id uuid PRIMARY KEY
     REFERENCES public.reconciliation_review(id) ON DELETE CASCADE,
-  order_id uuid NOT NULL,
-  merchant_id uuid NOT NULL,
+  order_id uuid NOT NULL
+    REFERENCES public.orders(id) ON DELETE CASCADE,
+  merchant_id uuid NOT NULL
+    REFERENCES public.merchants(id) ON DELETE CASCADE,
   attempts integer NOT NULL DEFAULT 1 CHECK (attempts >= 1),
   last_attempt_at timestamptz NOT NULL DEFAULT now(),
   confirmed_at timestamptz,
@@ -32,7 +34,7 @@ ALTER TABLE public.order_cancellation_refund_alerts ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON TABLE public.order_cancellation_refund_alerts
   FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.order_cancellation_refund_alerts
+GRANT SELECT, INSERT, UPDATE ON TABLE public.order_cancellation_refund_alerts
   TO service_role;
 
 CREATE POLICY order_cancellation_refund_alerts_service_role

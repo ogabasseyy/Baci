@@ -49,7 +49,13 @@ describe('PiggyVest head start balance check at submit', () => {
 
   it('creates the plan once a fresh balance covers the head start', async () => {
     readBalance.mockResolvedValueOnce(2_000_000);
-    const input = createInput();
+    // The reload brings in the new plan, so the hand-off can proceed.
+    const input = createInput({
+      refetch: jest.fn(async () => ({
+        isError: false,
+        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
+      })),
+    });
     const { result } = renderHook(() => useStartSavingsSubmit(input));
     await act(async () => {
       await result.current.submitSavingsGoal(primaryOptions);

@@ -31,6 +31,14 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
     mockScheduleSavingsReminderNotification(...args),
 }));
 
+/** A successful wallet refetch whose data holds one plan. */
+function loadedWith(goalId: string) {
+  return {
+    isError: false,
+    data: { wallet: { savings_goals: [{ id: goalId }] } },
+  };
+}
+
 function createInput(overrides = {}): UseStartSavingsSubmitInput {
   return {
     activeMerchantId: 'merchant-1',
@@ -288,6 +296,7 @@ describe('runSavingsGoalSubmission', () => {
       deferInitialContribution: true,
       effectiveInitialContribution: 10000,
       onContinueInWallet,
+      refetch: jest.fn(async () => loadedWith('goal-1')),
       setCreatedGoalId,
     });
 
@@ -307,6 +316,26 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setShowTransferModal).not.toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
     expect(setCreatedGoalId).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['resolves with an error', { isError: true, data: undefined }],
+    ['has not loaded the new plan yet', loadedWith('older-goal')],
+  ])('never prefills the head start when the reload %s', async (_l, outcome) => {
+    const onContinueInWallet = jest.fn();
+    const input = createInput({
+      deferInitialContribution: true,
+      effectiveInitialContribution: 10000,
+      onContinueInWallet,
+      refetch: jest.fn(async () => outcome),
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    expect(onContinueInWallet).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenLastCalledWith(
+      PLAN_CREATED_HEAD_START_PENDING
+    );
   });
 
   it('never prefills the head start on another plan when the reload fails', async () => {

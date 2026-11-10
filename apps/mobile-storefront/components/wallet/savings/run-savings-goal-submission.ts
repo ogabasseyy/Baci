@@ -23,6 +23,26 @@ import type { ContributionRail } from './stored-contribution-operation';
 export const PLAN_CREATED_HEAD_START_PENDING =
   'Your plan was created, but we could not load it yet. Open your wallet to add the head start.';
 
+/** The wallet refetch succeeded and its data includes the plan by id. */
+function walletHasGoal(refetchResult: unknown, goalId: string): boolean {
+  if (!refetchResult || typeof refetchResult !== 'object') return false;
+  const { isError, data } = refetchResult as {
+    isError?: boolean;
+    data?: {
+      wallet?: {
+        active_savings_goal?: { id?: string } | null;
+        savings_goals?: Array<{ id?: string }>;
+      };
+    };
+  };
+  if (isError) return false;
+  const wallet = data?.wallet;
+  return (
+    wallet?.active_savings_goal?.id === goalId ||
+    (wallet?.savings_goals ?? []).some((goal) => goal.id === goalId)
+  );
+}
+
 export type FundingAccount = {
   account_number: string;
 } | null;
@@ -174,13 +194,19 @@ export async function runSavingsGoalSubmission(
       // goal by id and falls back to an older active plan when it is not
       // there yet. Without the reload, never prefill a head start that could
       // land on the wrong plan.
+      // A failed refetch resolves with an error result rather than throwing,
+      // so the reloaded data itself must contain the new plan.
+      let loaded = false;
       try {
-        await input.refetch();
+        loaded = walletHasGoal(await input.refetch(), result.goalId);
       } catch {
-        if (isCurrent()) input.setFormError(PLAN_CREATED_HEAD_START_PENDING);
-        return;
+        loaded = false;
       }
       if (!isCurrent()) return;
+      if (!loaded) {
+        input.setFormError(PLAN_CREATED_HEAD_START_PENDING);
+        return;
+      }
       input.onContinueInWallet(
         result.goalId,
         input.effectiveInitialContribution

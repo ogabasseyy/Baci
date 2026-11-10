@@ -23,7 +23,7 @@ type KeyState = {
 };
 
 const states = new Map<string, KeyState>();
-const lateAnswerListeners = new Set<() => void>();
+const lateAnswerListeners = new Set<(scopeKey: string) => void>();
 
 function stateOf(merchantId: string, userId: string): KeyState {
   const key = `${merchantId}\u0000${userId}`;
@@ -91,21 +91,32 @@ export function recallPrimaryFundingAccount(
 }
 
 /**
+ * The wallet screen's scope for a signed-in user at a merchant; the same
+ * `user:merchant` form WalletScreen passes to the primary wallet watch.
+ */
+export function primaryScopeKey(userId: string, merchantId: string): string {
+  return `${userId}:${merchantId}`;
+}
+
+/**
  * Subscribes to confirmed answers that arrived after their wallet load had
  * already given up, so a screen showing "unknown" can reload and show them.
  */
-export function onLatePrimaryAnswer(listener: () => void): () => void {
+export function onLatePrimaryAnswer(
+  listener: (scopeKey: string) => void
+): () => void {
   lateAnswerListeners.add(listener);
   return () => {
     lateAnswerListeners.delete(listener);
   };
 }
 
-export function announceLatePrimaryAnswer() {
+export function announceLatePrimaryAnswer(merchantId: string, userId: string) {
+  const scopeKey = primaryScopeKey(userId, merchantId);
   for (const listener of lateAnswerListeners) {
     // One screen's failure never stops the others or the read itself.
     try {
-      listener();
+      listener(scopeKey);
     } catch {
       // The screen still reloads on its own retry or next open.
     }

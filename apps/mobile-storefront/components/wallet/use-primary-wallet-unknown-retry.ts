@@ -12,7 +12,7 @@ export const PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT = 10;
 interface Input {
   /** The wallet's PiggyVest read came back unknown (slow or failed). */
   unknown: boolean;
-  /** Account + merchant scope; a change restarts the retries. */
+  /** `primaryScopeKey(user, merchant)`; a change restarts the retries. */
   scopeKey: string;
   refetch: () => unknown;
 }
@@ -61,8 +61,14 @@ export function usePrimaryWalletUnknownRetry({
         : current
     );
   });
-  const reloadForLateAnswer = useEffectEvent(() => {
-    if (unknown && attempts < PRIMARY_UNKNOWN_RETRY_LIMIT) void retry(scopeKey);
+  // Only an answer for this screen's own account and merchant counts.
+  const reloadForLateAnswer = useEffectEvent((answeredScope: string) => {
+    if (
+      answeredScope === scopeKey &&
+      unknown &&
+      attempts < PRIMARY_UNKNOWN_RETRY_LIMIT
+    )
+      void retry(scopeKey);
   });
   useEffect(() => onLatePrimaryAnswer(reloadForLateAnswer), []);
   useEffect(() => {

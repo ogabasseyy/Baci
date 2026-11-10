@@ -282,6 +282,8 @@ describe('readPrimaryFundingAccountSoon', () => {
     answer({ status: 'ready', account, balanceKobo: 1 });
     await flushAnswer();
     expect(listener).toHaveBeenCalledTimes(1);
+    // Scoped to the account and merchant the answer belongs to.
+    expect(listener).toHaveBeenCalledWith('u:m');
   });
 
   it('keeps announcing past a screen whose reload throws', async () => {

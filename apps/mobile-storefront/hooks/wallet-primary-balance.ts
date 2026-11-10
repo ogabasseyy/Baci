@@ -43,7 +43,7 @@ export async function readPrimaryFundingAccountSoon(
         sequence
       );
       // This load already gave up: tell the screen a confirmed answer landed.
-      if (timedOut && stored) announceLatePrimaryAnswer();
+      if (timedOut && stored) announceLatePrimaryAnswer(merchantId, userId);
       return value;
     });
   const settled = await Promise.race([read, timeout]);

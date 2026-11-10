@@ -37,7 +37,7 @@ describe('usePrimaryWalletUnknownRetry', () => {
   it('re-checks a slow PiggyVest read a bounded number of times', async () => {
     const refetch = jest.fn(async () => undefined);
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     for (let i = 0; i < PRIMARY_UNKNOWN_RETRY_LIMIT + 2; i += 1) {
       await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
@@ -58,12 +58,12 @@ describe('usePrimaryWalletUnknownRetry', () => {
   it('bounds reloads from late answers by the quick attempts', async () => {
     const refetch = jest.fn(async () => undefined);
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     // A provider that always answers late announces after every reload.
     for (let i = 0; i < PRIMARY_UNKNOWN_RETRY_LIMIT + 5; i += 1) {
       await act(async () => {
-        announceLatePrimaryAnswer();
+        announceLatePrimaryAnswer('m', 'u');
       });
     }
     expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT);
@@ -74,7 +74,7 @@ describe('usePrimaryWalletUnknownRetry', () => {
       throw new Error('offline');
     });
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
@@ -90,7 +90,7 @@ describe('usePrimaryWalletUnknownRetry', () => {
         })
     );
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -113,13 +113,13 @@ describe('usePrimaryWalletUnknownRetry', () => {
         })
     );
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(1);
     act(() => {
-      announceLatePrimaryAnswer();
-      announceLatePrimaryAnswer();
+      announceLatePrimaryAnswer('m', 'u');
+      announceLatePrimaryAnswer('m', 'u');
     });
     // Never two reloads at once.
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -131,13 +131,25 @@ describe('usePrimaryWalletUnknownRetry', () => {
     expect(refetch).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores a late answer for another account or merchant', async () => {
+    const refetch = jest.fn(async () => undefined);
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
+    );
+    act(() => {
+      announceLatePrimaryAnswer('m', 'other-user');
+      announceLatePrimaryAnswer('other-merchant', 'u');
+    });
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
   it('reloads as soon as a late confirmed answer lands', async () => {
     const refetch = jest.fn(async () => undefined);
     renderHook(() =>
-      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'u:m', refetch })
     );
     act(() => {
-      announceLatePrimaryAnswer();
+      announceLatePrimaryAnswer('m', 'u');
     });
     expect(refetch).toHaveBeenCalledTimes(1);
   });
@@ -146,7 +158,7 @@ describe('usePrimaryWalletUnknownRetry', () => {
     const refetch = jest.fn(async () => undefined);
     const { rerender } = renderHook(
       ({ unknown }: { unknown: boolean }) =>
-        usePrimaryWalletUnknownRetry({ unknown, scopeKey: 'a', refetch }),
+        usePrimaryWalletUnknownRetry({ unknown, scopeKey: 'u:m', refetch }),
       { initialProps: { unknown: true } }
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
@@ -154,7 +166,7 @@ describe('usePrimaryWalletUnknownRetry', () => {
     rerender({ unknown: false });
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 5);
     act(() => {
-      announceLatePrimaryAnswer();
+      announceLatePrimaryAnswer('m', 'u');
     });
     expect(refetch).toHaveBeenCalledTimes(1);
   });
@@ -173,11 +185,11 @@ describe('usePrimaryWalletUnknownRetry', () => {
     const { rerender } = renderHook(
       ({ scopeKey }: { scopeKey: string }) =>
         usePrimaryWalletUnknownRetry({ unknown: true, scopeKey, refetch }),
-      { initialProps: { scopeKey: 'a' } }
+      { initialProps: { scopeKey: 'u:m' } }
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(1);
-    rerender({ scopeKey: 'b' });
+    rerender({ scopeKey: 'v:m' });
     // Account b waits while a's reload is still running.
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 2);
     expect(refetch).toHaveBeenCalledTimes(1);
@@ -193,10 +205,10 @@ describe('usePrimaryWalletUnknownRetry', () => {
     const { rerender } = renderHook(
       ({ scopeKey }: { scopeKey: string }) =>
         usePrimaryWalletUnknownRetry({ unknown: true, scopeKey, refetch }),
-      { initialProps: { scopeKey: 'a' } }
+      { initialProps: { scopeKey: 'u:m' } }
     );
     await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS - 1000);
-    rerender({ scopeKey: 'b' });
+    rerender({ scopeKey: 'v:m' });
     // The old scope's timer is gone; the new one waits a full delay.
     await tick(1000);
     expect(refetch).not.toHaveBeenCalled();

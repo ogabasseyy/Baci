@@ -114,6 +114,25 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(result.current.isSubmitting).toBe(false);
   });
 
+  it('releases the submit lock when the balance read throws', async () => {
+    readBalance.mockRejectedValueOnce(new Error('boom'));
+    const input = createInput();
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
+    );
+    expect(result.current.isSubmitting).toBe(false);
+    // A later attempt runs again instead of hitting a stuck lock.
+    readBalance.mockResolvedValueOnce(null);
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(readBalance).toHaveBeenCalledTimes(2);
+  });
+
   it('drops the submission when another account signs in during the check', async () => {
     useAuthStore.setState({ user: { id: 'user-a' } } as never);
     let answer: (value: number) => void = () => undefined;

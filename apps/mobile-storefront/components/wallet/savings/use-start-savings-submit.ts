@@ -77,9 +77,13 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       const submittingUserId = useAuthStore.getState().user?.id;
       // Inside the guarded lifecycle: no second submit can start, and an
       // edit to the plan while the balance is read cancels this one.
-      const balanceKobo = await readFreshPrimaryBalanceKobo(
-        input.activeMerchantId
-      );
+      // A thrown read counts as unconfirmed, so the lock is always released.
+      let balanceKobo: number | null = null;
+      try {
+        balanceKobo = await readFreshPrimaryBalanceKobo(input.activeMerchantId);
+      } catch {
+        balanceKobo = null;
+      }
       // Whole kobo on both sides: no fractional naira comparison.
       const headStartKobo = Math.round(
         input.effectiveInitialContribution * 100

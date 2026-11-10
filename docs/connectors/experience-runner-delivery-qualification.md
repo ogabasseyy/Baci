@@ -41,6 +41,7 @@ The initial design is one process with an owned persistent volume. Companion out
 - Verified installed filesystem digests, versions, root ownership, worker policy and isolation, plus a signed offline compile/render/browser job. A host or toolchain change invalidates the old installation receipt.
 - Normal owner, staff-denial, anonymous/public, grant-revocation and cross-merchant checks through the actual MCP/backend configuration.
 - Actual HTTPS hostname/TLS/cookie/frame isolation, canonical custom-domain routing, restart/expiry/revocation and delivery resource integrity.
+- Verify that each MCP gateway and proxy can carry the 300-second finalize call. After an interrupted response, read the existing job with `get_experience_operation`. If it is retryable, use the same job ID and idempotency key.
 - Rollback proof: call the boot uninstaller, then `integration.dispose()`. New MCP/auth/runner work is rejected, output is denied, and tenant pipeline registrations are removed. Existing merchant data/history must remain. Do not reverse old migrations or publish a replacement head as rollback.
 - Required exact-commit CI and source-bound review. Current scoped local checks are not candidate-wide CI.
 

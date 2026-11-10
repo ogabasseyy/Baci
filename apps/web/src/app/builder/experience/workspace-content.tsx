@@ -1,7 +1,7 @@
-import { z } from 'zod';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
+import { merchantIdParamSchema } from '@/schemas/merchant-id-param';
 import { ExperienceWorkspace } from './workspace-client';
 export async function ExperienceWorkspaceContent({
   searchParams,
@@ -10,7 +10,9 @@ export async function ExperienceWorkspaceContent({
 }) {
   try {
     const q = await searchParams;
-    const wanted = q.merchant ? z.uuid().parse(q.merchant) : undefined;
+    const wanted = q.merchant
+      ? merchantIdParamSchema.parse(q.merchant)
+      : undefined;
     const client = await createClient();
     const auth = await client.auth.getUser();
     if (auth.error || !auth.data.user)

@@ -1,11 +1,15 @@
 import { expect, it, vi } from 'vitest';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
 import {
+  type ExperienceToolName,
   experienceToolInputs,
   experienceToolNames,
 } from '../src/schemas/experience-tools';
 import { experienceWireContracts } from '../tools/experience-runner/generate-tool-contracts';
-import { listedExperienceSchemas } from './experience-contracts';
+import {
+  experienceWireInputs,
+  listedExperienceSchemas,
+} from './experience-contracts';
 import wire from './experience-contracts.json';
 import { registerBuilderTools } from './registry';
 
@@ -137,4 +141,72 @@ it('experience auth failures carry reconnect scope challenges without exposing t
     expect.stringContaining('scope="storefront.read storefront.publish"'),
   ]);
   expect(JSON.stringify(result)).not.toContain('synthetic.outer');
+});
+
+it('rejects unknown root properties in every converted tool schema', () => {
+  const digest = 'a'.repeat(64);
+  const path = 'src/Experience.tsx';
+  const build = { buildId: id };
+  const job = { jobId: id };
+  const upload = { uploadId: id };
+  const retry = { idempotencyKey: id };
+  const evidence = { evidenceId: id };
+  const lifecycle = {
+    ...build,
+    ...retry,
+    expectedDraftVersion: 0,
+    expectedPublishedVersion: 0,
+  };
+  const inputs = {
+    get_experience_capabilities: {},
+    read_experience: {
+      operation: 'read',
+      artifactId: id,
+      path,
+      byteOffset: 0,
+      maxBytes: 10,
+    },
+    begin_experience_upload: {
+      manifest: {
+        format: 'baci.experience/v2',
+        runtime: 'react-browser-sandbox/v1',
+        sdkVersion: 'commerce-bridge/v1',
+        entry: path,
+        files: [{ path, content: 'synthetic' }],
+        packages: [{ name: 'react', versionRef: 'platform-pinned' }],
+        routes: [{ path: '/', view: 'home' }],
+        assets: [],
+        capabilities: ['catalog.read'],
+      },
+      files: { files: [{ path, bytes: 9, digest }] },
+    },
+    write_experience_chunk: {
+      ...upload,
+      path,
+      offset: 0,
+      bytesBase64: 'YQ==',
+      chunkDigest: digest,
+    },
+    finalize_experience_upload: upload,
+    build_experience: { artifactId: id, ...retry },
+    get_experience_operation: job,
+    read_experience_performance: build,
+    finalize_experience_build: { ...job, ...retry },
+    preview_experience: { ...build, ...retry, routeId: '/' },
+    apply_experience: { ...build, ...retry, ...evidence, expectedVersion: 0 },
+    publish_experience: lifecycle,
+    rollback_experience: lifecycle,
+    read_experience_evidence: evidence,
+  } satisfies Record<ExperienceToolName, object>;
+  for (const name of experienceToolNames) {
+    const input = { storefrontId: id, ...inputs[name] };
+    expect(experienceToolInputs[name].safeParse(input).success, name).toBe(
+      true
+    );
+    const schema = experienceWireInputs[name];
+    expect(schema.safeParse(input).success, name).toBe(true);
+    expect(schema.safeParse({ ...input, unexpected: true }).success, name).toBe(
+      false
+    );
+  }
 });

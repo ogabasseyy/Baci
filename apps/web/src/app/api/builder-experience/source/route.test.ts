@@ -5,6 +5,9 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: vi.fn(async () => ({ valid: true })),
 }));
 vi.mock('@/lib/experience/owner-request', () => ({
+  authenticateExperienceOwnerRequest: vi.fn(async () => async () => ({
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  })),
   resolveExperienceOwnerRequest: vi.fn(async () => ({
     merchantId: '11111111-1111-4111-8111-111111111111',
   })),
@@ -15,6 +18,7 @@ vi.mock('@/lib/experience/source-service', () => ({
 }));
 
 import { checkCsrfProtection } from '@/lib/csrf';
+import { authenticateExperienceOwnerRequest } from '@/lib/experience/owner-request';
 import { patchSource } from '@/lib/experience/source-service';
 import { POST } from './route';
 
@@ -65,4 +69,16 @@ it('rejects over-budget bodies and failed CSRF before patch', async () => {
     ).status
   ).toBe(403);
   expect(patchSource).not.toHaveBeenCalled();
+});
+
+it('rejects an anonymous request without reading the source body', async () => {
+  vi.mocked(authenticateExperienceOwnerRequest).mockRejectedValueOnce(
+    Error('NOT_FOUND')
+  );
+  const request = new NextRequest('http://127.0.0.1/api/source', {
+    method: 'POST',
+    body: '{',
+  });
+  expect((await POST(request)).status).toBe(403);
+  expect(request.bodyUsed).toBe(false);
 });

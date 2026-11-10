@@ -1,7 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
-import { resolveExperienceOwnerRequest } from '@/lib/experience/owner-request';
+import {
+  authenticateExperienceOwnerRequest,
+  resolveExperienceOwnerRequest,
+} from '@/lib/experience/owner-request';
 import { patchSource, readSource } from '@/lib/experience/source-service';
 import { experienceToolInputs } from '@/schemas/experience-tools';
 
@@ -57,21 +60,22 @@ export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)
     return Response.json({ error: 'Forbidden' }, { status: 403, headers });
-  const body = await readBoundedJsonBody(request, 4194304);
-  if (!body.ok)
-    return Response.json(
-      { error: 'Invalid source request.' },
-      { status: 400, headers }
-    );
-  const parsed = experienceToolInputs.read_experience.safeParse(body.body);
-  if (!parsed.success || parsed.data.operation !== 'patch')
-    return Response.json(
-      { error: 'Invalid source request.' },
-      { status: 400, headers }
-    );
   try {
+    const resolveOwner = await authenticateExperienceOwnerRequest();
+    const body = await readBoundedJsonBody(request, 4194304);
+    if (!body.ok)
+      return Response.json(
+        { error: 'Invalid source request.' },
+        { status: 400, headers }
+      );
+    const parsed = experienceToolInputs.read_experience.safeParse(body.body);
+    if (!parsed.success || parsed.data.operation !== 'patch')
+      return Response.json(
+        { error: 'Invalid source request.' },
+        { status: 400, headers }
+      );
     const { storefrontId, operation: _, ...input } = parsed.data;
-    const ctx = await resolveExperienceOwnerRequest(storefrontId);
+    const ctx = await resolveOwner(storefrontId);
     return Response.json(await patchSource(ctx, input), { headers });
   } catch {
     return Response.json(

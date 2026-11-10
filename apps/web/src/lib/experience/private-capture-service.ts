@@ -3,7 +3,7 @@ import type {
   ExperienceManifest,
   PublicBootstrap,
 } from '@baci/shared/experience';
-import { z } from 'zod';
+import { experienceId } from '@/schemas/experience-id';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
 import { captureExperience } from '../../../tools/experience-runner/capture-route';
 import { loadOfflineAssets } from './asset-service';
@@ -65,8 +65,8 @@ export function createPrivateExperienceCapture(deps: {
     inputCtx: OwnerRequestContext,
     input: { buildId: string; routeId: string; idempotencyKey: string }
   ) => {
-    z.uuid().parse(input.buildId);
-    z.uuid().parse(input.idempotencyKey);
+    experienceId.parse(input.buildId);
+    experienceId.parse(input.idempotencyKey);
     const ctx = await requireExperienceOwner(inputCtx);
     for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);
     const key = [

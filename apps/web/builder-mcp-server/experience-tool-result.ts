@@ -1,6 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { z } from 'zod';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
+import { experienceEvidenceId } from '../src/schemas/experience-evidence-row';
 import {
   experienceError,
   experienceMcpResultEnvelope,
@@ -29,7 +29,7 @@ export async function experienceMcpToolResult(
     if (
       !options ||
       typeof options.evidenceId !== 'string' ||
-      !z.uuid().safeParse(envelope.value?.evidenceId).success ||
+      !experienceEvidenceId.safeParse(envelope.value?.evidenceId).success ||
       envelope.value?.evidenceId !== options.evidenceId
     )
       return experienceMcpToolResult(name, experienceError('NOT_FOUND'));

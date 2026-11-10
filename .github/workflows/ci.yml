@@ -716,17 +716,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Fetch base branch history
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --filter=blob:none --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      # Full-history checkout already fetched the base repository. Use the
+      # exact event base SHA without keeping credentials for later steps.
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SILENT_REVERT_LOOKBACK: '80'
-        run: node ci_scripts/detect-silent-reverts.mjs
+        run: |
+          git cat-file -e "$BASE_SHA^{commit}"
+          node ci_scripts/detect-silent-reverts.mjs
 
   quality:
     name: Quality Gate

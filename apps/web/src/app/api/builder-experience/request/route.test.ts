@@ -84,13 +84,19 @@ const apply = {
     idempotencyKey: id,
   },
 };
-it('CSRF and malformed JSON stop before authentication or tenant access', async () => {
+it('rejects CSRF before authentication and authenticates before parsing', async () => {
   f.csrf = false;
   expect((await POST(req(apply))).status).toBe(403);
   expect(f.client).not.toHaveBeenCalled();
   f.csrf = true;
+  f.user = false;
+  const anonymous = req('{');
+  expect((await POST(anonymous)).status).toBe(403);
+  expect(anonymous.bodyUsed).toBe(false);
+  expect(f.getMerchant).not.toHaveBeenCalled();
+  f.user = true;
   expect((await POST(req('{'))).status).toBe(400);
-  expect(f.client).not.toHaveBeenCalled();
+  expect(f.getMerchant).not.toHaveBeenCalled();
 });
 it('anonymous, staff and mismatched merchant cannot request private effects', async () => {
   for (const state of [

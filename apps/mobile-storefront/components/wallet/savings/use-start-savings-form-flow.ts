@@ -5,12 +5,7 @@ import type {
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
-import {
-  isWholeNairaAmount,
-  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
-  PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE,
-  wholeNairaHeadStart,
-} from './start-savings-wallet-balance';
+import { primaryHeadStartRefusal } from './start-savings-wallet-balance';
 
 export {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
@@ -139,14 +134,14 @@ export function useStartSavingsFormFlow({
       // move: the legacy path fails atomically, so this path must too. The
       // plan is created without the head start, so check the target bound
       // the creation request would otherwise have enforced.
-      // Ask for whole naira rather than silently rounding the amount up.
-      if (!isWholeNairaAmount(initialContributionValue)) {
-        setFormError(PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE);
-        return;
-      }
-      // Same whole-naira amount the wallet moves and the submit checks.
-      if (wholeNairaHeadStart(initialContributionValue) > targetValue) {
-        setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
+      // Whole naira (no silent rounding) and within the target, as the
+      // submit step checks again on its own input.
+      const refusal = primaryHeadStartRefusal(
+        initialContributionValue,
+        targetValue
+      );
+      if (refusal) {
+        setFormError(refusal);
         return;
       }
       // The balance is confirmed fresh inside the guarded submission, so

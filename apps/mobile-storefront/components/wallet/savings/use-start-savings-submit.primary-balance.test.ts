@@ -8,6 +8,7 @@ import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
+  PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE,
   readFreshPrimaryBalanceKobo,
 } from './start-savings-wallet-balance';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
@@ -90,36 +91,6 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
   });
 
-  it('checks a fractional head start against the whole naira the wallet will move', async () => {
-    // ₦10,000.10 is prefilled as ₦10,001 in the wallet's Add to savings sheet.
-    readBalance.mockResolvedValueOnce(1_000_010);
-    const input = createInput({ effectiveInitialContribution: 10_000.1 });
-    const { result } = renderHook(() => useStartSavingsSubmit(input));
-    await act(async () => {
-      await result.current.submitSavingsGoal(primaryOptions);
-    });
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenCalledWith(
-      PRIMARY_HEAD_START_SHORT_MESSAGE
-    );
-  });
-
-  it('allows a head start the balance covers in whole naira', async () => {
-    readBalance.mockResolvedValueOnce(1_000_100);
-    const input = createInput({
-      effectiveInitialContribution: 10_000.1,
-      refetch: jest.fn(async () => ({
-        isError: false,
-        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
-      })),
-    });
-    const { result } = renderHook(() => useStartSavingsSubmit(input));
-    await act(async () => {
-      await result.current.submitSavingsGoal(primaryOptions);
-    });
-    expect(createSavingsGoal).toHaveBeenCalled();
-  });
-
   it.each([
     ['is short by a kobo', 1_999_999, PRIMARY_HEAD_START_SHORT_MESSAGE],
     ['cannot be confirmed', null, PRIMARY_BALANCE_CHECK_FAILED_MESSAGE],
@@ -135,19 +106,17 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(result.current.isSubmitting).toBe(false);
   });
 
-  it('refuses a head start that rounds up past a fractional target', async () => {
-    // ₦10,000.10 moves as ₦10,001, more than the ₦10,000.10 target.
-    const input = createInput({
-      effectiveInitialContribution: 10_000.1,
-      targetValue: 10_000.1,
-    });
+  it.each([
+    0.004, 0.009,
+  ])('refuses a sub-naira head start of %p instead of handing over ₦0', async (amount) => {
+    const input = createInput({ effectiveInitialContribution: amount });
     const { result } = renderHook(() => useStartSavingsSubmit(input));
     await act(async () => {
       await result.current.submitSavingsGoal(primaryOptions);
     });
     expect(createSavingsGoal).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(
-      PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
+      PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE
     );
   });
 

@@ -32,8 +32,9 @@ describe('SavingsGoalSummary', () => {
     expect(screen.queryByText('Every naira counts')).toBeNull();
     expect(screen.queryByText(/no image/i)).toBeNull();
     // Screen readers still hear the target and that nothing is saved yet.
+    // The target is shown, not only read out, beside the weekly pace.
     expect(
-      screen.getByLabelText(/^Nothing saved yet toward your ₦250,000 target\./)
+      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
     ).toBeOnTheScreen();
     expect(
       screen.getByText(/^Save about ₦62,500 a week to reach this by /)

@@ -16,8 +16,8 @@ import {
 } from './run-savings-goal-submission';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
-  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
+  primaryHeadStartRefusal,
   readFreshPrimaryBalanceKobo,
   wholeNairaHeadStart,
 } from './start-savings-wallet-balance';
@@ -117,14 +117,12 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       return;
     }
     if (options?.confirmPrimaryBalance) {
-      // The plan is created without the head start, so the target bound the
-      // creation request would enforce is checked here, on this input.
-      // Checked on the whole naira the wallet will move, not the typed amount.
-      if (
-        wholeNairaHeadStart(input.effectiveInitialContribution) >
+      const headStartRefusal = primaryHeadStartRefusal(
+        input.effectiveInitialContribution,
         input.targetValue
-      ) {
-        input.setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
+      );
+      if (headStartRefusal) {
+        input.setFormError(headStartRefusal);
         release();
         return;
       }

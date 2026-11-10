@@ -97,6 +97,10 @@ describe('isWholeNairaAmount', () => {
     [20_000.0000001, true],
     [10_000.4, false],
     [10_000.01, false],
+    // Dust below ₦1 would hand the wallet ₦0.
+    [0.004, false],
+    [0.009, false],
+    [0, false],
     [Number.NaN, false],
   ])('treats %p as whole naira: %p', (amount, expected) => {
     expect(isWholeNairaAmount(amount)).toBe(expected);

@@ -5,11 +5,13 @@ import { useAuthStore } from '@/stores/auth-store';
 export const PRIMARY_HEAD_START_SHORT_MESSAGE =
   'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
 export const PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE =
-  'Enter your head start in whole naira, with no kobo.';
+  'Enter your head start in whole naira (at least ₦1), with no kobo.';
 
-/** The wallet moves whole naira only: a head start must have no kobo. */
+/** The wallet moves whole naira only: at least ₦1 and no kobo. */
 export function isWholeNairaAmount(amount: number): boolean {
-  return Number.isFinite(amount) && Math.round(amount * 100) % 100 === 0;
+  if (!Number.isFinite(amount)) return false;
+  const kobo = Math.round(amount * 100);
+  return kobo >= 100 && kobo % 100 === 0;
 }
 
 export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
@@ -83,4 +85,20 @@ export async function readFreshPrimaryBalanceKobo(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Why a PiggyVest head start can't go ahead as typed, or null when it can:
+ * the wallet moves whole naira only (at least ₦1, no kobo), and the plan is
+ * created without it, so the target bound is checked here too.
+ */
+export function primaryHeadStartRefusal(
+  amount: number,
+  targetValue: number
+): string | null {
+  if (!isWholeNairaAmount(amount))
+    return PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE;
+  if (wholeNairaHeadStart(amount) > targetValue)
+    return PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE;
+  return null;
 }

@@ -69,6 +69,7 @@ export function EmailForm({
         type="submit"
         className="w-full h-12 text-white rounded-xl font-semibold transition-all hover:scale-[1.01] active:scale-[0.99] bg-[#D62027] hover:bg-[#D62027]/90 shadow-lg shadow-red-600/10"
         disabled={isLoading || !email}
+        aria-busy={isLoading}
       >
         {isSending ? (
           <>

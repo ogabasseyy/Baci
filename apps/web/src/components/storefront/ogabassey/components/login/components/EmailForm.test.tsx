@@ -18,6 +18,9 @@ describe('EmailForm', () => {
       />
     );
     const input = screen.getByRole('textbox', { name: /email address/i });
+    const submitBtn = screen.getByRole('button', { name: /send sign-in code/i });
+
+    expect(submitBtn).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByText('Email address')).toHaveClass(
       'text-store-background-text'
     );

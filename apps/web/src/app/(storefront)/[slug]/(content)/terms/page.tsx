@@ -14,6 +14,7 @@ import {
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
 import { buildRequestScopedStoreUrl, buildStoreUrl } from '@/lib/store-url';
+import { isLegalPagePublishable } from '../../is-legal-page-publishable';
 import { TermsPageClient } from '../pages/terms/terms-page-client';
 
 interface PageProps {
@@ -30,6 +31,8 @@ export async function generateMetadata({
     return { title: 'Terms of Service' };
   }
 
+  const isPublishable = isLegalPagePublishable(merchant, 'terms');
+
   const baseUrl = buildStoreUrl(merchant);
   const canonicalUrl = `${baseUrl}/terms`;
   const description = generateMetaDescription(
@@ -37,7 +40,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Terms of Service | ${merchant.business_name}`,
+    title: 'Terms of Service',
     description,
     openGraph: {
       title: `Terms of Service | ${merchant.business_name}`,
@@ -49,7 +52,9 @@ export async function generateMetadata({
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: getIndexableRobotsMetadata(),
+    robots: isPublishable
+      ? getIndexableRobotsMetadata()
+      : { index: false, follow: false },
   };
 }
 
@@ -69,15 +74,14 @@ async function TermsPageContent({ params }: PageProps) {
     notFound();
   }
 
-  const hasTermsContent = merchant.pages?.terms;
-  const templateHasTermsPage =
-    !!merchant.template_id &&
-    merchant.template_id !== 'default' &&
-    merchant.template_id !== 'puck';
-
-  if (!hasTermsContent && !templateHasTermsPage) {
+  if (!isLegalPagePublishable(merchant, 'terms')) {
     notFound();
   }
+
+  const templateHasTermsPage =
+    Boolean(merchant.template_id) &&
+    merchant.template_id !== 'default' &&
+    merchant.template_id !== 'puck';
 
   const baseUrl = buildRequestScopedStoreUrl(merchant, await headers());
 

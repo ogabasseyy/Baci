@@ -12,8 +12,9 @@ import {
 } from '@/lib/validation';
 
 export const metadata: Metadata = {
-  title: 'Member Status | Ogabassey',
+  title: 'Member Status',
   description: 'Check your membership tier and benefits',
+  robots: { index: false, follow: false },
 };
 
 export default async function MemberStatusPage({

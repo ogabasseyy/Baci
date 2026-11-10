@@ -64,7 +64,7 @@ function Checkout({
 
 it('keeps credit applied when switching to instalments and offers Credit Direct for the balance', () => {
   render(<Checkout />);
-  fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
+  fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
   expect(screen.getByLabelText('Applied wallet credit')).toHaveTextContent(
     '₦20,000'
   );
@@ -88,7 +88,7 @@ it('preserves the selected financier when wallet credit arrives later', () => {
 it('does not offer instalments or require a financier when the wallet covers the whole order', () => {
   render(<PaymentStep {...base} remainingAmount={0} />);
   expect(
-    screen.queryByRole('button', { name: /pay in installments/i })
+    screen.queryByRole('button', { name: /pay small small/i })
   ).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /place order/i })).toBeEnabled();
 });

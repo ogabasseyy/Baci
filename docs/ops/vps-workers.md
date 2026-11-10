@@ -75,6 +75,15 @@ Some cron work intentionally remains in the web app because it needs web-only ru
   privacy-safe `admin_signup_health` PostHog event; telemetry failure never
   changes the health response. See `docs/ops/mobile-signup-monitoring.md`. Log:
   `/home/bassey/baci-workers/logs/merchant-signup-health.log`.
+- `/api/cron/cart-notice-health`, scheduled every 5 minutes. Alarm for
+  shared-cart live updates: reads `commerce_cart_publish_health()` (counts
+  only) and returns non-2xx with a `shared-cart notice_delivery_fault` error
+  log when a change notice for a live-update merchant is still undelivered
+  five minutes after it was written, or when any were dead-lettered in the
+  last 24 hours. Delivery itself runs in the database (write-time trigger
+  plus the `commerce-cart-publish-events` pg_cron sweep); see
+  `docs/deploy/shared-cart-rollout.md`. Log:
+  `/home/bassey/baci-workers/logs/cart-notice-health.log`.
 - `/api/cron/reconcile-gateway-paid-orders`, scheduled hourly at :20. Re-verifies Paystack payment attempts older than 12 hours on paid or partially paid orders with a separate completed payment, and clears only references currently reported abandoned or failed by Paystack. A DVA placeholder may also be cleared after Paystack returns 404 when the placeholder itself carries the DVA marker. Older unmarked 404s stay open for manual verification. Pending, successful, and unverifiable attempts remain open. The sweep rotates unresolved rows so old attempts cannot starve later ones. It also heals "wedged" gateway orders (completed transaction, order never flipped to paid) after re-verifying with the gateway, then drains failed paid-order side effects (settlement / receipt email / ad tracking). Log: `/home/bassey/baci-workers/logs/reconcile-gateway-paid-orders.log`.
 - `/api/cron/wallet-payouts`, scheduled daily at 06:00.
 - `/api/cron/vtu-cashback-summaries`, scheduled monthly on the 1st at 08:30.

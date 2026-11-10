@@ -2,6 +2,7 @@
 import { Pencil } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { equityForPercentage, percentageForAmount } from './down-payment';
+import amountStyles from './OxygenDownPaymentAmount.module.css';
 import { OxygenDownPaymentSlider } from './OxygenDownPaymentSlider';
 import styles from './OxygenPlanForm.module.css';
 
@@ -77,13 +78,13 @@ export function OxygenDownPayment({
       <div className={styles.cardHeading}>
         <label htmlFor={id}>Your down payment</label>
         <output
-          className={styles.percentage}
+          className={amountStyles.percentage}
           aria-label="Down payment percentage"
         >
           {percentage === null ? '—' : `${percentage}%`}
         </output>
       </div>
-      <div className={styles.amountInput}>
+      <div className={amountStyles.amountInput}>
         <span aria-hidden="true">₦</span>
         <input
           id={id}
@@ -127,7 +128,7 @@ export function OxygenDownPayment({
         />
         <button
           type="button"
-          className={styles.editAmount}
+          className={amountStyles.editAmount}
           aria-label="Edit down payment"
           onClick={() => amountInput.current?.focus()}
         >

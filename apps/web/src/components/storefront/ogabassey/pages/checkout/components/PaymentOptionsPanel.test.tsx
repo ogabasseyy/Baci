@@ -35,6 +35,34 @@ function renderPanel(
 }
 
 describe('payment schedule selection', () => {
+  it('shows the Oxygen and Credit Direct logos beside their options', () => {
+    renderPanel('installments', true, true, {
+      oxygenEligible: true,
+      creditDirectEligible: true,
+      featureSettings: { credit_direct_enabled: true },
+    });
+    expect(screen.getByText('Oxygen Finance')).toBeInTheDocument();
+    expect(screen.getByText(/From 25% down/)).toBeInTheDocument();
+    expect(screen.getByText(/From 30% down/)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Oxygen X Finance Company' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Credit Direct lending logo' })).toBeInTheDocument();
+  });
+  it('shows expandable payment cards and keeps crypto under Pay in Full', () => {
+    renderPanel('full', true, true, { featureSettings: { juicyway_enabled: true } });
+    expect(screen.getByText('Pay now — we start processing your order right away')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Pay in Full' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('radio', { name: /juicyway/i })).toBeVisible();
+  });
+  it('shows Credit Direct terms and its bank list only when selected', () => {
+    renderPanel('installments', true, true, {
+      paymentMethod: 'credit_direct',
+      creditDirectEligible: true,
+      featureSettings: { credit_direct_enabled: true },
+    });
+    expect(screen.getByText('From 30% down')).toBeVisible();
+    expect(screen.getByText('3–6 months')).toBeVisible();
+    expect(screen.getByText('24 supported banks')).toBeVisible();
+  });
   it('hides unavailable REDVAULT and allows selecting it when available', () => {
     const hidden = renderPanel();
     expect(
@@ -102,9 +130,9 @@ describe('payment schedule selection', () => {
   it('hides unavailable installments and restores full payment choices', async () => {
     renderPanel('installments', true, false);
     expect(
-      screen.queryByRole('button', { name: 'Pay in Installments' })
+      screen.queryByRole('button', { name: 'Pay Small Small' })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Proforma Invoice' })).toBeInTheDocument();
   });
 
   describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
@@ -119,16 +147,16 @@ describe('payment schedule selection', () => {
         expect(setPaymentTab).toHaveBeenCalledWith('full');
       });
       expect(setPaymentMethod).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create Proforma Invoice' })).toBeInTheDocument();
     });
   });
   it('offers the invoice option exactly once, on its own tab', () => {
     renderPanel('full');
 
-    // The "Get a Proforma Invoice" tab owns invoice selection: no
+    // The "Create Proforma Invoice" tab owns invoice selection: no
     // duplicate invoice card may appear under Pay in Full.
     expect(
-      screen.getByRole('button', { name: 'Get a Proforma Invoice' })
+      screen.getByRole('button', { name: 'Create Proforma Invoice' })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('radio', { name: /invoice/i })
@@ -138,7 +166,7 @@ describe('payment schedule selection', () => {
   it('offers a proforma invoice without requiring an online payment gateway', () => {
     const { setPaymentMethod } = renderPanel('invoice', false);
 
-    fireEvent.click(screen.getByRole('radio', { name: /get a proforma invoice/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /create proforma invoice/i }));
 
     expect(setPaymentMethod).toHaveBeenCalledWith('invoice');
   });
@@ -147,14 +175,14 @@ describe('payment schedule selection', () => {
     renderPanel('installments');
 
     expect(
-      screen.queryByRole('radio', { name: /get a proforma invoice/i })
+      screen.queryByRole('radio', { name: /create proforma invoice/i })
     ).not.toBeInTheDocument();
   });
 
   it.each([
-    ['full', 'Pay in Full', 'Pay in Installments'],
-    ['installments', 'Pay in Installments', 'Pay in Full'],
-    ['invoice', 'Get a Proforma Invoice', 'Pay in Full'],
+    ['full', 'Pay in Full', 'Pay Small Small'],
+    ['installments', 'Pay Small Small', 'Pay in Full'],
+    ['invoice', 'Create Proforma Invoice', 'Pay in Full'],
   ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
     renderPanel(value);
 
@@ -165,21 +193,16 @@ describe('payment schedule selection', () => {
       'aria-pressed',
       'true'
     );
-    expect(screen.getByRole('button', { name: selected })).toHaveClass(
-      'bg-store-primary',
-      'text-store-primary-text'
-    );
+    expect(screen.getByRole('button', { name: selected }).closest('section')).toHaveClass('border-store-primary');
     expect(screen.getByRole('button', { name: inactive })).toHaveAttribute(
       'aria-pressed',
       'false'
     );
-    expect(screen.getByRole('button', { name: inactive })).not.toHaveClass(
-      'bg-store-primary'
-    );
+    expect(screen.getByRole('button', { name: inactive }).closest('section')).not.toHaveClass('border-store-primary');
   });
 
   it.each([
-    ['full', 'Pay in Installments', 'installments'],
+    ['full', 'Pay Small Small', 'installments'],
     ['installments', 'Pay in Full', 'full'],
     ['invoice', 'Pay in Full', 'full'],
   ] as const)('switches away from %s and clears the old gateway', (value, label, next) => {

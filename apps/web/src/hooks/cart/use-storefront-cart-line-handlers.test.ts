@@ -37,6 +37,30 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 describe('useStorefrontCartLineHandlers', () => {
+  it('keeps only the latest upsell timer when products are added repeatedly', () => {
+    vi.useFakeTimers();
+    try {
+      const setShowUpsell = vi.fn();
+      const upsellTimerRef = { current: null };
+      const { result } = setup({
+        delegated: true,
+        enableSmartCartPro: true,
+        setShowUpsell,
+        upsellTimerRef,
+      });
+      result.current.addToCart(product, 1);
+      vi.advanceTimersByTime(250);
+      result.current.addToCart(product, 1);
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(250);
+      expect(setShowUpsell).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(250);
+      expect(setShowUpsell).toHaveBeenCalledExactlyOnceWith(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('appends a legacy line through the cart updater', () => {
     const { result, setCart } = setup();
     result.current.addToCart(product, 2);

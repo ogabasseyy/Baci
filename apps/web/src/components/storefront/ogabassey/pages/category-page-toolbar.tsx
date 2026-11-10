@@ -34,17 +34,29 @@ export function CategoryPageToolbar({
   const Title = titleHeading === 'h2' ? 'h2' : 'h1';
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-6 mb-6">
-      <nav className="flex items-center overflow-x-auto whitespace-nowrap pb-2 text-sm text-store-background-text/65">
-        <Link
-          href={asRoute(basePath || '')}
-          className="transition-colors hover:text-store-primary"
-        >
-          Home
-        </Link>
-        <ChevronRight size={16} className="mx-2" />
-        <span className="font-medium text-store-background-text">
-          {displayTitle}
-        </span>
+      <nav
+        aria-label="Breadcrumb"
+        className="overflow-x-auto whitespace-nowrap pb-2 text-sm text-store-background-text/65"
+      >
+        <ol className="flex items-center">
+          <li>
+            <Link
+              href={asRoute(basePath || '/')}
+              className="transition-colors hover:text-store-primary"
+            >
+              Home
+            </Link>
+          </li>
+          <li className="flex items-center">
+            <ChevronRight size={16} className="mx-2" aria-hidden="true" />
+            <span
+              aria-current="page"
+              className="font-medium text-store-background-text"
+            >
+              {displayTitle}
+            </span>
+          </li>
+        </ol>
       </nav>
 
       <div className="mt-4 flex items-end justify-between">

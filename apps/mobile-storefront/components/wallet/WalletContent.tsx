@@ -1,5 +1,5 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { RefreshControl } from 'react-native';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
@@ -78,6 +78,11 @@ export interface WalletContentProps {
   onQuickSave: () => void;
   onRefresh: () => void;
   onResetFund: () => void;
+  /**
+   * The wallet PIN prompt. It is mounted inside the savings sheet while that
+   * sheet is open (iOS cannot stack sibling modals), and at the root otherwise.
+   */
+  pinPrompt?: ReactNode;
   onResetRedeem: () => void;
   onStartSavings: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
@@ -162,6 +167,7 @@ export function WalletContent(props: WalletContentProps) {
     showSavingsDeviceSwap,
     handleSelectSavingsDevice,
   } = useSavingsDeviceSwap(onChangeSavingsDevice);
+  const savingsSheetOpen = showSavingsProgress && Boolean(activeSavingsGoal);
 
   return (
     <WalletPrimaryContext.Provider value={props.primaryReady === true}>
@@ -195,6 +201,7 @@ export function WalletContent(props: WalletContentProps) {
           loyaltyTier={loyaltyTier}
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
+          onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           savingsBalance={savingsBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
@@ -221,7 +228,8 @@ export function WalletContent(props: WalletContentProps) {
           onManageCards={onManageCards}
           onQuickSave={onQuickSave}
           onStartSavings={onStartSavings}
-          showPrimaryAction={!activeSavingsGoal}
+          // Start Savings now lives inside the wallet card.
+          showPrimaryAction={false}
           showQuickSave={false}
         />
         {showRedeemPanel ? (
@@ -253,6 +261,7 @@ export function WalletContent(props: WalletContentProps) {
         onFundWallet={onFundSavingsWallet}
         onRefreshWallet={async () => onRefresh()}
         onResolveVariant={() => setShowSavingsVariantResolution(true)}
+        overlay={savingsSheetOpen ? props.pinPrompt : null}
         visible={showSavingsProgress}
         walletBalance={spendableBalance}
       />
@@ -281,6 +290,7 @@ export function WalletContent(props: WalletContentProps) {
         }
       />
       <WalletFundModal {...props} creditWatch={creditWatch} />
+      {savingsSheetOpen ? null : props.pinPrompt}
     </WalletPrimaryContext.Provider>
   );
 }

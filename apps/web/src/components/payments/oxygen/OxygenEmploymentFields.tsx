@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
 import { OxygenSelect } from './OxygenSelect';
 import { oxygenFieldClass as field } from './oxygen-checkout-styles';
+import { isOxygenEmploymentReady } from './oxygen-employment-ready';
 
 function ordinal(day: number) {
   if (day >= 11 && day <= 13) return `${day}th`;
@@ -17,13 +18,19 @@ function formatIncome(value: string) {
 }
 export function OxygenEmploymentFields({
   defaults,
+  onReady,
 }: {
+  onReady?: () => void;
   defaults: OxygenFormDraft['fields'];
 }) {
   const id = useId();
   const [income, setIncome] = useState(
     (defaults.salary_amount ?? '').replaceAll(',', '')
   );
+  const [payday, setPayday] = useState(defaults.salary_date ?? '');
+  function revealWhenComplete(amount: string, day: string) {
+    if (isOxygenEmploymentReady(amount, day)) onReady?.();
+  }
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <label
@@ -60,12 +67,16 @@ export function OxygenEmploymentFields({
           inputMode="decimal"
           maxLength={40}
           pattern={'[0-9,]+(\\.[0-9]{1,2})?'}
+          title="Enter an amount with up to two decimal places."
           placeholder="e.g. 250,000"
           required
           onChange={(event) => {
             const value = event.target.value.replaceAll(',', '');
-            if (/^\d*(\.\d{0,2})?$/.test(value) && value.length <= 30)
-              setIncome(value.startsWith('.') ? `0${value}` : value);
+            if (/^\d*(\.\d{0,2})?$/.test(value) && value.length <= 30) {
+              const next = value.startsWith('.') ? `0${value}` : value;
+              setIncome(next);
+              revealWhenComplete(next, payday);
+            }
           }}
         />
       </label>
@@ -78,7 +89,11 @@ export function OxygenEmploymentFields({
         <OxygenSelect
           id={`${id}-payday`}
           name="salary_date"
-          defaultValue={defaults.salary_date ?? ''}
+          value={payday}
+          onChange={(event) => {
+            setPayday(event.target.value);
+            revealWhenComplete(income, event.target.value);
+          }}
           required
         >
           <option value="" disabled>

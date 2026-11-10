@@ -230,6 +230,36 @@ describe('PiggyVest head start balance check at submit', () => {
     useAuthStore.setState({ user: null } as never);
   });
 
+  it('retries the hand-off for the created plan instead of creating another', async () => {
+    readBalance.mockResolvedValue(2_000_000);
+    const refetch = jest
+      .fn<() => Promise<unknown>>()
+      // First reload has not picked the new plan up yet.
+      .mockResolvedValueOnce({ isError: true, data: undefined })
+      .mockResolvedValue({
+        isError: false,
+        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
+      });
+    const input = createInput({ refetch });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+    // The customer submits again: the same plan is handed over.
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ savingsGoalId: 'goal-1' }),
+      })
+    );
+    readBalance.mockReset();
+  });
+
   it('drops the submission when the plan is edited during the check', async () => {
     let answer: (value: number) => void = () => undefined;
     readBalance.mockReturnValueOnce(

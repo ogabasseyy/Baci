@@ -4,6 +4,7 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { useAuthStore } from '@/stores/auth-store';
+import { handOffToWallet } from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
@@ -25,6 +26,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  // A created plan whose wallet hand-off could not finish, for its account.
+  const pendingHandOffRef = useRef<{ goalId: string; userId?: string } | null>(
+    null
+  );
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
@@ -116,31 +121,57 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         return;
       }
     }
+    const release = () => {
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+    };
+    // The head start moves through PiggyVest from the wallet's Add to
+    // savings sheet, prefilled with the amount the customer chose.
+    const continueInWallet = (goalId: string, amount: number) => {
+      pendingHandOffRef.current = null;
+      router.replace({
+        pathname: '/wallet',
+        params: {
+          action: 'savings',
+          savingsGoalId: goalId,
+          savingsAmount: String(wholeNairaHeadStart(amount)),
+        },
+      });
+    };
+    const onHandOffPending = (goalId: string) => {
+      pendingHandOffRef.current = { goalId, userId: submittingUserId };
+    };
+    const pending = pendingHandOffRef.current;
+    if (
+      options?.continueInWallet &&
+      pending &&
+      pending.userId === submittingUserId
+    ) {
+      // The plan already exists: retry its hand-off, never create another.
+      await handOffToWallet(
+        {
+          ...input,
+          onContinueInWallet: continueInWallet,
+          onHandOffPending,
+        },
+        pending.goalId,
+        stillCurrent
+      ).finally(release);
+      return;
+    }
     await runSavingsGoalSubmission(
       {
         ...input,
         deferInitialContribution:
           options?.deferInitialContribution ?? input.deferInitialContribution,
-        // The head start moves through PiggyVest from the wallet's Add to
-        // savings sheet, prefilled with the amount the customer chose.
         onContinueInWallet: options?.continueInWallet
-          ? (goalId: string, amount: number) =>
-              router.replace({
-                pathname: '/wallet',
-                params: {
-                  action: 'savings',
-                  savingsGoalId: goalId,
-                  savingsAmount: String(wholeNairaHeadStart(amount)),
-                },
-              })
+          ? continueInWallet
           : undefined,
+        onHandOffPending,
       },
       validation,
       stillCurrent
-    ).finally(() => {
-      submitInFlightRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
-    });
+    ).finally(release);
   };
 
   const submitBankTransferContribution = async () => {

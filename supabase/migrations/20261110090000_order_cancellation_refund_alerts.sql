@@ -11,7 +11,9 @@
 -- crash) stays unconfirmed (confirmed_at IS NULL). The listing RPC below
 -- re-drives such rows after a cool-down, capped at p_max_attempts, and returns
 -- never-claimed reviews first-class, so already-alerted reviews can never
--- crowd the scan limit.
+-- crowd the scan limit. Every attempt, delivered or not, keeps its row, so a
+-- persistently undeliverable review hits the cool-down and cap instead of
+-- looping.
 --
 -- Server-only: no browser role can read or write it.
 
@@ -66,6 +68,9 @@ SET search_path = ''
 AS $$
   SELECT r.id, r.order_id, r.merchant_id, r.candidates, r.metadata, a.attempts
   FROM public.reconciliation_review r
+  -- Un-alertable reviews (no order, no merchant, or order/merchant mismatch)
+  -- are excluded before the limit so they never occupy scan slots.
+  JOIN public.orders o ON o.id = r.order_id AND o.merchant_id = r.merchant_id
   LEFT JOIN public.order_cancellation_refund_alerts a ON a.review_id = r.id
   WHERE r.issue_type = 'order_cancellation_refund_requires_review'
     AND r.resolved_at IS NULL
@@ -78,7 +83,9 @@ AS $$
         AND a.last_attempt_at <= p_retry_before
       )
     )
-  ORDER BY r.created_at DESC
+  -- Never-attempted reviews first, then cooled-down retries; newest first
+  -- within each, so retries cannot starve fresh reviews.
+  ORDER BY (a.review_id IS NOT NULL), r.created_at DESC
   LIMIT LEAST(GREATEST(p_limit, 1), 200);
 $$;
 

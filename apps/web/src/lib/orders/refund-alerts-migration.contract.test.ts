@@ -28,6 +28,21 @@ describe('order_cancellation_refund_alerts migration contract', () => {
     expect(sql.indexOf('LEFT JOIN')).toBeLessThan(sql.indexOf('LIMIT LEAST'));
   });
 
+  it('excludes un-alertable reviews before the limit', () => {
+    expect(sql).toContain(
+      'JOIN public.orders o ON o.id = r.order_id AND o.merchant_id = r.merchant_id'
+    );
+    expect(sql.indexOf('JOIN public.orders')).toBeLessThan(
+      sql.indexOf('LIMIT LEAST')
+    );
+  });
+
+  it('orders never-attempted reviews before cooled-down retries', () => {
+    expect(sql).toMatch(
+      /ORDER BY \(a\.review_id IS NOT NULL\), r\.created_at DESC/
+    );
+  });
+
   it('locks the RPC down to service_role', () => {
     expect(sql).toMatch(/SET search_path = ''/);
     expect(sql).toMatch(

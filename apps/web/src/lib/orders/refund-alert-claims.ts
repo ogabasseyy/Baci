@@ -1,0 +1,74 @@
+import { logger } from '@/lib/logger';
+import type {
+  AlertSupabase,
+  PriorAlertAttempt,
+  RefundReviewAlertOrder,
+} from '@/lib/orders/refund-alert-types';
+
+/**
+ * Record one send attempt for a review. A first attempt inserts the ledger
+ * row (attempts = 1); a re-drive compare-and-sets the attempt count so two
+ * workers cannot both re-send. The row is never deleted on failure: every
+ * attempt, definite or uncertain, counts toward the cool-down and cap.
+ */
+export async function claimAlert(
+  supabase: AlertSupabase,
+  review: { id: string },
+  order: RefundReviewAlertOrder,
+  prior: PriorAlertAttempt | null
+): Promise<boolean> {
+  if (prior) {
+    const { data, error } = await supabase
+      .from('order_cancellation_refund_alerts')
+      .update({
+        attempts: prior.attempts + 1,
+        last_attempt_at: new Date().toISOString(),
+      })
+      .eq('review_id', review.id)
+      .eq('attempts', prior.attempts)
+      .is('confirmed_at', null)
+      .select('review_id');
+    if (error) {
+      logger.error({
+        message: 'Cancellation refund alert re-claim failed',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+      return false;
+    }
+    return Array.isArray(data) && data.length > 0;
+  }
+  const { error } = await supabase
+    .from('order_cancellation_refund_alerts')
+    .insert({
+      merchant_id: order.merchant_id,
+      order_id: order.id,
+      review_id: review.id,
+    });
+  if (!error) return true;
+  if ((error as { code?: string }).code !== '23505') {
+    logger.error({
+      message: 'Cancellation refund alert claim failed',
+      orderId: order.id,
+      reviewId: review.id,
+    });
+  }
+  return false;
+}
+
+export async function confirmClaim(
+  supabase: AlertSupabase,
+  reviewId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('order_cancellation_refund_alerts')
+    .update({ confirmed_at: new Date().toISOString() })
+    .eq('review_id', reviewId);
+  if (error) {
+    // Left unconfirmed, the review can be re-driven after the cool-down.
+    logger.error({
+      message: 'Cancellation refund alert could not be confirmed',
+      reviewId,
+    });
+  }
+}

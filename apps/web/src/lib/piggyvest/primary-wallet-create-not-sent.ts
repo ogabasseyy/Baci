@@ -12,7 +12,7 @@ import type {
  * an unparseable reply, these are not ambiguous, so the onboarding attempt
  * can fail fast instead of parking the customer in an endless "pending".
  */
-export function isPrimaryWalletCreateNotSent(
+function isPrimaryWalletCreateNotSent(
   error: unknown
 ): error is PiggyvestApiError {
   return (
@@ -33,7 +33,7 @@ type NotSentOutcome = {
  * earlier ambiguous dispatch may still have created the customer. Logs only
  * the error code and status, never request data.
  */
-export async function settlePrimaryWalletCreateNotSent(input: {
+async function settleNotSent(input: {
   error: PiggyvestApiError;
   reclaimed: boolean;
   storage: Pick<
@@ -65,17 +65,25 @@ export async function settlePrimaryWalletCreateNotSent(input: {
     : { status: 'unavailable', code: 'PROVIDER_UNAVAILABLE' };
 }
 
-/** Classifies a definitive provider decline of the create call. */
-export function classifyPrimaryWalletCreationDecline(
-  error: unknown
-): 'interest_routing' | 'bvn' | null {
-  if (!(error instanceof PiggyvestApiError)) return null;
-  if (
-    error.declined &&
-    (error.status === 400 || error.status === 422) &&
-    /payout|interest/i.test(error.message)
-  )
-    return 'interest_routing';
-  // Only 400 is a BVN verdict; every other status stays transport-ambiguous.
-  return error.status === 400 ? 'bvn' : null;
+/**
+ * When createCustomer itself rejected with a provably-not-sent error, settles
+ * the intent and returns the outcome; otherwise returns null so the caller's
+ * ambiguous/decline handling runs. A later step's error never qualifies.
+ */
+export async function settlePrimaryWalletCreateIfNotSent(input: {
+  error: unknown;
+  createReturned: boolean;
+  reclaimed: boolean;
+  storage: Pick<
+    PrimaryWalletOnboardingStorage,
+    'recordUncertain' | 'releaseIntent'
+  >;
+  claimedScope: PrimaryWalletIntentScope & {
+    intentId: string;
+    claimToken: string;
+  };
+}): Promise<NotSentOutcome | null> {
+  const { error, createReturned, ...rest } = input;
+  if (createReturned || !isPrimaryWalletCreateNotSent(error)) return null;
+  return await settleNotSent({ error, ...rest });
 }

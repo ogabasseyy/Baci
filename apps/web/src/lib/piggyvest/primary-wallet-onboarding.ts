@@ -5,6 +5,8 @@ import {
   piggyvestPrimaryWalletOnboardingConfigurationSchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
+import { settlePrimaryWalletCreateIfNotSent } from './primary-wallet-create-not-sent';
+import { classifyPrimaryWalletCreationDecline } from './primary-wallet-creation-decline';
 import {
   lookupPrimaryWalletCustomer,
   type PrimaryWalletCustomerLookup,
@@ -20,11 +22,6 @@ import {
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
-import {
-  classifyPrimaryWalletCreationDecline,
-  isPrimaryWalletCreateNotSent,
-  settlePrimaryWalletCreateNotSent,
-} from './primary-wallet-onboarding-create-errors';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
@@ -256,13 +253,14 @@ export async function onboardPiggyvestPrimaryWallet(
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
     // Credentials rejected or relay refused: fail fast, never "pending".
-    if (!createReturned && isPrimaryWalletCreateNotSent(error))
-      return settlePrimaryWalletCreateNotSent({
-        error,
-        reclaimed: claim.reclaimed === true,
-        storage: input.storage,
-        claimedScope,
-      });
+    const notSent = await settlePrimaryWalletCreateIfNotSent({
+      error,
+      createReturned,
+      reclaimed: claim.reclaimed === true,
+      storage: input.storage,
+      claimedScope,
+    });
+    if (notSent) return notSent;
     // A decline that names the interest settings is our configured payout
     // wallet being refused, never the customer's BVN. On a fresh claim it
     // proves nothing was created, so the intent is released for a corrected

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@baci/shared/experience": [
+        "../../packages/shared/src/experience/index.ts"
+      ],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "tools/experience-runner/**/*.ts",
+    "tests/experience-browser/fixtures/**/*.ts",
+    "tests/experience-browser/fixtures/**/*.tsx",
+    "tests/experience-browser/production-*.ts",
+    "src/schemas/experience-*.ts",
+    "src/**/*.d.ts",
+    "src/lib/consent-mode.ts"
+  ],
+  "exclude": ["node_modules"]
+}

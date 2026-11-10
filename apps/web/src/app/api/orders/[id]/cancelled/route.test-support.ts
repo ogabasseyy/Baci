@@ -12,7 +12,7 @@ export function createSupabase() {
   });
   const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
   const persistedMode = vi.fn().mockResolvedValue({
-    data: { cancellation_refund_mode: 'automatic' },
+    data: { cancellation_refund_mode: 'automatic', currency: 'NGN' },
     error: null,
   });
   const ledgerRows = vi.fn().mockResolvedValue({

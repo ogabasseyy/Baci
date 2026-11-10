@@ -52,8 +52,13 @@ describe('merchant cancellation refund-mode migration', () => {
     // No status allow-list: terminal refund rows seed it too.
     expect(branch).not.toContain("r.status NOT IN ('completed', 'refunded')");
     // Only a dead rejection (no provider identity) is exempt.
+    // NULL-safe: a failed row with no verdict stamp must still seed the step,
+    // so only an explicit 'failed' stamp (via COALESCE) is exempt.
     expect(branch).toContain(
-      "r.metadata->>'provider_refund_status' = 'failed'"
+      "COALESCE(r.metadata->>'provider_refund_status', '') = 'failed'"
+    );
+    expect(branch).not.toMatch(
+      /AND r\.metadata->>'provider_refund_status' = 'failed'/
     );
   });
 

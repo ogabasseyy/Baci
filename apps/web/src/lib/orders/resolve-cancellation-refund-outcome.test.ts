@@ -19,7 +19,10 @@ const leg = (over: Record<string, unknown> = {}) => ({
 function supabaseWith({
   evidence = { data: false, error: null } as unknown,
   ledger = { data: [leg()], error: null } as unknown,
-  mode = { data: { cancellation_refund_mode: 'automatic' }, error: null },
+  mode = {
+    data: { cancellation_refund_mode: 'automatic', currency: 'NGN' },
+    error: null,
+  },
 }: {
   evidence?: unknown;
   ledger?: unknown;
@@ -267,6 +270,36 @@ describe('resolveCancellationRefundOutcome', () => {
           evidence: { data: null, error: { message: 'x' } },
         }),
       })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
+
+  it('reports unknown for a single USD capture on an NGN order', async () => {
+    const supabase = supabaseWith({
+      ledger: { data: [leg({ currency: 'USD' })], error: null },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
+
+  it('defaults a blank order currency to NGN like the worker', async () => {
+    const supabase = supabaseWith({
+      mode: {
+        data: { cancellation_refund_mode: 'manual', currency: '' },
+        error: null,
+      },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toMatchObject({ outcome: 'manual_required' });
+  });
+
+  it('reports unknown when the order currency cannot be read', async () => {
+    const supabase = supabaseWith({
+      mode: { data: null, error: { message: 'x' } },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
     ).resolves.toEqual({ outcome: 'unknown' });
   });
 });

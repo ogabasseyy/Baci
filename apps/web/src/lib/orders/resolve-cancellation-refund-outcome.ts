@@ -63,6 +63,16 @@ export async function resolveCancellationRefundOutcome({
       { p_order_id: orderId }
     );
     if (evidenceError || hasEvidence !== false) return { outcome: 'unknown' };
+    // The order's own currency (explicit column, merchant-scoped): never infer
+    // it from a capture, or a single foreign-currency capture would pass the
+    // plan's currency check. A failed read reports unknown.
+    const { data: orderRow, error: orderError } = await supabase
+      .from('orders')
+      .select('currency')
+      .eq('id', orderId)
+      .eq('merchant_id', merchantId)
+      .maybeSingle();
+    if (orderError || !orderRow) return { outcome: 'unknown' };
     const { data, error } = await supabase
       .from('transactions')
       .select(
@@ -94,10 +104,9 @@ export async function resolveCancellationRefundOutcome({
       transaction_type: string;
     }>;
     const plan = getCancelRefundPlan({
-      // The order currency is not read here; the first payment leg's stands
-      // in for it (the worker quarantines mixed-currency orders anyway).
-      orderCurrency: rows.find((row) => row.transaction_type === 'payment')
-        ?.currency,
+      // A blank order currency defaults to NGN inside the plan, like the
+      // worker's preflight gate.
+      orderCurrency: orderRow.currency,
       paymentStatus: 'Paid',
       total: 0,
       transactions: rows.map((row) => ({

@@ -209,14 +209,17 @@ BEGIN
       -- manual mode still blocks every new initiation, so seeding only
       -- enables verification and finalization. The one exclusion mirrors the
       -- worker (collectAwaitingCancellationRefundLegs): a definitive
-      -- provider rejection with no provider identity can never recover.
+      -- provider rejection (explicit failed stamp) with no provider
+      -- identity can never recover.
       SELECT 1 FROM public.transactions r
        WHERE r.order_id = p_order_id
          AND r.merchant_id = v_order.merchant_id
          AND r.transaction_type = 'refund'
          AND NOT (
            r.status = 'failed'
-           AND r.metadata->>'provider_refund_status' = 'failed'
+           -- NULL-safe: only an EXPLICIT provider 'failed' stamp is a
+           -- definitive rejection; a missing verdict must still seed the step.
+           AND COALESCE(r.metadata->>'provider_refund_status', '') = 'failed'
            AND COALESCE(r.gateway_reference, '') !~ '^[1-9][0-9]*$'
            AND COALESCE(r.metadata->>'provider_refund_id', '') !~ '^[1-9][0-9]*$'
          )

@@ -42,4 +42,16 @@ describe('order-gigl-address-draft', () => {
     expect(next).toEqual({ address: 'Somewhere', city: '', state: '' });
     expect('latitude' in next).toBe(false);
   });
+
+  it('drops an out-of-range or non-finite pin from a selected place', () => {
+    const base = { address: 'X', city: 'A', state: 'B' };
+    expect(
+      'latitude' in
+        applySelectedPlace({}, { ...base, latitude: 91, longitude: 3 })
+    ).toBe(false);
+    expect(
+      'latitude' in
+        applySelectedPlace({}, { ...base, latitude: Number.NaN, longitude: 3 })
+    ).toBe(false);
+  });
 });

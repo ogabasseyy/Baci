@@ -26,7 +26,11 @@ export function applySelectedPlace(
   place: OrderGiglSelectedPlace
 ): Draft {
   const { latitude: _lat, longitude: _lng, ...rest } = draft;
-  const hasPin = place.latitude !== undefined && place.longitude !== undefined;
+  const hasPin =
+    Number.isFinite(place.latitude) &&
+    Number.isFinite(place.longitude) &&
+    Math.abs(place.latitude as number) <= 90 &&
+    Math.abs(place.longitude as number) <= 180;
   return {
     ...rest,
     address: place.address,

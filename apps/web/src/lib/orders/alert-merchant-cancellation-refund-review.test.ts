@@ -16,6 +16,7 @@ import {
   merchant,
   order,
   review,
+  withAbort,
 } from './refund-alert.test-support';
 import type { RefundReviewAlertSenders } from './refund-alert-types';
 
@@ -232,9 +233,11 @@ describe('alertMerchantOfRefundReview', () => {
     const supabase = makeSupabase();
     supabase.insert.mockImplementation(
       () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve({ error: null }), 6_000)
-        )
+        withAbort(
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ error: null }), 6_000)
+          )
+        ) as never
     );
     const senders = makeSenders({
       sendEmail: vi.fn(() => new Promise<never>(() => {})),

@@ -124,4 +124,58 @@ describe('alertMerchantOfRefundReview retries', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('claim deadlines', () => {
+    it('defers by the deadline, aborts the claim and never delivers on a slow insert', async () => {
+      vi.useFakeTimers();
+      const supabase = makeSupabase();
+      let aborted = false;
+      supabase.insert.mockImplementation(
+        () =>
+          ({
+            abortSignal: (signal: AbortSignal) => {
+              signal.addEventListener('abort', () => {
+                aborted = true;
+              });
+              return new Promise(() => {});
+            },
+          }) as never
+      );
+      const senders = makeSenders();
+      const pending = alertMerchantOfRefundReview({
+        deadlineMs: Date.now() + 9_000,
+        merchant,
+        order,
+        review,
+        senders,
+        supabase: asSupabase(supabase),
+      });
+      await vi.advanceTimersByTimeAsync(9_000);
+      await expect(pending).resolves.toBe('deferred');
+      expect(aborted).toBe(true);
+      expect(senders.sendPush).not.toHaveBeenCalled();
+      expect(senders.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('defers on a slow compare-and-set re-claim without delivering', async () => {
+      vi.useFakeTimers();
+      const supabase = makeSupabase();
+      supabase.reclaimChain.select.mockImplementation(
+        () => ({ abortSignal: () => new Promise(() => {}) }) as never
+      );
+      const senders = makeSenders();
+      const pending = alertMerchantOfRefundReview({
+        deadlineMs: Date.now() + 9_000,
+        merchant,
+        order,
+        prior: { attempts: 1 },
+        review,
+        senders,
+        supabase: asSupabase(supabase),
+      });
+      await vi.advanceTimersByTimeAsync(9_000);
+      await expect(pending).resolves.toBe('deferred');
+      expect(senders.sendPush).not.toHaveBeenCalled();
+    });
+  });
 });

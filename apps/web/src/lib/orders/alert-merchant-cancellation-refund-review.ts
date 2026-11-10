@@ -5,6 +5,7 @@ import {
   markUndeliverable,
 } from '@/lib/orders/refund-alert-claims';
 import { deliverAlert } from '@/lib/orders/refund-alert-delivery';
+import { runBounded } from '@/lib/orders/refund-alert-lookup';
 import type {
   AlertSupabase,
   ChannelOutcome,
@@ -102,7 +103,24 @@ export async function alertMerchantOfRefundReview({
         ? Number.POSITIVE_INFINITY
         : deadlineMs - Date.now();
     if (remainingMs < MIN_ALERT_BUDGET_MS) return 'deferred';
-    const claim = await claimAlert(supabase, review, order, prior);
+    // Bound the claim write by the absolute phase deadline (abortable). A
+    // timed-out write may still land server-side: that leaves an unconfirmed
+    // claim which the next pass re-drives after the cool-down, the intended
+    // safe outcome. Delivery never starts after a timed-out claim, and the
+    // pass stops on 'deferred', so a late-landing claim cannot cause a
+    // duplicate send within this pass.
+    const claimResult = await runBounded(deadlineMs, (signal) =>
+      claimAlert(supabase, review, order, prior, signal)
+    );
+    if (claimResult.timedOut) {
+      logger.warn({
+        message: 'Cancellation refund alert claim timed out; deferring',
+        orderId: order.id,
+        reviewId: review.id,
+      });
+      return 'deferred';
+    }
+    const claim = claimResult.value;
     if (claim === 'duplicate') return 'duplicate';
     if (claim === 'error') return 'skipped';
     let timer: ReturnType<typeof setTimeout> | undefined;

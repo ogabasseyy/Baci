@@ -18,16 +18,25 @@ export const review = {
   metadata: { ambiguous_initiation: false } as unknown,
 };
 
+/** Promise that also exposes the builder's abortSignal(), like postgrest. */
+export function withAbort<T>(promise: Promise<T>) {
+  return Object.assign(promise, { abortSignal: () => promise });
+}
+
 export function makeSupabase(
   insertError: { code: string } | null = null,
   reclaimed: unknown[] = [{ review_id: 'review-1' }]
 ) {
-  const insert = vi.fn().mockResolvedValue({ error: insertError });
+  const insert = vi.fn(() =>
+    withAbort(Promise.resolve({ error: insertError }))
+  );
   const confirmEq = vi.fn().mockResolvedValue({ error: null });
   const reclaimChain = {
     eq: vi.fn(() => reclaimChain),
     is: vi.fn(() => reclaimChain),
-    select: vi.fn().mockResolvedValue({ data: reclaimed, error: null }),
+    select: vi.fn(() =>
+      withAbort(Promise.resolve({ data: reclaimed, error: null }))
+    ),
   };
   const update = vi.fn((values: Record<string, unknown>) =>
     'confirmed_at' in values || typeof values.undeliverable_at === 'string'

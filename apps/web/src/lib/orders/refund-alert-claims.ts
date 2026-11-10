@@ -17,10 +17,11 @@ export async function claimAlert(
   supabase: AlertSupabase,
   review: { id: string },
   order: RefundReviewAlertOrder,
-  prior: PriorAlertAttempt | null
+  prior: PriorAlertAttempt | null,
+  signal?: AbortSignal
 ): Promise<ClaimResult> {
   if (prior) {
-    const { data, error } = await supabase
+    const reclaim = supabase
       .from('order_cancellation_refund_alerts')
       .update({
         attempts: prior.attempts + 1,
@@ -31,6 +32,9 @@ export async function claimAlert(
       .eq('attempts', prior.attempts)
       .is('confirmed_at', null)
       .select('review_id');
+    const { data, error } = await (signal
+      ? reclaim.abortSignal(signal)
+      : reclaim);
     if (error) {
       logger.error({
         error,
@@ -43,13 +47,12 @@ export async function claimAlert(
     // No row matched: another worker already re-claimed it (benign).
     return Array.isArray(data) && data.length > 0 ? 'claimed' : 'duplicate';
   }
-  const { error } = await supabase
-    .from('order_cancellation_refund_alerts')
-    .insert({
-      merchant_id: order.merchant_id,
-      order_id: order.id,
-      review_id: review.id,
-    });
+  const insert = supabase.from('order_cancellation_refund_alerts').insert({
+    merchant_id: order.merchant_id,
+    order_id: order.id,
+    review_id: review.id,
+  });
+  const { error } = await (signal ? insert.abortSignal(signal) : insert);
   if (!error) return 'claimed';
   if ((error as { code?: string }).code === '23505') return 'duplicate';
   logger.error({

@@ -15,6 +15,9 @@ export function createSupabase() {
     data: { cancellation_refund_mode: 'automatic' },
     error: null,
   });
+  const pendingRefundLegs = vi
+    .fn()
+    .mockResolvedValue({ data: [], error: null });
   const productsIn = vi.fn().mockResolvedValue({
     data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
     error: null,
@@ -32,6 +35,12 @@ export function createSupabase() {
             })),
           })),
         };
+      }
+      if (table === 'transactions') {
+        const chain: Record<string, unknown> = {};
+        chain.eq = vi.fn(() => chain);
+        chain.limit = pendingRefundLegs;
+        return { select: vi.fn(() => chain) };
       }
       if (table === 'products') {
         return {
@@ -51,5 +60,12 @@ export function createSupabase() {
     }),
     rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
   };
-  return { orderItemsEq, persistedMode, productsIn, supabase, variantsIn };
+  return {
+    orderItemsEq,
+    pendingRefundLegs,
+    persistedMode,
+    productsIn,
+    supabase,
+    variantsIn,
+  };
 }

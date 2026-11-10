@@ -29,6 +29,12 @@ export function createPaidOrderStatusActions(overrides?: {
       shipping_status: 'processing',
       total: 5000,
       updated_at: '',
+      cancel_refund_plan: {
+        amount: 5000,
+        automaticSupported: true,
+        inFlightAmount: 0,
+        ledgerKnown: true,
+      },
       ...overrides?.order,
     },
     setShowCreditModal: vi.fn(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCancelRefundPlan } from './cancel-refund-plan';
+import { getCancelRefundPlan, isPaidStatus } from './cancel-refund-plan';
 
 const getAutomaticCancelRefundAmount = (
   order: Parameters<typeof getCancelRefundPlan>[0]
@@ -52,6 +52,7 @@ describe('getAutomaticCancelRefundAmount', () => {
       amount: 5000,
       automaticSupported: true,
       inFlightAmount: 5000,
+      ledgerKnown: true,
     });
   });
 
@@ -102,6 +103,7 @@ describe('getAutomaticCancelRefundAmount', () => {
       amount: 5000,
       automaticSupported: true,
       inFlightAmount: 0,
+      ledgerKnown: true,
     });
   });
 
@@ -115,6 +117,7 @@ describe('getAutomaticCancelRefundAmount', () => {
       amount: 10000,
       automaticSupported: false,
       inFlightAmount: 0,
+      ledgerKnown: true,
     });
   });
 
@@ -138,6 +141,7 @@ describe('getAutomaticCancelRefundAmount', () => {
       amount: 5000,
       automaticSupported: true,
       inFlightAmount: 0,
+      ledgerKnown: true,
     });
   });
 
@@ -195,6 +199,7 @@ describe('getAutomaticCancelRefundAmount', () => {
       amount: 80,
       automaticSupported: false,
       inFlightAmount: 0,
+      ledgerKnown: true,
     });
   });
 
@@ -215,5 +220,19 @@ describe('getAutomaticCancelRefundAmount', () => {
       ],
     });
     expect(plan.amount).toBe(100);
+  });
+
+  it('flags a plan built without a ledger as unknown', () => {
+    expect(
+      getCancelRefundPlan({ paymentStatus: 'Paid', total: 4000 }).ledgerKnown
+    ).toBe(false);
+  });
+
+  it('recognizes case-variant paid statuses only', () => {
+    expect(isPaidStatus('paid')).toBe(true);
+    expect(isPaidStatus(' PAID ')).toBe(true);
+    expect(isPaidStatus('Paid')).toBe(true);
+    expect(isPaidStatus('unpaid')).toBe(false);
+    expect(isPaidStatus(undefined)).toBe(false);
   });
 });

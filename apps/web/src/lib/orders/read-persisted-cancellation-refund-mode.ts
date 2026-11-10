@@ -5,20 +5,19 @@ export type CancellationRefundMode = 'automatic' | 'manual';
 
 /**
  * The refund mode an already-cancelled order was cancelled with. A legacy
- * null means automatic. When the read fails the requested mode is returned
- * (and the failure logged): the replay itself already succeeded.
+ * null means automatic. When the read fails this returns null (and logs):
+ * callers must not guess a mode, because a wrong guess can tell a merchant to
+ * refund by hand while an automatic refund is queued.
  */
 export async function readPersistedCancellationRefundMode({
-  fallback,
   merchantId,
   orderId,
   supabase,
 }: {
-  fallback: CancellationRefundMode;
   merchantId: string;
   orderId: string;
   supabase: Pick<SupabaseClient, 'from'>;
-}): Promise<CancellationRefundMode> {
+}): Promise<CancellationRefundMode | null> {
   const { data, error } = await supabase
     .from('orders')
     .select('cancellation_refund_mode')
@@ -32,7 +31,7 @@ export async function readPersistedCancellationRefundMode({
       merchantId,
       error,
     });
-    return fallback;
+    return null;
   }
   return data.cancellation_refund_mode === 'manual' ? 'manual' : 'automatic';
 }

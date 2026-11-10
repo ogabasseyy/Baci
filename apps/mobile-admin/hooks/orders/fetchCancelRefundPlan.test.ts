@@ -50,6 +50,7 @@ describe('fetchCancelRefundPlan', () => {
       amount: 5000,
       automaticSupported: true,
       inFlightAmount: 0,
+      ledgerKnown: true,
     });
   });
 

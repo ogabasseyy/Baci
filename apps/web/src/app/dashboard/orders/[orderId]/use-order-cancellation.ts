@@ -42,14 +42,22 @@ export function useOrderCancellation({
       onCancelled();
       // A replay keeps the persisted mode, so trust the response over the
       // requested choice when it says what it did.
-      const manualRequired = response?.sideEffects?.refund
-        ? response.sideEffects.refund === 'manual_required'
+      const outcome = response?.sideEffects?.refund;
+      // Only an explicit manual_required (or, with no outcome in the
+      // response, the explicit manual choice) may tell the merchant to
+      // repay by hand; an unknown outcome stays neutral.
+      const manualRequired = outcome
+        ? outcome === 'manual_required'
         : refund === 'manual';
       toast({
         title: 'Order status updated to Canceled',
         ...(manualRequired && {
           description:
             'Refund pending. Record the refund from the Refund card once you have paid the customer.',
+        }),
+        ...(outcome === 'unknown' && {
+          description:
+            "Cancelled. Check the order's Refund card for refund status.",
         }),
       });
       return true;
@@ -67,6 +75,18 @@ export function useOrderCancellation({
   };
 
   const requestCancellation = async () => {
+    // Without a readable ledger we cannot say what is owed, so never offer a
+    // manual refund: cancel neutrally and point at the Refund card.
+    if (!plan.ledgerKnown) {
+      if (
+        !window.confirm(
+          "Refund details could not be loaded. Cancel this order? Any refund is queued automatically, so check the order's Refund card afterwards instead of refunding the customer yourself."
+        )
+      )
+        return;
+      await submit();
+      return;
+    }
     // A paid order with money the worker could refund asks how to refund in
     // a dialog; everything else keeps the plain confirmation.
     if (plan.amount > 0) {

@@ -38,6 +38,11 @@ export interface CancelRefundPlan {
   /** Outstanding external amount the cancellation worker would refund. */
   amount: number;
   /**
+   * False when the ledger could not be read: the plan is then a guess from
+   * the order total, so clients must not offer a manual refund on it.
+   */
+  ledgerKnown: boolean;
+  /**
    * Amount whose provider refund is already in flight (the leg is
    * `refund_pending`). Never refunded again and never to be refunded by
    * hand: the merchant waits for it.
@@ -60,6 +65,11 @@ const FUNDED_LEG_STATUSES: ReadonlySet<string> = new Set([
   'refunded',
 ]);
 
+/** Paid check that tolerates the case variants stored across apps. */
+export function isPaidStatus(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().toLowerCase() === 'paid';
+}
+
 /**
  * Plan for a merchant cancellation of a paid order, matching the worker:
  * funded external payment legs that no completed refund row already
@@ -79,11 +89,10 @@ export function getCancelRefundPlan(
   if (order.transactions === undefined) {
     return {
       amount:
-        order.paymentStatus.trim().toLowerCase() === 'paid' && order.total > 0
-          ? order.total
-          : 0,
+        isPaidStatus(order.paymentStatus) && order.total > 0 ? order.total : 0,
       automaticSupported: true,
       inFlightAmount: 0,
+      ledgerKnown: false,
     };
   }
   const refundRows = order.transactions.filter(
@@ -137,6 +146,7 @@ export function getCancelRefundPlan(
     amount: outstanding.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
     inFlightAmount:
       inFlight.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
+    ledgerKnown: true,
     // A partially covered leg is a coverage mismatch to the worker, which
     // withholds it for review instead of refunding the remainder.
     automaticSupported: outstanding.every(

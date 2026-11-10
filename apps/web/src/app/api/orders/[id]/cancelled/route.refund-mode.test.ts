@@ -113,7 +113,7 @@ describe('POST /api/orders/[id]/cancelled refund mode', () => {
     });
   });
 
-  it('falls back to the requested mode when the persisted mode cannot be read', async () => {
+  it('reports an unknown refund outcome when the persisted mode cannot be read', async () => {
     const { persistedMode, supabase } = createSupabase();
     persistedMode.mockResolvedValue({
       data: null,
@@ -133,7 +133,29 @@ describe('POST /api/orders/[id]/cancelled refund mode', () => {
 
     await expect(response.json()).resolves.toMatchObject({
       alreadyCancelled: true,
-      sideEffects: { refund: 'manual_required' },
+      sideEffects: { refund: 'unknown' },
+    });
+  });
+
+  it('does not claim a manual refund is required while a leg refund is in flight', async () => {
+    const { pendingRefundLegs, supabase } = createSupabase();
+    pendingRefundLegs.mockResolvedValue({
+      data: [{ id: 'leg-1' }],
+      error: null,
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ confirm_cancellation: true, refund: 'manual' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      sideEffects: { refund: 'unknown' },
     });
   });
 

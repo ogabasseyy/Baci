@@ -7,7 +7,7 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
 import { mapCancellationRpcError } from '@/lib/orders/map-cancellation-rpc-error';
-import { readPersistedCancellationRefundMode } from '@/lib/orders/read-persisted-cancellation-refund-mode';
+import { resolveCancellationRefundOutcome } from '@/lib/orders/resolve-cancellation-refund-outcome';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { merchantOrderCancellationSchema } from '@/schemas/orders';
@@ -112,16 +112,15 @@ export async function POST(
     }
     const alreadyCancelled = !cancellationPerformed;
 
-    // A replay changes nothing, so report the mode the order was actually
-    // cancelled with rather than echoing this request's choice.
-    const effectiveRefundMode = alreadyCancelled
-      ? await readPersistedCancellationRefundMode({
-          fallback: refundMode,
-          merchantId,
-          orderId: id,
-          supabase,
-        })
-      : refundMode;
+    // What the response says about the refund: the persisted mode on a
+    // replay, and never a hand-refund claim we are not sure of.
+    const refundOutcome = await resolveCancellationRefundOutcome({
+      alreadyCancelled,
+      merchantId,
+      orderId: id,
+      requested: refundMode,
+      supabase,
+    });
 
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
@@ -264,10 +263,7 @@ export async function POST(
         message: 'Cancellation completed; side effects are queued',
         sideEffects: {
           customerEmail: 'queued',
-          refund:
-            effectiveRefundMode === 'manual'
-              ? 'manual_required'
-              : 'queued_if_required',
+          refund: refundOutcome,
         },
       },
       { status: 202 }

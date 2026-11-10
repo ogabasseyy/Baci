@@ -154,4 +154,46 @@ describe('useOrderCancellation', () => {
       expect.stringContaining('already in progress with the provider')
     );
   });
+
+  it('cancels neutrally without offering a manual refund when the ledger is unavailable', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mocks.apiPost.mockResolvedValue({ success: true });
+    const { result } = renderHook(() =>
+      useOrderCancellation({
+        onCancelled: vi.fn(),
+        order: order({ transactions: undefined } as Partial<Order>),
+      })
+    );
+    await act(() => result.current.requestCancellation());
+    expect(result.current.dialogProps.isOpen).toBe(false);
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('could not be loaded')
+    );
+    expect(mocks.apiPost).toHaveBeenCalledWith(
+      '/api/orders/order-1/cancelled',
+      { cancelled_by: 'merchant', confirm_cancellation: true }
+    );
+  });
+
+  it('shows neutral copy when the server reports an unknown refund outcome', async () => {
+    mocks.apiPost.mockResolvedValue({
+      sideEffects: { refund: 'unknown' },
+      success: true,
+    });
+    const { result } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    await act(() => result.current.requestCancellation());
+    await act(() => result.current.dialogProps.onConfirm('manual'));
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringContaining('Check the order'),
+      })
+    );
+    expect(mocks.toast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringContaining('Refund pending'),
+      })
+    );
+  });
 });

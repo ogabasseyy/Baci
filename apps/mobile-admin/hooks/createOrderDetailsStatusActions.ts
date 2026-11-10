@@ -1,3 +1,4 @@
+import { isPaidStatus } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
 import type { CancellationRefundChoice } from '@/hooks/orders/useOrderStatusUpdate';
@@ -104,11 +105,13 @@ export function createOrderDetailsStatusActions({
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
           : newStatus === 'cancelled'
-            ? refundIsManual
-              ? 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.'
-              : order.payment_status === 'paid' || order.amount_paid > 0
-                ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
-                : 'The customer notification has been queued.'
+            ? refundOutcome === 'unknown'
+              ? "The customer notification has been queued. Check the order's refund status; do not refund the customer by hand until it shows what is owed."
+              : refundIsManual
+                ? 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.'
+                : isPaidStatus(order.payment_status) || order.amount_paid > 0
+                  ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
+                  : 'The customer notification has been queued.'
             : '';
 
       setSuccessModal({
@@ -178,14 +181,31 @@ export function createOrderDetailsStatusActions({
       return;
     }
 
-    const isPaid = order.payment_status === 'paid' || order.amount_paid > 0;
+    const isPaid = isPaidStatus(order.payment_status) || order.amount_paid > 0;
     // The plan (outstanding external legs, Paystack-only automatic refunds)
-    // is best effort: unknown keeps the safe default prompt below, and the
-    // server stays the real gate.
+    // is best effort. Without it we cannot say what is owed, so never offer
+    // a manual refund: cancel neutrally and point at the refund status.
     const plan = order.cancel_refund_plan;
-    const hasRefundChoice = isPaid && (plan === undefined || plan.amount > 0);
-    if (hasRefundChoice) {
-      const automaticSupported = plan?.automaticSupported ?? true;
+    if (isPaid && plan === undefined) {
+      Alert.alert(
+        'Cancel order?',
+        "Refund details could not be loaded. Any refund is queued automatically, so check the order's refund status afterwards instead of refunding the customer yourself. This cannot be undone.",
+        [
+          { text: 'Keep Order', style: 'cancel' },
+          {
+            text: 'Cancel Order',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus);
+            },
+          },
+        ]
+      );
+      return;
+    }
+    const hasRefundChoice = isPaid && plan !== undefined && plan.amount > 0;
+    if (hasRefundChoice && plan) {
+      const automaticSupported = plan.automaticSupported;
       // The safe automatic path is listed first (Android positions buttons
       // by order). Mobile has no staff permission data, so it always offers
       // the automatic action; for legs the worker cannot refund itself that
@@ -193,7 +213,7 @@ export function createOrderDetailsStatusActions({
       // permission, which the server enforces with a 403.
       const noteCurrency = order.currency?.trim() || 'NGN';
       const inFlightNote =
-        plan && plan.inFlightAmount > 0
+        plan.inFlightAmount > 0
           ? ` The provider is already refunding ${formatCurrency(plan.inFlightAmount, undefined, noteCurrency)} of this payment: only the remaining ${formatCurrency(plan.amount, undefined, noteCurrency)} is yours to refund, so do not refund the rest yourself.`
           : '';
       Alert.alert(

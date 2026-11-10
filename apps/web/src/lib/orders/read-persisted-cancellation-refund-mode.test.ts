@@ -14,7 +14,7 @@ function supabaseReturning(result: { data: unknown; error: unknown }) {
   } as never;
 }
 
-const args = { fallback: 'manual' as const, merchantId: 'm1', orderId: 'o1' };
+const args = { merchantId: 'm1', orderId: 'o1' };
 
 describe('readPersistedCancellationRefundMode', () => {
   it('returns the persisted manual mode', async () => {
@@ -25,7 +25,6 @@ describe('readPersistedCancellationRefundMode', () => {
     await expect(
       readPersistedCancellationRefundMode({
         ...args,
-        fallback: 'automatic',
         supabase,
       })
     ).resolves.toBe('manual');
@@ -41,13 +40,13 @@ describe('readPersistedCancellationRefundMode', () => {
     ).resolves.toBe('automatic');
   });
 
-  it('falls back to the requested mode when the read fails', async () => {
+  it('returns null instead of guessing when the read fails', async () => {
     const supabase = supabaseReturning({
       data: null,
       error: { message: 'down' },
     });
     await expect(
       readPersistedCancellationRefundMode({ ...args, supabase })
-    ).resolves.toBe('manual');
+    ).resolves.toBeNull();
   });
 });

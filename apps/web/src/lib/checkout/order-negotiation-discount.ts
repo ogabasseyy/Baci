@@ -4,6 +4,7 @@ import {
   makeOfferLineKey,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { after } from 'next/server';
 import {
   loadOrderConditionPrices,
   orderConditionPrice,
@@ -62,6 +63,7 @@ export async function computeOrderNegotiationDiscount({
   vatRegistered,
   allowUnavailableConditionPrices,
   conditionPriceOverrides,
+  monitorCostFloor = false,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
@@ -72,6 +74,9 @@ export async function computeOrderNegotiationDiscount({
   supabase: SupabaseClient;
   allowUnavailableConditionPrices?: boolean;
   conditionPriceOverrides?: Map<string, number>;
+  // Set by the route only when the validated discount will actually be
+  // charged; enables the observation-only cost-floor log.
+  monitorCostFloor?: boolean;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
   vatRegistered: boolean;
@@ -223,19 +228,29 @@ export async function computeOrderNegotiationDiscount({
     lines,
     MAX_AUTO_NEGOTIATION_DISCOUNT_RATE
   );
-  // Observation only (never alters the result): flag accepted discounts that
+  // Observation only (never alters the result): flag charged discounts that
   // land under the merchant's cost floor so the exposure can be measured.
-  if (!result.rejectionCode && result.totalDiscount > 0) {
-    await monitorNegotiationCostFloor({
-      supabase,
-      merchantId,
-      lines: lines.map((line) => ({
-        productId: line.productId,
-        catalogUnitPrice: line.catalogUnitPrice,
-        clientUnitPrice: line.clientUnitPrice,
-        negotiable: line.negotiable,
-      })),
-    });
+  // Runs after the response so checkout latency is unaffected.
+  if (monitorCostFloor && !result.rejectionCode && result.totalDiscount > 0) {
+    const monitorLines = lines.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId,
+      catalogUnitPrice: line.catalogUnitPrice,
+      clientUnitPrice: line.clientUnitPrice,
+      negotiable: line.negotiable,
+    }));
+    const run = () =>
+      monitorNegotiationCostFloor({
+        supabase,
+        merchantId,
+        lines: monitorLines,
+      });
+    try {
+      after(run);
+    } catch {
+      // Outside a request scope (scripts/tests): run detached, never awaited.
+      void run();
+    }
   }
 
   return applyPersistedLineOccurrenceKeys(result, indexedItems, productMap);

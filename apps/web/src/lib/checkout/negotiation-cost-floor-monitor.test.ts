@@ -6,19 +6,26 @@ vi.mock('@/lib/logger', () => ({ logger: { warn } }));
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { monitorNegotiationCostFloor } from './negotiation-cost-floor-monitor';
 
-function clientReturning(result: { data: unknown; error: unknown }) {
-  const query = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    overrideTypes: vi.fn().mockResolvedValue(result),
-  };
-  const from = vi.fn().mockReturnValue(query);
+type Result = { data: unknown; error: unknown };
+
+function clientReturning(tables: Record<string, Result>) {
+  const from = vi.fn((table: string) => {
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      overrideTypes: vi
+        .fn()
+        .mockResolvedValue(tables[table] ?? { data: [], error: null }),
+    };
+    return query;
+  });
   return { client: { from } as unknown as SupabaseClient, from };
 }
 
-const line = (clientUnitPrice: number) => ({
+const line = (clientUnitPrice: number, variantId: string | null = null) => ({
   productId: 'p1',
+  variantId,
   catalogUnitPrice: 100,
   clientUnitPrice,
   negotiable: true,
@@ -27,43 +34,79 @@ const line = (clientUnitPrice: number) => ({
 describe('monitorNegotiationCostFloor', () => {
   beforeEach(() => warn.mockReset());
 
-  it('logs when a negotiated price is under cost * 1.1, without cost values', async () => {
+  it('logs one aggregated entry when a price is under cost * 1.1, without cost values', async () => {
     const { client } = clientReturning({
-      data: [{ id: 'p1', cost_price: 95 }],
-      error: null,
+      products: { data: [{ id: 'p1', cost_price: 95 }], error: null },
     });
     await monitorNegotiationCostFloor({
       supabase: client,
       merchantId: 'm1',
-      lines: [line(98)],
+      lines: [line(98), { ...line(97), productId: 'p1' }],
     });
     expect(warn).toHaveBeenCalledTimes(1);
     const payload = warn.mock.calls[0][0];
-    expect(payload).toMatchObject({
+    expect(payload.breaches).toHaveLength(2);
+    expect(payload.breaches[0]).toMatchObject({
       productId: 'p1',
-      belowCostFloor: true,
+      negotiatedUnitPrice: 98,
       belowCost: false,
     });
-    expect(JSON.stringify(payload)).not.toContain('95');
+    expect(JSON.stringify(payload)).not.toContain('"cost');
   });
 
   it('flags belowCost when the price is under cost itself', async () => {
     const { client } = clientReturning({
-      data: [{ id: 'p1', cost_price: 99 }],
-      error: null,
+      products: { data: [{ id: 'p1', cost_price: 99 }], error: null },
     });
     await monitorNegotiationCostFloor({
       supabase: client,
       merchantId: 'm1',
       lines: [line(98)],
     });
-    expect(warn.mock.calls[0][0]).toMatchObject({ belowCost: true });
+    expect(warn.mock.calls[0][0].breaches[0]).toMatchObject({
+      belowCost: true,
+    });
+  });
+
+  it('uses the variant cost over the parent cost (regression: variant at cost 99, parent 60)', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
+      product_variants: {
+        data: [{ id: 'v1', product_id: 'p1', cost_price: 99 }],
+        error: null,
+      },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98, 'v1')],
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0].breaches[0]).toMatchObject({
+      variantId: 'v1',
+      belowCost: true,
+    });
+  });
+
+  it('falls back to the parent cost when the variant has none', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 95 }], error: null },
+      product_variants: {
+        data: [{ id: 'v1', product_id: 'p1', cost_price: null }],
+        error: null,
+      },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98, 'v1')],
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it('stays silent when the price clears the cost floor', async () => {
     const { client } = clientReturning({
-      data: [{ id: 'p1', cost_price: 60 }],
-      error: null,
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
     });
     await monitorNegotiationCostFloor({
       supabase: client,
@@ -74,7 +117,7 @@ describe('monitorNegotiationCostFloor', () => {
   });
 
   it('skips the lookup for non-discounted or non-negotiable lines', async () => {
-    const { client, from } = clientReturning({ data: [], error: null });
+    const { client, from } = clientReturning({});
     await monitorNegotiationCostFloor({
       supabase: client,
       merchantId: 'm1',
@@ -85,8 +128,10 @@ describe('monitorNegotiationCostFloor', () => {
 
   it('never throws when the cost lookup errors or the column is unreadable', async () => {
     const { client } = clientReturning({
-      data: null,
-      error: { message: 'permission denied for column cost_price' },
+      products: {
+        data: null,
+        error: { message: 'permission denied for column cost_price' },
+      },
     });
     await expect(
       monitorNegotiationCostFloor({

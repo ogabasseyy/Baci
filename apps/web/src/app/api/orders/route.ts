@@ -1327,6 +1327,14 @@ export async function POST(request: NextRequest) {
           conditionPriceOverrides,
           items: orderItemsPayload,
           merchantId: merchant_id,
+          // Mirrors shouldApplyServerDerivedDiscount below: only discounts
+          // that will really be charged feed the cost-floor measurement.
+          monitorCostFloor:
+            !redvaultRequested &&
+            merchantCanAutoNegotiate &&
+            !requestedDiscountCode &&
+            (typeof body.expected_total === 'number' ||
+              source === 'mobile_app'),
           offerPrices: liveOfferPrices,
           supabase,
           vatRegistered,

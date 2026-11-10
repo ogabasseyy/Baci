@@ -175,7 +175,12 @@ BEGIN
 
   -- 'manual' leaves the order without a refund step on purpose: the
   -- merchant refunds outside Baci and records it from the Refund card.
-  IF v_refund_mode = 'automatic' AND EXISTS (
+  -- The exception is a leg whose provider refund is already pending or
+  -- terminal (e.g. PayPal flips the payment row itself): those still need
+  -- the row so the drain waits for the provider and runs aggregate
+  -- finalization, while the worker never initiates a refund in manual
+  -- mode (the persisted mode suppresses initiation).
+  IF EXISTS (
     SELECT 1 FROM public.transactions t
      WHERE t.order_id = p_order_id
        AND t.merchant_id = v_order.merchant_id
@@ -185,6 +190,10 @@ BEGIN
        -- refund is pending or terminal) need the row so the drain
        -- resumes them and runs aggregate finalization.
        AND t.status IN ('completed', 'refund_pending', 'refunded')
+       AND (
+         v_refund_mode = 'automatic'
+         OR t.status IN ('refund_pending', 'refunded')
+       )
        AND t.amount > 0
        AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'

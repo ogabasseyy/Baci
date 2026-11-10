@@ -273,7 +273,10 @@ describe('cancellation refund plan', () => {
     });
     await actions.handleStatusUpdate('cancelled');
     const call = vi.mocked(Alert.alert).mock.calls[0];
-    expect(call?.[1]).toContain('only the remaining 3000 is yours to refund');
+    expect(call?.[1]).toMatch(/refunding .*2,000\.00 of this payment/);
+    expect(call?.[1]).toMatch(
+      /only the remaining .*3,000\.00 is yours to refund/
+    );
     expect(call?.[2]?.map((button) => button.text)).toContain(
       'Cancel only (I will refund them)'
     );

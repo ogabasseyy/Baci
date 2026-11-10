@@ -21,8 +21,12 @@ describe('merchant cancellation refund-mode migration', () => {
     expect(sql).toContain("'invalid_refund_mode'");
   });
 
-  it('seeds the refund step only for the automatic mode', () => {
-    expect(sql).toContain("IF v_refund_mode = 'automatic' AND EXISTS (");
+  it('seeds the refund step for automatic mode, and in manual mode only for refund-state legs', () => {
+    expect(sql).toMatch(
+      /IF EXISTS \([\s\S]*?v_refund_mode = 'automatic'\s+OR t\.status IN \('refund_pending', 'refunded'\)[\s\S]*?\) THEN\s+INSERT INTO public\.order_cancellation_side_effects[\s\S]*?'refund'/
+    );
+    // A completed leg alone never seeds the refund step in manual mode.
+    expect(sql).not.toMatch(/IF v_refund_mode = 'manual' AND EXISTS/);
     // The customer email step stays unconditional.
     expect(sql).toMatch(/'customer_email', 'failed'/);
   });

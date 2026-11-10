@@ -222,4 +222,22 @@ describe('preflightCancellationRefundCoverage', () => {
     expect(outcome.manualPendingLegIds.has('payment-2')).toBe(true);
     expect(outcome.manualPendingLegIds.has(paystackPayment.id)).toBe(false);
   });
+
+  it('waits for the provider on a cancel-only order whose leg refund is pending', async () => {
+    const pending = { ...paystackPayment, status: 'refund_pending' };
+    const error = await preflightCancellationRefundCoverage(
+      input({
+        allLegs: [pending],
+        linkLegs: [pending],
+        order: { ...order, cancellation_refund_mode: 'manual' },
+        soleCompletedLeg: undefined,
+        transactions: [pending],
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(quarantineRefund).not.toHaveBeenCalled();
+  });
 });

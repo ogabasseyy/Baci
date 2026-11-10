@@ -83,7 +83,10 @@
         "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts",
         "supabase/migrations/20261111090100_merchant_cancel_order_refund_mode.sql",
         "packages/shared/src/lib/cancel-refund-plan.ts",
-        "apps/web/src/app/api/orders/[id]/cancelled/route.ts"
+        "apps/web/src/app/api/orders/[id]/cancelled/route.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/use-order-cancellation.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/cancel-order-dialog.tsx",
+        "apps/mobile-admin/hooks/createOrderDetailsStatusActions.ts"
       ]
     },
     {

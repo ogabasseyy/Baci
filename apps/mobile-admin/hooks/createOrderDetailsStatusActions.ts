@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
 import type { CancellationRefundChoice } from '@/hooks/orders/useOrderStatusUpdate';
 import type { ShippingStatus } from '@/hooks/useOrders';
+import { formatCurrency } from '@/lib/utils';
 
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
 
@@ -192,7 +193,7 @@ export function createOrderDetailsStatusActions({
       // permission, which the server enforces with a 403.
       const inFlightNote =
         plan && plan.inFlightAmount > 0
-          ? ` The provider is already refunding ${plan.inFlightAmount} of this payment: only the remaining ${plan.amount} is yours to refund, so do not refund the rest yourself.`
+          ? ` The provider is already refunding ${formatCurrency(plan.inFlightAmount, undefined, order.currency || 'NGN')} of this payment: only the remaining ${formatCurrency(plan.amount, undefined, order.currency || 'NGN')} is yours to refund, so do not refund the rest yourself.`
           : '';
       Alert.alert(
         'Cancel paid order?',

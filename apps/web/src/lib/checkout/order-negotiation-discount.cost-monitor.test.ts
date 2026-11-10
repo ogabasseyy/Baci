@@ -80,4 +80,24 @@ describe('computeOrderNegotiationDiscount cost-floor monitor gate', () => {
     await run(1000, true);
     expect(monitor).not.toHaveBeenCalled();
   });
+
+  it('forwards no variant id when it does not belong to the line product (regression: foreign variant resolved another product cost)', async () => {
+    const supabase = supabaseWithProduct();
+    supabase.rpc = vi.fn(() =>
+      Promise.resolve({
+        data: [{ id: 'v-foreign', product_id: 'other', price_override: null }],
+        error: null,
+      })
+    );
+    await computeOrderNegotiationDiscount({
+      items: [
+        { product_id: 'p1', variant_id: 'v-foreign', quantity: 1, price: 980 },
+      ],
+      merchantId: 'm1',
+      supabase: supabase as never,
+      vatRegistered: true,
+      monitorCostFloor: true,
+    });
+    expect(monitor.mock.calls[0][0].lines[0].variantId).toBeNull();
+  });
 });

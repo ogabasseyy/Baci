@@ -21,7 +21,10 @@ function positiveCost(value: number | string | null | undefined) {
 }
 
 /**
- * Observation only. Logs when a below-catalog negotiated unit price falls
+ * Observation only. Log counts are CANDIDATE orders (a later payment/RPC
+ * failure or an idempotent retry still logs), so size exposure from them
+ * as an upper bound, not as realized losses.
+ * Logs when a below-catalog negotiated unit price falls
  * under the merchant's cost floor (cost * 1.1) or under cost itself.
  *
  * Never throws and never changes the order: the cost column is a private
@@ -72,6 +75,7 @@ export async function monitorNegotiationCostFloor({
       const { data: variants, error: variantError } = await supabase
         .from('product_variants')
         .select('id, product_id, cost_price')
+        .eq('merchant_id', merchantId)
         .in('id', variantIds)
         .overrideTypes<VariantCostRow[], { merge: false }>();
       if (!variantError && variants) {

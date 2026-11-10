@@ -167,6 +167,10 @@ export async function computeOrderNegotiationDiscount({
   );
 
   const lines: NegotiationLineInput[] = [];
+  // Cost-floor measurement input: only the variant linkage validated against
+  // the line's product is forwarded (a foreign/mismatched id prices from the
+  // parent and must not resolve another product's cost).
+  const validatedVariantIds: Array<string | null> = [];
   for (const { item, lineId } of validatableItems) {
     if (!item.product_id) {
       return null;
@@ -190,6 +194,7 @@ export async function computeOrderNegotiationDiscount({
       item.offer_id && item.product_id
         ? offerPrices?.get(makeOfferLineKey(item.product_id, item.offer_id))
         : undefined;
+    validatedVariantIds.push(variant ? (item.variant_id ?? null) : null);
     lines.push({
       catalogUnitPrice: Number(
         orderConditionPrice(conditionPrices, item) ??
@@ -232,9 +237,9 @@ export async function computeOrderNegotiationDiscount({
   // land under the merchant's cost floor so the exposure can be measured.
   // Runs after the response so checkout latency is unaffected.
   if (monitorCostFloor && !result.rejectionCode && result.totalDiscount > 0) {
-    const monitorLines = lines.map((line) => ({
+    const monitorLines = lines.map((line, index) => ({
       productId: line.productId,
-      variantId: line.variantId,
+      variantId: validatedVariantIds[index] ?? null,
       catalogUnitPrice: line.catalogUnitPrice,
       clientUnitPrice: line.clientUnitPrice,
       negotiable: line.negotiable,

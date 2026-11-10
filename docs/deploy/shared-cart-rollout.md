@@ -67,7 +67,7 @@ and enrollment gates in the release sequence below.
   `commerce_cart_publish_health()` reports stale and dead-lettered notices
   as counts for alerting. The sweep sends at most 100 notices a minute, so
   when a merchant with an existing undelivered backlog is first enrolled,
-  drain it by calling `commerce_cart_publish_events(50, '<operator>')`
+  drain it by calling `commerce_cart_publish_events(50, 'operator-backfill')`
   repeatedly before relying on the alarm; otherwise
   `/api/cron/cart-notice-health` reports the old backlog as stale until the
   sweep catches up. A notice that fails ten sends is dead-lettered and not

@@ -21,8 +21,8 @@ const NO_CHANGES = {
   test_plan_mode: 'targeted',
 };
 
-function lintRunner({ isPrivate, enabled, event, headRepository, repository }) {
-  return privateRunnerRoute(workflow, 'quality-lint', { 'github.event.repository.private': isPrivate, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': headRepository, 'github.repository': repository });
+function lintRunner({ isPrivate, enabled, event, headRepository, repository }, field = 'runs-on') {
+  return privateRunnerRoute(workflow, 'quality-lint', { 'github.event.repository.private': isPrivate, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': headRepository, 'github.repository': repository }, field);
 }
 
 test('routes lint to the private runner only for an opted-in private repository and trusted PR head', () => {
@@ -35,6 +35,10 @@ test('routes lint to the private runner only for an opted-in private repository 
   };
   const privateRunner = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
   assert.deepEqual(lintRunner(trusted), privateRunner);
+  assert.equal(lintRunner(trusted, 'timeout-minutes'), 30);
+  assert.equal(lintRunner({ ...trusted, isPrivate: false }, 'timeout-minutes'), 15);
+  assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }, 'timeout-minutes'), 15);
+  assert.equal(lintRunner({ ...trusted, event: 'merge_group' }, 'timeout-minutes'), 15);
   assert.equal(lintRunner({ ...trusted, isPrivate: false }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, isPrivate: null }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, enabled: '' }), 'ubuntu-24.04');

@@ -138,7 +138,8 @@ jobs:
     # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
+    # Cold cache restores can take over ten minutes on the private runner.
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && 30 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -699,6 +700,10 @@ jobs:
         uses: ./.github/actions/storefront-release-tests
       - name: Run Knip Dead Code Check
         if: needs.changes.outputs.web == 'true'
+        # The repository-wide analysis exceeds Node's default ~2 GiB heap.
+        # Scope the larger limit to Knip so other steps retain their defaults.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm knip
 
 
@@ -843,7 +848,9 @@ jobs:
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache
         name: Restore Next.js build cache
-        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        # Avoid hashing the full installed workspace and restoring a shared
+        # cache on the persistent private runner; cold builds were tested there.
+        if: runner.environment == 'github-hosted' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/apps/web/.next/cache

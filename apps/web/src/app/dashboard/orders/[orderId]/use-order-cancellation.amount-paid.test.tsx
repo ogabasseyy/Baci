@@ -64,7 +64,10 @@ describe('useOrderCancellation recorded amount paid', () => {
   ])('cancels neutrally when %s', async (_name, over) => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     const { result: hook } = renderHook(() =>
-      useOrderCancellation({ onCancelled: vi.fn(), order: order(over) })
+      useOrderCancellation({
+        onCancelled: vi.fn(),
+        order: order(over as Partial<Order>),
+      })
     );
     await act(() => hook.current.requestCancellation());
     expect(hook.current.dialogProps.isOpen).toBe(false);

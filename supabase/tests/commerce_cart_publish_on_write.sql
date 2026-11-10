@@ -271,6 +271,8 @@ DO $$ BEGIN
   END IF;
   IF has_function_privilege('anon', 'public.commerce_cart_publish_events(integer,text)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.commerce_cart_publish_events(integer,text)', 'EXECUTE')
+    OR has_function_privilege('commerce_cart_shopper', 'public.commerce_cart_publish_events(integer,text)', 'EXECUTE')
+    OR has_function_privilege('commerce_cart_receiver', 'public.commerce_cart_publish_events(integer,text)', 'EXECUTE')
     OR NOT has_function_privilege('commerce_cart_worker', 'public.commerce_cart_publish_events(integer,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'publisher execute grants changed';
   END IF;

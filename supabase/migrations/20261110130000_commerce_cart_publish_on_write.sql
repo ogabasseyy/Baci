@@ -194,8 +194,11 @@ END;
 $$;
 ALTER FUNCTION public.commerce_cart_publish_events(integer, text)
   OWNER TO postgres;
+-- Same closed list as 20261014070000; the commerce_cart_worker grant made
+-- there is kept by CREATE OR REPLACE.
 REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, commerce_cart_shopper,
+    commerce_cart_receiver;
 
 -- Health reading for alerting: two counts, no cart or merchant identifiers.
 -- "Stale" is a notice for a live-update merchant still undelivered five
@@ -208,8 +211,12 @@ REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
 -- commerce_cart_events_ready_idx (20261014070000) already narrow; the
 -- dead-letter count uses the index below.
 --
+-- Rows waiting out a retry backoff are counted on purpose: a notice still
+-- unsent five minutes after its cart write has been failing for five
+-- minutes, which is the fault this alarm exists to report.
+--
 -- The reading is deliberately callable with the public anon key (as
--- get_merchant_signup_policy_health is): the monitor route must not use a
+-- get_merchant_signup_policy_health in 20260728091958 is): the monitor route must not use a
 -- service-role client, and the result is two platform-wide counts with no
 -- cart, shopper or merchant data. CRON_SECRET gates the alerting route, not
 -- the counts themselves.

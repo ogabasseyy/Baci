@@ -81,10 +81,10 @@ export function SavingsCardContributionReview({
 
 const styles = StyleSheet.create({
   content: { gap: 12, paddingTop: 10 },
-  body: { fontSize: 14, lineHeight: 21 },
-  label: { fontSize: 15, fontWeight: '600' },
+  body: { fontSize: 13, lineHeight: 21 },
+  label: { fontSize: 14, fontWeight: '600' },
   primary: {
-    minHeight: 50,
+    minHeight: 44,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',

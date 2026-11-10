@@ -14,5 +14,5 @@ export function WalletProviderAttribution({
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 12 },
+  label: { fontSize: 10, lineHeight: 16, textAlign: 'center', marginTop: 12 },
 });

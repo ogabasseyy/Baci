@@ -38,7 +38,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     gap: SPACING.xs,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   iconButton: {
@@ -48,19 +48,19 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     width: 32,
   },
   walletBalance: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     fontWeight: TYPOGRAPHY.weight.medium,
   },
   addSection: {
     gap: SPACING.sm,
   },
   sectionLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
-  walletHint: { fontSize: TYPOGRAPHY.size.xs },
+  walletHint: { fontSize: 10 },
   contributionGuidance: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 20,
   },
   amountInput: {
@@ -70,17 +70,17 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.xs,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   amountInputField: {
     flex: 1,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '600',
     minWidth: 0,
     padding: 0,
   },
   amountPrefix: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   actionRow: {
@@ -98,7 +98,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
   },
   changeDeviceButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   secondaryButton: {
@@ -107,10 +107,10 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   secondaryButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   primaryButton: {
@@ -118,8 +118,8 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     backgroundColor: BRAND.primary,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
-    minHeight: 48,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: 10,
   },
   primaryButtonFocused: {
     borderColor: WALLET_COLORS.white,
@@ -127,14 +127,14 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   primaryButtonText: {
     color: WALLET_COLORS.white,
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   disabledButton: {
     opacity: 0.65,
   },
   autoDebitHint: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 18,
     marginTop: SPACING.md,
   },

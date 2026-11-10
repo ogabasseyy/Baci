@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
-import { runSavingsGoalSubmission } from './run-savings-goal-submission';
+import {
+  PLAN_CREATED_HEAD_START_PENDING,
+  runSavingsGoalSubmission,
+} from './run-savings-goal-submission';
 
 const mockCreateSavingsGoal =
   jest.fn<
@@ -304,5 +307,25 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setShowTransferModal).not.toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
     expect(setCreatedGoalId).not.toHaveBeenCalled();
+  });
+
+  it('never prefills the head start on another plan when the reload fails', async () => {
+    const onContinueInWallet = jest.fn();
+    const input = createInput({
+      deferInitialContribution: true,
+      effectiveInitialContribution: 10000,
+      onContinueInWallet,
+      refetch: jest.fn(async () => {
+        throw new Error('offline');
+      }),
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    expect(mockCreateSavingsGoal).toHaveBeenCalled();
+    expect(onContinueInWallet).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenLastCalledWith(
+      PLAN_CREATED_HEAD_START_PENDING
+    );
   });
 });

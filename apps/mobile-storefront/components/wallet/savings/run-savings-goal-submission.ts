@@ -20,6 +20,9 @@ import {
   isInsufficientWalletError,
 } from './start-savings-controller.utils';
 import type { ContributionRail } from './stored-contribution-operation';
+export const PLAN_CREATED_HEAD_START_PENDING =
+  'Your plan was created, but we could not load it yet. Open your wallet to add the head start.';
+
 export type FundingAccount = {
   account_number: string;
 } | null;
@@ -168,11 +171,14 @@ export async function runSavingsGoalSubmission(
       input.setShowPreviewModal(false);
       input.setFormError(null);
       // Load the new goal into the wallet data first: the wallet opens the
-      // goal by id and would otherwise fall back to an older active plan.
+      // goal by id and falls back to an older active plan when it is not
+      // there yet. Without the reload, never prefill a head start that could
+      // land on the wrong plan.
       try {
         await input.refetch();
       } catch {
-        // The wallet reloads on open; the goal id still selects the plan.
+        if (isCurrent()) input.setFormError(PLAN_CREATED_HEAD_START_PENDING);
+        return;
       }
       if (!isCurrent()) return;
       input.onContinueInWallet(

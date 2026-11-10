@@ -1,8 +1,8 @@
 # Baci capabilities and agent access
 
 Reviewed 10 November 2026 against source revision
-`de1d5aa7126844518ce1cc421b8c1ded82bb6b1c` for the shared invoice and receipt template
-and the dispatch check for both displayed bank accounts. The 9 November review of
+`c304a2b8b4f79f40336d7f0a79a238c383a2694b` for the shared invoice and receipt template
+and the versioned dispatch check for both bank accounts and seller registration. The 9 November review of
 `efb3ba2de0df089137572bc23bfd2ef5c50dc1b5` remains the evidence for the shipping funding fix.
 Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow

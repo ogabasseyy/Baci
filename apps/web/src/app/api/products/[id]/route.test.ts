@@ -198,6 +198,7 @@ const productSelectArgs: string[] = [];
 // assert the DELETE handler pre-reads the row BEFORE deleting it (the junction
 // rows cascade away with the delete, so reading after would come back empty).
 const productOps: string[] = [];
+let protectedRefreshError = false;
 let linkedBlogPostRows: unknown[] = [];
 
 const createMockSupabase = () => ({
@@ -237,6 +238,31 @@ const createMockSupabase = () => ({
           })
         ),
       };
+    }
+    if (table === 'merchant_products') {
+      const view = {
+        select: vi.fn((columns: string) => {
+          productSelectArgs.push(columns);
+          return view;
+        }),
+        eq: vi.fn(() => view),
+        single: vi.fn(() =>
+          Promise.resolve({
+            data:
+              productError ||
+              (lastProductUpdatePayload && protectedRefreshError)
+                ? null
+                : lastProductUpdatePayload
+                  ? updateResult
+                  : product,
+            error:
+              lastProductUpdatePayload && protectedRefreshError
+                ? { message: 'read unavailable' }
+                : productError,
+          })
+        ),
+      };
+      return view;
     }
     if (table === 'products') {
       let eqCallCount = 0;
@@ -288,14 +314,17 @@ const createMockSupabase = () => ({
           return {
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
-                select: vi.fn(() => ({
-                  single: vi.fn(() =>
-                    Promise.resolve({
-                      data: updateError ? null : updateResult,
-                      error: updateError,
-                    })
-                  ),
-                })),
+                select: vi.fn((columns: string) => {
+                  expect(columns).toBe('id');
+                  return {
+                    single: vi.fn(() =>
+                      Promise.resolve({
+                        data: updateError ? null : updateResult,
+                        error: updateError,
+                      })
+                    ),
+                  };
+                }),
               })),
             })),
           };
@@ -460,6 +489,7 @@ function resetMocks() {
     has_variants: false,
   };
   productError = null;
+  protectedRefreshError = false;
   variants = [];
   anchorVariants = [];
   updateResult = null;
@@ -2063,5 +2093,33 @@ describe('DELETE /api/products/[id]', () => {
       expect(res.status).toBe(500);
       expect(json.error).toBe('Internal server error');
     });
+  });
+});
+
+describe('PUT protected product read boundary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMocks();
+  });
+  it('does not mutate when edit access exists but protected view denies the row', async () => {
+    productError = { message: 'not found' };
+    const res = await PUT(makePutRequest(PRODUCT_ID, { price: 6000 }), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+    expect(res.status).toBe(404);
+    expect(productUpdatePayloads).toHaveLength(0);
+  });
+  it('purges committed changes when protected hydration fails', async () => {
+    protectedRefreshError = true;
+    const res = await PUT(makePutRequest(PRODUCT_ID, { price: 6000 }), {
+      params: Promise.resolve({ id: PRODUCT_ID }),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({
+      saved: true,
+      error: expect.stringContaining('Product saved'),
+    });
+    expect(productUpdatePayloads).toHaveLength(1);
+    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalled();
   });
 });

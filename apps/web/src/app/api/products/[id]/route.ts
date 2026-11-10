@@ -79,7 +79,7 @@ export async function GET(
 
     // Try to find by ID first, then by slug
     let query = supabase
-      .from('products')
+      .from('merchant_products')
       .select(PRODUCT_COLUMNS)
       .eq('merchant_id', merchantId);
 
@@ -265,9 +265,9 @@ export async function PUT(
     }
     const merchantId = merchantContext.merchantId;
 
-    // Verify product belongs to merchant
+    // Verify both ownership and protected read access before any mutation.
     const { data: existingProduct, error: fetchError } = await supabase
-      .from('products')
+      .from('merchant_products')
       .select(
         // `category` (legacy text), the direct `category_id` join (including
         // `is_active`), and the `product_categories` junction projection are read
@@ -740,14 +740,13 @@ export async function PUT(
       typeof existingProduct,
       'categories' | 'product_categories'
     > = existingProduct;
-    let hasFreshProductRow = false;
     if (Object.keys(updates).length > 1) {
-      const { data: persistedProduct, error: updateError } = await supabase
+      const { error: updateError } = await supabase
         .from('products')
         .update(updates)
         .eq('id', id)
         .eq('merchant_id', merchantId)
-        .select(PRODUCT_COLUMNS)
+        .select('id')
         .single();
 
       if (updateError) {
@@ -757,9 +756,6 @@ export async function PUT(
           { status: 500 }
         );
       }
-
-      updatedProduct = persistedProduct;
-      hasFreshProductRow = true;
     }
 
     // Handle Variants
@@ -805,17 +801,16 @@ export async function PUT(
     }
 
     if (deferredVariantModelUpdates) {
-      const { data: variantModelProduct, error: variantModelError } =
-        await supabase
-          .from('products')
-          .update({
-            ...deferredVariantModelUpdates,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id)
-          .eq('merchant_id', merchantId)
-          .select(PRODUCT_COLUMNS)
-          .single();
+      const { error: variantModelError } = await supabase
+        .from('products')
+        .update({
+          ...deferredVariantModelUpdates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('merchant_id', merchantId)
+        .select('id')
+        .single();
 
       if (variantModelError) {
         console.error(
@@ -827,36 +822,33 @@ export async function PUT(
           { status: 500 }
         );
       }
-
-      updatedProduct = variantModelProduct;
-      hasFreshProductRow = true;
     }
 
-    if (!hasFreshProductRow) {
+    let refreshFailed = false;
+    {
       const { data: refreshedProduct, error: refreshedProductError } =
         await supabase
-          .from('products')
+          .from('merchant_products')
           .select(PRODUCT_COLUMNS)
           .eq('id', id)
           .eq('merchant_id', merchantId)
           .single();
 
-      if (refreshedProductError) {
+      if (refreshedProductError || !refreshedProduct) {
         console.error(
           'Error refreshing updated product:',
           refreshedProductError
         );
-        return NextResponse.json(
-          { error: 'Failed to load updated product' },
-          { status: 500 }
-        );
+        refreshFailed = true;
+        // Preserve committed inputs for cache invalidation despite read failure.
+        updatedProduct = { ...existingProduct, ...updates };
+      } else {
+        updatedProduct = refreshedProduct;
       }
-
-      updatedProduct = refreshedProduct;
     }
 
     // Regenerate embedding if name or description changed
-    if (updatedProduct && (body.name || body.description)) {
+    if (!refreshFailed && updatedProduct && (body.name || body.description)) {
       const embeddingText = getProductEmbeddingText({
         name: updatedProduct.name,
         description: updatedProduct.description,
@@ -968,6 +960,16 @@ export async function PUT(
       );
     }
 
+    if (refreshFailed) {
+      return NextResponse.json(
+        {
+          saved: true,
+          error:
+            'Product saved, but refreshing it failed. Reload before making another change.',
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ product: updatedProduct });
   } catch (error) {
     console.error('Unexpected error in PUT /api/products/[id]:', error);

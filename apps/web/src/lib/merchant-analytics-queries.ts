@@ -84,7 +84,7 @@ export async function fetchMerchantAnalyticsData(
       supabase
         .from('order_items')
         .select(
-          'cost_price, product_id, name, price, quantity, product_variants(cost_price), products(brand, cost_price), order_item_unit_costs(cost_price, unit_index), orders!inner(merchant_id, payment_status, created_at, branch_id)'
+          'cost_price, product_id, name, price, quantity, product_variants(cost_price), products:merchant_products(brand, cost_price), order_item_unit_costs(cost_price, unit_index), orders!inner(merchant_id, payment_status, created_at, branch_id)'
         )
         .eq('orders.merchant_id', merchantId)
         .eq('orders.payment_status', 'paid')
@@ -97,7 +97,7 @@ export async function fetchMerchantAnalyticsData(
       supabase
         .from('order_items')
         .select(
-          'cost_price, product_id, name, price, quantity, product_variants(cost_price), products(brand, cost_price), order_item_unit_costs(cost_price, unit_index), orders!inner(merchant_id, payment_status, created_at, branch_id)'
+          'cost_price, product_id, name, price, quantity, product_variants(cost_price), products:merchant_products(brand, cost_price), order_item_unit_costs(cost_price, unit_index), orders!inner(merchant_id, payment_status, created_at, branch_id)'
         )
         .eq('orders.merchant_id', merchantId)
         .eq('orders.payment_status', 'paid')

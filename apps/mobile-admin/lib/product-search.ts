@@ -118,7 +118,7 @@ export async function fetchAdminProductSearchRows<
   }
 
   let rowsQuery = supabase
-    .from('products')
+    .from('merchant_products')
     .select(args.selectColumns)
     .eq('merchant_id', args.merchantId)
     .is('parent_product_id', null)
@@ -212,7 +212,7 @@ export async function fetchAdminProductSuggestionCandidates<
   }
 
   const { data, error } = await supabase
-    .from('products')
+    .from('merchant_products')
     .select(args.selectColumns)
     .eq('merchant_id', args.merchantId)
     .is('parent_product_id', null)

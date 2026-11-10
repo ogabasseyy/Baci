@@ -22,6 +22,7 @@ type UpdateQuery = {
   eq: (column: string, value: unknown) => UpdateQuery;
   select: (columns: string) => UpdateQuery;
   single: () => Promise<SingleRowResult>;
+  maybeSingle: () => Promise<SingleRowResult>;
 };
 
 // Mock for the `update().eq().eq().select().single()` chain used by the
@@ -32,6 +33,9 @@ function createUpdateQuery(result: SingleRowResult): UpdateQuery {
   query.eq = vi.fn(() => query) as UpdateQuery['eq'];
   query.select = vi.fn(() => query) as UpdateQuery['select'];
   query.single = vi.fn(() => Promise.resolve(result)) as UpdateQuery['single'];
+  query.maybeSingle = vi.fn(() =>
+    Promise.resolve(result)
+  ) as UpdateQuery['maybeSingle'];
   return query;
 }
 
@@ -184,79 +188,121 @@ describe('fetchProducts stock filters', () => {
   });
 });
 
-describe('quick-action storefront purge', () => {
+describe('protected quick-action writes', () => {
+  const previous = { id: 'p', slug: 'phone', category: 'Phones' };
   beforeEach(() => {
     mocks.from.mockReset();
-    mocks.normalizeProductInventory.mockReset();
     mocks.normalizeProductInventory.mockImplementation(
       (product: unknown) => product
     );
     mocks.revalidateStorefrontProducts.mockReset();
   });
-
-  it('schedules a storefront purge with slug/id/category after a stock update', async () => {
-    const row = {
-      id: 'prod-1',
-      slug: 'iphone-15',
-      category: 'Smartphones',
-      stock: 7,
-    };
-    mocks.from.mockReturnValueOnce(
-      createUpdateQuery({ data: row, error: null })
-    );
-
-    await updateProductStock('prod-1', 7, 'merchant-1');
-
+  const run = (action: string) =>
+    action === 'stock'
+      ? updateProductStock('p', 2, 'm')
+      : updateProductStatus('p', 'active', 'm');
+  it.each([
+    'stock',
+    'status',
+  ])('preflights, safely writes and hydrates %s', async (action) => {
+    const preflight = createUpdateQuery({ data: previous, error: null });
+    const write = createUpdateQuery({ data: { id: 'p' }, error: null });
+    const read = createUpdateQuery({
+      data: { ...previous, cost_price: 12 },
+      error: null,
+    });
+    mocks.from
+      .mockReturnValueOnce(preflight)
+      .mockReturnValueOnce(write)
+      .mockReturnValueOnce(read);
+    await run(action);
+    expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
+      'merchant_products',
+      'products',
+      'merchant_products',
+    ]);
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
+    expect(write.single).toHaveBeenCalledOnce();
+    expect(read.single).toHaveBeenCalledOnce();
+    expect(write.select).toHaveBeenCalledWith('id');
+    expect(preflight.eq).toHaveBeenCalledWith('merchant_id', 'm');
+    expect(read.eq).toHaveBeenCalledWith('merchant_id', 'm');
     expect(mocks.revalidateStorefrontProducts).toHaveBeenCalledWith(
-      [{ slug: 'iphone-15', id: 'prod-1', category: 'Smartphones' }],
-      'merchant-1'
+      [previous],
+      'm'
     );
   });
-
-  it('does not schedule a purge when the stock update fails', async () => {
-    mocks.from.mockReturnValueOnce(
-      createUpdateQuery({
-        data: null,
-        error: { message: 'stock update failed' },
-      })
-    );
-
-    await expect(updateProductStock('prod-1', 7, 'merchant-1')).rejects.toThrow(
-      'stock update failed'
-    );
+  it.each([
+    'stock',
+    'status',
+  ])('does not write %s without protected view access', async (action) => {
+    const preflight = createUpdateQuery({ data: null, error: null });
+    mocks.from.mockReturnValueOnce(preflight);
+    await expect(run(action)).rejects.toThrow('Product is not accessible');
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
+    expect(mocks.from).toHaveBeenCalledTimes(1);
     expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
   });
-
-  it('schedules a storefront purge with slug/id/category after a status update', async () => {
-    const row = {
-      id: 'prod-2',
-      slug: 'ankara-bag',
-      category: 'Bags',
-      status: 'archived',
-    };
-    mocks.from.mockReturnValueOnce(
-      createUpdateQuery({ data: row, error: null })
+  it.each([
+    'stock',
+    'status',
+  ])('preserves genuine %s preflight errors without writing', async (action) => {
+    const preflight = createUpdateQuery({
+      data: null,
+      error: { message: 'permission denied for view merchant_products' },
+    });
+    mocks.from.mockReturnValueOnce(preflight);
+    await expect(run(action)).rejects.toThrow(
+      'permission denied for view merchant_products'
     );
-
-    await updateProductStatus('prod-2', 'archived', 'merchant-1');
-
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
+  });
+  it.each([
+    'stock',
+    'status',
+  ])('does not purge failed %s writes', async (action) => {
+    mocks.from
+      .mockReturnValueOnce(createUpdateQuery({ data: previous, error: null }))
+      .mockReturnValueOnce(
+        createUpdateQuery({ data: null, error: { message: 'write denied' } })
+      );
+    await expect(run(action)).rejects.toThrow('write denied');
+    expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
+  });
+  it.each([
+    'stock',
+    'status',
+  ])('purges saved %s even when hydration errors', async (action) => {
+    mocks.from
+      .mockReturnValueOnce(createUpdateQuery({ data: previous, error: null }))
+      .mockReturnValueOnce(
+        createUpdateQuery({ data: { id: 'p' }, error: null })
+      )
+      .mockReturnValueOnce(
+        createUpdateQuery({ data: null, error: { message: 'network error' } })
+      );
+    await expect(run(action)).rejects.toThrow('Product saved');
     expect(mocks.revalidateStorefrontProducts).toHaveBeenCalledWith(
-      [{ slug: 'ankara-bag', id: 'prod-2', category: 'Bags' }],
-      'merchant-1'
+      [previous],
+      'm'
     );
   });
-
-  it('does not schedule a purge when the status update fails', async () => {
-    mocks.from.mockReturnValueOnce(
-      createUpdateQuery({
-        data: null,
-        error: { message: 'status update failed' },
-      })
+  it('purges saved stock even when hydration returns no row', async () => {
+    mocks.from
+      .mockReturnValueOnce(createUpdateQuery({ data: previous, error: null }))
+      .mockReturnValueOnce(
+        createUpdateQuery({ data: { id: 'p' }, error: null })
+      )
+      .mockReturnValueOnce(createUpdateQuery({ data: null, error: null }));
+    await expect(run('stock')).rejects.toThrow('Product saved');
+    expect(mocks.revalidateStorefrontProducts).toHaveBeenCalledWith(
+      [previous],
+      'm'
     );
-
-    await expect(
-      updateProductStatus('prod-2', 'archived', 'merchant-1')
-    ).rejects.toThrow('status update failed');
-    expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
   });
 });

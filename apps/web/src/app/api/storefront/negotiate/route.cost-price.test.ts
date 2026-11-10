@@ -59,7 +59,36 @@ describe('storefront negotiate cost_price containment', () => {
       );
 
       expect(body.status).toBe('final');
-      expect(body.counterOffer).toBe(1089);
+      expect(body.counterOffer).toBe(1000);
+    });
+    it('stops at the public list price when no safe discount tier exists', async () => {
+      const { body } = await callNegotiate(
+        { ...product, cost_price: 990 },
+        980,
+        1
+      );
+      expect(body.status).toBe('final');
+      expect(body.canContinue).toBe(false);
+      expect(body.counterOffer).toBe(1000);
+      expect(JSON.stringify(body)).not.toContain('1089');
+    });
+
+    it.each([
+      986.7,
+      1089,
+      -1,
+      Number.POSITIVE_INFINITY,
+    ])('fails closed rather than expose an unquantized RPC result %s', async (floor) => {
+      const { response, body, insert } = await callNegotiate(
+        product,
+        500,
+        3,
+        undefined,
+        { data: floor, error: null }
+      );
+      expect(response.status).toBe(500);
+      expect(body.counterOffer).toBeUndefined();
+      expect(insert).not.toHaveBeenCalled();
     });
   });
 });

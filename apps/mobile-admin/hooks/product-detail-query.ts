@@ -16,7 +16,7 @@ export async function fetchProductDetail(args: {
   if (!args.productId || args.productId === 'new') return null;
 
   const { data: productData, error: productError } = await supabase
-    .from('products')
+    .from('merchant_products')
     .select(MOBILE_ADMIN_PRODUCT_WITH_RELATIONS_QUERY)
     .eq('id', args.productId)
     .eq('merchant_id', args.merchantId)

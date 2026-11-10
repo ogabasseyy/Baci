@@ -36,7 +36,7 @@ export async function fetchProducts(
   }
 
   let query = supabase
-    .from('products')
+    .from('merchant_products')
     .select(PRODUCT_COLUMNS, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .is('parent_product_id', null)
@@ -66,7 +66,17 @@ export async function updateProductStock(
   stock: number,
   merchantId: string
 ): Promise<Product> {
-  const { data, error } = await supabase
+  // Verify the protected read boundary before making a change we must hydrate.
+  const { data: previousProduct, error: accessError } = await supabase
+    .from('merchant_products')
+    .select('id, slug, category')
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (accessError || !previousProduct) {
+    throw new Error(accessError?.message ?? 'Product is not accessible');
+  }
+  const { error } = await supabase
     .from('products')
     .update({
       stock,
@@ -75,20 +85,32 @@ export async function updateProductStock(
     })
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .select(PRODUCT_COLUMNS)
+    .select('id')
     .single();
 
   if (error) throw new Error(error.message);
-  const product = normalizeProductInventory(data);
-
-  // The quick stock edit mutated the product via Supabase directly (no web
-  // route ran), so nothing evicted the storefront's raised-TTL edge cache.
-  // Fire-and-forget the SAME purge the save path uses (never awaited, never
-  // throws) so the storefront reflects the new stock/availability immediately.
+  // The write committed. Invalidate even if the following hydration fails.
   void revalidateStorefrontProducts(
-    [{ slug: product.slug, id: product.id, category: product.category }],
+    [
+      {
+        slug: previousProduct.slug,
+        id: previousProduct.id,
+        category: previousProduct.category,
+      },
+    ],
     merchantId
   );
+  const { data, error: readError } = await supabase
+    .from('merchant_products')
+    .select(PRODUCT_COLUMNS)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .single();
+  if (readError || !data)
+    throw new Error(
+      'Product saved, but refreshing it failed. Reload before making another change.'
+    );
+  const product = normalizeProductInventory(data);
 
   return product;
 }
@@ -98,25 +120,47 @@ export async function updateProductStatus(
   status: ProductStatus,
   merchantId: string
 ): Promise<Product> {
-  const { data, error } = await supabase
+  // Verify the protected read boundary before making a change we must hydrate.
+  const { data: previousProduct, error: accessError } = await supabase
+    .from('merchant_products')
+    .select('id, slug, category')
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (accessError || !previousProduct) {
+    throw new Error(accessError?.message ?? 'Product is not accessible');
+  }
+  const { error } = await supabase
     .from('products')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', productId)
     .eq('merchant_id', merchantId)
-    .select(PRODUCT_COLUMNS)
+    .select('id')
     .single();
 
   if (error) throw new Error(error.message);
-  const product = normalizeProductInventory(data);
-
-  // A status flip (e.g. archive/activate) changes what the storefront lists and
-  // serves, but was written straight to Supabase with no web route to evict the
-  // raised-TTL edge cache. Fire-and-forget the same storefront purge the save
-  // path uses (never awaited, never throws).
+  // The write committed. Invalidate even if the following hydration fails.
   void revalidateStorefrontProducts(
-    [{ slug: product.slug, id: product.id, category: product.category }],
+    [
+      {
+        slug: previousProduct.slug,
+        id: previousProduct.id,
+        category: previousProduct.category,
+      },
+    ],
     merchantId
   );
+  const { data, error: readError } = await supabase
+    .from('merchant_products')
+    .select(PRODUCT_COLUMNS)
+    .eq('id', productId)
+    .eq('merchant_id', merchantId)
+    .single();
+  if (readError || !data)
+    throw new Error(
+      'Product saved, but refreshing it failed. Reload before making another change.'
+    );
+  const product = normalizeProductInventory(data);
 
   return product;
 }

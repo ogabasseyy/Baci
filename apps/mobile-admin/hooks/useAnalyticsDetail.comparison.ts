@@ -64,7 +64,7 @@ export async function fetchAnalyticsDetailComparison({
         price,
         order_item_unit_costs(cost_price, unit_index),
         product_variants(cost_price),
-        products(cost_price),
+        products:merchant_products(cost_price),
         orders!inner(id, merchant_id, payment_status, branch_id, created_at)
       `)
       .eq('orders.merchant_id', merchantId)

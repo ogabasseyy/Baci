@@ -79,18 +79,32 @@ describe('invoice HTML PDF isolation', () => {
       'http://169.254.169.254/',
       'file:///etc/passwd',
     ]) {
-      const request = { url: () => url, abort: vi.fn(), continue: vi.fn() };
+      const request = {
+        url: () => url,
+        abort: vi.fn().mockResolvedValue(undefined),
+        continue: vi.fn().mockResolvedValue(undefined),
+      };
       handle(request);
       expect(request.abort).toHaveBeenCalledOnce();
     }
     const request = {
       url: () => 'data:image/png;base64,AQID',
-      abort: vi.fn(),
-      continue: vi.fn(),
+      abort: vi.fn().mockResolvedValue(undefined),
+      continue: vi.fn().mockResolvedValue(undefined),
     };
     handle(request);
     expect(request.continue).toHaveBeenCalledOnce();
   });
+  it('handles interception rejection when the browser closes the request', async () => {
+    await renderHtmlToPdf('<html>invoice</html>');
+    const handle = mocks.on.mock.calls[0][1];
+    const request = {
+      url: () => 'data:image/png;base64,AQID',
+      continue: vi.fn().mockRejectedValue(new Error('Target closed')),
+    };
+    await expect(handle(request)).resolves.toBeUndefined();
+  });
+
   it('serializes eight jobs, rejects a ninth, and recovers capacity', async () => {
     const held = Promise.withResolvers<Uint8Array>();
     mocks.pdf.mockReturnValueOnce(held.promise);

@@ -1,11 +1,9 @@
 import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import rawNextConfig from './next.config';
-import { INVOICE_PDF_FILE_TRACING_INCLUDES } from './src/config/invoice-pdf-file-tracing';
 import {
   getStorefrontMetadataCacheBucket,
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -38,52 +36,6 @@ describe('next.config core options', () => {
 
   afterAll(() => {
     vi.unstubAllEnvs();
-  });
-
-  it('packages the headless browser for server invoice and receipt exports', () => {
-    expect(nextConfig.serverExternalPackages).toEqual(
-      expect.arrayContaining(['@sparticuz/chromium', 'puppeteer-core'])
-    );
-    expect(nextConfig.outputFileTracingRoot).toBe(resolve(__dirname, '../..'));
-    expect(nextConfig.outputFileTracingIncludes).toMatchObject(
-      INVOICE_PDF_FILE_TRACING_INCLUDES
-    );
-    const picomatch: (
-      pattern: string,
-      options: { contains: boolean; dot: boolean }
-    ) => (route: string) => boolean = createRequire(import.meta.url)(
-      'next/dist/compiled/picomatch'
-    );
-    const includesChromium = (route: string) =>
-      Object.entries(nextConfig.outputFileTracingIncludes ?? {}).some(
-        ([scope, files]) =>
-          files.includes('../../node_modules/@sparticuz/chromium/bin/**/*') &&
-          picomatch(scope, { contains: true, dot: true })(route)
-      );
-    for (const route of [
-      '/api/orders',
-      '/api/orders/[id]/invoice',
-      '/api/storefront/account/orders/[id]/invoice',
-      '/api/storefront/account/orders/[id]/receipt',
-      '/api/cron/order-notifications',
-    ]) {
-      expect(includesChromium(route)).toBe(true);
-    }
-    for (const route of [
-      '/api/orders/[id]',
-      '/api/orders/[id]/generate-dva',
-      '/api/storefront/account/orders/[id]',
-    ]) {
-      expect(includesChromium(route)).toBe(false);
-    }
-    expect(
-      existsSync(
-        resolve(
-          __dirname,
-          '../../node_modules/@sparticuz/chromium/bin/chromium.br'
-        )
-      )
-    ).toBe(true);
   });
 
   it('lets proxy handle legacy Klump webhook trailing slash compatibility', () => {

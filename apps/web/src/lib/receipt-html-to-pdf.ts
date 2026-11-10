@@ -151,11 +151,13 @@ async function renderDocument(
     page.on('request', (request) => {
       // No network or file access: logo bytes were validated and embedded by
       // receipt-logo. This also blocks merchant-controlled URL redirects.
-      if (/^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(request.url())) {
-        void request.continue();
-      } else {
-        void request.abort();
-      }
+      const decision = /^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(
+        request.url()
+      )
+        ? request.continue()
+        : request.abort();
+      // Browser shutdown can race with this decision after a render expires.
+      return decision.catch(() => undefined);
     });
     await page.setContent(html, {
       waitUntil: 'load',

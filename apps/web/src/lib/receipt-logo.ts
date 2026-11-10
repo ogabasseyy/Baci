@@ -23,6 +23,7 @@ function isSupportedLogoContentType(contentType: string) {
 function isTrustedLogoUrl(parsedUrl: URL) {
   if (
     parsedUrl.protocol !== 'https:' ||
+    parsedUrl.port ||
     parsedUrl.username ||
     parsedUrl.password
   ) {

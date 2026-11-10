@@ -2,6 +2,8 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+// Count the files as deployed, including the stored .br archives.
+// This package budget does not measure runtime extraction disk or browser memory.
 const MAX_FUNCTION_BYTES = 250 * 1024 * 1024;
 const CHROMIUM_BIN = /(?:^|\/)@sparticuz\/chromium\/bin\//;
 const CHROMIUM_FILES = [

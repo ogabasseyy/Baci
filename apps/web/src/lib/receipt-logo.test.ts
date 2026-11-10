@@ -143,6 +143,23 @@ describe('receipt logo safety', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('rejects a configured storage logo on a nonstandard port', async () => {
+    vi.stubEnv(
+      'NEXT_PUBLIC_SUPABASE_URL',
+      'https://project-ref.supabase.co:8443'
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(
+      resolveReceiptLogoDataUri({
+        ...baseMerchant,
+        logo_url:
+          'https://project-ref.supabase.co:8443/storage/v1/object/public/images/logo.png',
+      })
+    ).resolves.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects Supabase logo URLs outside the public logo allowlist', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);

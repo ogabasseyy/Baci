@@ -177,6 +177,16 @@ if (hasSupabaseCredentials && !isServerRuntime && isNativeRuntime) {
 
 export const supabase = supabaseClient;
 
+/** Public project URL and client key, for isolated receive-only realtime clients. */
+export function getSupabaseRealtimeConfig(): {
+  url: string;
+  key: string;
+} | null {
+  return hasSupabaseCredentials
+    ? { url: validSupabaseUrl, key: supabaseClientKey }
+    : null;
+}
+
 /**
  * Check if Supabase is configured
  */

@@ -40,6 +40,8 @@ interface SharedCartState {
   loadSavedCart: (() => Promise<void>) | null;
   linkAccount: ((input: NativeAccountLinkInput) => Promise<void>) | null;
   checkoutReview: NativeCheckoutSnapshot | null;
+  /** Plain-language reason the last optimistic edit was rolled back. */
+  writeNotice: string | null;
   prepareCheckoutReview:
     | ((operationId: string) => Promise<{
         snapshot: NativeCheckoutSnapshot;
@@ -66,5 +68,6 @@ export const useNativeSharedCartStore = create<SharedCartState>(() => ({
   loadSavedCart: null,
   linkAccount: null,
   checkoutReview: null,
+  writeNotice: null,
   prepareCheckoutReview: null,
 }));

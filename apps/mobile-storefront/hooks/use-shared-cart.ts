@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { useEffect, useRef } from 'react';
 import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
+import { bindSharedCartRealtime } from '@/lib/cart/bind-shared-cart-realtime';
 import { createNativeCartController } from '@/lib/cart/controller';
 import type { CartProductShell } from '@/lib/cart/display';
 import {
@@ -14,6 +15,7 @@ import {
 } from '@/lib/cart/enrollment-transition';
 import { dedupeMergeConflictItems } from '@/lib/cart/merge-conflict-items';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
+import { createOptimisticCart } from '@/lib/cart/optimistic-cart-write';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
 import { cartSessionStorage } from '@/lib/cart/session-storage';
@@ -24,6 +26,7 @@ import {
 } from '@/lib/cart/shared-cart-client';
 import { startSharedCartPolling } from '@/lib/cart/shared-cart-polling';
 import { getCartShopperToken } from '@/lib/cart/shopper-token';
+import { writeFailureMessage } from '@/lib/cart/write-failure-message';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { releaseCheckoutCreditSnapshot } from '@/lib/release-checkout-credit-snapshot';
@@ -39,6 +42,8 @@ import {
 interface Options extends NativeCartConfig {
   enabled: boolean;
   accountsEnabled?: boolean;
+  /** Push refresh channel; polling and foreground refresh remain the safety net. */
+  realtimeEnabled?: boolean;
   subjectKey: string;
 }
 interface Deps {
@@ -140,6 +145,14 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       savedCart: null,
     });
     let controller: ReturnType<typeof createNativeCartController> | null = null;
+    const optimistic = createOptimisticCart({
+      getItems: () => useCartStore.getState().items,
+      setItems: (items) => {
+        if (isCurrent()) useCartStore.setState({ items });
+      },
+      hasSnapshot: () =>
+        Boolean(useNativeSharedCartStore.getState().snapshot?.cartId),
+    });
     let retireDevice: (() => Promise<void>) | undefined;
     const release = installSharedCartWriter({
       retire: async () => {
@@ -167,8 +180,21 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         }
       },
       write: (action) => {
-        if (!controller) return Promise.reject(new Error('Cart unavailable'));
-        return controller.write(action);
+        const active = controller;
+        if (!active) return Promise.reject(new Error('Cart unavailable'));
+        useNativeSharedCartStore.setState({ writeNotice: null });
+        return optimistic
+          .write(action, (resolved) => active.write(resolved))
+          .catch((error: unknown) => {
+            if (alive)
+              useNativeSharedCartStore.setState({
+                writeNotice: writeFailureMessage(error),
+              });
+            // The rollback may hide a write the server did apply (timeout);
+            // reconcile with the authoritative cart rather than guess.
+            void active.refresh().catch(() => undefined);
+            throw error;
+          });
       },
       onError: () => {
         if (!alive) return;
@@ -279,8 +305,19 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       hasSnapshot: () =>
         Boolean(useNativeSharedCartStore.getState().snapshot?.cartId),
     });
+    const stopRealtime = options.realtimeEnabled
+      ? bindSharedCartRealtime({
+          merchantId: options.merchantId,
+          merchantSlug: options.merchantSlug,
+          apiOrigin: options.apiOrigin,
+          subjectKey: options.subjectKey,
+          isCurrent,
+          refresh: () => controller?.refresh() ?? Promise.resolve(),
+        })
+      : undefined;
     return () => {
       alive = false;
+      stopRealtime?.();
       stopPolling();
       release();
       useCartStore.setState({ isLoading: false });
@@ -289,6 +326,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
   }, [
     options.enabled,
     options.accountsEnabled,
+    options.realtimeEnabled,
     options.merchantId,
     options.merchantSlug,
     options.apiOrigin,

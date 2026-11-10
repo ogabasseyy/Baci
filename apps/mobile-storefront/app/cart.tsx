@@ -8,6 +8,7 @@ import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
 import CartStateView from '@/components/cart/CartStateView';
 import { CartStatusOnlyScreen } from '@/components/cart/CartStatusOnlyScreen';
+import { CartWriteNotice } from '@/components/cart/CartWriteNotice';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
@@ -219,6 +220,7 @@ export default function CartScreen() {
   return (
     <>
       <SharedCartStatusPanel />
+      <CartWriteNotice />
       <NativeCartAccountPanel />
       <CartLoadedView
         colorScheme={colorScheme}

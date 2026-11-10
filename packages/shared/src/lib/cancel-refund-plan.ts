@@ -42,8 +42,9 @@ export interface CancelRefundPlan {
   /** Outstanding external amount the cancellation worker would refund. */
   amount: number;
   /**
-   * False when the ledger could not be read: the plan is then a guess from
-   * the order total, so clients must not offer a manual refund on it.
+   * False when the ledger could not be read, or holds a refund that cannot
+   * be attributed to a payment leg: the plan is then a guess, so clients must
+   * not offer a manual refund on it.
    */
   ledgerKnown: boolean;
   /**
@@ -176,6 +177,15 @@ export function getCancelRefundPlan(
           row.payment_transaction_id === leg.id && isRefundInFlightRow(row)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
+  // An unlinked refund that several legs could own cannot be attributed (the
+  // worker quarantines that order), so the plan cannot say what is owed.
+  const unresolved =
+    legs.length > 1 &&
+    refundRows.some(
+      (row) =>
+        !row.payment_transaction_id &&
+        (DONE_REFUND_STATUSES.has(row.status) || isRefundInFlightRow(row))
+    );
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')
     .map((leg) => {
@@ -192,7 +202,7 @@ export function getCancelRefundPlan(
     amount: outstanding.reduce((sum, { owed }) => sum + owed, 0) / 100,
     inFlightAmount:
       entries.reduce((sum, { inFlightMinor }) => sum + inFlightMinor, 0) / 100,
-    ledgerKnown: true,
+    ledgerKnown: !unresolved,
     // A partially covered leg (or one with a refund already in flight) is a
     // coverage mismatch to the worker, which withholds it for review
     // instead of refunding the remainder.

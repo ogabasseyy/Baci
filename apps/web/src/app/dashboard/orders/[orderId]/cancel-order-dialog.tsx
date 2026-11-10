@@ -45,23 +45,17 @@ export function CancelOrderDialog({
   onConfirm: (refund: CancelRefundChoice) => Promise<void> | void;
   refundAmount: number;
 }) {
-  // Staff without refund permission cannot choose cancel-only, but the
-  // server still lets them cancel in automatic mode: when the worker cannot
-  // refund a leg itself, that sends the refund to owner review.
-  const refundGoesToReview = !automaticSupported && !canCancelOnly;
-  const showAutomatic = automaticSupported || refundGoesToReview;
-  const [choice, setChoice] = useState<CancelRefundChoice>(
-    automaticSupported || !canCancelOnly ? 'automatic' : 'manual'
-  );
+  // The automatic option is always offered: when the worker cannot refund a
+  // leg itself it sends the refund to owner review, which is safe for anyone
+  // with edit access. It is also the default, so an inattentive click never
+  // lands on a self-refund; cancel-only is an explicit opt-in.
+  const refundGoesToReview = !automaticSupported;
+  const [choice, setChoice] = useState<CancelRefundChoice>('automatic');
   const [busy, setBusy] = useState(false);
-  // Permissions and plan support can resolve after the dialog opened: derive
-  // the choice that is actually available instead of trusting stale state.
+  // Permissions can resolve after the dialog opened: derive the choice that
+  // is actually available instead of trusting stale state.
   const effectiveChoice: CancelRefundChoice =
-    choice === 'manual' && !canCancelOnly
-      ? 'automatic'
-      : choice === 'automatic' && !showAutomatic
-        ? 'manual'
-        : choice;
+    choice === 'manual' && !canCancelOnly ? 'automatic' : choice;
 
   const amount = formatDisplayCurrency(refundAmount, currency || 'NGN', {
     minimumFractionDigits: 2,
@@ -95,20 +89,18 @@ export function CancelOrderDialog({
           }}
           aria-label="Refund option"
         >
-          {showAutomatic && (
-            <div className="flex items-start gap-3">
-              <RadioGroupItem
-                value="automatic"
-                id="cancel-refund-automatic"
-                className="mt-1"
-              />
-              <Label htmlFor="cancel-refund-automatic" className="leading-snug">
-                {refundGoesToReview
-                  ? `Cancel and send the ${amount} refund to review`
-                  : `Cancel and refund ${amount} to the customer's original payment method`}
-              </Label>
-            </div>
-          )}
+          <div className="flex items-start gap-3">
+            <RadioGroupItem
+              value="automatic"
+              id="cancel-refund-automatic"
+              className="mt-1"
+            />
+            <Label htmlFor="cancel-refund-automatic" className="leading-snug">
+              {refundGoesToReview
+                ? `Cancel and send the ${amount} refund to review`
+                : `Cancel and refund ${amount} to the customer's original payment method`}
+            </Label>
+          </div>
           {canCancelOnly && (
             <div className="flex items-start gap-3">
               <RadioGroupItem
@@ -128,8 +120,8 @@ export function CancelOrderDialog({
           <p className="text-sm text-muted-foreground">
             Baci cannot refund all of this payment automatically (it was not
             paid through Paystack, or an earlier refund covered only part of
-            it). Cancel the order, refund the customer yourself, then record the
-            refund from the Refund card.
+            it). Send the refund to the store owner for review, or cancel only,
+            refund the customer yourself and record it from the Refund card.
           </p>
         )}
         {refundGoesToReview && (

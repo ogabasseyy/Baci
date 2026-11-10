@@ -178,4 +178,24 @@ describe('resolveCancellationRefundOutcome', () => {
       outcome: 'queued_if_required',
     });
   });
+
+  it('reports unknown when an unlinked refund cannot be attributed to one leg', async () => {
+    const supabase = supabaseWith({
+      ledger: {
+        data: [
+          leg({ id: 'a' }),
+          leg({ id: 'b' }),
+          leg({
+            id: 'refund-1',
+            payment_transaction_id: null,
+            transaction_type: 'refund',
+          }),
+        ],
+        error: null,
+      },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
 });

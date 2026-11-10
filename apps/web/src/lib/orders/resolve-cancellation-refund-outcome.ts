@@ -101,6 +101,7 @@ export async function resolveCancellationRefundOutcome({
         transaction_type: row.transaction_type,
       })),
     });
+    if (!plan.ledgerKnown) return { outcome: 'unknown' };
     const currency =
       rows.find((row) => row.transaction_type === 'payment')?.currency ?? null;
     return {

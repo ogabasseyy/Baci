@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getCancelRefundPlan } from './cancel-refund-plan';
+import {
+  type CancelRefundOrder,
+  getCancelRefundPlan,
+} from './cancel-refund-plan';
+
+type Tx = NonNullable<CancelRefundOrder['transactions']>[number];
 
 // A provider-accepted Paystack refund is recorded as its own refund row in
 // `refund_pending` while the payment leg stays `completed`. The plan must
@@ -43,15 +48,17 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
   });
 
   const payment100 = { ...payment, currency: 'NGN' };
-  const pendingRow = (over: Record<string, unknown>) => ({
-    amount: 100,
-    currency: 'NGN',
-    gateway: 'paystack',
-    id: 'refund-x',
-    payment_transaction_id: 'pay-1',
-    transaction_type: 'refund',
-    ...over,
-  });
+  const pendingRow = (over: Record<string, unknown> = {}): Tx =>
+    ({
+      amount: 100,
+      currency: 'NGN',
+      gateway: 'paystack',
+      id: 'refund-x',
+      payment_transaction_id: 'pay-1',
+      status: 'completed',
+      transaction_type: 'refund',
+      ...over,
+    }) as Tx;
 
   it('counts a processing refund row as in flight while the payment leg stays completed', () => {
     const plan = getCancelRefundPlan({
@@ -100,7 +107,7 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
   });
 
   describe('failed refund rows', () => {
-    const failed = (over: Record<string, unknown>) =>
+    const failed = (over: Record<string, unknown> = {}): Tx =>
       pendingRow({
         provider_refund_status: 'failed',
         status: 'failed',
@@ -167,5 +174,30 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
       });
       expect(plan.amount).toBe(100);
     });
+  });
+
+  it('marks the plan unresolved when an unlinked completed refund could belong to several legs', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 200,
+      transactions: [
+        { ...payment100, id: 'a' },
+        { ...payment100, id: 'b' },
+        pendingRow({ payment_transaction_id: undefined, status: 'completed' }),
+      ],
+    });
+    expect(plan.ledgerKnown).toBe(false);
+  });
+
+  it('stays resolved when the sole payment leg owns the unlinked refund', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        payment100,
+        pendingRow({ payment_transaction_id: undefined, status: 'completed' }),
+      ],
+    });
+    expect(plan.ledgerKnown).toBe(true);
   });
 });

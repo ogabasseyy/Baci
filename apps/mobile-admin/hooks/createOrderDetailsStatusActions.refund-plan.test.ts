@@ -224,4 +224,23 @@ describe('cancellation refund plan', () => {
       );
     });
   });
+
+  it('cancels neutrally when the plan could not attribute a refund to a leg', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: {
+        cancel_refund_plan: {
+          amount: 200,
+          automaticSupported: true,
+          inFlightAmount: 0,
+          ledgerKnown: false,
+        },
+      },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    const call = vi.mocked(Alert.alert).mock.calls[0];
+    expect(call?.[1]).toContain('could not be loaded');
+    expect(call?.[2]?.map((button) => button.text)).not.toContain(
+      'Cancel only (I will refund them)'
+    );
+  });
 });

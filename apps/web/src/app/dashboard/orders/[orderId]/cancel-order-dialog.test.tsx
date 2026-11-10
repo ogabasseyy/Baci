@@ -57,7 +57,7 @@ describe('CancelOrderDialog', () => {
     ).toBeChecked();
   });
 
-  it('offers only manual handling when a leg cannot be refunded automatically', async () => {
+  it('defaults to the review path, not self-refund, when a leg cannot be refunded automatically', async () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined);
     render(
       <CancelOrderDialog
@@ -70,12 +70,16 @@ describe('CancelOrderDialog', () => {
       />
     );
     expect(
-      screen.queryByRole('radio', { name: /cancel and refund/i })
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /cancel only/i })).toBeChecked();
+      screen.getByRole('radio', {
+        name: /send the .*12,500.* refund to review/i,
+      })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /cancel only/i })
+    ).not.toBeChecked();
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
-    expect(onConfirm).toHaveBeenCalledWith('manual');
+    expect(onConfirm).toHaveBeenCalledWith('automatic');
   });
 
   it('hides cancel-only without refund permission', () => {

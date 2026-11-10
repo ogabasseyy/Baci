@@ -212,7 +212,7 @@ export function createOrderDetailsStatusActions({
     // is best effort. Without it we cannot say what is owed, so never offer
     // a manual refund: cancel neutrally and point at the refund status.
     const plan = order.cancel_refund_plan;
-    if (isPaid && plan === undefined) {
+    if (isPaid && (plan === undefined || !plan.ledgerKnown)) {
       Alert.alert(
         'Cancel order?',
         "Refund details could not be loaded. Any refund is queued automatically, so check the order's refund status afterwards instead of refunding the customer yourself. This cannot be undone.",

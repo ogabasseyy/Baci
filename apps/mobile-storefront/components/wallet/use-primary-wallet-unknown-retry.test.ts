@@ -43,6 +43,18 @@ describe('usePrimaryWalletUnknownRetry', () => {
     expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT);
   });
 
+  it('keeps re-checking after a reload fails, without an unhandled error', async () => {
+    const refetch = jest.fn(async () => {
+      throw new Error('offline');
+    });
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+    );
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for a reload to finish before spending the next attempt', async () => {
     let finish: () => void = () => undefined;
     const refetch = jest.fn(

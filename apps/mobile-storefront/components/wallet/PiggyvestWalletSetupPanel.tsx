@@ -3,7 +3,10 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { rememberPrimaryFundingAccount } from '@/hooks/primary-funding-account-memory';
+import {
+  beginPrimaryRead,
+  rememberPrimaryFundingAccount,
+} from '@/hooks/primary-funding-account-memory';
 import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -92,6 +95,10 @@ export function PiggyvestWalletSetupPanel({
     setBusy(true);
     setError(false);
     setAwaitingAccount(false);
+    // Numbered as it starts, so a wallet read started later still wins.
+    const sequence = requestUserId
+      ? beginPrimaryRead(merchantId, requestUserId)
+      : 0;
     try {
       const result = await piggyvestPrimaryWalletApi.read(
         merchantId,
@@ -110,11 +117,16 @@ export function PiggyvestWalletSetupPanel({
           Number.isSafeInteger(balanceKobo) &&
           balanceKobo >= 0
         )
-          rememberPrimaryFundingAccount(merchantId, requestUserId, {
-            status: 'ready',
-            account: result.account,
-            balanceKobo,
-          });
+          rememberPrimaryFundingAccount(
+            merchantId,
+            requestUserId,
+            {
+              status: 'ready',
+              account: result.account,
+              balanceKobo,
+            },
+            sequence
+          );
         onRefresh();
       } else setAwaitingAccount(true);
     } catch (error) {

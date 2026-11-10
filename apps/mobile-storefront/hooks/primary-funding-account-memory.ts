@@ -102,7 +102,14 @@ export function onLatePrimaryAnswer(listener: () => void): () => void {
 }
 
 export function announceLatePrimaryAnswer() {
-  for (const listener of lateAnswerListeners) listener();
+  for (const listener of lateAnswerListeners) {
+    // One screen's failure never stops the others or the read itself.
+    try {
+      listener();
+    } catch {
+      // The screen still reloads on its own retry or next open.
+    }
+  }
 }
 
 /** Test hook: drops every remembered read and listener. */

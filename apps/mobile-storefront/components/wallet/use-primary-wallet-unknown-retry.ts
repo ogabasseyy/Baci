@@ -35,6 +35,8 @@ export function usePrimaryWalletUnknownRetry({
   const retry = useEffectEvent(async (forScope: string) => {
     try {
       await refetch();
+    } catch {
+      // A failed reload still spends the attempt; the next one may succeed.
     } finally {
       // Spend the attempt only once the reload has settled.
       setState((current) =>

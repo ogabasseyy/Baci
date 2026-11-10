@@ -4,9 +4,12 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
+import { readFreshPrimaryBalance } from './start-savings-wallet-balance';
 
 export const PRIMARY_HEAD_START_SHORT_MESSAGE =
   'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
+  "We couldn't check your wallet balance just now. Please try again.";
 
 /**
  * Form-flow handlers for the start-savings form: preview validation,
@@ -130,6 +133,16 @@ export function useStartSavingsFormFlow({
       // Refuse up front rather than create a plan whose head start cannot
       // move: the legacy path fails atomically, so this path must too.
       if (requiredTopUpAmount > 0) {
+        setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
+        return;
+      }
+      // The screen's balance may be a stand-in; confirm it fresh first.
+      const freshBalance = await readFreshPrimaryBalance();
+      if (freshBalance === null) {
+        setFormError(PRIMARY_BALANCE_CHECK_FAILED_MESSAGE);
+        return;
+      }
+      if (freshBalance < initialContributionValue) {
         setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
         return;
       }

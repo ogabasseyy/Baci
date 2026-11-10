@@ -12,6 +12,7 @@ import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 
 const mockRemember = jest.fn();
 jest.mock('@/hooks/primary-funding-account-memory', () => ({
+  beginPrimaryRead: () => 7,
   rememberPrimaryFundingAccount: (...args: unknown[]) => mockRemember(...args),
 }));
 
@@ -86,7 +87,9 @@ it('checks for the account number by itself and finishes when it is ready', asyn
         status: 'ready',
         account: expect.objectContaining({ accountNumber: '0123456789' }),
         balanceKobo: 250_000,
-      })
+      }),
+      // Numbered when the sheet's read started, not when it answered.
+      7
     );
   } finally {
     jest.useRealTimers();

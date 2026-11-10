@@ -1,4 +1,6 @@
 import type { WalletData } from '@/hooks/wallet-query';
+import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
+import { useAuthStore } from '@/stores/auth-store';
 
 /**
  * The balance a new plan's head start can come from. A PiggyVest customer
@@ -15,4 +17,31 @@ export function resolveStartSavingsWalletBalance(
   if (typeof kobo === 'number' && Number.isSafeInteger(kobo) && kobo >= 0)
     return { balance: kobo / 100, primaryWallet: true };
   return { balance: wallet?.balance ?? 0, primaryWallet: false };
+}
+
+/**
+ * A fresh PiggyVest main-wallet balance (naira) for the head-start check
+ * right before a plan is created. The wallet screen's figure may be a
+ * stand-in up to two minutes old, so it never decides whether money can
+ * move. Null when the balance cannot be confirmed now.
+ */
+export async function readFreshPrimaryBalance(): Promise<number | null> {
+  const { merchantId, user } = useAuthStore.getState();
+  if (!merchantId || !user?.id) return null;
+  try {
+    const { account, balanceKobo } = await piggyvestPrimaryWalletApi.read(
+      merchantId,
+      user.id
+    );
+    if (
+      !account ||
+      typeof balanceKobo !== 'number' ||
+      !Number.isSafeInteger(balanceKobo) ||
+      balanceKobo < 0
+    )
+      return null;
+    return balanceKobo / 100;
+  } catch {
+    return null;
+  }
 }

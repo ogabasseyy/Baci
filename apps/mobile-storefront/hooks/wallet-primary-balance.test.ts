@@ -7,9 +7,11 @@ import {
   jest,
 } from '@jest/globals';
 import {
+  beginPrimaryRead,
   forgetRememberedPrimaryFundingAccounts,
   onLatePrimaryAnswer,
   REMEMBERED_PRIMARY_READ_TTL_MS,
+  recallPrimaryFundingAccount,
   rememberPrimaryFundingAccount,
 } from './primary-funding-account-memory';
 import {
@@ -259,6 +261,49 @@ describe('readPrimaryFundingAccountSoon', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps announcing past a screen whose reload throws', async () => {
+    const later = jest.fn();
+    onLatePrimaryAnswer(() => {
+      throw new Error('screen gone');
+    });
+    onLatePrimaryAnswer(later);
+    let answer: (value: unknown) => void = () => undefined;
+    mockRead.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const load = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await load;
+    answer({ status: 'ready', account, balanceKobo: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(later).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a wallet read started after the setup sheet replace its balance', () => {
+    const sheet = beginPrimaryRead('m', 'u');
+    const wallet = beginPrimaryRead('m', 'u');
+    rememberPrimaryFundingAccount(
+      'm',
+      'u',
+      { status: 'ready', account, balanceKobo: 100 },
+      sheet
+    );
+    expect(
+      rememberPrimaryFundingAccount(
+        'm',
+        'u',
+        { status: 'ready', account, balanceKobo: 900 },
+        wallet
+      )
+    ).toBe(true);
+    expect(recallPrimaryFundingAccount('m', 'u')).toMatchObject({
+      balanceKobo: 900,
+    });
   });
 });
 

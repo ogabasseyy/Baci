@@ -27,3 +27,10 @@ export const experienceLifecyclePublicationBinding = z.object({
     .default('confirmation-required'),
   receiptId: z.uuid().optional(),
 });
+
+export const experienceApprovalId = z.uuid();
+export const experienceLifecycleReceipt = z.record(z.string(), z.json());
+export const experienceApprovalPageInput = z.object({
+  approval: experienceApprovalId,
+  kind: z.enum(['draft', 'lifecycle']).default('draft'),
+});

@@ -1,8 +1,12 @@
-import { z } from 'zod';
 import { loadDraftApproval } from '@/lib/experience/approval-service';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { loadLifecycleApproval } from '@/lib/experience/publication-service';
 import { createClient } from '@/lib/supabase/server';
+import {
+  experienceApprovalId,
+  experienceApprovalPageInput,
+} from '@/schemas/experience-publication';
+import { experienceDigest } from '@/schemas/experience-upload';
 import {
   ExperienceApprovalClient,
   type ExperienceApprovalView,
@@ -13,12 +17,7 @@ export async function ExperienceApprovalContent({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const p = z
-    .object({
-      approval: z.uuid(),
-      kind: z.enum(['draft', 'lifecycle']).default('draft'),
-    })
-    .safeParse(await searchParams);
+  const p = experienceApprovalPageInput.safeParse(await searchParams);
   if (!p.success)
     return (
       <main>
@@ -46,17 +45,14 @@ export async function ExperienceApprovalContent({
       );
     const view: ExperienceApprovalView = {
       approvalId: p.data.approval,
-      merchantId: z.uuid().parse(data.merchantId),
+      merchantId: experienceApprovalId.parse(data.merchantId),
       kind: p.data.kind,
       action:
         'action' in data && typeof data.action === 'string'
           ? data.action
           : 'apply',
       buildId: typeof data.buildId === 'string' ? data.buildId : undefined,
-      effectDigest: z
-        .string()
-        .regex(/^[a-f0-9]{64}$/)
-        .parse(data.effectDigest),
+      effectDigest: experienceDigest.parse(data.effectDigest),
       routes: 'routes' in data ? data.routes : undefined,
       capabilities: 'capabilities' in data ? data.capabilities : undefined,
       summary: 'summary' in data ? data.summary : data,

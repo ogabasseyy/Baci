@@ -1,17 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import { createBuilderThrottle } from '@/lib/builder-gateway/throttle';
+import {
+  experienceEvidenceId,
+  experienceEvidenceImageRow,
+} from '@/schemas/experience-evidence-row';
 
-const imageRow = z.object({
-  merchant_id: z.uuid(),
-  evidence_digest: z.string().regex(/^[a-f0-9]{64}$/),
-  evidence_bytes: z
-    .string()
-    .max(4194306)
-    .regex(/^\\x(?:[a-f0-9]{2})+$/i),
-});
 export interface EvidenceReadDependencies {
   authenticate(request: Request): Promise<BuilderIdentity>;
   resolveUserClient(identity: BuilderIdentity): Promise<SupabaseClient>;
@@ -28,7 +23,10 @@ export function createExperienceEvidenceReader(deps: EvidenceReadDependencies) {
     const denied = (status: number) =>
       Response.json({ error: 'Evidence unavailable.' }, { status, headers });
     if (request.method !== 'GET') return denied(405);
-    if (!z.uuid().safeParse(evidenceId).success || new URL(request.url).search)
+    if (
+      !experienceEvidenceId.safeParse(evidenceId).success ||
+      new URL(request.url).search
+    )
       return denied(400);
     try {
       const identity = await deps.authenticate(request);
@@ -43,7 +41,9 @@ export function createExperienceEvidenceReader(deps: EvidenceReadDependencies) {
         .select('merchant_id,evidence_digest,evidence_bytes')
         .eq('id', evidenceId)
         .maybeSingle();
-      const parsed = result.error ? null : imageRow.safeParse(result.data);
+      const parsed = result.error
+        ? null
+        : experienceEvidenceImageRow.safeParse(result.data);
       if (
         !parsed?.success ||
         !identity.allowedMerchantIds.includes(parsed.data.merchant_id)

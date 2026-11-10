@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
-import { experienceApprovalPost } from '@/schemas/experience-publication';
+import {
+  experienceApprovalId,
+  experienceApprovalPost,
+} from '@/schemas/experience-publication';
 export interface OwnerApprovalDependencies {
   ownerClient(request: Request): Promise<SupabaseClient | null>;
   checkMutation(request: Request): Promise<Response | null>;
@@ -28,9 +30,9 @@ export function createOwnerApprovalHandler(deps: OwnerApprovalDependencies) {
       if (!owner)
         return respond({ error: 'Sign in to review this approval.' }, 401);
       if (request.method === 'GET') {
-        const parsed = z
-          .uuid()
-          .safeParse(new URL(request.url).searchParams.get('approval'));
+        const parsed = experienceApprovalId.safeParse(
+          new URL(request.url).searchParams.get('approval')
+        );
         if (!parsed.success)
           return respond({ error: 'Invalid approval request.' }, 400);
         const kind = new URL(request.url).searchParams.get('kind') ?? 'draft';

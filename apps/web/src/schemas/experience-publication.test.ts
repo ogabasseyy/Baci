@@ -120,3 +120,20 @@ it('defaults uncommitted lifecycle bindings and admits every committed receipt s
     })
   ).not.toHaveProperty('extra');
 });
+
+it('defaults the owner approval page to draft and validates lifecycle receipts', async () => {
+  const { experienceApprovalPageInput, experienceLifecycleReceipt } =
+    await import('./experience-publication');
+  expect(experienceApprovalPageInput.parse({ approval: id })).toEqual({
+    approval: id,
+    kind: 'draft',
+  });
+  expect(
+    experienceApprovalPageInput.safeParse({ approval: id, kind: 'unknown' })
+      .success
+  ).toBe(false);
+  expect(
+    experienceLifecycleReceipt.parse({ status: 'verifying', receipt: { id } })
+  ).toEqual({ status: 'verifying', receipt: { id } });
+  expect(experienceLifecycleReceipt.safeParse([]).success).toBe(false);
+});

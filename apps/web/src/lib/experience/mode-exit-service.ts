@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { experienceModeExitInput } from '@/schemas/experience-mode-exit';
+import {
+  experienceApprovalId,
+  experienceLifecycleReceipt,
+} from '@/schemas/experience-publication';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
@@ -32,17 +35,17 @@ export async function requestExperienceModeExit(
     p_retry: v.idempotencyKey,
   });
   if (r.error) throw Error('UNAVAILABLE');
-  return z.record(z.string(), z.json()).parse(r.data);
+  return experienceLifecycleReceipt.parse(r.data);
 }
 /** Owner-web only; model tools have no confirmation dispatch. */
 export async function confirmExperienceModeExit(
   client: SupabaseClient,
   id: string
 ) {
-  z.uuid().parse(id);
+  experienceApprovalId.parse(id);
   const auth = await client.auth.getUser();
   if (auth.error || !auth.data.user) throw Error('NOT_FOUND');
   const r = await client.rpc('experience_confirm_mode_exit', { p_intent: id });
   if (r.error) throw Error('UNAVAILABLE');
-  return z.record(z.string(), z.json()).parse(r.data);
+  return experienceLifecycleReceipt.parse(r.data);
 }

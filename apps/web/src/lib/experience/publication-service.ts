@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
-import { experienceLifecyclePublicationBinding } from '@/schemas/experience-publication';
+import {
+  experienceApprovalId,
+  experienceLifecyclePublicationBinding,
+  experienceLifecycleReceipt,
+} from '@/schemas/experience-publication';
 import { experienceToolInputs } from '@/schemas/experience-tools';
 import {
   type OwnerRequestContext,
@@ -34,25 +37,25 @@ export async function requestExperiencePublication(
     p_retry: v.idempotencyKey,
   });
   if (r.error) throw Error('UNAVAILABLE');
-  return z.record(z.string(), z.json()).parse(r.data);
+  return experienceLifecycleReceipt.parse(r.data);
 }
 export async function loadLifecycleApproval(
   client: SupabaseClient,
   id: string
 ) {
-  z.uuid().parse(id);
+  experienceApprovalId.parse(id);
   const auth = await client.auth.getUser();
   if (auth.error || !auth.data.user) throw Error('NOT_FOUND');
   const r = await client.rpc('experience_load_lifecycle', { p_intent: id });
   if (r.error) throw Error('UNAVAILABLE');
-  return z.record(z.string(), z.json()).parse(r.data);
+  return experienceLifecycleReceipt.parse(r.data);
 }
 /** Owner-web only; never imported into the model dispatcher. */
 export async function confirmExperiencePublication(
   client: SupabaseClient,
   id: string
 ) {
-  z.uuid().parse(id);
+  experienceApprovalId.parse(id);
   const auth = await client.auth.getUser();
   if (auth.error || !auth.data.user) throw Error('NOT_FOUND');
   const binding = experienceLifecyclePublicationBinding.parse(
@@ -71,5 +74,5 @@ export async function confirmExperiencePublication(
     p_intent: id,
   });
   if (r.error) throw Error('UNAVAILABLE');
-  return z.record(z.string(), z.json()).parse(r.data);
+  return experienceLifecycleReceipt.parse(r.data);
 }

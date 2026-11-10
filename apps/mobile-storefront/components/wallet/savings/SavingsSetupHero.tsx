@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 1,
     color: '#302047',
@@ -87,13 +87,13 @@ const styles = StyleSheet.create({
   body: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   copy: { flex: 1 },
   title: {
-    fontSize: 34,
+    fontSize: 31,
     lineHeight: 37,
     fontWeight: '900',
     letterSpacing: -1.4,
     color: '#302047',
   },
-  subtitle: { marginTop: 12, fontSize: 14, lineHeight: 21, color: '#514064' },
+  subtitle: { marginTop: 12, fontSize: 13, lineHeight: 21, color: '#514064' },
   art: {
     width: 92,
     height: 136,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#302047',
   },
-  phoneText: { color: '#302047', fontSize: 10, fontWeight: '800' },
+  phoneText: { color: '#302047', fontSize: 9, fontWeight: '800' },
   coin: {
     position: 'absolute',
     bottom: 0,
@@ -149,5 +149,5 @@ const styles = StyleSheet.create({
     borderTopColor: '#C7B4E2',
     paddingTop: 14,
   },
-  footerText: { flex: 1, fontSize: 12, fontWeight: '600', color: '#302047' },
+  footerText: { flex: 1, fontSize: 11, fontWeight: '600', color: '#302047' },
 });

@@ -265,9 +265,9 @@ export function GoalLifecycleScreen({
 
 const styles = StyleSheet.create({
   content: { gap: 16, padding: 20 },
-  title: { fontSize: 22, fontWeight: '700' },
+  title: { fontSize: 20, fontWeight: '700' },
   goal: { gap: 4 },
-  goalTitle: { fontSize: 16, fontWeight: '600' },
-  body: { fontSize: 15, lineHeight: 22 },
+  goalTitle: { fontSize: 14, fontWeight: '600' },
+  body: { fontSize: 14, lineHeight: 22 },
   actions: { gap: 10 },
 });

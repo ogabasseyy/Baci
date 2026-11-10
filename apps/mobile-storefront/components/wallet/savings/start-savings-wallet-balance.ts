@@ -4,6 +4,14 @@ import { useAuthStore } from '@/stores/auth-store';
 
 export const PRIMARY_HEAD_START_SHORT_MESSAGE =
   'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+export const PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE =
+  'Enter your head start in whole naira, with no kobo.';
+
+/** The wallet moves whole naira only: a head start must have no kobo. */
+export function isWholeNairaAmount(amount: number): boolean {
+  return Number.isFinite(amount) && Math.round(amount * 100) % 100 === 0;
+}
+
 export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
   'Your head start cannot be more than the plan target.';
 export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =

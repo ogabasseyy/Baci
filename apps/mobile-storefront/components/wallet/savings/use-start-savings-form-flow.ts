@@ -6,7 +6,9 @@ import type {
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
 import {
+  isWholeNairaAmount,
   PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
+  PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE,
   wholeNairaHeadStart,
 } from './start-savings-wallet-balance';
 
@@ -137,6 +139,11 @@ export function useStartSavingsFormFlow({
       // move: the legacy path fails atomically, so this path must too. The
       // plan is created without the head start, so check the target bound
       // the creation request would otherwise have enforced.
+      // Ask for whole naira rather than silently rounding the amount up.
+      if (!isWholeNairaAmount(initialContributionValue)) {
+        setFormError(PRIMARY_HEAD_START_WHOLE_NAIRA_MESSAGE);
+        return;
+      }
       // Same whole-naira amount the wallet moves and the submit checks.
       if (wholeNairaHeadStart(initialContributionValue) > targetValue) {
         setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);

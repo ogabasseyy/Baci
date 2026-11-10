@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import {
   FRESH_PRIMARY_BALANCE_TIMEOUT_MS,
+  isWholeNairaAmount,
   readFreshPrimaryBalanceKobo,
   wholeNairaHeadStart,
 } from './start-savings-wallet-balance';
@@ -87,5 +88,17 @@ describe('wholeNairaHeadStart', () => {
     [-5, 0],
   ])('moves %p naira as %p whole naira', (amount, expected) => {
     expect(wholeNairaHeadStart(amount)).toBe(expected);
+  });
+});
+
+describe('isWholeNairaAmount', () => {
+  it.each([
+    [10_000, true],
+    [20_000.0000001, true],
+    [10_000.4, false],
+    [10_000.01, false],
+    [Number.NaN, false],
+  ])('treats %p as whole naira: %p', (amount, expected) => {
+    expect(isWholeNairaAmount(amount)).toBe(expected);
   });
 });

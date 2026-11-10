@@ -15,9 +15,21 @@ export function createSupabase() {
     data: { cancellation_refund_mode: 'automatic' },
     error: null,
   });
-  const pendingRefundLegs = vi
-    .fn()
-    .mockResolvedValue({ data: [], error: null });
+  const ledgerRows = vi.fn().mockResolvedValue({
+    data: [
+      {
+        amount: 5000,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'ref-1',
+        id: 'leg-1',
+        payment_transaction_id: null,
+        status: 'completed',
+        transaction_type: 'payment',
+      },
+    ],
+    error: null,
+  });
   const productsIn = vi.fn().mockResolvedValue({
     data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
     error: null,
@@ -39,7 +51,7 @@ export function createSupabase() {
       if (table === 'transactions') {
         const chain: Record<string, unknown> = {};
         chain.eq = vi.fn(() => chain);
-        chain.limit = pendingRefundLegs;
+        chain.in = ledgerRows;
         return { select: vi.fn(() => chain) };
       }
       if (table === 'products') {
@@ -62,7 +74,7 @@ export function createSupabase() {
   };
   return {
     orderItemsEq,
-    pendingRefundLegs,
+    ledgerRows,
     persistedMode,
     productsIn,
     supabase,

@@ -186,4 +186,42 @@ describe('cancellation refund plan', () => {
       );
     });
   });
+
+  it('offers the refund choice when the plan has money outstanding but the cached status is not paid', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: { amount_paid: 0, payment_status: 'pending' },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    expect(vi.mocked(Alert.alert).mock.calls[0]?.[0]).toBe(
+      'Cancel paid order?'
+    );
+  });
+
+  it('states the in-flight and remaining amounts after a cancel-only cancellation', async () => {
+    const { actions, setSuccessModal } = createPaidOrderStatusActions({
+      updateStatus: vi.fn().mockResolvedValue({
+        refund_details: {
+          currency: 'NGN',
+          inFlightAmount: 2000,
+          remainingAmount: 3000,
+        },
+        refund_outcome: 'manual_required',
+      }),
+    });
+    await actions.handleStatusUpdate('cancelled');
+    vi.mocked(Alert.alert)
+      .mock.calls[0]?.[2]?.find(
+        (button) => button.text === 'Cancel only (I will refund them)'
+      )
+      ?.onPress?.();
+    await vi.waitFor(() => {
+      expect(setSuccessModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subMessage: expect.stringMatching(
+            /2,000\.00 is already being refunded by the provider; you only need to refund .*3,000\.00/
+          ),
+        })
+      );
+    });
+  });
 });

@@ -137,12 +137,59 @@ describe('POST /api/orders/[id]/cancelled refund mode', () => {
     });
   });
 
-  it('does not claim a manual refund is required while a leg refund is in flight', async () => {
-    const { pendingRefundLegs, supabase } = createSupabase();
-    pendingRefundLegs.mockResolvedValue({
-      data: [{ id: 'leg-1' }],
+  it('reports authoritative in-flight and remaining amounts for a cancel-only order', async () => {
+    const { ledgerRows, supabase } = createSupabase();
+    ledgerRows.mockResolvedValue({
+      data: [
+        {
+          amount: 3000,
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: 'ref-1',
+          id: 'leg-1',
+          payment_transaction_id: null,
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+        {
+          amount: 2000,
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: 'ref-2',
+          id: 'leg-2',
+          payment_transaction_id: null,
+          status: 'refund_pending',
+          transaction_type: 'payment',
+        },
+      ],
       error: null,
     });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ confirm_cancellation: true, refund: 'manual' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      sideEffects: {
+        refund: 'manual_required',
+        refundDetails: {
+          currency: 'NGN',
+          inFlightAmount: 2000,
+          remainingAmount: 3000,
+        },
+      },
+    });
+  });
+
+  it('reports an unknown outcome when the ledger cannot be read', async () => {
+    const { ledgerRows, supabase } = createSupabase();
+    ledgerRows.mockResolvedValue({ data: null, error: { message: 'down' } });
     mocks.authenticateApiRequest.mockResolvedValue({
       error: null,
       supabase,

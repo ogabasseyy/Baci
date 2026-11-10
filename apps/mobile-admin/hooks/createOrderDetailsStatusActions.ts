@@ -101,6 +101,27 @@ export function createOrderDetailsStatusActions({
         ? refundOutcome === 'manual_required'
         : refund === 'manual';
 
+      const refundDetails =
+        typeof result === 'object' &&
+        result !== null &&
+        'refund_details' in result &&
+        typeof result.refund_details === 'object' &&
+        result.refund_details !== null
+          ? (result.refund_details as {
+              currency?: string | null;
+              inFlightAmount?: number;
+              remainingAmount?: number;
+            })
+          : undefined;
+      const manualCurrency =
+        refundDetails?.currency?.trim() || order.currency?.trim() || 'NGN';
+      const manualMessage =
+        refundDetails &&
+        (refundDetails.inFlightAmount ?? 0) > 0 &&
+        typeof refundDetails.remainingAmount === 'number'
+          ? `The customer notification has been queued. ${formatCurrency(refundDetails.inFlightAmount ?? 0, undefined, manualCurrency)} is already being refunded by the provider; you only need to refund ${formatCurrency(refundDetails.remainingAmount, undefined, manualCurrency)}. Record it on the order once you have paid the customer.`
+          : 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.';
+
       const subMessage =
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
@@ -108,7 +129,7 @@ export function createOrderDetailsStatusActions({
             ? refundOutcome === 'unknown'
               ? "The customer notification has been queued. Check the order's refund status; do not refund the customer by hand until it shows what is owed."
               : refundIsManual
-                ? 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.'
+                ? manualMessage
                 : isPaidStatus(order.payment_status) || order.amount_paid > 0
                   ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
                   : 'The customer notification has been queued.'
@@ -181,7 +202,12 @@ export function createOrderDetailsStatusActions({
       return;
     }
 
-    const isPaid = isPaidStatus(order.payment_status) || order.amount_paid > 0;
+    // A plan showing outstanding money means the order is paid even when
+    // the cached status is stale (payment completed after the read).
+    const isPaid =
+      isPaidStatus(order.payment_status) ||
+      order.amount_paid > 0 ||
+      (order.cancel_refund_plan?.amount ?? 0) > 0;
     // The plan (outstanding external legs, Paystack-only automatic refunds)
     // is best effort. Without it we cannot say what is owed, so never offer
     // a manual refund: cancel neutrally and point at the refund status.

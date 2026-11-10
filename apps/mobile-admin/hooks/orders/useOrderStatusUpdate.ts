@@ -159,10 +159,19 @@ async function updateOrderStatus(
       typeof sideEffects.refund === 'string'
         ? sideEffects.refund
         : undefined;
+    const refundDetails =
+      sideEffects &&
+      typeof sideEffects === 'object' &&
+      'refundDetails' in sideEffects &&
+      sideEffects.refundDetails &&
+      typeof sideEffects.refundDetails === 'object'
+        ? sideEffects.refundDetails
+        : undefined;
     return {
       id: orderId,
       shipping_status: 'cancelled',
       ...(refundOutcome && { refund_outcome: refundOutcome }),
+      ...(refundDetails && { refund_details: refundDetails }),
     } as Order;
   }
 

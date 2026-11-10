@@ -114,7 +114,7 @@ export async function POST(
 
     // What the response says about the refund: the persisted mode on a
     // replay, and never a hand-refund claim we are not sure of.
-    const refundOutcome = await resolveCancellationRefundOutcome({
+    const refund = await resolveCancellationRefundOutcome({
       alreadyCancelled,
       merchantId,
       orderId: id,
@@ -263,7 +263,8 @@ export async function POST(
         message: 'Cancellation completed; side effects are queued',
         sideEffects: {
           customerEmail: 'queued',
-          refund: refundOutcome,
+          refund: refund.outcome,
+          ...(refund.details && { refundDetails: refund.details }),
         },
       },
       { status: 202 }

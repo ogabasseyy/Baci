@@ -3,12 +3,36 @@ import { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
+import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { Order } from '../actions';
 import type { CancelRefundChoice } from './cancel-order-dialog';
 
 interface CancelResponse {
-  sideEffects?: { refund?: string };
+  sideEffects?: {
+    refund?: string;
+    refundDetails?: {
+      currency: string | null;
+      inFlightAmount: number;
+      remainingAmount: number;
+    };
+  };
   success?: boolean;
+}
+
+function manualRefundMessage(
+  details: NonNullable<CancelResponse['sideEffects']>['refundDetails']
+): string {
+  const record =
+    'Record the refund from the Refund card once you have paid the customer.';
+  if (!details || details.inFlightAmount <= 0) {
+    return `Refund pending. ${record}`;
+  }
+  const money = (value: number) =>
+    formatDisplayCurrency(value, details.currency || 'NGN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  return `${money(details.inFlightAmount)} is already being refunded by the provider; you only need to refund ${money(details.remainingAmount)}. ${record}`;
 }
 
 /**
@@ -52,8 +76,9 @@ export function useOrderCancellation({
       toast({
         title: 'Order status updated to Canceled',
         ...(manualRequired && {
-          description:
-            'Refund pending. Record the refund from the Refund card once you have paid the customer.',
+          description: manualRefundMessage(
+            response?.sideEffects?.refundDetails
+          ),
         }),
         ...(outcome === 'unknown' && {
           description:

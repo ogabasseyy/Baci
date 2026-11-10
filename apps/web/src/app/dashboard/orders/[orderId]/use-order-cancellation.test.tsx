@@ -196,4 +196,30 @@ describe('useOrderCancellation', () => {
       })
     );
   });
+
+  it('states what the provider is already refunding and what remains for the merchant', async () => {
+    mocks.apiPost.mockResolvedValue({
+      sideEffects: {
+        refund: 'manual_required',
+        refundDetails: {
+          currency: 'NGN',
+          inFlightAmount: 2000,
+          remainingAmount: 3000,
+        },
+      },
+      success: true,
+    });
+    const { result } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    await act(() => result.current.requestCancellation());
+    await act(() => result.current.dialogProps.onConfirm('manual'));
+    expect(mocks.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringMatching(
+          /2,000\.00 is already being refunded by the provider; you only need to refund .*3,000\.00/
+        ),
+      })
+    );
+  });
 });

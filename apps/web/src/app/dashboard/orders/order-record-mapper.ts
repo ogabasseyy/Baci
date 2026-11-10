@@ -61,6 +61,8 @@ interface DashboardTransactionRecord {
   gateway: string;
   created_at: string;
   payment_transaction_id?: string | null;
+  provider_refund_id?: string | null;
+  provider_refund_status?: string | null;
 }
 
 interface MapDashboardOrderRecordOptions {
@@ -165,6 +167,8 @@ export function mapDashboardOrderRecord(
             created_at: transaction.created_at,
             gateway_reference: transaction.gateway_reference,
             payment_transaction_id: transaction.payment_transaction_id,
+            provider_refund_id: transaction.provider_refund_id,
+            provider_refund_status: transaction.provider_refund_status,
           })),
         }
       : {}),

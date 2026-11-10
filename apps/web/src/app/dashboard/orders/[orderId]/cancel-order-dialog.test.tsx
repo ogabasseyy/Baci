@@ -146,4 +146,23 @@ describe('CancelOrderDialog', () => {
     await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
     expect(screen.getByText(/for the remaining .*12,500/i)).toBeVisible();
   });
+
+  it('submits the automatic choice when cancel-only becomes unavailable after being selected', async () => {
+    const onConfirm = vi.fn().mockResolvedValue(undefined);
+    const props = {
+      currency: 'NGN',
+      isOpen: true,
+      onClose: vi.fn(),
+      onConfirm,
+      refundAmount: 12500,
+    };
+    const { rerender } = render(<CancelOrderDialog {...props} />);
+    await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
+    rerender(<CancelOrderDialog {...props} canCancelOnly={false} />);
+    expect(
+      screen.getByRole('radio', { name: /cancel and refund/i })
+    ).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    expect(onConfirm).toHaveBeenCalledWith('automatic');
+  });
 });

@@ -54,6 +54,14 @@ export function CancelOrderDialog({
     automaticSupported || !canCancelOnly ? 'automatic' : 'manual'
   );
   const [busy, setBusy] = useState(false);
+  // Permissions and plan support can resolve after the dialog opened: derive
+  // the choice that is actually available instead of trusting stale state.
+  const effectiveChoice: CancelRefundChoice =
+    choice === 'manual' && !canCancelOnly
+      ? 'automatic'
+      : choice === 'automatic' && !showAutomatic
+        ? 'manual'
+        : choice;
 
   const amount = formatDisplayCurrency(refundAmount, currency || 'NGN', {
     minimumFractionDigits: 2,
@@ -63,7 +71,7 @@ export function CancelOrderDialog({
   const handleConfirm = async () => {
     setBusy(true);
     try {
-      await onConfirm(choice);
+      await onConfirm(effectiveChoice);
     } finally {
       setBusy(false);
     }
@@ -81,7 +89,7 @@ export function CancelOrderDialog({
           </DialogDescription>
         </DialogHeader>
         <RadioGroup
-          value={choice}
+          value={effectiveChoice}
           onValueChange={(value) => {
             if (isCancelRefundChoice(value)) setChoice(value);
           }}
@@ -143,7 +151,7 @@ export function CancelOrderDialog({
             yourself; wait for it to finish.
           </p>
         )}
-        {choice === 'manual' && canCancelOnly && (
+        {effectiveChoice === 'manual' && canCancelOnly && (
           <p className="text-sm text-muted-foreground">
             No refund will be sent automatically for{' '}
             {inFlightAmount > 0 ? `the remaining ${amount}` : 'this order'}. The

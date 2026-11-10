@@ -28,6 +28,10 @@ export interface CancelRefundOrder {
     gateway: string | null;
     gateway_reference?: string | null;
     payment_transaction_id?: string | null;
+    /** Refund rows: the provider's own verdict stamp (metadata). */
+    provider_refund_status?: string | null;
+    /** Refund rows: the stored provider refund id (metadata). */
+    provider_refund_id?: string | number | null;
     status: string;
     id?: string;
     transaction_type?: string;
@@ -70,12 +74,37 @@ const DONE_REFUND_STATUSES: ReadonlySet<string> = new Set([
   'refunded',
 ]);
 
-// Refund-type rows whose provider refund has not finished yet.
-const PENDING_REFUND_STATUSES: ReadonlySet<string> = new Set([
-  'pending',
-  'processing',
-  'refund_pending',
-]);
+const POSITIVE_INTEGER = /^[1-9][0-9]*$/;
+
+/**
+ * A non-terminal refund row still counts as money in flight or under review,
+ * mirroring the worker's collectAwaitingCancellationRefundLegs: every
+ * non-completed linked row is, except a definitive provider rejection
+ * (failed with a failed provider stamp) that carries no provider identity,
+ * which can never recover and so waits for nothing. A failed row WITH a
+ * numeric gateway reference or stored provider id can still flip to
+ * processed later, so refunding it by hand could double-pay.
+ */
+function isRefundInFlightRow(row: {
+  gateway_reference?: string | null;
+  provider_refund_id?: string | number | null;
+  provider_refund_status?: string | null;
+  status: string;
+}): boolean {
+  if (DONE_REFUND_STATUSES.has(row.status)) return false;
+  if (row.status === 'failed' && row.provider_refund_status === 'failed') {
+    const reference = (row.gateway_reference ?? '').trim();
+    const stored = row.provider_refund_id;
+    const hasIdentity =
+      POSITIVE_INTEGER.test(reference) ||
+      (typeof stored === 'number' &&
+        Number.isSafeInteger(stored) &&
+        stored > 0) ||
+      (typeof stored === 'string' && POSITIVE_INTEGER.test(stored.trim()));
+    return hasIdentity;
+  }
+  return true;
+}
 
 /** Paid check that tolerates the case variants stored across apps. */
 export function isPaidStatus(value: unknown): boolean {
@@ -121,38 +150,41 @@ export function getCancelRefundPlan(
   // capture) belongs to the sole external payment leg, like the worker's
   // attribution; with several candidate legs it stays unattributed.
   const soleLegId = legs.length === 1 ? legs[0]?.id : undefined;
-  const refundRows = order.transactions
-    .filter((row) => row.transaction_type === 'refund')
-    .map((row) => ({
-      ...row,
-      target: row.payment_transaction_id || soleLegId,
-    }));
-  const rowsFor = (
-    leg: (typeof order.transactions)[number],
-    statuses: ReadonlySet<string>
-  ) =>
+  const refundRows = order.transactions.filter(
+    (row) => row.transaction_type === 'refund'
+  );
+  // Completed refunds cover a leg only in the same currency and gateway.
+  // An unlinked one belongs to the sole payment leg, like the worker's
+  // attribution; with several candidate legs it stays unattributed.
+  const coveredFor = (leg: (typeof order.transactions)[number]): number =>
     refundRows
       .filter(
         (row) =>
-          row.target === leg.id &&
-          statuses.has(row.status) &&
+          DONE_REFUND_STATUSES.has(row.status) &&
+          (row.payment_transaction_id || soleLegId) === leg.id &&
           (row.currency ?? null) === (leg.currency ?? null) &&
           normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
-  // A leg is covered only by completed refunds in the same currency and
-  // gateway that together reach the capture; a partial refund leaves the
-  // remainder outstanding. Refund rows still pending or processing are
-  // refunds already in flight, even while the payment leg stays completed.
+  // Non-terminal refund rows need an explicit link (the worker ignores
+  // unlinked ones) and count as in flight, even while the payment leg
+  // stays completed.
+  const pendingFor = (leg: (typeof order.transactions)[number]): number =>
+    refundRows
+      .filter(
+        (row) =>
+          row.payment_transaction_id === leg.id && isRefundInFlightRow(row)
+      )
+      .reduce((sum, row) => sum + toMinor(row.amount), 0);
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')
     .map((leg) => {
-      const covered = rowsFor(leg, DONE_REFUND_STATUSES);
+      const covered = coveredFor(leg);
       const open = Math.max(toMinor(leg.amount) - covered, 0);
       const inFlightMinor =
         leg.status === 'refund_pending'
           ? open
-          : Math.min(open, rowsFor(leg, PENDING_REFUND_STATUSES));
+          : Math.min(open, pendingFor(leg));
       return { covered, inFlightMinor, leg, owed: open - inFlightMinor };
     });
   const outstanding = entries.filter(({ owed }) => owed > 0);

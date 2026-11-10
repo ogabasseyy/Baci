@@ -1,17 +1,35 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it as vitestIt } from 'vitest';
 import { createReplayManifestTestWorkspace } from './replay-manifest-test-workspace.test-support';
 import { verifySupabaseHistoryReplayManifest } from './verify-supabase-history-replay-manifest';
 
-const replayManifestWorkspace = createReplayManifestTestWorkspace();
-const copyWorkspace = () =>
-  replayManifestWorkspace.copyWorkspace('baci-replay-drift-');
-
-afterEach(replayManifestWorkspace.cleanUp);
+// Each test owns its workspace even if a timed-out cleanup is still running.
+const it = (
+  name: string,
+  operation: (
+    copyWorkspace: (prefix?: string) => Promise<string>
+  ) => Promise<void>,
+  timeout = 90_000
+) =>
+  vitestIt(
+    name,
+    async ({ onTestFinished }) => {
+      const workspace = createReplayManifestTestWorkspace();
+      onTestFinished(async () => {
+        await workspace.cleanUp();
+      }, 120_000);
+      await workspace.run(() =>
+        operation((prefix) =>
+          workspace.copyWorkspace(prefix ?? 'baci-replay-drift-')
+        )
+      );
+    },
+    timeout
+  );
 
 describe('post-deploy replay fixture drift', () => {
-  it('rejects refreshed production-effect fixture byte drift', async () => {
+  it('rejects refreshed production-effect fixture byte drift', async (copyWorkspace) => {
     const root = await copyWorkspace();
     const fixture = path.join(
       root,
@@ -32,7 +50,7 @@ describe('post-deploy replay fixture drift', () => {
     ).rejects.toThrow(/production-effect fixture/i);
   });
 
-  it('rejects refreshed linked-ledger fixture byte drift', async () => {
+  it('rejects refreshed linked-ledger fixture byte drift', async (copyWorkspace) => {
     const root = await copyWorkspace();
     const fixture = path.join(
       root,

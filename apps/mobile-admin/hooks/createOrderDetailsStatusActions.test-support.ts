@@ -5,6 +5,7 @@ type ActionsParams = Parameters<typeof createOrderDetailsStatusActions>[0];
 
 export function createPaidOrderStatusActions(overrides?: {
   order?: Partial<NonNullable<ActionsParams['order']>>;
+  refundEvidenceBlocksChoice?: ActionsParams['refundEvidenceBlocksChoice'];
   setSuccessModal?: ActionsParams['setSuccessModal'];
   updateStatus?: ActionsParams['updateStatus'];
 }) {
@@ -13,6 +14,7 @@ export function createPaidOrderStatusActions(overrides?: {
     overrides?.updateStatus ?? vi.fn().mockResolvedValue(undefined);
   const actions = createOrderDetailsStatusActions({
     openShipmentFlow: vi.fn(),
+    refundEvidenceBlocksChoice: overrides?.refundEvidenceBlocksChoice,
     order: {
       id: 'order-paid',
       amount_paid: 5000,

@@ -243,4 +243,28 @@ describe('cancellation refund plan', () => {
       'Cancel only (I will refund them)'
     );
   });
+
+  it('rechecks open refund evidence at confirm time and falls back to the neutral cancel', async () => {
+    const refundEvidenceBlocksChoice = vi.fn().mockResolvedValue(true);
+    const { actions } = createPaidOrderStatusActions({
+      refundEvidenceBlocksChoice,
+    });
+    await actions.handleStatusUpdate('cancelled');
+    expect(refundEvidenceBlocksChoice).toHaveBeenCalledWith('order-paid');
+    const call = vi.mocked(Alert.alert).mock.calls[0];
+    expect(call?.[0]).toBe('Cancel order?');
+    expect(call?.[2]?.map((button) => button.text)).not.toContain(
+      'Cancel only (I will refund them)'
+    );
+  });
+
+  it('keeps the refund choice when the confirm-time recheck finds no open evidence', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      refundEvidenceBlocksChoice: vi.fn().mockResolvedValue(false),
+    });
+    await actions.handleStatusUpdate('cancelled');
+    expect(vi.mocked(Alert.alert).mock.calls[0]?.[0]).toBe(
+      'Cancel paid order?'
+    );
+  });
 });

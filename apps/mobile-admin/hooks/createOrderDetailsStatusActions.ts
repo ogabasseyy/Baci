@@ -16,6 +16,8 @@ interface CreateOrderDetailsStatusActionsParams {
   setShowCreditModal: (value: boolean) => void;
   setShowPaymentOptionModal: (value: boolean) => void;
   setShowStatusModal: (value: boolean) => void;
+  /** Confirm-time recheck of open provider-refund evidence (true blocks). */
+  refundEvidenceBlocksChoice?: (orderId: string) => Promise<boolean>;
   setSuccessModal: (
     value:
       | {
@@ -55,6 +57,7 @@ interface CreateOrderDetailsStatusActionsParams {
 export function createOrderDetailsStatusActions({
   openShipmentFlow,
   order,
+  refundEvidenceBlocksChoice,
   setShowCreditModal,
   setShowPaymentOptionModal,
   setShowStatusModal,
@@ -198,7 +201,7 @@ export function createOrderDetailsStatusActions({
     // is best effort. Without it we cannot say what is owed, so never offer
     // a manual refund: cancel neutrally and point at the refund status.
     const plan = order.cancel_refund_plan;
-    if (isPaid && (plan === undefined || !plan.ledgerKnown)) {
+    const showNeutralCancel = () =>
       Alert.alert(
         'Cancel order?',
         "Refund details couldn't be loaded. Cancel now and check the order's refund status for what happens next; do not refund the customer by hand until it shows what is owed. This cannot be undone.",
@@ -213,10 +216,22 @@ export function createOrderDetailsStatusActions({
           },
         ]
       );
+    if (isPaid && (plan === undefined || !plan.ledgerKnown)) {
+      showNeutralCancel();
       return;
     }
     const hasRefundChoice = isPaid && plan !== undefined && plan.amount > 0;
     if (hasRefundChoice && plan) {
+      // The plan was read with the order and can be stale: recheck open
+      // provider-refund evidence now, and fall back to the neutral cancel
+      // (no cancel-only) when it is open or the check fails.
+      if (
+        refundEvidenceBlocksChoice &&
+        (await refundEvidenceBlocksChoice(order.id))
+      ) {
+        showNeutralCancel();
+        return;
+      }
       const automaticSupported = plan.automaticSupported;
       // The safe automatic path is listed first (Android positions buttons
       // by order). Mobile has no staff permission data, so it always offers

@@ -2,6 +2,22 @@
 
 Prepared configuration only; no service has been installed or enabled.
 
+**Superseded for delivery (2026-11-10).** Cart change notices are now sent by
+the database: a trigger sends at write time and a pg_cron sweep retries
+(`supabase/migrations/20261110130000_commerce_cart_publish_on_write.sql`, see
+`docs/deploy/shared-cart-rollout.md`). Do not install this service to deliver
+notices; running it alongside the sweep is harmless (row locks fence them) but
+adds nothing. The notes below remain as the record of the worker design.
+
+**Open gap: retention.** Only this worker runs the `cleanup_commerce_carts`
+retention pass (expired receipts, events, handoffs and checkout sessions, and
+idle-cart expiration), and this worker has never been installed, so that pass
+is not running anywhere today. Write-time sending does not change that. It
+needs its own owner-approved step: either a pg_cron job for
+`cleanup_commerce_carts` (after confirming the function accepts the scheduler
+role) or running this worker for retention only. Terminal carts older than 90
+days are purged separately by the `commerce-cart-terminal-purge` job.
+
 The tracked `config/baci-cart-events.service` delegates to the existing
 `bin/run-web-script.sh` scheduler launcher and the exact `app-live` release.
 Its dedicated environment file must be provisioned under separate owner

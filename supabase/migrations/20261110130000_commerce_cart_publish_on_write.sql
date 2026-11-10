@@ -1,0 +1,262 @@
+-- Shared-cart change notices: fix the sender, send at write time, keep a
+-- slow sweep as the safety net, and expose a health reading for alerting.
+--
+-- Why: production showed every queued notice failing. Supabase's
+-- realtime.send now adds an `id` key to a payload that has none, so the
+-- publisher's exact-payload acknowledgement check
+-- (20261014070000_commerce_cart_broadcast.sql) could never match and every
+-- send was counted as lost. Nothing was ever delivered.
+--
+-- What changes:
+--  1. One private sender builds the notice with its own `id`, so the stored
+--     payload is exactly what was sent on every realtime.send version, and
+--     confirms the stored row by that id.
+--  2. A BEFORE INSERT trigger on the outbox sends the notice inside the cart
+--     write's own transaction (realtime.send is an INSERT that Realtime ships
+--     from the WAL after commit, so a rolled-back cart write sends nothing).
+--     A failed or unconfirmed send never fails the cart write: the row simply
+--     stays undelivered for the sweep.
+--  3. The publisher keeps its leases, backoff and dead-letter rules and now
+--     uses the same sender. pg_cron runs it every 30 seconds as the sweep.
+--  4. commerce_cart_publish_health() reports stale and dead-lettered notices
+--     as counts only, for a monitor to alert on.
+
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.commerce_cart_send_change(
+  p_merchant_id uuid,
+  p_cart_id uuid,
+  p_version integer,
+  p_operation_id text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_id text := pg_catalog.gen_random_uuid()::text;
+  v_topic text := 'cart:' || p_merchant_id::text || ':' || p_cart_id::text;
+  -- Routing hint only: no cart contents ever enter a notice.
+  v_payload jsonb := pg_catalog.jsonb_build_object(
+    'id', v_id,
+    'merchantId', p_merchant_id,
+    'cartId', p_cart_id,
+    'version', p_version,
+    'operationId', p_operation_id
+  );
+BEGIN
+  PERFORM realtime.send(v_payload, 'cart_changed', v_topic, true);
+  -- realtime.send reports a failed insert (for example a missing daily
+  -- partition) as a warning, not an error. Never acknowledge without the
+  -- durable row this call wrote. The topic, extension and private filters
+  -- match Realtime's replay index, and the one-day bound prunes the daily
+  -- partitions whatever time zone the session stamps inserted_at in.
+  RETURN EXISTS (
+    SELECT 1
+    FROM realtime.messages AS message
+    WHERE message.topic = v_topic
+      AND message.extension = 'broadcast'
+      AND message.private = true
+      AND message.inserted_at
+        >= (pg_catalog.now() AT TIME ZONE 'utc') - interval '1 day'
+      AND message.event = 'cart_changed'
+      AND message.payload ->> 'id' = v_id
+  );
+END;
+$$;
+ALTER FUNCTION private.commerce_cart_send_change(uuid, uuid, integer, text)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.commerce_cart_send_change(uuid, uuid, integer, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+-- Send at write time. Every cart writer already records its change in the
+-- outbox, so one trigger covers them all.
+CREATE OR REPLACE FUNCTION private.commerce_cart_events_send_on_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.delivered_at IS NOT NULL OR NEW.dead_letter_at IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.merchants AS merchant
+    WHERE merchant.id = NEW.merchant_id
+      AND merchant.premium_features
+        @> '["shared_cart","shared_cart_realtime"]'::jsonb
+  ) THEN
+    RETURN NEW;
+  END IF;
+  BEGIN
+    IF private.commerce_cart_send_change(
+      NEW.merchant_id, NEW.cart_id, NEW.version, NEW.operation_id
+    ) THEN
+      NEW.delivered_at := pg_catalog.now();
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    -- The cart write must never fail because a notice could not be sent.
+    -- The row stays undelivered and the sweep retries it.
+    NULL;
+  END;
+  RETURN NEW;
+END;
+$$;
+ALTER FUNCTION private.commerce_cart_events_send_on_write() OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.commerce_cart_events_send_on_write()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS commerce_cart_events_send_on_write
+  ON public.commerce_cart_events;
+CREATE TRIGGER commerce_cart_events_send_on_write
+  BEFORE INSERT ON public.commerce_cart_events
+  FOR EACH ROW
+  EXECUTE FUNCTION private.commerce_cart_events_send_on_write();
+
+-- Sweep publisher: unchanged contract (signature, grants, leases, backoff,
+-- dead letter after 10 attempts); only the send and its confirmation move to
+-- the shared sender.
+CREATE OR REPLACE FUNCTION public.commerce_cart_publish_events(
+  p_limit integer,
+  p_worker_id text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  r record;
+  v_sent integer := 0;
+  v_failed integer := 0;
+  v_dead integer := 0;
+  v_attempt integer;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 50
+    OR p_worker_id IS NULL OR p_worker_id !~ '^[a-zA-Z0-9_-]{1,80}$' THEN
+    RAISE EXCEPTION 'invalid publisher parameters';
+  END IF;
+  FOR r IN
+    SELECT e.*
+    FROM public.commerce_cart_events AS e
+    JOIN public.merchants AS m ON m.id = e.merchant_id
+    WHERE e.delivered_at IS NULL
+      AND e.dead_letter_at IS NULL
+      AND e.next_attempt_at <= pg_catalog.now()
+      AND e.expires_at > pg_catalog.now()
+      AND m.premium_features @> '["shared_cart","shared_cart_realtime"]'::jsonb
+    ORDER BY e.id
+    LIMIT p_limit
+    FOR UPDATE OF e SKIP LOCKED
+  LOOP
+    v_attempt := r.attempts + 1;
+    BEGIN
+      UPDATE public.commerce_cart_events
+      SET locked_at = pg_catalog.now(), locked_by = p_worker_id,
+        attempts = v_attempt
+      WHERE id = r.id;
+      IF NOT private.commerce_cart_send_change(
+        r.merchant_id, r.cart_id, r.version, r.operation_id
+      ) THEN
+        RAISE EXCEPTION 'broadcast not durably accepted';
+      END IF;
+      UPDATE public.commerce_cart_events
+      SET delivered_at = pg_catalog.now(), locked_at = NULL, locked_by = NULL
+      WHERE id = r.id;
+      v_sent := v_sent + 1;
+    EXCEPTION WHEN OTHERS THEN
+      UPDATE public.commerce_cart_events
+      SET attempts = v_attempt, locked_at = NULL, locked_by = NULL,
+        next_attempt_at = pg_catalog.now() + pg_catalog.make_interval(
+          secs => least(300, power(2, least(v_attempt, 8))::integer)
+        ),
+        dead_letter_at = CASE
+          WHEN v_attempt >= 10 THEN pg_catalog.now() ELSE NULL
+        END
+      WHERE id = r.id;
+      v_failed := v_failed + 1;
+      IF v_attempt >= 10 THEN v_dead := v_dead + 1; END IF;
+    END;
+  END LOOP;
+  RETURN pg_catalog.jsonb_build_object(
+    'sent', v_sent, 'failed', v_failed, 'deadLettered', v_dead
+  );
+END;
+$$;
+ALTER FUNCTION public.commerce_cart_publish_events(integer, text)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
+  FROM PUBLIC, anon, authenticated;
+
+-- Health reading for alerting: two counts, no cart or merchant identifiers.
+-- "Stale" is a notice for a live-update merchant still undelivered five
+-- minutes after it was written; with send-on-write and a 30-second sweep
+-- that only happens when delivery is broken. Both counts read small partial
+-- indexes, so the anon-callable reading stays cheap.
+CREATE INDEX IF NOT EXISTS commerce_cart_events_dead_letter_idx
+  ON public.commerce_cart_events (dead_letter_at)
+  WHERE dead_letter_at IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.commerce_cart_publish_health()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  WITH counts AS (
+    SELECT
+      (
+        SELECT pg_catalog.count(*)
+        FROM public.commerce_cart_events AS e
+        JOIN public.merchants AS m ON m.id = e.merchant_id
+        WHERE e.delivered_at IS NULL
+          AND e.dead_letter_at IS NULL
+          AND e.expires_at > pg_catalog.now()
+          AND e.created_at < pg_catalog.now() - interval '5 minutes'
+          AND m.premium_features
+            @> '["shared_cart","shared_cart_realtime"]'::jsonb
+      ) AS stale_undelivered,
+      (
+        SELECT pg_catalog.count(*)
+        FROM public.commerce_cart_events AS e
+        WHERE e.dead_letter_at > pg_catalog.now() - interval '24 hours'
+      ) AS dead_lettered_24h
+  )
+  SELECT pg_catalog.jsonb_build_object(
+    'healthy', stale_undelivered = 0 AND dead_lettered_24h = 0,
+    'staleUndelivered', stale_undelivered,
+    'deadLettered24h', dead_lettered_24h
+  )
+  FROM counts;
+$$;
+ALTER FUNCTION public.commerce_cart_publish_health() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.commerce_cart_publish_health()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.commerce_cart_publish_health() TO anon;
+
+-- Sweep schedule and its run-log retention. Non-destructive: the publisher
+-- only sends notices for merchants enrolled in live updates. Re-running
+-- cron.schedule under the same job name replaces the earlier definition.
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'commerce-cart-publish-events',
+      '30 seconds',
+      $job$SELECT public.commerce_cart_publish_events(50, 'pg-cron')$job$
+    );
+    PERFORM cron.alter_job(
+      (SELECT jobid FROM cron.job
+        WHERE jobname = 'commerce-cart-publish-events'),
+      active := true
+    );
+    PERFORM cron.schedule(
+      'commerce-cart-publish-events-log-retention',
+      '23 3 * * *',
+      $job$DELETE FROM cron.job_run_details WHERE command = 'SELECT public.commerce_cart_publish_events(50, ''pg-cron'')' AND end_time < pg_catalog.clock_timestamp() - interval '7 days'$job$
+    );
+  END IF;
+END;
+$do$;

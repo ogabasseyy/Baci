@@ -53,9 +53,25 @@ and enrollment gates in the release sequence below.
   active expired carts to `expired` only when no active, unexpired
   checkout session exists for them (`NOT EXISTS` guard). Unexpired
   retry receipts are spared.
-- Transactional outbox publisher with leases, bounded backoff and
-  dead-letter handling (local unit/SQL evidence; live qualification
-  pending).
+- Change notices are sent by the database itself
+  (`20261110130000_commerce_cart_publish_on_write.sql`): a trigger on the
+  outbox sends each notice inside the cart write's transaction, and a
+  pg_cron sweep (`commerce-cart-publish-events`, every 30 seconds) retries
+  anything that was not confirmed, with leases, bounded backoff and
+  dead-letter handling. A failed send never fails a cart write. No worker
+  process or worker credential is needed; the VPS worker described in
+  `vps-workers/docs/cart-events.md` is not installed. The first live
+  switch-on (2026-11-10) found the original publisher could never
+  acknowledge a send, because `realtime.send` adds an `id` to the stored
+  payload; the sender now supplies its own id and confirms by it.
+  `commerce_cart_publish_health()` reports stale and dead-lettered notices
+  as counts for alerting. The sweep sends at most 100 notices a minute, so
+  when a merchant with an existing undelivered backlog is first enrolled,
+  drain it by calling `commerce_cart_publish_events(50, '<operator>')`
+  repeatedly before relying on the alarm; otherwise
+  `/api/cron/cart-notice-health` reports the old backlog as stale until the
+  sweep catches up. A notice that fails ten sends is dead-lettered and not
+  retried; the alarm reports it for 24 hours.
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
 - Worker credential boundary: `20261015157000` revokes the

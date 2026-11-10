@@ -9,14 +9,11 @@ the database: a trigger sends at write time and a pg_cron sweep retries
 notices; running it alongside the sweep is harmless (row locks fence them) but
 adds nothing. The notes below remain as the record of the worker design.
 
-**Open gap: retention.** Only this worker runs the `cleanup_commerce_carts`
-retention pass (expired receipts, events, handoffs and checkout sessions, and
-idle-cart expiration), and this worker has never been installed, so that pass
-is not running anywhere today. Write-time sending does not change that. It
-needs its own owner-approved step: either a pg_cron job for
-`cleanup_commerce_carts` (after confirming the function accepts the scheduler
-role) or running this worker for retention only. Terminal carts older than 90
-days are purged separately by the `commerce-cart-terminal-purge` job.
+**Retention.** This worker was also the only caller of the
+`cleanup_commerce_carts` retention pass. Because the worker is not installed,
+retention runs instead from the `commerce-cart-retention` pg_cron job (step 5a
+of `docs/deploy/shared-cart-rollout.md`), active in production since
+2026-11-10.
 
 The tracked `config/baci-cart-events.service` delegates to the existing
 `bin/run-web-script.sh` scheduler launcher and the exact `app-live` release.

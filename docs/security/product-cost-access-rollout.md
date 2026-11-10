@@ -134,7 +134,9 @@ this work is not a blanket audit or migration of all cost-bearing tables.
   the minimal fixture: the inventory-policy dependency is intentionally unavailable
   to authenticated shoppers. The corrected test preserves that boundary, and all
   three local SQL suites pass with the historical dependency ACL reproduced.
-  A new full historical replay is still required.
+  Activation CI subsequently passed the complete historical replay and all 314
+  registered SQL checks on commit `5f052a5387c06ebd23f42e49662fd0f4a8677d86`
+  (run `42844943100`, DB Replay job `129931069300`).
 - Final split-write regressions passed: 55 web route tests and 32 mobile tests.
   An independent review identified the partial-success/cache invalidation issue;
   its remedy was re-reviewed without new findings.
@@ -145,10 +147,14 @@ this work is not a blanket audit or migration of all cost-bearing tables.
 - CodeRabbit reviewed the full 45-file combined stack and raised one minor issue:
   missing mobile preflight rows used `single()` rather than `maybeSingle()`. Both
   preflights were corrected; the 19-test regression suite and Biome passed. The
-  correction-only re-review is blocked by the shared CLI rate limit and can be
-  retried after its reported ten-minute reset.
-- Full historical replay is blocked locally by Supabase CLI version mismatch
-  (the repository requires 2.111.0). A manually dispatched full CI run is checking
-  the stacked draft because automatic quality gates only target main.
-- Full historical replay, monorepo CI and final review remain release gates.
-  Focused checks are not a green CI result.
+  correction-only re-review subsequently covered seven files and raised zero
+  issues. The CLI rate limit delayed the review but did not prevent completion.
+- Full historical replay remains unavailable locally because the installed
+  Supabase CLI differs from the required 2.111.0; the pinned CI replay above passed.
+  Manually dispatch CI for stacked drafts because automatic quality gates only
+  target main.
+- Broad CI also exposed stale test fixtures for product reconciliation and the
+  product API after the protected read-path change. Keep those test fixtures on
+  `merchant_products`, while creation/mutation mocks continue to use `products`.
+- Monorepo CI remains a release gate. A passing database replay and focused
+  checks are not a green result for the entire workflow.

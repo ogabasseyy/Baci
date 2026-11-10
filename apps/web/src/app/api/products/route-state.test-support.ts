@@ -125,10 +125,21 @@ export const createMockSupabase = () => ({
         ),
       };
     }
-    if (table === 'products') {
+    if (table === 'products' || table === 'merchant_products') {
       const chain = {
-        select: vi.fn(() => chain),
-        delete: vi.fn(() => chain),
+        select: vi.fn((columns: string) => {
+          if (table === 'products' && /\bcost_price\b/.test(columns)) {
+            throw new Error(
+              'Product costs must be read through merchant_products'
+            );
+          }
+          return chain;
+        }),
+        delete: vi.fn(() => {
+          if (table === 'merchant_products')
+            throw new Error('merchant_products is read-only');
+          return chain;
+        }),
         eq: vi.fn(() => chain),
         order: vi.fn(() => chain),
         or: vi.fn(() => chain),
@@ -149,18 +160,22 @@ export const createMockSupabase = () => ({
             error: null,
           })
         ),
-        insert: vi.fn(() => ({
-          select: vi.fn(() => ({
-            single: vi.fn(() =>
-              Promise.resolve({
-                data: productRouteTestState.insertError
-                  ? null
-                  : productRouteTestState.insertResult,
-                error: productRouteTestState.insertError,
-              })
-            ),
-          })),
-        })),
+        insert: vi.fn(() => {
+          if (table === 'merchant_products')
+            throw new Error('merchant_products is read-only');
+          return {
+            select: vi.fn(() => ({
+              single: vi.fn(() =>
+                Promise.resolve({
+                  data: productRouteTestState.insertError
+                    ? null
+                    : productRouteTestState.insertResult,
+                  error: productRouteTestState.insertError,
+                })
+              ),
+            })),
+          };
+        }),
       };
       productRouteTestState.lastProductsQueryChain = chain;
       return chain;

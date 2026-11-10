@@ -22,8 +22,8 @@ export const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerCopy: { flex: 1, gap: 5 },
-  eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4 },
-  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.7 },
+  eyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
+  title: { fontSize: 25, fontWeight: '800', letterSpacing: -0.7 },
   closeButton: {
     width: 44,
     height: 44,
@@ -31,10 +31,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  subtitle: { fontSize: 14, lineHeight: 22, marginBottom: 12 },
-  accountName: { fontSize: 12, lineHeight: 18, marginTop: 4 },
+  subtitle: { fontSize: 13, lineHeight: 22, marginBottom: 12 },
+  accountName: { fontSize: 11, lineHeight: 18, marginTop: 4 },
   accountBank: {
-    fontSize: 12,
+    fontSize: 11,
   },
   accountCard: {
     alignItems: 'center',
@@ -58,7 +58,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   accountNumber: {
-    fontSize: 26,
+    fontSize: 23,
     fontWeight: '700',
     letterSpacing: 1,
   },
@@ -66,7 +66,7 @@ export const styles = StyleSheet.create({
     marginTop: 16,
   },
   cardToggle: {
-    minHeight: 52,
+    minHeight: 45,
     borderRadius: 16,
     borderWidth: 1,
     justifyContent: 'center',
@@ -76,11 +76,11 @@ export const styles = StyleSheet.create({
     marginTop: 14,
   },
   cardToggleText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   copyFeedback: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 6,
   },
   settingUpRow: {

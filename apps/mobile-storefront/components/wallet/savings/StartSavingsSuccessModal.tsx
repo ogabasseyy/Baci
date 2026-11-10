@@ -30,7 +30,7 @@ export function StartSavingsSuccessModal({ colors, controller }: Props) {
       <Text
         style={{
           color: colors.textSecondary,
-          fontSize: 14,
+          fontSize: 13,
           lineHeight: 20,
           textAlign: 'center',
         }}

@@ -1,5 +1,7 @@
 'use client';
 
+// Client component: owns the refund-choice radio state and click handlers.
+
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {

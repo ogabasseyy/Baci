@@ -1,6 +1,10 @@
 import type { Order, ShippingStatus } from '@baci/shared';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES,
+  UNCONFIRMED_SHIPPING_ERROR_CODES,
+} from '@/constants/shipping-booking-error-codes';
 import { BASE_URL } from '@/lib/api-client';
 import { useMerchant } from '../useMerchant';
 import {
@@ -15,10 +19,6 @@ import {
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
-import {
-  DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES,
-  UNCONFIRMED_SHIPPING_ERROR_CODES,
-} from './shipping-booking-error-codes';
 
 // Shipping includes a bounded tariff check before carrier submission. Keep a
 // single deadline across fetch and response parsing, with no automatic retry.

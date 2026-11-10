@@ -112,12 +112,14 @@ export function SavingsGoalSummary({
         ) : null}
       </View>
       {hasProgress ? null : (
-        // No visual card yet, but screen readers still hear where it stands.
+        // No progress card yet: the pace line, or where the plan stands when
+        // there is no pace, with the target always read out.
         <Text
           accessibilityLabel={`Nothing saved yet toward your ${formatNgnCurrency(goal.target_amount)} target.${nudge ? ` ${nudge.label}` : ''}`}
           style={[styles.nudge, { color: colors.text }]}
         >
-          {nudge?.label ?? ''}
+          {nudge?.label ??
+            `Nothing saved yet toward your ${formatNgnCurrency(goal.target_amount)} target.`}
         </Text>
       )}
       {hasProgress ? (

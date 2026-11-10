@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Alert } from 'react-native';
-import type { UseStartSavingsSubmitInput } from './run-savings-goal-submission';
+import { runSavingsGoalSubmission } from './run-savings-goal-submission';
 import {
-  PLAN_CREATED_HEAD_START_PENDING,
-  runSavingsGoalSubmission,
-} from './run-savings-goal-submission';
+  createInput,
+  validation,
+} from './run-savings-goal-submission.test-support';
 
 const mockCreateSavingsGoal =
   jest.fn<
@@ -30,66 +30,6 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
   scheduleSavingsReminderNotification: (...args: unknown[]) =>
     mockScheduleSavingsReminderNotification(...args),
 }));
-
-/** A successful wallet refetch whose data holds one plan. */
-function loadedWith(goalId: string) {
-  return {
-    isError: false,
-    data: { wallet: { savings_goals: [{ id: goalId }] } },
-  };
-}
-
-function createInput(overrides = {}): UseStartSavingsSubmitInput {
-  return {
-    activeMerchantId: 'merchant-1',
-    activeMerchantSlug: 'ogabassey',
-    contributionValue: 20000,
-    effectiveInitialContribution: 20000,
-    frequency: 'daily' as const,
-    fundingAccount: { account_number: '0123456789' },
-    initialContributionIdempotencyKey: null,
-    goalIdempotencyKey: null,
-    setGoalIdempotencyKey: jest.fn(),
-    maturityDate: '2026-06-30',
-    preferredDebitTime: '06:20',
-    refetch: jest.fn(async () => undefined),
-    requiredTopUpAmount: 50000,
-    selectedPaymentMethodId: null,
-    selectedProduct: {
-      id: 'product-1',
-      image: 'https://example.com/iphone.jpg',
-      name: 'iPhone 13 Pro Max',
-      price: 800000,
-      slug: 'iphone-13-pro-max',
-      variantId: 'variant-1',
-      requiresVariantSelection: false,
-    },
-    setFormError: jest.fn(),
-    setInitialContributionIdempotencyKey: jest.fn(),
-    setShowFundingModal: jest.fn(),
-    setShowPreviewModal: jest.fn(),
-    setShowSuccessModal: jest.fn(),
-    setShowTransferModal: jest.fn(),
-    sourceMode: 'manual' as const,
-    startDate: '2026-05-22',
-    targetValue: 800000,
-    variantId: undefined,
-    ...overrides,
-  };
-}
-
-const validation = {
-  formattedStartDate: '2026-05-22',
-  selectedProduct: {
-    id: 'product-1',
-    image: 'https://example.com/iphone.jpg',
-    name: 'iPhone 13 Pro Max',
-    price: 800000,
-    slug: 'iphone-13-pro-max',
-    variantId: 'variant-1',
-    requiresVariantSelection: false,
-  },
-};
 
 describe('runSavingsGoalSubmission', () => {
   beforeEach(() => {
@@ -287,84 +227,5 @@ describe('runSavingsGoalSubmission', () => {
     expect(setCreatedGoalId).toHaveBeenCalledWith('goal-1');
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
-  });
-
-  it('hands a deferred PiggyVest head start to the wallet instead of the transfer sheet', async () => {
-    const setCreatedGoalId = jest.fn();
-    const onContinueInWallet = jest.fn();
-    const input = createInput({
-      deferInitialContribution: true,
-      effectiveInitialContribution: 10000,
-      onContinueInWallet,
-      refetch: jest.fn(async () => loadedWith('goal-1')),
-      setCreatedGoalId,
-    });
-
-    await runSavingsGoalSubmission(input, validation);
-
-    // The plan is created without debiting the legacy wallet...
-    expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
-      expect.objectContaining({ initialContributionAmount: 0 })
-    );
-    // ...and the head start moves from the wallet's Add to savings sheet.
-    expect(onContinueInWallet).toHaveBeenCalledWith('goal-1', 10000);
-    // The new goal is loaded into the wallet data before the hand-off.
-    expect(input.refetch).toHaveBeenCalled();
-    const refetchOrder = jest.mocked(input.refetch).mock.invocationCallOrder[0];
-    const handOffOrder = onContinueInWallet.mock.invocationCallOrder[0];
-    expect(refetchOrder).toBeLessThan(handOffOrder ?? 0);
-    expect(input.setShowTransferModal).not.toHaveBeenCalledWith(true);
-    expect(input.setShowSuccessModal).not.toHaveBeenCalled();
-    expect(setCreatedGoalId).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['resolves with an error', { isError: true, data: undefined }],
-    ['has not loaded the new plan yet', loadedWith('older-goal')],
-  ])('never prefills the head start when the reload %s', async (_l, outcome) => {
-    const onContinueInWallet = jest.fn();
-    const input = createInput({
-      deferInitialContribution: true,
-      effectiveInitialContribution: 10000,
-      onContinueInWallet,
-      refetch: jest.fn(async () => outcome),
-    });
-
-    await runSavingsGoalSubmission(input, validation);
-
-    expect(onContinueInWallet).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenLastCalledWith(
-      PLAN_CREATED_HEAD_START_PENDING
-    );
-    // Said where the customer will see it, not only in the form.
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Plan created',
-      PLAN_CREATED_HEAD_START_PENDING
-    );
-  });
-
-  it('never prefills the head start on another plan when the reload fails', async () => {
-    const onContinueInWallet = jest.fn();
-    const input = createInput({
-      deferInitialContribution: true,
-      effectiveInitialContribution: 10000,
-      onContinueInWallet,
-      refetch: jest.fn(async () => {
-        throw new Error('offline');
-      }),
-    });
-
-    await runSavingsGoalSubmission(input, validation);
-
-    expect(mockCreateSavingsGoal).toHaveBeenCalled();
-    expect(onContinueInWallet).not.toHaveBeenCalled();
-    expect(input.setFormError).toHaveBeenLastCalledWith(
-      PLAN_CREATED_HEAD_START_PENDING
-    );
-    // Said where the customer will see it, not only in the form.
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Plan created',
-      PLAN_CREATED_HEAD_START_PENDING
-    );
   });
 });

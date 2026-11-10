@@ -94,6 +94,10 @@ describe('SavingsGoalSummary', () => {
       />
     );
     expect(screen.queryByText(/a week to reach this by/)).toBeNull();
+    // No blank gap: with no pace, the zero-saved status shows instead.
+    expect(
+      screen.getByText('Nothing saved yet toward your ₦250,000 target.')
+    ).toBeOnTheScreen();
   });
 
   it.each([

@@ -4,7 +4,10 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { useAuthStore } from '@/stores/auth-store';
-import { handOffToWallet } from './hand-off-to-wallet';
+import {
+  handOffToWallet,
+  PLAN_ALREADY_CREATED_MESSAGE,
+} from './hand-off-to-wallet';
 import { runBankTransferContribution } from './run-bank-transfer-contribution';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
@@ -27,9 +30,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
   // A created plan whose wallet hand-off could not finish, for its account.
-  const pendingHandOffRef = useRef<{ goalId: string; userId?: string } | null>(
-    null
-  );
+  const pendingHandOffRef = useRef<{
+    goalId: string;
+    userId?: string;
+    contextKey: string;
+  } | null>(null);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
   const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
@@ -84,10 +89,31 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     const submittingUserId = useAuthStore.getState().user?.id;
     const stillCurrent = () =>
       context.active && useAuthStore.getState().user?.id === submittingUserId;
+    // A plan already exists for this account but its head start never moved:
+    // only the unchanged wallet hand-off may continue it. Any edit, a dropped
+    // head start or another funding choice must not create a second plan or
+    // fund that plan with different details.
+    const pending =
+      pendingHandOffRef.current?.userId === submittingUserId
+        ? pendingHandOffRef.current
+        : null;
+    if (
+      pending &&
+      !(options?.continueInWallet && pending.contextKey === context.key)
+    ) {
+      input.setFormError(PLAN_ALREADY_CREATED_MESSAGE);
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+      return;
+    }
     if (options?.confirmPrimaryBalance) {
       // The plan is created without the head start, so the target bound the
       // creation request would enforce is checked here, on this input.
-      if (input.effectiveInitialContribution > input.targetValue) {
+      // Checked on the whole naira the wallet will move, not the typed amount.
+      if (
+        wholeNairaHeadStart(input.effectiveInitialContribution) >
+        input.targetValue
+      ) {
         input.setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
         submitInFlightRef.current = false;
         if (mountedRef.current) setIsSubmitting(false);
@@ -139,14 +165,13 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       });
     };
     const onHandOffPending = (goalId: string) => {
-      pendingHandOffRef.current = { goalId, userId: submittingUserId };
+      pendingHandOffRef.current = {
+        goalId,
+        userId: submittingUserId,
+        contextKey: context.key,
+      };
     };
-    const pending = pendingHandOffRef.current;
-    if (
-      options?.continueInWallet &&
-      pending &&
-      pending.userId === submittingUserId
-    ) {
+    if (pending) {
       // The plan already exists: retry its hand-off, never create another.
       await handOffToWallet(
         {

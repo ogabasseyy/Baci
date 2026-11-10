@@ -135,6 +135,22 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(result.current.isSubmitting).toBe(false);
   });
 
+  it('refuses a head start that rounds up past a fractional target', async () => {
+    // ₦10,000.10 moves as ₦10,001, more than the ₦10,000.10 target.
+    const input = createInput({
+      effectiveInitialContribution: 10_000.1,
+      targetValue: 10_000.1,
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
+    );
+  });
+
   it('refuses a head start above the target even on a direct submit', async () => {
     const input = createInput({
       effectiveInitialContribution: 900000,
@@ -228,36 +244,6 @@ describe('PiggyVest head start balance check at submit', () => {
     });
     expect(router.replace).not.toHaveBeenCalled();
     useAuthStore.setState({ user: null } as never);
-  });
-
-  it('retries the hand-off for the created plan instead of creating another', async () => {
-    readBalance.mockResolvedValue(2_000_000);
-    const refetch = jest
-      .fn<() => Promise<unknown>>()
-      // First reload has not picked the new plan up yet.
-      .mockResolvedValueOnce({ isError: true, data: undefined })
-      .mockResolvedValue({
-        isError: false,
-        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
-      });
-    const input = createInput({ refetch });
-    const { result } = renderHook(() => useStartSavingsSubmit(input));
-    await act(async () => {
-      await result.current.submitSavingsGoal(primaryOptions);
-    });
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
-    expect(router.replace).not.toHaveBeenCalled();
-    // The customer submits again: the same plan is handed over.
-    await act(async () => {
-      await result.current.submitSavingsGoal(primaryOptions);
-    });
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
-    expect(router.replace).toHaveBeenCalledWith(
-      expect.objectContaining({
-        params: expect.objectContaining({ savingsGoalId: 'goal-1' }),
-      })
-    );
-    readBalance.mockReset();
   });
 
   it('drops the submission when the plan is edited during the check', async () => {

@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+// useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
@@ -113,16 +114,17 @@ export function PiggyvestWalletSetupPanel({
   // While PiggyVest finishes the account number, check by itself every few
   // seconds (bounded) so the customer never has to keep tapping.
   const runAutoCheck = useEffectEvent(() => {
+    // A manual check may have started since the timer was set: skip without
+    // spending one of the bounded automatic checks.
+    if (busy) return;
+    setAutoChecks((count) => count + 1);
     void refresh();
   });
   useEffect(() => {
     // Wait while a check is in flight so every counted check really runs.
     if (busy || !pending || reviewRequired || autoChecks >= AUTO_CHECK_LIMIT)
       return;
-    const timer = setTimeout(() => {
-      setAutoChecks((count) => count + 1);
-      runAutoCheck();
-    }, AUTO_CHECK_INTERVAL_MS);
+    const timer = setTimeout(runAutoCheck, AUTO_CHECK_INTERVAL_MS);
     return () => clearTimeout(timer);
   }, [busy, pending, reviewRequired, autoChecks]);
 

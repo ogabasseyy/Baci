@@ -114,6 +114,28 @@ describe('ModalSheet', () => {
     }
   });
 
+  it('does not report a close when it mounts already closed', () => {
+    jest.useFakeTimers();
+    try {
+      const onClosed = jest.fn();
+      render(
+        <ModalSheet
+          presentation="fade-backdrop"
+          visible={false}
+          onClosed={onClosed}
+        >
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(onClosed).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('runs a shared backdrop and request-close handler only once', () => {
     const close = jest.fn();
     render(

@@ -16,4 +16,9 @@ describe('formatNgnCurrency', () => {
     expect(formatNgnCurrency(0)).toBe('₦0');
     expect(formatNgnCurrency(250400)).toBe('₦250,400');
   });
+
+  it('shows a dash instead of NaN or Infinity for a non-finite amount', () => {
+    expect(formatNgnCurrency(Number.NaN)).toBe('—');
+    expect(formatNgnCurrency(Number.POSITIVE_INFINITY)).toBe('—');
+  });
 });

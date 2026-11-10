@@ -1,3 +1,4 @@
+// useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
 import { type ReactNode, useEffect, useEffectEvent, useState } from 'react';
 import type { ModalProps, StyleProp, ViewStyle } from 'react-native';
 import {
@@ -65,6 +66,12 @@ export function ModalSheet({
   const notifyClosed = useEffectEvent(() => onClosed?.());
   useEffect(() => {
     if (!fadeBackdrop) return;
+    // Already closed (first mount, or a rotation while closed): nothing to
+    // animate and no close to report.
+    if (!visible && !mounted) {
+      cardOffset.setValue(slideDistance);
+      return;
+    }
     if (visible) setMounted(true);
     const slide = Animated.timing(cardOffset, {
       toValue: visible ? 0 : slideDistance,
@@ -78,7 +85,7 @@ export function ModalSheet({
       }
     });
     return () => slide.stop();
-  }, [fadeBackdrop, visible, cardOffset, slideDistance]);
+  }, [fadeBackdrop, visible, mounted, cardOffset, slideDistance]);
   const modalVisible = fadeBackdrop ? visible || mounted : visible;
   const content = fadeBackdrop ? (
     <Animated.View

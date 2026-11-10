@@ -5,7 +5,6 @@ import {
   piggyvestPrimaryWalletOnboardingConfigurationSchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
-import { PiggyvestApiError } from './client';
 import {
   lookupPrimaryWalletCustomer,
   type PrimaryWalletCustomerLookup,
@@ -21,8 +20,12 @@ import {
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
+import {
+  classifyPrimaryWalletCreationDecline,
+  isPrimaryWalletCreateNotSent,
+  settlePrimaryWalletCreateNotSent,
+} from './primary-wallet-onboarding-create-errors';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
-import { isPrimaryWalletCreateNotSent } from './primary-wallet-onboarding-not-sent';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Input = {
@@ -146,9 +149,7 @@ export async function onboardPiggyvestPrimaryWallet(
     }
   }
 
-  // Set once createCustomer resolves: only its own rejection can prove
-  // nothing was created; a matching error from a later step cannot.
-  let createReturned = false;
+  let createReturned = false; // only createCustomer's rejection proves not-sent
   try {
     const created = await input.createCustomer(providerRequest);
     createReturned = true;
@@ -254,26 +255,14 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
-    // Credentials rejected or relay refused: provably nothing was created.
-    // Fail fast with "unavailable" instead of an endless "pending". A fresh
-    // claim is released for a clean retry; a reclaimed one stays reclaimable
-    // because an earlier ambiguous dispatch may still have created the
-    // customer. Logs only the error code and status, never request data.
-    if (!createReturned && isPrimaryWalletCreateNotSent(error)) {
-      console.error(
-        `[PiggyVest][primary-onboarding] create not sent: ${error.code} status=${error.status ?? 'none'}`
-      );
-      try {
-        if (claim.reclaimed === true) {
-          await input.storage.recordUncertain(claimedScope);
-        } else if (!(await input.storage.releaseIntent(claimedScope))) {
-          return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-        }
-      } catch {
-        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
-      }
-      return { status: 'unavailable', code: 'PROVIDER_UNAVAILABLE' };
-    }
+    // Credentials rejected or relay refused: fail fast, never "pending".
+    if (!createReturned && isPrimaryWalletCreateNotSent(error))
+      return settlePrimaryWalletCreateNotSent({
+        error,
+        reclaimed: claim.reclaimed === true,
+        storage: input.storage,
+        claimedScope,
+      });
     // A decline that names the interest settings is our configured payout
     // wallet being refused, never the customer's BVN. On a fresh claim it
     // proves nothing was created, so the intent is released for a corrected
@@ -283,7 +272,7 @@ export async function onboardPiggyvestPrimaryWallet(
     // is released so a corrected BVN can be claimed, unless the lookup found
     // our customer: releasing would make the next attempt a fresh claim that
     // refuses it. Every other throw stays ambiguous.
-    const decline = classifyCreationDecline(error);
+    const decline = classifyPrimaryWalletCreationDecline(error);
     const keepReclaimable =
       decline === 'interest_routing'
         ? claim.reclaimed === true
@@ -308,18 +297,4 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'unavailable', code: 'NOT_CONFIGURED' }
       : { status: 'pending' };
   }
-}
-
-function classifyCreationDecline(
-  error: unknown
-): 'interest_routing' | 'bvn' | null {
-  if (!(error instanceof PiggyvestApiError)) return null;
-  if (
-    error.declined &&
-    (error.status === 400 || error.status === 422) &&
-    /payout|interest/i.test(error.message)
-  )
-    return 'interest_routing';
-  // Only 400 is a BVN verdict; every other status stays transport-ambiguous.
-  return error.status === 400 ? 'bvn' : null;
 }

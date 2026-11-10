@@ -13,6 +13,8 @@ const NGN_KOBO_FORMATTER = new Intl.NumberFormat('en-NG', {
 });
 
 export function formatNgnCurrency(amount: number): string {
+  // A bad snapshot or arithmetic slip must never render "₦NaN".
+  if (!Number.isFinite(amount)) return '—';
   return Number.isInteger(amount)
     ? NGN_WHOLE_FORMATTER.format(amount)
     : NGN_KOBO_FORMATTER.format(amount);

@@ -55,6 +55,20 @@ describe('bugfix: a rejected live credential no longer parks setup as endless "p
     expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
   });
 
+  it('reports a missing API token as not configured, not a PiggyVest outage', async () => {
+    const input = onboardingFixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'missing token')
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'NOT_CONFIGURED',
+    });
+    expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
+  });
+
   it('reports storage unavailable when the intent cannot be released', async () => {
     const input = onboardingFixture();
     input.storage.releaseIntent.mockResolvedValue(false);

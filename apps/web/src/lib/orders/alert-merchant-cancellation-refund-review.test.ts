@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/env', () => ({ getAppUrl: () => 'https://app.example.com' }));
 vi.mock('@/lib/logger', () => ({
@@ -6,7 +6,8 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import {
-  alertMerchantOfCancellationRefundReview,
+  alertMerchantOfRefundReview,
+  MIN_ALERT_BUDGET_MS,
   type RefundReviewAlertSenders,
 } from './alert-merchant-cancellation-refund-review';
 
@@ -17,29 +18,18 @@ const order = {
   order_number: '1042',
 };
 const merchant = { email: 'owner@example.com', id: 'merchant-1' };
+const review = {
+  candidates: [{ amount: 27735, currency: 'NGN' }],
+  id: 'review-1',
+};
 
-function makeSupabase({
-  insertError = null,
-  reviews = [{ candidates: [{ amount: 27735 }], id: 'review-1' }],
-  reviewError = null,
-}: {
-  insertError?: { code: string } | null;
-  reviewError?: Error | null;
-  reviews?: Array<{ candidates: unknown; id: string }>;
-} = {}) {
+function makeSupabase(insertError: { code: string } | null = null) {
   const insert = vi.fn().mockResolvedValue({ error: insertError });
   const deleteEq = vi.fn().mockResolvedValue({ error: null });
-  const from = vi.fn((table: string) => {
-    if (table === 'reconciliation_review') {
-      const query = {
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockResolvedValue({ data: reviews, error: reviewError }),
-        select: vi.fn().mockReturnThis(),
-      };
-      return query;
-    }
-    return { delete: vi.fn(() => ({ eq: deleteEq })), insert };
-  });
+  const from = vi.fn(() => ({
+    delete: vi.fn(() => ({ eq: deleteEq })),
+    insert,
+  }));
   return { deleteEq, from, insert };
 }
 
@@ -48,22 +38,33 @@ function makeSenders(
 ): RefundReviewAlertSenders {
   return {
     sendEmail: vi.fn().mockResolvedValue({ success: true }),
-    sendPush: vi.fn().mockResolvedValue({ sent: 1 }),
+    sendPush: vi.fn().mockResolvedValue({ failed: 0, sent: 1 }),
     ...overrides,
   };
 }
 
-describe('alertMerchantOfCancellationRefundReview', () => {
+async function run(
+  supabase: ReturnType<typeof makeSupabase>,
+  senders: RefundReviewAlertSenders,
+  extra: { deadlineMs?: number; review?: typeof review } = {}
+) {
+  return alertMerchantOfRefundReview({
+    merchant,
+    order,
+    review,
+    senders,
+    supabase: supabase as never,
+    ...extra,
+  });
+}
+
+afterEach(() => vi.useRealTimers());
+
+describe('alertMerchantOfRefundReview', () => {
   it('pushes and emails once with the order deep link', async () => {
     const supabase = makeSupabase();
     const senders = makeSenders();
-    await alertMerchantOfCancellationRefundReview({
-      merchant,
-      order,
-      senders,
-      supabase: supabase as never,
-    });
-
+    await expect(run(supabase, senders)).resolves.toBe('alerted');
     expect(supabase.insert).toHaveBeenCalledWith({
       merchant_id: 'merchant-1',
       order_id: 'order-1',
@@ -74,7 +75,6 @@ describe('alertMerchantOfCancellationRefundReview', () => {
     expect(title).toBe('Refund needs attention');
     expect(body).toContain('Refund for order #1042');
     expect(body).toContain('27,735');
-    expect(body).toContain('Open the order to refund manually.');
     expect(data).toMatchObject({
       order_id: 'order-1',
       type: 'paystack_refund_needs_attention',
@@ -85,49 +85,45 @@ describe('alertMerchantOfCancellationRefundReview', () => {
     expect(email.textContent).toContain(
       'https://app.example.com/dashboard/orders/order-1'
     );
+    expect(email.htmlContent).toContain(
+      'href="https://app.example.com/dashboard/orders/order-1"'
+    );
     expect(supabase.deleteEq).not.toHaveBeenCalled();
   });
 
-  it('stays silent when the review was already alerted', async () => {
-    const supabase = makeSupabase({ insertError: { code: '23505' } });
+  it('escapes quotes in the href with the attribute escaper', async () => {
+    const supabase = makeSupabase();
     const senders = makeSenders();
-    await alertMerchantOfCancellationRefundReview({
+    await alertMerchantOfRefundReview({
       merchant,
-      order,
+      order: { ...order, id: 'o"x' },
+      review,
       senders,
       supabase: supabase as never,
     });
+    const html = vi.mocked(senders.sendEmail).mock.calls[0][0].htmlContent;
+    expect(html).not.toContain(
+      'href="https://app.example.com/dashboard/orders/o"'
+    );
+    expect(html).toContain('o%22x');
+  });
+
+  it('stays silent when the review was already alerted', async () => {
+    const senders = makeSenders();
+    await expect(run(makeSupabase({ code: '23505' }), senders)).resolves.toBe(
+      'skipped'
+    );
     expect(senders.sendPush).not.toHaveBeenCalled();
     expect(senders.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('does nothing when no open review exists', async () => {
-    const supabase = makeSupabase({ reviews: [] });
-    const senders = makeSenders();
-    await alertMerchantOfCancellationRefundReview({
-      merchant,
-      order,
-      senders,
-      supabase: supabase as never,
-    });
-    expect(supabase.insert).not.toHaveBeenCalled();
-    expect(senders.sendPush).not.toHaveBeenCalled();
-  });
-
-  it('never throws and releases the claim when no channel delivers', async () => {
+  it('releases the claim when no channel delivers', async () => {
     const supabase = makeSupabase();
     const senders = makeSenders({
-      sendEmail: vi.fn().mockRejectedValue(new Error('smtp down')),
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
       sendPush: vi.fn().mockRejectedValue(new Error('expo down')),
     });
-    await expect(
-      alertMerchantOfCancellationRefundReview({
-        merchant,
-        order,
-        senders,
-        supabase: supabase as never,
-      })
-    ).resolves.toBeUndefined();
+    await expect(run(supabase, senders)).resolves.toBe('alerted');
     expect(supabase.deleteEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 
@@ -136,26 +132,66 @@ describe('alertMerchantOfCancellationRefundReview', () => {
     const senders = makeSenders({
       sendEmail: vi.fn().mockRejectedValue(new Error('smtp down')),
     });
-    await alertMerchantOfCancellationRefundReview({
-      merchant,
-      order,
-      senders,
-      supabase: supabase as never,
-    });
+    await run(supabase, senders);
     expect(supabase.deleteEq).not.toHaveBeenCalled();
   });
 
-  it('swallows a failed review lookup', async () => {
-    const supabase = makeSupabase({ reviewError: new Error('db') });
+  it.each([
+    ['unknown outcome', { deliveryOutcome: 'unknown' as const, sent: 0 }],
+    ['partial failure', { failed: 1, sent: 1 }],
+    ['push error list', { errors: ['x'], failed: 0, sent: 1 }],
+  ])('does not treat a %s push as delivered: falls through to email', async (_n, push) => {
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendEmail: vi.fn().mockResolvedValue({ success: false }),
+      sendPush: vi.fn().mockResolvedValue(push),
+    });
+    await run(supabase, senders);
+    expect(senders.sendEmail).toHaveBeenCalledTimes(1);
+    // Uncertain: may have reached a device, so no duplicate-prone retry.
+    expect(supabase.deleteEq).not.toHaveBeenCalled();
+  });
+
+  it('counts an uncertain push as delivered when email succeeds', async () => {
+    const supabase = makeSupabase();
+    const senders = makeSenders({
+      sendPush: vi
+        .fn()
+        .mockResolvedValue({ deliveryOutcome: 'unknown', sent: 0 }),
+    });
+    await run(supabase, senders);
+    expect(supabase.deleteEq).not.toHaveBeenCalled();
+  });
+
+  it('defers without claiming when the phase budget is too short', async () => {
+    const supabase = makeSupabase();
     const senders = makeSenders();
-    await expect(
-      alertMerchantOfCancellationRefundReview({
-        merchant,
-        order,
-        senders,
-        supabase: supabase as never,
-      })
-    ).resolves.toBeUndefined();
+    const deadlineMs = Date.now() + MIN_ALERT_BUDGET_MS - 1_000;
+    await expect(run(supabase, senders, { deadlineMs })).resolves.toBe(
+      'deferred'
+    );
+    expect(supabase.insert).not.toHaveBeenCalled();
     expect(senders.sendPush).not.toHaveBeenCalled();
+  });
+
+  it('stops waiting at the deadline, keeps the claim, and never releases it later', async () => {
+    vi.useFakeTimers();
+    const supabase = makeSupabase();
+    let finish: (v: { sent: number }) => void = () => {};
+    const senders = makeSenders({
+      sendPush: vi.fn(
+        () =>
+          new Promise<{ sent: number }>((resolve) => {
+            finish = resolve;
+          })
+      ),
+    });
+    const deadlineMs = Date.now() + 10_000;
+    const pending = run(supabase, senders, { deadlineMs });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(pending).resolves.toBe('alerted');
+    finish({ sent: 0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(supabase.deleteEq).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
-import { alertMerchantOfCancellationRefundReview } from '@/lib/orders/alert-merchant-cancellation-refund-review';
+import { alertPendingRefundReviews } from '@/lib/orders/alert-pending-refund-reviews';
 import { CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS } from '@/lib/orders/cancellation-drain-deadline';
 import { EMAIL_ATTEMPTS_PER_SENDER } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { executeOrderCancellationSideEffect } from '@/lib/orders/execute-order-cancellation-side-effect';
@@ -273,23 +273,6 @@ export async function drainFailedOrderCancellationSideEffects({
             supabase,
           }),
       });
-      // A refund that ended failed/uncertain may have filed a review:
-      // tell the merchant once (idempotent, never throws).
-      if (
-        step === 'refund' &&
-        (status === 'failed' || status === 'delivery_uncertain')
-      ) {
-        await alertMerchantOfCancellationRefundReview({
-          merchant: { email: merchant.email ?? null, id: merchant.id },
-          order: {
-            currency: order.currency ?? null,
-            id: order.id,
-            merchant_id: order.merchant_id,
-            order_number: order.order_number ?? null,
-          },
-          supabase,
-        });
-      }
       if (status === 'completed') {
         summary.drained.push({ orderId, step });
       } else if (status === 'deferred') {
@@ -308,5 +291,8 @@ export async function drainFailedOrderCancellationSideEffects({
     }
   }
 
+  // Merchant alerts for open refund reviews run last and inside the refund
+  // phase cutoff (never delays the notification drain); never throws.
+  await alertPendingRefundReviews({ deadlineMs: refundCutoff, supabase });
   return summary;
 }

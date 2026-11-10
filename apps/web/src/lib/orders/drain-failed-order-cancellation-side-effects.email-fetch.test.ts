@@ -5,6 +5,10 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(),
 }));
 
+// The merchant alert pass has its own query budget and tests.
+vi.mock('@/lib/orders/alert-pending-refund-reviews', () => ({
+  alertPendingRefundReviews: vi.fn(),
+}));
 vi.mock('@/lib/orders/execute-order-cancellation-side-effect', () => ({
   executeOrderCancellationSideEffect: mocks.execute,
 }));

@@ -5,13 +5,13 @@ import type {
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
+import { PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE } from './start-savings-wallet-balance';
+
 export {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
 } from './start-savings-wallet-balance';
-
-export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
-  'Your head start cannot be more than the plan target.';
 
 /**
  * Form-flow handlers for the start-savings form: preview validation,

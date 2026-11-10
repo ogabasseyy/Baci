@@ -4,6 +4,8 @@ import { useAuthStore } from '@/stores/auth-store';
 
 export const PRIMARY_HEAD_START_SHORT_MESSAGE =
   'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+export const PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE =
+  'Your head start cannot be more than the plan target.';
 export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
   "We couldn't check your wallet balance just now. Please try again.";
 /** Same budget as the wallet load: never hang the form on a slow read. */

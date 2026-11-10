@@ -12,6 +12,7 @@ import {
 } from './run-savings-goal-submission';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
   readFreshPrimaryBalanceKobo,
 } from './start-savings-wallet-balance';
@@ -74,6 +75,14 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     setIsSubmitting(true);
     const context = contextRef.current;
     if (options?.confirmPrimaryBalance) {
+      // The plan is created without the head start, so the target bound the
+      // creation request would enforce is checked here, on this input.
+      if (input.effectiveInitialContribution > input.targetValue) {
+        input.setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
+        submitInFlightRef.current = false;
+        if (mountedRef.current) setIsSubmitting(false);
+        return;
+      }
       const submittingUserId = useAuthStore.getState().user?.id;
       // Inside the guarded lifecycle: no second submit can start, and an
       // edit to the plan while the balance is read cancels this one.

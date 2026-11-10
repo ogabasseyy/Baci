@@ -6,6 +6,7 @@ import { createSavingsGoal } from '@/lib/customer-savings';
 import { useAuthStore } from '@/stores/auth-store';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
+  PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
   readFreshPrimaryBalanceKobo,
 } from './start-savings-wallet-balance';
@@ -111,6 +112,23 @@ describe('PiggyVest head start balance check at submit', () => {
     });
     expect(createSavingsGoal).not.toHaveBeenCalled();
     expect(input.setFormError).toHaveBeenCalledWith(message);
+    expect(result.current.isSubmitting).toBe(false);
+  });
+
+  it('refuses a head start above the target even on a direct submit', async () => {
+    const input = createInput({
+      effectiveInitialContribution: 900000,
+      targetValue: 800000,
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(readBalance).not.toHaveBeenCalled();
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE
+    );
     expect(result.current.isSubmitting).toBe(false);
   });
 

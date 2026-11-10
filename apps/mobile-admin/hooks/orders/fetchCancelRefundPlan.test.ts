@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ result: vi.fn() }));
 
+vi.mock('@baci/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@baci/shared')>();
+  return { ...actual, getCancelRefundPlan: vi.fn(actual.getCancelRefundPlan) };
+});
+
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: () => ({
@@ -12,6 +17,7 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+import { getCancelRefundPlan } from '@baci/shared';
 import { fetchCancelRefundPlan } from './fetchCancelRefundPlan';
 
 const args = {
@@ -42,6 +48,7 @@ describe('fetchCancelRefundPlan', () => {
     await expect(fetchCancelRefundPlan(args)).resolves.toEqual({
       amount: 5000,
       automaticSupported: true,
+      inFlightAmount: 0,
     });
   });
 
@@ -68,5 +75,13 @@ describe('fetchCancelRefundPlan', () => {
   it('returns undefined when the ledger cannot be read', async () => {
     mocks.result.mockResolvedValue({ data: null, error: { message: 'x' } });
     await expect(fetchCancelRefundPlan(args)).resolves.toBeUndefined();
+  });
+
+  it('normalizes a differently cased paid status before planning', async () => {
+    mocks.result.mockResolvedValue({ data: [], error: null });
+    await fetchCancelRefundPlan({ ...args, paymentStatus: 'PAID' });
+    expect(getCancelRefundPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentStatus: 'Paid' })
+    );
   });
 });

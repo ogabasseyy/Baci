@@ -75,9 +75,11 @@ export function useOrderCancellation({
       return;
     }
     const warning =
-      order.paymentStatus === 'Paid'
-        ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
-        : 'Cancel this order and restore its tracked inventory?';
+      plan.inFlightAmount > 0
+        ? 'A refund is already in progress with the provider. Cancelling will not send another one, so wait for it to finish instead of refunding the customer yourself. Continue?'
+        : order.paymentStatus === 'Paid'
+          ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
+          : 'Cancel this order and restore its tracked inventory?';
     if (!window.confirm(warning)) return;
     await submit();
   };
@@ -86,6 +88,7 @@ export function useOrderCancellation({
     dialogKey: session,
     dialogProps: {
       automaticSupported: plan.automaticSupported,
+      inFlightAmount: plan.inFlightAmount,
       canCancelOnly: merchantContext?.hasPermission('orders', 'refund') ?? true,
       isOpen,
       onClose: () => setIsOpen(false),

@@ -26,17 +26,60 @@ describe('getAutomaticCancelRefundAmount', () => {
     ).toBe(8000);
   });
 
-  it('counts refund_pending legs but not self-terminal refunded ones', () => {
-    expect(
-      getAutomaticCancelRefundAmount({
-        paymentStatus: 'Paid',
-        total: 10000,
-        transactions: [
-          leg({ id: 'a', status: 'refund_pending' }),
-          leg({ id: 'b', status: 'refunded' }),
-        ],
-      })
-    ).toBe(5000);
+  it('tracks refund_pending legs as in flight, not as new refunds', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 10000,
+      transactions: [
+        leg({ id: 'a', status: 'refund_pending' }),
+        leg({ id: 'b', status: 'refunded' }),
+      ],
+    });
+    expect(plan.amount).toBe(0);
+    expect(plan.inFlightAmount).toBe(5000);
+  });
+
+  it('plans only the non-in-flight leg when both are present', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 10000,
+      transactions: [
+        leg({ id: 'a', status: 'refund_pending' }),
+        leg({ id: 'b' }),
+      ],
+    });
+    expect(plan).toEqual({
+      amount: 5000,
+      automaticSupported: true,
+      inFlightAmount: 5000,
+    });
+  });
+
+  it('computes coverage in integer minor units', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 0.8,
+      transactions: [
+        leg({ amount: 0.8, currency: 'NGN' }),
+        {
+          amount: 0.1,
+          currency: 'NGN',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+        {
+          amount: 0.7,
+          currency: 'NGN',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(0);
   });
 
   it('excludes legs already covered by a completed refund row', () => {
@@ -55,7 +98,11 @@ describe('getAutomaticCancelRefundAmount', () => {
         },
       ],
     });
-    expect(plan).toEqual({ amount: 5000, automaticSupported: true });
+    expect(plan).toEqual({
+      amount: 5000,
+      automaticSupported: true,
+      inFlightAmount: 0,
+    });
   });
 
   it('turns automatic refunds off when an outstanding leg is not Paystack', () => {
@@ -64,7 +111,11 @@ describe('getAutomaticCancelRefundAmount', () => {
       total: 8000,
       transactions: [leg({ id: 'a' }), leg({ id: 'b', gateway: 'korapay' })],
     });
-    expect(plan).toEqual({ amount: 10000, automaticSupported: false });
+    expect(plan).toEqual({
+      amount: 10000,
+      automaticSupported: false,
+      inFlightAmount: 0,
+    });
   });
 
   it('keeps automatic refunds when only a covered leg is non-Paystack', () => {
@@ -83,7 +134,11 @@ describe('getAutomaticCancelRefundAmount', () => {
         },
       ],
     });
-    expect(plan).toEqual({ amount: 5000, automaticSupported: true });
+    expect(plan).toEqual({
+      amount: 5000,
+      automaticSupported: true,
+      inFlightAmount: 0,
+    });
   });
 
   it('ignores internal, pending, and refund legs', () => {
@@ -110,17 +165,6 @@ describe('getAutomaticCancelRefundAmount', () => {
     ).toBe(0);
   });
 
-  it('does not treat a non-Paystack refund_pending leg as automatic', () => {
-    const plan = getCancelRefundPlan({
-      paymentStatus: 'Paid',
-      total: 5000,
-      transactions: [
-        leg({ gateway: 'paypal', id: 'a', status: 'refund_pending' }),
-      ],
-    });
-    expect(plan.automaticSupported).toBe(false);
-  });
-
   it('keeps a partially refunded leg outstanding but not automatic', () => {
     const plan = getCancelRefundPlan({
       paymentStatus: 'Paid',
@@ -138,7 +182,11 @@ describe('getAutomaticCancelRefundAmount', () => {
       ],
     });
     // Partial coverage is withheld by the worker, so no automatic option.
-    expect(plan).toEqual({ amount: 80, automaticSupported: false });
+    expect(plan).toEqual({
+      amount: 80,
+      automaticSupported: false,
+      inFlightAmount: 0,
+    });
   });
 
   it('ignores refunds in another currency when judging coverage', () => {

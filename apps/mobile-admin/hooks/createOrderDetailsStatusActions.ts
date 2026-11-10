@@ -190,11 +190,17 @@ export function createOrderDetailsStatusActions({
       // the automatic action; for legs the worker cannot refund itself that
       // action sends the refund to owner review, and cancel-only needs refund
       // permission, which the server enforces with a 403.
+      const inFlightNote =
+        plan && plan.inFlightAmount > 0
+          ? ' Part of this payment is already being refunded by the provider: do not refund that part yourself.'
+          : '';
       Alert.alert(
         'Cancel paid order?',
-        automaticSupported
-          ? 'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.'
-          : 'Baci cannot refund all of this payment automatically. You can cancel and send the refund to the store owner for review, or cancel and refund the customer yourself. Submit once; if the result is unclear, check the order status instead of cancelling again.',
+        `${
+          automaticSupported
+            ? 'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+            : 'Baci cannot refund all of this payment automatically. You can cancel and send the refund to the store owner for review, or cancel and refund the customer yourself. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+        }${inFlightNote}`,
         [
           { text: 'Keep Order', style: 'cancel' },
           {
@@ -219,7 +225,9 @@ export function createOrderDetailsStatusActions({
     }
     Alert.alert(
       'Cancel order?',
-      'This records who cancelled the order and restores tracked inventory. This cannot be undone.',
+      plan && plan.inFlightAmount > 0
+        ? 'A refund is already in progress with the provider. Cancelling will not send another one, so wait for it to finish instead of refunding the customer yourself. This cannot be undone.'
+        : 'This records who cancelled the order and restores tracked inventory. This cannot be undone.',
       [
         { text: 'Keep Order', style: 'cancel' },
         {

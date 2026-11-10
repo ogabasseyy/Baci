@@ -1,7 +1,4 @@
-import {
-  type CancelRefundPlan,
-  getCancelRefundPlan,
-} from '@baci/shared/lib/cancel-refund-plan';
+import { type CancelRefundPlan, getCancelRefundPlan } from '@baci/shared';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -21,29 +18,38 @@ export async function fetchCancelRefundPlan({
   paymentStatus: string;
   total: number;
 }): Promise<CancelRefundPlan | undefined> {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select(
-      'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id'
-    )
-    .eq('order_id', orderId)
-    .eq('merchant_id', merchantId)
-    .in('transaction_type', ['payment', 'refund']);
-  if (error || !data) return undefined;
-  return getCancelRefundPlan({
-    paymentStatus: paymentStatus === 'paid' ? 'Paid' : paymentStatus,
-    total,
-    transactions: data.map((row) => ({
-      amount: Number(row.amount),
-      currency: row.currency,
-      gateway: row.gateway,
-      gateway_reference: row.gateway_reference,
-      id: row.id,
-      payment_transaction_id: (
-        row as { payment_transaction_id?: string | null }
-      ).payment_transaction_id,
-      status: row.status,
-      transaction_type: row.transaction_type,
-    })),
-  });
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(
+        'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id'
+      )
+      .eq('order_id', orderId)
+      .eq('merchant_id', merchantId)
+      .in('transaction_type', ['payment', 'refund']);
+    if (error || !data) return undefined;
+    return getCancelRefundPlan({
+      // Stored statuses vary in case; the plan expects the display form.
+      paymentStatus:
+        String(paymentStatus ?? '').toLowerCase() === 'paid'
+          ? 'Paid'
+          : paymentStatus,
+      total,
+      transactions: data.map((row) => ({
+        amount: Number(row.amount),
+        currency: row.currency,
+        gateway: row.gateway,
+        gateway_reference: row.gateway_reference,
+        id: row.id,
+        payment_transaction_id: (
+          row as { payment_transaction_id?: string | null }
+        ).payment_transaction_id,
+        status: row.status,
+        transaction_type: row.transaction_type,
+      })),
+    });
+  } catch {
+    // Best effort: an unreadable ledger leaves the plan unknown.
+    return undefined;
+  }
 }

@@ -38,6 +38,12 @@ export interface CancelRefundPlan {
   /** Outstanding external amount the cancellation worker would refund. */
   amount: number;
   /**
+   * Amount whose provider refund is already in flight (the leg is
+   * `refund_pending`). Never refunded again and never to be refunded by
+   * hand: the merchant waits for it.
+   */
+  inFlightAmount: number;
+  /**
    * False when an outstanding leg is one the worker cannot refund
    * automatically (non-Paystack, no provider reference, or only partly
    * covered by earlier refunds, which the worker withholds): the merchant
@@ -75,6 +81,7 @@ export function getCancelRefundPlan(
       amount:
         order.paymentStatus === 'Paid' && order.total > 0 ? order.total : 0,
       automaticSupported: true,
+      inFlightAmount: 0,
     };
   }
   const refundRows = order.transactions.filter(
@@ -83,6 +90,9 @@ export function getCancelRefundPlan(
       (row.status === 'completed' || row.status === 'refunded') &&
       row.payment_transaction_id
   );
+  // Money math runs in integer minor units so float remainders (0.1 + 0.7
+  // vs 0.8) cannot leave a phantom sliver outstanding.
+  const toMinor = (value: number): number => Math.round(value * 100);
   // A leg is covered only by completed refunds in the same currency and
   // gateway that together reach the capture; a partial refund leaves the
   // remainder outstanding.
@@ -94,8 +104,8 @@ export function getCancelRefundPlan(
           (row.currency ?? null) === (leg.currency ?? null) &&
           normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
-      .reduce((sum, row) => sum + row.amount, 0);
-  const outstanding = order.transactions
+      .reduce((sum, row) => sum + toMinor(row.amount), 0);
+  const remaining = order.transactions
     .filter(
       (leg) =>
         leg.transaction_type === 'payment' &&
@@ -106,11 +116,25 @@ export function getCancelRefundPlan(
     )
     .map((leg) => {
       const covered = coveredFor(leg);
-      return { covered, leg, remaining: Math.max(leg.amount - covered, 0) };
+      return {
+        covered,
+        leg,
+        remaining: Math.max(toMinor(leg.amount) - covered, 0),
+      };
     })
-    .filter(({ remaining }) => remaining > 0);
+    .filter((entry) => entry.remaining > 0);
+  // A refund_pending leg already has its provider refund in flight: it is
+  // tracked apart so no new refund is promised or asked of the merchant.
+  const inFlight = remaining.filter(
+    ({ leg }) => leg.status === 'refund_pending'
+  );
+  const outstanding = remaining.filter(
+    ({ leg }) => leg.status !== 'refund_pending'
+  );
   return {
-    amount: outstanding.reduce((sum, { remaining }) => sum + remaining, 0),
+    amount: outstanding.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
+    inFlightAmount:
+      inFlight.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
     // A partially covered leg is a coverage mismatch to the worker, which
     // withholds it for review instead of refunding the remainder.
     automaticSupported: outstanding.every(

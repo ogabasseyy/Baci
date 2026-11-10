@@ -186,7 +186,11 @@ describe('cancellation refund plan', () => {
   it('offers a refund-review action instead of an automatic refund when a leg is unsupported', async () => {
     const { actions, updateStatus } = createPaidOrderStatusActions({
       order: {
-        cancel_refund_plan: { amount: 5000, automaticSupported: false },
+        cancel_refund_plan: {
+          amount: 5000,
+          automaticSupported: false,
+          inFlightAmount: 0,
+        },
       },
     });
     await actions.handleStatusUpdate('cancelled');
@@ -206,7 +210,13 @@ describe('cancellation refund plan', () => {
 
   it('uses the plain confirmation when nothing external is refundable', async () => {
     const { actions } = createPaidOrderStatusActions({
-      order: { cancel_refund_plan: { amount: 0, automaticSupported: true } },
+      order: {
+        cancel_refund_plan: {
+          amount: 0,
+          automaticSupported: true,
+          inFlightAmount: 0,
+        },
+      },
     });
     await actions.handleStatusUpdate('cancelled');
     expect(vi.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Cancel order?');
@@ -230,5 +240,24 @@ describe('cancellation refund plan', () => {
         })
       );
     });
+  });
+
+  it('tells the merchant to wait when the provider refund is already in flight', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: {
+        cancel_refund_plan: {
+          amount: 0,
+          automaticSupported: true,
+          inFlightAmount: 5000,
+        },
+      },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    const call = vi.mocked(Alert.alert).mock.calls[0];
+    expect(call?.[0]).toBe('Cancel order?');
+    expect(call?.[1]).toContain('already in progress with the provider');
+    expect(call?.[2]?.map((button) => button.text)).not.toContain(
+      'Cancel only (I will refund them)'
+    );
   });
 });

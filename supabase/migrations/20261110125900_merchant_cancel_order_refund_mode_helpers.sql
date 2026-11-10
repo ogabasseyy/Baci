@@ -33,7 +33,9 @@ GRANT SELECT (cancellation_refund_mode) ON TABLE public.orders TO authenticated;
 -- The mode decides whether a refund is sent, so it must only change inside
 -- the cancel RPC (SECURITY DEFINER, so current_user is its owner there). A
 -- direct PostgREST write from an authenticated or anon session could flip
--- an automatic cancellation to manual and suppress the refund.
+-- an automatic cancellation to manual and suppress the refund. service_role
+-- is deliberately not blocked: it is trusted server-side code (workers and
+-- operations), never reachable from a browser session.
 CREATE OR REPLACE FUNCTION private.guard_order_cancellation_refund_mode()
 RETURNS trigger
 LANGUAGE plpgsql

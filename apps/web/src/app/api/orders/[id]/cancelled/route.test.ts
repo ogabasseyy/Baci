@@ -1,4 +1,3 @@
-import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -33,59 +32,7 @@ vi.mock('@/lib/csrf', () => ({
 }));
 
 import { POST } from './route';
-
-function request(body: unknown): NextRequest {
-  return { json: vi.fn().mockResolvedValue(body) } as unknown as NextRequest;
-}
-
-function createSupabase() {
-  const orderItemsEq = vi.fn().mockResolvedValue({
-    data: [{ product_id: 'product-1' }],
-    error: null,
-  });
-  const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
-  const persistedMode = vi.fn().mockResolvedValue({
-    data: { cancellation_refund_mode: 'automatic' },
-    error: null,
-  });
-  const productsIn = vi.fn().mockResolvedValue({
-    data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
-    error: null,
-  });
-  const supabase = {
-    from: vi.fn((table: string) => {
-      if (table === 'order_items') {
-        return { select: vi.fn(() => ({ eq: orderItemsEq })) };
-      }
-      if (table === 'orders') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({ maybeSingle: persistedMode })),
-            })),
-          })),
-        };
-      }
-      if (table === 'products') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({ in: productsIn })),
-          })),
-        };
-      }
-      if (table === 'product_variants') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({ in: variantsIn })),
-          })),
-        };
-      }
-      throw new Error(`Unexpected table ${table}`);
-    }),
-    rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
-  };
-  return { orderItemsEq, persistedMode, productsIn, supabase, variantsIn };
-}
+import { createSupabase, request } from './route.test-support';
 
 describe('POST /api/orders/[id]/cancelled', () => {
   it('keeps product invalidation after a committed restock and failed product read', async () => {
@@ -185,122 +132,6 @@ describe('POST /api/orders/[id]/cancelled', () => {
     });
   });
 
-  it('passes a cancel-only choice to the RPC and reports a manual refund', async () => {
-    const { supabase } = createSupabase();
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(
-      request({
-        cancelled_by: 'merchant',
-        confirm_cancellation: true,
-        refund: 'manual',
-      }),
-      { params: Promise.resolve({ id: 'order-1' }) }
-    );
-
-    expect(response.status).toBe(202);
-    expect(supabase.rpc).toHaveBeenCalledWith(
-      'cancel_order_as_merchant',
-      expect.objectContaining({ p_refund_mode: 'manual' })
-    );
-    await expect(response.json()).resolves.toMatchObject({
-      sideEffects: { customerEmail: 'queued', refund: 'manual_required' },
-    });
-  });
-
-  it('rejects an unknown refund choice before touching the database', async () => {
-    const { supabase } = createSupabase();
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(
-      request({
-        cancelled_by: 'merchant',
-        confirm_cancellation: true,
-        refund: 'skip',
-      }),
-      { params: Promise.resolve({ id: 'order-1' }) }
-    );
-
-    expect(response.status).toBe(400);
-    expect(supabase.rpc).not.toHaveBeenCalled();
-  });
-
-  it('explains a cancel-only refusal for staff without refund permission', async () => {
-    const { supabase } = createSupabase();
-    supabase.rpc.mockResolvedValue({
-      data: null,
-      error: { code: '42501', message: 'order_cancel_refund_forbidden' },
-    });
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(
-      request({ confirm_cancellation: true, refund: 'manual' }),
-      { params: Promise.resolve({ id: 'order-1' }) }
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      code: 'CANCEL_REFUND_FORBIDDEN',
-      error: expect.stringContaining('refund permission'),
-    });
-  });
-
-  it('falls back to the requested mode when the persisted mode cannot be read', async () => {
-    const { persistedMode, supabase } = createSupabase();
-    persistedMode.mockResolvedValue({
-      data: null,
-      error: { message: 'read failed' },
-    });
-    supabase.rpc.mockResolvedValue({ data: false, error: null });
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(
-      request({ confirm_cancellation: true, refund: 'manual' }),
-      { params: Promise.resolve({ id: 'order-1' }) }
-    );
-
-    await expect(response.json()).resolves.toMatchObject({
-      alreadyCancelled: true,
-      sideEffects: { refund: 'manual_required' },
-    });
-  });
-
-  it('maps an invalid refund mode raised by the RPC to 400', async () => {
-    const { supabase } = createSupabase();
-    supabase.rpc.mockResolvedValue({
-      data: null,
-      error: { code: '22023', message: 'invalid_refund_mode' },
-    });
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(request({ confirm_cancellation: true }), {
-      params: Promise.resolve({ id: 'order-1' }),
-    });
-
-    expect(response.status).toBe(400);
-    expect(mocks.revalidateProducts).not.toHaveBeenCalled();
-  });
-
   it('does not queue or revalidate when the order is no longer cancellable', async () => {
     const { supabase } = createSupabase();
     supabase.rpc.mockResolvedValue({
@@ -391,27 +222,6 @@ describe('POST /api/orders/[id]/cancelled', () => {
       success: true,
     });
   });
-  it('reports the persisted refund mode on a replay instead of echoing the request', async () => {
-    const { persistedMode, supabase } = createSupabase();
-    supabase.rpc.mockResolvedValue({ data: false, error: null });
-    mocks.authenticateApiRequest.mockResolvedValue({
-      error: null,
-      supabase,
-      user: { id: 'user-1' },
-    });
-
-    const response = await POST(
-      request({ confirm_cancellation: true, refund: 'manual' }),
-      { params: Promise.resolve({ id: 'order-1' }) }
-    );
-
-    expect(persistedMode).toHaveBeenCalled();
-    await expect(response.json()).resolves.toMatchObject({
-      alreadyCancelled: true,
-      sideEffects: { refund: 'queued_if_required' },
-    });
-  });
-
   it('avoids product and feed cache churn for unlimited-inventory items', async () => {
     const { productsIn, supabase } = createSupabase();
     productsIn.mockResolvedValue({

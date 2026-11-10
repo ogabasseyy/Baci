@@ -24,7 +24,7 @@ export function OrderRefundStatusLine({ summary }: { summary: RefundSummary }) {
       {awaitingManualRefund && (
         <p className="text-sm">
           No automatic refund was queued for this cancellation.
-          {summary.canRecordManual === true
+          {summary.canManageRefunds === true && summary.canRecordManual === true
             ? ' Refund the customer yourself, then record it with Record manual refund.'
             : ' The store owner or staff with refund permission needs to refund the customer and record it.'}
         </p>

@@ -27,6 +27,7 @@ export function CancelOrderDialog({
   automaticSupported = true,
   canCancelOnly = true,
   currency,
+  inFlightAmount = 0,
   isOpen,
   onClose,
   onConfirm,
@@ -37,6 +38,8 @@ export function CancelOrderDialog({
   /** Owner or orders.refund: the cancel-only path skips the auto refund. */
   canCancelOnly?: boolean;
   currency: string | null;
+  /** Part of the payment whose provider refund is already in progress. */
+  inFlightAmount?: number;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (refund: CancelRefundChoice) => Promise<void> | void;
@@ -126,6 +129,17 @@ export function CancelOrderDialog({
             paid through Paystack, or an earlier refund covered only part of
             it). The order will be cancelled and the refund sent to the store
             owner for review.
+          </p>
+        )}
+        {inFlightAmount > 0 && (
+          <p className="text-sm text-muted-foreground">
+            A refund of{' '}
+            {formatDisplayCurrency(inFlightAmount, currency || 'NGN', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}{' '}
+            is already in progress with the provider. Do not refund that part
+            yourself; wait for it to finish.
           </p>
         )}
         {choice === 'manual' && canCancelOnly && (

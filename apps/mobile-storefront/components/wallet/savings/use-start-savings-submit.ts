@@ -90,6 +90,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
     submitInFlightRef.current = true;
     setIsSubmitting(true);
+    // Every exit below releases the submit lock through this one function.
+    const release = () => {
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+    };
     const context = contextRef.current;
     // Bound to the account that submitted: a switch cancels every follow-up.
     const submittingUserId = authUserIdRef.current;
@@ -108,8 +113,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       !(options?.continueInWallet && pending.contextKey === context.key)
     ) {
       input.setFormError(PLAN_ALREADY_CREATED_MESSAGE);
-      submitInFlightRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
+      release();
       return;
     }
     if (options?.confirmPrimaryBalance) {
@@ -121,8 +125,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         input.targetValue
       ) {
         input.setFormError(PRIMARY_HEAD_START_ABOVE_TARGET_MESSAGE);
-        submitInFlightRef.current = false;
-        if (mountedRef.current) setIsSubmitting(false);
+        release();
         return;
       }
       // Inside the guarded lifecycle: no second submit can start, and an
@@ -148,15 +151,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       const current = stillCurrent();
       if (refusal || !current) {
         if (refusal && current) input.setFormError(refusal);
-        submitInFlightRef.current = false;
-        if (mountedRef.current) setIsSubmitting(false);
+        release();
         return;
       }
     }
-    const release = () => {
-      submitInFlightRef.current = false;
-      if (mountedRef.current) setIsSubmitting(false);
-    };
     // The head start moves through PiggyVest from the wallet's Add to
     // savings sheet, prefilled with the amount the customer chose.
     const continueInWallet = (goalId: string, amount: number) => {

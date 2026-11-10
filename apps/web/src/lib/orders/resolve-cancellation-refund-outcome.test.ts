@@ -21,6 +21,7 @@ function supabaseWith({
   ledger = { data: [leg()], error: null } as unknown,
   mode = { data: { cancellation_refund_mode: 'automatic' }, error: null },
 }: {
+  evidence?: unknown;
   ledger?: unknown;
   mode?: unknown;
 } = {}) {

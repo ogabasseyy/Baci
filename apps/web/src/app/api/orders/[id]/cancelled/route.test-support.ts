@@ -70,12 +70,13 @@ export function createSupabase() {
       }
       throw new Error(`Unexpected table ${table}`);
     }),
-    rpc: vi.fn((name: string) =>
-      Promise.resolve(
-        name === 'order_has_unresolved_refund_evidence'
-          ? { data: false, error: null }
-          : { data: true, error: null }
-      )
+    rpc: vi.fn(
+      (name: string): Promise<{ data: unknown; error: unknown }> =>
+        Promise.resolve(
+          name === 'order_has_unresolved_refund_evidence'
+            ? { data: false, error: null }
+            : { data: true, error: null }
+        )
     ),
   };
   return {

@@ -1,4 +1,4 @@
-import { getCancelRefundPlan } from '@baci/shared/lib/cancel-refund-plan';
+import { getCancelRefundPlan } from '@baci/shared';
 import { describe, expect, it } from 'vitest';
 import { classifyCancellationRefundLinks } from './classify-cancellation-refund-links';
 import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
@@ -219,6 +219,16 @@ const cases: [string, Row[], boolean][] = [
     true,
   ],
   ['unlinked manual refund', [pay(), unlinked({ gateway: 'manual' })], true],
+  [
+    'unlinked refund covering the completed leg beside a refunded sibling',
+    [pay(), pay({ id: 'pay-2', status: 'refunded' }), unlinked()],
+    false,
+  ],
+  [
+    'unlinked refund covering the completed leg beside a refund_pending sibling',
+    [pay(), pay({ id: 'pay-2', status: 'refund_pending' }), unlinked()],
+    false,
+  ],
   [
     'refund linked to an already-refunded leg',
     [pay({ status: 'refunded' }), pay({ id: 'pay-2' }), refund()],

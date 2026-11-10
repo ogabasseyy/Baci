@@ -30,7 +30,15 @@ export async function fetchCancelRefundPlan({
       .eq('merchant_id', merchantId)
       .in('transaction_type', ['payment', 'refund']);
     if (error || !data) return undefined;
-    return getCancelRefundPlan({
+    // Open provider-refund evidence means money may already have moved: mark
+    // the plan unresolved so no manual repayment is offered. An unreadable
+    // check leaves the plan unknown for the same reason.
+    const { data: hasEvidence, error: evidenceError } = await supabase.rpc(
+      'order_has_unresolved_refund_evidence',
+      { p_order_id: orderId }
+    );
+    if (evidenceError) return undefined;
+    const plan = getCancelRefundPlan({
       orderCurrency: currency,
       // Stored statuses vary in case; the plan expects the display form.
       paymentStatus:
@@ -57,6 +65,7 @@ export async function fetchCancelRefundPlan({
         transaction_type: row.transaction_type,
       })),
     });
+    return hasEvidence === false ? plan : { ...plan, ledgerKnown: false };
   } catch {
     // Best effort: an unreadable ledger leaves the plan unknown.
     return undefined;

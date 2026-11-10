@@ -16,7 +16,6 @@
     "./imei": "./src/imei/index.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",
-    "./lib/cancel-refund-plan": "./src/lib/cancel-refund-plan.ts",
     "./lib/commerce-variant-axis": "./src/lib/commerce-variant-axis.ts",
     "./lib/filter-by-location-phrase": "./src/lib/filter-by-location-phrase.ts",
     "./lib/gigl-tracking-status": "./src/lib/gigl-tracking-status.ts",

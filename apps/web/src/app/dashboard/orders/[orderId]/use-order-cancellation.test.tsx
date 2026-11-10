@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   apiPost: vi.fn(),
+  evidence: vi.fn(),
   merchant: vi.fn(),
   toast: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', () => ({ apiPost: mocks.apiPost }));
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ rpc: mocks.evidence }),
+}));
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
@@ -40,6 +44,7 @@ describe('useOrderCancellation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.merchant.mockReturnValue({ hasPermission: () => true });
+    mocks.evidence.mockResolvedValue({ data: false, error: null });
   });
 
   it('opens the choice dialog when there is money to refund', async () => {
@@ -265,5 +270,25 @@ describe('useOrderCancellation', () => {
       useOrderCancellation({ onCancelled: vi.fn(), order: order() })
     );
     expect(result.current.dialogProps.canCancelOnly).toBe(true);
+  });
+
+  it.each([
+    ['an unresolved movement review is open', { data: true, error: null }],
+    ['the evidence check fails', { data: null, error: { message: 'x' } }],
+  ])('cancels neutrally without a manual option when %s', async (_name, result) => {
+    mocks.evidence.mockResolvedValue(result);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { result: hook } = renderHook(() =>
+      useOrderCancellation({ onCancelled: vi.fn(), order: order() })
+    );
+    await act(() => hook.current.requestCancellation());
+    expect(hook.current.dialogProps.isOpen).toBe(false);
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('could not be loaded')
+    );
+    expect(mocks.evidence).toHaveBeenCalledWith(
+      'order_has_unresolved_refund_evidence',
+      { p_order_id: 'order-1' }
+    );
   });
 });

@@ -157,7 +157,11 @@ export function getCancelRefundPlan(
   // An unlinked refund row (legacy, or a manual record against the only
   // capture) belongs to the sole external payment leg, like the worker's
   // attribution; with several candidate legs it stays unattributed.
-  const soleLegId = legs.length === 1 ? legs[0]?.id : undefined;
+  // Like the worker's soleCompletedCancellationLeg, only a COMPLETED leg
+  // can own it, never a refund_pending or refunded sibling.
+  const completedLegs = legs.filter((leg) => leg.status === 'completed');
+  const soleLegId =
+    completedLegs.length === 1 ? completedLegs[0]?.id : undefined;
   const refundRows = order.transactions.filter(
     (row) => row.transaction_type === 'refund'
   );

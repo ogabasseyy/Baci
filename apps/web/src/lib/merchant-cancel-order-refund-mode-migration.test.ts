@@ -46,6 +46,21 @@ describe('merchant cancellation refund-mode migration', () => {
     );
   });
 
+  it('exposes the movement-evidence gate to merchants only through a definer wrapper', () => {
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.order_has_unresolved_refund_evidence('
+    );
+    expect(sql).toContain(
+      'private.unresolved_order_movement_evidence_v1(\n    p_order_id, v_merchant_id\n  )'
+    );
+    expect(sql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.order_has_unresolved_refund_evidence(uuid)\n  TO authenticated;'
+    );
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.order_has_unresolved_refund_evidence\(uuid\)\s+FROM PUBLIC, anon, authenticated, service_role, postgres;/
+    );
+  });
+
   it('requires the owner or orders.refund for the cancel-only mode', () => {
     expect(sql).toMatch(
       /IF v_refund_mode = 'manual' AND NOT \([\s\S]*?'orders', 'refund'[\s\S]*?order_cancel_refund_forbidden' USING ERRCODE = '42501'/

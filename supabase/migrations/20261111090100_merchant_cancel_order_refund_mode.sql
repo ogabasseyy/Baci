@@ -237,6 +237,41 @@ REVOKE ALL ON FUNCTION public.cancel_order_as_merchant(uuid, text, text)
 GRANT EXECUTE ON FUNCTION public.cancel_order_as_merchant(uuid, text, text)
   TO authenticated;
 
+-- Merchant-safe read of the refund manager's movement-evidence gate. The
+-- review table is service_role-only under RLS, so the dashboard and mobile
+-- cancel flows cannot read it; this definer wrapper exposes only the boolean
+-- (the private helper asserts the caller is the merchant owner or staff).
+-- Unresolved provider-refund evidence means money may already have moved, so
+-- clients must not offer or confirm a manual repayment while it is open.
+CREATE OR REPLACE FUNCTION public.order_has_unresolved_refund_evidence(
+  p_order_id uuid
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_merchant_id uuid;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
+  END IF;
+  SELECT o.merchant_id INTO v_merchant_id
+    FROM public.orders o WHERE o.id = p_order_id;
+  IF v_merchant_id IS NULL THEN
+    RAISE EXCEPTION 'order_not_found' USING ERRCODE = 'P0002';
+  END IF;
+  RETURN private.unresolved_order_movement_evidence_v1(
+    p_order_id, v_merchant_id
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.order_has_unresolved_refund_evidence(uuid)
+  FROM PUBLIC, anon, authenticated, service_role, postgres;
+GRANT EXECUTE ON FUNCTION public.order_has_unresolved_refund_evidence(uuid)
+  TO authenticated;
+
 -- PostgREST caches the schema: the new orders column and the replaced RPC
 -- signature must be visible to API callers without a restart.
 NOTIFY pgrst, 'reload schema';

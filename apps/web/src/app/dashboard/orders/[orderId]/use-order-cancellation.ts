@@ -1,9 +1,10 @@
-import { getCancelRefundPlan } from '@baci/shared/lib/cancel-refund-plan';
+import { getCancelRefundPlan } from '@baci/shared';
 import { useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { createClient } from '@/lib/supabase/client';
 import type { Order } from '../actions';
 import type { CancelRefundChoice } from './cancel-order-dialog';
 
@@ -17,6 +18,22 @@ interface CancelResponse {
     };
   };
   success?: boolean;
+}
+
+/**
+ * Open provider-refund evidence (or a failed check) means money may already
+ * have moved, so no manual repayment may be offered or confirmed.
+ */
+async function refundEvidenceBlocksChoice(orderId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createClient().rpc(
+      'order_has_unresolved_refund_evidence',
+      { p_order_id: orderId }
+    );
+    return Boolean(error) || data !== false;
+  } catch {
+    return true;
+  }
 }
 
 function manualRefundMessage(
@@ -105,7 +122,10 @@ export function useOrderCancellation({
   const requestCancellation = async () => {
     // Without a readable ledger we cannot say what is owed, so never offer a
     // manual refund: cancel neutrally and point at the Refund card.
-    if (!plan.ledgerKnown) {
+    if (
+      !plan.ledgerKnown ||
+      (plan.amount > 0 && (await refundEvidenceBlocksChoice(order.id)))
+    ) {
       if (
         !window.confirm(
           "Refund details could not be loaded. Cancel this order? Any refund is queued automatically, so check the order's Refund card afterwards instead of refunding the customer yourself."

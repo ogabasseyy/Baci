@@ -17,6 +17,7 @@ const leg = (over: Record<string, unknown> = {}) => ({
 });
 
 function supabaseWith({
+  evidence = { data: false, error: null } as unknown,
   ledger = { data: [leg()], error: null } as unknown,
   mode = { data: { cancellation_refund_mode: 'automatic' }, error: null },
 }: {
@@ -27,6 +28,7 @@ function supabaseWith({
   chain.eq = vi.fn(() => chain);
   chain.in = vi.fn().mockResolvedValue(ledger);
   return {
+    rpc: vi.fn().mockResolvedValue(evidence),
     from: vi.fn((table: string) =>
       table === 'orders'
         ? {
@@ -245,5 +247,25 @@ describe('resolveCancellationRefundOutcome', () => {
     await expect(
       resolveCancellationRefundOutcome({ ...manual, supabase })
     ).resolves.toMatchObject({ details: { currency: 'NGN' } });
+  });
+
+  it('reports unknown while an unresolved movement review is open', async () => {
+    await expect(
+      resolveCancellationRefundOutcome({
+        ...manual,
+        supabase: supabaseWith({ evidence: { data: true, error: null } }),
+      })
+    ).resolves.toEqual({ outcome: 'unknown' });
+  });
+
+  it('reports unknown when the movement-evidence check fails', async () => {
+    await expect(
+      resolveCancellationRefundOutcome({
+        ...manual,
+        supabase: supabaseWith({
+          evidence: { data: null, error: { message: 'x' } },
+        }),
+      })
+    ).resolves.toEqual({ outcome: 'unknown' });
   });
 });

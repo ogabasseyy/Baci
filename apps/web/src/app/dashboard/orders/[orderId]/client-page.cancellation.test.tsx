@@ -89,6 +89,12 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ hasPermission: () => true }),
 }));
 
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    rpc: vi.fn().mockResolvedValue({ data: false, error: null }),
+  }),
+}));
+
 vi.mock('@/lib/api-client', () => ({
   apiPatch: vi.fn(),
   apiPost: vi.fn(),

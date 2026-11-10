@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ result: vi.fn() }));
+const mocks = vi.hoisted(() => ({ evidence: vi.fn(), result: vi.fn() }));
 
 vi.mock('@baci/shared', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -10,6 +10,7 @@ vi.mock('@baci/shared', async (importOriginal) => {
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
+    rpc: mocks.evidence,
     from: () => ({
       select: () => ({
         eq: () => ({ eq: () => ({ in: mocks.result }) }),
@@ -29,7 +30,10 @@ const args = {
 };
 
 describe('fetchCancelRefundPlan', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.evidence.mockResolvedValue({ data: false, error: null });
+  });
 
   it('plans the outstanding Paystack leg as automatically refundable', async () => {
     mocks.result.mockResolvedValue({
@@ -85,5 +89,36 @@ describe('fetchCancelRefundPlan', () => {
     expect(getCancelRefundPlan).toHaveBeenCalledWith(
       expect.objectContaining({ paymentStatus: 'Paid' })
     );
+  });
+
+  it('marks the plan unresolved while a movement review is open', async () => {
+    mocks.result.mockResolvedValue({
+      data: [
+        {
+          amount: 5000,
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: 'ref',
+          id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+      ],
+      error: null,
+    });
+    mocks.evidence.mockResolvedValue({ data: true, error: null });
+    await expect(fetchCancelRefundPlan(args)).resolves.toMatchObject({
+      ledgerKnown: false,
+    });
+    expect(mocks.evidence).toHaveBeenCalledWith(
+      'order_has_unresolved_refund_evidence',
+      { p_order_id: 'o1' }
+    );
+  });
+
+  it('returns no plan when the movement-evidence check fails', async () => {
+    mocks.result.mockResolvedValue({ data: [], error: null });
+    mocks.evidence.mockResolvedValue({ data: null, error: { message: 'x' } });
+    await expect(fetchCancelRefundPlan(args)).resolves.toBeUndefined();
   });
 });

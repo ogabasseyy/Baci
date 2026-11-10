@@ -1,4 +1,4 @@
-import { getCancelRefundPlan } from '@baci/shared/lib/cancel-refund-plan';
+import { getCancelRefundPlan } from '@baci/shared';
 import { describe, expect, it } from 'vitest';
 import { mapDashboardOrderRecord } from './order-record-mapper';
 

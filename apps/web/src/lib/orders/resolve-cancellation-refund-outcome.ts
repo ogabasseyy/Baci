@@ -1,4 +1,4 @@
-import { getCancelRefundPlan } from '@baci/shared/lib/cancel-refund-plan';
+import { getCancelRefundPlan } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { readPersistedCancellationRefundMode } from '@/lib/orders/read-persisted-cancellation-refund-mode';
@@ -42,7 +42,7 @@ export async function resolveCancellationRefundOutcome({
   merchantId: string;
   orderId: string;
   requested: 'automatic' | 'manual';
-  supabase: Pick<SupabaseClient, 'from'>;
+  supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
 }): Promise<ResolvedCancellationRefund> {
   let mode: 'automatic' | 'manual' = requested;
   if (alreadyCancelled) {
@@ -56,6 +56,13 @@ export async function resolveCancellationRefundOutcome({
   }
   if (mode === 'automatic') return { outcome: 'queued_if_required' };
   try {
+    // Open provider-refund evidence means money may already have moved: never
+    // confirm a manual repayment while it is unresolved (or unreadable).
+    const { data: hasEvidence, error: evidenceError } = await supabase.rpc(
+      'order_has_unresolved_refund_evidence',
+      { p_order_id: orderId }
+    );
+    if (evidenceError || hasEvidence !== false) return { outcome: 'unknown' };
     const { data, error } = await supabase
       .from('transactions')
       .select(

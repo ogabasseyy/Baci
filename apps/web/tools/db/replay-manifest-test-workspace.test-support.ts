@@ -8,7 +8,8 @@ const WORKSPACE_ROOT = path.resolve(import.meta.dirname, '../../../..');
 const execFileAsync = promisify(execFile);
 
 export function createReplayManifestTestWorkspace(
-  removeRoot = (root: string) => rm(root, { force: true, recursive: true })
+  removeRoot = (root: string) =>
+    rm(root, { force: true, recursive: true, maxRetries: 3, retryDelay: 100 })
 ) {
   const temporaryRoots: string[] = [];
   const pendingOperations = new Set<Promise<unknown>>();
@@ -53,9 +54,16 @@ export function createReplayManifestTestWorkspace(
     },
     cleanUp: async () => {
       await Promise.allSettled([...pendingOperations]);
-      return Promise.all(
-        temporaryRoots.splice(0).map((root) => removeRoot(root))
+      const roots = temporaryRoots.splice(0);
+      const results = await Promise.allSettled(
+        roots.map(async (root) => removeRoot(root))
       );
+      const failures = results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') return [];
+        temporaryRoots.push(roots[index]);
+        return [result.reason];
+      });
+      if (failures.length > 0) throw failures[0];
     },
   };
 }

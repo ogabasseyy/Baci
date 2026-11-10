@@ -33,3 +33,21 @@ it('keeps a workspace until its timed-out test operation finishes', async () => 
   expect(removeRoot).toHaveBeenCalledWith(root);
   await expect(access(root)).rejects.toMatchObject({ code: 'ENOENT' });
 }, 90_000);
+
+it('retains a failed removal for a later cleanup retry', async () => {
+  const removeRoot = vi
+    .fn<(root: string) => Promise<void>>()
+    .mockRejectedValueOnce(new Error('temporary removal failure'))
+    .mockImplementation((root) => rm(root, { force: true, recursive: true }));
+  const workspace = createReplayManifestTestWorkspace(removeRoot);
+  const root = await workspace.copyWorkspace();
+  try {
+    await expect(workspace.cleanUp()).rejects.toThrow(
+      'temporary removal failure'
+    );
+    await workspace.cleanUp();
+    await expect(access(root)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+}, 90_000);

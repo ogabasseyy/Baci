@@ -50,7 +50,7 @@ describe('Order cancellation email', () => {
       ].join('\n');
 
       expect(output).toContain('₹5,000');
-      expect(output).toContain('Refund Due (pending): ₹5,000');
+      expect(output).toContain('Potential refund (pending): ₹5,000');
       expect(output).not.toContain('₦');
     });
   });
@@ -121,7 +121,7 @@ describe('cancellation refund status wording', () => {
       merchantUrl: 'https://example.com',
       currency: 'NGN',
     });
-    expect(text).toContain('Refund Due (pending): ₦100');
+    expect(text).toContain('Potential refund (pending): ₦100');
     expect(text).toContain('does not confirm that the refund has been sent');
     expect(text).not.toContain('Refund Amount');
     expect(text).not.toMatch(/business days/i);
@@ -132,5 +132,25 @@ describe('cancellation refund status wording', () => {
     expect(text).not.toMatch(/will refund/i);
     expect(text).not.toContain('original payment method');
     expect(text).toContain('REFUND INFORMATION (PENDING)');
+  });
+  it('omits the refund block when nothing is refundable', () => {
+    const data = {
+      orderNumber: 'ORD-0',
+      customerName: 'Buyer',
+      items: [],
+      totalAmount: 100,
+      amountPaid: 0,
+      refundAmount: 0,
+      cancelledBy: 'customer' as const,
+      merchantName: 'Store',
+      merchantUrl: 'https://example.com',
+      currency: 'NGN',
+    };
+    const html = generateOrderCancellationEmail(data);
+    const text = generateOrderCancellationText(data);
+    expect(html).not.toContain('Refund Information');
+    expect(html).not.toContain('Potential refund');
+    expect(text).not.toContain('REFUND INFORMATION');
+    expect(text).not.toContain('Potential refund');
   });
 });

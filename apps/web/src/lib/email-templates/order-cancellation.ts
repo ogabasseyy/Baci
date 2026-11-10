@@ -61,7 +61,7 @@ export function generateOrderCancellationEmail(
           <td style="padding: 4px 0; text-align: right; color: #1e293b; font-weight: 600;">${formatEmailMoney(data.amountPaid, data.currency)}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; color: #6b7280;">Refund Due (pending)</td>
+          <td style="padding: 4px 0; color: #6b7280;">Potential refund (pending)</td>
           <td style="padding: 4px 0; text-align: right; color: #b45309; font-weight: 700;">${formatEmailMoney(data.refundAmount, data.currency)}</td>
         </tr>
       </table>
@@ -209,7 +209,7 @@ export function generateOrderCancellationText(
       ? `
 REFUND INFORMATION (PENDING)
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
-Refund Due (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
+Potential refund (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
 The store will review your order to confirm whether a refund of up to this amount is due. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
 `
       : '';

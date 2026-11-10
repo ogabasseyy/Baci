@@ -124,12 +124,18 @@ and enrollment gates in the release sequence below.
    `SELECT cron.schedule('commerce-cart-retention', '*/5 * * * *', $cron$SELECT public.cleanup_commerce_carts()$cron$);`
    `cleanup_commerce_carts()` was written to be run by the cart events
    worker, which was never installed, so until this job exists nothing
-   deletes expired retry receipts, creation requests, outbox events,
-   handoffs (one day past expiry) or checkout sessions, and nothing flips
-   idle carts to `expired`. Each call handles at most 1,000 rows per
+   deletes expired retry receipts, creation requests and outbox events,
+   handoffs expired over a day, non-submitted checkout sessions expired
+   over a day, or submitted checkout sessions older than 90 days, and
+   nothing flips idle carts to `expired`. Each call handles at most 1,000 rows per
    table, so a backlog drains over successive runs. Flipping an idle cart
-   to `expired` does not take anything away from a shopper: access is
-   already refused once the cart's seven-day grant has lapsed. It does
+   to `expired` should not take anything away from a shopper: a
+   cart and its guest grant are both created with a seven-day life
+   (`20261012050200_commerce_cart_commands.sql`), and cart access requires
+   an unrevoked, unexpired grant. Grants issued later (pairing, account
+   link) can outlive the cart, so confirm before activating that no
+   active cart past `expires_at` still has a live grant; in production on
+   2026-11-10 none of the 528 such carts did. It does
    start the 90-day clock after which the terminal purge deletes the cart.
    Dispatch-held carts, handoffs and checkout sessions are skipped by the
    function's own fences. To stop it: `SELECT cron.unschedule('commerce-cart-retention');`

@@ -73,6 +73,7 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 STABLE
+SECURITY INVOKER
 SET search_path = ''
 AS $$
   SELECT r.id, r.order_id, r.merchant_id, r.candidates, r.metadata, a.attempts

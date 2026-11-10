@@ -132,4 +132,26 @@ describe('processCancellationDrain merchant alerts', () => {
       expect.objectContaining({ failed: 1 })
     );
   });
+
+  it('caps the alert pass and sizes notification sends from the pre-alert time', async () => {
+    let now = 1_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    mocks.alertPendingRefundReviews.mockImplementation(async () => {
+      now += 130_000; // a slow alert pass
+      return counts;
+    });
+    try {
+      await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
+      const { deadlineMs } = mocks.alertPendingRefundReviews.mock.calls[0][0];
+      expect(deadlineMs).toBeLessThanOrEqual(1_000_000 + 20_000);
+      // Derived from the pre-alert timestamp: still one send fits.
+      expect(mocks.drainPaystackRefundNotifications.mock.calls[0][2]).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

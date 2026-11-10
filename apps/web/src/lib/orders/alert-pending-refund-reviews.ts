@@ -15,6 +15,9 @@ import type {
 // of sends.
 const REVIEW_SCAN_LIMIT = 50;
 const MAX_ALERTS_PER_PASS = 3;
+// Hard cap on claim round-trips per pass (duplicates and deferrals included),
+// so a page of already-claimed rows cannot cause dozens of writes.
+const MAX_CLAIM_ROUND_TRIPS = 10;
 // Reviews older than this predate the alert or were left to operations;
 // do not page merchants about them retroactively.
 const REVIEW_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
@@ -183,12 +186,19 @@ export async function alertPendingRefundReviews({
         (m) => [m.id, m]
       )
     );
+    let roundTrips = 0;
     for (const review of pending) {
-      if (summary.attempted >= MAX_ALERTS_PER_PASS) break;
+      if (
+        summary.attempted >= MAX_ALERTS_PER_PASS ||
+        roundTrips >= MAX_CLAIM_ROUND_TRIPS
+      ) {
+        break;
+      }
       const order = orderById.get(review.order_id);
       const merchant = merchantById.get(review.merchant_id);
       // Tenant check: the review, order, and merchant must agree.
       if (!order || !merchant || order.merchant_id !== merchant.id) continue;
+      roundTrips += 1;
       const result = await alertMerchantOfRefundReview({
         deadlineMs,
         merchant,

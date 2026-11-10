@@ -115,3 +115,21 @@ describe('markUndeliverable', () => {
     expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 });
+
+describe('detached writes never reject', () => {
+  it('confirmClaim swallows a thrown or rejected write', async () => {
+    const supabase = makeSupabase();
+    supabase.confirmEq.mockRejectedValue(new Error('aborted'));
+    await expect(
+      confirmClaim(asSupabase(supabase), 'review-1')
+    ).resolves.toBeUndefined();
+  });
+
+  it('markUndeliverable swallows a thrown or rejected write', async () => {
+    const supabase = makeSupabase();
+    supabase.confirmEq.mockRejectedValue(new Error('aborted'));
+    await expect(
+      markUndeliverable(asSupabase(supabase), 'review-1', 0)
+    ).resolves.toBeUndefined();
+  });
+});

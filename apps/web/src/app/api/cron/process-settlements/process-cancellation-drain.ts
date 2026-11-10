@@ -24,6 +24,9 @@ import { sweepPaystackRefundRecoveryWatches } from '@/lib/payments/sweep-paystac
 import type { createServiceClient } from '@/lib/supabase/service';
 import type { sendEmail } from '@/lib/zeptomail';
 
+// Hard total budget for the merchant alert pass.
+const ALERT_PASS_MAX_MS = 20_000;
+
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
@@ -127,8 +130,15 @@ export async function processCancellationDrain(
   // drain whether it ran, was skipped for budget, or rejected (allSettled
   // above): they have their own refund-phase cutoff and budget check, and
   // never throw, so a backlog cannot starve them.
+  // Capture the phase start BEFORE the alert pass: the notification drain
+  // limit is derived from it, and the pass has a hard total time cap, so a
+  // slow alert pass cannot shrink notification sends.
+  const alertPhaseStartedAt = Date.now();
   const merchantRefundAlerts = await alertPendingRefundReviews({
-    deadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
+    deadlineMs: Math.min(
+      cancellationRefundDrainDeadlineMs(workersStartedAt),
+      alertPhaseStartedAt + ALERT_PASS_MAX_MS
+    ),
     senders: {
       sendEmail: sendCancellationEmail,
       sendPush: sendMerchantPush,
@@ -147,7 +157,9 @@ export async function processCancellationDrain(
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay
   // pending/failed for the next invocation.
-  const drainLimit = notificationDrainLimit(Date.now() - workersStartedAt);
+  const drainLimit = notificationDrainLimit(
+    alertPhaseStartedAt - workersStartedAt
+  );
   const notificationSkippedDueToBudget = drainLimit <= 0;
   if (notificationSkippedDueToBudget) {
     // The zero-limit call below still runs: its exhausted/uncertain

@@ -83,7 +83,7 @@ describe('order_cancellation_refund_alerts migration contract', () => {
   });
 
   it('locks the RPC down to service_role', () => {
-    expect(sql).toMatch(/SET search_path = ''/);
+    expect(sql).toMatch(/SECURITY INVOKER\s+SET search_path = ''/);
     expect(sql).toMatch(
       /REVOKE EXECUTE ON FUNCTION public\.list_cancellation_refund_reviews_needing_alert_v1\([^)]*\)\s+FROM PUBLIC, anon, authenticated;/
     );

@@ -74,4 +74,42 @@ describe('alertPendingRefundReviews lookup deadlines', () => {
     await expect(pending).resolves.toMatchObject({ attempted: 0, deferred: 1 });
     expect(mocks.alert).not.toHaveBeenCalled();
   });
+
+  it('stops after the claim round-trip cap even when every row is a duplicate', async () => {
+    mocks.alert.mockReset().mockResolvedValue('duplicate');
+    const reviews = Array.from({ length: 30 }, (_, i) => ({
+      ...review,
+      id: `r${i}`,
+    }));
+    const lookup = (rows: unknown[]) => ({
+      select: () => ({
+        in: () => ({
+          abortSignal: () => Promise.resolve({ data: rows, error: null }),
+        }),
+      }),
+    });
+    const supabase = {
+      from: vi.fn((table: string) =>
+        table === 'orders'
+          ? lookup([
+              {
+                currency: 'NGN',
+                id: 'o1',
+                merchant_id: 'm1',
+                order_number: '1',
+              },
+            ])
+          : lookup([{ email: 'a@b.c', id: 'm1' }])
+      ),
+      rpc: vi.fn(() => ({
+        abortSignal: () => Promise.resolve({ data: reviews, error: null }),
+      })),
+    };
+    const result = await alertPendingRefundReviews({
+      senders,
+      supabase: supabase as never,
+    });
+    expect(mocks.alert).toHaveBeenCalledTimes(10);
+    expect(result).toMatchObject({ attempted: 0, duplicate: 10 });
+  });
 });

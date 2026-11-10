@@ -68,11 +68,14 @@ export async function confirmClaim(
   supabase: AlertSupabase,
   reviewId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('order_cancellation_refund_alerts')
-    .update({ confirmed_at: new Date().toISOString() })
-    .eq('review_id', reviewId);
-  if (error) {
+  // Never rejects: the write may be left detached (bounded wait, late abort).
+  try {
+    const { error } = await supabase
+      .from('order_cancellation_refund_alerts')
+      .update({ confirmed_at: new Date().toISOString() })
+      .eq('review_id', reviewId);
+    if (error) throw error;
+  } catch (error) {
     // Left unconfirmed, the review can be re-driven after the cool-down.
     logger.error({
       error,
@@ -92,12 +95,14 @@ export async function markUndeliverable(
   reviewId: string,
   attempts: number
 ): Promise<void> {
-  const now = new Date().toISOString();
-  const { error } = await supabase
-    .from('order_cancellation_refund_alerts')
-    .update({ attempts, last_attempt_at: now, undeliverable_at: now })
-    .eq('review_id', reviewId);
-  if (error) {
+  try {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('order_cancellation_refund_alerts')
+      .update({ attempts, last_attempt_at: now, undeliverable_at: now })
+      .eq('review_id', reviewId);
+    if (error) throw error;
+  } catch (error) {
     logger.error({
       error,
       message: 'Cancellation refund alert could not be marked undeliverable',

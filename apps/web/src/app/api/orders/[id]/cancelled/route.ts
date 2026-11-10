@@ -77,8 +77,9 @@ export async function POST(
       const { data: preCancelItems, error: preCancelItemsError } =
         await supabase
           .from('order_items')
-          .select('product_id')
-          .eq('order_id', id);
+          .select('product_id, orders!inner(merchant_id)')
+          .eq('order_id', id)
+          .eq('orders.merchant_id', merchantId);
       if (!preCancelItemsError) {
         preCancelItemIds = Array.from(
           new Set(
@@ -128,8 +129,9 @@ export async function POST(
       try {
         const { data, error } = await supabase
           .from('order_items')
-          .select('product_id, variant_id')
-          .eq('order_id', id);
+          .select('product_id, variant_id, orders!inner(merchant_id)')
+          .eq('order_id', id)
+          .eq('orders.merchant_id', merchantId);
         if (error) throw error;
         orderItems = data;
       } catch (itemsError) {

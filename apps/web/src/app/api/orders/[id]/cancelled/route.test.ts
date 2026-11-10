@@ -59,6 +59,26 @@ describe('POST /api/orders/[id]/cancelled', () => {
       supabase,
     });
   });
+  it('scopes both order_items reads to the resolved merchant', async () => {
+    const { orderItemsEq, orderItemsOrderEq, supabase } = createSupabase();
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    await POST(
+      request({ cancelled_by: 'merchant', confirm_cancellation: true }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+    // The pre-cancel snapshot and the post-cancel reread.
+    expect(orderItemsOrderEq).toHaveBeenCalledTimes(2);
+    expect(orderItemsOrderEq).toHaveBeenCalledWith('order_id', 'order-1');
+    expect(orderItemsEq).toHaveBeenCalledTimes(2);
+    expect(orderItemsEq).toHaveBeenCalledWith(
+      'orders.merchant_id',
+      'merchant-1'
+    );
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.checkCsrfProtection.mockResolvedValue({ valid: true });

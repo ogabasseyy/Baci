@@ -52,7 +52,9 @@ function createSupabase({
       if (table === 'order_items') {
         return {
           select: vi.fn(() => ({
-            eq: vi.fn().mockResolvedValue({ data: [orderItem], error: null }),
+            eq: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ data: [orderItem], error: null }),
+            })),
           })),
         };
       }

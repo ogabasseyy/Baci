@@ -10,9 +10,16 @@ export function createSupabase() {
     data: [{ product_id: 'product-1' }],
     error: null,
   });
+  const orderItemsOrderEq = vi.fn(() => ({ eq: orderItemsEq }));
   const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
   const persistedMode = vi.fn().mockResolvedValue({
-    data: { cancellation_refund_mode: 'automatic', currency: 'NGN' },
+    data: {
+      amount_paid: 5000,
+      cancellation_refund_mode: 'automatic',
+      currency: 'NGN',
+      payment_status: 'paid',
+      total: 5000,
+    },
     error: null,
   });
   const ledgerRows = vi.fn().mockResolvedValue({
@@ -37,7 +44,11 @@ export function createSupabase() {
   const supabase = {
     from: vi.fn((table: string) => {
       if (table === 'order_items') {
-        return { select: vi.fn(() => ({ eq: orderItemsEq })) };
+        return {
+          select: vi.fn(() => ({
+            eq: orderItemsOrderEq,
+          })),
+        };
       }
       if (table === 'orders') {
         return {
@@ -81,6 +92,7 @@ export function createSupabase() {
   };
   return {
     orderItemsEq,
+    orderItemsOrderEq,
     ledgerRows,
     persistedMode,
     productsIn,

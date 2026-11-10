@@ -68,7 +68,7 @@ export async function resolveCancellationRefundOutcome({
     // plan's currency check. A failed read reports unknown.
     const { data: orderRow, error: orderError } = await supabase
       .from('orders')
-      .select('currency, amount_paid')
+      .select('currency, amount_paid, payment_status, total')
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
       .maybeSingle();
@@ -112,8 +112,13 @@ export async function resolveCancellationRefundOutcome({
           ? null
           : Number(orderRow.amount_paid),
       orderCurrency: orderRow.currency,
-      paymentStatus: 'Paid',
-      total: 0,
+      // The order's real status and total (the plan reads them only when the
+      // ledger is unknown, which this path never reaches).
+      paymentStatus:
+        String(orderRow.payment_status ?? '').toLowerCase() === 'paid'
+          ? 'Paid'
+          : String(orderRow.payment_status ?? ''),
+      total: Number(orderRow.total) || 0,
       transactions: rows.map((row) => ({
         amount: Number(row.amount),
         currency: row.currency,

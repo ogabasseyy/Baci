@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { RefundAlertPassSummary } from './alert-pending-refund-reviews';
 import type {
   AlertSupabase,
   RefundReviewAlertSenders,
@@ -48,3 +49,16 @@ export function makeSenders(
 
 export const asSupabase = (s: ReturnType<typeof makeSupabase>) =>
   s as unknown as AlertSupabase;
+
+export const emptyAlertSummary: RefundAlertPassSummary = {
+  alerted: 0,
+  attempted: 0,
+  deferred: 0,
+  failed: 0,
+  uncertain: 0,
+};
+
+/** Module mock factory for suites that only need the alert pass to no-op. */
+export const alertModuleMock = async () => ({
+  alertPendingRefundReviews: vi.fn().mockResolvedValue(emptyAlertSummary),
+});

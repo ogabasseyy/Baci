@@ -32,6 +32,7 @@ export async function claimAlert(
       .select('review_id');
     if (error) {
       logger.error({
+        error,
         message: 'Cancellation refund alert re-claim failed',
         orderId: order.id,
         reviewId: review.id,
@@ -51,6 +52,7 @@ export async function claimAlert(
   if (!error) return 'claimed';
   if ((error as { code?: string }).code === '23505') return 'duplicate';
   logger.error({
+    error,
     message: 'Cancellation refund alert claim failed',
     orderId: order.id,
     reviewId: review.id,
@@ -69,6 +71,7 @@ export async function confirmClaim(
   if (error) {
     // Left unconfirmed, the review can be re-driven after the cool-down.
     logger.error({
+      error,
       message: 'Cancellation refund alert could not be confirmed',
       reviewId,
     });

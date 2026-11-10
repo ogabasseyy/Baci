@@ -56,7 +56,16 @@ vi.mock('@/lib/payments/sweep-paystack-refund-recovery-watches', () => ({
   sweepPaystackRefundRecoveryWatches: mocks.sweepPaystackRefundRecoveryWatches,
 }));
 
+import type { RefundAlertPassSummary } from '@/lib/orders/alert-pending-refund-reviews';
 import { processCancellationDrain } from './process-cancellation-drain';
+
+const counts: RefundAlertPassSummary = {
+  alerted: 1,
+  attempted: 3,
+  deferred: 0,
+  failed: 1,
+  uncertain: 1,
+};
 
 describe('processCancellationDrain merchant alerts', () => {
   const supabase = { from: vi.fn(), rpc: vi.fn() } as never;
@@ -94,12 +103,7 @@ describe('processCancellationDrain merchant alerts', () => {
   });
 
   it('still runs the merchant alert pass when the side-effect drain rejects', async () => {
-    mocks.alertPendingRefundReviews.mockResolvedValue({
-      alerted: 1,
-      attempted: 2,
-      deferred: 0,
-      failed: 1,
-    });
+    mocks.alertPendingRefundReviews.mockResolvedValue(counts);
     mocks.drainFailedOrderCancellationSideEffects.mockRejectedValue(
       new Error('cancellation_side_effect_lookup_failed')
     );
@@ -112,7 +116,6 @@ describe('processCancellationDrain merchant alerts', () => {
   });
 
   it('reports merchant alert counts in the success payload and warns on failures', async () => {
-    const counts = { alerted: 1, attempted: 2, deferred: 0, failed: 1 };
     mocks.alertPendingRefundReviews.mockResolvedValue(counts);
     const response = await processCancellationDrain(
       supabase,

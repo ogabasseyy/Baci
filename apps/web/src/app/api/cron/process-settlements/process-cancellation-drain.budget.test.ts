@@ -56,6 +56,7 @@ vi.mock('@/lib/payments/sweep-paystack-refund-recovery-watches', () => ({
   sweepPaystackRefundRecoveryWatches: mocks.sweepPaystackRefundRecoveryWatches,
 }));
 
+import { emptyAlertSummary } from '@/lib/orders/refund-alert.test-support';
 import { processCancellationDrain } from './process-cancellation-drain';
 
 describe('processCancellationDrain budget scheduling', () => {
@@ -66,6 +67,7 @@ describe('processCancellationDrain budget scheduling', () => {
       mock.mockReset();
     }
 
+    mocks.alertPendingRefundReviews.mockResolvedValue(emptyAlertSummary);
     mocks.isRefundVerificationPendingBefore.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],

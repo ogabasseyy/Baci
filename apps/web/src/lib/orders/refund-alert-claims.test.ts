@@ -42,7 +42,9 @@ describe('claimAlert', () => {
     await expect(
       claimAlert(asSupabase(supabase), review, order, null)
     ).resolves.toBe('error');
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { code: '50000' } })
+    );
   });
 
   it('increments the attempt with compare-and-set on the prior count', async () => {

@@ -24,9 +24,9 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
 }));
-vi.mock('@/lib/orders/alert-pending-refund-reviews', () => ({
-  alertPendingRefundReviews: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('@/lib/orders/alert-pending-refund-reviews', async () =>
+  (await import('@/lib/orders/refund-alert.test-support')).alertModuleMock()
+);
 vi.mock('@/lib/orders/refund-verification-pending', () => ({
   REFUND_VERIFICATION_PROBE_BUDGET_MS: 10_000,
   isRefundVerificationPendingBefore: mocks.isRefundVerificationPendingBefore,

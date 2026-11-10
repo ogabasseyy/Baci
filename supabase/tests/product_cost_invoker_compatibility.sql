@@ -44,13 +44,35 @@ SELECT pg_temp.assert_cost_query_denied('SELECT cost_price FROM public.products'
 -- Switching away still invokes the trigger because OLD.variant_model was SKU.
 UPDATE public.products SET variant_model='legacy'
 WHERE id='ca570000-0000-4000-8000-000000000201';
--- Pure catalog helpers now work for authenticated shoppers without whole-row grants.
+-- The public negotiation classifier needs only safe catalog fields.
 SELECT set_config('request.jwt.claim.sub','ca570000-0000-4000-8000-000000000006',true);
 SELECT public.commerce_cart_product_negotiable(
   'ca570000-0000-4000-8000-000000000101','ca570000-0000-4000-8000-000000000201');
-SELECT public.commerce_cart_condition_pool_is_quantity_managed(
-  'ca570000-0000-4000-8000-000000000101','ca570000-0000-4000-8000-000000000201');
-SELECT public.commerce_cart_condition_supported(
-  'ca570000-0000-4000-8000-000000000101','ca570000-0000-4000-8000-000000000201',NULL,'new');
+-- Inventory policy is an internal dependency intentionally unavailable to shoppers.
+-- Do not widen its historical ACL just to make a direct internal-helper call work.
+DO $$ BEGIN
+  IF has_function_privilege('authenticated',
+    'public.get_effective_inventory_tracking_policy(text,text)','EXECUTE') THEN
+    RAISE EXCEPTION 'Internal inventory-policy helper became shopper-callable';
+  END IF;
+END $$;
+SELECT pg_temp.assert_cost_query_denied(
+  $query$SELECT public.commerce_cart_condition_pool_is_quantity_managed(
+    'ca570000-0000-4000-8000-000000000101',
+    'ca570000-0000-4000-8000-000000000201')$query$);
 RESET ROLE;
+-- Supported cart entrypoints are SECURITY DEFINER. Test these internal helpers
+-- in that privileged execution context, without changing any production grants.
+DO $$ BEGIN
+  IF public.commerce_cart_condition_pool_is_quantity_managed(
+    'ca570000-0000-4000-8000-000000000101',
+    'ca570000-0000-4000-8000-000000000201') IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Untracked catalog product lost quantity-managed classification';
+  END IF;
+  IF public.commerce_cart_condition_supported(
+    'ca570000-0000-4000-8000-000000000101',
+    'ca570000-0000-4000-8000-000000000201',NULL,'new') IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Default product condition is no longer supported';
+  END IF;
+END $$;
 ROLLBACK;

@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 10 November 2026 against source revision
-`ad7a113fb08298ee2fc275e00bfcbefa3b50d0eb`. Agentic checkout session quotes now include
+`34aa9ad6b53938318ff1d7ea78d125e72ce8c460`. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

@@ -1,9 +1,21 @@
-export type PinProofRequest = {
+/** A contribution: the proof is bound to goal, operation and amount. */
+export type FundPinProofRequest = {
+  action?: 'fund';
   merchantId?: string;
   goalId: string;
   operationId: string;
   amountKobo: number;
 };
+
+/** Cancel or complete: the server moves the whole goal, so no amount. */
+export type GoalActionPinProofRequest = {
+  action: 'cancel' | 'complete';
+  merchantId: string;
+  goalId: string;
+  operationId: string;
+};
+
+export type PinProofRequest = FundPinProofRequest | GoalActionPinProofRequest;
 
 /** Resolves a single-use proof, or null when the customer backs out. */
 export type PinProofRequester = (

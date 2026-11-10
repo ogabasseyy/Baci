@@ -111,8 +111,8 @@ describe('BlogListingPagination', () => {
     );
   });
 
-  it('preserves the active category/search filter and the slug base path', () => {
-    render(
+  it('preserves the active category/search filter and the slug base path while omitting crawl discovery links on filtered or paginated pages', () => {
+    const { rerender } = render(
       <BlogListingPagination
         storeBasePath="/acme"
         currentPage={2}
@@ -128,10 +128,46 @@ describe('BlogListingPagination', () => {
     expect(next.getAttribute('href')).toContain('search=pixel');
     expect(next.getAttribute('href')).toContain('page=3');
 
-    const discoveryLink = screen.getByRole('link', { name: 'Blog page 5' });
-    expect(discoveryLink.getAttribute('href')).toContain('/acme/blog?');
-    expect(discoveryLink.getAttribute('href')).toContain('category=phones');
-    expect(discoveryLink.getAttribute('href')).toContain('search=pixel');
-    expect(discoveryLink.getAttribute('href')).toContain('page=5');
+    expect(
+      screen.queryByText('Browse blog archive pages')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Blog page 5' })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <BlogListingPagination
+        storeBasePath="/acme"
+        currentPage={1}
+        totalPages={5}
+        category="phones"
+      />
+    );
+    expect(
+      screen.queryByText('Browse blog archive pages')
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <BlogListingPagination
+        storeBasePath="/acme"
+        currentPage={1}
+        totalPages={5}
+        search="pixel"
+      />
+    );
+    expect(
+      screen.queryByText('Browse blog archive pages')
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <BlogListingPagination
+        storeBasePath="/acme"
+        currentPage={2}
+        totalPages={5}
+      />
+    );
+    expect(
+      screen.queryByText('Browse blog archive pages')
+    ).not.toBeInTheDocument();
   });
 });

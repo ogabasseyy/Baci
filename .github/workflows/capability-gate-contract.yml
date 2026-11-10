@@ -17,9 +17,7 @@ name: Capability Gate Contract
 # Residual limit: direct pushes to protected branches bypass PR guards;
 # branch protection with required reviews plus the gate-contract required
 # check is the remaining layer (owner action).
-# Dependence note: the base fetch below runs without stored credentials,
-# which succeeds because this repository is public; a private setting
-# would need an explicit token for that step.
+# The base fetch uses a read-only token through a temporary askpass helper.
 # Residual acceptance: the head checkout opts out of the v7 pwn-request
 # guard to materialize fork code in pull_request_target; head files are
 # only hashed/parsed (never executed) and the running checker is always
@@ -47,7 +45,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: 45e5455fdbbc7c74e4108d6e5897c956c58d6e6e94a0103bca233084346d5738
+  PINNED_CHECKER_SHA256: 18b988c36e64f08bc0d007fc20d129cb03615c2c9650b5367c08e17066393410
 
 jobs:
   gate-contract:
@@ -68,13 +66,28 @@ jobs:
           # always come from the base revision, so no head code executes.
           allow-unsafe-pr-checkout: true
       - name: Run base-owned contract check against the head
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
             rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check
-            base_ref=$(jq -r .pull_request.base.ref "$GITHUB_EVENT_PATH")
-            git fetch --no-tags --depth 1 origin "$base_ref"
-            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check
+            base_sha=$(jq -r .pull_request.base.sha "$GITHUB_EVENT_PATH")
+            printf '%s' "$base_sha" | LC_ALL=C grep -Eq '^[0-9a-f]{40}$'
+            [ "$GITHUB_SERVER_URL" = "https://github.com" ]
+            [ "$(jq -r .repository.full_name "$GITHUB_EVENT_PATH")" = "$GITHUB_REPOSITORY" ]
+            umask 077
+            ask_dir=$(mktemp -d)
+            trap 'rm -rf "$ask_dir"' EXIT
+            askpass="$ask_dir/askpass"
+            # shellcheck disable=SC2016 # The helper expands the token only when Git runs it.
+            printf '%s\n' '#!/bin/sh' 'case "$1" in *Username*) printf "%s\n" x-access-token ;; *) printf "%s\n" "$GH_TOKEN" ;; esac' > "$askpass"
+            chmod 700 "$askpass"
+            GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch --no-tags --depth 1 "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" "$base_sha"
+            unset GH_TOKEN
+            rm -rf "$ask_dir"
+            trap - EXIT
+            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py vps-workers/baci-editorial-context/capability_gate_contract_private_fetch.py | tar -x -C /tmp/cg-check
             CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py
           else
             CHECKER=.github/scripts/capability_gate_contract_check.py

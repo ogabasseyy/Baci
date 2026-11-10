@@ -22,7 +22,7 @@ describe('RepairsLabHero', () => {
       screen.getByText(/extend the life of your devices/i)
     ).not.toHaveClass('sr-only');
     expect(
-      screen.getByText(/certified technicians use genuine parts/i)
+      screen.getByText(/confirm available parts and repair terms/i)
     ).not.toHaveClass('sr-only');
     const support = document.querySelector('[data-cwv-lcp-support]');
     expect(support).toHaveTextContent(

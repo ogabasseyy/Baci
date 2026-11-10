@@ -8,3 +8,12 @@
  */
 export const HOME_PRODUCT_GRID_CARD_IMAGE_SIZES =
   '(max-width: 480px) 40vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 20vw';
+
+/**
+ * Responsive sizing ladder for category catalog and listing product cards.
+ * Calibrated for a 2-column mobile grid (390px viewport width -> 32vw = ~125px * 3 DPR = ~375px)
+ * to select the lightweight 384w candidate instead of the oversized 640w tier on 3x DPR devices.
+ */
+export const STOREFRONT_PRODUCT_CARD_IMAGE_SIZES =
+  '(max-width: 480px) 32vw, (max-width: 768px) 33vw, (max-width: 1200px) 25vw, 280px';
+

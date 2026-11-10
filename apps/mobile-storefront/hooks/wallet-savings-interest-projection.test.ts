@@ -81,3 +81,18 @@ it('keeps goal progress at two decimals when paid interest has fractional naira'
   expect(result.goals[0].current_amount).toBe(0.3);
   expect(result.savingsBalance).toBe(0.3);
 });
+
+it('keeps the stored balance as principal_amount only where interest is added', () => {
+  const result = projectWalletSavingsInterest({
+    goals: [
+      { id: goalId, current_amount: 0, status: 'completed' },
+      { id: 'other', current_amount: 50, status: 'completed' },
+    ],
+    goalInterestKobo: [{ goal_id: goalId, credited_interest_kobo: 10_000 }],
+  });
+  expect(result.goals[0]).toMatchObject({
+    current_amount: 100,
+    principal_amount: 0,
+  });
+  expect(result.goals[1]).not.toHaveProperty('principal_amount');
+});

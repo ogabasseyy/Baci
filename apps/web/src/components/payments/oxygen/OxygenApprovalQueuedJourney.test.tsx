@@ -1,19 +1,5 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -22,24 +8,9 @@ vi.mock('@/lib/posthog/capture-client-event', () => ({
 }));
 
 import { OxygenProviderFlow } from './OxygenProviderFlow';
+import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
 
-beforeAll(() =>
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  )
-);
-afterAll(() => vi.unstubAllGlobals());
-// input-otp schedules selection synchronization up to 50ms after input changes.
-afterEach(async () => {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
-  });
-});
+installOxygenOtpTestEnvironment();
 beforeEach(() => {
   mocks.fetch.mockReset();
 });
@@ -137,8 +108,17 @@ it('resumes an unclaimed approval with its original key and no second OTP reques
       files: [new File(['signature'], 'signature.png', { type: 'image/png' })],
     },
   });
+  await screen.findByText('Signature ready');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('checkbox', { name: /I accept this payment plan/ })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('checkbox', { name: /I accept this payment plan/ })
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^Continue$/ })).toBeEnabled()
   );
   fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
   await waitFor(() =>

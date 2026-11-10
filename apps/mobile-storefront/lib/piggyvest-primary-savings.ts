@@ -15,6 +15,11 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   onRail?: (rail: 'primary' | 'legacy') => void;
   /** False for an id already bound to primary: it must never reach legacy. */
   allowLegacyFallback?: boolean;
+  /**
+   * True when the screen advertised the PiggyVest balance for this
+   * contribution: it must never be spent from the legacy wallet instead.
+   */
+  primaryAdvertised?: boolean;
   /** Single-use PIN proof bound to this goal, operation and amount. */
   pinProof?: string;
 }) {
@@ -62,6 +67,10 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     // the contribution through the working legacy flow instead of failing.
     if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
       throw error;
+    if (input.primaryAdvertised)
+      throw new Error(
+        "Adding to savings from your wallet isn't available yet. Please try again later."
+      );
     if (input.allowLegacyFallback === false)
       throw new Error(
         'We are checking your earlier contribution. Please try again later.'

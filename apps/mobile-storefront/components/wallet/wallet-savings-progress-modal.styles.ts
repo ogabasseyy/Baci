@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 import {
-  palette,
+  BRAND,
   RADIUS,
   SPACING,
   TYPOGRAPHY,
@@ -14,14 +14,18 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   card: {
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
     borderTopLeftRadius: RADIUS['2xl'],
     borderTopRightRadius: RADIUS['2xl'],
+    height: '88%',
     maxHeight: '88%',
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
-  scrollContent: { gap: SPACING.lg, paddingBottom: SPACING.md },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1, gap: SPACING.md, paddingBottom: SPACING.md },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -34,7 +38,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     gap: SPACING.xs,
   },
   title: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 16,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   iconButton: {
@@ -43,112 +47,40 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     justifyContent: 'center',
     width: 32,
   },
-  contentRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-  },
-  devicePane: {
-    alignItems: 'center',
-    borderRadius: RADIUS.xl,
-    justifyContent: 'center',
-    minHeight: 96,
-    width: 96,
-  },
-  deviceImage: {
-    height: 90,
-    width: 86,
-  },
-  devicePlaceholder: {
-    alignItems: 'center',
-    height: 90,
-    justifyContent: 'center',
-    width: 86,
-  },
-  progressPane: {
-    flex: 1,
-    minWidth: 0,
-  },
-  milestoneRow: {
-    gap: SPACING.xs,
-    marginBottom: SPACING.sm,
-  },
-  goalTitle: {
-    fontSize: TYPOGRAPHY.size.base,
-    fontWeight: TYPOGRAPHY.weight.bold,
-  },
-  milestoneText: {
-    fontSize: TYPOGRAPHY.size.sm,
-  },
-  progressCard: {
-    borderWidth: 1,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  progressTrack: {
-    borderRadius: RADIUS.full,
-    height: 8,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    borderRadius: RADIUS.full,
-    height: '100%',
-  },
-  amountRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    justifyContent: 'space-between',
-  },
-  amountLeft: {
-    fontSize: TYPOGRAPHY.size.sm,
-    fontWeight: TYPOGRAPHY.weight.bold,
-  },
   walletBalance: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     fontWeight: TYPOGRAPHY.weight.medium,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.xs,
-    marginTop: SPACING.sm,
-  },
-  metaPill: {
-    borderRadius: RADIUS.full,
-    fontSize: TYPOGRAPHY.size.xs,
-    fontWeight: TYPOGRAPHY.weight.semibold,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 5,
   },
   addSection: {
     gap: SPACING.sm,
   },
   sectionLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
-  walletHint: { fontSize: TYPOGRAPHY.size.xs },
+  walletHint: { fontSize: 10 },
   contributionGuidance: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 20,
   },
   amountInput: {
     alignItems: 'center',
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS['2xl'],
     borderWidth: 1,
     flexDirection: 'row',
     gap: SPACING.xs,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   amountInputField: {
     flex: 1,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 20,
+    fontWeight: '600',
     minWidth: 0,
     padding: 0,
   },
   amountPrefix: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   actionRow: {
@@ -157,15 +89,16 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   changeDeviceButton: {
     alignItems: 'center',
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
+    alignSelf: 'center',
+    borderRadius: RADIUS.full,
     flexDirection: 'row',
     gap: SPACING.xs,
     justifyContent: 'center',
-    paddingVertical: 11,
+    minHeight: 44,
+    paddingHorizontal: SPACING.md,
   },
   changeDeviceButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   secondaryButton: {
@@ -174,19 +107,19 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   secondaryButtonText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: palette.emerald[800],
+    backgroundColor: BRAND.primary,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
-    minHeight: 48,
-    paddingVertical: 12,
+    minHeight: 44,
+    paddingVertical: 10,
   },
   primaryButtonFocused: {
     borderColor: WALLET_COLORS.white,
@@ -194,14 +127,14 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   primaryButtonText: {
     color: WALLET_COLORS.white,
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   disabledButton: {
     opacity: 0.65,
   },
   autoDebitHint: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 18,
     marginTop: SPACING.md,
   },

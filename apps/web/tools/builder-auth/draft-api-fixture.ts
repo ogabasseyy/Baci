@@ -7,6 +7,7 @@ import { createServer, request as proxyRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { urlToHttpOptions } from 'node:url';
 import { importJWK, type JWK, jwtVerify } from 'jose';
+import { builderCiDockerArgs } from './ci-container-labels.mjs';
 import { startLocalPostgrest } from './local-postgrest-fixture.ts';
 export async function startDraftApi(
   containerName: string,
@@ -139,6 +140,7 @@ export async function startDraftApi(
         'run',
         '--rm',
         '-d',
+        ...builderCiDockerArgs(),
         '--name',
         api,
         '-p',

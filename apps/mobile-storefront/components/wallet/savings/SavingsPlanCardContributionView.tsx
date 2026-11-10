@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SavingsSheetTextInput } from '../SavingsSheetTextInput';
 import { SavingsCardContributionReview } from './SavingsCardContributionReview';
 import { SavingsCardContributionStatus } from './SavingsCardContributionStatus';
 import { SavingsCardMethodPicker } from './SavingsCardMethodPicker';
@@ -83,7 +84,7 @@ export function SavingsPlanCardContributionView({
             ]}
           >
             <Text style={[styles.currency, { color: colors.text }]}>₦</Text>
-            <TextInput
+            <SavingsSheetTextInput
               accessibilityLabel="Card contribution amount"
               editable={canStart && !hasSnapshot}
               value={amount}
@@ -150,20 +151,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  title: { flex: 1, fontSize: 16, fontWeight: '600' },
+  title: { flex: 1, fontSize: 14, fontWeight: '600' },
   content: { gap: 12, paddingTop: 10 },
-  preview: { fontSize: 12, lineHeight: 18, marginTop: 4 },
-  body: { fontSize: 14, lineHeight: 21 },
-  label: { fontSize: 15, fontWeight: '600' },
+  preview: { fontSize: 11, lineHeight: 18, marginTop: 4 },
+  body: { fontSize: 13, lineHeight: 21 },
+  label: { fontSize: 14, fontWeight: '600' },
   input: {
     borderWidth: 1,
     borderRadius: 14,
-    minHeight: 56,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     gap: 8,
   },
-  currency: { fontSize: 24 },
-  field: { flex: 1, minWidth: 0, fontSize: 24, paddingVertical: 10 },
+  currency: { fontSize: 22 },
+  field: { flex: 1, minWidth: 0, fontSize: 22, paddingVertical: 8 },
 });

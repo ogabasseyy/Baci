@@ -5,15 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 
 const m = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -21,26 +13,10 @@ vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: m.fetch }));
 
 import { continueWithSignature } from './approval-test-helpers';
 import { OxygenApprovalCode } from './OxygenApprovalCode';
+import { installOxygenOtpTestEnvironment } from './oxygen-otp-test-environment.test-support';
 
-beforeAll(() =>
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    }
-  )
-);
-afterAll(() => vi.unstubAllGlobals());
+installOxygenOtpTestEnvironment();
 beforeEach(() => vi.clearAllMocks());
-// input-otp schedules selection synchronization up to 50ms after mounting.
-// Let those callbacks finish before Vitest tears down the DOM environment.
-afterEach(async () => {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
-  });
-});
 const id = '60000000-0000-4000-8000-000000000001';
 const ref = '70000000-0000-4000-8000-000000000025';
 const state: OxygenProviderState = {
@@ -226,24 +202,19 @@ it('keeps the red pending animation until the server responds', async () => {
       })
   );
   await readyApproval(approve);
-  vi.useFakeTimers();
-  try {
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: '123456' },
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(document.querySelector('[data-state="pending"]')).not.toBeNull();
-    expect(document.querySelector('[data-state="verified"]')).toBeNull();
-    await act(async () => {
-      finish(false);
-    });
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Approval was not confirmed'
-    );
-    expect(approve).toHaveBeenCalledTimes(1);
-  } finally {
-    vi.useRealTimers();
-  }
+  fireEvent.change(screen.getByRole('textbox'), {
+    target: { value: '123456' },
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(document.querySelector('[data-state="pending"]')).not.toBeNull();
+  expect(document.querySelector('[data-state="verified"]')).toBeNull();
+  await act(async () => {
+    finish(false);
+  });
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Approval was not confirmed'
+  );
+  expect(approve).toHaveBeenCalledTimes(1);
 });

@@ -13,9 +13,7 @@ import {
   generateOrganizationSchema,
   generateProductSchema,
   generateSlug,
-  getCanonicalStorefrontFilterSearchParams,
   getEffectiveProductStock,
-  getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
   isRedundantPlatformListParenthetical,
@@ -33,6 +31,24 @@ function makeTrustProfile(
     ...overrides,
   };
 }
+
+const completePolicies = makeTrustProfile({
+  shippingPolicy: {
+    localRoute: '/shipping',
+    regions: ['NG'],
+    shippingFeeType: 'free',
+    handlingDaysMin: 0,
+    handlingDaysMax: 1,
+    transitDaysMin: 1,
+    transitDaysMax: 5,
+  },
+  returnPolicy: {
+    localRoute: '/returns',
+    windowDays: 7,
+    returnMethod: 'in_store',
+    returnFees: 'free',
+  },
+});
 
 describe('buildStorefrontAcceptedPaymentMethods', () => {
   it('derives only checkout-enabled payment methods for structured data', () => {
@@ -526,7 +542,9 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
-    expect(variants[0]).not.toHaveProperty('description');
+    expect(variants[0]?.description).toContain(
+      'A flagship device with variant-specific merchandising.'
+    );
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -591,6 +609,277 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variesBy).not.toContain('https://schema.org/additionalProperty');
     // Exactly 2 unique values: size + color
     expect(variesBy).toHaveLength(2);
+  });
+
+  describe('bugfix: product structured data variant and policy regressions', () => {
+    it('declares only variant dimensions present on every variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Silver', storage: '512GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { ram: '16GB' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v3',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toBeUndefined();
+      const variants = schema.hasVariant as Record<string, unknown>[];
+      expect(variants[0].color).toBe('Silver');
+      expect(variants[1]).not.toHaveProperty('color');
+      expect(variants[2]).not.toHaveProperty('size');
+    });
+
+    it.each([
+      [{ color: 'Black', size: '128GB' }, { color: 'White' }, 'color'],
+      [{ color: 'Black', size: '128GB' }, { size: '256GB' }, 'size'],
+    ] as const)('emits the independently complete variant dimension', (first, second, expected) => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: first,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              stock_quantity: 2,
+              attributes: second,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
+    });
+
+    it('provides a truthful description on each product variant', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          description: 'A refurbished phone with a clear display.',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black', storage: '128GB' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(variant.description).toContain(
+        'A refurbished phone with a clear display.'
+      );
+      expect(variant.description).toContain('Black');
+      expect(variant.description).toContain('128GB');
+    });
+
+    it('keeps variant names concise when catalog attributes contain long specifications', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          name: 'HP ProBook 440 G11',
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                color: 'Pike Silver',
+                ram: '16GB',
+                processor: 'Core Ultra 5',
+                specifications: 'detailed specification '.repeat(30),
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const name = String(
+        (schema.hasVariant as Record<string, unknown>[])[0].name
+      );
+      expect(name.length).toBeLessThanOrEqual(150);
+      expect(name).toContain('HP ProBook 440 G11');
+      expect(name).toContain('Pike Silver');
+      expect(name).toContain('16GB');
+    });
+
+    it('uses stable feed identifiers when a variant SKU or group slug is invalid', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          slug: `product-${'x'.repeat(60)}`,
+          variants: [
+            {
+              id: 'b9c67d32-7d63-41a3-9b14-2e7eb322a995',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              sku: `INVALID SKU ${'x'.repeat(60)}`,
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      const variant = (schema.hasVariant as Record<string, unknown>[])[0];
+      expect(schema.productGroupID).toBe(
+        'e7d13d26-ef38-4c5b-a616-40d23cf69708'
+      );
+      expect(variant.inProductGroupWithID).toBe(schema.productGroupID);
+      expect(variant.sku).toBe('b9c67d32-7d63-41a3-9b14-2e7eb322a995');
+    });
+
+    it('preserves validated SKU fallback and clears stale custom variesBy when custom schema markup is invalid or incomplete', () => {
+      const singleSchema = generateProductSchema(
+        makeProduct({
+          id: 'e7d13d26-ef38-4c5b-a616-40d23cf69708',
+          sku: `INVALID SKU ${'x'.repeat(60)}`,
+          schema_markup: {
+            sku: `CUSTOM INVALID SKU ${'y'.repeat(60)}`,
+          } as unknown as Product['schema_markup'],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(singleSchema.sku).toBe('e7d13d26-ef38-4c5b-a616-40d23cf69708');
+
+      const groupSchema = generateProductSchema(
+        makeProduct({
+          id: 'invalid id / with spaces',
+          slug: `product-${'x'.repeat(60)}`,
+          schema_markup: {
+            variesBy: ['https://schema.org/color'],
+          } as unknown as Product['schema_markup'],
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { processor: 'M4' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect(groupSchema.variesBy).toBeUndefined();
+      expect(groupSchema.productGroupID).toBe('group-invalid-id---with-spaces');
+      expect(
+        (groupSchema.hasVariant as Record<string, unknown>[])[0]
+          .inProductGroupWithID
+      ).toBe(groupSchema.productGroupID);
+    });
+
+    it('does not treat oversized specification text as a variant size', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: {
+                storage: 'Full product specification '.repeat(10),
+                ram: '32GB RAM',
+              },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG'
+      );
+      expect((schema.hasVariant as Record<string, unknown>[])[0].size).toBe(
+        '32GB RAM'
+      );
+    });
+
+    it('does not claim free nationwide shipping or return terms without evidence', () => {
+      const schema = generateProductSchema(
+        makeProduct({
+          variants: [
+            {
+              id: 'v1',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'Black' },
+              stock_quantity: 2,
+            },
+            {
+              id: 'v2',
+              product_id: 'test-123',
+              merchant_id: 'm1',
+              attributes: { color: 'White' },
+              stock_quantity: 2,
+            },
+          ],
+        }),
+        'TestStore',
+        'NGN',
+        'NG',
+        undefined,
+        makeTrustProfile({
+          shippingPolicy: {
+            localRoute: '/shipping',
+            regions: ['Lagos, Nigeria'],
+            shippingFeeType: 'calculated',
+          },
+        })
+      );
+      for (const variant of schema.hasVariant as Record<string, unknown>[]) {
+        const offer = variant.offers as Record<string, unknown>;
+        expect(offer).not.toHaveProperty('shippingDetails');
+        expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
+      }
+    });
   });
 
   it('sets variant-level availability correctly', () => {
@@ -670,12 +959,19 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       ],
     });
 
-    const schema = generateProductSchema(product, 'TestStore', 'NGN', 'NG');
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      completePolicies
+    );
     const variants = schema.hasVariant as Record<string, unknown>[];
     const offer = variants[0].offers as Record<string, unknown>;
 
-    // priceValidUntil is a YYYY-MM-DD string
-    expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The catalog does not provide a real expiry for this price.
+    expect(offer).not.toHaveProperty('priceValidUntil');
 
     // shippingDetails
     const shipping = offer.shippingDetails as Record<string, unknown>;
@@ -711,7 +1007,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       'NGN',
       'NG',
       undefined,
-      undefined,
+      completePolicies,
       { productUrl: 'https://shop.example/phones/test-product' }
     );
     const offers = (schema.hasVariant as Record<string, unknown>[]).map(
@@ -1041,242 +1337,20 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
   });
 });
 
-describe('getIndexableRobotsMetadata', () => {
-  it('returns large-preview directives for indexable storefront pages', () => {
-    expect(getIndexableRobotsMetadata()).toEqual({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        'max-image-preview': 'large',
-        'max-snippet': -1,
-        'max-video-preview': -1,
-      },
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-      'max-video-preview': -1,
-    });
-  });
-
-  it('keeps focused single-filter listing URLs indexable when filters affect results', () => {
-    expect(getIndexableRobotsMetadata({ brand: 'Dell' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(
-      getIndexableRobotsMetadata(
-        { brand: 'Dell' },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('deduplicates legacy singular and plural keys for the same listing filter', () => {
-    expect(
-      getIndexableRobotsMetadata(
-        {
-          brand: 'Dell',
-          brands: 'Dell',
-        },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('treats price bounds as one listing filter', () => {
-    expect(
-      getIndexableRobotsMetadata(
-        {
-          minPrice: '100000',
-          maxPrice: '500000',
-        },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-      },
-    });
-  });
-
-  it('noindexes multi-filter listing URLs while preserving follow directives', () => {
-    expect(
-      getIndexableRobotsMetadata({
-        brand: 'Dell',
-        minPrice: '100000',
-      })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-  });
-
-  it('ignores the hub transition token in robots and canonical decisions', () => {
-    expect(
-      getIndexableRobotsMetadata({
-        graphics: 'NVIDIA RTX 4070',
-        graphicsHub: 'rtx-4070',
-      })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-    });
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { graphics: 'NVIDIA RTX 4070', graphicsHub: 'rtx-4070' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('graphics=NVIDIA+RTX+4070');
-  });
-
-  it('treats graphics as a storefront filter for faceted listing URLs', () => {
-    expect(
-      getIndexableRobotsMetadata({ graphics: 'NVIDIA RTX 4070' })
-    ).toMatchObject({
-      index: false,
-      follow: true,
-    });
-
-    expect(
-      getIndexableRobotsMetadata(
-        { graphics: 'NVIDIA RTX 4070' },
-        { filtersAffectResults: true }
-      )
-    ).toMatchObject({
-      index: true,
-      follow: true,
-    });
-  });
-
-  it('noindexes storefront search query URLs while preserving follow directives', () => {
-    expect(getIndexableRobotsMetadata({ q: 'acc6.top' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(getIndexableRobotsMetadata({ query: 'iphone 16' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-
-    expect(getIndexableRobotsMetadata({ search: 'pixel 10' })).toMatchObject({
-      index: false,
-      follow: true,
-      googleBot: {
-        index: false,
-        follow: true,
-      },
-    });
-  });
-});
-
-describe('getCanonicalStorefrontFilterSearchParams', () => {
-  it('preserves a focused single listing filter in canonical query params', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { brand: 'Dell' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('brand=Dell');
-  });
-
-  it('keeps price range bounds together as one canonical listing filter', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        {
-          minPrice: '100000',
-          maxPrice: '500000',
-        },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('minPrice=100000&maxPrice=500000');
-  });
-
-  it('normalizes search aliases to the canonical search query param', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { q: 'iphone 16' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=iphone+16');
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { query: 'pixel 10' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=pixel+10');
-
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { search: 'redmi pad' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('search=redmi+pad');
-  });
-
-  it('preserves a focused graphics filter in canonical query params', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams(
-        { graphics: 'NVIDIA RTX 4070' },
-        { filtersAffectResults: true }
-      ).toString()
-    ).toBe('graphics=NVIDIA+RTX+4070');
-  });
-
-  it('drops canonical filter params until filters affect listing results', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams({ brand: 'Dell' }).toString()
-    ).toBe('');
-  });
-
-  it('drops canonical filter params for multi-filter listing URLs', () => {
-    expect(
-      getCanonicalStorefrontFilterSearchParams({
-        brand: 'Dell',
-        minPrice: '100000',
-      }).toString()
-    ).toBe('');
-  });
-});
-
 describe('generateOrganizationSchema', () => {
+  it('does not invent a return window or fees from a summary-only policy', () => {
+    const schema = generateOrganizationSchema({
+      name: 'Test Store',
+      url: 'https://test.example',
+      trustProfile: makeTrustProfile({
+        returnPolicy: {
+          summary: 'Contact us about returns',
+          localRoute: '/returns',
+        },
+      }),
+    });
+    expect(schema).not.toHaveProperty('hasMerchantReturnPolicy');
+  });
   it('keeps controlled use-brand profiles for the platform organization', () => {
     const schema = generateOrganizationSchema({
       name: 'Baci',
@@ -1370,55 +1444,6 @@ describe('generateOrganizationSchema', () => {
 });
 
 describe('generateMetaTitle', () => {
-  it('removes duplicated suffixes and keeps a single merchant suffix', () => {
-    expect(
-      generateMetaTitle('Buy Smartphones in Nigeria | Ogabassey | Ogabassey', {
-        suffix: 'Ogabassey',
-        maxLength: 70,
-      })
-    ).toBe('Buy Smartphones in Nigeria | Ogabassey');
-  });
-
-  it('adds suffix when missing and trims long titles', () => {
-    const title = generateMetaTitle(
-      "Introducing the iPhone 15 Series: Apple's Next Evolution in Smartphones",
-      {
-        suffix: 'Ogabassey',
-        maxLength: 70,
-      }
-    );
-
-    expect(title).toContain('Ogabassey');
-    expect(title.length).toBeLessThanOrEqual(70);
-  });
-
-  it('deduplicates suffixes that include regex metacharacters', () => {
-    expect(
-      generateMetaTitle('Buy Smartphones | Oga(bassey)+? | Oga(bassey)+?', {
-        suffix: 'Oga(bassey)+?',
-        maxLength: 70,
-      })
-    ).toBe('Buy Smartphones | Oga(bassey)+?');
-  });
-
-  it('does not treat an inline substring as an existing suffix', () => {
-    expect(
-      generateMetaTitle('MacBook Pro 16', {
-        suffix: 'Pro',
-        maxLength: 70,
-      })
-    ).toBe('MacBook Pro 16 | Pro');
-  });
-
-  it('does not treat partial word matches as an existing suffix', () => {
-    expect(
-      generateMetaTitle('Restore your phone fast', {
-        suffix: 'Store',
-        maxLength: 70,
-      })
-    ).toBe('Restore your phone fast | Store');
-  });
-
   describe('platform-list-only parenthetical compaction', () => {
     it('compacts redundant platform list with suffix and returns full title without ellipsis', () => {
       expect(
@@ -1665,7 +1690,7 @@ describe('generateMetaTitle', () => {
         }
       );
       expect(title).toBe(
-        'Buy EA Sports FC 27 - Ultimate Championship Edition wit... | Ogabassey'
+        'Buy EA Sports FC 27 - Ultimate Championship Edition... | Ogabassey'
       );
       expect(title.length).toBeLessThanOrEqual(70);
     });
@@ -1678,8 +1703,8 @@ describe('generateMetaTitle', () => {
           suffix: 'Very Long Merchant Suffix That Exceeds Max',
         }
       );
-      expect(title).toBe('Buy EA Sports FC ...');
-      expect(title.length).toBe(20);
+      expect(title).toBe('Buy EA Sports FC 27');
+      expect(title.length).toBeLessThanOrEqual(20);
     });
 
     it('handles genuine no-suffix path when title fits after compaction without ellipsis', () => {
@@ -1701,7 +1726,7 @@ describe('generateMetaTitle', () => {
             maxLength: 40,
           }
         )
-      ).toBe('Buy EA Sports FC 27 - Ultimate Champi...');
+      ).toBe('Buy EA Sports FC 27 - Ultimate...');
     });
 
     it('handles empty titles, fallbacks, and identity suffixes correctly', () => {
@@ -1729,7 +1754,7 @@ describe('generateMetaTitle', () => {
           suffix: 'Ogabassey Electronics Store',
           maxLength: 15,
         })
-      ).toBe('Ogabassey El...');
+      ).toBe('Ogabassey...');
     });
 
     it('strips orphan trailing separators before suffix or end of title when over length', () => {

@@ -3,8 +3,10 @@ import {
   fetchWalletPinStatus,
   submitWalletPin,
   verifyFundPin,
+  verifyGoalActionPin,
 } from '@/lib/wallet-pin-api';
 import { WalletPinSchemas } from '@/schemas/wallet-pin';
+import { messageOf as goalMessageOf } from './goal-lifecycle-outcomes';
 import type { WalletPinSheetBinding } from './use-wallet-pin-prompt';
 
 export type WalletPinStep =
@@ -18,12 +20,32 @@ export const WALLET_PIN_UNAVAILABLE = 'Wallet PIN is unavailable right now';
 const PIN_FORMAT = 'Enter 4 to 6 digits.';
 const PIN_MISMATCH = 'The two PINs do not match.';
 const PIN_SAVED = 'PIN saved. Enter it again to confirm this contribution.';
+const PIN_SAVED_SHORT = 'PIN saved.';
+// Codes the PIN service sends with copy written for the customer.
+const SAFE_PIN_CODES: ReadonlySet<string> = new Set([
+  'PIN_ALREADY_SET',
+  'PIN_BUSY',
+  'PIN_INCORRECT',
+  'PIN_LOCKED',
+  'PIN_NOT_SET',
+  'PIN_RESET_REQUIRED',
+  'PIN_UNAVAILABLE',
+]);
 const FALLBACK_ERROR = 'Something went wrong. Please try again.';
 
 function messageOf(error: unknown) {
   return error instanceof Error && error.message
     ? error.message
     : FALLBACK_ERROR;
+}
+
+// Goal cancel / complete never shows raw network, parse or server text: only
+// PIN-service copy and the goal flow's own safe codes get through.
+function goalActionMessageOf(error: unknown) {
+  const code = codeOf(error);
+  return code && SAFE_PIN_CODES.has(code) && error instanceof Error
+    ? messageOf(error)
+    : goalMessageOf(error);
 }
 
 function codeOf(error: unknown) {
@@ -42,7 +64,11 @@ export function useWalletPinSheet({
   request,
   expectedUserId,
   onProof,
-}: Pick<WalletPinSheetBinding, 'request' | 'onProof' | 'expectedUserId'>) {
+  onInvalid,
+}: Pick<
+  WalletPinSheetBinding,
+  'request' | 'onProof' | 'expectedUserId' | 'onInvalid'
+>) {
   const [step, setStep] = useState<WalletPinStep>('loading');
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -55,7 +81,9 @@ export function useWalletPinSheet({
   const generation = useRef(0);
   const operationId = request?.operationId ?? null;
   const goalId = request?.goalId ?? null;
-  const amountKobo = request?.amountKobo ?? null;
+  const amountKobo =
+    request && 'amountKobo' in request ? request.amountKobo : null;
+  const action = request?.action ?? 'fund';
   const merchantId = request?.merchantId ?? null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the whole request identity must restart the sheet, even though the effect body only reads the id and the user.
@@ -83,7 +111,7 @@ export function useWalletPinSheet({
     return () => {
       current = false;
     };
-  }, [operationId, goalId, amountKobo, merchantId, expectedUserId]);
+  }, [operationId, goalId, amountKobo, action, merchantId, expectedUserId]);
 
   const guarded = async (work: (isCurrent: () => boolean) => Promise<void>) => {
     if (busyRef.current) return;
@@ -111,12 +139,19 @@ export function useWalletPinSheet({
       try {
         await submitWalletPin(kind, pin, expectedUserId);
         if (!isCurrent()) return;
-        setNotice(PIN_SAVED);
+        setNotice(
+          request && 'amountKobo' in request ? PIN_SAVED : PIN_SAVED_SHORT
+        );
         setStep('enter');
       } catch (failure) {
         if (!isCurrent()) return;
         if (codeOf(failure) === 'PIN_ALREADY_SET') setStep('enter');
-        else setError(messageOf(failure));
+        else
+          setError(
+            request && !('amountKobo' in request)
+              ? goalActionMessageOf(failure)
+              : messageOf(failure)
+          );
       } finally {
         if (isCurrent()) {
           setPin('');
@@ -133,16 +168,28 @@ export function useWalletPinSheet({
       if (!request.merchantId) return setError(WALLET_PIN_UNAVAILABLE);
       setNotice(null);
       try {
-        const proof = await verifyFundPin(
-          {
-            merchantId: request.merchantId,
-            pin,
-            goalId: request.goalId,
-            operationId: request.operationId,
-            amountKobo: request.amountKobo,
-          },
-          expectedUserId
-        );
+        const proof =
+          'amountKobo' in request
+            ? await verifyFundPin(
+                {
+                  merchantId: request.merchantId,
+                  pin,
+                  goalId: request.goalId,
+                  operationId: request.operationId,
+                  amountKobo: request.amountKobo,
+                },
+                expectedUserId
+              )
+            : await verifyGoalActionPin(
+                {
+                  merchantId: request.merchantId,
+                  pin,
+                  action: request.action,
+                  goalId: request.goalId,
+                  operationId: request.operationId,
+                },
+                expectedUserId
+              );
         // The sheet was closed or re-opened while this check was in flight:
         // the proof belongs to a request nobody is waiting on any more.
         if (!isCurrent()) return;
@@ -152,9 +199,20 @@ export function useWalletPinSheet({
         if (!isCurrent()) return;
         setPin('');
         const code = codeOf(failure);
+        if (
+          onInvalid &&
+          (code === 'CANCEL_OPERATION_INVALID' ||
+            code === 'COMPLETE_OPERATION_INVALID')
+        ) {
+          return onInvalid(messageOf(failure));
+        }
         if (code === 'PIN_NOT_SET') setStep('set');
         else if (code === 'PIN_RESET_REQUIRED') setStep('reset');
-        setError(messageOf(failure));
+        setError(
+          'amountKobo' in request
+            ? messageOf(failure)
+            : goalActionMessageOf(failure)
+        );
       }
     });
 

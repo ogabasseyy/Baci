@@ -38,6 +38,7 @@ const config = {
   setupFiles: ['<rootDir>/__mocks__/expo-winter-setup.js'],
   setupFilesAfterEnv: ['./jest.setup.ts'],
   moduleNameMapper: {
+    '^@gorhom/bottom-sheet$': '<rootDir>/__mocks__/gorhom-bottom-sheet.js',
     '^@/(.*)$': '<rootDir>/$1',
     '^@baci/shared$': '<rootDir>/../../packages/shared/src/index.ts',
     '^@baci/shared/resolve-mobile-react$':

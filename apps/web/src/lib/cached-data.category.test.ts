@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCachedCategoryPageData,
   getCachedCategoryPageShellData,
+  getPublicProductVariantsByProductIds,
 } from '@/lib/cached-data';
 import {
   buildCachedDataTestHarness,
@@ -193,6 +194,15 @@ describe('getCachedCategoryPageData category routing and fallback logic', () => 
       'test-store'
     );
 
+    expect(harness.mockSelect).toHaveBeenCalledWith(
+      expect.stringContaining('has_variants')
+    );
+    expect(harness.mockSelect).toHaveBeenCalledWith(
+      expect.stringContaining('variant_model')
+    );
+    expect(harness.mockSelect).toHaveBeenCalledWith(
+      expect.stringContaining('has_condition_offers')
+    );
     expect(cacheLife).toHaveBeenCalledWith('storefront-page');
     expect(cacheLife).toHaveBeenCalledWith('products');
     expect(cacheTag).toHaveBeenCalledWith(
@@ -1367,5 +1377,39 @@ describe('getCachedCategoryPageData category routing and fallback logic', () => 
       productsQueryFailed: true,
     });
     expect(harness.mockFrom).not.toHaveBeenCalledWith('products');
+  });
+});
+
+describe('public budget variant hydration', () => {
+  it('uses the existing safe RPC projection and groups exact options by parent', async () => {
+    const variant = {
+      id: 'variant-1',
+      product_id: 'product-1',
+      attributes: { storage: '128GB' },
+      price_override: 456500,
+      condition: 'used',
+      stock_quantity: 0,
+      effective_policy: 'off',
+    };
+    harness.mockRpc.mockResolvedValueOnce({ data: [variant], error: null });
+    expect(
+      await getPublicProductVariantsByProductIds('merchant-123', [
+        'product-1',
+        'product-1',
+      ])
+    ).toEqual({ 'product-1': [variant] });
+    expect(harness.mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_variants',
+      { p_product_ids: ['product-1'] }
+    );
+  });
+  it('propagates variant query failure instead of publishing parent fallback prices', async () => {
+    harness.mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: new Error('unavailable'),
+    });
+    await expect(
+      getPublicProductVariantsByProductIds('merchant-123', ['product-1'])
+    ).rejects.toThrow('unavailable');
   });
 });

@@ -1,25 +1,13 @@
-import type Colors from '@/constants/Colors';
-import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { useState } from 'react';
+import { CONFIG } from '@/lib/config';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
+import { useAuthStore } from '@/stores/auth-store';
+import { ManualPrimaryGoalSection } from './ManualPrimaryGoalSection';
+import { SavingsFundingLoadingPanel } from './SavingsFundingLoadingPanel';
+import { usePrimaryGoalGate } from './savings/use-primary-goal-gate';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
 import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
-
-type WalletColors = (typeof Colors)['light'];
-
-type WalletSavingsFundingSectionProps = {
-  addAmount: string;
-  colors: WalletColors;
-  goal: WalletActiveSavingsGoal;
-  isAdding: boolean;
-  isFundPending: boolean;
-  onAddAmountChange: (value: string) => void;
-  onAddSavings: () => void;
-  onFundWallet: () => void;
-  onRefreshWallet?: () => Promise<unknown>;
-  remainingAmount: number;
-  usesPlanFunding: boolean;
-  visible: boolean;
-  walletBalance: number;
-};
+import type { WalletSavingsFundingSectionProps } from './wallet-savings-funding-section.types';
 
 export function WalletSavingsFundingSection({
   addAmount,
@@ -35,11 +23,55 @@ export function WalletSavingsFundingSection({
   usesPlanFunding,
   visible,
   walletBalance,
+  walletUpdatedAt,
 }: WalletSavingsFundingSectionProps) {
+  const [gateRetryNonce, setGateRetryNonce] = useState(0);
+  const gate = usePrimaryGoalGate(walletUpdatedAt, gateRetryNonce);
+  const userId = useAuthStore((state) => state.user?.id);
+  const storeMerchantId = useAuthStore((state) => state.merchantId);
+  const merchantId = pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID);
   const showWalletContribution =
     !usesPlanFunding || goal.source_mode === 'manual';
   if (usesPlanFunding && !visible) {
     return null;
+  }
+  if (!usesPlanFunding && goal.source_mode === 'manual') {
+    if (!userId || !merchantId) {
+      return <SavingsFundingLoadingPanel colors={colors} state="identity" />;
+    }
+    if (gate === 'checking')
+      return <SavingsFundingLoadingPanel colors={colors} />;
+    if (gate === 'error') {
+      return (
+        <SavingsFundingLoadingPanel
+          colors={colors}
+          onRetry={() => setGateRetryNonce((nonce) => nonce + 1)}
+          state="error"
+        />
+      );
+    }
+    if (gate === 'ready')
+      return (
+        <ManualPrimaryGoalSection
+          key={JSON.stringify([userId, merchantId, goal.id])}
+          addAmount={addAmount}
+          colors={colors}
+          goal={goal}
+          isAdding={isAdding}
+          isFundPending={isFundPending}
+          merchantId={merchantId}
+          onAddAmountChange={onAddAmountChange}
+          onAddSavings={onAddSavings}
+          onFundWallet={onFundWallet}
+          onRefreshWallet={onRefreshWallet}
+          remainingAmount={remainingAmount}
+          usesPlanFunding={usesPlanFunding}
+          userId={userId}
+          visible={visible}
+          walletBalance={walletBalance}
+        />
+      );
+    // Explicit off verdicts keep the legacy contribution path below.
   }
 
   return (

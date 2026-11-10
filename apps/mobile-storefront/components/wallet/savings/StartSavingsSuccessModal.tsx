@@ -27,6 +27,17 @@ export function StartSavingsSuccessModal({ colors, controller }: Props) {
       >
         Savings plan created successfully
       </Text>
+      <Text
+        style={{
+          color: colors.textSecondary,
+          fontSize: 13,
+          lineHeight: 20,
+          textAlign: 'center',
+        }}
+      >
+        You're off to a great start. Add to it whenever you like and watch it
+        grow.
+      </Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Go to wallet"

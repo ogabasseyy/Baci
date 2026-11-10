@@ -21,7 +21,7 @@ export function WalletTransferMode({ colors, controller }: TransferModalProps) {
       cardStyle={[styles.modalCard, { backgroundColor: colors.background }]}
     >
       <Text style={[styles.modalTitle, { color: colors.text }]}>
-        Fund wallet to continue
+        Add money to continue
       </Text>
       <View
         style={[

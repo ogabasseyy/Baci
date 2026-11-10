@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   numberRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  number: { color: '#FFFFFF', fontSize: 19, fontWeight: '700' },
-  bank: { color: '#AEB4BE', fontSize: 11, marginTop: 2 },
-  feedback: { color: '#AEB4BE', fontSize: 10 },
+  number: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  bank: { color: '#AEB4BE', fontSize: 10, marginTop: 2 },
+  feedback: { color: '#AEB4BE', fontSize: 9 },
 });

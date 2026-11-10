@@ -11,6 +11,8 @@ export type WalletPinSheetBinding = {
   expectedUserId?: string;
   onProof: (proof: string) => void;
   onCancel: () => void;
+  /** The server says this operation is no longer valid: close, no proof. */
+  onInvalid?: (message: string) => void;
 };
 
 /**
@@ -23,6 +25,7 @@ export function useWalletPinPrompt() {
   const userId = useAuthStore((state) => state.user?.id);
   const initiator = useRef<string | undefined>(undefined);
   const resolver = useRef<((proof: string | null) => void) | null>(null);
+  const invalid = useRef<string | null>(null);
   useEffect(
     () => () => {
       resolver.current?.(null);
@@ -50,6 +53,7 @@ export function useWalletPinPrompt() {
       resolver.current?.(null);
       resolver.current = resolve;
       initiator.current = userId;
+      invalid.current = null;
       setRequest(next);
     });
   const sheetProps: WalletPinSheetBinding = {
@@ -57,6 +61,18 @@ export function useWalletPinPrompt() {
     expectedUserId: request ? initiator.current : undefined,
     onProof: settle,
     onCancel: () => settle(null),
+    onInvalid: (message: string) => {
+      invalid.current = message;
+      settle(null);
+    },
   };
-  return { requestProof, sheetProps };
+  /** Why the last sheet closed without a proof, if the server invalidated it. */
+  const takeInvalid = () => {
+    const message = invalid.current;
+    invalid.current = null;
+    return message;
+  };
+  /** Closes the sheet and resolves the waiter with no proof. */
+  const cancel = () => settle(null);
+  return { requestProof, sheetProps, takeInvalid, cancel };
 }

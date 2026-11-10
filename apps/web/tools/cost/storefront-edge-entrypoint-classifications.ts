@@ -57,6 +57,7 @@ const DYNAMIC_ENTRYPOINTS = [
   '(content)/pages/rewards/page.tsx',
   '(customer)/account/addresses/page.tsx',
   '(customer)/account/callback/route.ts',
+  '(customer)/account/checkout-return/page.tsx',
   '(customer)/account/login/page.tsx',
   '(customer)/account/orders/[orderId]/insurance/page.tsx',
   '(customer)/account/orders/[orderId]/page.tsx',

@@ -51,7 +51,7 @@ function setup(
 
 describe('CartSidebarFooter', () => {
   it('renders the total and checkout actions', () => {
-    setup();
+    const { onClose } = setup();
 
     expect(screen.getByTestId('cart-total')).toHaveTextContent('1000000');
     expect(
@@ -61,9 +61,9 @@ describe('CartSidebarFooter', () => {
       'href',
       '/store/cart'
     );
-    expect(
-      screen.getByRole('button', { name: 'Continue Shopping' })
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'View Full Cart' }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Continue Shopping' })).not.toBeInTheDocument();
   });
 
   it('shows the negotiate-total button only when every line is negotiable', () => {
@@ -113,7 +113,7 @@ describe('CartSidebarFooter', () => {
   });
 
   it('wires the action callbacks', () => {
-    const { onNegotiateTotal, onCheckout, onClose } = setup();
+    const { onNegotiateTotal, onCheckout } = setup();
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Negotiate Total Amount' })
@@ -123,7 +123,5 @@ describe('CartSidebarFooter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Proceed to Checkout' }));
     expect(onCheckout).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue Shopping' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

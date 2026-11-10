@@ -1,16 +1,21 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const sql = readFileSync(
-  join(
-    process.cwd(),
-    '../../supabase/migrations/20261109130000_wallet_spendable_breakdown.sql'
+  resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../../../supabase/migrations/20261109130000_wallet_spendable_breakdown.sql'
   ),
   'utf8'
 );
 
 describe('get_merchant_wallet_spendable_breakdown migration', () => {
+  it('keeps unreconciled exposure out of the settled-to-bank total', () => {
+    expect(sql).toContain('pending_reconciliation_total');
+    expect(sql).not.toMatch(/exposure\(wallet\.id\)\s*\+\s*COALESCE/);
+  });
   it('uses the same spendable rule as reserve_merchant_shipping_charge', () => {
     expect(sql).toContain('private.merchant_wallet_direct_settled_exposure');
     expect(sql).toMatch(/GREATEST\(/);

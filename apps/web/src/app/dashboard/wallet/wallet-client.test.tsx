@@ -105,7 +105,11 @@ describe('WalletClient', () => {
       <WalletClient
         merchantId="merchant-1"
         payoutCurrency="NGN"
-        spendable={{ spendableBalance: 1200, settledToBankTotal: 9000 }}
+        spendable={{
+          spendableBalance: 1200,
+          settledToBankTotal: 9000,
+          pendingReconciliationTotal: 4000,
+        }}
         wallet={{
           id: 'wallet-1',
           availableBalance: 10200,

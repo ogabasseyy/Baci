@@ -1,9 +1,20 @@
 import { z } from 'zod';
 
+// Postgres numeric arrives as a number or a decimal string. Null, empty and
+// non-numeric values must fail closed rather than coerce to 0.
+const moneySchema = z.union([
+  z.number().finite(),
+  z
+    .string()
+    .regex(/^-?\d+(\.\d+)?$/)
+    .transform(Number),
+]);
+
 /** Rows from public.get_merchant_wallet_spendable_breakdown (0 or 1 row). */
 export const walletSpendableBreakdownRowsSchema = z.array(
   z.object({
-    spendable_balance: z.coerce.number().finite(),
-    settled_to_bank_total: z.coerce.number().finite(),
+    spendable_balance: moneySchema,
+    settled_to_bank_total: moneySchema,
+    pending_reconciliation_total: moneySchema,
   })
 );

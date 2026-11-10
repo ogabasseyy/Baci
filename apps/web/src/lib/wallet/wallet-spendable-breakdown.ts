@@ -4,6 +4,7 @@ import { walletSpendableBreakdownRowsSchema } from '@/schemas/wallet-spendable-b
 export type WalletSpendableBreakdown = {
   spendableBalance: number;
   settledToBankTotal: number;
+  pendingReconciliationTotal: number;
 };
 
 export type WalletSpendableBreakdownResult =
@@ -15,10 +16,15 @@ export async function readWalletSpendableBreakdown(
   supabase: SupabaseClient,
   merchantId: string
 ): Promise<WalletSpendableBreakdownResult> {
-  const { data, error } = await supabase.rpc(
-    'get_merchant_wallet_spendable_breakdown',
-    { p_merchant_id: merchantId }
-  );
+  let result: Awaited<ReturnType<typeof supabase.rpc>>;
+  try {
+    result = await supabase.rpc('get_merchant_wallet_spendable_breakdown', {
+      p_merchant_id: merchantId,
+    });
+  } catch {
+    return { ok: false };
+  }
+  const { data, error } = result;
   if (error) return { ok: false };
   const parsed = walletSpendableBreakdownRowsSchema.safeParse(data);
   if (!parsed.success) return { ok: false };
@@ -27,5 +33,6 @@ export async function readWalletSpendableBreakdown(
     ok: true,
     spendableBalance: row?.spendable_balance ?? 0,
     settledToBankTotal: row?.settled_to_bank_total ?? 0,
+    pendingReconciliationTotal: row?.pending_reconciliation_total ?? 0,
   };
 }

@@ -26,5 +26,8 @@ BEGIN
      OR pg_temp.wallet_tx_count(v_order) <> 0 THEN
     RAISE EXCEPTION 'T8: releasing a platform reservation must not move the wallet';
   END IF;
+  -- Re-quoting (replacing the selected quote) is no longer blocked by the
+  -- quote-replacement trigger once the reservation is released.
+  UPDATE public.orders SET selected_quote_id = NULL WHERE id = v_order;
 END;
 $t8$;

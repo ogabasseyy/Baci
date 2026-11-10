@@ -47,6 +47,14 @@ describe('getCheckoutGiglPaidShippingFee', () => {
     ['the credit-direct alias', { ...order, payment_method: 'credit-direct' }],
     ['a manual payment', { ...order, payment_method: 'manual_payment' }],
     ['cash', { ...order, payment_method: 'cash' }],
+    // Fail-safe allow-list: unverified providers never show as customer-paid.
+    ['Oxygen', { ...order, payment_method: 'oxygen' }],
+    [
+      'a merchant DVA bank transfer',
+      { ...order, payment_method: 'bank_transfer' },
+    ],
+    ['an unknown future provider', { ...order, payment_method: 'newpay' }],
+    ['a missing method', { ...order, payment_method: null }],
   ])('returns null for %s', (_case, candidate) => {
     expect(getCheckoutGiglPaidShippingFee(candidate)).toBeNull();
   });

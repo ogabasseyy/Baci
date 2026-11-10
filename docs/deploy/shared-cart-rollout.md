@@ -72,7 +72,17 @@ and enrollment gates in the release sequence below.
   `supabase db query --linked`; the function is not callable by API roles) before relying on the alarm; otherwise
   `/api/cron/cart-notice-health` reports the old backlog as stale until the
   sweep catches up. A notice that fails ten sends is dead-lettered and not
-  retried; the alarm reports it for 24 hours.
+  retried; the alarm reports it for 24 hours. Write-time sending adds
+  one insert and one indexed lookup to each cart write for an enrolled
+  merchant, so compare cart-write latency before and after the first
+  enrollment. Kill switch that keeps delivery working through the sweep
+  alone (notices then arrive within about 30 seconds):
+  `ALTER TABLE public.commerce_cart_events DISABLE TRIGGER commerce_cart_events_send_on_write;`
+  (re-enable with `ENABLE TRIGGER`). Removing a merchant's
+  `shared_cart_realtime` flag stops both paths for that merchant. The
+  health counts are readable with the public anon key by design: an
+  accepted, unauthenticated operational signal with no cart, shopper or
+  merchant data.
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
 - Worker credential boundary: `20261015157000` revokes the

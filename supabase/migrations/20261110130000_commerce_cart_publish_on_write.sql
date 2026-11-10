@@ -52,8 +52,10 @@ BEGIN
   -- realtime.send reports a failed insert (for example a missing daily
   -- partition) as a warning, not an error. Never acknowledge without the
   -- durable row this call wrote. The topic, extension and private filters
-  -- match Realtime's replay index, and the one-day bound prunes the daily
-  -- partitions whatever time zone the session stamps inserted_at in.
+  -- match Realtime's replay index. inserted_at is timestamp without time
+  -- zone, stamped in the writing session's zone, so the bound is a loose
+  -- one-day window (wider than any zone offset) that only prunes old daily
+  -- partitions; the row being confirmed is always seconds old.
   RETURN EXISTS (
     SELECT 1
     FROM realtime.messages AS message
@@ -254,20 +256,24 @@ REVOKE ALL ON FUNCTION public.commerce_cart_publish_health()
 GRANT EXECUTE ON FUNCTION public.commerce_cart_publish_health() TO anon;
 
 -- Sweep schedule and its run-log retention. Non-destructive: the publisher
--- only sends notices for merchants enrolled in live updates. Re-running
--- cron.schedule under the same job name replaces the earlier definition.
+-- only sends notices for merchants enrolled in live updates. New jobs are
+-- active as soon as they are scheduled.
 DO $do$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_cron') THEN
+    -- Start from a clean slate: cron.schedule only replaces a same-name
+    -- job owned by the same role, and production already holds jobs with
+    -- these names from the first switch-on attempt.
+    PERFORM cron.unschedule(job.jobid)
+    FROM cron.job AS job
+    WHERE job.jobname IN (
+      'commerce-cart-publish-events',
+      'commerce-cart-publish-events-log-retention'
+    );
     PERFORM cron.schedule(
       'commerce-cart-publish-events',
       '30 seconds',
       $job$SELECT public.commerce_cart_publish_events(50, 'pg-cron')$job$
-    );
-    PERFORM cron.alter_job(
-      (SELECT jobid FROM cron.job
-        WHERE jobname = 'commerce-cart-publish-events'),
-      active := true
     );
     PERFORM cron.schedule(
       'commerce-cart-publish-events-log-retention',

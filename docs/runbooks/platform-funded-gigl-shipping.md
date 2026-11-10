@@ -27,3 +27,10 @@ WHERE funding_source = 'platform' AND status IN ('booked','needs_reconciliation'
 
 Confirm cancellation with GIG, then set the charge as postgres: `UPDATE public.merchant_shipping_charges SET status = 'refunded', failure_code = 'PROVIDER_CANCELLED_MANUAL', refunded_at = now(), updated_at = now() WHERE id = '<charge id>' AND funding_source = 'platform';`
 (no wallet movement; the CHECK forbids wallet transaction ids on platform charges).
+
+### Full cleanup and evidence (required before the UPDATE)
+
+1. Obtain written/portal confirmation from GIG that the waybill (`shipments.tracking_number`) is cancelled, and record it on the ticket.
+2. If GIG may still deliver, do NOT mark refunded; reconcile with GIG first.
+3. After the charge UPDATE, check the order: `shipment_id`, `tracking_number`, `shipping_status` and the `shipments` row must reflect the cancellation (set the shipment `status = 'cancelled'`), and clear any `shipment_booking_lock_token`.
+4. Re-quote the order in the admin app if it must ship again.

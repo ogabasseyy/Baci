@@ -133,6 +133,8 @@ export function useOrderGiglShipping({
     invalidateQuote();
   };
   const refreshBalance = async (context?: OrderGiglPollContext) => {
+    // Baci-paid quotes never depend on the merchant wallet balance.
+    if (walletRef.current?.paidByBaci) return walletRef.current;
     const isCurrent = () =>
       !context ||
       (context.isCurrent() && enabledRef.current && appActiveRef.current);

@@ -1,5 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const original =
@@ -27,15 +27,37 @@ export function prepareTypedNavigation(source) {
   return source.replace(original, prepared);
 }
 
-export async function prepareTypedNavigationFile(path) {
+/**
+ * Prepare the generated declaration at `path`. With `outputPath`, the source
+ * stays untouched and the prepared copy is written there instead: `next build`
+ * regenerates `.next/types/link.d.ts` before its own type check, so the
+ * production build reads a copy that the build cannot overwrite.
+ */
+export async function prepareTypedNavigationFile(path, outputPath = path) {
   const source = await readFile(path, 'utf8');
   const output = prepareTypedNavigation(source);
+  if (outputPath !== path) {
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, output, 'utf8');
+    return;
+  }
   if (output !== source) await writeFile(path, output, 'utf8');
+}
+
+/** Read the optional `--output <path>` argument; anything else fails closed. */
+export function parseOutputArgument(args) {
+  if (args.length === 0) return undefined;
+  if (args.length === 2 && args[0] === '--output' && args[1]) return args[1];
+  throw new Error('Usage: prepare-typed-navigation.mjs [--output <path>]');
 }
 
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  await prepareTypedNavigationFile(resolve('.next/types/link.d.ts'));
+  const output = parseOutputArgument(process.argv.slice(2));
+  await prepareTypedNavigationFile(
+    resolve('.next/types/link.d.ts'),
+    output ? resolve(output) : undefined
+  );
 }

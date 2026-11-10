@@ -4,6 +4,7 @@ import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
 import { bindSharedCartRealtime } from '@/lib/cart/bind-shared-cart-realtime';
 import { createNativeCartController } from '@/lib/cart/controller';
 import type { CartProductShell } from '@/lib/cart/display';
+import { dropPredictedLines } from '@/lib/cart/drop-predicted-lines';
 import {
   bindControllerActions,
   createEnrollmentTransition,
@@ -26,7 +27,7 @@ import {
 } from '@/lib/cart/shared-cart-client';
 import { startSharedCartPolling } from '@/lib/cart/shared-cart-polling';
 import { getCartShopperToken } from '@/lib/cart/shopper-token';
-import { writeFailureMessage } from '@/lib/cart/write-failure-message';
+import { reportWriteFailure } from '@/lib/cart/write-failure-message';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { releaseCheckoutCreditSnapshot } from '@/lib/release-checkout-credit-snapshot';
@@ -224,11 +225,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
           if (isCurrent()) useCartStore.setState({ items });
         },
         onWriteFailed: (action, error, outcome) => {
-          // Background repricing and restores are not shopper taps.
-          if (isCurrent() && isPredictableEdit(action))
-            useNativeSharedCartStore.setState({
-              writeNotice: writeFailureMessage(error, outcome),
-            });
+          if (isCurrent()) reportWriteFailure(action, error, outcome);
         },
         status: (status, code) => {
           if (!isCurrent()) return;
@@ -312,6 +309,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       stopRealtime?.();
       stopPolling();
       release();
+      dropPredictedLines();
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({ ...DISABLED_SHARED_CART_STATE });
     };

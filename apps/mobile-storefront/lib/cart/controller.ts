@@ -24,14 +24,18 @@ import {
 import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
-import { createPendingEdits, isPendingLineId } from './pending-edits';
+import { createPendingEdits, withoutPendingLines } from './pending-edits';
 import { pendingCartRequest } from './pending-request';
 import { NativeCartError } from './shared-cart-client';
 
 const TERMINAL_STATES = new Set(['completed', 'expired', 'canceled']);
 export function createNativeCartController(
-  options: NativeCartControllerOptions
+  rawOptions: NativeCartControllerOptions
 ) {
+  const options = {
+    ...rawOptions,
+    getLegacy: withoutPendingLines(rawOptions.getLegacy),
+  };
   let snapshot: CartSnapshot | null = null;
   let terminal = false;
   let terminalCartId: string | null = null;
@@ -207,9 +211,7 @@ export function createNativeCartController(
     if (legacy.sharedCartRef) throw new NativeCartError('reconnect_required');
     const created = await coordinator.create({
       operationId: options.newOperationId(),
-      lines: legacy.items
-        .filter((item) => !isPendingLineId(item.id))
-        .map(nativeCartInput),
+      lines: legacy.items.map(nativeCartInput),
     });
     await accept(created);
     return created;

@@ -204,3 +204,18 @@ it('keeps a single socket when connects overlap', async () => {
   expect(t.deps.connect).toHaveBeenCalledTimes(1);
   t.handle.stop();
 });
+
+it('retries a hint at the same version after a failed refresh', async () => {
+  const t = setup();
+  await flush();
+  t.refresh.mockRejectedValueOnce(new Error('offline'));
+  t.emit(event(4));
+  await flush();
+  t.emit(event(4));
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(2);
+  t.emit(event(4));
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(2);
+  t.handle.stop();
+});

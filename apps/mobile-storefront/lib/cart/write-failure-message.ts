@@ -1,4 +1,7 @@
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { NativeCartError } from './native-cart-error';
+import { isPredictableEdit } from './pending-edits';
 
 const MESSAGES: Record<string, string> = {
   invalid_item:
@@ -28,4 +31,16 @@ export function writeFailureMessage(
 ): string {
   if (outcome === 'unconfirmed') return UNCONFIRMED;
   return (error instanceof NativeCartError && MESSAGES[error.code]) || FALLBACK;
+}
+
+/** Tells the shopper about a failed tap; background repricing and restores stay silent. */
+export function reportWriteFailure(
+  action: SharedCartWrite,
+  error: unknown,
+  outcome: 'rolled_back' | 'unconfirmed'
+): void {
+  if (isPredictableEdit(action))
+    useNativeSharedCartStore.setState({
+      writeNotice: writeFailureMessage(error, outcome),
+    });
 }

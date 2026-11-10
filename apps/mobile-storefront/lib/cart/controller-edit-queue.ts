@@ -52,8 +52,10 @@ export function createEditQueue(deps: EditQueueDeps) {
           : 'rolled_back';
         // The write may have landed; settle against the server inside this
         // slot so nothing else (checkout) runs on a guess.
-        if (outcome === 'unconfirmed')
+        if (outcome === 'unconfirmed') {
+          if (edit) deps.edits.markLanded(edit);
           await deps.refresh().catch(() => undefined);
+        }
         deps.onFailed?.(action, error, outcome);
         throw error;
       } finally {

@@ -1,6 +1,6 @@
 import type { CartItem } from '@/stores/cart-store.types';
 import { createNativeCartController } from './controller';
-import type { NativeCartError } from './native-cart-error';
+import { NativeCartError } from './native-cart-error';
 
 export const merchant = '11111111-1111-4111-8111-111111111111';
 export const cartId = '22222222-2222-4222-8222-222222222222';
@@ -113,14 +113,21 @@ export function setup(options: { live?: boolean } = {}) {
         cart: snapshotOf(server.version, server.lines),
       });
     }),
-    command: jest.fn(async (input: { command: Record<string, unknown> }) => {
-      calls.push(`command:${String(input.command.type)}`);
-      if (hold) await new Promise<void>((resolve) => gates.push(resolve));
-      const failure = failures.shift();
-      if (failure) throw failure;
-      apply(input.command);
-      return { cart: snapshotOf(server.version, server.lines) };
-    }),
+    command: jest.fn(
+      async (input: {
+        expectedVersion: number;
+        command: Record<string, unknown>;
+      }) => {
+        calls.push(`command:${String(input.command.type)}`);
+        if (input.expectedVersion !== server.version)
+          throw new NativeCartError('version_conflict');
+        if (hold) await new Promise<void>((resolve) => gates.push(resolve));
+        const failure = failures.shift();
+        if (failure) throw failure;
+        apply(input.command);
+        return { cart: snapshotOf(server.version, server.lines) };
+      }
+    ),
     recoverCreation: jest.fn().mockResolvedValue(null),
     restartSession: jest.fn(() => {
       context = { actor: 'guest', cartId: null };
@@ -169,6 +176,9 @@ export function setup(options: { live?: boolean } = {}) {
     receipts,
     screen,
     server,
+    loseProof: () => {
+      context = null;
+    },
     holdCommands: () => {
       hold = true;
     },

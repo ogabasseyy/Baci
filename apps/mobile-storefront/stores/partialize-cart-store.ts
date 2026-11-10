@@ -1,3 +1,4 @@
+import { stripPendingLines } from '@/lib/cart/pending-edits';
 import type { CartState } from './cart-store-state';
 
 export function partializeCartStore(state: CartState) {
@@ -9,7 +10,7 @@ export function partializeCartStore(state: CartState) {
     // persisted store (MMKV/AsyncStorage) is not encrypted storage.
     // Shared carts rehydrate them from the authoritative snapshot
     // after restart; legacy lines simply reprice without the award.
-    items: state.items.map((item) => {
+    items: stripPendingLines(state.items).map((item) => {
       const { voucher_token, voucher_award_id, ...rest } = item;
       void voucher_token;
       void voucher_award_id;

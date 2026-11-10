@@ -61,8 +61,15 @@ export function startSharedCartRealtime(
       /* Recovery stays HTTP based. */
     }
   }
-  function refresh(): void {
-    void options.refresh().catch(() => undefined);
+  function refresh(hint?: number): void {
+    void options
+      .refresh()
+      .then(() => {
+        // Remember a hint only once it was fetched, so a failed fetch lets
+        // the next broadcast at the same version try again.
+        if (hint !== undefined) highestHint = Math.max(highestHint, hint);
+      })
+      .catch(() => undefined);
   }
   async function connect(): Promise<void> {
     // Take the epoch before yielding, or an overlapping connect would adopt
@@ -101,8 +108,7 @@ export function startSharedCartRealtime(
             )
           )
             return;
-          highestHint = event.version;
-          refresh();
+          refresh(event.version);
         },
         (isJoined) => {
           // A join can race a mutation before the first hint: always fetch.

@@ -97,3 +97,33 @@ it('stays silent when background repricing fails', async () => {
   expect(notice()).toBeNull();
   unmount();
 });
+
+it('drops predicted lines left behind when the controller is torn down', async () => {
+  const { useCartStore } = jest.requireActual('@/stores/cart-store');
+  const { unmount } = renderHook(() => useSharedCart(options, deps));
+  await waitFor(() => expect(deps.client).toHaveBeenCalled());
+  useCartStore.setState({
+    items: [
+      {
+        id: 'pending-line::1',
+        product_id: 'p',
+        slug: 'p',
+        name: 'P',
+        price: 1,
+        quantity: 1,
+      },
+      {
+        id: 'real',
+        product_id: 'q',
+        slug: 'q',
+        name: 'Q',
+        price: 1,
+        quantity: 1,
+      },
+    ],
+  });
+  unmount();
+  expect(
+    useCartStore.getState().items.map((i: { id: string }) => i.id)
+  ).toEqual(['real']);
+});

@@ -7,6 +7,22 @@ const MAX_REMEMBERED_ADDS = 50;
 
 export const isPendingLineId = (id: string) => id.startsWith(PENDING);
 
+/** Predicted lines are screen-only: never persisted, imported or counted as the shopper's own. */
+export const stripPendingLines = (items: CartItem[]): CartItem[] =>
+  items.some((item) => isPendingLineId(item.id))
+    ? items.filter((item) => !isPendingLineId(item.id))
+    : items;
+
+/** Wraps a legacy-cart reader so the controller never sees predicted lines. */
+export function withoutPendingLines<T extends { items: CartItem[] }>(
+  read: () => T
+): () => T {
+  return () => {
+    const legacy = read();
+    return { ...legacy, items: stripPendingLines(legacy.items) };
+  };
+}
+
 export interface PendingEdit {
   action: SharedCartWrite;
   pendingId: string;
@@ -73,12 +89,16 @@ function predict(
 export function createPendingEdits(show: (items: CartItem[]) => void) {
   let confirmed: CartItem[] = [];
   let edits: PendingEdit[] = [];
+  const landed = new Set<PendingEdit>();
   let sequence = 0;
   const addedLines = new Map<string, Omit<CartItem, 'id'>>();
 
   const view = () =>
     edits.reduce(
-      (items, edit) => predict(items, edit.action, edit.pendingId) ?? items,
+      (items, edit) =>
+        landed.has(edit)
+          ? items
+          : (predict(items, edit.action, edit.pendingId) ?? items),
       confirmed
     );
 
@@ -92,6 +112,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
     reset(items: CartItem[] = []): void {
       confirmed = items;
       edits = [];
+      landed.clear();
     },
     begin(action: SharedCartWrite): PendingEdit {
       sequence += 1;
@@ -107,7 +128,12 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       show(view());
       return edit;
     },
+    /** The server may already hold this edit; stop replaying it over snapshots that include it. */
+    markLanded(edit: PendingEdit): void {
+      landed.add(edit);
+    },
     settle(edit: PendingEdit): void {
+      landed.delete(edit);
       edits = edits.filter((entry) => entry !== edit);
       show(view());
     },

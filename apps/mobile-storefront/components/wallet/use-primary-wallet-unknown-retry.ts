@@ -6,6 +6,8 @@ export const PRIMARY_UNKNOWN_RETRY_DELAY_MS = 4000;
 export const PRIMARY_UNKNOWN_RETRY_LIMIT = 3;
 /** After the quick attempts: a slow, steady re-check while still unknown. */
 export const PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS = 30_000;
+/** Slow re-checks before giving up until the screen reloads (~5 minutes). */
+export const PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT = 10;
 
 interface Input {
   /** The wallet's PiggyVest read came back unknown (slow or failed). */
@@ -20,7 +22,8 @@ interface Input {
  * number and balance (or showing one recalled from moments ago) until
  * something reloads it. While the answer is unknown or recalled: re-check a
  * few times quickly, reloading as soon as a late confirmed answer lands, then
- * keep re-checking slowly so a recalled balance never stands for long. Late
+ * keep re-checking slowly for a few minutes so a recalled balance never
+ * stands for long, then stop until the screen reloads. Late
  * answers spend the same quick attempts, so a provider that always answers
  * late cannot drive a reload loop. One reload runs at a time.
  */
@@ -58,7 +61,11 @@ export function usePrimaryWalletUnknownRetry({
   });
   useEffect(() => onLatePrimaryAnswer(reloadForLateAnswer), []);
   useEffect(() => {
-    if (!unknown) return;
+    if (
+      !unknown ||
+      attempts >= PRIMARY_UNKNOWN_RETRY_LIMIT + PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT
+    )
+      return;
     // Bound to this scope: an account switch clears it and starts afresh.
     const forScope = scopeKey;
     const delay =

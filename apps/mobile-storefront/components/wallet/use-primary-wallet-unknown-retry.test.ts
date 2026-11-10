@@ -15,6 +15,7 @@ import {
   PRIMARY_UNKNOWN_RETRY_DELAY_MS,
   PRIMARY_UNKNOWN_RETRY_LIMIT,
   PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS,
+  PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT,
   usePrimaryWalletUnknownRetry,
 } from './use-primary-wallet-unknown-retry';
 
@@ -45,6 +46,13 @@ describe('usePrimaryWalletUnknownRetry', () => {
     // Still unknown (or recalled): keep re-checking, slowly.
     await tick(PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT + 1);
+    // The slow phase is bounded too: no endless polling on a mounted screen.
+    for (let i = 0; i < PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT + 3; i += 1) {
+      await tick(PRIMARY_UNKNOWN_SLOW_RETRY_DELAY_MS);
+    }
+    expect(refetch).toHaveBeenCalledTimes(
+      PRIMARY_UNKNOWN_RETRY_LIMIT + PRIMARY_UNKNOWN_SLOW_RETRY_LIMIT
+    );
   });
 
   it('bounds reloads from late answers by the quick attempts', async () => {

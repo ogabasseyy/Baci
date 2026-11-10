@@ -12,7 +12,7 @@ import {
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
-  readFreshPrimaryBalance,
+  readFreshPrimaryBalanceKobo,
 } from './start-savings-wallet-balance';
 import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 import { validateSavingsInput } from './validate-savings-input';
@@ -75,11 +75,17 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     if (options?.confirmPrimaryBalance) {
       // Inside the guarded lifecycle: no second submit can start, and an
       // edit to the plan while the balance is read cancels this one.
-      const balance = await readFreshPrimaryBalance(input.activeMerchantId);
+      const balanceKobo = await readFreshPrimaryBalanceKobo(
+        input.activeMerchantId
+      );
+      // Whole kobo on both sides: no fractional naira comparison.
+      const headStartKobo = Math.round(
+        input.effectiveInitialContribution * 100
+      );
       const refusal =
-        balance === null
+        balanceKobo === null
           ? PRIMARY_BALANCE_CHECK_FAILED_MESSAGE
-          : balance < input.effectiveInitialContribution
+          : balanceKobo < headStartKobo
             ? PRIMARY_HEAD_START_SHORT_MESSAGE
             : null;
       if (refusal || !context.active) {

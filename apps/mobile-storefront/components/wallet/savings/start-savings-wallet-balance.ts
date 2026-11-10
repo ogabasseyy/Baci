@@ -27,13 +27,13 @@ export function resolveStartSavingsWalletBalance(
 }
 
 /**
- * A fresh PiggyVest main-wallet balance (naira) for the head-start check
+ * A fresh PiggyVest main-wallet balance (whole kobo) for the head-start check
  * right before a plan is created. The wallet screen's figure may be a
  * stand-in up to two minutes old, so it never decides whether money can
  * move. `merchantId` is the screen's resolved merchant (with the configured
  * fallback). Null when the balance cannot be confirmed within the budget.
  */
-export async function readFreshPrimaryBalance(
+export async function readFreshPrimaryBalanceKobo(
   merchantId: string | null | undefined
 ): Promise<number | null> {
   const userId = useAuthStore.getState().user?.id;
@@ -56,7 +56,7 @@ export async function readFreshPrimaryBalance(
       balanceKobo < 0
     )
       return null;
-    return balanceKobo / 100;
+    return balanceKobo;
   } catch {
     return null;
   } finally {

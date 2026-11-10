@@ -6,7 +6,7 @@ import { createSavingsGoal } from '@/lib/customer-savings';
 import {
   PRIMARY_BALANCE_CHECK_FAILED_MESSAGE,
   PRIMARY_HEAD_START_SHORT_MESSAGE,
-  readFreshPrimaryBalance,
+  readFreshPrimaryBalanceKobo,
 } from './start-savings-wallet-balance';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { createInput } from './use-start-savings-submit.test-utils';
@@ -25,7 +25,7 @@ jest.mock('@/lib/customer-savings', () => ({
 }));
 jest.mock('./start-savings-wallet-balance', () => ({
   ...jest.requireActual<object>('./start-savings-wallet-balance'),
-  readFreshPrimaryBalance: jest.fn(),
+  readFreshPrimaryBalanceKobo: jest.fn(),
 }));
 jest.mock('@/lib/clipboard', () => ({ setClipboardString: jest.fn() }));
 jest.mock('@/services/savings-reminder-notifications', () => ({
@@ -33,7 +33,7 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
   scheduleSavingsReminderNotification: jest.fn(async () => 'reminder-1'),
 }));
 
-const readBalance = jest.mocked(readFreshPrimaryBalance);
+const readBalance = jest.mocked(readFreshPrimaryBalanceKobo);
 const primaryOptions = {
   deferInitialContribution: true,
   continueInWallet: true,
@@ -47,7 +47,7 @@ describe('PiggyVest head start balance check at submit', () => {
   });
 
   it('creates the plan once a fresh balance covers the head start', async () => {
-    readBalance.mockResolvedValueOnce(20000);
+    readBalance.mockResolvedValueOnce(2_000_000);
     const input = createInput();
     const { result } = renderHook(() => useStartSavingsSubmit(input));
     await act(async () => {
@@ -82,8 +82,18 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
   });
 
+  it('allows a head start the balance covers exactly, to the kobo', async () => {
+    readBalance.mockResolvedValueOnce(1_000_010);
+    const input = createInput({ effectiveInitialContribution: 10_000.1 });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).toHaveBeenCalled();
+  });
+
   it.each([
-    ['is short', 19999, PRIMARY_HEAD_START_SHORT_MESSAGE],
+    ['is short by a kobo', 1_999_999, PRIMARY_HEAD_START_SHORT_MESSAGE],
     ['cannot be confirmed', null, PRIMARY_BALANCE_CHECK_FAILED_MESSAGE],
   ])('creates nothing when the balance %s', async (_label, balance, message) => {
     readBalance.mockResolvedValueOnce(balance);
@@ -120,7 +130,7 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(readBalance).toHaveBeenCalledTimes(1);
     rerender({ ...input, targetValue: 900000 });
     await act(async () => {
-      answer(50000);
+      answer(5_000_000);
       await pending;
     });
     expect(createSavingsGoal).not.toHaveBeenCalled();

@@ -88,6 +88,29 @@ BEGIN
     RAISE EXCEPTION 'quote_not_eligible' USING ERRCODE = '22023';
   END IF;
   IF v_existing.id IS NOT NULL THEN
+    -- Resuming an unconsumed platform reservation spends Baci funds at booking:
+    -- the flag must still be on and the caller holds the strict booking gate.
+    IF v_existing.funding_source = 'platform' AND v_existing.status = 'reserved' THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM private.platform_funded_gigl_merchants AS flag
+        WHERE flag.merchant_id = v_order.merchant_id AND flag.enabled
+      ) THEN
+        RAISE EXCEPTION 'platform_funding_revoked' USING ERRCODE = '22023';
+      END IF;
+      IF NOT (
+        v_is_owner
+        OR (
+          public.check_staff_permission(
+            (SELECT auth.uid()), v_order.merchant_id, 'orders', 'fulfill'
+          )
+          AND public.check_staff_permission(
+            (SELECT auth.uid()), v_order.merchant_id, 'orders', 'edit'
+          )
+        )
+      ) THEN
+        RAISE EXCEPTION 'wallet_reservation_fulfill_edit_required' USING ERRCODE = '42501';
+      END IF;
+    END IF;
     IF v_existing.status = 'reserved' THEN
       UPDATE public.merchant_shipping_charges
       SET attempt_token_digest = pg_catalog.encode(extensions.digest(p_attempt_token, 'sha256'), 'hex'),

@@ -7,6 +7,8 @@ Disable: `UPDATE private.platform_funded_gigl_merchants SET enabled = false WHER
 
 ## Periodic review (spend visibility)
 
+Run these as postgres in the SQL editor (the flag table is unreadable to every API role).
+
 ```sql
 SELECT merchant_id, count(*), sum(charged_amount)
 FROM public.merchant_shipping_charges

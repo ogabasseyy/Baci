@@ -118,6 +118,22 @@ and enrollment gates in the release sequence below.
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
+   Activated in production on 2026-11-10 with the owner's approval.
+5a. Activate bounded retention explicitly (only with the owner's
+   authorization): where pg_cron exists, run
+   `SELECT cron.schedule('commerce-cart-retention', '*/5 * * * *', $cron$SELECT public.cleanup_commerce_carts()$cron$);`
+   `cleanup_commerce_carts()` was written to be run by the cart events
+   worker, which was never installed, so until this job exists nothing
+   deletes expired retry receipts, creation requests, outbox events,
+   handoffs (one day past expiry) or checkout sessions, and nothing flips
+   idle carts to `expired`. Each call handles at most 1,000 rows per
+   table, so a backlog drains over successive runs. Flipping an idle cart
+   to `expired` does not take anything away from a shopper: access is
+   already refused once the cart's seven-day grant has lapsed. It does
+   start the 90-day clock after which the terminal purge deletes the cart.
+   Dispatch-held carts, handoffs and checkout sessions are skipped by the
+   function's own fences. To stop it: `SELECT cron.unschedule('commerce-cart-retention');`
+   Migration application alone never schedules this job.
 6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
 7. Expand only after convergence, checkout-binding and isolation

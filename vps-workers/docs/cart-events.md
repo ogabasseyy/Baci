@@ -25,6 +25,11 @@ next loop pass while event publishing continues. A publisher failure still
 exits nonzero so the service supervisor can restart it. Cleanup never runs while the existing worker
 activation flag is disabled. This change does not install or enable the service.
 
+Because this worker is not installed, that retention pass does not run from
+here. The supported way to run it is the pg_cron job in step 5a of
+`docs/deploy/shared-cart-rollout.md`, which calls the same
+`cleanup_commerce_carts()` function on the same five-minute cadence.
+
 Each publisher batch and due cleanup constructs a fresh scoped client. Use
 `COMMERCE_CART_WORKER_JWT_FILE` to let the existing token rotator replace a token
 file between calls without a worker restart. The inline JWT option requires

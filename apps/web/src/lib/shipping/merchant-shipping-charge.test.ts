@@ -159,4 +159,14 @@ describe('merchant shipping charge RPC adapter', () => {
       )
     ).rejects.toMatchObject({ code: 'MERCHANT_WALLET_RECONCILIATION_FAILED' });
   });
+
+  it('bugfix: maps platform_funding_revoked to an actionable re-quote error', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'platform_funding_revoked' },
+    });
+    await expect(
+      reserveMerchantShippingCharge({ rpc } as never, 'o1', 'q1')
+    ).rejects.toMatchObject({ code: 'PLATFORM_FUNDING_REVOKED', status: 409 });
+  });
 });

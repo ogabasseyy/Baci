@@ -146,7 +146,7 @@ export function setup(options: { live?: boolean } = {}) {
   const receipts = {
     read: jest.fn(() => {
       const hit = retained.armed;
-      retained.armed = false;
+      if (!retainReceipt) retained.armed = false;
       return Promise.resolve(
         hit ? ({ operationId: 'retained', body: {} } as never) : null
       );
@@ -155,6 +155,7 @@ export function setup(options: { live?: boolean } = {}) {
     clear: jest.fn().mockResolvedValue(undefined),
   };
   const failed = jest.fn();
+  const succeeded = jest.fn();
   const controller = createNativeCartController({
     merchantId: merchant,
     client: client as never,
@@ -175,6 +176,7 @@ export function setup(options: { live?: boolean } = {}) {
     },
     showItems: show,
     onWriteFailed: failed,
+    onWriteSucceeded: succeeded,
     status: jest.fn(),
     isCurrent: () => true,
   });
@@ -182,6 +184,7 @@ export function setup(options: { live?: boolean } = {}) {
     client,
     controller,
     failed,
+    succeeded,
     calls,
     failures,
     receipts,

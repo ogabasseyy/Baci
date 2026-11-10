@@ -217,3 +217,39 @@ describe('second review round', () => {
     expect(quantities(s.screen.items)).toEqual([2]);
   });
 });
+
+describe('third review round', () => {
+  it('keeps the running prediction on screen while a conflict refresh runs', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    s.server.lines.push({ id: 'remote-1', productId: PRODUCT_B, quantity: 1 });
+    s.server.version += 1;
+    await s.controller.write({ type: 'quantity', id: 'line-1', quantity: 4 });
+    const shown = s.screen.history.map(
+      (items) => items.find((i) => i.id === 'line-1')?.quantity
+    );
+    expect(shown.slice(shown.indexOf(4))).not.toContain(1);
+  });
+
+  it('clears the failure notice after the next successful edit', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    await s.controller.write({ type: 'quantity', id: 'line-1', quantity: 2 });
+    expect(s.succeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it('predicts a separate line when only a non-color option differs', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    s.holdCommands();
+    const add = s.controller.write({
+      type: 'add',
+      item: { ...shopItem(PRODUCT_A), variant_attributes: { size: 'L' } },
+    });
+    expect(s.screen.items).toHaveLength(2);
+    await s.drain(add);
+  });
+});

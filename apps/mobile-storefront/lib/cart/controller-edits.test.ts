@@ -191,7 +191,7 @@ describe('finding 4: waiting edits survive refreshes and failures', () => {
 });
 
 describe('finding 3: an uncertain failure is not reported as undone', () => {
-  it('says the change is still saving and settles against the server', async () => {
+  it('settles against the server and drops the warning once the change is confirmed', async () => {
     const s = setup({ live: true });
     s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
     await s.controller.refresh();
@@ -205,11 +205,8 @@ describe('finding 3: an uncertain failure is not reported as undone', () => {
     await expect(
       s.controller.write({ type: 'quantity', id: 'line-1', quantity: 5 })
     ).rejects.toBeInstanceOf(NativeCartError);
-    expect(s.failed).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      'unconfirmed'
-    );
+    expect(s.failed).not.toHaveBeenCalled();
+    expect(s.succeeded).toHaveBeenCalled();
     expect(quantities(s.screen.items)).toEqual([5]);
   });
 });

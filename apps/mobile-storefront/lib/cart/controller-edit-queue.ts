@@ -1,4 +1,5 @@
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
+import type { NativeCartControllerOptions } from './controller-options';
 import { NativeCartError } from './native-cart-error';
 import {
   type createPendingEdits,
@@ -23,11 +24,10 @@ interface EditQueueDeps {
   refresh(): Promise<void>;
   /** A request is still saved for retry, so it may yet be applied. */
   hasRetainedRequest(): Promise<boolean>;
-  onFailed?(
-    action: SharedCartWrite,
-    error: unknown,
-    outcome: EditOutcome
-  ): void;
+  notify: Pick<
+    NativeCartControllerOptions,
+    'onWriteFailed' | 'onWriteSucceeded'
+  >;
 }
 
 /**
@@ -47,10 +47,13 @@ export function createEditQueue(deps: EditQueueDeps) {
       try {
         if (edit) deps.edits.startRun(edit);
         const resolved = deps.edits.resolve(action);
-        if (resolved) await deps.run(resolved);
+        if (resolved) {
+          await deps.run(resolved);
+          if (edit) deps.notify.onWriteSucceeded?.();
+        }
         // The line this tap targeted never reached the cart.
         else
-          deps.onFailed?.(
+          deps.notify.onWriteFailed?.(
             action,
             new NativeCartError('invalid_item'),
             'rolled_back'
@@ -63,11 +66,19 @@ export function createEditQueue(deps: EditQueueDeps) {
             : 'rolled_back';
         // The write may have landed; settle against the server inside this
         // slot so nothing else (checkout) runs on a guess.
+        let recovered = false;
         if (outcome === 'unconfirmed') {
           if (edit) deps.edits.markLanded(edit);
-          await deps.refresh().catch(() => undefined);
+          const refreshed = await deps.refresh().then(
+            () => true,
+            () => false
+          );
+          // Server truth is on screen and nothing is queued for retry: nothing left to explain.
+          recovered =
+            refreshed && !(await deps.hasRetainedRequest().catch(() => true));
         }
-        deps.onFailed?.(action, error, outcome);
+        if (recovered) deps.notify.onWriteSucceeded?.();
+        else deps.notify.onWriteFailed?.(action, error, outcome);
         throw error;
       } finally {
         unpin();

@@ -207,6 +207,10 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         showItems: (items) => {
           if (isCurrent()) useCartStore.setState({ items });
         },
+        onWriteSucceeded: () => {
+          if (isCurrent())
+            useNativeSharedCartStore.setState({ writeNotice: null });
+        },
         onWriteFailed: (action, error, outcome) => {
           if (isCurrent()) reportWriteFailure(action, error, outcome);
         },

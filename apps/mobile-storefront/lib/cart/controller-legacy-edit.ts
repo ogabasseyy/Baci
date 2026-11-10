@@ -41,3 +41,16 @@ export async function editLocalCartOnly(
   options.status('ready');
   return true;
 }
+
+/** Runs one edit: local-only fixes stay local, everything else goes to the server writer. */
+export function createEditRunner(
+  options: NativeCartControllerOptions,
+  receipts: typeof pendingCartRequest,
+  engaged: () => boolean,
+  write: (action: SharedCartWrite) => Promise<void>
+) {
+  return async (action: SharedCartWrite): Promise<void> => {
+    if (await editLocalCartOnly(options, receipts, action, engaged())) return;
+    await write(action);
+  };
+}

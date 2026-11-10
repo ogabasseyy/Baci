@@ -2,7 +2,7 @@ import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
 import { createEditQueue } from './controller-edit-queue';
-import { editLocalCartOnly } from './controller-legacy-edit';
+import { createEditRunner } from './controller-legacy-edit';
 import type {
   NativeCartControllerOptions,
   NativeCartStatus,
@@ -80,7 +80,10 @@ export function createNativeCartController(
       /* Publish only after tenant-scoped display hydration below. */
     },
   });
-  async function accept(next: CartSnapshot): Promise<void> {
+  async function accept(
+    next: CartSnapshot,
+    acknowledges = false
+  ): Promise<void> {
     assertCurrent();
     if (next.merchantId.toLowerCase() !== options.merchantId.toLowerCase())
       throw new NativeCartError('merchant_mismatch');
@@ -108,7 +111,7 @@ export function createNativeCartController(
     snapshot = next;
     options.publish(next, {
       ...display,
-      items: edits.confirm(display.items),
+      items: edits.confirm(display.items, acknowledges),
     });
     options.status('ready');
   }
@@ -225,7 +228,7 @@ export function createNativeCartController(
     serial,
   });
   const operations = createNativeCartWrite({
-    accept,
+    accept: (next) => accept(next, true),
     coordinator,
     ensureCart,
     getTerminal: () => terminal,
@@ -245,19 +248,13 @@ export function createNativeCartController(
     serial,
     refresh,
     hasRetainedRequest: () => receipts.read(options.merchantId).then(Boolean),
-    onFailed: options.onWriteFailed,
-    run: async (action: SharedCartWrite) => {
-      if (
-        await editLocalCartOnly(
-          options,
-          receipts,
-          action,
-          Boolean(snapshot) || terminal || Boolean(incoming)
-        )
-      )
-        return;
-      await operations.write(action);
-    },
+    notify: options,
+    run: createEditRunner(
+      options,
+      receipts,
+      () => Boolean(snapshot) || terminal || Boolean(incoming),
+      (action) => operations.write(action)
+    ),
   });
   return {
     refresh: () => serial(refresh),

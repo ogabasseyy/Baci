@@ -1,4 +1,3 @@
-import { isSameCartLine } from '@/stores/cart-line';
 import type { CartItem } from '@/stores/cart-store.types';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { isPendingLineId, pendingLineId } from './pending-line-id';
@@ -57,7 +56,7 @@ function predict(
       incoming.voucher_token || incoming.voucher_award_id
     );
     const quantity = hasVoucher ? 1 : incoming.quantity;
-    const index = items.findIndex((item) => isSameCartLine(item, incoming));
+    const index = items.findIndex((item) => sameServerLine(item, incoming));
     if (index < 0) return [...items, { ...incoming, quantity, id: pendingId }];
     if (hasVoucher) return items;
     return items.map((item, at) =>
@@ -107,10 +106,11 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
 
   return {
     /** Server-confirmed lines arrived; returns what to display with waiting edits on top. */
-    confirm(items: CartItem[]): CartItem[] {
+    confirm(items: CartItem[], acknowledges = false): CartItem[] {
       confirmed = items;
-      // The edit being sent is in the reply it just produced; replaying it would double it.
-      return view(true);
+      // A reply to the edit being sent already contains it; replaying it would double it.
+      // A refresh before a conflict retry does not, so keep predicting then.
+      return view(acknowledges);
     },
     /** A finished or discarded cart leaves nothing to predict against. */
     reset(items: CartItem[] = []): void {

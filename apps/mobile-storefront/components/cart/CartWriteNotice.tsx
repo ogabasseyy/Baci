@@ -4,7 +4,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
-/** App-wide, so a rejected add from a product page is explained too; stays until dismissed or replaced by a newer failure. */
+/** App-wide, so a rejected add from a product page is explained too; clears after the next successful edit, on dismissal, or when replaced by a newer failure. */
 export function CartWriteNotice() {
   const notice = useNativeSharedCartStore((state) => state.writeNotice);
   const colors = Colors[useColorScheme() ?? 'light'];

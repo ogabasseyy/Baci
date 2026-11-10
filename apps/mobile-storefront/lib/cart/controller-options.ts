@@ -50,6 +50,8 @@ export interface NativeCartControllerOptions {
   status(status: NativeCartStatus, code?: string): void;
   /** Screen-only update while shopper edits wait for the server. */
   showItems?(items: CartItem[]): void;
+  /** A shopper edit went through (or an uncertain one was confirmed by the server). */
+  onWriteSucceeded?(): void;
   /** A shopper edit failed: undone for certain, or possibly still applied. */
   onWriteFailed?(
     action: SharedCartWrite,

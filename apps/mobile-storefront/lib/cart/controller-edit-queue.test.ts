@@ -16,7 +16,7 @@ function setup(live = true) {
     run: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     hasRetainedRequest: jest.fn().mockResolvedValue(false),
-    onFailed: jest.fn(),
+    notify: { onWriteFailed: jest.fn(), onWriteSucceeded: jest.fn() },
   };
   return { deps, enqueue: createEditQueue(deps), shown };
 }
@@ -36,7 +36,7 @@ it('reports a definite rejection as rolled back', async () => {
   const t = setup();
   t.deps.run.mockRejectedValue(new NativeCartError('invalid_item'));
   await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
-  expect(t.deps.onFailed).toHaveBeenCalledWith(
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
     add,
     expect.anything(),
     'rolled_back'
@@ -50,7 +50,7 @@ it('refreshes and reports unconfirmed when a request is retained', async () => {
   t.deps.hasRetainedRequest.mockResolvedValue(true);
   await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
   expect(t.deps.refresh).toHaveBeenCalledTimes(1);
-  expect(t.deps.onFailed).toHaveBeenCalledWith(
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
     add,
     expect.anything(),
     'unconfirmed'
@@ -61,7 +61,7 @@ it('tells the shopper when the tapped line never landed', async () => {
   const t = setup();
   await t.enqueue({ type: 'remove', id: 'pending-line::99' });
   expect(t.deps.run).not.toHaveBeenCalled();
-  expect(t.deps.onFailed).toHaveBeenCalled();
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalled();
 });
 
 it('only treats flagged errors as indeterminate', () => {

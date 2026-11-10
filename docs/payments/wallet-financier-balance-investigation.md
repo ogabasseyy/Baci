@@ -1,10 +1,10 @@
 # Wallet credit, financing and Klump retirement
 
-Date: 2026-11-07. Branch: `codex/wallet-payment-visibility`; draft PR #4074.
+Date: 2026-11-07. Branch: `codex/wallet-payment-visibility`; PR #4074.
 
 ## Status
 
-The replacement implementation is being submitted to draft PR #4074, replacing the superseded automatic wallet-removal approach. The draft requires exact-head CI and review before merge. No production transactions, provider requests, migrations, deployment, billing changes or merges were performed.
+The replacement implementation is being submitted to PR #4074, replacing the superseded automatic wallet-removal approach. The PR requires CI and review on its latest commit before merge. No production transactions, provider requests, migrations, deployment, billing changes or merges were performed.
 
 The owner approved retaining the full/instalment choice in the payment step and clarified that Klump is closed and must be retired. Klump financing work was removed rather than completed.
 
@@ -28,6 +28,16 @@ Klump is absent from the web and mobile payment choices regardless of stale merc
 2. A reserved wallet Credit Direct session that closes or loses its response requires authoritative status/manual recovery. Neither local expiry nor a new session proves cancellation, and no automatic reset/cancellation proof is invented.
 3. Uncertain legacy wallet Credit Direct orders or orders switched from another rail fail admission rather than assume an old session is unchargeable. Oxygen still excludes device-savings composition; this change enables wallet credit specifically.
 4. Local fixture replay does not establish production schema or provider readiness. The new migrations are unapplied, and no live lender settlement was exercised.
+
+## Cutover and legacy recovery
+
+Before enabling wallet-funded financing, replay the four migrations in timestamp order in staging. Run the wallet-credit projection, Oxygen funding and Credit Direct reservation harnesses there against disposable fixtures, then verify the migration replay and capability register in CI. The last migration permits the merchant cancellation flow to restore the original wallet debit after verified Credit Direct capture.
+
+Inventory existing orders with wallet ledger activity before rollout. Review Credit Direct orders that still have a lender session but lack a durable reservation, and Oxygen workflows with wallet activity that lack an admitted funding snapshot. Check the original order, completed debit, lender session and merchant settlement evidence together. A signed lender session can survive a closed popup or expired token.
+
+For an unresolved order, keep its saved checkout and route it to operations. Use the lender's authoritative status and settlement evidence to distinguish an active session, a verified capture and a terminal no-capture outcome. Resume or reconcile the existing attempt through the supported recovery path. Hold rollout for affected orders that have no supported recovery path. The migration deliberately leaves ambiguous records without a reservation or snapshot. An amount, session age or client redirect alone cannot justify creating one.
+
+New fully wallet-funded orders finalize through `finalize_wallet_order_payment` in `POST /api/orders` before a lender opens. A saved Oxygen URL with a zero balance is read-only recovery context. If the stored order is still unpaid, operations should verify the wallet finalization outcome before authorizing any retry.
 
 ## Validation
 

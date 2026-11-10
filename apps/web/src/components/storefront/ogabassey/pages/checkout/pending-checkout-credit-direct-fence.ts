@@ -26,52 +26,6 @@ export function hasWalletCreditDirectOrder(
   );
 }
 
-/** Only the automatic reduction of an already consumed wallet balance may differ. */
-export function walletCreditDirectFingerprintsMatch(
-  input: ResolvePendingCheckoutOrderOptions
-): boolean {
-  const pending = input.pendingOrder;
-  if (!hasWalletCreditDirectOrder(input) || !pending) return false;
-  if (
-    checkoutFingerprintsMatch(
-      pending.checkoutFingerprint,
-      input.checkoutFingerprint
-    )
-  )
-    return true;
-  try {
-    const before: unknown = JSON.parse(pending.checkoutFingerprint);
-    const after: unknown = JSON.parse(input.checkoutFingerprint);
-    if (
-      !before ||
-      !after ||
-      typeof before !== 'object' ||
-      typeof after !== 'object' ||
-      Array.isArray(before) ||
-      Array.isArray(after)
-    )
-      return false;
-    const oldCheckout = before as Record<string, unknown>;
-    const newCheckout = after as Record<string, unknown>;
-    return (
-      oldCheckout.useWalletCredit === true &&
-      typeof newCheckout.useWalletCredit === 'boolean' &&
-      oldCheckout.walletAmountUsed === pending.walletAmountUsed &&
-      newCheckout.walletAmountUsed === 0 &&
-      checkoutFingerprintsMatch(
-        JSON.stringify(oldCheckout),
-        JSON.stringify({
-          ...newCheckout,
-          useWalletCredit: true,
-          walletAmountUsed: pending.walletAmountUsed,
-        })
-      )
-    );
-  } catch {
-    return false;
-  }
-}
-
 /** A wallet refresh must not discard an order with an unresolved lender leg. */
 export async function resolveWalletCreditDirectFence(
   input: ResolvePendingCheckoutOrderOptions
@@ -79,7 +33,14 @@ export async function resolveWalletCreditDirectFence(
   if (!hasWalletCreditDirectOrder(input) || !input.pendingOrder) return null;
   const pendingOrder = input.pendingOrder;
   // Method changes still pass through the server's durable reservation guard.
-  if (pendingOrder.trackingToken && walletCreditDirectFingerprintsMatch(input))
+  if (
+    pendingOrder.trackingToken &&
+    checkoutFingerprintsMatch(
+      pendingOrder.checkoutFingerprint,
+      input.checkoutFingerprint,
+      pendingOrder.walletAmountUsed
+    )
+  )
     return null;
   if (pendingOrder.trackingToken && pendingOrder.orderId) {
     const existing = await fetchFencedOrderState({

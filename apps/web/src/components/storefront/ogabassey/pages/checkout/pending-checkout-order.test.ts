@@ -7,6 +7,48 @@ import {
 } from './pending-checkout-order';
 
 describe('pending-checkout-order', () => {
+  it.each([
+    ['oxygen', true],
+    ['paystack', true],
+    ['paystack', false],
+  ] as const)('retains the saved Oxygen invoice after wallet refresh when switching to %s (server permits: %s)', async (paymentMethod, allowed) => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'oxygen-order', total: 50000, payment_status: 'unpaid' }))
+      .mockResolvedValueOnce(allowed
+        ? Response.json({ order: { id: 'oxygen-order' } })
+        : Response.json({ code: 'oxygen_payment_in_progress' }, { status: 409 }));
+    const result = resolvePendingCheckoutOrder({
+      pendingOrder: {
+        orderId: 'oxygen-order',
+        trackingToken: 'oxygen-token',
+        merchantId: 'merchant-1',
+        customerEmail: 'john@example.com',
+        customerPhone: '',
+        checkoutFingerprint: JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000 }),
+        walletAmountUsed: 20000,
+        amountDueToGateway: 30000,
+        paymentMethod: 'oxygen',
+        createdAt: '2026-11-10',
+      },
+      merchantId: 'merchant-1',
+      customerEmail: 'john@example.com',
+      checkoutFingerprint: JSON.stringify({ useWalletCredit: false, walletAmountUsed: 0 }),
+      paymentMethod,
+      shippingProvider: null,
+      fetchImpl,
+    });
+    if (allowed) {
+      await expect(result).resolves.toMatchObject({
+        reusableOrder: { order: { id: 'oxygen-order' }, amountDueToGateway: 30000 },
+        clearStoredOrder: false,
+      });
+    } else {
+      await expect(result).rejects.toThrow('Your Oxygen payment is in progress');
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe('/api/orders/reuse');
+  });
+
   it('does not discard an Oxygen order when the server reports a live liability', async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ id: 'order-123', total: 12000, payment_status: 'unpaid', shipping_status: 'pending' }))

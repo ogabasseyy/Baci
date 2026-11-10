@@ -67,7 +67,9 @@ export function getRenderablePaymentMethods(
 
   return methods.filter(
     (method) =>
-      method.id !== 'credpal' && Object.hasOwn(settings, method.dbField)
+      method.id !== 'credpal' &&
+      method.id !== 'klump' &&
+      Object.hasOwn(settings, method.dbField)
   );
 }
 

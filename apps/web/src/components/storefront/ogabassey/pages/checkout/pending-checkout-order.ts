@@ -1,4 +1,4 @@
-import { hasWalletCreditDirectOrder, resolveWalletCreditDirectFence, walletCreditDirectFingerprintsMatch } from './pending-checkout-credit-direct-fence';
+import { hasWalletCreditDirectOrder, resolveWalletCreditDirectFence } from './pending-checkout-credit-direct-fence';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import {
@@ -211,10 +211,13 @@ export async function resolvePendingCheckoutOrder({
     pendingOrder.merchantId !== merchantId ||
     normalizeText(pendingOrder.customerEmail) !==
       normalizeText(customerEmail) ||
-    (!checkoutFingerprintsMatch(
+    !checkoutFingerprintsMatch(
       pendingOrder.checkoutFingerprint,
-      checkoutFingerprint
-    ) && !walletCreditDirectFingerprintsMatch({ pendingOrder, merchantId, customerEmail, checkoutFingerprint, paymentMethod, shippingProvider }))
+      checkoutFingerprint,
+      pendingOrder.paymentMethod === 'oxygen' || pendingOrder.paymentMethod === 'credit_direct'
+        ? pendingOrder.walletAmountUsed
+        : undefined
+    )
   ) {
     return { reusableOrder: null, clearStoredOrder: true };
   }

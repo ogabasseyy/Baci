@@ -75,6 +75,23 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('keeps Paystack rejection text when a later leg fails after progress', async () => {
+    await expect(
+      invoke({
+        code: 'HTTP_400',
+        error: 'Insufficient balance',
+        refundIds: [7],
+      })
+    ).rejects.toThrow('Insufficient balance');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason:
+          'Some payment legs were accepted for refund, but a later leg failed: Insufficient balance',
+      })
+    );
+  });
+
   it('quarantines an ambiguous failure terminally and throws delivery-uncertain', async () => {
     await expect(
       invoke({ code: 'NETWORK_ERROR', error: 'socket hung up' })

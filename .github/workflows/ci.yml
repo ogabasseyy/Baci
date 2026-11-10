@@ -727,7 +727,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SILENT_REVERT_LOOKBACK: '80'
         run: |
-          git cat-file -e "$BASE_SHA^{commit}"
+          if ! git cat-file -e "$BASE_SHA^{commit}"; then
+            echo "Exact base commit is missing from checkout. Refresh the PR branch and retry." >&2
+            exit 1
+          fi
           node ci_scripts/detect-silent-reverts.mjs
 
   quality:

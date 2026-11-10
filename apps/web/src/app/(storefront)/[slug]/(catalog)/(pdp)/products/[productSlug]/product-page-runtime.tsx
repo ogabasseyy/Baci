@@ -113,11 +113,8 @@ export async function ProductPageRuntime({
           <JsonLd data={breadcrumbSchema} />
           {faqSchema && <JsonLd data={faqSchema} />}
           <ProductDetailClient product={product} faqs={productFaqs} />
-          {/* Optional SEO enrichment, live review structured data and the repairs
-          link stream BELOW the already-rendered product shell. fallback={null}
-          is safe: this content appends beneath the visible PDP/LCP shell, so it
-          never hides or shifts it (matches the canonical categorized PDP's
-          semantic-section boundary). */}
+          {/* Stream SEO enrichment and the repairs link below the visible PDP
+              shell so late content never hides or shifts it. */}
           <Suspense fallback={null}>
             <ProductPageBelowFold
               baseUrl={baseUrl}

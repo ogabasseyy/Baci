@@ -99,8 +99,10 @@ describe('cancellation refund status wording', () => {
     // be failed or delivery_uncertain.
     expect(html).not.toContain('Cancellation starts the refund workflow');
     expect(html).toContain(
-      'the store will review your order and arrange any refund due'
+      'The store will review your order and arrange any refund due'
     );
+    expect(html).not.toContain('If you have already paid');
+    expect(html).not.toContain('original payment method');
     expect(html).toContain('does not confirm that the refund has been sent');
     expect(html).toContain('contact the store');
     expect(html).not.toContain('Refund Amount');
@@ -127,6 +129,7 @@ describe('cancellation refund status wording', () => {
     expect(html).toContain('Refund Information (pending)');
     expect(html).not.toContain('#ecfdf5');
     expect(text).not.toMatch(/will refund/i);
+    expect(text).not.toContain('original payment method');
     expect(text).toContain('REFUND INFORMATION (PENDING)');
   });
 });

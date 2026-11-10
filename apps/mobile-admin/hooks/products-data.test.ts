@@ -22,6 +22,7 @@ type UpdateQuery = {
   eq: (column: string, value: unknown) => UpdateQuery;
   select: (columns: string) => UpdateQuery;
   single: () => Promise<SingleRowResult>;
+  maybeSingle: () => Promise<SingleRowResult>;
 };
 
 // Mock for the `update().eq().eq().select().single()` chain used by the
@@ -32,6 +33,9 @@ function createUpdateQuery(result: SingleRowResult): UpdateQuery {
   query.eq = vi.fn(() => query) as UpdateQuery['eq'];
   query.select = vi.fn(() => query) as UpdateQuery['select'];
   query.single = vi.fn(() => Promise.resolve(result)) as UpdateQuery['single'];
+  query.maybeSingle = vi.fn(() =>
+    Promise.resolve(result)
+  ) as UpdateQuery['maybeSingle'];
   return query;
 }
 
@@ -217,6 +221,10 @@ describe('protected quick-action writes', () => {
       'products',
       'merchant_products',
     ]);
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
+    expect(write.single).toHaveBeenCalledOnce();
+    expect(read.single).toHaveBeenCalledOnce();
     expect(write.select).toHaveBeenCalledWith('id');
     expect(preflight.eq).toHaveBeenCalledWith('merchant_id', 'm');
     expect(read.eq).toHaveBeenCalledWith('merchant_id', 'm');
@@ -229,10 +237,28 @@ describe('protected quick-action writes', () => {
     'stock',
     'status',
   ])('does not write %s without protected view access', async (action) => {
-    mocks.from.mockReturnValueOnce(
-      createUpdateQuery({ data: null, error: null })
-    );
+    const preflight = createUpdateQuery({ data: null, error: null });
+    mocks.from.mockReturnValueOnce(preflight);
     await expect(run(action)).rejects.toThrow('Product is not accessible');
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
+  });
+  it.each([
+    'stock',
+    'status',
+  ])('preserves genuine %s preflight errors without writing', async (action) => {
+    const preflight = createUpdateQuery({
+      data: null,
+      error: { message: 'permission denied for view merchant_products' },
+    });
+    mocks.from.mockReturnValueOnce(preflight);
+    await expect(run(action)).rejects.toThrow(
+      'permission denied for view merchant_products'
+    );
+    expect(preflight.maybeSingle).toHaveBeenCalledOnce();
+    expect(preflight.single).not.toHaveBeenCalled();
     expect(mocks.from).toHaveBeenCalledTimes(1);
     expect(mocks.revalidateStorefrontProducts).not.toHaveBeenCalled();
   });

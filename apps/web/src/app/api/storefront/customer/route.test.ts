@@ -48,17 +48,21 @@ function mockChain(returnValue: { data: unknown; error: unknown }) {
   return chain;
 }
 
-// Builds the PATCH update chain: .update().eq().is().select().maybeSingle().
+// Builds the PATCH update chain: .update().eq().eq().eq().is().select().maybeSingle().
 // `matched` is the live row the write returned (null => no live row matched, i.e.
 // the customer was soft-deleted between the lookup and the update).
 function mockUpdateChain(matched: { id: string } | null) {
   const update = vi.fn().mockReturnValue({
     eq: vi.fn().mockReturnValue({
-      is: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          maybeSingle: vi
-            .fn()
-            .mockResolvedValue({ data: matched, error: null }),
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          is: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              maybeSingle: vi
+                .fn()
+                .mockResolvedValue({ data: matched, error: null }),
+            }),
+          }),
         }),
       }),
     }),

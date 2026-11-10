@@ -1,28 +1,16 @@
 import { isSameCartLine } from '@/stores/cart-line';
 import type { CartItem } from '@/stores/cart-store.types';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
+import { isPendingLineId, pendingLineId } from './pending-line-id';
+import { sameServerLine } from './same-server-line';
 
-const PENDING = 'pending-line::';
+export {
+  isPendingLineId,
+  stripPendingLines,
+  withoutPendingLines,
+} from './pending-line-id';
 
 const noop = (): void => undefined;
-
-export const isPendingLineId = (id: string) => id.startsWith(PENDING);
-
-/** Predicted lines are screen-only: never persisted, imported or counted as the shopper's own. */
-export const stripPendingLines = (items: CartItem[]): CartItem[] =>
-  items.some((item) => isPendingLineId(item.id))
-    ? items.filter((item) => !isPendingLineId(item.id))
-    : items;
-
-/** Wraps a legacy-cart reader so the controller never sees predicted lines. */
-export function withoutPendingLines<T extends { items: CartItem[] }>(
-  read: () => T
-): () => T {
-  return () => {
-    const legacy = read();
-    return { ...legacy, items: stripPendingLines(legacy.items) };
-  };
-}
 
 export interface PendingEdit {
   action: SharedCartWrite;
@@ -101,7 +89,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
     const added = addedLines.get(id);
     return added
       ? items.find(
-          (item) => !isPendingLineId(item.id) && isSameCartLine(item, added)
+          (item) => !isPendingLineId(item.id) && sameServerLine(item, added)
         )?.id
       : undefined;
   };
@@ -148,7 +136,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
     },
     begin(action: SharedCartWrite): PendingEdit {
       sequence += 1;
-      const edit = { action, pendingId: `${PENDING}${sequence}` };
+      const edit = { action, pendingId: pendingLineId(sequence) };
       edits.push(edit);
       if (action.type === 'add') {
         addedLines.set(edit.pendingId, action.item);

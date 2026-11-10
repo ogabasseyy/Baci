@@ -17,7 +17,6 @@ import {
 import { dedupeMergeConflictItems } from '@/lib/cart/merge-conflict-items';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
-import { isPredictableEdit } from '@/lib/cart/pending-edits';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
 import { publishNativeCart } from '@/lib/cart/publish-native-cart';
 import { retireSharedCartDevice } from '@/lib/cart/retire-shared-cart-device';
@@ -161,8 +160,6 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       write: (action) => {
         const active = controller;
         if (!active) return Promise.reject(new Error('Cart unavailable'));
-        if (isPredictableEdit(action))
-          useNativeSharedCartStore.setState({ writeNotice: null });
         return active.write(action);
       },
       onError: () => {

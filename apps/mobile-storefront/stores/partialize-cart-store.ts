@@ -1,4 +1,4 @@
-import { stripPendingLines } from '@/lib/cart/pending-edits';
+import { stripPendingLines } from '@/lib/cart/pending-line-id';
 import type { CartState } from './cart-store-state';
 
 export function partializeCartStore(state: CartState) {

@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
-Reviewed 9 November 2026 against source revision
-`efb3ba2de0df089137572bc23bfd2ef5c50dc1b5` (the shipping funding fix commit; the 7 November review of `7449a55cd9943bb367c152b035fd358ccad5fd8d` otherwise stands). Agentic checkout session quotes now include
+Reviewed 10 November 2026 against source revision
+`6ccdaff06b147f4a818620519fd5b148fecb40cd` (the cancel refund choice commit; merchant order cancellation now offers an automatic or manual refund, source evidence only; the 9 November review of `efb3ba2de0df089137572bc23bfd2ef5c50dc1b5` and the 7 November review of `7449a55cd9943bb367c152b035fd358ccad5fd8d` otherwise stands). Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

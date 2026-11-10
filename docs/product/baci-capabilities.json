@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-09T13:20:23+00:00",
-  "source_revision": "efb3ba2de0df089137572bc23bfd2ef5c50dc1b5",
-  "evidence_digest": "ba4611151447925c1a848998a4f8c24e6e136076049303426765c3c8bf22541d",
-  "claims_digest": "855da2fa664a993d34b7b012e816234c91a69b3e6a00e4747297aebd7871113e",
+  "reviewed_at": "2026-11-10T13:03:08+00:00",
+  "source_revision": "6ccdaff06b147f4a818620519fd5b148fecb40cd",
+  "evidence_digest": "52d8c2ef35a82a97e103756d77d21e0ed753361d642bd4ec4952d07243874eb6",
+  "claims_digest": "b91d3560266b48a82ee98080d5380f26dcc33e7f285ff498335226302f7b2441",
   "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
@@ -73,7 +73,7 @@
       "title": "Staff-entered orders",
       "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
-      "limitations": "Network and permissions are required. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
+      "limitations": "Network and permissions are required. Cancelling a paid order lets the merchant choose an automatic Paystack refund or a cancel-only path with a manual refund; the automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
       "source_refs": [
         "apps/web/src/app/dashboard/orders/create/page.tsx",
         "apps/mobile-admin/app/(admin)/order/new.tsx",

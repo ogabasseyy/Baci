@@ -7,8 +7,8 @@
 -- DVA), pod, cash, manual, marketplace imports, unknown or future providers,
 -- NULL -- is non-retaining and books from the merchant shipping wallet.
 -- Adding a provider requires evidence it records retained_shipping_amount.
--- Mirrors GIGL_CHECKOUT_PAYMENT_METHODS_WITH_RETENTION in
--- apps/web/src/lib/shipping/assert-gigl-customer-checkout-prepaid.ts.
+-- Mirrors isGiglShippingRetainingPaymentMethod in
+-- packages/shared/src/lib/gigl-shipping-retention-payment-methods.ts.
 -- private.stamp_gigl_order_economics() already calls this helper by name.
 CREATE OR REPLACE FUNCTION private.is_non_retaining_checkout_payment_method(p_method text)
 RETURNS boolean

@@ -23,6 +23,8 @@ interface EditQueueDeps {
   serial<T>(run: () => Promise<T>): Promise<T>;
   run(action: SharedCartWrite): Promise<void>;
   refresh(): Promise<void>;
+  /** A request is still saved for retry, so it may yet be applied. */
+  hasRetainedRequest(): Promise<boolean>;
   onFailed?(
     action: SharedCartWrite,
     error: unknown,
@@ -42,6 +44,7 @@ export function createEditQueue(deps: EditQueueDeps) {
       isPredictableEdit(action) && deps.live()
         ? deps.edits.begin(action)
         : null;
+    const unpin = deps.edits.pin(action);
     return deps.serial(async () => {
       try {
         const resolved = deps.edits.resolve(action);
@@ -54,9 +57,11 @@ export function createEditQueue(deps: EditQueueDeps) {
             'rolled_back'
           );
       } catch (error) {
-        const outcome: EditOutcome = isIndeterminateFailure(error)
-          ? 'unconfirmed'
-          : 'rolled_back';
+        const outcome: EditOutcome =
+          isIndeterminateFailure(error) ||
+          (await deps.hasRetainedRequest().catch(() => true))
+            ? 'unconfirmed'
+            : 'rolled_back';
         // The write may have landed; settle against the server inside this
         // slot so nothing else (checkout) runs on a guess.
         if (outcome === 'unconfirmed') {
@@ -66,6 +71,7 @@ export function createEditQueue(deps: EditQueueDeps) {
         deps.onFailed?.(action, error, outcome);
         throw error;
       } finally {
+        unpin();
         if (edit) deps.edits.settle(edit);
       }
     });

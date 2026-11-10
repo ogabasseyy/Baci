@@ -4,6 +4,8 @@ import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 
 const PENDING = 'pending-line::';
 
+const noop = (): void => undefined;
+
 export const isPendingLineId = (id: string) => id.startsWith(PENDING);
 
 /** Predicted lines are screen-only: never persisted, imported or counted as the shopper's own. */
@@ -91,15 +93,28 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
   const landed = new Set<PendingEdit>();
   let sequence = 0;
   const addedLines = new Map<string, Omit<CartItem, 'id'>>();
+  const pinned = new Map<string, number>();
 
+  /** The real line a pending id stands for, once the add has landed in `items`. */
+  const realId = (items: CartItem[], id: string) => {
+    const added = addedLines.get(id);
+    return added
+      ? items.find(
+          (item) => !isPendingLineId(item.id) && isSameCartLine(item, added)
+        )?.id
+      : undefined;
+  };
   const view = () =>
-    edits.reduce(
-      (items, edit) =>
-        landed.has(edit)
-          ? items
-          : (predict(items, edit.action, edit.pendingId) ?? items),
-      confirmed
-    );
+    edits.reduce((items, edit) => {
+      if (landed.has(edit)) return items;
+      const { action } = edit;
+      const target =
+        (action.type === 'remove' || action.type === 'quantity') &&
+        isPendingLineId(action.id)
+          ? { ...action, id: realId(items, action.id) ?? action.id }
+          : action;
+      return predict(items, target, edit.pendingId) ?? items;
+    }, confirmed);
 
   return {
     /** Server-confirmed lines arrived; returns what to display with waiting edits on top. */
@@ -112,6 +127,17 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       confirmed = items;
       edits = [];
       landed.clear();
+    },
+    /** Keeps a pending line's identity while an unpredicted tap (assurance, negotiation) waits on it. */
+    pin(action: SharedCartWrite): () => void {
+      if (!('id' in action) || !isPendingLineId(action.id)) return noop;
+      const { id } = action;
+      pinned.set(id, (pinned.get(id) ?? 0) + 1);
+      return () => {
+        const left = (pinned.get(id) ?? 1) - 1;
+        if (left > 0) pinned.set(id, left);
+        else pinned.delete(id);
+      };
     },
     /** Server-confirmed lines when edits are still waiting, else null (nothing to undo). */
     revert(): CartItem[] | null {
@@ -137,6 +163,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       // Keep an added line's identity only while an edit still needs it.
       for (const id of [...addedLines.keys()])
         if (
+          !pinned.has(id) &&
           !edits.some(
             (entry) =>
               entry.pendingId === id ||
@@ -153,16 +180,9 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
      * Null means that line never reached the cart, so there is nothing to send.
      */
     resolve(action: SharedCartWrite): SharedCartWrite | null {
-      if (
-        (action.type !== 'remove' && action.type !== 'quantity') ||
-        !isPendingLineId(action.id)
-      )
-        return action;
-      const added = addedLines.get(action.id);
-      const real = added
-        ? confirmed.find((item) => isSameCartLine(item, added))
-        : undefined;
-      return real ? { ...action, id: real.id } : null;
+      if (!('id' in action) || !isPendingLineId(action.id)) return action;
+      const real = realId(confirmed, action.id);
+      return real ? { ...action, id: real } : null;
     },
   };
 }

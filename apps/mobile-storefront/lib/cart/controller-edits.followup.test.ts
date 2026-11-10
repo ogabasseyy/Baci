@@ -157,3 +157,51 @@ describe('review follow-ups', () => {
     await s.drain(edit);
   });
 });
+
+describe('Codex follow-ups', () => {
+  it('keeps a queued quantity visible once its add is confirmed', async () => {
+    const s = setup({ live: true });
+    await s.controller.refresh();
+    s.holdCommands();
+    const add = s.controller.write({ type: 'add', item: shopItem(PRODUCT_A) });
+    const bump = s.controller.write({
+      type: 'quantity',
+      id: s.screen.items[0].id,
+      quantity: 4,
+    });
+    await s.release();
+    await s.release();
+    expect(s.screen.items.map((i) => i.quantity)).toEqual([4]);
+    await s.drain(add, bump);
+    expect(quantities(s.screen.items)).toEqual([4]);
+  });
+
+  it('carries a pending line id through assurance toggles', async () => {
+    const s = setup({ live: true });
+    await s.controller.refresh();
+    s.holdCommands();
+    const add = s.controller.write({ type: 'add', item: shopItem(PRODUCT_A) });
+    const toggle = s.controller.write({
+      type: 'assurance',
+      id: s.screen.items[0].id,
+    });
+    await s.drain(add, toggle);
+    expect(s.calls).toEqual(['command:add', 'command:set_assurance']);
+  });
+
+  it('does not promise an undo while a retained request can still apply', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    s.retainReceiptOnFailure();
+    s.failures.push(new NativeCartError('rate_limited'));
+    await s.controller
+      .write({ type: 'quantity', id: 'line-1', quantity: 5 })
+      .catch(() => undefined);
+    expect(s.failed).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'unconfirmed'
+    );
+  });
+});

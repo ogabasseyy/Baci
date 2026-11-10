@@ -19,6 +19,8 @@ import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { isPredictableEdit } from '@/lib/cart/pending-edits';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
+import { publishNativeCart } from '@/lib/cart/publish-native-cart';
+import { retireSharedCartDevice } from '@/lib/cart/retire-shared-cart-device';
 import { cartSessionStorage } from '@/lib/cart/session-storage';
 import {
   createNativeCartClient,
@@ -148,29 +150,13 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
     let controller: ReturnType<typeof createNativeCartController> | null = null;
     let retireDevice: (() => Promise<void>) | undefined;
     const release = installSharedCartWriter({
-      retire: async () => {
+      retire: () => {
         alive = false;
-        if (retireDevice) {
-          try {
-            await retireDevice();
-          } catch (error) {
-            if (
-              !(error instanceof NativeCartError) ||
-              error.code !== 'revocation_pending'
-            )
-              throw error;
-            const pending = await deps.receipts.read(options.merchantId);
-            if (pending)
-              await deps.receipts.clear(
-                options.merchantId,
-                pending.operationId
-              );
-            throw error;
-          }
-          const pending = await deps.receipts.read(options.merchantId);
-          if (pending)
-            await deps.receipts.clear(options.merchantId, pending.operationId);
-        }
+        return retireSharedCartDevice(
+          retireDevice,
+          deps.receipts,
+          options.merchantId
+        );
       },
       write: (action) => {
         const active = controller;
@@ -235,32 +221,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
           useNativeSharedCartStore.setState({ status, code });
         },
         publish: (snapshot, display) => {
-          if (!isCurrent()) return;
-          const previous = useCartStore.getState();
-          const changedCart =
-            previous.sharedCartRef?.merchantId !== snapshot.merchantId ||
-            previous.sharedCartRef.cartId !== snapshot.cartId;
-          const checkoutGeneration = changedCart
-            ? mintedCheckoutGenerations.register(Crypto.randomUUID())
-            : previous.checkoutGeneration;
-          if (changedCart)
-            persistCheckoutGenerationDetached(checkoutGeneration);
-          useCartStore.setState({
-            items: display.items,
-            sharedCartRef: {
-              merchantId: snapshot.merchantId,
-              cartId: snapshot.cartId,
-            },
-            checkoutGeneration,
-            cartWideNegotiationActive: false,
-          });
-          useNativeSharedCartStore.setState({
-            snapshot,
-            metadataReady: display.metadataReady,
-            checkoutReview: changedCart
-              ? null
-              : useNativeSharedCartStore.getState().checkoutReview,
-          });
+          if (isCurrent()) publishNativeCart(snapshot, display);
         },
       });
       bindControllerActions(

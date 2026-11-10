@@ -70,6 +70,8 @@ export function setup(options: { live?: boolean } = {}) {
   const gates: Array<() => void> = [];
   const failures: Array<NativeCartError | null> = [];
   let hold = false;
+  let retainReceipt = false;
+  const retained = { armed: false };
   const apply = (command: Record<string, unknown>) => {
     if (command.type === 'add') {
       const item = command.item as { productId: string };
@@ -123,7 +125,10 @@ export function setup(options: { live?: boolean } = {}) {
           throw new NativeCartError('version_conflict');
         if (hold) await new Promise<void>((resolve) => gates.push(resolve));
         const failure = failures.shift();
-        if (failure) throw failure;
+        if (failure) {
+          retained.armed = retainReceipt;
+          throw failure;
+        }
         apply(input.command);
         return { cart: snapshotOf(server.version, server.lines) };
       }
@@ -139,7 +144,13 @@ export function setup(options: { live?: boolean } = {}) {
     }),
   };
   const receipts = {
-    read: jest.fn().mockResolvedValue(null),
+    read: jest.fn(() => {
+      const hit = retained.armed;
+      retained.armed = false;
+      return Promise.resolve(
+        hit ? ({ operationId: 'retained', body: {} } as never) : null
+      );
+    }),
     save: jest.fn().mockResolvedValue(undefined),
     clear: jest.fn().mockResolvedValue(undefined),
   };
@@ -176,6 +187,9 @@ export function setup(options: { live?: boolean } = {}) {
     receipts,
     screen,
     server,
+    retainReceiptOnFailure: () => {
+      retainReceipt = true;
+    },
     loseProof: () => {
       context = null;
     },

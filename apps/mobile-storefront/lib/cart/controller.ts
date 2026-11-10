@@ -244,6 +244,7 @@ export function createNativeCartController(
     live: () => Boolean(snapshot) && !terminal && !incoming,
     serial,
     refresh,
+    hasRetainedRequest: () => receipts.read(options.merchantId).then(Boolean),
     onFailed: options.onWriteFailed,
     run: async (action: SharedCartWrite) => {
       if (

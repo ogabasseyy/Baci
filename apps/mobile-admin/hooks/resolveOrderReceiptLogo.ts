@@ -1,4 +1,4 @@
-import { sanitizeSvg } from '@baci/shared';
+import { DEFAULT_MEDIA_CDN_ORIGIN, sanitizeSvg } from '@baci/shared';
 import { fetch } from 'expo/fetch';
 import { getConfiguredSupabaseUrl } from '@/lib/supabase-config';
 
@@ -11,7 +11,7 @@ function trustedLogoUrl(value: string) {
     return null;
   }
   if (
-    url.hostname === 'cdn.ogabassey.com' &&
+    url.origin === DEFAULT_MEDIA_CDN_ORIGIN &&
     url.pathname.startsWith('/media/')
   ) {
     return url;

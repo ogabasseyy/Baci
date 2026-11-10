@@ -1,4 +1,6 @@
-export const DEFAULT_MEDIA_CDN_ORIGIN = 'https://cdn.ogabassey.com';
+import { DEFAULT_MEDIA_CDN_ORIGIN } from '@baci/shared/constants';
+
+export { DEFAULT_MEDIA_CDN_ORIGIN };
 export const DEFAULT_BLOG_MEDIA_CDN_ORIGIN = DEFAULT_MEDIA_CDN_ORIGIN;
 
 /**

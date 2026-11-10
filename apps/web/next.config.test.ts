@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
@@ -47,14 +48,33 @@ describe('next.config core options', () => {
     expect(nextConfig.outputFileTracingIncludes).toMatchObject(
       INVOICE_PDF_FILE_TRACING_INCLUDES
     );
-    for (const scope of [
-      '/api/orders{,/**}',
-      '/api/storefront/account/orders/**',
+    const picomatch: (
+      pattern: string,
+      options: { contains: boolean; dot: boolean }
+    ) => (route: string) => boolean = createRequire(import.meta.url)(
+      'next/dist/compiled/picomatch'
+    );
+    const includesChromium = (route: string) =>
+      Object.entries(nextConfig.outputFileTracingIncludes ?? {}).some(
+        ([scope, files]) =>
+          files.includes('../../node_modules/@sparticuz/chromium/bin/**/*') &&
+          picomatch(scope, { contains: true, dot: true })(route)
+      );
+    for (const route of [
+      '/api/orders',
+      '/api/orders/[id]/invoice',
+      '/api/storefront/account/orders/[id]/invoice',
+      '/api/storefront/account/orders/[id]/receipt',
       '/api/cron/order-notifications',
     ]) {
-      expect(nextConfig.outputFileTracingIncludes?.[scope]).toContain(
-        '../../node_modules/@sparticuz/chromium/bin/**/*'
-      );
+      expect(includesChromium(route)).toBe(true);
+    }
+    for (const route of [
+      '/api/orders/[id]',
+      '/api/orders/[id]/generate-dva',
+      '/api/storefront/account/orders/[id]',
+    ]) {
+      expect(includesChromium(route)).toBe(false);
     }
     expect(
       existsSync(

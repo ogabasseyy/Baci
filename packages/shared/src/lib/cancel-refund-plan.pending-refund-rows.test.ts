@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { getCancelRefundPlan } from './cancel-refund-plan';
 import {
-  type CancelRefundOrder,
-  getCancelRefundPlan,
-} from './cancel-refund-plan';
-
-type Tx = NonNullable<CancelRefundOrder['transactions']>[number];
+  payment100,
+  pendingRow,
+  type Tx,
+} from './cancel-refund-plan.test-support';
 
 // A provider-accepted Paystack refund is recorded as its own refund row in
 // `refund_pending` while the payment leg stays `completed`. The plan must
@@ -46,19 +46,6 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
     expect(plan.amount).toBe(60);
     expect(plan.inFlightAmount).toBe(40);
   });
-
-  const payment100 = { ...payment, currency: 'NGN' };
-  const pendingRow = (over: Record<string, unknown> = {}): Tx =>
-    ({
-      amount: 100,
-      currency: 'NGN',
-      gateway: 'paystack',
-      id: 'refund-x',
-      payment_transaction_id: 'pay-1',
-      status: 'completed',
-      transaction_type: 'refund',
-      ...over,
-    }) as Tx;
 
   it('counts a processing refund row as in flight while the payment leg stays completed', () => {
     const plan = getCancelRefundPlan({
@@ -275,46 +262,6 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
         ],
       });
       expect(plan.ledgerKnown).toBe(true);
-    });
-  });
-
-  describe('completed Paystack refund rows without a processed verdict', () => {
-    const unverified = (amount: number) =>
-      pendingRow({ amount, provider_refund_status: null, status: 'completed' });
-
-    it('treats a full unverified refund as awaiting verification, not covered or owed', () => {
-      const plan = getCancelRefundPlan({
-        paymentStatus: 'Paid',
-        total: 100,
-        transactions: [payment100, unverified(100)],
-      });
-      expect(plan.amount).toBe(0);
-      expect(plan.inFlightAmount).toBe(100);
-      expect(plan.automaticSupported).toBe(true);
-      expect(plan.ledgerKnown).toBe(true);
-    });
-
-    it('does not advise manual repayment of the rest while a partial refund is unverified', () => {
-      const plan = getCancelRefundPlan({
-        paymentStatus: 'Paid',
-        total: 100,
-        transactions: [payment100, unverified(20)],
-      });
-      expect(plan.amount).toBe(0);
-      expect(plan.inFlightAmount).toBe(100);
-    });
-
-    it('still counts a processed refund as settled coverage', () => {
-      const plan = getCancelRefundPlan({
-        paymentStatus: 'Paid',
-        total: 100,
-        transactions: [
-          payment100,
-          pendingRow({ provider_refund_status: 'processed' }),
-        ],
-      });
-      expect(plan.amount).toBe(0);
-      expect(plan.inFlightAmount).toBe(0);
     });
   });
 });

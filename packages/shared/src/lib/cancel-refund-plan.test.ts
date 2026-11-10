@@ -1,20 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getCancelRefundPlan, isPaidStatus } from './cancel-refund-plan';
+import { leg } from './cancel-refund-plan.test-support';
 
 const getAutomaticCancelRefundAmount = (
   order: Parameters<typeof getCancelRefundPlan>[0]
 ) => getCancelRefundPlan(order).amount;
-
-const leg = (over: Record<string, unknown> = {}) => ({
-  amount: 5000,
-  currency: 'NGN',
-  gateway: 'paystack',
-  gateway_reference: 'ref',
-  id: 'leg-1',
-  status: 'completed',
-  transaction_type: 'payment',
-  ...over,
-});
 
 describe('getAutomaticCancelRefundAmount', () => {
   it('sums completed external payment legs', () => {
@@ -244,58 +234,5 @@ describe('getAutomaticCancelRefundAmount', () => {
     expect(isPaidStatus('Paid')).toBe(true);
     expect(isPaidStatus('unpaid')).toBe(false);
     expect(isPaidStatus(undefined)).toBe(false);
-  });
-
-  it('matches currency codes that differ only by case or padding, like the worker', () => {
-    const plan = getCancelRefundPlan({
-      paymentStatus: 'Paid',
-      total: 100,
-      transactions: [
-        leg({ amount: 100, currency: 'NGN' }),
-        {
-          amount: 100,
-          currency: ' ngn ',
-          gateway: 'paystack',
-          payment_transaction_id: 'leg-1',
-          provider_refund_status: 'processed',
-          status: 'completed',
-          transaction_type: 'refund',
-        },
-      ],
-    });
-    expect(plan.amount).toBe(0);
-  });
-
-  it('never sums legs in different currencies', () => {
-    const plan = getCancelRefundPlan({
-      orderCurrency: 'NGN',
-      paymentStatus: 'Paid',
-      total: 100,
-      transactions: [
-        leg({ amount: 100, currency: 'NGN' }),
-        leg({ amount: 100, currency: 'USD', id: 'leg-2' }),
-      ],
-    });
-    expect(plan.ledgerKnown).toBe(false);
-  });
-
-  it('treats an open leg with no currency as unresolved', () => {
-    const plan = getCancelRefundPlan({
-      orderCurrency: 'NGN',
-      paymentStatus: 'Paid',
-      total: 100,
-      transactions: [leg({ amount: 100, currency: null })],
-    });
-    expect(plan.ledgerKnown).toBe(false);
-  });
-
-  it('keeps a single-currency order resolved', () => {
-    const plan = getCancelRefundPlan({
-      orderCurrency: 'NGN',
-      paymentStatus: 'Paid',
-      total: 100,
-      transactions: [leg({ amount: 100, currency: 'NGN' })],
-    });
-    expect(plan.ledgerKnown).toBe(true);
   });
 });

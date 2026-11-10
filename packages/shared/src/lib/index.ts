@@ -17,6 +17,7 @@ export * from './fetch-offer-resolutions';
 export * from './fetch-with-timeout';
 export * from './filter-by-location-phrase';
 export * from './get-paystack-dva-account-number';
+export * from './gigl-shipping-retention-payment-methods';
 export * from './gigl-tracking-status';
 export * from './has-active-search-refinements';
 export * from './is-finite-number';

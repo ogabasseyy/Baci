@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ result: vi.fn() }));
 
 vi.mock('@baci/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@baci/shared')>();
-  return { ...actual, getCancelRefundPlan: vi.fn(actual.getCancelRefundPlan) };
+  const actual = await importOriginal<Record<string, unknown>>();
+  const real = actual.getCancelRefundPlan as (...args: unknown[]) => unknown;
+  return { ...actual, getCancelRefundPlan: vi.fn(real) };
 });
 
 vi.mock('@/lib/supabase', () => ({

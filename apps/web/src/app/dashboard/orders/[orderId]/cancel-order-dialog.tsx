@@ -109,8 +109,9 @@ export function CancelOrderDialog({
                 className="mt-1"
               />
               <Label htmlFor="cancel-refund-manual" className="leading-snug">
-                Cancel only — I&apos;ll refund them another way (cash, transfer,
-                store credit)
+                {inFlightAmount > 0
+                  ? `Cancel only — I'll refund the remaining ${amount} another way (cash, transfer, store credit)`
+                  : "Cancel only — I'll refund them another way (cash, transfer, store credit)"}
               </Label>
             </div>
           )}
@@ -144,8 +145,10 @@ export function CancelOrderDialog({
         )}
         {choice === 'manual' && canCancelOnly && (
           <p className="text-sm text-muted-foreground">
-            No refund will be sent automatically. The order will show as refund
-            pending until you record the refund from its Refund card.
+            No refund will be sent automatically for{' '}
+            {inFlightAmount > 0 ? `the remaining ${amount}` : 'this order'}. The
+            order will show as refund pending until you record that refund from
+            its Refund card.
           </p>
         )}
         <DialogFooter>

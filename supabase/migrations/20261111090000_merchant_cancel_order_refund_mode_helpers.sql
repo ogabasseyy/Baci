@@ -1,5 +1,5 @@
 -- Helpers and schema for merchant cancellation with a refund choice
--- (20261110130000_merchant_cancel_order_refund_mode.sql). The in-flight
+-- (20261111090100_merchant_cancel_order_refund_mode.sql). The in-flight
 -- payment gate and the verified-capture transition move here unchanged from
 -- public.cancel_order_as_merchant (20260928185300) so the main migration
 -- stays within the module size limit; the main function calls them.

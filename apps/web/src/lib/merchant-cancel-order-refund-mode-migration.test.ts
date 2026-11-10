@@ -7,9 +7,9 @@ const read = (name: string) =>
     resolve(process.cwd(), '../../supabase/migrations', name),
     'utf8'
   );
-const sql = read('20261110130000_merchant_cancel_order_refund_mode.sql');
+const sql = read('20261111090100_merchant_cancel_order_refund_mode.sql');
 const helperSql = read(
-  '20261110125900_merchant_cancel_order_refund_mode_helpers.sql'
+  '20261111090000_merchant_cancel_order_refund_mode_helpers.sql'
 );
 
 describe('merchant cancellation refund-mode migration', () => {

@@ -260,4 +260,22 @@ describe('cancellation refund plan', () => {
       'Cancel only (I will refund them)'
     );
   });
+
+  it('limits the cancel-only refund to the amount not already in flight', async () => {
+    const { actions } = createPaidOrderStatusActions({
+      order: {
+        cancel_refund_plan: {
+          amount: 3000,
+          automaticSupported: true,
+          inFlightAmount: 2000,
+        },
+      },
+    });
+    await actions.handleStatusUpdate('cancelled');
+    const call = vi.mocked(Alert.alert).mock.calls[0];
+    expect(call?.[1]).toContain('only the remaining 3000 is yours to refund');
+    expect(call?.[2]?.map((button) => button.text)).toContain(
+      'Cancel only (I will refund them)'
+    );
+  });
 });

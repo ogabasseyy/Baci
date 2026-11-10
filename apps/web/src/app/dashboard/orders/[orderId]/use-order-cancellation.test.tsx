@@ -137,4 +137,21 @@ describe('useOrderCancellation', () => {
     expect(result.current.dialogProps.refundAmount).toBe(80);
     expect(result.current.dialogProps.automaticSupported).toBe(false);
   });
+
+  it('offers only a plain confirmation when everything is already being refunded', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useOrderCancellation({
+        onCancelled: vi.fn(),
+        order: order({
+          transactions: [{ ...paystackLeg, status: 'refund_pending' }],
+        } as Partial<Order>),
+      })
+    );
+    await act(() => result.current.requestCancellation());
+    expect(result.current.dialogProps.isOpen).toBe(false);
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('already in progress with the provider')
+    );
+  });
 });

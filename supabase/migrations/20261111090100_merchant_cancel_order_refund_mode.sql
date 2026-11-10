@@ -19,7 +19,7 @@
 -- same grants (authenticated only). 'manual' needs the owner or the
 -- orders.refund permission. The column, the in-flight payment gate and the
 -- verified-capture transition live in the preceding helper migration
--- (20261110125900); everything else is unchanged from
+-- (20261111090000); everything else is unchanged from
 -- 20260928185300_fail_closed_on_unknown_abandoned_stamps.sql.
 DROP FUNCTION IF EXISTS public.cancel_order_as_merchant(uuid, text);
 

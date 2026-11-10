@@ -81,7 +81,7 @@
         "apps/web/src/app/dashboard/orders/create/create-order-form.tsx",
         "apps/mobile-admin/hooks/useNewOrderController.ts",
         "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts",
-        "supabase/migrations/20261110130000_merchant_cancel_order_refund_mode.sql",
+        "supabase/migrations/20261111090100_merchant_cancel_order_refund_mode.sql",
         "packages/shared/src/lib/cancel-refund-plan.ts",
         "apps/web/src/app/api/orders/[id]/cancelled/route.ts"
       ]

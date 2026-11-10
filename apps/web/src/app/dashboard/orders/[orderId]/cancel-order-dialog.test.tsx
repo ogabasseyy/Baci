@@ -125,4 +125,25 @@ describe('CancelOrderDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
     expect(onConfirm).toHaveBeenCalledWith('automatic');
   });
+
+  it('limits the cancel-only refund to the part not already in flight', async () => {
+    render(
+      <CancelOrderDialog
+        currency="NGN"
+        inFlightAmount={5000}
+        isOpen
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        refundAmount={12500}
+      />
+    );
+    expect(
+      screen.getByRole('radio', { name: /refund the remaining .*12,500/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/already in progress with the provider/i)
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
+    expect(screen.getByText(/for the remaining .*12,500/i)).toBeVisible();
+  });
 });

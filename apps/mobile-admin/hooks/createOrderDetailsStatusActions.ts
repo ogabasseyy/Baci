@@ -192,7 +192,7 @@ export function createOrderDetailsStatusActions({
       // permission, which the server enforces with a 403.
       const inFlightNote =
         plan && plan.inFlightAmount > 0
-          ? ' Part of this payment is already being refunded by the provider: do not refund that part yourself.'
+          ? ` The provider is already refunding ${plan.inFlightAmount} of this payment: only the remaining ${plan.amount} is yours to refund, so do not refund the rest yourself.`
           : '';
       Alert.alert(
         'Cancel paid order?',

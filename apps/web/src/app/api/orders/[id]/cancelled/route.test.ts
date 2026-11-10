@@ -233,6 +233,54 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
+  it('explains a cancel-only refusal for staff without refund permission', async () => {
+    const { supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'order_cancel_refund_forbidden' },
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ confirm_cancellation: true, refund: 'manual' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'CANCEL_REFUND_FORBIDDEN',
+      error: expect.stringContaining('refund permission'),
+    });
+  });
+
+  it('falls back to the requested mode when the persisted mode cannot be read', async () => {
+    const { persistedMode, supabase } = createSupabase();
+    persistedMode.mockResolvedValue({
+      data: null,
+      error: { message: 'read failed' },
+    });
+    supabase.rpc.mockResolvedValue({ data: false, error: null });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(
+      request({ confirm_cancellation: true, refund: 'manual' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      alreadyCancelled: true,
+      sideEffects: { refund: 'manual_required' },
+    });
+  });
+
   it('maps an invalid refund mode raised by the RPC to 400', async () => {
     const { supabase } = createSupabase();
     supabase.rpc.mockResolvedValue({

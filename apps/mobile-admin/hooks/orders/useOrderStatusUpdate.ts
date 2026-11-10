@@ -10,50 +10,16 @@ import {
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
+import {
+  DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES,
+  UNCONFIRMED_SHIPPING_ERROR_CODES,
+} from './shipping-booking-error-codes';
 
 // Shipping includes a bounded tariff check before carrier submission. Keep a
 // single deadline across fetch and response parsing, with no automatic retry.
 const SHIPMENT_BOOKING_TIMEOUT_MS = 30000;
 const ORDER_STATUS_UPDATE_TIMEOUT_MS = 15000;
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
-
-// These codes can follow submission or an existing/in-flight booking. Some
-// (for example ORDER_NOT_FOUND) are shared by pre- and post-submit guards,
-// so a typed response alone cannot establish that another booking is safe.
-const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
-  'SHIPMENT_SAVE_FAILED',
-  'ORDER_REFUNDED_AFTER_BOOKING',
-  'SHIPMENT_BOOKING_STATE_CHECK_FAILED',
-  'ORDER_NOT_FOUND',
-  'MERCHANT_WALLET_COMPLETION_FAILED',
-  'MERCHANT_WALLET_RECONCILIATION_FAILED',
-  'MERCHANT_WALLET_SUBMISSION_FAILED',
-  'MERCHANT_WALLET_REFUND_FAILED',
-  'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
-  'MERCHANT_WALLET_BOOKED_SHIPMENT_MISSING',
-  'SHIPMENT_BOOKING_IN_PROGRESS',
-  'SHIPMENT_BOOKING_LOCK_RELEASE_FAILED',
-  'EXISTING_SHIPMENT_LOOKUP_FAILED',
-  'INCOMPLETE_EXISTING_SHIPMENT',
-  'EXISTING_SHIPMENT_PROVIDER_MISMATCH',
-  'EXISTING_SHIPMENT_QUOTE_MISMATCH',
-]);
-
-// Only errors traced to lookup/validation before carrier submission belong
-// here. A new server/proxy code alone does not prove that booking failed.
-const DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES = new Set([
-  // Refused before any carrier submission (payment/funding check).
-  'GIGL_REQUIRES_PREPAID_OR_WALLET',
-  'SHIPMENT_BOOKING_LOCK_FAILED',
-  'MERCHANT_LOOKUP_FAILED',
-  'MERCHANT_SENDER_REQUIRED',
-  'QUOTE_ECONOMICS_LOOKUP_FAILED',
-  'QUOTE_METADATA_LOOKUP_FAILED',
-  'QUOTE_REFRESH_PERSIST_FAILED',
-  'QUOTE_REFRESH_ORDER_UPDATE_FAILED',
-  'GIGL_AUTHENTICATION_FAILED',
-  'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED',
-]);
 
 interface OrderStatusContext {
   previousOrderQueries: [readonly unknown[], Order | undefined][];

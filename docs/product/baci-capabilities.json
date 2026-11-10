@@ -73,7 +73,7 @@
       "title": "Staff-entered orders",
       "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
-      "limitations": "Network and permissions are required. Cancelling a paid order lets the merchant choose an automatic refund (Paystack legs only) or a cancel-only path with a manual refund that needs the owner or refund permission; the automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
+      "limitations": "Network and permissions are required. For a paid order with an outstanding external payment, the web order page and the mobile order-details screen let the merchant choose an automatic refund or a cancel-only path with a manual refund (owner or refund permission). The automatic option is hidden when an outstanding leg is not a Paystack leg with a reference, and the mobile list-screen status dropdown always uses the automatic default. The automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
       "source_refs": [
         "apps/web/src/app/dashboard/orders/create/page.tsx",
         "apps/mobile-admin/app/(admin)/order/new.tsx",

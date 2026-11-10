@@ -25,6 +25,41 @@ END $$;
 ALTER TABLE public.orders
   VALIDATE CONSTRAINT orders_cancellation_refund_mode_check;
 
+-- Column reads go through column-level grants on orders (table SELECT was
+-- revoked), so the new column needs its own grant. Merchant dashboards and
+-- the cancel route read it; storefront (anon) never does.
+GRANT SELECT (cancellation_refund_mode) ON TABLE public.orders TO authenticated;
+
+-- The mode decides whether a refund is sent, so it must only change inside
+-- the cancel RPC (SECURITY DEFINER, so current_user is its owner there). A
+-- direct PostgREST write from an authenticated or anon session could flip
+-- an automatic cancellation to manual and suppress the refund.
+CREATE OR REPLACE FUNCTION private.guard_order_cancellation_refund_mode()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF current_user IN ('authenticated', 'anon')
+     AND NEW.cancellation_refund_mode IS DISTINCT FROM (
+       CASE WHEN TG_OP = 'UPDATE' THEN OLD.cancellation_refund_mode END
+     ) THEN
+    RAISE EXCEPTION 'cancellation_refund_mode_protected'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.guard_order_cancellation_refund_mode()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS orders_guard_cancellation_refund_mode ON public.orders;
+CREATE TRIGGER orders_guard_cancellation_refund_mode
+  BEFORE INSERT OR UPDATE OF cancellation_refund_mode ON public.orders
+  FOR EACH ROW
+  EXECUTE FUNCTION private.guard_order_cancellation_refund_mode();
+
 CREATE OR REPLACE FUNCTION private.merchant_cancel_payment_in_flight(
   p_order_id uuid,
   p_merchant_id uuid

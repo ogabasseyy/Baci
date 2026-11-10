@@ -41,17 +41,17 @@ describe('CancelOrderDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith('manual');
   });
 
-  it('resets to the automatic default each time it reopens', async () => {
+  it('starts from the automatic default when remounted with a new key', async () => {
     const props = {
       currency: 'NGN',
+      isOpen: true,
       onClose: vi.fn(),
       onConfirm: vi.fn().mockResolvedValue(undefined),
       refundAmount: 12500,
     };
-    const { rerender } = render(<CancelOrderDialog {...props} isOpen />);
+    const { rerender } = render(<CancelOrderDialog key="1" {...props} />);
     await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
-    rerender(<CancelOrderDialog {...props} isOpen={false} />);
-    rerender(<CancelOrderDialog {...props} isOpen />);
+    rerender(<CancelOrderDialog key="2" {...props} />);
     expect(
       screen.getByRole('radio', { name: /cancel and refund/i })
     ).toBeChecked();

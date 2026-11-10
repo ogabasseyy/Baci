@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getCancelRefundPlan } from '@/lib/orders/get-automatic-cancel-refund-amount';
 import { mapDashboardOrderRecord } from './order-record-mapper';
 
 const baseOrder = {
@@ -131,6 +132,46 @@ describe('mapDashboardOrderRecord', () => {
         ],
       })
     );
+  });
+
+  it('passes the refund-coverage fields through to the cancel plan', () => {
+    const mapped = mapDashboardOrderRecord(baseOrder, {
+      includeDetails: true,
+      orderItemImageMap: new Map(),
+      transactions: [
+        {
+          amount: 5000,
+          created_at: '2026-01-01T00:00:00.000Z',
+          currency: 'NGN',
+          gateway: 'paystack',
+          gateway_reference: 'ref-1',
+          id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+        {
+          amount: 5000,
+          created_at: '2026-01-02T00:00:00.000Z',
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'refund-1',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+
+    expect(mapped.transactions?.[0]).toMatchObject({
+      gateway_reference: 'ref-1',
+    });
+    expect(mapped.transactions?.[1]).toMatchObject({
+      payment_transaction_id: 'leg-1',
+    });
+    // The covered leg leaves nothing for a cancellation to refund.
+    expect(
+      getCancelRefundPlan({ ...mapped, paymentStatus: 'Paid' }).amount
+    ).toBe(0);
   });
 
   it('maps persisted financial fields for dashboard order history', () => {

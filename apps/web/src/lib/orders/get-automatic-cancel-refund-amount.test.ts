@@ -108,4 +108,53 @@ describe('getAutomaticCancelRefundAmount', () => {
       getAutomaticCancelRefundAmount({ paymentStatus: 'Pending', total: 4000 })
     ).toBe(0);
   });
+
+  it('does not treat a non-Paystack refund_pending leg as automatic', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 5000,
+      transactions: [
+        leg({ gateway: 'paypal', id: 'a', status: 'refund_pending' }),
+      ],
+    });
+    expect(plan.automaticSupported).toBe(false);
+  });
+
+  it('keeps a partially refunded leg outstanding for the remainder', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 20,
+          currency: 'NGN',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan).toEqual({ amount: 80, automaticSupported: true });
+  });
+
+  it('ignores refunds in another currency when judging coverage', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 100,
+          currency: 'USD',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(100);
+  });
 });

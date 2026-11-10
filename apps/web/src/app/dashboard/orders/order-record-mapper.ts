@@ -60,6 +60,7 @@ interface DashboardTransactionRecord {
   currency: string;
   gateway: string;
   created_at: string;
+  payment_transaction_id?: string | null;
 }
 
 interface MapDashboardOrderRecordOptions {
@@ -162,6 +163,8 @@ export function mapDashboardOrderRecord(
             currency: transaction.currency,
             gateway: transaction.gateway,
             created_at: transaction.created_at,
+            gateway_reference: transaction.gateway_reference,
+            payment_transaction_id: transaction.payment_transaction_id,
           })),
         }
       : {}),

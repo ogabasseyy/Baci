@@ -406,7 +406,11 @@ describe('OrderDetailsClientPage', () => {
     await userEvent.click(screen.getByRole('radio', { name: /cancel only/i }));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
 
-    expect(apiPost).toHaveBeenCalled();
+    expect(apiPost).toHaveBeenCalledWith(
+      '/api/orders/order-123/cancelled',
+      expect.objectContaining({ refund: 'manual' })
+    );
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /cancel only/i })).toBeChecked();
   });
 });

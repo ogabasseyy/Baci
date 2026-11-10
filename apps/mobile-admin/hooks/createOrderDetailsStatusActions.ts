@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
+import type { CancellationRefundChoice } from '@/hooks/orders/useOrderStatusUpdate';
 import type { ShippingStatus } from '@/hooks/useOrders';
 
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -41,7 +42,7 @@ interface CreateOrderDetailsStatusActionsParams {
   ) => void;
   updateStatus: (input: {
     orderId: string;
-    refund?: 'automatic' | 'manual';
+    refund?: CancellationRefundChoice;
     status: ShippingStatus;
   }) => Promise<unknown>;
 }
@@ -57,7 +58,7 @@ export function createOrderDetailsStatusActions({
 }: CreateOrderDetailsStatusActionsParams) {
   const performStatusUpdate = async (
     newStatus: ShippingStatus,
-    refund?: 'automatic' | 'manual'
+    refund?: CancellationRefundChoice
   ) => {
     if (!order) {
       return;
@@ -140,7 +141,8 @@ export function createOrderDetailsStatusActions({
       const cancellationShowsServerReason =
         newStatus === 'cancelled' &&
         (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||
-          errorCode === 'ORDER_NOT_CANCELLABLE');
+          errorCode === 'ORDER_NOT_CANCELLABLE' ||
+          errorCode === 'CANCEL_REFUND_FORBIDDEN');
       Alert.alert(
         'Error',
         cancellationShowsServerReason ? errorMessage : 'Failed to update status'
@@ -165,25 +167,26 @@ export function createOrderDetailsStatusActions({
 
     const isPaid = order.payment_status === 'paid' || order.amount_paid > 0;
     if (isPaid) {
-      // Paid orders choose how the customer is refunded. The default,
-      // first action keeps the automatic refund.
+      // Paid orders choose how the customer is refunded. The safe automatic
+      // refund is listed first (Android positions buttons by order), and the
+      // cancel-only path needs refund permission, which the server enforces.
       Alert.alert(
         'Cancel paid order?',
         'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.',
         [
           { text: 'Keep Order', style: 'cancel' },
           {
-            text: 'Cancel only (I will refund them)',
-            style: 'destructive',
-            onPress: () => {
-              void performStatusUpdate(newStatus, 'manual');
-            },
-          },
-          {
             text: 'Cancel and refund to original payment method',
             style: 'destructive',
             onPress: () => {
               void performStatusUpdate(newStatus, 'automatic');
+            },
+          },
+          {
+            text: 'Cancel only (I will refund them)',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus, 'manual');
             },
           },
         ]

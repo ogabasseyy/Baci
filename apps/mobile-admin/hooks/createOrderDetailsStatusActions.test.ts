@@ -228,6 +228,11 @@ describe('createOrderDetailsStatusActions', () => {
       'instead of cancelling again'
     );
     const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    expect(confirmation?.map((button) => button.text)).toEqual([
+      'Keep Order',
+      'Cancel and refund to original payment method',
+      'Cancel only (I will refund them)',
+    ]);
     confirmation
       ?.find(
         (button) =>

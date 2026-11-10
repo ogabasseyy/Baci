@@ -87,6 +87,28 @@ describe('createOrderDetailsStatusActions paid cancellation', () => {
     });
   });
 
+  it('explains the refund-permission refusal for a cancel-only attempt', async () => {
+    const message =
+      'Only the store owner or staff with refund permission can cancel an order without an automatic refund.';
+    const { actions } = createPaidOrderStatusActions({
+      updateStatus: vi
+        .fn()
+        .mockRejectedValue(
+          new OrderStatusUpdateError(message, 'CANCEL_REFUND_FORBIDDEN')
+        ),
+    });
+
+    await actions.handleStatusUpdate('cancelled');
+    const confirmation = vi.mocked(Alert.alert).mock.calls[0]?.[2];
+    const cancelOnly = confirmation?.find(
+      (button) => button.text === 'Cancel only (I will refund them)'
+    );
+    cancelOnly?.onPress?.();
+    await vi.waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', message);
+    });
+  });
+
   it('shows the server reason when the error is rewrapped without the class', async () => {
     const message =
       'A payment attempt needs to be checked before this order can be cancelled. Please contact support.';

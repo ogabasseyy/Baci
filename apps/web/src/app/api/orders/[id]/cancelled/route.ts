@@ -6,6 +6,8 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
+import { mapCancellationRpcError } from '@/lib/orders/map-cancellation-rpc-error';
+import { readPersistedCancellationRefundMode } from '@/lib/orders/read-persisted-cancellation-refund-mode';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { merchantOrderCancellationSchema } from '@/schemas/orders';
@@ -102,65 +104,24 @@ export async function POST(
         p_refund_mode: refundMode,
       });
     if (cancellationError) {
-      // PostgREST can wrap the raised sentinel with context, so match
-      // it as a substring: exact equality would silently demote a 409
-      // PAYMENT_RECONCILIATION_REQUIRED to a generic failure.
-      const paymentNeedsReconciliation =
-        cancellationError.code === 'P0001' &&
-        cancellationError.message.includes('payment_capture_in_flight');
-      const status =
-        cancellationError.code === 'P0002'
-          ? 404
-          : cancellationError.code === 'P0001'
-            ? 409
-            : cancellationError.code === '42501'
-              ? 403
-              : cancellationError.code === '22023'
-                ? 400
-                : 500;
+      const failure = mapCancellationRpcError(cancellationError);
       return NextResponse.json(
-        {
-          error: paymentNeedsReconciliation
-            ? 'A payment attempt needs to be checked before this order can be cancelled. Please contact support.'
-            : status === 409
-              ? 'This order can no longer be cancelled.'
-              : status === 404
-                ? 'Order not found'
-                : status === 403
-                  ? 'You do not have permission to cancel this order.'
-                  : status === 400
-                    ? 'Invalid refund option.'
-                    : 'Failed to cancel order',
-          code: paymentNeedsReconciliation
-            ? 'PAYMENT_RECONCILIATION_REQUIRED'
-            : status === 409
-              ? 'ORDER_NOT_CANCELLABLE'
-              : undefined,
-        },
-        { status }
+        { error: failure.error, code: failure.code },
+        { status: failure.status }
       );
     }
     const alreadyCancelled = !cancellationPerformed;
 
     // A replay changes nothing, so report the mode the order was actually
     // cancelled with rather than echoing this request's choice.
-    let effectiveRefundMode: 'automatic' | 'manual' | 'unknown' = refundMode;
-    if (alreadyCancelled) {
-      const { data: persisted, error: persistedError } = await supabase
-        .from('orders')
-        .select('cancellation_refund_mode')
-        .eq('id', id)
-        .eq('merchant_id', merchantId)
-        .maybeSingle();
-      if (persistedError || !persisted) {
-        effectiveRefundMode = 'unknown';
-      } else {
-        effectiveRefundMode =
-          persisted.cancellation_refund_mode === 'manual'
-            ? 'manual'
-            : 'automatic';
-      }
-    }
+    const effectiveRefundMode = alreadyCancelled
+      ? await readPersistedCancellationRefundMode({
+          fallback: refundMode,
+          merchantId,
+          orderId: id,
+          supabase,
+        })
+      : refundMode;
 
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
@@ -306,9 +267,7 @@ export async function POST(
           refund:
             effectiveRefundMode === 'manual'
               ? 'manual_required'
-              : effectiveRefundMode === 'unknown'
-                ? 'unknown'
-                : 'queued_if_required',
+              : 'queued_if_required',
         },
       },
       { status: 202 }

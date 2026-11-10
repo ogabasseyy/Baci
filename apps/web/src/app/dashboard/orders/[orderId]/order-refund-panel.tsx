@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { orderRefundStatusLabels } from '@/config/order-refund';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-options';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import { OrderRefundManualForm } from './order-refund-manual-form';
+import { OrderRefundStatusLine } from './order-refund-status-line';
 import { OrderRefundTimeline } from './order-refund-timeline';
 import { useOrderRefundSubmit } from './use-order-refund-submit';
 import { useRefundPinAmountCap } from './use-refund-pin-amount-cap';
@@ -164,13 +164,6 @@ export function OrderRefundPanel({
     setShowForm,
     setSummary,
   });
-  // A cancellation with no queued refund step ("cancel only") leaves the
-  // balance outstanding and idle: say so plainly instead of the neutral
-  // "Not started", so it never reads as refunded or forgotten.
-  const awaitingManualRefund =
-    summary?.status === 'not_started' &&
-    summary.remaining > 0 &&
-    summary.canRecordManual === true;
   const money = (value: number) =>
     formatDisplayCurrency(value, summary?.currency || 'NGN', {
       minimumFractionDigits: 2,
@@ -193,17 +186,7 @@ export function OrderRefundPanel({
           </p>
         ) : (
           <>
-            <p role="status" className="font-semibold">
-              {awaitingManualRefund
-                ? 'Refund pending'
-                : (orderRefundStatusLabels[summary.status] ?? summary.status)}
-            </p>
-            {awaitingManualRefund && (
-              <p className="text-sm">
-                No automatic refund was queued for this cancellation. Refund the
-                customer yourself, then record it with Record manual refund.
-              </p>
-            )}
+            <OrderRefundStatusLine summary={summary} />
             <dl className="text-sm space-y-1">
               <div className="flex justify-between">
                 <dt>Amount paid</dt>

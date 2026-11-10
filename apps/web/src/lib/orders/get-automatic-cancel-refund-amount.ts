@@ -6,6 +6,7 @@ interface CancelRefundOrder {
   total: number;
   transactions?: Array<{
     amount: number;
+    currency?: string | null;
     gateway: string | null;
     gateway_reference?: string | null;
     payment_transaction_id?: string | null;
@@ -57,32 +58,44 @@ export function getCancelRefundPlan(
       automaticSupported: true,
     };
   }
-  const coveredLegIds = new Set(
-    order.transactions
+  const refundRows = order.transactions.filter(
+    (row) =>
+      row.transaction_type === 'refund' &&
+      (row.status === 'completed' || row.status === 'refunded') &&
+      row.payment_transaction_id
+  );
+  // A leg is covered only by completed refunds in the same currency and
+  // gateway that together reach the capture; a partial refund leaves the
+  // remainder outstanding.
+  const remainingFor = (leg: (typeof order.transactions)[number]): number => {
+    const covered = refundRows
       .filter(
         (row) =>
-          row.transaction_type === 'refund' &&
-          (row.status === 'completed' || row.status === 'refunded') &&
-          row.payment_transaction_id
+          row.payment_transaction_id === leg.id &&
+          (row.currency ?? null) === (leg.currency ?? null) &&
+          normalizePaymentGateway(row.gateway) ===
+            normalizePaymentGateway(leg.gateway)
       )
-      .map((row) => row.payment_transaction_id)
-  );
-  const outstanding = order.transactions.filter(
-    (leg) =>
-      leg.transaction_type === 'payment' &&
-      FUNDED_LEG_STATUSES.has(leg.status) &&
-      leg.status !== 'refunded' &&
-      leg.amount > 0 &&
-      isExternalPaymentGateway(leg.gateway) &&
-      !(leg.id && coveredLegIds.has(leg.id))
-  );
-  return {
-    amount: outstanding.reduce((sum, leg) => sum + leg.amount, 0),
-    automaticSupported: outstanding.every(
+      .reduce((sum, row) => sum + row.amount, 0);
+    return Math.max(leg.amount - covered, 0);
+  };
+  const outstanding = order.transactions
+    .filter(
       (leg) =>
+        leg.transaction_type === 'payment' &&
+        FUNDED_LEG_STATUSES.has(leg.status) &&
+        leg.status !== 'refunded' &&
+        leg.amount > 0 &&
+        isExternalPaymentGateway(leg.gateway)
+    )
+    .map((leg) => ({ leg, remaining: remainingFor(leg) }))
+    .filter(({ remaining }) => remaining > 0);
+  return {
+    amount: outstanding.reduce((sum, { remaining }) => sum + remaining, 0),
+    automaticSupported: outstanding.every(
+      ({ leg }) =>
         Boolean(leg.gateway_reference) &&
-        (normalizePaymentGateway(leg.gateway) === 'PAYSTACK' ||
-          leg.status === 'refund_pending')
+        normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
     ),
   };
 }

@@ -7,6 +7,7 @@ vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import { preflightCancellationRefundInitiation } from './preflight-cancellation-refund-initiation';
 import {
+  order,
   paystackPayment,
   preflightInput,
 } from './preflight-cancellation-refund-initiation.test-support';
@@ -67,7 +68,7 @@ describe('preflightCancellationRefundInitiation initiation set', () => {
     const result = await preflightCancellationRefundInitiation(
       preflightInput({
         order: {
-          ...preflightInput().order,
+          ...order,
           cancellation_refund_mode: 'manual',
         },
         transactions: [

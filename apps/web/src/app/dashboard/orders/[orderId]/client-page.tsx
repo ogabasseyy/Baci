@@ -140,6 +140,7 @@ export default function OrderDetailsClientPage({
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancelDialogSession, setCancelDialogSession] = useState(0);
   const merchantContext = useMerchantSafe();
   const cancelRefundPlan = getCancelRefundPlan(order);
 
@@ -174,7 +175,8 @@ export default function OrderDetailsClientPage({
     if (newStatus === 'Canceled' && refund === undefined) {
       // A paid order with money the worker could refund asks how to refund
       // in a dialog; everything else keeps the plain confirmation.
-      if (getCancelRefundPlan(order).amount > 0) {
+      if (cancelRefundPlan.amount > 0) {
+        setCancelDialogSession((session) => session + 1);
         setIsCancelDialogOpen(true);
         return false;
       }
@@ -359,6 +361,7 @@ export default function OrderDetailsClientPage({
         orderItems={displayItems}
       />
       <CancelOrderDialog
+        key={cancelDialogSession}
         isOpen={isCancelDialogOpen}
         onClose={() => setIsCancelDialogOpen(false)}
         currency={orderCurrency}

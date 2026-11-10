@@ -150,4 +150,42 @@ describe('preflightCancellationRefundCoverage', () => {
       'refund'
     );
   });
+
+  it('leaves uncovered non-Paystack legs to the merchant on a cancel-only order', async () => {
+    const korapay = {
+      ...paystackPayment,
+      gateway: 'korapay',
+      id: 'payment-2',
+      gateway_reference: 'kora-ref',
+    };
+    const result = await preflightCancellationRefundCoverage(
+      input({
+        allLegs: [paystackPayment, korapay],
+        linkLegs: [paystackPayment, korapay],
+        order: { ...order, cancellation_refund_mode: 'manual' },
+        soleCompletedLeg: undefined,
+        transactions: [paystackPayment, korapay],
+      })
+    );
+    expect(quarantineRefund).not.toHaveBeenCalled();
+    expect(result.manualPendingLegIds.has('payment-2')).toBe(true);
+  });
+
+  it('still quarantines uncovered non-Paystack legs on an automatic order', async () => {
+    const korapay = {
+      ...paystackPayment,
+      gateway: 'korapay',
+      id: 'payment-2',
+      gateway_reference: 'kora-ref',
+    };
+    await preflightCancellationRefundCoverage(
+      input({
+        allLegs: [paystackPayment, korapay],
+        linkLegs: [paystackPayment, korapay],
+        soleCompletedLeg: undefined,
+        transactions: [paystackPayment, korapay],
+      })
+    ).catch(() => undefined);
+    expect(quarantineRefund).toHaveBeenCalled();
+  });
 });

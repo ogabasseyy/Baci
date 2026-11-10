@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,6 +19,10 @@ export type CancelRefundChoice = 'automatic' | 'manual';
 const isCancelRefundChoice = (value: string): value is CancelRefundChoice =>
   value === 'automatic' || value === 'manual';
 
+/**
+ * Mount with a fresh `key` each time it opens so the choice starts from the
+ * safe default instead of the previous order's selection.
+ */
 export function CancelOrderDialog({
   automaticSupported = true,
   canCancelOnly = true,
@@ -45,11 +49,6 @@ export function CancelOrderDialog({
   const canConfirm = automaticSupported || canCancelOnly;
   const [busy, setBusy] = useState(false);
 
-  // The dialog stays mounted between orders; every open starts from the safe
-  // automatic default instead of the previous order's choice.
-  useEffect(() => {
-    if (isOpen) setChoice(defaultChoice);
-  }, [isOpen, defaultChoice]);
   const amount = formatDisplayCurrency(refundAmount, currency || 'NGN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -122,7 +121,7 @@ export function CancelOrderDialog({
             owner.
           </p>
         )}
-        {choice === 'manual' && (
+        {choice === 'manual' && canCancelOnly && (
           <p className="text-sm text-muted-foreground">
             No refund will be sent automatically. The order will show as refund
             pending until you record the refund from its Refund card.

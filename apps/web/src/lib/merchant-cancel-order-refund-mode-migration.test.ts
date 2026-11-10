@@ -57,6 +57,27 @@ describe('merchant cancellation refund-mode migration', () => {
     );
   });
 
+  it('grants the column to authenticated only, never anon', () => {
+    expect(helperSql).toContain(
+      'GRANT SELECT (cancellation_refund_mode) ON TABLE public.orders TO authenticated;'
+    );
+    expect(helperSql).not.toMatch(
+      /GRANT SELECT \(cancellation_refund_mode\)[^;]*anon/
+    );
+  });
+
+  it('rejects direct client writes to the mode outside the cancel RPC', () => {
+    expect(helperSql).toContain("IF current_user IN ('authenticated', 'anon')");
+    expect(helperSql).toMatch(
+      /BEFORE INSERT OR UPDATE OF cancellation_refund_mode ON public\.orders[\s\S]*?EXECUTE FUNCTION private\.guard_order_cancellation_refund_mode\(\)/
+    );
+    expect(helperSql).toContain(
+      'REVOKE ALL ON FUNCTION private.guard_order_cancellation_refund_mode()'
+    );
+    // The RPC is SECURITY DEFINER, so its own writes run as the owner.
+    expect(sql).toContain('SECURITY DEFINER');
+  });
+
   it('stores the mode on the order and keeps the grants exact', () => {
     expect(sql).toContain('cancellation_refund_mode = v_refund_mode');
     expect(sql).toContain(

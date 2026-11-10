@@ -61,12 +61,12 @@ export function generateOrderCancellationEmail(
           <td style="padding: 4px 0; text-align: right; color: #1e293b; font-weight: 600;">${formatEmailMoney(data.amountPaid, data.currency)}</td>
         </tr>
         <tr>
-          <td style="padding: 4px 0; color: #6b7280;">Refund Amount</td>
+          <td style="padding: 4px 0; color: #6b7280;">Refund Due (pending)</td>
           <td style="padding: 4px 0; text-align: right; color: #059669; font-weight: 700;">${formatEmailMoney(data.refundAmount, data.currency)}</td>
         </tr>
       </table>
       <p style="margin: 12px 0 0 0; font-size: 13px; color: #047857;">
-        Please contact the store for an update on your refund status.
+        If you have already paid, the store will refund up to this amount to your original payment method. This email does not confirm that the refund has been sent. If you do not see it within 5 business days, please contact the store.
       </p>
     </div>
     `
@@ -209,8 +209,8 @@ export function generateOrderCancellationText(
       ? `
 REFUND INFORMATION
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
-Refund Amount: ${formatEmailMoney(data.refundAmount, data.currency)}
-Please contact the store for an update on your refund status.
+Refund Due (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
+If you have already paid, the store will refund up to this amount to your original payment method. This email does not confirm that the refund has been sent. If you do not see it within 5 business days, please contact the store.
 `
       : '';
 

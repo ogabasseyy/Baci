@@ -50,7 +50,7 @@ describe('Order cancellation email', () => {
       ].join('\n');
 
       expect(output).toContain('₹5,000');
-      expect(output).toContain('Refund Amount: ₹5,000');
+      expect(output).toContain('Refund Due (pending): ₹5,000');
       expect(output).not.toContain('₦');
     });
   });
@@ -98,9 +98,26 @@ describe('cancellation refund status wording', () => {
     // must not assert refund-workflow initiation while the refund may still
     // be failed or delivery_uncertain.
     expect(html).not.toContain('Cancellation starts the refund workflow');
-    expect(html).toContain(
-      'Please contact the store for an update on your refund status.'
-    );
+    expect(html).toContain('If you have already paid, the store will refund');
+    expect(html).toContain('does not confirm that the refund has been sent');
+    expect(html).toContain('contact the store');
+    expect(html).not.toContain('Refund Amount');
+    expect(html).not.toMatch(/has been refunded|was refunded|refunded to you/i);
     expect(html).not.toContain('will be processed within 3-5 business days');
+    const text = generateOrderCancellationText({
+      orderNumber: 'ORD-1',
+      customerName: 'Buyer',
+      items: [],
+      totalAmount: 100,
+      amountPaid: 100,
+      refundAmount: 100,
+      cancelledBy: 'merchant',
+      merchantName: 'Store',
+      merchantUrl: 'https://example.com',
+      currency: 'NGN',
+    });
+    expect(text).toContain('Refund Due (pending): ₦100');
+    expect(text).toContain('does not confirm that the refund has been sent');
+    expect(text).not.toContain('Refund Amount');
   });
 });

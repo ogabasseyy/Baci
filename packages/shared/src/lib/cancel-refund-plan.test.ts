@@ -68,6 +68,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'NGN',
           gateway: 'paystack',
           payment_transaction_id: 'leg-1',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
@@ -76,6 +77,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'NGN',
           gateway: 'paystack',
           payment_transaction_id: 'leg-1',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
@@ -96,6 +98,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'NGN',
           gateway: 'paystack',
           payment_transaction_id: 'a',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
@@ -135,6 +138,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'NGN',
           gateway: 'korapay',
           payment_transaction_id: 'b',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
@@ -192,17 +196,19 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'NGN',
           gateway: 'paystack',
           payment_transaction_id: 'leg-1',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
       ],
     });
-    // Partial coverage is withheld by the worker, so no automatic option.
+    // Verified partial coverage is a mismatch the worker withholds and
+    // quarantines: no automatic option and no repay advice (unresolved).
     expect(plan).toEqual({
       amount: 80,
       automaticSupported: false,
       inFlightAmount: 0,
-      ledgerKnown: true,
+      ledgerKnown: false,
     });
   });
 
@@ -217,6 +223,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: 'USD',
           gateway: 'paystack',
           payment_transaction_id: 'leg-1',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },
@@ -250,6 +257,7 @@ describe('getAutomaticCancelRefundAmount', () => {
           currency: ' ngn ',
           gateway: 'paystack',
           payment_transaction_id: 'leg-1',
+          provider_refund_status: 'processed',
           status: 'completed',
           transaction_type: 'refund',
         },

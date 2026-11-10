@@ -167,20 +167,34 @@ export function getCancelRefundPlan(
   );
   // Completed refunds cover a leg only in the same currency and gateway.
   // An unlinked one belongs to the sole payment leg, like the worker's
-  // attribution; with several candidate legs it stays unattributed.
+  // attribution; with several candidate legs it stays unattributed. A
+  // Paystack row without a processed provider verdict is NOT settled
+  // coverage: the worker waits for verification, so such a leg is reported
+  // as awaiting the provider (in flight), never covered and never owed.
+  const doneRowsFor = (leg: (typeof order.transactions)[number]) =>
+    refundRows.filter(
+      (row) =>
+        DONE_REFUND_STATUSES.has(row.status) &&
+        (row.payment_transaction_id || soleLegId) === leg.id &&
+        normalizeGateway(row.currency) === normalizeGateway(leg.currency) &&
+        // Merchant-recorded manual rows (gateway MANUAL) cover by matching
+        // money only, like the worker; others must match the leg's gateway.
+        (normalizeGateway(row.gateway) === 'MANUAL' ||
+          normalizeGateway(row.gateway) === normalizeGateway(leg.gateway))
+    );
+  const isUnverifiedPaystack = (row: {
+    gateway: string | null;
+    provider_refund_status?: string | null;
+  }): boolean =>
+    normalizeGateway(row.gateway) === 'PAYSTACK' &&
+    row.provider_refund_status !== 'processed';
   const coveredFor = (leg: (typeof order.transactions)[number]): number =>
-    refundRows
-      .filter(
-        (row) =>
-          DONE_REFUND_STATUSES.has(row.status) &&
-          (row.payment_transaction_id || soleLegId) === leg.id &&
-          normalizeGateway(row.currency) === normalizeGateway(leg.currency) &&
-          // Merchant-recorded manual rows (gateway MANUAL) cover by matching
-          // money only, like the worker; others must match the leg's gateway.
-          (normalizeGateway(row.gateway) === 'MANUAL' ||
-            normalizeGateway(row.gateway) === normalizeGateway(leg.gateway))
-      )
+    doneRowsFor(leg)
+      .filter((row) => !isUnverifiedPaystack(row))
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
+  const awaitingVerification = (
+    leg: (typeof order.transactions)[number]
+  ): boolean => doneRowsFor(leg).some(isUnverifiedPaystack);
   // Non-terminal refund rows need an explicit link (the worker ignores
   // unlinked ones) and count as in flight, even while the payment leg
   // stays completed.
@@ -203,7 +217,7 @@ export function getCancelRefundPlan(
       const covered = coveredFor(leg);
       const open = Math.max(toMinor(leg.amount) - covered, 0);
       const inFlightMinor =
-        leg.status === 'refund_pending'
+        leg.status === 'refund_pending' || awaitingVerification(leg)
           ? open
           : Math.min(open, pendingFor(leg));
       return { covered, inFlightMinor, leg, owed: open - inFlightMinor };

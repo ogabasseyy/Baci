@@ -137,6 +137,7 @@ describe('useOrderCancellation', () => {
               currency: 'NGN',
               gateway: 'paystack',
               payment_transaction_id: 'leg-1',
+              provider_refund_status: 'processed',
               status: 'completed',
               transaction_type: 'refund',
             },

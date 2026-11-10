@@ -119,6 +119,16 @@ const cases: [string, Row[], boolean][] = [
   ['full linked processed Paystack refund', [pay(), refund()], false],
   ['partial linked processed refund', [pay(), refund({ amount: 20 })], true],
   [
+    'partial unverified linked Paystack refund (the worker waits for verification)',
+    [pay(), refund({ amount: 20, provider_refund_status: null })],
+    false,
+  ],
+  [
+    'unverified unlinked Paystack refund on the sole leg',
+    [pay(), unlinked({ provider_refund_status: null })],
+    false,
+  ],
+  [
     'unverified linked Paystack refund',
     [pay(), refund({ provider_refund_status: null })],
     false,

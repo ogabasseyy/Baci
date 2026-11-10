@@ -99,6 +99,7 @@ describe('resolveCancellationRefundOutcome', () => {
           leg({
             id: 'refund-1',
             payment_transaction_id: 'leg-1',
+            provider_refund_status: 'processed',
             transaction_type: 'refund',
           }),
         ],

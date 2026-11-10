@@ -79,11 +79,14 @@ export async function deliverAlert({
 }): Promise<ChannelOutcome> {
   const label =
     sanitizeOrderLabel(order.order_number ?? '') || order.id.slice(0, 8);
+  // Visible push copy and payload use the same metacharacter-free label;
+  // the email keeps HTML escaping for its own rendering.
+  const copyLabel = label.replace(/[<>&"']/g, '');
   const amount = reviewAmountText(review.candidates, order.currency);
   const amountText = amount === null ? '' : ` (${amount})`;
   const { body, title } = buildRefundReviewAlertCopy({
     amountText,
-    label,
+    label: copyLabel,
     metadata: review.metadata,
   });
   let notified = false;
@@ -108,7 +111,7 @@ export async function deliverAlert({
             // Reuses the shipped admin deep link: this type opens the order.
             type: 'paystack_refund_needs_attention',
             order_id: order.id,
-            order_number: label.replace(/[<>&"']/g, ''),
+            order_number: copyLabel,
           },
           'payments'
         )

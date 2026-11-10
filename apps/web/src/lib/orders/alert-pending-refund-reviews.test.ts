@@ -215,16 +215,41 @@ describe('alertPendingRefundReviews', () => {
       alerted: 1,
       attempted: 3,
       deferred: 0,
+      duplicate: 0,
       failed: 1,
       uncertain: 1,
     });
   });
 
-  it('does not count a duplicate claim as a failure', async () => {
-    mocks.alert.mockReset().mockResolvedValue('duplicate');
+  it('counts duplicates separately without using attempt slots', async () => {
+    mocks.alert
+      .mockReset()
+      .mockResolvedValueOnce('duplicate')
+      .mockResolvedValueOnce('duplicate')
+      .mockResolvedValueOnce('duplicate')
+      .mockResolvedValueOnce('duplicate')
+      .mockResolvedValueOnce('delivered');
+    const reviews = ['a', 'b', 'c', 'd', 'e'].map((id) => ({
+      alert_attempts: null,
+      candidates: [],
+      id,
+      merchant_id: 'm1',
+      metadata: {},
+      order_id: 'o1',
+    }));
     await expect(
-      alertPendingRefundReviews({ senders, supabase: makeSupabase() as never })
-    ).resolves.toMatchObject({ alerted: 0, failed: 0, uncertain: 0 });
+      alertPendingRefundReviews({
+        senders,
+        supabase: makeSupabase({ reviews }) as never,
+      })
+    ).resolves.toEqual({
+      alerted: 1,
+      attempted: 1,
+      deferred: 0,
+      duplicate: 4,
+      failed: 0,
+      uncertain: 0,
+    });
   });
 
   it('counts a deferral and stops', async () => {

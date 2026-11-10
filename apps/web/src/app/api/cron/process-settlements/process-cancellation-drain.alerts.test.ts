@@ -63,6 +63,7 @@ const counts: RefundAlertPassSummary = {
   alerted: 1,
   attempted: 3,
   deferred: 0,
+  duplicate: 0,
   failed: 1,
   uncertain: 1,
 };

@@ -10,14 +10,6 @@ import type {
   RefundReviewAlertSenders,
 } from '@/lib/orders/refund-alert-types';
 
-export type {
-  AlertSupabase,
-  PriorAlertAttempt,
-  RefundReviewAlertMerchant,
-  RefundReviewAlertOrder,
-  RefundReviewAlertSenders,
-};
-
 const ALERT_TIMEOUT_MS = 15_000;
 // After the outer timeout, wait this long (within the drain budget) for the
 // detached delivery so a just-late success is confirmed before returning.
@@ -29,7 +21,7 @@ const TIMEOUT_GRACE_MS = 2_000;
  * elsewhere (benign). deferred: no budget, unclaimed. skipped: the claim or
  * the attempt itself errored.
  */
-export type RefundAlertOutcome =
+type RefundAlertOutcome =
   | 'delivered'
   | 'deferred'
   | 'duplicate'

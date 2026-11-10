@@ -54,6 +54,7 @@ export const emptyAlertSummary: RefundAlertPassSummary = {
   alerted: 0,
   attempted: 0,
   deferred: 0,
+  duplicate: 0,
   failed: 0,
   uncertain: 0,
 };

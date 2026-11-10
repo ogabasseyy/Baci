@@ -8,7 +8,6 @@ import { logger } from '@/lib/logger';
 import {
   alertMerchantOfRefundReview,
   MIN_ALERT_BUDGET_MS,
-  type RefundReviewAlertSenders,
 } from './alert-merchant-cancellation-refund-review';
 import {
   asSupabase,
@@ -18,6 +17,7 @@ import {
   order,
   review,
 } from './refund-alert.test-support';
+import type { RefundReviewAlertSenders } from './refund-alert-types';
 
 vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');
 afterEach(() => vi.useRealTimers());

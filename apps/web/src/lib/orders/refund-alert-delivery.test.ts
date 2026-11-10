@@ -102,6 +102,20 @@ describe('deliverAlert', () => {
     ).toBe('ABCDEFG');
   });
 
+  it('uses the same metacharacter-free label in push copy and payload', async () => {
+    const senders = makeSenders();
+    await run(senders, {
+      order: { ...order, order_number: `<b>"1'&2` },
+    }).promise;
+    const [, , body, data] = vi.mocked(senders.sendPush).mock.calls[0];
+    expect(data.order_number).toBe('b12');
+    expect(body).toContain('order #b12');
+    expect(body).not.toMatch(/[<>&"]/);
+    // The email keeps HTML escaping for its subject/link text.
+    const email = vi.mocked(senders.sendEmail).mock.calls[0][0];
+    expect(email.htmlContent).toContain('Open order #&lt;b&gt;');
+  });
+
   it('sanitizes labels and falls back to the id when empty', () => {
     expect(sanitizeOrderLabel('A\r\nB C\u0000')).toBe('ABC');
     expect(sanitizeOrderLabel('x'.repeat(100))).toHaveLength(40);

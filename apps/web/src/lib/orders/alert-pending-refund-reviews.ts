@@ -1,11 +1,13 @@
 import { logger } from '@/lib/logger';
 import {
-  type AlertSupabase,
   alertMerchantOfRefundReview,
   MIN_ALERT_BUDGET_MS,
   REFUND_ALERT_RETRY_CAP,
-  type RefundReviewAlertSenders,
 } from '@/lib/orders/alert-merchant-cancellation-refund-review';
+import type {
+  AlertSupabase,
+  RefundReviewAlertSenders,
+} from '@/lib/orders/refund-alert-types';
 
 // Open reviews examined per pass (newest first) and alerts attempted per
 // pass: keeps the cron cost to a few indexed reads plus a bounded number
@@ -44,6 +46,7 @@ export interface RefundAlertPassSummary {
   alerted: number;
   attempted: number;
   deferred: number;
+  duplicate: number;
   failed: number;
   uncertain: number;
 }
@@ -94,6 +97,7 @@ export async function alertPendingRefundReviews({
     alerted: 0,
     attempted: 0,
     deferred: 0,
+    duplicate: 0,
     failed: 0,
     uncertain: 0,
   };
@@ -151,9 +155,6 @@ export async function alertPendingRefundReviews({
       const merchant = merchantById.get(review.merchant_id);
       // Tenant check: the review, order, and merchant must agree.
       if (!order || !merchant || order.merchant_id !== merchant.id) continue;
-      // Only reviews actually alerted use a slot, so invalid ones cannot
-      // starve older valid reviews.
-      summary.attempted += 1;
       const result = await alertMerchantOfRefundReview({
         deadlineMs,
         merchant,
@@ -166,6 +167,13 @@ export async function alertPendingRefundReviews({
         senders,
         supabase,
       });
+      // Only genuine attempts use a slot: invalid rows and duplicate claims
+      // (another worker owns them) cannot starve older valid reviews.
+      if (result === 'duplicate') {
+        summary.duplicate += 1;
+        continue;
+      }
+      summary.attempted += 1;
       if (result === 'delivered') summary.alerted += 1;
       else if (result === 'failed' || result === 'skipped') summary.failed += 1;
       else if (result === 'uncertain') summary.uncertain += 1;
@@ -173,7 +181,6 @@ export async function alertPendingRefundReviews({
         summary.deferred += 1;
         break;
       }
-      // 'duplicate' is benign (another worker owns it): not counted.
     }
   } catch (error) {
     logger.error({ error, message: 'Refund review alert pass failed' });

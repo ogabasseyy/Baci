@@ -11,7 +11,7 @@ import type {
  * workers cannot both re-send. The row is never deleted on failure: every
  * attempt, definite or uncertain, counts toward the cool-down and cap.
  */
-export type ClaimResult = 'claimed' | 'duplicate' | 'error';
+type ClaimResult = 'claimed' | 'duplicate' | 'error';
 
 export async function claimAlert(
   supabase: AlertSupabase,

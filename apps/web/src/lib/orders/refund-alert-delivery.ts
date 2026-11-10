@@ -86,7 +86,7 @@ export async function deliverAlert({
   // Visible push copy and payload use the same metacharacter-free label;
   // the email keeps HTML escaping for its own rendering.
   const copyLabel = label.replace(/[<>&"']/g, '');
-  const amount = reviewAmountText(review.candidates, order.currency);
+  const amount = reviewAmountText(review.candidates, order.currency, order.id);
   const amountText = amount === null ? '' : ` (${amount})`;
   const { body, title } = buildRefundReviewAlertCopy({
     amountText,

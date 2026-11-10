@@ -4,6 +4,10 @@ import {
   confirmClaim,
   markUndeliverable,
 } from '@/lib/orders/refund-alert-claims';
+import {
+  MIN_ALERT_BUDGET_MS,
+  REFUND_ALERT_RETRY_CAP,
+} from '@/lib/orders/refund-alert-constants';
 import { deliverAlert } from '@/lib/orders/refund-alert-delivery';
 import { runBounded } from '@/lib/orders/refund-alert-lookup';
 import type {
@@ -57,12 +61,6 @@ async function awaitWithin(
   ]);
   clearTimeout(timer);
 }
-
-/** Total send attempts per review before the alert is abandoned. */
-export const REFUND_ALERT_RETRY_CAP = 3;
-
-/** Below this much remaining phase budget the alert is deferred, unclaimed. */
-export const MIN_ALERT_BUDGET_MS = 8_000;
 
 /**
  * Tell the merchant about one open refund review. The ledger row (one per

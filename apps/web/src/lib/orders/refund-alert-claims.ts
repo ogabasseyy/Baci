@@ -54,7 +54,7 @@ export async function claimAlert(
   });
   const { error } = await (signal ? insert.abortSignal(signal) : insert);
   if (!error) return 'claimed';
-  if ((error as { code?: string }).code === '23505') return 'duplicate';
+  if (error.code === '23505') return 'duplicate';
   logger.error({
     error,
     message: 'Cancellation refund alert claim failed',

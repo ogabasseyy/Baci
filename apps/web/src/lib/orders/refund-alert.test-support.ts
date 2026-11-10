@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
-import type { RefundAlertPassSummary } from './alert-pending-refund-reviews';
 import type {
   AlertSupabase,
+  RefundAlertPassSummary,
   RefundReviewAlertSenders,
 } from './refund-alert-types';
 

@@ -5,10 +5,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { logger } from '@/lib/logger';
-import {
-  alertMerchantOfRefundReview,
-  MIN_ALERT_BUDGET_MS,
-} from './alert-merchant-cancellation-refund-review';
+import { alertMerchantOfRefundReview } from './alert-merchant-cancellation-refund-review';
 import {
   asSupabase,
   makeSenders,
@@ -18,6 +15,7 @@ import {
   review,
   withAbort,
 } from './refund-alert.test-support';
+import { MIN_ALERT_BUDGET_MS } from './refund-alert-constants';
 import type { RefundReviewAlertSenders } from './refund-alert-types';
 
 vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.com');

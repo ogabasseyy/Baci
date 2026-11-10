@@ -6,8 +6,6 @@ vi.mock('@/lib/logger', () => ({
 }));
 vi.mock('@/lib/orders/alert-merchant-cancellation-refund-review', () => ({
   alertMerchantOfRefundReview: mocks.alert,
-  MIN_ALERT_BUDGET_MS: 8_000,
-  REFUND_ALERT_RETRY_CAP: 3,
 }));
 
 import { alertPendingRefundReviews } from './alert-pending-refund-reviews';

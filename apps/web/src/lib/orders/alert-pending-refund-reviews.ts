@@ -1,12 +1,13 @@
 import { logger } from '@/lib/logger';
+import { alertMerchantOfRefundReview } from '@/lib/orders/alert-merchant-cancellation-refund-review';
 import {
-  alertMerchantOfRefundReview,
   MIN_ALERT_BUDGET_MS,
   REFUND_ALERT_RETRY_CAP,
-} from '@/lib/orders/alert-merchant-cancellation-refund-review';
+} from '@/lib/orders/refund-alert-constants';
 import { runBounded } from '@/lib/orders/refund-alert-lookup';
 import type {
   AlertSupabase,
+  RefundAlertPassSummary,
   RefundReviewAlertSenders,
 } from '@/lib/orders/refund-alert-types';
 
@@ -48,20 +49,10 @@ function isActionable(review: OpenReview): review is ActionableReview {
  * ones. Unconfirmed claims past the cool-down (under the retry cap) come
  * back too, carrying their attempt count.
  */
-export interface RefundAlertPassSummary {
-  alerted: number;
-  attempted: number;
-  deferred: number;
-  duplicate: number;
-  failed: number;
-  uncertain: number;
-  undeliverable: number;
-}
-
 async function loadReviewsNeedingAlert(
   supabase: AlertSupabase,
   deadlineMs: number | undefined
-): Promise<ActionableReview[] | null | 'timeout'> {
+): Promise<ActionableReview[] | null | 'timeout' | 'not-deployed'> {
   const now = Date.now();
   const bounded = await runBounded(deadlineMs, (signal) =>
     supabase
@@ -79,10 +70,40 @@ async function loadReviewsNeedingAlert(
   if (bounded.timedOut) return 'timeout';
   const { data, error } = bounded.value;
   if (error) {
+    // The RPC ships with a migration that may not be applied yet: PostgREST
+    // PGRST202 / Postgres 42883 (undefined_function). Not a real failure.
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      return 'not-deployed';
+    }
     logger.error({ error, message: 'Refund review alert lookup failed' });
     return null;
   }
   return ((data ?? []) as OpenReview[]).filter(isActionable);
+}
+
+let rpcNotDeployedLogged = false;
+
+function deferNotDeployed(
+  summary: RefundAlertPassSummary
+): RefundAlertPassSummary {
+  if (!rpcNotDeployedLogged) {
+    rpcNotDeployedLogged = true;
+    logger.warn({ message: 'refund alert RPC not deployed yet' });
+  }
+  summary.deferred += 1;
+  return summary;
+}
+
+function deferForBudget(
+  summary: RefundAlertPassSummary,
+  step: string
+): RefundAlertPassSummary {
+  // Visible in the cron payload: a starved pass must not look like "no work".
+  logger.warn({
+    message: `Refund review alert pass out of budget before ${step}; deferring`,
+  });
+  summary.deferred += 1;
+  return summary;
 }
 
 function deferPass(
@@ -131,14 +152,16 @@ export async function alertPendingRefundReviews({
   const outOfBudget = () =>
     deadlineMs !== undefined && deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS;
   try {
-    if (outOfBudget()) return summary;
+    if (outOfBudget()) return deferForBudget(summary, 'review lookup');
     const pending = await loadReviewsNeedingAlert(supabase, deadlineMs);
     if (pending === 'timeout') return deferPass(summary, 'review lookup');
+    if (pending === 'not-deployed') return deferNotDeployed(summary);
     if (pending === null) {
       summary.failed += 1;
       return summary;
     }
-    if (pending.length === 0 || outOfBudget()) return summary;
+    if (pending.length === 0) return summary;
+    if (outOfBudget()) return deferForBudget(summary, 'context lookup');
     const orderIds = [...new Set(pending.map((r) => r.order_id))];
     const merchantIds = [...new Set(pending.map((r) => r.merchant_id))];
     const context = await runBounded(deadlineMs, (signal) =>
@@ -170,7 +193,7 @@ export async function alertPendingRefundReviews({
       summary.failed += 1;
       return summary;
     }
-    if (outOfBudget()) return summary;
+    if (outOfBudget()) return deferForBudget(summary, 'alert sends');
     const orderById = new Map(
       (
         (orders ?? []) as Array<{

@@ -6,8 +6,6 @@ vi.mock('@/lib/logger', () => ({
 }));
 vi.mock('@/lib/orders/alert-merchant-cancellation-refund-review', () => ({
   alertMerchantOfRefundReview: mocks.alert,
-  MIN_ALERT_BUDGET_MS: 8_000,
-  REFUND_ALERT_RETRY_CAP: 3,
 }));
 
 import { alertPendingRefundReviews } from './alert-pending-refund-reviews';
@@ -111,5 +109,16 @@ describe('alertPendingRefundReviews lookup deadlines', () => {
     });
     expect(mocks.alert).toHaveBeenCalledTimes(10);
     expect(result).toMatchObject({ attempted: 0, duplicate: 10 });
+  });
+
+  it('reports a budget-driven early exit as deferred, not as an empty pass', async () => {
+    const supabase = { from: vi.fn(), rpc: vi.fn() };
+    const result = await alertPendingRefundReviews({
+      deadlineMs: Date.now() + 1_000,
+      senders,
+      supabase: supabase as never,
+    });
+    expect(result).toMatchObject({ attempted: 0, deferred: 1 });
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });

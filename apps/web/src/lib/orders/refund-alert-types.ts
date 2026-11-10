@@ -53,3 +53,13 @@ export type ChannelOutcome =
   | 'timeout'
   | 'uncertain'
   | 'undeliverable';
+
+export interface RefundAlertPassSummary {
+  alerted: number;
+  attempted: number;
+  deferred: number;
+  duplicate: number;
+  failed: number;
+  uncertain: number;
+  undeliverable: number;
+}

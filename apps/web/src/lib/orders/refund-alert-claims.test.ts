@@ -5,13 +5,13 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 import { logger } from '@/lib/logger';
-import { REFUND_ALERT_RETRY_CAP } from './alert-merchant-cancellation-refund-review';
 import { asSupabase, makeSupabase, order } from './refund-alert.test-support';
 import {
   claimAlert,
   confirmClaim,
   markUndeliverable,
 } from './refund-alert-claims';
+import { REFUND_ALERT_RETRY_CAP } from './refund-alert-constants';
 
 const review = { id: 'review-1' };
 

@@ -35,4 +35,30 @@ describe('reviewAmountText', () => {
     expect(reviewAmountText(null, 'NGN')).toBeNull();
     expect(reviewAmountText([{ amount: 'x' }], 'NGN')).toBeNull();
   });
+
+  it('omits the amount when candidates include another order (snake or camel case)', () => {
+    expect(
+      reviewAmountText(
+        [
+          { amount: 100, currency: 'NGN', order_id: 'o1' },
+          { amount: 50, currency: 'NGN', order_id: 'o2' },
+        ],
+        'NGN',
+        'o1'
+      )
+    ).toBeNull();
+    expect(
+      reviewAmountText([{ amount: 100, orderId: 'o2' }], 'NGN', 'o1')
+    ).toBeNull();
+  });
+
+  it('keeps the amount when every candidate belongs to the order', () => {
+    expect(
+      reviewAmountText(
+        [{ amount: 100, currency: 'NGN', order_id: 'o1' }, { amount: 50 }],
+        'NGN',
+        'o1'
+      )
+    ).toContain('150');
+  });
 });

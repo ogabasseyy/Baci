@@ -56,7 +56,7 @@ vi.mock('@/lib/payments/sweep-paystack-refund-recovery-watches', () => ({
   sweepPaystackRefundRecoveryWatches: mocks.sweepPaystackRefundRecoveryWatches,
 }));
 
-import type { RefundAlertPassSummary } from '@/lib/orders/alert-pending-refund-reviews';
+import type { RefundAlertPassSummary } from '@/lib/orders/refund-alert-types';
 import { processCancellationDrain } from './process-cancellation-drain';
 
 const counts: RefundAlertPassSummary = {

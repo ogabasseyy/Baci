@@ -17,9 +17,20 @@ function formatAmount(amount: number, currency: string): string {
  */
 export function reviewAmountText(
   candidates: unknown,
-  orderCurrency: string | null
+  orderCurrency: string | null,
+  orderId?: string
 ): string | null {
   if (!Array.isArray(candidates)) return null;
+  // An ambiguous provider reference can list payments of other orders too;
+  // never present their total as this order's refund.
+  if (orderId !== undefined) {
+    const foreign = candidates.some((candidate) => {
+      const leg = candidate as { order_id?: unknown; orderId?: unknown } | null;
+      const id = leg?.order_id ?? leg?.orderId;
+      return typeof id === 'string' && id.length > 0 && id !== orderId;
+    });
+    if (foreign) return null;
+  }
   const totals = new Map<string, number>();
   for (const candidate of candidates) {
     const leg = candidate as { amount?: unknown; currency?: unknown } | null;

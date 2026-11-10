@@ -18,6 +18,7 @@ export interface SharedCartExperienceEntry {
   started?: boolean;
   isSettled(): boolean;
   envelope?: SendSharedCartCommandInput;
+  partition?: string;
   prepare(snapshot: CartSnapshot): Promise<boolean>;
   policy: AttemptPolicy<ExperienceErrorCode>;
   canProject(): boolean;

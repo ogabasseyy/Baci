@@ -6,19 +6,20 @@ import type {
 } from '@baci/shared/experience';
 import { experienceCartCommandSchema } from '@/schemas/experience-cart-command';
 import {
-  createSharedCartReceiptStore,
-  hashCartOperation,
-  type SharedCartOperationReceipt,
-} from './shared-cart-operation-receipts';
-
-export { publicCartSnapshot } from './shared-cart-command-mapping';
-
-import {
   engineCommand,
   publicCartSnapshot,
   publicCommand,
   sharedCartIntent,
 } from './shared-cart-command-mapping';
+import type {
+  SharedCartCommandRuntime,
+  SharedCartExperienceEntry,
+} from './shared-cart-experience-types';
+import {
+  createSharedCartReceiptStore,
+  hashCartOperation,
+  type SharedCartOperationReceipt,
+} from './shared-cart-operation-receipts';
 
 const denied = (code: ExperienceErrorCode): CartBridgeResult => ({
   status: 'error',
@@ -26,15 +27,9 @@ const denied = (code: ExperienceErrorCode): CartBridgeResult => ({
   message: 'Use the trusted storefront to continue.',
 });
 
-export type {
-  SharedCartCommandRuntime,
-  SharedCartExperienceEntry,
-} from './shared-cart-experience-types';
+export type { SharedCartCommandRuntime, SharedCartExperienceEntry };
+export { publicCartSnapshot };
 
-import type {
-  SharedCartCommandRuntime,
-  SharedCartExperienceEntry,
-} from './shared-cart-experience-types';
 /** Adds observers to the existing single send queue; owns no transport/provisioner. */
 export function createSharedCartCommandPort(
   runtime: SharedCartCommandRuntime
@@ -186,6 +181,7 @@ export function createSharedCartCommandPort(
           commandHash,
           state: 'prepared',
         };
+        entry.partition = partition;
         save(priorWire ? 'indeterminate' : 'prepared');
         return true;
       },
@@ -202,9 +198,7 @@ export function createSharedCartCommandPort(
       finish(result, expose = true) {
         if (result.ok) save('confirmed');
         if (settled) return;
-        settled = true;
         if (result.ok) {
-          save('confirmed');
           complete(
             expose && entry.canProject()
               ? { status: 'ok', value: publicCartSnapshot(result.snapshot) }
@@ -249,7 +243,6 @@ export function createSharedCartCommandPort(
       },
       deny() {
         if (settled) return;
-        settled = true;
         save(wire ? 'indeterminate' : 'cancelled-unsent');
         complete(
           wire
@@ -271,6 +264,20 @@ export function createSharedCartCommandPort(
       if (!gate.allowed) return denied(gate.code);
       const partition = await runtime.loadContinuity();
       if (!partition) return { status: 'indeterminate', operationId: id };
+      if (active?.partition === partition) {
+        const result = await active.promise;
+        if (runtime.refreshAdmission && !(await runtime.refreshAdmission()))
+          return denied('CONNECTION_REVOKED');
+        const current = runtime.admit();
+        if (!current.allowed) return denied(current.code);
+        if (
+          active.generation !== runtime.generation() ||
+          (runtime.rebind && !runtime.rebind(partition)) ||
+          !(runtime.sameShopper?.() ?? true)
+        )
+          return { status: 'indeterminate', operationId: id };
+        if (result.status !== 'indeterminate') return result;
+      }
       const receipt = receipts?.get(partition, id);
       if (!receipt) return { status: 'indeterminate', operationId: id };
       if (receipt.state === 'confirmed') {

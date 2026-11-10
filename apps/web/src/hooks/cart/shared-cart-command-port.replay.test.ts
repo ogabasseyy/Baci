@@ -135,3 +135,43 @@ it('keeps a freshly CSRF-rejected operation definitively unsent', async () => {
     code: 'CONNECTION_REVOKED',
   });
 });
+
+it.each([
+  'conflict',
+  'ok',
+] as const)('recovers a settled %s without receipt storage and without resending', async (status) => {
+  const f = await replayFixture();
+  f.runtime.receiptStorage = null;
+  const port = createSharedCartCommandPort(f.runtime);
+  const pending = port.submit(
+    { kind: 'remove', lineId: '10000000-0000-4000-8000-000000000001' },
+    'late'
+  );
+  await vi.waitFor(() => expect(f.entries.has('late')).toBe(true));
+  const entry = f.entries.get('late');
+  if (!entry) throw Error('missing operation');
+  expect(await entry.prepare(snapshot)).toBe(true);
+  entry.policy.onAttemptStart();
+  entry.finish(
+    status === 'ok'
+      ? { ok: true, snapshot, replayed: false, warnings: [] }
+      : { ok: false, code: 'version_conflict', snapshot, retryable: false }
+  );
+  const expected = await pending;
+  expect(expected.status).toBe(status);
+  expect(await port.reconcile('late')).toEqual(expected);
+  expect(f.runtime.enqueue).toHaveBeenCalledTimes(2);
+
+  f.runtime.loadContinuity = async () => 'different-shopper';
+  expect(await port.reconcile('late')).toEqual({
+    status: 'indeterminate',
+    operationId: 'late',
+  });
+
+  f.runtime.loadContinuity = async () => 'shopper';
+  f.runtime.refreshAdmission = async () => false;
+  expect(await port.reconcile('late')).toMatchObject({
+    status: 'error',
+    code: 'CONNECTION_REVOKED',
+  });
+});

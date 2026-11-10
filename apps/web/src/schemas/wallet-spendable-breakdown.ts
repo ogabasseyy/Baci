@@ -3,10 +3,10 @@ import { z } from 'zod';
 // Postgres numeric arrives as a number or a decimal string. Null, empty and
 // non-numeric values must fail closed rather than coerce to 0.
 const moneySchema = z.union([
-  z.number().finite(),
+  z.number().finite().nonnegative(),
   z
     .string()
-    .regex(/^-?\d+(\.\d+)?$/)
+    .regex(/^\d+(\.\d+)?$/)
     .transform(Number),
 ]);
 

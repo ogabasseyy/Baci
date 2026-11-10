@@ -17,7 +17,7 @@ describe('walletSpendableBreakdownRowsSchema', () => {
     expect(schema.parse([])).toEqual([]);
   });
   it('fails closed on null, empty, non-numeric or missing values', () => {
-    for (const bad of [null, '', 'abc', undefined, Number.NaN]) {
+    for (const bad of [null, '', 'abc', undefined, Number.NaN, -1, '-5.00']) {
       expect(
         schema.safeParse([{ ...row, spendable_balance: bad }]).success
       ).toBe(false);

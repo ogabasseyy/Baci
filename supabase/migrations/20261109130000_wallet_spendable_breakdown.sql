@@ -5,6 +5,8 @@
 -- proven direct-split settlements. pending_reconciliation_total is the legacy
 -- exposure held back from spending whose destination is not yet verified; it
 -- is reported separately so it is never presented as confirmed bank receipts.
+-- Authenticated-only by design (dashboard user client); unlike get_wallet_summary
+-- it deliberately has no service_role path.
 -- Neither is spendable or withdrawable. No balance is changed.
 CREATE OR REPLACE FUNCTION public.get_merchant_wallet_spendable_breakdown(
   p_merchant_id uuid

@@ -239,16 +239,3 @@ export const KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST = {
   description: 'Please choose another payment method.',
   variant: 'destructive' as const,
 };
-
-export function isKlumpUnavailableForGatewayAmount({
-  paymentMethod,
-  payableAmount,
-}: {
-  paymentMethod: string;
-  payableAmount: number;
-  orderAmount: number;
-}): boolean {
-  // A fully covered order needs no provider; stale positive Klump selections
-  // must stop before creating another order or opening a checkout session.
-  return paymentMethod === 'klump' && payableAmount !== 0;
-}

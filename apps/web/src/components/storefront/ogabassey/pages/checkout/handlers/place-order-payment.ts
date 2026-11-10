@@ -1,6 +1,5 @@
 import { toast } from '@/hooks/use-toast';
 import {
-  isKlumpUnavailableForGatewayAmount,
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
 } from '../utils';
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
@@ -44,13 +43,7 @@ export async function routePlaceOrderPayment(
     ? `&trackingToken=${order.tracking_token}`
     : '';
 
-  if (
-    isKlumpUnavailableForGatewayAmount({
-      paymentMethod,
-      payableAmount: paymentAmount,
-      orderAmount: total,
-    })
-  ) {
+  if (paymentMethod === 'klump') {
     toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
     setIsProcessing(false);
     isOrderInFlightRef.current = false;
@@ -114,8 +107,7 @@ export async function routePlaceOrderPayment(
 
   if (
     paymentMethod === 'paystack' ||
-    paymentMethod === 'korapay' ||
-    paymentMethod === 'klump'
+    paymentMethod === 'korapay'
   ) {
     const result = await initializeCardPayment(
       merchant.id,

@@ -6,7 +6,7 @@ import type {
   CheckoutPaymentOrder,
   CheckoutWalletRedemption,
 } from './submit-checkout-order';
-import { isKlumpUnavailableForGatewayAmount, KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
+import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 
 type DispatchBase = Omit<
   CheckoutPaymentDispatchContext,
@@ -58,13 +58,7 @@ export async function continueCheckoutPayment({
 }: ContinueCheckoutPaymentOptions): Promise<void> {
   const paymentAmount = amountDueToGateway ?? dispatch.total;
 
-  if (
-    isKlumpUnavailableForGatewayAmount({
-      paymentMethod,
-      payableAmount: paymentAmount,
-      orderAmount: dispatch.total,
-    })
-  ) {
+  if (paymentMethod === 'klump') {
     toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
     releaseSubmission();
     return;

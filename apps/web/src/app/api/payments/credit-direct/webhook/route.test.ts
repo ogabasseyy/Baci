@@ -1895,6 +1895,43 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
 
+    it('heals an exact paid wallet replay without reopening reservation verification', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      supabase.rpc.mockResolvedValue({
+        data: null,
+        error: { message: 'credit_direct_wallet_retry_required' },
+      } as never);
+      const chain = supabase.from('orders');
+      chain.ilike.mockResolvedValue({
+        data: [
+          {
+            ...mockOrder,
+            payment_status: 'paid',
+            wallet_amount_used: 20000,
+            notes: JSON.stringify({
+              creditDirectTransactionId:
+                merchantPaymentPayload.checkoutTransactionId,
+              merchantPaidAt: merchantPaymentPayload.timeStamp,
+            }),
+          },
+        ],
+        error: null,
+      } as never);
+
+      const response = await POST(createMockRequest(merchantPaymentPayload));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        received: true,
+        message: 'Already processed',
+      });
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'verify_credit_direct_wallet_event',
+        expect.anything()
+      );
+    });
+
     it('is idempotent when order is already paid', async () => {
       const paidOrder = { ...mockOrder, payment_status: 'paid' };
 

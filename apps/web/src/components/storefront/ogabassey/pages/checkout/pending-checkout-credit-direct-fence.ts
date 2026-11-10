@@ -55,13 +55,14 @@ export function walletCreditDirectFingerprintsMatch(
     const newCheckout = after as Record<string, unknown>;
     return (
       oldCheckout.useWalletCredit === true &&
-      newCheckout.useWalletCredit === true &&
+      typeof newCheckout.useWalletCredit === 'boolean' &&
       oldCheckout.walletAmountUsed === pending.walletAmountUsed &&
       newCheckout.walletAmountUsed === 0 &&
       checkoutFingerprintsMatch(
         JSON.stringify(oldCheckout),
         JSON.stringify({
           ...newCheckout,
+          useWalletCredit: true,
           walletAmountUsed: pending.walletAmountUsed,
         })
       )

@@ -13,3 +13,17 @@ CREATE TABLE public.customer_savings_redemptions(order_id uuid,amount numeric);
 CREATE TABLE public.transactions(order_id uuid,transaction_type text);
 GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role;
 GRANT SELECT,UPDATE ON public.orders TO authenticated;
+
+ALTER TABLE public.merchants ADD COLUMN user_id uuid;
+ALTER TABLE public.orders ADD COLUMN cancelled_at timestamptz, ADD COLUMN cancelled_by text;
+CREATE FUNCTION public.check_staff_permission(uuid,uuid,text,text)
+RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+CREATE TABLE public.customer_wallets(
+ id uuid PRIMARY KEY, merchant_id uuid, customer_id uuid, available_balance numeric,
+ total_redeemed numeric, updated_at timestamptz
+);
+ALTER TABLE public.customer_wallet_transactions
+ ADD COLUMN id uuid DEFAULT extensions.gen_random_uuid() PRIMARY KEY,
+ ADD COLUMN wallet_id uuid,
+ ADD COLUMN balance_after numeric,
+ ADD COLUMN description text;

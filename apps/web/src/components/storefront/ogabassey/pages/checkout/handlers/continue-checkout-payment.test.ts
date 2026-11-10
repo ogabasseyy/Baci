@@ -14,7 +14,7 @@ vi.mock('./dispatch-checkout-payment', () => ({
 describe('continueCheckoutPayment', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each(['paystack', 'credit_direct', 'oxygen', 'klump'] as const)('completes a zero-due %s order without starting a payment provider', async (paymentMethod) => {
+  it.each(['paystack', 'credit_direct', 'oxygen'] as const)('completes a zero-due %s order without starting a payment provider', async (paymentMethod) => {
     const context = paymentDispatchContext();
     const {
       order,
@@ -105,7 +105,7 @@ describe('continueCheckoutPayment', () => {
     expect(completeCheckoutOrder).not.toHaveBeenCalled();
   });
 
-  it('rejects retired Klump before attempting optional signup', async () => {
+  it.each([0, 750])('rejects retired Klump with %s due before optional signup', async (amountDueToGateway) => {
     const context = paymentDispatchContext();
     const {
       order,
@@ -125,7 +125,7 @@ describe('continueCheckoutPayment', () => {
       dispatch,
       order,
       wallet: { amountUsed: 250, newBalance: 750 },
-      amountDueToGateway: 750,
+      amountDueToGateway,
       createdOrderNumber: 'ORD-1',
       orderChargeCurrency: 'NGN',
       checkoutFingerprint: 'fingerprint',

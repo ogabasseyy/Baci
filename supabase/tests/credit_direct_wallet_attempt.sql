@@ -11,6 +11,12 @@ INSERT INTO public.orders(id,merchant_id,customer_id,total,amount_paid,wallet_am
  SELECT ('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',50000,20000,20000 FROM generate_series(10,19) n;
 INSERT INTO public.customer_wallet_transactions(source_id,source_type,type,amount,customer_id,merchant_id)
  SELECT id,'order_redemption','redemption',20000,customer_id,merchant_id FROM public.orders;
+-- Attach the real reversal RPC's wallet before reserving the order.
+INSERT INTO public.customer_wallets(id,merchant_id,customer_id,available_balance,total_redeemed)
+VALUES('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',0,20000);
+UPDATE public.customer_wallet_transactions SET wallet_id='00000000-0000-4000-8000-000000000004'
+ WHERE source_id='00000000-0000-4000-8000-000000000010';
+UPDATE public.merchants SET user_id='00000000-0000-4000-8000-000000000005';
 SELECT set_config('test.role','authenticated',false);
 DO $$
 DECLARE token record; again record;
@@ -79,8 +85,19 @@ SELECT public.test_assert(NOT has_function_privilege('authenticated','public.ver
 SELECT set_config('test.role','',false);
 SELECT public.test_reject($q$UPDATE public.orders SET amount_paid=20000 WHERE id='00000000-0000-4000-8000-000000000010'$q$,'credit_direct_wallet_attempt_pending');
 SELECT set_config('test.role','service_role',false);
--- Following verified merchant capture, existing internal refund processing remains available.
-INSERT INTO public.customer_wallet_transactions(source_id,source_type,type,amount) VALUES('00000000-0000-4000-8000-000000000010','order_reversal','adjustment',20000);
+-- Exercise the real wallet reversal RPC with the actor and cancellation stamp
+-- that cancel_order_as_merchant supplies. Direct execution remains restricted.
+SELECT public.test_assert(NOT has_function_privilege('authenticated','public.reverse_wallet_redemption(uuid,text,uuid)','EXECUTE'),'buyers cannot call the reversal directly');
+SELECT set_config('test.role','authenticated',false);
+SELECT set_config('test.actor','00000000-0000-4000-8000-000000000005',false);
+SELECT public.test_reject($q$SELECT * FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Uncancelled order','00000000-0000-4000-8000-000000000002')$q$,'credit_direct_wallet_attempt_pending');
+UPDATE public.orders SET shipping_status='cancelled',cancelled_at=now(),cancelled_by='merchant' WHERE id='00000000-0000-4000-8000-000000000010';
+SELECT set_config('test.actor','00000000-0000-4000-8000-000000000003',false);
+SELECT public.test_reject($q$SELECT * FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Wrong actor','00000000-0000-4000-8000-000000000002')$q$,'credit_direct_wallet_attempt_pending');
+SELECT set_config('test.actor','00000000-0000-4000-8000-000000000005',false);
+SELECT public.test_assert((SELECT success AND reversed_amount=20000 AND new_balance=20000 FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Merchant cancelled','00000000-0000-4000-8000-000000000002')),'captured merchant cancellation restores exactly the original wallet debit');
+SELECT public.test_assert((SELECT NOT success AND reversed_amount=0 AND new_balance=20000 FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Duplicate cancellation','00000000-0000-4000-8000-000000000002')),'cancellation replay cannot credit the wallet twice');
+SELECT set_config('test.role','service_role',false);
 SELECT public.verify_credit_direct_wallet_event('00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000002','provider-reference',true,30000);
 -- Full-payment Credit Direct refunds are not accidentally fenced by the new wallet rule.
 INSERT INTO public.customer_wallet_transactions(source_id,source_type,type,amount) VALUES('00000000-0000-4000-8000-000000000020','order_refund','refund',50000);

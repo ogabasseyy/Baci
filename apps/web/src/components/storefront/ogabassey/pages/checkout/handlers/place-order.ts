@@ -4,7 +4,6 @@ import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { checkOxygenStorefrontAvailability } from '../check-oxygen-storefront-availability';
 import {
   KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST,
-  isKlumpUnavailableForGatewayAmount,
 } from '../utils';
 import { createPlaceOrder } from './place-order-create';
 import { routePlaceOrderPayment } from './place-order-payment';
@@ -153,19 +152,12 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     return;
   }
   const shippingProvider = shippingProviderResolution.provider;
-  const clientPayableAmount = payWithWallet ? total - walletAmountUsed : total;
   const billingAddressLine1 =
     deliveryMethod === 'door' && isNewAddressMode
       ? newAddressStreet
       : shippingAddressData.address;
 
-  if (
-    isKlumpUnavailableForGatewayAmount({
-      paymentMethod,
-      payableAmount: clientPayableAmount,
-      orderAmount: total,
-    })
-  ) {
+  if (paymentMethod === 'klump') {
     toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
     setIsProcessing(false);
     isOrderInFlightRef.current = false;

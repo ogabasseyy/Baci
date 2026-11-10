@@ -12,7 +12,9 @@ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20260724100100_s2p_credit_dir
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20260724100200_s2p_harden_set_credit_direct_session.sql
 if [[ "${1:-}" != '--baseline' ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107165000_credit_direct_wallet_attempt_reservation.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261110170000_allow_captured_credit_direct_wallet_cancellation.sql
 fi
+psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20260427170000_deterministic_reverse_wallet_redemption_lookup.sql
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/credit_direct_wallet_attempt.sql
 # Hold a real consumed attempt open, simulating concurrent signing/lost response.
 # The second session must be refused once the first transaction commits.

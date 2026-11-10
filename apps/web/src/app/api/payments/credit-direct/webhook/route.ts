@@ -409,19 +409,30 @@ export async function POST(request: NextRequest) {
 
     // A wallet lender obligation survives lost responses and popup closure.
     // Bind only verified provider evidence to its durable funding reservation.
-    const walletFunding =
-      Number(order.wallet_amount_used) > 0
-        ? await verifyCreditDirectWalletEvent({
-            supabase,
-            orderId: order.id,
-            merchantId: order.merchant_id,
-            reference: payload.checkoutTransactionId,
-            merchantCompleted:
-              payload.eventType === 'Checkout_Merchant_Payment_Completed',
-            providerAmount: getWebhookProductsTotal(payload.products),
-          })
-        : null;
-    if (Number(order.wallet_amount_used) > 0 && walletFunding === null) {
+    const isPaidMerchantReplay =
+      order.payment_status === 'paid' &&
+      payload.eventType === 'Checkout_Merchant_Payment_Completed';
+    // The saved merchant settlement is authoritative for an exact paid retry.
+    // Other wallet events still have to bind to the durable reservation.
+    const hasRecordedMerchantCapture =
+      isPaidMerchantReplay &&
+      readNoteString(parsedNotes.merchantPaidAt) !== null &&
+      readNoteString(parsedNotes.creditDirectTransactionId) ===
+        payload.checkoutTransactionId;
+    const needsWalletVerification =
+      Number(order.wallet_amount_used) > 0 && !hasRecordedMerchantCapture;
+    const walletFunding = needsWalletVerification
+      ? await verifyCreditDirectWalletEvent({
+          supabase,
+          orderId: order.id,
+          merchantId: order.merchant_id,
+          reference: payload.checkoutTransactionId,
+          merchantCompleted:
+            payload.eventType === 'Checkout_Merchant_Payment_Completed',
+          providerAmount: getWebhookProductsTotal(payload.products),
+        })
+      : null;
+    if (needsWalletVerification && walletFunding === null) {
       logger.warn({
         message: 'Credit Direct wallet funding requires reconciliation',
         orderId: order.id,
@@ -455,10 +466,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Idempotency: If order is already paid, skip processing (webhook retry)
-    if (
-      order.payment_status === 'paid' &&
-      payload.eventType === 'Checkout_Merchant_Payment_Completed'
-    ) {
+    if (isPaidMerchantReplay) {
       logger.info({
         message: 'Credit Direct webhook already processed (order already paid)',
         orderId: order.id,

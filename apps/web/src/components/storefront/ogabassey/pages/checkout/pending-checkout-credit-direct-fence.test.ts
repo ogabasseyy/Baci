@@ -59,7 +59,7 @@ it('routes a confirmed paid order rather than initiating financing again', async
   ).toMatchObject({ paidOrder: { orderId: 'order-1' } });
 });
 
-it('reuses the same saved order for a wallet-only balance refresh and lets the server decide a method switch', async () => {
+it.each([false, true])('reuses the same saved order after a wallet refresh (wallet selected: %s)', async (useWalletCredit) => {
   const before = JSON.stringify({
     merchantId: 'merchant-1',
     items: [{ product_id: 'p1', price: 50000, quantity: 1 }],
@@ -69,7 +69,7 @@ it('reuses the same saved order for a wallet-only balance refresh and lets the s
   const after = JSON.stringify({
     merchantId: 'merchant-1',
     items: [{ product_id: 'p1', price: 50000, quantity: 1 }],
-    useWalletCredit: true,
+    useWalletCredit,
     walletAmountUsed: 0,
   });
   const fetchImpl = vi

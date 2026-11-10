@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         ordered_quantity,
         avg_daily_sales,
         predicted_demand_30d,
-        products (
+        products:merchant_products (
           id,
           name,
           image,

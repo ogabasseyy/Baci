@@ -76,20 +76,29 @@ export async function POST(request: NextRequest) {
         maximumFractionDigits: 0,
       });
 
-    const originalPrice = product.price;
-    // Auto-accept floor: never below cost margin, and never deeper than the
-    // shared 2% auto-negotiation cap. products.cost_price is not readable by
-    // shoppers, so the database computes the cost-based part and returns only
-    // the floor. Fail closed: without it we could accept a below-cost offer.
+    const originalPrice = Number(product.price);
+    // The database selects a fixed public-price tier using the private margin.
+    // Never expose a continuous cost-derived floor. Validate the fixed tier here
+    // as well so a stale migration fails closed instead of leaking exact costs.
     const { data: costFloor, error: costFloorError } = await supabase.rpc(
       'get_negotiation_cost_floor_price',
       { p_product_id: product.id, p_merchant_id: product.merchant_id }
     );
     const costFloorPrice = Number(costFloor);
+    const publicPriceTiers = [
+      originalPrice,
+      ...Object.values(DISCOUNT_TIERS).map((rate) =>
+        Math.ceil((originalPrice * Math.round((1 - rate) * 1000)) / 1000)
+      ),
+    ];
     if (
       costFloorError ||
       costFloor == null ||
-      !Number.isFinite(costFloorPrice)
+      !Number.isFinite(originalPrice) ||
+      originalPrice <= 0 ||
+      !Number.isFinite(costFloorPrice) ||
+      costFloorPrice > originalPrice ||
+      !publicPriceTiers.includes(costFloorPrice)
     ) {
       console.error('Negotiation cost floor lookup error:', costFloorError);
       return NextResponse.json(
@@ -143,6 +152,18 @@ export async function POST(request: NextRequest) {
         attemptNumber,
         canContinue: false,
       };
+    } else if (minAcceptablePrice >= originalPrice) {
+      // No safe discount tier exists. Keep the public list price rather than
+      // returning a private cost-derived amount or a quote above list price.
+      result = {
+        status: 'final',
+        counterOffer: originalPrice,
+        originalPrice,
+        offeredPrice,
+        message: 'This is already the best price.',
+        attemptNumber,
+        canContinue: false,
+      };
     } else if (attemptNumber >= 3) {
       // Final attempt - give best possible price
       const finalPrice = Math.max(
@@ -162,10 +183,10 @@ export async function POST(request: NextRequest) {
       } else {
         result = {
           status: 'final',
-          counterOffer: Math.round(finalPrice),
+          counterOffer: Math.ceil(finalPrice),
           originalPrice,
           offeredPrice,
-          message: `This is our best price: ${formatOfferPrice(Math.round(finalPrice))}. We cannot go lower.`,
+          message: `This is our best price: ${formatOfferPrice(Math.ceil(finalPrice))}. We cannot go lower.`,
           attemptNumber,
           canContinue: false,
         };
@@ -180,13 +201,13 @@ export async function POST(request: NextRequest) {
 
       result = {
         status: 'counter',
-        counterOffer: Math.round(counterOffer),
+        counterOffer: Math.ceil(counterOffer),
         originalPrice,
         offeredPrice,
         message:
           attemptNumber === 1
-            ? `We appreciate your offer! How about ${formatOfferPrice(Math.round(counterOffer))}?`
-            : `We've reduced our price further to ${formatOfferPrice(Math.round(counterOffer))}.`,
+            ? `We appreciate your offer! How about ${formatOfferPrice(Math.ceil(counterOffer))}?`
+            : `We've reduced our price further to ${formatOfferPrice(Math.ceil(counterOffer))}.`,
         attemptNumber,
         canContinue: attemptNumber < 3,
       };

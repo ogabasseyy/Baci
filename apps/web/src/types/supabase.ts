@@ -15689,6 +15689,10 @@ export type Database = {
       };
     };
     Views: {
+      merchant_products: {
+        Row: Database['public']['Tables']['products']['Row'];
+        Relationships: Database['public']['Tables']['products']['Relationships'];
+      };
       admin_query_performance: {
         Row: {
           cache_hit_ratio: number | null;

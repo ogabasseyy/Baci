@@ -55,7 +55,7 @@ export function useTopSellingProducts(
 
       const productIds = rpcData.map((item) => item.id);
       const { data: productsData, error: productsError } = await supabase
-        .from('products')
+        .from('merchant_products')
         .select(PRODUCT_COLUMNS)
         .in('id', productIds)
         .eq('merchant_id', merchantId);

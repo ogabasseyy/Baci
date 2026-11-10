@@ -38,12 +38,18 @@ export function supabaseFor(
       error: productRow ? null : { message: 'not found' },
     });
 
-  // Mirrors get_negotiation_cost_floor_price(): GREATEST(cost * 1.1, price * 0.98)
+  // Mirrors the fixed public-price tiers, never a continuous cost-derived amount.
   const price = Number(product.price);
   const rpc = vi.fn(() =>
     Promise.resolve(
       rpcOverride ?? {
-        data: Math.max((Number(costPrice) || price * 0.6) * 1.1, price * 0.98),
+        data:
+          [0.98, 0.985, 0.99]
+            .map((rate) => Math.ceil(price * rate))
+            .find(
+              (tier) =>
+                tier < price && tier >= (Number(costPrice) || price * 0.6) * 1.1
+            ) ?? price,
         error: null,
       }
     )

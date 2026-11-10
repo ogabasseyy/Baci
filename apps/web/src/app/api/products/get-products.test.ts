@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getProductListContext: vi.fn(),
   range: vi.fn(),
   rpc: vi.fn(),
+  from: vi.fn(),
 }));
 
 vi.mock('./get-product-list-context', () => ({
@@ -51,6 +52,7 @@ describe('getProducts', () => {
       order: vi.fn(() => query),
       range: mocks.range,
     };
+    mocks.from.mockImplementation(() => query);
     mocks.getProductListContext.mockResolvedValue({
       merchantId: 'merchant-1',
       query: {
@@ -63,7 +65,7 @@ describe('getProducts', () => {
         ids: undefined,
       },
       supabase: {
-        from: vi.fn(() => query),
+        from: mocks.from,
         rpc: mocks.rpc,
       },
     });
@@ -76,6 +78,7 @@ describe('getProducts', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mocks.from).toHaveBeenCalledWith('merchant_products');
     expect(body.products[0]).toMatchObject({
       id: 'product-1',
       colors: ['Black'],

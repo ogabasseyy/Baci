@@ -36,7 +36,7 @@ export async function getProducts(request: NextRequest) {
       : PRODUCT_WITH_VARIANTS_QUERY;
 
     let query = supabase
-      .from('products')
+      .from('merchant_products')
       .select(productSelect as typeof PRODUCT_WITH_VARIANTS_QUERY, {
         count: 'exact',
       })

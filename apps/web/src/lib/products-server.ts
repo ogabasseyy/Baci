@@ -91,7 +91,7 @@ export async function getProducts(
 
   // Build query
   let query = supabase
-    .from('products')
+    .from('merchant_products')
     .select(PRODUCT_WITH_VARIANTS_QUERY, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .order('created_at', { ascending: false });

@@ -45,7 +45,7 @@ JOIN public.orders o ON o.id = c.order_id AND o.shipment_id = s.id
 WHERE c.id = '<charge id>' AND c.funding_source = 'platform';
 ```
 
-The order keeps its `shipping_status` and shipping economics (the quote is still valid for a re-book); change `shipping_status` by hand only if GIG confirmed nothing shipped.
+Cancelling the shipment makes the tracking trigger set the order's `shipping_status` to `cancelled`, which blocks re-quoting (409), so the order update below restores it to `processing`. Shipping economics are left as they are; re-quote in the admin app to re-book.
 
 Copy-pasteable transaction (replace the placeholders; every statement must report 1 row):
 
@@ -55,13 +55,14 @@ UPDATE public.merchant_shipping_charges
 SET status = 'refunded', failure_code = 'PROVIDER_CANCELLED_MANUAL',
     refunded_at = now(), updated_at = now()
 WHERE id = '<charge id>' AND funding_source = 'platform'
+  AND order_id = '<order id>' AND shipment_id = '<shipment id>'
   AND status IN ('booked','needs_reconciliation');
 UPDATE public.shipments SET status = 'cancelled', updated_at = now()
 WHERE id = '<shipment id>' AND order_id = '<order id>';
 UPDATE public.orders
 SET shipment_id = NULL, tracking_number = NULL,
     shipment_booking_lock_token = NULL, shipment_booking_started_at = NULL,
-    updated_at = now()
+    shipping_status = 'processing', updated_at = now()
 WHERE id = '<order id>' AND shipment_id = '<shipment id>';
 -- COMMIT only if all three updates affected exactly one row; otherwise ROLLBACK.
 ```

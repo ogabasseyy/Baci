@@ -59,6 +59,7 @@ vi.mock('react-native-google-places-autocomplete', () => ({
 
 const props = {
   addressDraft: {},
+  bookingAllowed: true,
   error: null,
   fundingAccount: null,
   missingFields: ['address', 'city', 'state'] as (

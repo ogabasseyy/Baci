@@ -45,7 +45,8 @@ export function startSharedCartRealtime(
   let highestHint = 0;
   let failures = 0;
   let inFlight = false;
-  let queued: { hint?: number; any: boolean } | null = null;
+  let queued: { hint?: number; any: boolean; cart: string | null } | null =
+    null;
 
   const live = (run: number) =>
     alive && run === epoch && options.isCurrent() && isForeground();
@@ -71,6 +72,7 @@ export function startSharedCartRealtime(
         hint:
           hint === undefined ? undefined : Math.max(hint, queued?.hint ?? 0),
         any: (queued?.any ?? false) || hint === undefined,
+        cart: options.getCartId(),
       };
       return;
     }
@@ -92,6 +94,7 @@ export function startSharedCartRealtime(
         if (
           alive &&
           next &&
+          next.cart === options.getCartId() &&
           (next.any ||
             (next.hint ?? 0) > Math.max(options.getVersion(), highestHint))
         )
@@ -178,6 +181,7 @@ export function startSharedCartRealtime(
       const cartId = options.getCartId();
       if (!alive || (cartId === connectedCartId && connection)) return;
       highestHint = 0;
+      queued = null;
       void connect();
     },
     stop() {

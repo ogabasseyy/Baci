@@ -278,3 +278,22 @@ it('skips the follow-up when the first refresh already reached the newest versio
   expect(t.refresh).toHaveBeenCalledTimes(1);
   t.handle.stop();
 });
+
+it('drops hints queued for a cart the shopper has since left', async () => {
+  const t = setup();
+  await flush();
+  let done: () => void = () => undefined;
+  t.refresh.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (done = resolve))
+  );
+  t.emit(event(100));
+  t.emit(event(101));
+  await flush();
+  t.state.cartId = '33333333-3333-4333-8333-333333333333';
+  t.state.version = 1;
+  t.handle.sync();
+  done();
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(1);
+  t.handle.stop();
+});

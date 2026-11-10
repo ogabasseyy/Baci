@@ -55,6 +55,26 @@ describe('handlePaystackCancellationRefundFailure', () => {
     );
   });
 
+  it('keeps Paystack rejection text in the review reason and metadata', async () => {
+    await expect(
+      invoke({
+        code: 'HTTP_400',
+        error: 'Transaction has been fully reversed',
+      })
+    ).rejects.toThrow('Transaction has been fully reversed');
+
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          provider_error: 'Transaction has been fully reversed',
+          provider_error_code: 'HTTP_400',
+        }),
+        reason:
+          'Paystack refund initiation was rejected for this payment leg: Transaction has been fully reversed',
+      })
+    );
+  });
+
   it('quarantines an ambiguous failure terminally and throws delivery-uncertain', async () => {
     await expect(
       invoke({ code: 'NETWORK_ERROR', error: 'socket hung up' })

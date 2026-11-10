@@ -1,25 +1,15 @@
 -- REGRESSION TEST: anon must not be able to read public.products.cost_price.
 --
--- Stage 1 (additive): locks the invariants of
--- 20261110090000_negotiation_cost_floor_rpc.sql. The anon column-grant checks
--- ship with the separate stage-2 migration. Assertions read the
--- catalog (has_column_privilege / has_function_privilege); nothing calls a
--- denied statement and catches the error.
---
--- USAGE:
---   pnpm --filter @baci/web db:replay:chronological \
---     --sql-check supabase/tests/products_cost_price_anon_containment.sql
---
--- NOTE: authenticated still reads cost_price on purpose (tracked in the
--- containment report). Section 3 pins that so a later change is deliberate.
+-- Final activation: both anonymous and authenticated clients must use the
+-- permitted column projection. Authorized costs use merchant_products instead.
 
 BEGIN;
 
 DO $$
 BEGIN
-  -- 3. authenticated + service_role unchanged (merchant dashboards keep working).
-  IF NOT has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') THEN
-    RAISE EXCEPTION 'authenticated lost SELECT on products.cost_price (not in scope)';
+  IF has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT')
+     OR has_column_privilege('authenticated', 'public.products', 'cost_price', 'SELECT') THEN
+    RAISE EXCEPTION 'A shopper role can still select products.cost_price';
   END IF;
   IF NOT has_column_privilege('service_role', 'public.products', 'cost_price', 'SELECT') THEN
     RAISE EXCEPTION 'service_role lost SELECT on products.cost_price';

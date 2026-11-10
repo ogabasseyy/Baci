@@ -137,8 +137,7 @@ export function useOrderGiglShipping({
       !context ||
       (context.isCurrent() && enabledRef.current && appActiveRef.current);
     if (walletRef.current?.paidByBaci) {
-      // Baci-paid quotes ignore the wallet balance; re-resolve the funding mode
-      // so a revoked flag is not shown as "Paid by Baci" from a stale marker.
+      // Baci-paid: re-resolve funding (a revoked flag must not linger).
       const resolved = await requestQuote(isCurrent);
       if (!isCurrent()) return null;
       return resolved ? toOrderGiglWalletState(resolved) : walletRef.current;

@@ -34,3 +34,22 @@ Confirm cancellation with GIG, then set the charge as postgres: `UPDATE public.m
 2. If GIG may still deliver, do NOT mark refunded; reconcile with GIG first.
 3. After the charge UPDATE, check the order: `shipment_id`, `tracking_number`, `shipping_status` and the `shipments` row must reflect the cancellation (set the shipment `status = 'cancelled'`), and clear any `shipment_booking_lock_token`.
 4. Re-quote the order in the admin app if it must ship again.
+
+Copy-pasteable transaction (replace the placeholders; every statement must report 1 row):
+
+```sql
+BEGIN;
+UPDATE public.merchant_shipping_charges
+SET status = 'refunded', failure_code = 'PROVIDER_CANCELLED_MANUAL',
+    refunded_at = now(), updated_at = now()
+WHERE id = '<charge id>' AND funding_source = 'platform'
+  AND status IN ('booked','needs_reconciliation');
+UPDATE public.shipments SET status = 'cancelled', updated_at = now()
+WHERE id = '<shipment id>' AND order_id = '<order id>';
+UPDATE public.orders
+SET shipment_id = NULL, tracking_number = NULL,
+    shipment_booking_lock_token = NULL, shipment_booking_started_at = NULL,
+    updated_at = now()
+WHERE id = '<order id>' AND shipment_id = '<shipment id>';
+-- COMMIT only if all three updates affected exactly one row; otherwise ROLLBACK.
+```

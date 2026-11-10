@@ -99,9 +99,10 @@ describe('cancellation refund status wording', () => {
     // be failed or delivery_uncertain.
     expect(html).not.toContain('Cancellation starts the refund workflow');
     expect(html).toContain(
-      'The store will review your order and arrange any refund due'
+      'The store will review your order to confirm whether a refund'
     );
     expect(html).not.toContain('If you have already paid');
+    expect(html).not.toMatch(/will (review your order and )?arrange/i);
     expect(html).not.toContain('original payment method');
     expect(html).toContain('does not confirm that the refund has been sent');
     expect(html).toContain('contact the store');

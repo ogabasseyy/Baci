@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T16:08:20+00:00",
-  "source_revision": "aa94b095c2a3ca86812bffd9586914ad6458362a",
-  "evidence_digest": "b45630781b507b40dc45b548b2d65a2c04cb9fa990f94eeafa26025b9a6f1aaf",
-  "claims_digest": "9eb4ef21fd97211c2e32602a5a900f0166f3726b9d49ad50670e151859d6509e",
+  "reviewed_at": "2026-11-10T16:18:44+00:00",
+  "source_revision": "0f730fb675969a6344e35a805e839c130123d6e1",
+  "evidence_digest": "dad6bcbc278c358348dedf84cdaf936faf54833d3ee71f6a7cd523bd6b4375a2",
+  "claims_digest": "6c5351a4e9df88167141e8baf6905b8e2b190d1c399b3c88f61b05e2ba7e3e67",
   "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {

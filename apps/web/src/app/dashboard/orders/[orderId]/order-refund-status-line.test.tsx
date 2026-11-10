@@ -72,4 +72,16 @@ describe('OrderRefundStatusLine', () => {
       screen.queryByText(/record it with Record manual refund/i)
     ).toBeNull();
   });
+
+  it('says refund status is unavailable when the cancel mode could not be read', () => {
+    render(
+      <OrderRefundStatusLine
+        summary={summary({ cancellationRefundMode: 'unknown' as never })}
+      />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /refund status unavailable/i
+    );
+    expect(screen.queryByText(/no automatic refund was queued/i)).toBeNull();
+  });
 });

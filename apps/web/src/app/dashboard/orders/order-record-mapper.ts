@@ -63,6 +63,7 @@ interface DashboardTransactionRecord {
   payment_transaction_id?: string | null;
   provider_refund_id?: string | null;
   provider_refund_status?: string | null;
+  refund_method?: string | null;
 }
 
 interface MapDashboardOrderRecordOptions {
@@ -169,6 +170,7 @@ export function mapDashboardOrderRecord(
             payment_transaction_id: transaction.payment_transaction_id,
             provider_refund_id: transaction.provider_refund_id,
             provider_refund_status: transaction.provider_refund_status,
+            refund_method: transaction.refund_method,
           })),
         }
       : {}),

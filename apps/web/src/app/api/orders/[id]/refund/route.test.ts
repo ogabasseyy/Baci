@@ -118,6 +118,7 @@ describe('order refund route', () => {
       legs: [],
       needsPaystackCheck: true,
       events,
+      cancellationRefundMode: 'unknown',
     });
   });
   it('normalizes a missing Paystack signal to false', async () => {

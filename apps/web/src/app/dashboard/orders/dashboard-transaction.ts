@@ -14,4 +14,5 @@ export interface Transaction {
   /** Refund rows: provider verdict stamp and stored provider refund id. */
   provider_refund_status?: string | null;
   provider_refund_id?: string | null;
+  refund_method?: string | null;
 }

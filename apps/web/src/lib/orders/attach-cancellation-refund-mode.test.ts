@@ -60,19 +60,19 @@ describe('attachCancellationRefundMode', () => {
     expect(legacy).toMatchObject({ cancellationRefundMode: null });
   });
 
-  it('returns the summary unchanged when the read fails or throws', async () => {
+  it('marks the mode unknown when the read fails or throws', async () => {
     const summary = { status: 'not_started' };
     await expect(
       attachCancellationRefundMode(
         summary,
         args(supabaseWith({ data: null, error: { message: 'x' } }).supabase)
       )
-    ).resolves.toBe(summary);
+    ).resolves.toEqual({ ...summary, cancellationRefundMode: 'unknown' });
     await expect(
       attachCancellationRefundMode(
         summary,
         args(supabaseWith(null, true).supabase)
       )
-    ).resolves.toBe(summary);
+    ).resolves.toEqual({ ...summary, cancellationRefundMode: 'unknown' });
   });
 });

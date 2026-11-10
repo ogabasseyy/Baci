@@ -7,6 +7,11 @@ import {
   AuthenticatedFetchPreflightError,
   createAuthenticatedFetchText,
 } from './authenticated-fetch';
+import {
+  type CancellationRefundDetails,
+  type OrderStatusUpdateResult,
+  readCancellationRefundResult,
+} from './cancellation-refund-result';
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
@@ -27,6 +32,7 @@ interface OrderStatusContext {
 }
 
 export type CancellationRefundChoice = 'automatic' | 'manual';
+export type { CancellationRefundDetails, OrderStatusUpdateResult };
 
 interface OrderStatusVariables {
   orderId: string;
@@ -47,7 +53,7 @@ async function updateOrderStatus(
   orderId: string,
   status: ShippingStatus,
   refund?: CancellationRefundChoice
-): Promise<Order> {
+): Promise<OrderStatusUpdateResult> {
   const isCancellation = status === 'cancelled';
   const url = `${BASE_URL}/api/orders/${orderId}${isCancellation ? '/cancelled' : ''}`;
 
@@ -150,29 +156,11 @@ async function updateOrderStatus(
   if (isCancellation) {
     // The server reports what it actually did (a replay keeps the persisted
     // mode), so callers word the outcome from this, not the request.
-    const sideEffects =
-      payload && typeof payload === 'object' ? payload.sideEffects : undefined;
-    const refundOutcome =
-      sideEffects &&
-      typeof sideEffects === 'object' &&
-      'refund' in sideEffects &&
-      typeof sideEffects.refund === 'string'
-        ? sideEffects.refund
-        : undefined;
-    const refundDetails =
-      sideEffects &&
-      typeof sideEffects === 'object' &&
-      'refundDetails' in sideEffects &&
-      sideEffects.refundDetails &&
-      typeof sideEffects.refundDetails === 'object'
-        ? sideEffects.refundDetails
-        : undefined;
     return {
       id: orderId,
       shipping_status: 'cancelled',
-      ...(refundOutcome && { refund_outcome: refundOutcome }),
-      ...(refundDetails && { refund_details: refundDetails }),
-    } as Order;
+      ...readCancellationRefundResult(payload),
+    };
   }
 
   const acknowledgedOrder =
@@ -209,7 +197,12 @@ export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
   const { merchant } = useMerchant();
 
-  return useMutation<Order, Error, OrderStatusVariables, OrderStatusContext>({
+  return useMutation<
+    OrderStatusUpdateResult,
+    Error,
+    OrderStatusVariables,
+    OrderStatusContext
+  >({
     mutationFn: ({ orderId, refund, status }) => {
       if (!merchant?.id) {
         throw new Error('Merchant ID is required');

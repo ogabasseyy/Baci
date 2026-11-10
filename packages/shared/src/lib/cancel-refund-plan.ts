@@ -1,3 +1,5 @@
+import { hasUnresolvedRefundEvidence } from './cancel-refund-attribution';
+
 const INTERNAL_PAYMENT_GATEWAYS = new Set([
   'WALLET',
   'SAVINGS',
@@ -21,6 +23,8 @@ const isExternalGateway = (gateway: string | null): boolean => {
 };
 
 export interface CancelRefundOrder {
+  /** Order currency; blank defaults to NGN like the worker. */
+  orderCurrency?: string | null;
   paymentStatus: string;
   total: number;
   transactions?: Array<{
@@ -33,6 +37,8 @@ export interface CancelRefundOrder {
     provider_refund_status?: string | null;
     /** Refund rows: the stored provider refund id (metadata). */
     provider_refund_id?: string | number | null;
+    /** Manual refund rows: the method the merchant declared (metadata). */
+    refund_method?: string | null;
     status: string;
     id?: string;
     transaction_type?: string;
@@ -165,7 +171,10 @@ export function getCancelRefundPlan(
           DONE_REFUND_STATUSES.has(row.status) &&
           (row.payment_transaction_id || soleLegId) === leg.id &&
           normalizeGateway(row.currency) === normalizeGateway(leg.currency) &&
-          normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
+          // Merchant-recorded manual rows (gateway MANUAL) cover by matching
+          // money only, like the worker; others must match the leg's gateway.
+          (normalizeGateway(row.gateway) === 'MANUAL' ||
+            normalizeGateway(row.gateway) === normalizeGateway(leg.gateway))
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
   // Non-terminal refund rows need an explicit link (the worker ignores
@@ -178,29 +187,11 @@ export function getCancelRefundPlan(
           row.payment_transaction_id === leg.id && isRefundInFlightRow(row)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
-  // The worker quarantines an order holding refund evidence it cannot
-  // attribute, so the plan cannot say what is owed. An unlinked COMPLETED
-  // refund only stays unattributable when several legs could own it (a sole
-  // leg owns it); unlinked NON-TERMINAL evidence (pending, processing, or a
-  // recoverable failed row) is unattributable even with a single leg.
-  // A refund that claims a payment id no funded leg of this order carries is
-  // a stale or cross-order link, which the worker also quarantines
-  // (classifyCancellationRefundLinks): every status counts, as there.
-  const fundedPaymentIds = new Set(
-    order.transactions
-      .filter(
-        (row) =>
-          row.transaction_type === 'payment' &&
-          FUNDED_LEG_STATUSES.has(row.status) &&
-          row.id
-      )
-      .map((row) => row.id)
-  );
-  const unresolved = refundRows.some((row) =>
-    row.payment_transaction_id
-      ? !fundedPaymentIds.has(row.payment_transaction_id)
-      : (legs.length > 1 && DONE_REFUND_STATUSES.has(row.status)) ||
-        isRefundInFlightRow(row)
+  // Every condition under which the worker quarantines the order for refund
+  // evidence it cannot attribute or reconcile leaves the plan unresolved.
+  const unresolved = hasUnresolvedRefundEvidence(
+    order.transactions,
+    order.orderCurrency
   );
   const entries = legs
     .filter((leg) => leg.status !== 'refunded')

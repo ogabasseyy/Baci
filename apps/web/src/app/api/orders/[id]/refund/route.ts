@@ -198,7 +198,8 @@ async function handle(
   try {
     merchantId = await getMerchantIdForApiUser(auth.supabase);
   } catch {
-    // Fail open: the card keeps neutral copy without the cancel mode.
+    // Fail closed for the label: without the mode the card shows an
+    // unavailable line, not a normal state.
   }
   const masked = maskRefundWorkerText(data as Record<string, unknown>);
   return NextResponse.json(
@@ -208,7 +209,7 @@ async function handle(
           orderId: id,
           supabase: auth.supabase,
         })
-      : masked
+      : { ...masked, cancellationRefundMode: 'unknown' }
   );
 }
 

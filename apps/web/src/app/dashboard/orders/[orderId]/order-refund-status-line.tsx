@@ -14,6 +14,14 @@ export function OrderRefundStatusLine({ summary }: { summary: RefundSummary }) {
     summary.cancellationRefundMode === 'manual' &&
     summary.status === 'not_started' &&
     summary.remaining > 0;
+  if (summary.cancellationRefundMode === 'unknown') {
+    return (
+      <p role="status" className="font-semibold">
+        Refund status unavailable. Reload the page, and check the refund history
+        before refunding the customer yourself.
+      </p>
+    );
+  }
   return (
     <>
       <p role="status" className="font-semibold">

@@ -202,6 +202,7 @@ export async function fetchOrderById(
     amount_paid: amountPaid,
     balance,
     cancel_refund_plan: await fetchCancelRefundPlan({
+      currency: order.currency,
       merchantId,
       orderId,
       paymentStatus,

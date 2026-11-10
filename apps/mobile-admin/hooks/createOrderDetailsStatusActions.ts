@@ -1,7 +1,10 @@
 import { isPaidStatus } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
-import type { CancellationRefundChoice } from '@/hooks/orders/useOrderStatusUpdate';
+import type {
+  CancellationRefundChoice,
+  OrderStatusUpdateResult,
+} from '@/hooks/orders/useOrderStatusUpdate';
 import type { ShippingStatus } from '@/hooks/useOrders';
 import { formatCurrency } from '@/lib/utils';
 
@@ -46,7 +49,7 @@ interface CreateOrderDetailsStatusActionsParams {
     orderId: string;
     refund?: CancellationRefundChoice;
     status: ShippingStatus;
-  }) => Promise<unknown>;
+  }) => Promise<OrderStatusUpdateResult | undefined>;
 }
 
 export function createOrderDetailsStatusActions({
@@ -89,30 +92,13 @@ export function createOrderDetailsStatusActions({
       });
       setShowStatusModal(false);
 
-      const refundOutcome =
-        typeof result === 'object' &&
-        result !== null &&
-        'refund_outcome' in result &&
-        typeof result.refund_outcome === 'string'
-          ? result.refund_outcome
-          : undefined;
+      const refundOutcome = result?.refund_outcome;
       // Prefer what the server reports over the requested choice.
       const refundIsManual = refundOutcome
         ? refundOutcome === 'manual_required'
         : refund === 'manual';
 
-      const refundDetails =
-        typeof result === 'object' &&
-        result !== null &&
-        'refund_details' in result &&
-        typeof result.refund_details === 'object' &&
-        result.refund_details !== null
-          ? (result.refund_details as {
-              currency?: string | null;
-              inFlightAmount?: number;
-              remainingAmount?: number;
-            })
-          : undefined;
+      const refundDetails = result?.refund_details;
       const manualCurrency =
         refundDetails?.currency?.trim() || order.currency?.trim() || 'NGN';
       const manualMessage =

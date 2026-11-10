@@ -59,7 +59,7 @@ export async function resolveCancellationRefundOutcome({
     const { data, error } = await supabase
       .from('transactions')
       .select(
-        'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id, provider_refund_status:metadata->>provider_refund_status, provider_refund_id:metadata->>provider_refund_id'
+        'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id, provider_refund_status:metadata->>provider_refund_status, provider_refund_id:metadata->>provider_refund_id, refund_method:metadata->>method'
       )
       .eq('order_id', orderId)
       .eq('merchant_id', merchantId)
@@ -82,10 +82,15 @@ export async function resolveCancellationRefundOutcome({
       payment_transaction_id: string | null;
       provider_refund_id: string | null;
       provider_refund_status: string | null;
+      refund_method: string | null;
       status: string;
       transaction_type: string;
     }>;
     const plan = getCancelRefundPlan({
+      // The order currency is not read here; the first payment leg's stands
+      // in for it (the worker quarantines mixed-currency orders anyway).
+      orderCurrency: rows.find((row) => row.transaction_type === 'payment')
+        ?.currency,
       paymentStatus: 'Paid',
       total: 0,
       transactions: rows.map((row) => ({
@@ -97,6 +102,7 @@ export async function resolveCancellationRefundOutcome({
         payment_transaction_id: row.payment_transaction_id,
         provider_refund_id: row.provider_refund_id,
         provider_refund_status: row.provider_refund_status,
+        refund_method: row.refund_method,
         status: row.status,
         transaction_type: row.transaction_type,
       })),

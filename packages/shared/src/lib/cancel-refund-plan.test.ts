@@ -7,6 +7,7 @@ const getAutomaticCancelRefundAmount = (
 
 const leg = (over: Record<string, unknown> = {}) => ({
   amount: 5000,
+  currency: 'NGN',
   gateway: 'paystack',
   gateway_reference: 'ref',
   id: 'leg-1',
@@ -92,6 +93,7 @@ describe('getAutomaticCancelRefundAmount', () => {
         leg({ id: 'b' }),
         {
           amount: 5000,
+          currency: 'NGN',
           gateway: 'paystack',
           payment_transaction_id: 'a',
           status: 'completed',
@@ -130,6 +132,7 @@ describe('getAutomaticCancelRefundAmount', () => {
         leg({ id: 'b', gateway: 'korapay' }),
         {
           amount: 5000,
+          currency: 'NGN',
           gateway: 'korapay',
           payment_transaction_id: 'b',
           status: 'completed',

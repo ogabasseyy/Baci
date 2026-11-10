@@ -191,7 +191,7 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
       expect(plan.ledgerKnown).toBe(false);
     });
 
-    it('ignores an unlinked failed refund that can never recover', () => {
+    it('treats an unlinked failed refund as unattributable even when it can never recover, like the worker', () => {
       const plan = getCancelRefundPlan({
         paymentStatus: 'Paid',
         total: 100,
@@ -203,8 +203,7 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
           }),
         ],
       });
-      expect(plan.ledgerKnown).toBe(true);
-      expect(plan.amount).toBe(100);
+      expect(plan.ledgerKnown).toBe(false);
     });
   });
 
@@ -269,6 +268,7 @@ describe('getCancelRefundPlan with linked pending refund rows', () => {
           payment100,
           { ...payment100, gateway: 'wallet', id: 'pay-wallet' },
           pendingRow({
+            gateway: 'wallet',
             payment_transaction_id: 'pay-wallet',
             status: 'completed',
           }),

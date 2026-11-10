@@ -8,11 +8,13 @@ import { supabase } from '@/lib/supabase';
  * server remains the real gate.
  */
 export async function fetchCancelRefundPlan({
+  currency,
   merchantId,
   orderId,
   paymentStatus,
   total,
 }: {
+  currency?: string | null;
   merchantId: string;
   orderId: string;
   paymentStatus: string;
@@ -22,13 +24,14 @@ export async function fetchCancelRefundPlan({
     const { data, error } = await supabase
       .from('transactions')
       .select(
-        'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id, provider_refund_status:metadata->>provider_refund_status, provider_refund_id:metadata->>provider_refund_id'
+        'id, amount, currency, gateway, gateway_reference, status, transaction_type, payment_transaction_id:metadata->>payment_transaction_id, provider_refund_status:metadata->>provider_refund_status, provider_refund_id:metadata->>provider_refund_id, refund_method:metadata->>method'
       )
       .eq('order_id', orderId)
       .eq('merchant_id', merchantId)
       .in('transaction_type', ['payment', 'refund']);
     if (error || !data) return undefined;
     return getCancelRefundPlan({
+      orderCurrency: currency,
       // Stored statuses vary in case; the plan expects the display form.
       paymentStatus:
         String(paymentStatus ?? '').toLowerCase() === 'paid'
@@ -49,6 +52,7 @@ export async function fetchCancelRefundPlan({
         provider_refund_status: (
           row as { provider_refund_status?: string | null }
         ).provider_refund_status,
+        refund_method: (row as { refund_method?: string | null }).refund_method,
         status: row.status,
         transaction_type: row.transaction_type,
       })),

@@ -5,8 +5,10 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
  * Adds the persisted cancellation refund mode to a masked refund summary so
  * the card can tell a cancel-only order (the merchant refunds outside Baci)
  * from one whose automatic refund simply has not run yet. Added after the
- * mask on purpose: the mask drops unknown keys. Fails open — any read
- * problem returns the summary unchanged and the card keeps neutral copy.
+ * mask on purpose: the mask drops unknown keys. Fails closed for the label:
+ * a read problem marks the mode `unknown`, so the card says refund status is
+ * unavailable instead of showing a normal state that could hide a pending
+ * cancel-only refund.
  */
 export async function attachCancellationRefundMode<T extends object>(
   summary: T,
@@ -27,7 +29,8 @@ export async function attachCancellationRefundMode<T extends object>(
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
       .maybeSingle();
-    if (error || !data) return summary;
+    if (error || !data)
+      return { ...summary, cancellationRefundMode: 'unknown' };
     const mode = data.cancellation_refund_mode;
     return {
       ...summary,
@@ -35,6 +38,6 @@ export async function attachCancellationRefundMode<T extends object>(
         mode === 'manual' || mode === 'automatic' ? mode : null,
     };
   } catch {
-    return summary;
+    return { ...summary, cancellationRefundMode: 'unknown' };
   }
 }

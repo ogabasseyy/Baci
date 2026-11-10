@@ -49,7 +49,10 @@ export function useOrderCancellation({
 }) {
   const { toast } = useToast();
   const merchantContext = useMerchantSafe();
-  const plan = getCancelRefundPlan(order);
+  const plan = getCancelRefundPlan({
+    ...order,
+    orderCurrency: order.currency,
+  });
   const [isOpen, setIsOpen] = useState(false);
   const [session, setSession] = useState(0);
 

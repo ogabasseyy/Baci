@@ -18,7 +18,7 @@ function chain(result: unknown) {
     q[m] = vi.fn(() => q);
   }
   q.limit = vi.fn().mockResolvedValue(result);
-  q.in = vi.fn().mockResolvedValue(result);
+  q.in = vi.fn(() => ({ abortSignal: vi.fn().mockResolvedValue(result) }));
   return q;
 }
 
@@ -55,7 +55,11 @@ function makeSupabase({
   };
   return {
     from: vi.fn((t: string) => tables[t]),
-    rpc: vi.fn().mockResolvedValue({ data: reviews, error: reviewError }),
+    rpc: vi.fn(() => ({
+      abortSignal: vi
+        .fn()
+        .mockResolvedValue({ data: reviews, error: reviewError }),
+    })),
   };
 }
 

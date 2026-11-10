@@ -4,6 +4,7 @@ import {
   MIN_ALERT_BUDGET_MS,
   REFUND_ALERT_RETRY_CAP,
 } from '@/lib/orders/alert-merchant-cancellation-refund-review';
+import { runBounded } from '@/lib/orders/refund-alert-lookup';
 import type {
   AlertSupabase,
   RefundReviewAlertSenders,
@@ -55,26 +56,42 @@ export interface RefundAlertPassSummary {
 }
 
 async function loadReviewsNeedingAlert(
-  supabase: AlertSupabase
-): Promise<ActionableReview[] | null> {
+  supabase: AlertSupabase,
+  deadlineMs: number | undefined
+): Promise<ActionableReview[] | null | 'timeout'> {
   const now = Date.now();
-  const { data, error } = await supabase.rpc(
-    'list_cancellation_refund_reviews_needing_alert_v1',
-    {
-      p_limit: REVIEW_SCAN_LIMIT,
-      p_max_attempts: REFUND_ALERT_RETRY_CAP,
-      p_retry_before: new Date(now - RETRY_COOLDOWN_MS).toISOString(),
-      p_undeliverable_before: new Date(
-        now - UNDELIVERABLE_RECHECK_MS
-      ).toISOString(),
-      p_since: new Date(now - REVIEW_LOOKBACK_MS).toISOString(),
-    }
+  const bounded = await runBounded(deadlineMs, (signal) =>
+    supabase
+      .rpc('list_cancellation_refund_reviews_needing_alert_v1', {
+        p_limit: REVIEW_SCAN_LIMIT,
+        p_max_attempts: REFUND_ALERT_RETRY_CAP,
+        p_retry_before: new Date(now - RETRY_COOLDOWN_MS).toISOString(),
+        p_undeliverable_before: new Date(
+          now - UNDELIVERABLE_RECHECK_MS
+        ).toISOString(),
+        p_since: new Date(now - REVIEW_LOOKBACK_MS).toISOString(),
+      })
+      .abortSignal(signal)
   );
+  if (bounded.timedOut) return 'timeout';
+  const { data, error } = bounded.value;
   if (error) {
     logger.error({ error, message: 'Refund review alert lookup failed' });
     return null;
   }
   return ((data ?? []) as OpenReview[]).filter(isActionable);
+}
+
+function deferPass(
+  summary: RefundAlertPassSummary,
+  step: string
+): RefundAlertPassSummary {
+  // Timed out against the phase deadline: nothing was claimed; retry next pass.
+  logger.warn({
+    message: `Refund review alert ${step} timed out; deferring pass`,
+  });
+  summary.deferred += 1;
+  return summary;
 }
 
 /**
@@ -112,7 +129,8 @@ export async function alertPendingRefundReviews({
     deadlineMs !== undefined && deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS;
   try {
     if (outOfBudget()) return summary;
-    const pending = await loadReviewsNeedingAlert(supabase);
+    const pending = await loadReviewsNeedingAlert(supabase, deadlineMs);
+    if (pending === 'timeout') return deferPass(summary, 'review lookup');
     if (pending === null) {
       summary.failed += 1;
       return summary;
@@ -120,16 +138,25 @@ export async function alertPendingRefundReviews({
     if (pending.length === 0 || outOfBudget()) return summary;
     const orderIds = [...new Set(pending.map((r) => r.order_id))];
     const merchantIds = [...new Set(pending.map((r) => r.merchant_id))];
+    const context = await runBounded(deadlineMs, (signal) =>
+      Promise.all([
+        supabase
+          .from('orders')
+          .select('id, merchant_id, order_number, currency')
+          .in('id', orderIds)
+          .abortSignal(signal),
+        supabase
+          .from('merchants')
+          .select('id, email')
+          .in('id', merchantIds)
+          .abortSignal(signal),
+      ])
+    );
+    if (context.timedOut) return deferPass(summary, 'context lookup');
     const [
       { data: orders, error: ordersError },
       { data: merchants, error: merchantsError },
-    ] = await Promise.all([
-      supabase
-        .from('orders')
-        .select('id, merchant_id, order_number, currency')
-        .in('id', orderIds),
-      supabase.from('merchants').select('id, email').in('id', merchantIds),
-    ]);
+    ] = context.value;
     if (ordersError || merchantsError) {
       logger.error({
         contextErrors: [ordersError?.message, merchantsError?.message].filter(

@@ -165,11 +165,10 @@ UPDATE public.order_notification_outbox SET status = 'processing', locked_by = '
 UPDATE public.merchants SET slug = 'fixture-fixed' WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'merchant correction re-arms the processing row');
 UPDATE public.merchants SET slug = 'fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
--- An unrendered-field edit keeps an undispatched processing lease:
--- repeated unrelated saves must not starve delivery.
+-- A registration number edit re-arms an undispatched render.
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
 UPDATE public.merchants SET cac_rc_number = 'RC999' WHERE id = '10000000-0000-4000-8000-000000000001';
-SELECT pg_temp.assert_true((SELECT status = 'processing' AND locked_by = 'm2-worker' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'unrendered merchant edit keeps the processing lease');
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'registration number edit re-arms the processing invoice');
 UPDATE public.merchants SET cac_rc_number = 'RC123' WHERE id = '10000000-0000-4000-8000-000000000001';
 -- A business_address edit under a nonempty registered address resets
 -- receipt markers alone: invoices render the registered line, so the

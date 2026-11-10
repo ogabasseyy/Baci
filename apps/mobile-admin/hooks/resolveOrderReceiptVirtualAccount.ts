@@ -95,6 +95,7 @@ function canProvisionPaystackDva(order: OrderDetailsRecord) {
 export async function resolveOrderReceiptVirtualAccount({
   order,
 }: {
+  /** Legacy caller field. Only customer payment accounts qualify for automatic confirmation. */
   merchant: ReceiptMerchantDetails | null | undefined;
   order: OrderDetailsRecord;
 }) {

@@ -15,7 +15,13 @@ vi.mock('react-native', () => ({
   Alert: { alert: vi.fn() },
 }));
 
+vi.mock('@/lib/query-client', async () => {
+  const { QueryClient } = await import('@tanstack/react-query');
+  return { queryClient: new QueryClient() };
+});
+
 vi.mock('@/lib/api-client', () => ({ apiClient: mocks.apiClient }));
+vi.mock('expo/fetch', () => ({ fetch: mocks.fetch }));
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -416,10 +422,9 @@ describe('createOrderDetailsReceiptActions', () => {
   });
 
   it('sanitizes fetched svg logos before previewing the receipt', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      text: async () => '<svg><script>alert(1)</script><rect /></svg>',
-    });
+    mocks.fetch.mockResolvedValue(
+      new Response('<svg><script>alert(1)</script><rect /></svg>')
+    );
     const setReceiptHtml = vi.fn();
 
     const actions = createOrderDetailsReceiptActions({
@@ -428,7 +433,7 @@ describe('createOrderDetailsReceiptActions', () => {
         business_name: 'Baci',
         email: 'merchant@example.com',
         id: 'merchant-1',
-        logo_url: 'https://example.com/logo.svg',
+        logo_url: 'https://cdn.ogabassey.com/media/logo.svg',
       },
       order: {
         amount_paid: 0,

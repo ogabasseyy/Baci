@@ -859,6 +859,9 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
           SUPABASE_JWT_SECRET: placeholder-jwt-secret
+      - name: Verify Chromium assets and size in invoice PDF build traces
+        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: node .github/scripts/verify-invoice-pdf-build-traces.mjs
       - name: Save Next.js build cache (main branch only)
         if: >
           runner.environment == 'github-hosted' &&

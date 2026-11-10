@@ -61,7 +61,7 @@ export async function markManualDocumentDispatchStarted(
   claimDomain: string | null
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
-    'mark_manual_document_dispatch_started',
+    'mark_manual_document_dispatch_started_v2',
     buildDispatchRpcParams({
       row,
       order,

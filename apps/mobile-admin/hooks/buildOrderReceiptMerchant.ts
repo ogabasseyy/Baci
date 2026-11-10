@@ -1,5 +1,6 @@
 import { type ReceiptMerchant, resolveMerchantBankName } from '@baci/shared';
-import { apiClient } from '@/lib/api-client';
+import { queryClient } from '@/lib/query-client';
+import { paystackBanksQueryOptions } from './usePaystackBanks';
 
 export interface ReceiptMerchantDetails {
   bank_account_name?: string | null;
@@ -42,20 +43,18 @@ export async function buildOrderReceiptMerchant(
     merchant.bank_code &&
     merchant.bank_account_number
   ) {
-    try {
-      const result = await apiClient<{
-        banks?: { code: string; name: string }[];
-      }>('/api/paystack/banks', {
-        requiresAuth: false,
-        timeout: 3000,
-      });
-      bankName = resolveMerchantBankName(
-        result.banks?.find((bank) => bank.code === merchant.bank_code)?.name,
-        merchant.bank_code
+    const options = paystackBanksQueryOptions(3000);
+    const banks = await queryClient
+      .fetchQuery({ ...options, retry: false })
+      .catch(() =>
+        queryClient.getQueryData<Awaited<ReturnType<typeof options.queryFn>>>(
+          options.queryKey
+        )
       );
-    } catch {
-      // Leave the name unset when the directory is unavailable.
-    }
+    bankName = resolveMerchantBankName(
+      banks?.find((bank) => bank.code === merchant.bank_code)?.name,
+      merchant.bank_code
+    );
   }
   return {
     bank_account_number: merchant.bank_account_number ?? null,

@@ -96,6 +96,14 @@ function appendAddressPart(
   parts.push(displayValue);
 }
 
+const INVOICE_TITLES = new Map([
+  ['381', 'Credit Note'],
+  ['383', 'Debit Note'],
+  ['384', 'Corrected Invoice'],
+  ['386', 'Prepayment Invoice'],
+  ['389', 'Self-billed Invoice'],
+]);
+
 export function generateReceiptHtml(
   order: ReceiptOrder,
   merchant: ReceiptMerchant,
@@ -115,17 +123,8 @@ export function generateReceiptHtml(
   // orders. The default is a receipt for paid orders and an invoice otherwise.
   const isProforma = options.documentKind === 'proforma' && !isPaid;
   const forceInvoice = options.documentKind === 'invoice';
-  const invoiceTitles: Record<string, string> = {
-    '381': 'Credit Note',
-    '383': 'Debit Note',
-    '384': 'Corrected Invoice',
-    '386': 'Prepayment Invoice',
-    '389': 'Self-billed Invoice',
-  };
-  const typeCode = options.invoiceTypeCode ?? '';
-  const invoiceTitle = Object.hasOwn(invoiceTitles, typeCode)
-    ? invoiceTitles[typeCode]
-    : 'Invoice';
+  const invoiceTitle =
+    INVOICE_TITLES.get(options.invoiceTypeCode ?? '') ?? 'Invoice';
   const docTitle = isProforma
     ? 'Proforma Invoice'
     : isPaid && !forceInvoice

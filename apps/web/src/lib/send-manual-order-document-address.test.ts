@@ -70,7 +70,7 @@ describe('send manual order document registered address', () => {
         row: { ...row, event_type: 'manual_order_invoice' },
       });
       const markCall = db.rpc.mock.calls.find(
-        ([fn]) => fn === 'mark_manual_document_dispatch_started'
+        ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
       );
       expect(markCall?.[1]).toMatchObject({
         p_merchant_registered_address: registered_address,

@@ -148,7 +148,7 @@ describe('send manual order document dispatch', () => {
     ).rejects.toThrow('order changed before dispatch');
     expect(
       db.rpc.mock.calls.some(
-        ([fn]) => fn === 'mark_manual_document_dispatch_started'
+        ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
       )
     ).toBe(true);
   });

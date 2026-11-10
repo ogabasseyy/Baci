@@ -1,5 +1,5 @@
 import type { ReceiptOrder } from '@baci/shared';
-import { generateReceiptHtml, sanitizeSvg } from '@baci/shared';
+import { generateReceiptHtml } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +7,7 @@ import {
   buildOrderReceiptMerchant,
   type ReceiptMerchantDetails,
 } from './buildOrderReceiptMerchant';
+import { resolveOrderReceiptLogo } from './resolveOrderReceiptLogo';
 import { resolveOrderReceiptVirtualAccount } from './resolveOrderReceiptVirtualAccount';
 import { resolveReceiptItemFulfillmentDetails } from './resolveReceiptItemFulfillmentDetails';
 
@@ -54,14 +55,6 @@ function resolveMerchantPages(
   }
 
   return null;
-}
-
-function isSvgLogoUrl(logoUrl: string) {
-  try {
-    return new URL(logoUrl).pathname.toLowerCase().endsWith('.svg');
-  } catch {
-    return false;
-  }
 }
 
 function getOrderReceiptDate(order: OrderDetailsRecord | undefined) {
@@ -146,41 +139,9 @@ export function createOrderDetailsReceiptActions({
         // Ignore merchant-page refresh failures and fall back to the local merchant payload.
       }
 
-      let logoUrl = merchant.logo_url ?? null;
-      let svgXml: string | undefined;
-
-      if (logoUrl?.startsWith('https://')) {
-        if (isSvgLogoUrl(logoUrl)) {
-          try {
-            const response = await fetch(logoUrl);
-            if (response.ok) {
-              svgXml = sanitizeSvg(await response.text());
-            }
-          } catch (error) {
-            console.warn('[OrderDetails] SVG fetch failed', error);
-          }
-        } else {
-          try {
-            const { File, Paths } = await import('expo-file-system');
-            const destination = new File(
-              Paths.cache,
-              `receipt_logo_${Date.now()}.png`
-            );
-            const downloaded = await File.downloadFileAsync(
-              logoUrl,
-              destination,
-              {
-                idempotent: true,
-              }
-            );
-            const base64 = await downloaded.base64();
-            logoUrl = `data:${downloaded.type || 'image/png'};base64,${base64}`;
-          } catch {
-            logoUrl = null;
-          }
-        }
-      }
-
+      const { logoUrl, svgXml } = await resolveOrderReceiptLogo(
+        merchant.logo_url
+      );
       const receiptMerchant = await buildOrderReceiptMerchant(
         merchant,
         logoUrl,

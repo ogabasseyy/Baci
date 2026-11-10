@@ -9,9 +9,25 @@ let renderQueue: Promise<unknown> = Promise.resolve();
 let pendingRenders = 0;
 const MAX_PENDING_RENDERS = 8;
 
+class ReceiptPdfUnavailableError extends Error {}
+
+export function receiptPdfUnavailableResponse(error: unknown) {
+  if (!(error instanceof ReceiptPdfUnavailableError)) return null;
+  return Response.json(
+    { error: 'PDF generation is temporarily unavailable. Try again shortly.' },
+    {
+      status: 503,
+      headers: { 'Retry-After': '5', 'Cache-Control': 'no-store' },
+    }
+  );
+}
+
 function remainingTime(deadline: number) {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('Invoice PDF render deadline exceeded');
+  if (remaining <= 0)
+    throw new ReceiptPdfUnavailableError(
+      'Invoice PDF render deadline exceeded'
+    );
   return remaining;
 }
 
@@ -54,12 +70,13 @@ export async function renderHtmlToPdf(
   );
   const timeout = remainingTime(deadline);
   if (pendingRenders >= MAX_PENDING_RENDERS)
-    throw new Error('Invoice PDF renderer is busy');
+    throw new ReceiptPdfUnavailableError('Invoice PDF renderer is busy');
+  const controller = new AbortController();
   pendingRenders += 1;
   const result = renderQueue
     .then(() => {
       remainingTime(deadline);
-      return renderDocument(html, deadline);
+      return renderDocument(html, deadline, controller.signal);
     })
     .finally(() => {
       pendingRenders -= 1;
@@ -70,10 +87,13 @@ export async function renderHtmlToPdf(
     return await Promise.race([
       result,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('Invoice PDF render deadline exceeded')),
-          timeout
-        );
+        timer = setTimeout(() => {
+          const error = new ReceiptPdfUnavailableError(
+            'Invoice PDF render deadline exceeded'
+          );
+          reject(error);
+          controller.abort(error);
+        }, timeout);
       }),
     ]);
   } finally {
@@ -83,20 +103,32 @@ export async function renderHtmlToPdf(
 
 async function renderDocument(
   html: string,
-  deadline: number
+  deadline: number,
+  signal: AbortSignal
 ): Promise<Uint8Array> {
   const isLinux = process.platform === 'linux';
   const executablePath = isLinux
     ? await chromium.executablePath()
     : await localChromePath();
+  signal.throwIfAborted();
   const browser = await puppeteer.launch({
+    signal,
     executablePath,
     args: isLinux ? chromium.args : [],
     headless: isLinux ? 'shell' : true,
     timeout: remainingTime(deadline),
     protocolTimeout: remainingTime(deadline),
   });
+  let closing: Promise<void> | undefined;
+  const close = () => (closing ??= browser.close());
+  const onAbort = () => {
+    void close().catch(() => {
+      // The launch signal also terminates the browser process.
+    });
+  };
+  signal.addEventListener('abort', onAbort, { once: true });
   try {
+    signal.throwIfAborted();
     const page = await browser.newPage();
     await page.setJavaScriptEnabled(false);
     await page.setRequestInterception(true);
@@ -121,6 +153,9 @@ async function renderDocument(
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     });
   } finally {
-    await browser.close();
+    signal.removeEventListener('abort', onAbort);
+    await close().catch((error: unknown) => {
+      if (!signal.aborted) throw error;
+    });
   }
 }

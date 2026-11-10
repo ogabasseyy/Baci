@@ -28,6 +28,7 @@ import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
 } from '@/lib/peppol-ubl-invoice';
+import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
 import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
@@ -764,6 +765,8 @@ export async function GET(
       },
     });
   } catch (error) {
+    const unavailable = receiptPdfUnavailableResponse(error);
+    if (unavailable) return unavailable;
     console.error('Error generating invoice:', error);
     return NextResponse.json(
       { error: 'Failed to generate invoice' },

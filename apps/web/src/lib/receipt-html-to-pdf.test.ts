@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHtmlToPdf } from './receipt-html-to-pdf';
+import {
+  receiptPdfUnavailableResponse,
+  renderHtmlToPdf,
+} from './receipt-html-to-pdf';
 
 const mocks = vi.hoisted(() => ({
   launch: vi.fn(),
@@ -24,6 +27,7 @@ describe('invoice HTML PDF isolation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.pdf.mockResolvedValue(new Uint8Array([1, 2]));
+    mocks.close.mockReset().mockResolvedValue(undefined);
     mocks.launch.mockResolvedValue({
       close: mocks.close,
       newPage: async () => mocks,
@@ -95,9 +99,14 @@ describe('invoice HTML PDF isolation', () => {
     );
     await vi.waitFor(() => expect(mocks.pdf).toHaveBeenCalledOnce());
     expect(mocks.launch).toHaveBeenCalledOnce();
-    await expect(renderHtmlToPdf('<html>overflow</html>')).rejects.toThrow(
-      'busy'
+    const unavailable = await renderHtmlToPdf('<html>overflow</html>').catch(
+      receiptPdfUnavailableResponse
     );
+    expect(unavailable).toBeInstanceOf(Response);
+    if (unavailable instanceof Response) {
+      expect(unavailable.status).toBe(503);
+      expect(unavailable.headers.get('Retry-After')).toBe('5');
+    }
     held.resolve(new Uint8Array([1, 2]));
     await Promise.all(jobs);
     expect(mocks.launch).toHaveBeenCalledTimes(8);
@@ -125,6 +134,36 @@ describe('invoice HTML PDF isolation', () => {
     await renderHtmlToPdf('<html>next</html>');
     expect(mocks.launch).toHaveBeenCalledTimes(2);
   }, 1000);
+
+  it('closes an active browser at the deadline before starting the next render', async () => {
+    vi.useFakeTimers();
+    const started = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<Uint8Array>();
+    mocks.pdf.mockImplementationOnce(() => {
+      started.resolve();
+      return held.promise;
+    });
+    mocks.close.mockImplementationOnce(async () =>
+      held.reject(new Error('Browser closed'))
+    );
+    const active = renderHtmlToPdf('<html>active</html>', Date.now() + 50);
+    const rejected = expect(active).rejects.toThrow('deadline');
+    try {
+      await started.promise;
+      const next = renderHtmlToPdf('<html>next</html>');
+      await vi.advanceTimersByTimeAsync(50);
+      await rejected;
+      expect(mocks.close).toHaveBeenCalled();
+      held.resolve(new Uint8Array([1, 2]));
+      await next;
+      expect(mocks.close.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.launch.mock.invocationCallOrder[1]
+      );
+    } finally {
+      held.resolve(new Uint8Array([1, 2]));
+      vi.useRealTimers();
+    }
+  });
 
   it('closes a failed browser and permits a subsequent export', async () => {
     mocks.pdf.mockRejectedValueOnce(new Error('Render failed'));

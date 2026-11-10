@@ -192,7 +192,7 @@ describe('send manual order document', () => {
       error: 'missing ZeptoMail token',
     });
     expect(db.rpc.mock.calls.map(([fn]) => fn)).not.toContain(
-      'mark_manual_document_dispatch_started'
+      'mark_manual_document_dispatch_started_v2'
     );
   });
 

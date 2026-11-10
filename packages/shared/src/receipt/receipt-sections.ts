@@ -6,7 +6,6 @@ import {
 } from './receipt-assurance';
 import {
   getReceiptDisplaySubtotal,
-  getReceiptVatRate,
   type MoneyFormatter,
   shouldShowVatLine,
 } from './receipt-money';
@@ -66,11 +65,18 @@ export function renderFinancialSummaryLines(
   }
 
   if (shouldShowVatLine(order, merchant)) {
-    const vatRate =
-      merchant.vat_registration_status === 'registered'
-        ? getReceiptVatRate(merchant, order.currency)
-        : null;
-    const vatLabel = escapeHtml(vatRate !== null ? `VAT (${vatRate}%)` : 'VAT');
+    const chargedRows = order.tax_subtotals?.filter(
+      (row) => row && (row.tax_amount ?? 0) > 0
+    );
+    const vatRate = chargedRows?.[0]?.vat_rate;
+    const singleHistoricalRate =
+      typeof vatRate === 'number' &&
+      Number.isFinite(vatRate) &&
+      vatRate > 0 &&
+      chargedRows?.every((row) => row?.vat_rate === vatRate);
+    const vatLabel = escapeHtml(
+      singleHistoricalRate ? `VAT (${vatRate}%)` : 'VAT'
+    );
     summaryLines.push(
       `<div class="sum-row"><span>${vatLabel}</span><span>${formatMoney(order.tax_amount)}</span></div>`
     );

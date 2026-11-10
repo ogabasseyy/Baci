@@ -56,8 +56,7 @@ export function buildDispatchMerchantSnapshot(
   rawBrandColors: unknown
 ): DispatchMerchantRow {
   // The merchant rides whole for transport, but staleness compares the
-  // rendered-only subset: cac_rc_number prints nowhere and stays
-  // ignored, the VAT inputs compare only for rowless taxed invoices
+  // rendered-only subset. The VAT inputs compare only for rowless taxed invoices
   // (breakdown synthesis), and registered_address gates invoices alone
   // (receipts print business_address instead).
   return {

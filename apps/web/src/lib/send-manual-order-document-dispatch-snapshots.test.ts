@@ -34,7 +34,7 @@ describe('send manual order document dispatch snapshots', () => {
     const db = database();
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({ p_document_kind: 'receipt' });
   });
@@ -43,7 +43,7 @@ describe('send manual order document dispatch snapshots', () => {
     const db = database({}, { primaryDomain: 'shop.example.com' });
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_claim_domain: 'shop.example.com',
@@ -63,7 +63,7 @@ describe('send manual order document dispatch snapshots', () => {
     );
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_merchant_support_email: 'support@shop.example.com',
@@ -76,7 +76,7 @@ describe('send manual order document dispatch snapshots', () => {
     const db = database({}, { merchantOverride: { slug: 'shop' } });
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({ p_merchant_slug: 'shop' });
     expect(markCall?.[1]).toMatchObject({
@@ -101,7 +101,7 @@ describe('send manual order document dispatch snapshots', () => {
       row: { ...row, event_type: 'manual_order_invoice' },
     });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       // bank_code never prints, so the snapshot omits it even when the
@@ -136,7 +136,7 @@ describe('send manual order document dispatch snapshots', () => {
       row: { ...row, event_type: 'manual_order_invoice' },
     });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_merchant_bank_code: null,
@@ -174,7 +174,7 @@ describe('send manual order document dispatch snapshots', () => {
       row: { ...row, event_type: 'manual_order_invoice' },
     });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_merchant_bank_code: null,
@@ -213,7 +213,7 @@ describe('send manual order document dispatch snapshots', () => {
     );
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_tax_count: 2,
@@ -260,7 +260,7 @@ describe('send manual order document dispatch snapshots', () => {
     );
     await sendManualOrderDocument({ supabase: db.client, row });
     const markCall = db.rpc.mock.calls.find(
-      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
     );
     expect(markCall?.[1]).toMatchObject({
       p_txn_count: 2,

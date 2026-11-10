@@ -260,13 +260,13 @@ export async function sendManualOrderDocument({
       row.id,
       row.claim_owner
     );
+    if (!(await recordAcceptedToken()))
+      return {
+        status: 'failed',
+        error: 'sent_claim_marker_failed',
+        deliveryOutcome: 'unknown',
+      };
     if (lease === 'unknown') {
-      if (!(await recordAcceptedToken()))
-        return {
-          status: 'failed',
-          error: 'sent_claim_marker_failed',
-          deliveryOutcome: 'unknown',
-        };
       return {
         status: 'failed',
         error: 'dispatch_lease_check_failed',
@@ -274,20 +274,8 @@ export async function sendManualOrderDocument({
       };
     }
     if (lease === 'reset') {
-      if (!(await recordAcceptedToken()))
-        return {
-          status: 'failed',
-          error: 'sent_claim_marker_failed',
-          deliveryOutcome: 'unknown',
-        };
       return { status: 'failed', error: 'document_changed_during_send' };
     }
-    if (!(await recordAcceptedToken()))
-      return {
-        status: 'failed',
-        error: 'sent_claim_marker_failed',
-        deliveryOutcome: 'unknown',
-      };
     return { status: 'sent', messageId: result.messageId };
   } catch (error) {
     // Never re-dispatch after a lost provider response or an accepted send whose

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHtmlToPdf } from '@/lib/receipt-html-to-pdf';
 import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
@@ -129,6 +130,24 @@ describe('invoice Paystack payment-account history', () => {
     vi.mocked(cookies).mockResolvedValue({ get: vi.fn() } as never);
     vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['invoice']));
     vi.mocked(resolveReceiptLogoDataUri).mockResolvedValue(null);
+  });
+
+  it('returns a retryable 503 when the invoice renderer deadline has elapsed', async () => {
+    vi.mocked(createClient).mockReturnValue(
+      createSupabaseMock(
+        { data: [], error: null },
+        { payment_status: 'paid' }
+      ) as unknown as ReturnType<typeof createClient>
+    );
+    vi.mocked(generateReceiptBlob).mockImplementationOnce(async () => {
+      await renderHtmlToPdf('<html>invoice</html>', 0);
+      throw new Error('Expected the expired render to reject');
+    });
+
+    const response = await invoiceRequest();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('5');
   });
 
   it('keeps an expired Paystack DVA on a paid invoice for payment history', async () => {

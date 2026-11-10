@@ -1,35 +1,8 @@
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
+import { releaseManifestInput } from '../../src/schemas/experience-runner-proofs';
 
-const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const gate = z.strictObject({
-  status: z.enum(['passed', 'failed', 'missing', 'skipped']),
-  sourceDigest: hash,
-  evidence: z.string().min(1).max(1000),
-});
-export const releaseManifestInput = z.strictObject({
-  candidateSha: z
-    .string()
-    .regex(/^[a-f0-9]{40}$/)
-    .nullable(),
-  sourceDigest: hash,
-  lockDigest: hash,
-  toolchainDigest: hash,
-  runtimeDigest: hash,
-  rollbackBuild: hash.nullable(),
-  gates: z.strictObject({
-    unit: gate,
-    types: gate,
-    lint: gate,
-    sql: gate,
-    browser: gate,
-    linux: gate,
-    noAi: gate,
-    review: gate,
-    ciFull: gate,
-    ciTargeted: gate,
-  }),
-});
+export { releaseManifestInput } from '../../src/schemas/experience-runner-proofs';
+
 /** Evidence, never deployment/publication authority. Missing/skipped/stale gates fail. */
 export function buildExperienceReleaseManifest(input: unknown) {
   const v = releaseManifestInput.parse(input);

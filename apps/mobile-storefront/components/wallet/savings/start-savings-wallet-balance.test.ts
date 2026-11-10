@@ -82,6 +82,9 @@ describe('wholeNairaHeadStart', () => {
     // A float artifact never asks for an extra naira.
     [20_000.0000001, 20_000],
     [19_999.9999999, 20_000],
+    [Number.NaN, 0],
+    [Number.POSITIVE_INFINITY, 0],
+    [-5, 0],
   ])('moves %p naira as %p whole naira', (amount, expected) => {
     expect(wholeNairaHeadStart(amount)).toBe(expected);
   });

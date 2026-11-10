@@ -13,6 +13,8 @@ export const PRIMARY_BALANCE_CHECK_FAILED_MESSAGE =
  * start: rounded to kobo first (dropping float artifacts), then up to naira.
  */
 export function wholeNairaHeadStart(amount: number): number {
+  // Never pass NaN, Infinity or a negative amount on to the wallet.
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
   return Math.ceil(Math.round(amount * 100) / 100);
 }
 

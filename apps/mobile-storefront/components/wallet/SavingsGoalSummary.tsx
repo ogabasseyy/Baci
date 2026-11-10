@@ -111,11 +111,15 @@ export function SavingsGoalSummary({
           />
         ) : null}
       </View>
-      {!hasProgress && nudge ? (
-        <Text style={[styles.nudge, { color: colors.text }]}>
-          {nudge.label}
+      {hasProgress ? null : (
+        // No visual card yet, but screen readers still hear where it stands.
+        <Text
+          accessibilityLabel={`Nothing saved yet toward your ${formatNgnCurrency(goal.target_amount)} target.${nudge ? ` ${nudge.label}` : ''}`}
+          style={[styles.nudge, { color: colors.text }]}
+        >
+          {nudge?.label ?? ''}
         </Text>
-      ) : null}
+      )}
       {hasProgress ? (
         <View
           style={[

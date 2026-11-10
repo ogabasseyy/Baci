@@ -74,6 +74,12 @@ it('leaves non-pairing deep links for the router instead of sending them to the 
   expect(peekCartPairingLink()).toBeNull();
 });
 
+it('sends an oversized non-pairing delivery to the start screen', () => {
+  const oversized = `ogabassey://product/${'a'.repeat(10001)}`;
+  expect(captureCartPairingLink(oversized, config)).toBe('/');
+  expect(peekCartPairingLink()).toBeNull();
+});
+
 it('captures a valid token when the global atob is unavailable', () => {
   const original = globalThis.atob;
   // @ts-expect-error simulate a runtime without the web global

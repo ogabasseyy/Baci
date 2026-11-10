@@ -27,6 +27,8 @@ export interface CartPairingLink {
    */
   browserUrl: string;
 }
+/** Longest system delivery handed on to the router or validated. */
+const MAX_DELIVERY_LENGTH = 10000;
 let pending: CartPairingLink | null = null;
 let revision = 0;
 const listeners = new Set<() => void>();
@@ -77,10 +79,12 @@ export function captureCartPairingLink(path: string, config: Config): string {
   // to Expo Router untouched. Every home-screen launch arrives here as
   // the app's own absolute root URL (Linking.createURL('/')), and
   // deep links, universal links and notification links are absolute
-  // too: rewriting them sent every launch to the cart. The router
-  // discards a delivery's scheme and host and only maps its path onto
-  // in-app routes, so no delivery can open anything outside the app.
-  if (!pairing) return path;
+  // too: rewriting them sent every launch to the cart. The router's
+  // extractExpoPathFromURL strips an https origin and treats a custom
+  // scheme's remainder as the path, so a delivery only ever selects an
+  // in-app route. Oversized deliveries still fail closed, to the start
+  // screen rather than the cart.
+  if (!pairing) return path.length > MAX_DELIVERY_LENGTH ? '/' : path;
   // A malformed or foreign pairing link must not wipe a valid pending
   // pairing captured moments earlier: the pending link is replaced
   // only after the incoming one fully validates below.
@@ -107,7 +111,7 @@ export function captureCartPairingLink(path: string, config: Config): string {
       !allowed.has(url.hostname.toLowerCase()) ||
       url.pathname !== '/cart' ||
       url.search ||
-      path.length > 10000
+      path.length > MAX_DELIVERY_LENGTH
     )
       return '/cart';
     if (

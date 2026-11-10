@@ -62,10 +62,16 @@ export async function readGiglWaybillCancellation(
     let matched = false;
     for (const entry of records) {
       if (entry === null || typeof entry !== 'object') continue;
-      const record = entry as { Waybill?: unknown; IsCancelled?: unknown };
-      if (String(record.Waybill ?? '').trim() !== wanted) continue;
+      const waybillValue = 'Waybill' in entry ? entry.Waybill : undefined;
+      if (String(waybillValue ?? '').trim() !== wanted) continue;
       matched = true;
-      if (record.IsCancelled === true) return 'cancelled';
+      // Same rule as the external-waybill preview: cancelled or deleted.
+      if (
+        ('IsCancelled' in entry && entry.IsCancelled === true) ||
+        ('IsDeleted' in entry && entry.IsDeleted === true)
+      ) {
+        return 'cancelled';
+      }
     }
     return matched ? 'active' : 'unknown';
   } catch (error) {

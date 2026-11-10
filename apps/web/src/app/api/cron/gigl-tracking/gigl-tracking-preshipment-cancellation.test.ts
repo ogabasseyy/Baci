@@ -59,6 +59,15 @@ describe('withPreshipmentCancellation', () => {
     expect(out.events).toHaveLength(2);
   });
 
+  it('keeps the last known location from the feed', () => {
+    const withLocation: TrackingResult = {
+      ...base,
+      events: [{ ...base.events[0]!, location: 'Lagos Hub' }],
+    };
+    const out = withPreshipmentCancellation(withLocation, 'W1', at);
+    expect(out.events[0]?.location).toBe('Lagos Hub');
+  });
+
   it('clears delivery timestamps inherited from the feed result', () => {
     const out = withPreshipmentCancellation(base, 'W1', at);
     expect(out.actualDelivery).toBeUndefined();

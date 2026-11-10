@@ -43,6 +43,7 @@ export function withPreshipmentCancellation(
     events: [
       {
         description: 'Shipment cancelled in GIG',
+        location: result?.events[0]?.location,
         providerEventKey: `preshipment-cancelled:${trackingNumber}`,
         rawStatus: 'CANCELLED',
         status,

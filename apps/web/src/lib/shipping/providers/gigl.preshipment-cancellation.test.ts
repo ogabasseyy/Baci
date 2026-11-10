@@ -35,6 +35,16 @@ describe('readGiglWaybillCancellation', () => {
     ).resolves.toBe('cancelled');
   });
 
+  it('reports cancelled when the preshipment record is deleted', async () => {
+    const { apiClient, io } = setupApi({
+      status: 200,
+      data: [{ Waybill: 'WB1', IsDeleted: true }],
+    });
+    await expect(
+      readGiglWaybillCancellation(apiClient, io, 'WB1')
+    ).resolves.toBe('cancelled');
+  });
+
   it('reports active when the record is not cancelled', async () => {
     const { apiClient, io } = setupApi({
       status: 200,

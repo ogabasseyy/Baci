@@ -17,6 +17,7 @@ DECLARE
   v_shipping_status text;
   v_order_status text;
   v_status_before text;
+  v_shipping_before text;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (
@@ -44,7 +45,7 @@ BEGIN
 
   UPDATE public.shipments SET status = 'in_transit'
   WHERE id = v_current_shipment_id;
-  SELECT status, shipping_status INTO v_status_before, v_shipping_status
+  SELECT status::text, shipping_status INTO v_status_before, v_shipping_before
   FROM public.orders WHERE id = v_order_id;
 
   -- Older generation cancelled: order must be completely untouched.
@@ -52,8 +53,8 @@ BEGIN
   WHERE id = v_old_shipment_id;
   SELECT status::text, shipping_status INTO v_order_status, v_shipping_status
   FROM public.orders WHERE id = v_order_id;
-  IF v_order_status IS DISTINCT FROM v_status_before::text
-     OR v_shipping_status IS DISTINCT FROM 'shipped' THEN
+  IF v_order_status IS DISTINCT FROM v_status_before
+     OR v_shipping_status IS DISTINCT FROM v_shipping_before THEN
     RAISE EXCEPTION
       'cancelling an older-generation shipment must leave the order untouched';
   END IF;
@@ -63,7 +64,7 @@ BEGIN
   WHERE id = v_current_shipment_id;
   SELECT status::text, shipping_status INTO v_order_status, v_shipping_status
   FROM public.orders WHERE id = v_order_id;
-  IF v_order_status IS DISTINCT FROM v_status_before::text THEN
+  IF v_order_status IS DISTINCT FROM v_status_before THEN
     RAISE EXCEPTION 'a cancelled shipment must not cancel the paid order';
   END IF;
   IF v_shipping_status IS DISTINCT FROM 'cancelled' THEN

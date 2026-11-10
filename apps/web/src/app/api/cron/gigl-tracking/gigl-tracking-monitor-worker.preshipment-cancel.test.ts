@@ -27,6 +27,12 @@ const bookedResult: TrackingResult = {
   trackingNumber: 'GIGL-1',
 };
 
+type WorkerClient = Parameters<typeof processClaimedGiglTrackingMonitors>[0];
+
+function toWorkerClient(rpc: ReturnType<typeof vi.fn>): WorkerClient {
+  return { rpc } as unknown as WorkerClient;
+}
+
 function setup(cancellation: 'cancelled' | 'active' | 'unknown') {
   const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
   const readCancellation = vi.fn().mockResolvedValue(cancellation);
@@ -39,7 +45,7 @@ async function run(
   results: Map<string, TrackingResult>
 ) {
   return processClaimedGiglTrackingMonitors(
-    { rpc: s.rpc } as never,
+    toWorkerClient(s.rpc),
     [monitor],
     'worker-1',
     async () => results,

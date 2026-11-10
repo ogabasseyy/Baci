@@ -79,7 +79,9 @@ export function getCancelRefundPlan(
   if (order.transactions === undefined) {
     return {
       amount:
-        order.paymentStatus === 'Paid' && order.total > 0 ? order.total : 0,
+        order.paymentStatus.trim().toLowerCase() === 'paid' && order.total > 0
+          ? order.total
+          : 0,
       automaticSupported: true,
       inFlightAmount: 0,
     };

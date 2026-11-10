@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import {
+  authenticateApiRequest,
+  getMerchantIdForApiUser,
+} from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { attachCancellationRefundMode } from '@/lib/orders/attach-cancellation-refund-mode';
 import { maskRefundWorkerText } from '@/lib/orders/mask-refund-worker-text';
@@ -191,11 +194,21 @@ async function handle(
       { error: 'Unable to manage refund', code: 'internal_error' },
       { status: 500 }
     );
+  let merchantId: string | null = null;
+  try {
+    merchantId = await getMerchantIdForApiUser(auth.supabase);
+  } catch {
+    // Fail open: the card keeps neutral copy without the cancel mode.
+  }
+  const masked = maskRefundWorkerText(data as Record<string, unknown>);
   return NextResponse.json(
-    await attachCancellationRefundMode(
-      maskRefundWorkerText(data as Record<string, unknown>),
-      { orderId: id, supabase: auth.supabase }
-    )
+    merchantId
+      ? await attachCancellationRefundMode(masked, {
+          merchantId,
+          orderId: id,
+          supabase: auth.supabase,
+        })
+      : masked
   );
 }
 

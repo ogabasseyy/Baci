@@ -2,33 +2,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachCancellationRefundMode } from './attach-cancellation-refund-mode';
 
 function supabaseWith(result: unknown, throws = false) {
+  const maybeSingle = throws
+    ? vi.fn().mockRejectedValue(new Error('down'))
+    : vi.fn().mockResolvedValue(result);
+  const eqMerchant = vi.fn(() => ({ maybeSingle }));
+  const eqId = vi.fn(() => ({ eq: eqMerchant }));
   return {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: throws
-            ? vi.fn().mockRejectedValue(new Error('down'))
-            : vi.fn().mockResolvedValue(result),
-        })),
-      })),
-    })),
-  } as never;
+    eqId,
+    eqMerchant,
+    supabase: {
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq: eqId })) })),
+    } as never,
+  };
 }
 
-const args = (supabase: never) => ({ orderId: 'o1', supabase });
+const args = (supabase: never) => ({
+  merchantId: 'm1',
+  orderId: 'o1',
+  supabase,
+});
 
 describe('attachCancellationRefundMode', () => {
-  it('adds the persisted manual mode', async () => {
+  it('adds the persisted manual mode, scoped to the merchant', async () => {
+    const { eqId, eqMerchant, supabase } = supabaseWith({
+      data: { cancellation_refund_mode: 'manual' },
+      error: null,
+    });
     const out = await attachCancellationRefundMode(
       { status: 'not_started' },
-      args(
-        supabaseWith({
-          data: { cancellation_refund_mode: 'manual' },
-          error: null,
-        })
-      )
+      args(supabase)
     );
     expect(out).toMatchObject({ cancellationRefundMode: 'manual' });
+    expect(eqId).toHaveBeenCalledWith('id', 'o1');
+    expect(eqMerchant).toHaveBeenCalledWith('merchant_id', 'm1');
   });
 
   it('adds automatic and maps a legacy null to null', async () => {
@@ -38,7 +44,7 @@ describe('attachCancellationRefundMode', () => {
         supabaseWith({
           data: { cancellation_refund_mode: 'automatic' },
           error: null,
-        })
+        }).supabase
       )
     );
     const legacy = await attachCancellationRefundMode(
@@ -47,7 +53,7 @@ describe('attachCancellationRefundMode', () => {
         supabaseWith({
           data: { cancellation_refund_mode: null },
           error: null,
-        })
+        }).supabase
       )
     );
     expect(automatic).toMatchObject({ cancellationRefundMode: 'automatic' });
@@ -59,11 +65,14 @@ describe('attachCancellationRefundMode', () => {
     await expect(
       attachCancellationRefundMode(
         summary,
-        args(supabaseWith({ data: null, error: { message: 'x' } }))
+        args(supabaseWith({ data: null, error: { message: 'x' } }).supabase)
       )
     ).resolves.toBe(summary);
     await expect(
-      attachCancellationRefundMode(summary, args(supabaseWith(null, true)))
+      attachCancellationRefundMode(
+        summary,
+        args(supabaseWith(null, true).supabase)
+      )
     ).resolves.toBe(summary);
   });
 });

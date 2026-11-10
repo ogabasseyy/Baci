@@ -156,6 +156,15 @@ describe('getAutomaticCancelRefundAmount', () => {
     ).toBe(0);
   });
 
+  it('reads the paid status case-insensitively when the ledger is unknown', () => {
+    expect(
+      getCancelRefundPlan({ paymentStatus: 'PAID', total: 4000 }).amount
+    ).toBe(4000);
+    expect(
+      getCancelRefundPlan({ paymentStatus: 'unpaid', total: 4000 }).amount
+    ).toBe(0);
+  });
+
   it('falls back to the total for a paid order with unknown ledger', () => {
     expect(
       getAutomaticCancelRefundAmount({ paymentStatus: 'Paid', total: 4000 })

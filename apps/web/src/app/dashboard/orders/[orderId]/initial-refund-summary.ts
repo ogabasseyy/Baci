@@ -13,7 +13,8 @@ import { createClient } from '@/lib/supabase/server';
 // client-side exactly as before, so a status outage degrades to a
 // spinner instead of breaking the order page.
 export async function getInitialRefundSummary(
-  orderId: string
+  orderId: string,
+  merchantId: string
 ): Promise<RefundSummary | null> {
   try {
     const supabase = await createClient();
@@ -24,7 +25,7 @@ export async function getInitialRefundSummary(
     if (error || !data || typeof data !== 'object') return null;
     return (await attachCancellationRefundMode(
       maskRefundWorkerText(data as Record<string, unknown>),
-      { orderId, supabase }
+      { merchantId, orderId, supabase }
     )) as unknown as RefundSummary;
   } catch {
     return null;

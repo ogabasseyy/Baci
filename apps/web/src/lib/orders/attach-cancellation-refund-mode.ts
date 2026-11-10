@@ -11,15 +11,21 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
 export async function attachCancellationRefundMode<T extends object>(
   summary: T,
   {
+    merchantId,
     orderId,
     supabase,
-  }: { orderId: string; supabase: Pick<SupabaseClient, 'from'> }
+  }: {
+    merchantId: string;
+    orderId: string;
+    supabase: Pick<SupabaseClient, 'from'>;
+  }
 ): Promise<T & Pick<RefundSummary, 'cancellationRefundMode'>> {
   try {
     const { data, error } = await supabase
       .from('orders')
       .select('cancellation_refund_mode')
       .eq('id', orderId)
+      .eq('merchant_id', merchantId)
       .maybeSingle();
     if (error || !data) return summary;
     const mode = data.cancellation_refund_mode;

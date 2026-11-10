@@ -65,8 +65,11 @@ export function startSharedCartRealtime(
     void options.refresh().catch(() => undefined);
   }
   async function connect(): Promise<void> {
-    await disconnect();
+    // Take the epoch before yielding, or an overlapping connect would adopt
+    // the newer one's and both would stay live.
+    const closing = disconnect();
     const run = epoch;
+    await closing;
     const cartId = options.getCartId();
     if (!cartId || !live(run)) return;
     try {

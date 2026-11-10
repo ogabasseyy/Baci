@@ -25,3 +25,12 @@ it('falls back to a generic restored-cart message for unknown failures', () => {
     /put your cart back/i
   );
 });
+
+it('says an uncertain failure is still saving instead of claiming it was undone', () => {
+  const message = writeFailureMessage(
+    new NativeCartError('network', true),
+    'unconfirmed'
+  );
+  expect(message).toMatch(/still saving/i);
+  expect(message).not.toMatch(/put your cart back|no longer available/i);
+});

@@ -18,7 +18,14 @@ const MESSAGES: Record<string, string> = {
 const FALLBACK =
   "That change couldn't be saved, so we put your cart back as it was.";
 
-/** Plain-language reason for a rejected cart edit; never exposes raw server detail. */
-export function writeFailureMessage(error: unknown): string {
+const UNCONFIRMED =
+  "We're still saving that change. Your cart will update in a moment.";
+
+/** Plain-language reason for a failed cart edit; never exposes raw server detail. */
+export function writeFailureMessage(
+  error: unknown,
+  outcome: 'rolled_back' | 'unconfirmed' = 'rolled_back'
+): string {
+  if (outcome === 'unconfirmed') return UNCONFIRMED;
   return (error instanceof NativeCartError && MESSAGES[error.code]) || FALLBACK;
 }

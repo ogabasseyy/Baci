@@ -1,5 +1,6 @@
 import type { CartItemIdentity, CartSnapshot } from '@baci/shared/cart';
 import type { CartItem } from '@/stores/cart-store.types';
+import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import type { CartProductShell } from './display';
 import type { pendingCartRequest } from './pending-request';
 import type { NativeCartClient } from './shared-cart-client';
@@ -47,6 +48,14 @@ export interface NativeCartControllerOptions {
     display: { items: CartItem[]; metadataReady: boolean }
   ): void;
   status(status: NativeCartStatus, code?: string): void;
+  /** Screen-only update while shopper edits wait for the server. */
+  showItems?(items: CartItem[]): void;
+  /** A shopper edit failed: undone for certain, or possibly still applied. */
+  onWriteFailed?(
+    action: SharedCartWrite,
+    error: unknown,
+    outcome: 'rolled_back' | 'unconfirmed'
+  ): void;
   isCurrent(): boolean;
   onHandoffCommitted?(handoffId: string): void;
   onMergeConflicts?(items: CartItemIdentity[], reason?: string): void;

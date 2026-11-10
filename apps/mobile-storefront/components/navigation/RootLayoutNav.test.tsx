@@ -93,6 +93,9 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('@/components/cart/SharedCartBridge', () => ({
   SharedCartBridge: () => <MockText>shared-cart-bridge</MockText>,
 }));
+jest.mock('@/components/cart/CartWriteNotice', () => ({
+  CartWriteNotice: () => <MockText>cart-write-notice</MockText>,
+}));
 jest.mock('@/components/cart/NativeCartPairingPanel', () => ({
   NativeCartPairingPanel: () => <MockText>cart-pairing-panel</MockText>,
 }));

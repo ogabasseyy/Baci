@@ -15,8 +15,8 @@ import {
 } from '@/lib/cart/enrollment-transition';
 import { dedupeMergeConflictItems } from '@/lib/cart/merge-conflict-items';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
-import { createOptimisticCart } from '@/lib/cart/optimistic-cart-write';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
+import { isPredictableEdit } from '@/lib/cart/pending-edits';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
 import { cartSessionStorage } from '@/lib/cart/session-storage';
 import {
@@ -145,14 +145,6 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       savedCart: null,
     });
     let controller: ReturnType<typeof createNativeCartController> | null = null;
-    const optimistic = createOptimisticCart({
-      getItems: () => useCartStore.getState().items,
-      setItems: (items) => {
-        if (isCurrent()) useCartStore.setState({ items });
-      },
-      hasSnapshot: () =>
-        Boolean(useNativeSharedCartStore.getState().snapshot?.cartId),
-    });
     let retireDevice: (() => Promise<void>) | undefined;
     const release = installSharedCartWriter({
       retire: async () => {
@@ -182,19 +174,9 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       write: (action) => {
         const active = controller;
         if (!active) return Promise.reject(new Error('Cart unavailable'));
-        useNativeSharedCartStore.setState({ writeNotice: null });
-        return optimistic
-          .write(action, (resolved) => active.write(resolved))
-          .catch((error: unknown) => {
-            if (alive)
-              useNativeSharedCartStore.setState({
-                writeNotice: writeFailureMessage(error),
-              });
-            // The rollback may hide a write the server did apply (timeout);
-            // reconcile with the authoritative cart rather than guess.
-            void active.refresh().catch(() => undefined);
-            throw error;
-          });
+        if (isPredictableEdit(action))
+          useNativeSharedCartStore.setState({ writeNotice: null });
+        return active.write(action);
       },
       onError: () => {
         if (!alive) return;
@@ -238,6 +220,16 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
             useCartStore.setState({ items, sharedCartRef: undefined });
         },
         loadProduct: deps.loadProduct,
+        showItems: (items) => {
+          if (isCurrent()) useCartStore.setState({ items });
+        },
+        onWriteFailed: (action, error, outcome) => {
+          // Background repricing and restores are not shopper taps.
+          if (isCurrent() && isPredictableEdit(action))
+            useNativeSharedCartStore.setState({
+              writeNotice: writeFailureMessage(error, outcome),
+            });
+        },
         status: (status, code) => {
           if (!isCurrent()) return;
           useCartStore.setState({

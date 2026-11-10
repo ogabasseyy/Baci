@@ -188,3 +188,19 @@ it('tears down on stop and ignores late events and sessions that changed', async
   await flush();
   expect(t.refresh).not.toHaveBeenCalled();
 });
+
+it('keeps a single socket when connects overlap', async () => {
+  const t = setup({ cartId: null });
+  const grants: Array<(value: CartReceiveAccess) => void> = [];
+  t.deps.loadAccess.mockImplementation(
+    () => new Promise<CartReceiveAccess>((resolve) => grants.push(resolve))
+  );
+  t.state.cartId = CART;
+  t.handle.sync();
+  t.handle.sync();
+  await flush();
+  for (const grant of grants.splice(0)) grant(access());
+  await flush();
+  expect(t.deps.connect).toHaveBeenCalledTimes(1);
+  t.handle.stop();
+});

@@ -1,6 +1,8 @@
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
+import { createEditQueue } from './controller-edit-queue';
+import { editLocalCartOnly } from './controller-legacy-edit';
 import type {
   NativeCartControllerOptions,
   NativeCartStatus,
@@ -22,6 +24,7 @@ import {
 import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
+import { createPendingEdits, isPendingLineId } from './pending-edits';
 import { pendingCartRequest } from './pending-request';
 import { NativeCartError } from './shared-cart-client';
 
@@ -35,6 +38,9 @@ export function createNativeCartController(
   let incoming: CartSnapshot | null = null;
   let tail: Promise<unknown> = Promise.resolve();
   const receipts = options.receipts ?? pendingCartRequest;
+  const edits = createPendingEdits((items) => {
+    if (options.isCurrent()) options.showItems?.(items);
+  });
   function assertCurrent(): void {
     if (!options.isCurrent()) throw new NativeCartError('session_changed');
   }
@@ -80,6 +86,7 @@ export function createNativeCartController(
       snapshot = null;
       terminal = true;
       terminalCartId = next.cartId;
+      edits.reset();
       options.publish(next, { items: [], metadataReady: true });
       options.status('ready');
       return;
@@ -95,7 +102,10 @@ export function createNativeCartController(
     );
     assertCurrent();
     snapshot = next;
-    options.publish(next, display);
+    options.publish(next, {
+      ...display,
+      items: edits.confirm(display.items),
+    });
     options.status('ready');
   }
   async function refresh(): Promise<void> {
@@ -116,6 +126,7 @@ export function createNativeCartController(
       pending = null;
       snapshot = null;
       terminal = false;
+      edits.reset();
     }
     assertCurrent();
     if (pending) {
@@ -196,7 +207,9 @@ export function createNativeCartController(
     if (legacy.sharedCartRef) throw new NativeCartError('reconnect_required');
     const created = await coordinator.create({
       operationId: options.newOperationId(),
-      lines: legacy.items.map(nativeCartInput),
+      lines: legacy.items
+        .filter((item) => !isPendingLineId(item.id))
+        .map(nativeCartInput),
     });
     await accept(created);
     return created;
@@ -224,43 +237,32 @@ export function createNativeCartController(
     refresh,
     status: options.status,
   });
+  const enqueueEdit = createEditQueue({
+    edits,
+    live: () => Boolean(snapshot) && !terminal && !incoming,
+    serial,
+    refresh,
+    onFailed: options.onWriteFailed,
+    run: async (action: SharedCartWrite) => {
+      if (
+        await editLocalCartOnly(
+          options,
+          receipts,
+          action,
+          Boolean(snapshot) || terminal || Boolean(incoming)
+        )
+      )
+        return;
+      await operations.write(action);
+    },
+  });
   return {
     refresh: () => serial(refresh),
     prepare: () =>
       serial(async () => {
         await ensureCart();
       }),
-    write: (action: SharedCartWrite) =>
-      serial(async () => {
-        const legacy = options.getLegacy();
-        if (
-          !terminal &&
-          !snapshot &&
-          !incoming &&
-          legacy.items.length > 0 &&
-          !legacy.sharedCartRef &&
-          options.repairLegacy &&
-          (action.type === 'clear' ||
-            action.type === 'remove' ||
-            action.type === 'quantity') &&
-          !(await options.client.context())?.cartId &&
-          !(await receipts.read(options.merchantId))
-        ) {
-          const items =
-            action.type === 'clear'
-              ? []
-              : legacy.items.flatMap((item) => {
-                  if (item.id !== action.id) return [item];
-                  return action.type === 'remove' || action.quantity <= 0
-                    ? []
-                    : [{ ...item, quantity: action.quantity }];
-                });
-          options.repairLegacy(items);
-          options.status('ready');
-          return;
-        }
-        await operations.write(action);
-      }),
+    write: enqueueEdit,
     pair: (
       link: CartPairingLink,
       choice: 'connect' | 'merge' | 'keep_existing',

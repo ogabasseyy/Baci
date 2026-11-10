@@ -145,7 +145,8 @@ BEGIN
     RAISE EXCEPTION 'invalid publisher parameters';
   END IF;
   FOR r IN
-    SELECT e.*
+    SELECT e.id, e.merchant_id, e.cart_id, e.version, e.operation_id,
+      e.attempts
     FROM public.commerce_cart_events AS e
     JOIN public.merchants AS m ON m.id = e.merchant_id
     WHERE e.delivered_at IS NULL
@@ -201,9 +202,11 @@ REVOKE ALL ON FUNCTION public.commerce_cart_publish_events(integer, text)
 -- minutes after it was written; with send-on-write and a 30-second sweep
 -- that only happens when delivery is broken. Both counts cover merchants
 -- currently enrolled in live updates only, so unenrolling a merchant clears
--- its share of the alarm at once. The stale count walks the existing
--- undelivered-rows partial index (commerce_cart_events_outbox_idx), which
--- holds only unsent notices; the dead-letter count uses the index below.
+-- its share of the alarm at once. The stale count is limited to unsent,
+-- unparked notices, a set the existing partial indexes
+-- commerce_cart_events_outbox_idx (20261012050000) and
+-- commerce_cart_events_ready_idx (20261014070000) already narrow; the
+-- dead-letter count uses the index below.
 --
 -- The reading is deliberately callable with the public anon key (as
 -- get_merchant_signup_policy_health is): the monitor route must not use a

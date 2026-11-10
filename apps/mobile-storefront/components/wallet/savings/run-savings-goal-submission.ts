@@ -23,23 +23,24 @@ import type { ContributionRail } from './stored-contribution-operation';
 export const PLAN_CREATED_HEAD_START_PENDING =
   'Your plan was created, but we could not load it yet. Open your wallet to add the head start.';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasGoalId(value: unknown, goalId: string): boolean {
+  return isRecord(value) && value.id === goalId;
+}
+
 /** The wallet refetch succeeded and its data includes the plan by id. */
 function walletHasGoal(refetchResult: unknown, goalId: string): boolean {
-  if (!refetchResult || typeof refetchResult !== 'object') return false;
-  const { isError, data } = refetchResult as {
-    isError?: boolean;
-    data?: {
-      wallet?: {
-        active_savings_goal?: { id?: string } | null;
-        savings_goals?: Array<{ id?: string }>;
-      };
-    };
-  };
-  if (isError) return false;
-  const wallet = data?.wallet;
+  if (!isRecord(refetchResult) || refetchResult.isError === true) return false;
+  const data = refetchResult.data;
+  const wallet = isRecord(data) ? data.wallet : undefined;
+  if (!isRecord(wallet)) return false;
+  const goals = wallet.savings_goals;
   return (
-    wallet?.active_savings_goal?.id === goalId ||
-    (wallet?.savings_goals ?? []).some((goal) => goal.id === goalId)
+    hasGoalId(wallet.active_savings_goal, goalId) ||
+    (Array.isArray(goals) && goals.some((goal) => hasGoalId(goal, goalId)))
   );
 }
 

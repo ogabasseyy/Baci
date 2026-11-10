@@ -122,8 +122,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
     await expect(first).resolves.toEqual({ status: 'unavailable' });
     answer({ status: 'ready', account, balanceKobo: 5_000_000 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAnswer();
 
     // The next load runs slow too: the late answer stands in for it.
     mockRead.mockReturnValueOnce(new Promise(() => undefined));
@@ -234,8 +233,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     await readPrimaryFundingAccountSoon('m', 'u');
     // The older read lands late with the stale balance: ignored.
     oldAnswer({ status: 'ready', account, balanceKobo: 5_000_000 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAnswer();
     mockRead.mockResolvedValueOnce({ status: 'unavailable' });
     await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
       status: 'ready',
@@ -258,8 +256,7 @@ describe('readPrimaryFundingAccountSoon', () => {
     mockRead.mockResolvedValueOnce({ status: 'not_ready' });
     await readPrimaryFundingAccountSoon('m', 'u');
     oldAnswer({ status: 'ready', account, balanceKobo: 1 });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushAnswer();
     mockRead.mockResolvedValueOnce({ status: 'unavailable' });
     await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
       status: 'unavailable',

@@ -111,7 +111,7 @@ export function SavingsGoalSummary({
           />
         ) : null}
       </View>
-      {hasProgress ? null : nudge ? (
+      {!hasProgress && nudge ? (
         <Text style={[styles.nudge, { color: colors.text }]}>
           {nudge.label}
         </Text>

@@ -108,7 +108,7 @@ BEGIN
           )
         )
       ) THEN
-        RAISE EXCEPTION 'wallet_reservation_fulfill_edit_required' USING ERRCODE = '42501';
+        RAISE EXCEPTION 'platform_reservation_fulfill_edit_required' USING ERRCODE = '42501';
       END IF;
     END IF;
     IF v_existing.status = 'reserved' THEN

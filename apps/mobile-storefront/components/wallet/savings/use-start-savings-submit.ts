@@ -75,6 +75,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     const context = contextRef.current;
+    // Bound to the account that submitted: a switch cancels every follow-up.
+    const submittingUserId = useAuthStore.getState().user?.id;
+    const stillCurrent = () =>
+      context.active && useAuthStore.getState().user?.id === submittingUserId;
     if (options?.confirmPrimaryBalance) {
       // The plan is created without the head start, so the target bound the
       // creation request would enforce is checked here, on this input.
@@ -84,7 +88,6 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         if (mountedRef.current) setIsSubmitting(false);
         return;
       }
-      const submittingUserId = useAuthStore.getState().user?.id;
       // Inside the guarded lifecycle: no second submit can start, and an
       // edit to the plan while the balance is read cancels this one.
       // A thrown read counts as unconfirmed, so the lock is always released.
@@ -133,7 +136,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
           : undefined,
       },
       validation,
-      () => context.active
+      stillCurrent
     ).finally(() => {
       submitInFlightRef.current = false;
       if (mountedRef.current) setIsSubmitting(false);

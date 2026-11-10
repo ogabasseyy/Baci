@@ -195,6 +195,41 @@ describe('PiggyVest head start balance check at submit', () => {
     useAuthStore.setState({ user: null } as never);
   });
 
+  it('never opens the wallet for a new account after the plan is created', async () => {
+    useAuthStore.setState({ user: { id: 'user-a' } } as never);
+    readBalance.mockResolvedValueOnce(2_000_000);
+    let reloaded: (value: unknown) => void = () => undefined;
+    const input = createInput({
+      refetch: jest.fn(
+        () =>
+          new Promise((resolve) => {
+            reloaded = resolve;
+          })
+      ),
+    });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    let pending: Promise<void> = Promise.resolve();
+    await act(async () => {
+      pending = result.current.submitSavingsGoal(primaryOptions);
+      await Promise.resolve();
+    });
+    // The plan exists and the wallet reload is running; the account switches.
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+    expect(createSavingsGoal).toHaveBeenCalled();
+    useAuthStore.setState({ user: { id: 'user-b' } } as never);
+    await act(async () => {
+      reloaded({
+        isError: false,
+        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
+      });
+      await pending;
+    });
+    expect(router.replace).not.toHaveBeenCalled();
+    useAuthStore.setState({ user: null } as never);
+  });
+
   it('drops the submission when the plan is edited during the check', async () => {
     let answer: (value: number) => void = () => undefined;
     readBalance.mockReturnValueOnce(

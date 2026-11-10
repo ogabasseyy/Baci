@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const sql = readFileSync(
   resolve(
     process.cwd(),
-    '../../supabase/migrations/20261110090000_merchant_cancel_order_refund_mode.sql'
+    '../../supabase/migrations/20261110130000_merchant_cancel_order_refund_mode.sql'
   ),
   'utf8'
 );

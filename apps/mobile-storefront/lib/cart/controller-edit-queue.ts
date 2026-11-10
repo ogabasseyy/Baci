@@ -59,9 +59,15 @@ export function createEditQueue(deps: EditQueueDeps) {
             'rolled_back'
           );
       } catch (error) {
+        // Blocked behind an earlier saved request: this edit was never sent,
+        // so recovering that request says nothing about it.
+        const blocked =
+          error instanceof NativeCartError &&
+          error.code === 'pending_operation';
         const outcome: EditOutcome =
-          isIndeterminateFailure(error) ||
-          (await deps.hasRetainedRequest().catch(() => true))
+          !blocked &&
+          (isIndeterminateFailure(error) ||
+            (await deps.hasRetainedRequest().catch(() => true)))
             ? 'unconfirmed'
             : 'rolled_back';
         // The write may have landed; settle against the server inside this

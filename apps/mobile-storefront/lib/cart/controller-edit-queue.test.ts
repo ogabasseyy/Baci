@@ -71,3 +71,17 @@ it('only treats flagged errors as indeterminate', () => {
   ).toBe(false);
   expect(isIndeterminateFailure(new Error('x'))).toBe(false);
 });
+
+it('reports an edit blocked behind a saved request as undone, without recovering', async () => {
+  const t = setup();
+  t.deps.run.mockRejectedValue(new NativeCartError('pending_operation'));
+  t.deps.hasRetainedRequest.mockResolvedValue(true);
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.refresh).not.toHaveBeenCalled();
+  expect(t.deps.notify.onWriteSucceeded).not.toHaveBeenCalled();
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
+    add,
+    expect.anything(),
+    'rolled_back'
+  );
+});

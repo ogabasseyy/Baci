@@ -76,3 +76,21 @@ describe('bugfix: normalize missing gift-wrap fields in legacy fingerprints', ()
     ).toBe(false);
   });
 });
+
+it('matches a confirmed wallet refresh even when saved properties were serialized in a different order', () => {
+  const saved = '{"useWalletCredit":true,"walletAmountUsed":20000,"items":[{"id":"p","price":50000}]}';
+  const refreshed = '{"items":[{"price":50000,"id":"p"}],"walletAmountUsed":0,"useWalletCredit":false}';
+  expect(checkoutFingerprintsMatch(saved, refreshed, 20000)).toBe(true);
+  expect(checkoutFingerprintsMatch(saved, refreshed.replace('50000','50001'), 20000)).toBe(false);
+});
+
+it.each([
+  [false, 20000],
+  [true, 10000],
+  [true, 0],
+  [true, Number.NaN],
+])('rejects wallet refresh for saved selection %s and unconfirmed debit %s', (useWalletCredit, confirmedDebit) => {
+  const saved = JSON.stringify({ useWalletCredit, walletAmountUsed: 20000 });
+  const refreshed = JSON.stringify({ useWalletCredit: false, walletAmountUsed: 0 });
+  expect(checkoutFingerprintsMatch(saved, refreshed, confirmedDebit)).toBe(false);
+});

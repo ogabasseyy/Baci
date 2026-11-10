@@ -296,3 +296,22 @@ it('shows the original invoice and wallet debit while financing only the remaind
     screen.getByRole('region', { name: 'Saved order summary' })
   ).toHaveTextContent('₦400,000.00');
 });
+
+it('passes the exact kobo remainder of a fractional saved order into the Oxygen dialog', async () => {
+  mocks.one.mockResolvedValue({
+    ...savedOrderResult,
+    data: {
+      ...savedOrderResult.data,
+      total: 50000.55,
+      wallet_amount_used: 20000.1,
+    },
+  });
+  render(
+    await OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  );
+  expect(screen.getByText('Plan amount: 30000.45')).toBeVisible();
+});

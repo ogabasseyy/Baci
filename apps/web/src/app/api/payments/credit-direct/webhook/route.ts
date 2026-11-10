@@ -23,12 +23,15 @@ import {
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-credit-direct-confirmation-review';
 import { escapeHtmlText } from '@/lib/sanitize';
+import { sanitizeLikePattern } from '@/lib/sanitize-core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { respondCustomerInventoryFailure } from './customer-inventory-failure';
 
-function readNoteString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
+import {
+  findCreditDirectWebhookOrder,
+  parseCreditDirectOrderNotes,
+  readNoteString,
+} from './webhook-order-reference';
 
 function getPayloadKeys(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -276,7 +279,10 @@ export async function POST(request: NextRequest) {
         'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes'
       )
       .in('payment_method', ['credit_direct', 'klump'])
-      .ilike('notes', `%${payload.checkoutTransactionId}%`);
+      .ilike(
+        'notes',
+        `%${sanitizeLikePattern(JSON.stringify(payload.checkoutTransactionId))}%`
+      );
 
     if (orderError) {
       logger.error({
@@ -304,7 +310,12 @@ export async function POST(request: NextRequest) {
       customer_name: string;
       order_number: string | null;
       notes: string | null;
-    } | null = orders?.[0] ?? null;
+    } | null =
+      findCreditDirectWebhookOrder(
+        orders ?? [],
+        payload.checkoutTransactionId,
+        payload.metaData ?? undefined
+      ) ?? null;
 
     if (!order && payload.metaData) {
       const { data: orderById } = await supabase
@@ -314,7 +325,7 @@ export async function POST(request: NextRequest) {
         )
         .eq('id', payload.metaData)
         .single();
-      if (orderById) {
+      if (orderById?.id === payload.metaData) {
         order = orderById;
       }
     }
@@ -325,16 +336,16 @@ export async function POST(request: NextRequest) {
         transactionId: payload.checkoutTransactionId,
         metaData: payload.metaData,
       });
-      // Return 200 to prevent retries - order might have been cancelled
-      return NextResponse.json({ received: true, warning: 'Order not found' });
+      // Preserve the stale-session acknowledgment for inexact notes hits.
+      return NextResponse.json({
+        received: true,
+        warning: orders?.length
+          ? 'Stale Credit Direct session'
+          : 'Order not found',
+      });
     }
 
-    let parsedNotes: Record<string, unknown> = {};
-    try {
-      parsedNotes = JSON.parse(order.notes || '{}') as Record<string, unknown>;
-    } catch {
-      parsedNotes = {};
-    }
+    const parsedNotes = parseCreditDirectOrderNotes(order.notes);
     const activeTransactionId =
       readNoteString(parsedNotes.creditDirectTransactionId) ??
       readNoteString(parsedNotes.credit_directTransactionId);
@@ -432,6 +443,19 @@ export async function POST(request: NextRequest) {
           providerAmount: getWebhookProductsTotal(payload.products),
         })
       : null;
+    if (walletFunding === 'retry') {
+      logger.warn({
+        message: 'Credit Direct wallet reservation is busy',
+        orderId: order.id,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing verification is temporarily busy',
+          code: 'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
+        },
+        { status: 503 }
+      );
+    }
     if (needsWalletVerification && walletFunding === null) {
       logger.warn({
         message: 'Credit Direct wallet funding requires reconciliation',

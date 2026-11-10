@@ -70,6 +70,11 @@ describe('PaymentStep', () => {
     vi.clearAllMocks();
   });
 
+  it('uses the default currency for a legacy checkout with a null currency', () => {
+    render(<PaymentStep {...defaultProps} currency={null} />);
+    expect(screen.getByText(/remaining balance: ₦10,000/i)).toBeVisible();
+  });
+
   it('preserves an available REDVAULT selection and clears it when availability is revoked', async () => {
     const setPaymentMethod = vi.fn();
     const { rerender } = render(<PaymentStep {...defaultProps} paymentMethod="uba_redvault" redvaultAvailable={true} setPaymentMethod={setPaymentMethod} />);

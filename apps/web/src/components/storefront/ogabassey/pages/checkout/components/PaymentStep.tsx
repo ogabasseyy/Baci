@@ -71,7 +71,7 @@ interface PaymentStepProps {
   oxygenAllowed?: boolean;
   remainingAmount: number;
   orderAmount: number;
-  currency?: string;
+  currency?: string | null;
   redvaultAvailable: boolean;
   redvaultStatus: RedvaultPaymentStatus;
   redvaultSummary: RedvaultQuoteSummary | null;
@@ -98,12 +98,13 @@ export function PaymentStep({
   oxygenAllowed = false,
   remainingAmount,
   orderAmount,
-  currency = 'NGN',
+  currency: checkoutCurrency,
   redvaultAvailable,
   redvaultStatus,
   redvaultSummary,
   redvaultOrderReady,
 }: PaymentStepProps) {
+  const currency = checkoutCurrency ?? 'NGN';
   // Paystack (and its DVA-backed bank transfer) settle NGN only — the
   // initialize API rejects them for non-NGN orders with UNSUPPORTED_CURRENCY,
   // so their country/subaccount availability alone must not surface them on a

@@ -2,6 +2,7 @@ import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
 import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
+import { roundMoney } from '@/lib/order-wallet-funding-utils';
 import { readOxygenCustomerPrefill } from '@/lib/payments/oxygen/customer-prefill';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { createClient } from '@/lib/supabase/server';
@@ -83,7 +84,7 @@ export async function OxygenStorefrontCheckout({
     ...(order.customer_email ? { email: order.customer_email } : {}),
   });
   const contact = checkoutContact.success ? checkoutContact.data : prefill;
-  const amountToFinance = order.total - order.wallet_amount_used;
+  const amountToFinance = roundMoney(order.total - order.wallet_amount_used);
   return (
     <CheckoutPage
       verifiedOxygenOrderId={order.id}

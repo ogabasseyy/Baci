@@ -53,6 +53,13 @@ describe('verified Credit Direct wallet funding', () => {
       await verifyCreditDirectWalletEvent({ ...args, supabase })
     ).toBeNull();
   });
+  it('distinguishes a retryable reservation conflict from invalid funding evidence', async () => {
+    const { supabase } = client(null, { code: '40001' });
+    expect(await verifyCreditDirectWalletEvent({ ...args, supabase })).toBe(
+      'retry'
+    );
+  });
+
   it('fails closed on an unbound attempt or conflicting provider reference', async () => {
     const { supabase } = client(null, {
       message: 'credit_direct_wallet_reconciliation_required',

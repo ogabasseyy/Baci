@@ -1,3 +1,5 @@
+import { stableStringify } from '@/lib/stable-stringify';
+
 /** Compare older saved attempts without their refreshable shipping quote UUID. */
 export function checkoutFingerprintsMatch(
   left: string,
@@ -22,7 +24,7 @@ export function checkoutFingerprintsMatch(
         const { variantId, variantAttributes, ...rest } = item as Record<string, unknown>;
         return { ...rest, variantId: variantId || null, variantAttributes: variantAttributes ?? {} };
       }) : items;
-      return JSON.stringify({
+      return stableStringify({
         ...checkout,
         items: normalizedItems,
         merchantRateId,

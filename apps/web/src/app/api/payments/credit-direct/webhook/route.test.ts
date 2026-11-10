@@ -475,6 +475,39 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
 
+    it('escapes the reference search and finds the exact active match after a decoy', async () => {
+      const reference = 'txn%_replay';
+      const payload = {
+        ...merchantPaymentPayload,
+        checkoutTransactionId: reference,
+      };
+      vi.mocked(parseWebhookPayload).mockReturnValue(payload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      const chain = supabase.from('orders');
+      chain.ilike.mockResolvedValue({
+        data: [
+          {
+            ...mockOrder,
+            id: 'decoy',
+            notes: JSON.stringify({ note: reference }),
+          },
+          {
+            ...mockOrder,
+            payment_status: 'paid',
+            notes: JSON.stringify({ creditDirectTransactionId: reference }),
+          },
+        ],
+        error: null,
+      } as never);
+      const response = await POST(createMockRequest(payload));
+      expect(await response.json()).toEqual({
+        received: true,
+        message: 'Already processed',
+      });
+      expect(chain.ilike).toHaveBeenCalledWith('notes', '%"txn\\%\\_replay"%');
+    });
+
     it('uses metadata fallback lookup so stale provider switches can be classified', async () => {
       vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
 
@@ -2699,6 +2732,28 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
   });
+  it('returns a retryable response for wallet reservation lock contention', async () => {
+    vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+    const supabase = createMockSupabaseClient();
+    vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '40001', message: 'credit_direct_wallet_retry_required' },
+    } as never);
+    const chain = supabase.from('orders');
+    chain.ilike.mockResolvedValue({
+      data: [{ ...mockOrder, wallet_amount_used: 20000, amount_paid: 20000 }],
+      error: null,
+    } as never);
+
+    const response = await POST(createMockRequest(merchantPaymentPayload));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
+    });
+    expect(chain.update).not.toHaveBeenCalled();
+  });
+
   it.each([
     customerPaymentPayload,
     merchantPaymentPayload,

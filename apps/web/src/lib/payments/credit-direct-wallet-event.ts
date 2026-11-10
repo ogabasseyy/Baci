@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { creditDirectWalletFundingSchema } from '@/schemas/credit-direct-wallet-event';
 
 /** Only the existing signature-verified webhook client may bind provider facts. */
@@ -33,7 +34,15 @@ export async function verifyCreditDirectWalletEvent({
       p_provider_amount: providerAmount,
     }
   );
-  if (error) return null;
+  if (error) {
+    if (error.code === '40001') return 'retry' as const;
+    logger.warn({
+      message: 'Credit Direct wallet verification RPC failed',
+      code: error.code,
+      orderId,
+    });
+    return null;
+  }
   const parsed = creditDirectWalletFundingSchema.safeParse(data);
   return parsed.success ? parsed.data : null;
 }

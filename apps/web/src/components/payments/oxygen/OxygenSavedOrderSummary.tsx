@@ -1,6 +1,7 @@
 import { ShoppingBag } from 'lucide-react';
 import type { z } from 'zod';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
+import { roundMoney } from '@/lib/order-wallet-funding-utils';
 import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
@@ -77,7 +78,9 @@ export function OxygenSavedOrderSummary({
             </div>
             <div className="flex justify-between font-bold">
               <dt>Amount to finance</dt>
-              <dd>{money(order.total - order.wallet_amount_used)}</dd>
+              <dd>
+                {money(roundMoney(order.total - order.wallet_amount_used))}
+              </dd>
             </div>
           </>
         )}

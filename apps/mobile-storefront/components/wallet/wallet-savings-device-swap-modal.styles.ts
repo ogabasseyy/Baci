@@ -26,7 +26,7 @@ export const walletSavingsDeviceSwapModalStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: 14,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   iconButton: {
@@ -36,20 +36,20 @@ export const walletSavingsDeviceSwapModalStyles = StyleSheet.create({
     width: 32,
   },
   helperText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 19,
   },
   savedAmount: {
     color: BRAND.primary,
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   input: {
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   list: {
     gap: SPACING.sm,
@@ -81,20 +81,20 @@ export const walletSavingsDeviceSwapModalStyles = StyleSheet.create({
     gap: 3,
   },
   rowTitle: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   rowMeta: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     fontWeight: TYPOGRAPHY.weight.medium,
   },
   rowPrice: {
     color: BRAND.primary,
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   loadingText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     textAlign: 'center',
   },
 });

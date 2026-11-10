@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Button, Text } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Button, Modal, Text } from 'react-native';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { ModalSheet } from './ModalSheet';
 
@@ -47,6 +47,114 @@ describe('ModalSheet', () => {
     );
 
     expect(screen.queryByTestId('modal-keyboard-surface')).toBeNull();
+  });
+
+  it('fades the backdrop in place instead of sliding it when opted in', () => {
+    const { UNSAFE_getByType } = render(
+      <ModalSheet presentation="fade-backdrop" visible>
+        <Text>Faded sheet</Text>
+      </ModalSheet>
+    );
+
+    expect(screen.getByText('Faded sheet')).toBeOnTheScreen();
+    expect(UNSAFE_getByType(Modal).props.animationType).toBe('fade');
+  });
+
+  it('slides the faded sheet down before unmounting it on close', () => {
+    jest.useFakeTimers();
+    try {
+      const { UNSAFE_getByType, rerender } = render(
+        <ModalSheet presentation="fade-backdrop" visible>
+          <Text>Closing sheet</Text>
+        </ModalSheet>
+      );
+      rerender(
+        <ModalSheet presentation="fade-backdrop" visible={false}>
+          <Text>Closing sheet</Text>
+        </ModalSheet>
+      );
+      // Still mounted while the card slides back down.
+      expect(UNSAFE_getByType(Modal).props.visible).toBe(true);
+
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      expect(UNSAFE_getByType(Modal).props.visible).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('reports when the closing slide has finished', () => {
+    jest.useFakeTimers();
+    try {
+      const onClosed = jest.fn();
+      const { rerender } = render(
+        <ModalSheet presentation="fade-backdrop" visible onClosed={onClosed}>
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      rerender(
+        <ModalSheet
+          presentation="fade-backdrop"
+          visible={false}
+          onClosed={onClosed}
+        >
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      expect(onClosed).not.toHaveBeenCalled();
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(onClosed).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not report a close when it mounts already closed', () => {
+    jest.useFakeTimers();
+    try {
+      const onClosed = jest.fn();
+      render(
+        <ModalSheet
+          presentation="fade-backdrop"
+          visible={false}
+          onClosed={onClosed}
+        >
+          <Text>Sheet</Text>
+        </ModalSheet>
+      );
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(onClosed).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('runs a shared backdrop and request-close handler only once', () => {
+    const close = jest.fn();
+    render(
+      <ModalSheet visible onBackdropPress={close} onRequestClose={close}>
+        <Text>Sheet</Text>
+      </ModalSheet>
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Dismiss modal' }));
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the native slide for sheets that have not opted in', () => {
+    const { UNSAFE_getByType } = render(
+      <ModalSheet visible>
+        <Text>Sliding sheet</Text>
+      </ModalSheet>
+    );
+
+    expect(UNSAFE_getByType(Modal).props.animationType).toBe('slide');
   });
 
   it('renders modal sheet content when visible', () => {

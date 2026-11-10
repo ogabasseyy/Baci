@@ -28,6 +28,20 @@ describe('receipt logo safety', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+  it('rejects a compressed logo with oversized decoded dimensions', async () => {
+    const header = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    header.writeUInt32BE(100_000, 16);
+    header.writeUInt32BE(100_000, 20);
+    await expect(
+      resolveReceiptLogoDataUri({
+        ...baseMerchant,
+        logo_url: `data:image/png;base64,${header.toString('base64')}`,
+      })
+    ).resolves.toBeNull();
+  });
   it('does not fetch untrusted merchant logo URLs', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
@@ -44,13 +58,18 @@ describe('receipt logo safety', () => {
 
   it('fetches only capped trusted media logo URLs', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(new Uint8Array([1, 2, 3]), {
-        headers: {
-          'content-length': '3',
-          'content-type': 'image/png',
-        },
-        status: 200,
-      })
+      new Response(
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==',
+          'base64'
+        ),
+        {
+          headers: {
+            'content-type': 'image/png',
+          },
+          status: 200,
+        }
+      )
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -59,7 +78,9 @@ describe('receipt logo safety', () => {
         ...baseMerchant,
         logo_url: 'https://cdn.ogabassey.com/media/merchant/logo.png',
       })
-    ).resolves.toBe('data:image/png;base64,AQID');
+    ).resolves.toBe(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=='
+    );
 
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.any(URL),
@@ -72,13 +93,18 @@ describe('receipt logo safety', () => {
 
   it('allows existing Supabase images bucket logo URLs', async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(new Uint8Array([4, 5, 6]), {
-        headers: {
-          'content-length': '3',
-          'content-type': 'image/png',
-        },
-        status: 200,
-      })
+      new Response(
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==',
+          'base64'
+        ),
+        {
+          headers: {
+            'content-type': 'image/png',
+          },
+          status: 200,
+        }
+      )
     );
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -88,7 +114,9 @@ describe('receipt logo safety', () => {
         logo_url:
           'https://project-ref.supabase.co/storage/v1/object/public/images/logo.png',
       })
-    ).resolves.toBe('data:image/png;base64,BAUG');
+    ).resolves.toBe(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=='
+    );
 
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.any(URL),
@@ -115,14 +143,14 @@ describe('receipt logo safety', () => {
   });
 
   it('rejects oversized trusted media logos before reading the body', async () => {
-    const arrayBuffer = vi.fn();
+    const getReader = vi.fn();
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
       headers: new Headers({
         'content-length': String(512 * 1024),
         'content-type': 'image/png',
       }),
-      arrayBuffer,
+      body: { getReader },
     });
     vi.stubGlobal('fetch', fetchSpy);
 
@@ -133,7 +161,7 @@ describe('receipt logo safety', () => {
       })
     ).resolves.toBeNull();
 
-    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(getReader).not.toHaveBeenCalled();
   });
 
   it('stops streaming trusted media logos after the byte cap', async () => {

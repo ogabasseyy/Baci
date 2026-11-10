@@ -3,7 +3,10 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
+import {
+  generateReceiptBlob,
+  resolveReceiptLogoDataUri,
+} from '@/lib/receipt-pdf-generator';
 import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
@@ -96,6 +99,7 @@ export async function GET(
       data.receiptMerchant,
       {
         documentKind: 'receipt',
+        logoDataUri: await resolveReceiptLogoDataUri(data.receiptMerchant),
         documentDate:
           (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
           data.receiptOrder.created_at,

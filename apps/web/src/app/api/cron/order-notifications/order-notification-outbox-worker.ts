@@ -109,7 +109,8 @@ async function markDeliveryOutcomeUnknown(
 async function processClaimedRow(
   supabase: SupabaseClientLike,
   row: ClaimedOrderNotificationOutboxRow,
-  summary: OrderNotificationCronSummary
+  summary: OrderNotificationCronSummary,
+  renderDeadline?: number
 ) {
   try {
     const shipmentMetadata = resolveOrderNotificationOutboxShipmentMetadata(
@@ -125,6 +126,7 @@ async function processClaimedRow(
       ? await sendManualOrderDocument({
           supabase,
           row: { ...row, event_type: eventType },
+          ...(renderDeadline !== undefined ? { renderDeadline } : {}),
         })
       : await sendOrderFulfillmentNotification({
           beforeProviderDispatch: () =>
@@ -245,7 +247,8 @@ function groupRowsByOrderId(rows: ClaimedOrderNotificationOutboxRow[]) {
 export async function processClaimedOrderNotificationRows(
   supabase: SupabaseClientLike,
   rows: ClaimedOrderNotificationOutboxRow[],
-  summary: OrderNotificationCronSummary
+  summary: OrderNotificationCronSummary,
+  renderDeadline?: number
 ) {
   const groups = groupRowsByOrderId(rows);
   let nextGroupIndex = 0;
@@ -256,7 +259,7 @@ export async function processClaimedOrderNotificationRows(
         const group = groups[nextGroupIndex];
         nextGroupIndex += 1;
         for (const row of group ?? [])
-          await processClaimedRow(supabase, row, summary);
+          await processClaimedRow(supabase, row, summary, renderDeadline);
       }
     })
   );

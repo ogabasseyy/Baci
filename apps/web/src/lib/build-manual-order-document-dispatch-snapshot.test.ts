@@ -18,7 +18,7 @@ const merchant = {
 const ngnInvoice = { currency: 'NGN', total: 100, amount_paid: 0 } as never;
 
 describe('dispatch snapshot builders', () => {
-  it('snapshots the VA only when one is selected', () => {
+  it('snapshots both bank cards when a VA is selected', () => {
     expect(
       buildDispatchPaymentSnapshot(
         merchant,
@@ -32,9 +32,9 @@ describe('dispatch snapshot builders', () => {
       )
     ).toEqual({
       merchantBankCode: null,
-      merchantBankAccountNumber: null,
-      merchantBankName: null,
-      merchantBankAccountName: null,
+      merchantBankAccountNumber: '1234567890',
+      merchantBankName: 'GTBank',
+      merchantBankAccountName: 'Shop Ltd',
       virtualAccountNumber: '9990001111',
       virtualAccountBankName: 'Paystack-Titan',
       virtualAccountName: 'Shop Ltd/ORD',

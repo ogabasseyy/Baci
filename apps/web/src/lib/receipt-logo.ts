@@ -1,4 +1,5 @@
 import type { ReceiptMerchant } from '@baci/shared';
+import sharp from 'sharp';
 import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 
 const MAX_LOGO_BYTES = 256 * 1024;
@@ -54,24 +55,43 @@ function mergeLogoChunks(chunks: Uint8Array[], totalBytes: number) {
   return bytes;
 }
 
-function encodeLogoBytesToBase64(bytes: Uint8Array) {
-  const alphabet =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let encoded = '';
+const MAX_LOGO_PIXELS = 4_000_000;
+const RASTER_DATA_URI =
+  /^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/]+={0,2})$/i;
 
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = bytes[index] ?? 0;
-    const second = bytes[index + 1] ?? 0;
-    const third = bytes[index + 2] ?? 0;
-    const triplet = (first << 16) | (second << 8) | third;
-
-    encoded += alphabet[(triplet >> 18) & 63];
-    encoded += alphabet[(triplet >> 12) & 63];
-    encoded += index + 1 < bytes.length ? alphabet[(triplet >> 6) & 63] : '=';
-    encoded += index + 2 < bytes.length ? alphabet[triplet & 63] : '=';
+async function isSafeLogo(bytes: Buffer, format: string) {
+  if (bytes.length === 0 || bytes.length > MAX_LOGO_BYTES) return false;
+  try {
+    const metadata = await sharp(bytes, {
+      limitInputPixels: MAX_LOGO_PIXELS,
+    }).metadata();
+    return (
+      metadata.format === (format === 'jpg' ? 'jpeg' : format) &&
+      Boolean(
+        metadata.width &&
+          metadata.height &&
+          metadata.width * metadata.height <= MAX_LOGO_PIXELS
+      ) &&
+      (metadata.pages ?? 1) === 1
+    );
+  } catch {
+    return false;
   }
+}
 
-  return encoded;
+/** Accept only bounded, single-frame raster images for browser PDF export. */
+export async function validateReceiptLogoDataUri(
+  value: string | null | undefined
+) {
+  if (!value || value.length > MAX_LOGO_DATA_URI_LENGTH) return null;
+  const match = RASTER_DATA_URI.exec(value);
+  if (!match) return null;
+  return (await isSafeLogo(
+    Buffer.from(match[2], 'base64'),
+    match[1].toLowerCase()
+  ))
+    ? value
+    : null;
 }
 
 async function readLogoBytes(response: Response) {
@@ -107,7 +127,7 @@ export async function resolveReceiptLogoDataUri(merchant: ReceiptMerchant) {
   if (!logoUrl) return null;
 
   if (logoUrl.startsWith('data:image/')) {
-    return logoUrl.length <= MAX_LOGO_DATA_URI_LENGTH ? logoUrl : null;
+    return validateReceiptLogoDataUri(logoUrl);
   }
 
   let parsedUrl: URL;
@@ -140,8 +160,11 @@ export async function resolveReceiptLogoDataUri(merchant: ReceiptMerchant) {
     const imageBytes = await readLogoBytes(response);
     if (!imageBytes) return null;
 
-    const base64 = encodeLogoBytesToBase64(imageBytes);
-    return `data:${contentType.split(';')[0]};base64,${base64}`;
+    const bytes = Buffer.from(imageBytes);
+    const mime = contentType.split(';')[0].trim().toLowerCase();
+    return (await isSafeLogo(bytes, mime.slice(6)))
+      ? `data:${mime};base64,${bytes.toString('base64')}`
+      : null;
   } catch {
     return null;
   } finally {

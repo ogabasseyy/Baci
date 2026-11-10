@@ -1,8 +1,12 @@
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
+import type { ReceiptOrder } from '@baci/shared';
 import { generateReceiptHtml, sanitizeSvg } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
 import { supabase } from '@/lib/supabase';
+import {
+  buildOrderReceiptMerchant,
+  type ReceiptMerchantDetails,
+} from './buildOrderReceiptMerchant';
 import { resolveOrderReceiptVirtualAccount } from './resolveOrderReceiptVirtualAccount';
 import { resolveReceiptItemFulfillmentDetails } from './resolveReceiptItemFulfillmentDetails';
 
@@ -24,30 +28,6 @@ async function loadNativeModules() {
   } catch {
     console.debug('[OrderDetails] Native export modules unavailable');
   }
-}
-
-interface ReceiptMerchantDetails {
-  bank_account_name?: string | null;
-  bank_account_number?: string | null;
-  bank_code?: string | null;
-  bank_name?: string | null;
-  registered_address?: ReceiptMerchant['registered_address'];
-  brand_colors?: ReceiptMerchant['brand_colors'];
-  business_address?: string | null;
-  business_name?: string | null;
-  cac_rc_number?: string | null;
-  email?: string | null;
-  id: string;
-  legal_entity_name?: string | null;
-  logo_url?: string | null;
-  pages?: Record<string, unknown> | null;
-  phone?: string | null;
-  social_media?: ReceiptMerchant['social_media'];
-  support_email?: string | null;
-  support_phone?: string | null;
-  tax_identification_number?: string | null;
-  vat_rate?: number | null;
-  vat_registration_status?: string | null;
 }
 
 interface CreateOrderDetailsReceiptActionsParams {
@@ -201,28 +181,12 @@ export function createOrderDetailsReceiptActions({
         }
       }
 
-      const receiptMerchant: ReceiptMerchant = {
-        bank_account_number: merchant.bank_account_number ?? null,
-        bank_code: merchant.bank_code ?? null,
-        bank_name: merchant.bank_name ?? null,
-        bank_account_name: merchant.bank_account_name ?? null,
-        registered_address: merchant.registered_address ?? null,
-        brand_colors: merchant.brand_colors ?? undefined,
-        business_address: merchant.business_address ?? null,
-        business_name: merchant.business_name || 'Baci',
-        cac_rc_number: merchant.cac_rc_number ?? null,
-        email: merchant.email || '',
-        legal_entity_name: merchant.legal_entity_name ?? null,
-        logo_url: logoUrl,
-        pages: merchantPages,
-        phone: merchant.phone ?? null,
-        social_media: merchant.social_media ?? null,
-        support_email: merchant.support_email ?? null,
-        support_phone: merchant.support_phone ?? null,
-        tax_identification_number: merchant.tax_identification_number ?? null,
-        vat_rate: merchant.vat_rate ?? null,
-        vat_registration_status: merchant.vat_registration_status ?? null,
-      };
+      const receiptMerchant = await buildOrderReceiptMerchant(
+        merchant,
+        logoUrl,
+        merchantPages ?? undefined,
+        order.payment_status !== 'paid' && receiptOrder.balance > 0
+      );
 
       setReceiptHtml(
         generateReceiptHtml(receiptOrder, receiptMerchant, {

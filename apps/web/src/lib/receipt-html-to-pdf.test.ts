@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   setRequestInterception: vi.fn(),
   executablePath: vi.fn().mockResolvedValue('/tmp/chromium'),
 }));
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  access: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@sparticuz/chromium', () => ({
   default: { args: ['--serverless'], executablePath: mocks.executablePath },
 }));
@@ -83,6 +87,45 @@ describe('invoice HTML PDF isolation', () => {
     handle(request);
     expect(request.continue).toHaveBeenCalledOnce();
   });
+  it('serializes eight jobs, rejects a ninth, and recovers capacity', async () => {
+    const held = Promise.withResolvers<Uint8Array>();
+    mocks.pdf.mockReturnValueOnce(held.promise);
+    const jobs = Array.from({ length: 8 }, () =>
+      renderHtmlToPdf('<html>invoice</html>')
+    );
+    await vi.waitFor(() => expect(mocks.pdf).toHaveBeenCalledOnce());
+    expect(mocks.launch).toHaveBeenCalledOnce();
+    await expect(renderHtmlToPdf('<html>overflow</html>')).rejects.toThrow(
+      'busy'
+    );
+    held.resolve(new Uint8Array([1, 2]));
+    await Promise.all(jobs);
+    expect(mocks.launch).toHaveBeenCalledTimes(8);
+    await expect(renderHtmlToPdf('<html>recovered</html>')).resolves.toEqual(
+      new Uint8Array([1, 2])
+    );
+  });
+
+  it('rejects a queued render before the worker deadline and never launches it', async () => {
+    const held = Promise.withResolvers<Uint8Array>();
+    mocks.pdf.mockReturnValueOnce(held.promise);
+    const active = renderHtmlToPdf('<html>active</html>');
+    try {
+      await vi.waitFor(() => expect(mocks.pdf).toHaveBeenCalledOnce());
+      const expired = renderHtmlToPdf('<html>expired</html>', Date.now() + 10);
+      const outcome = await Promise.race([
+        expired.catch((error: Error) => error.message),
+        new Promise((resolve) => setTimeout(() => resolve('still queued'), 40)),
+      ]);
+      expect(outcome).toMatch(/deadline/);
+    } finally {
+      held.resolve(new Uint8Array([1, 2]));
+      await active;
+    }
+    await renderHtmlToPdf('<html>next</html>');
+    expect(mocks.launch).toHaveBeenCalledTimes(2);
+  }, 1000);
+
   it('closes a failed browser and permits a subsequent export', async () => {
     mocks.pdf.mockRejectedValueOnce(new Error('Render failed'));
     await expect(renderHtmlToPdf('<html>bad</html>')).rejects.toThrow(

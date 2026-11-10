@@ -98,6 +98,8 @@ const batchSizeSchema = createCronBatchSizeSchema({
 });
 
 export async function GET(request: Request) {
+  // Keep time for outbox retry bookkeeping after a timed-out render.
+  const renderDeadline = Date.now() + (maxDuration - 15) * 1000;
   if (!hasValidCronSecret(request.headers, getCronSecret())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -184,7 +186,12 @@ export async function GET(request: Request) {
     });
   }
   try {
-    await processClaimedOrderNotificationRows(supabase, rows, summary);
+    await processClaimedOrderNotificationRows(
+      supabase,
+      rows,
+      summary,
+      renderDeadline
+    );
   } catch (error) {
     logger.error({
       message: 'Failed to persist order notification outcome',

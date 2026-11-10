@@ -157,9 +157,8 @@ export interface ReceiptOptions {
   paymentLink?: string;
   svgXml?: string;
   /**
-   * Explicit document kind. Only `proforma` changes the output today: an
-   * unpaid order opened behind a "View / Download Proforma Invoice" action
-   * must read as a proforma, not a commercial invoice.
+   * Explicit invoices also apply to paid orders. Proformas apply to unpaid
+   * orders. By default, paid orders produce receipts and others produce invoices.
    */
   documentKind?: ReceiptDocumentKind;
 }

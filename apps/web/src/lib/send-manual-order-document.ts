@@ -59,9 +59,11 @@ export type ManualOrderDocumentResult =
 export async function sendManualOrderDocument({
   supabase,
   row,
+  renderDeadline,
 }: {
   supabase: Pick<SupabaseClient, 'rpc' | 'from'>;
   row: DocumentRow;
+  renderDeadline?: number;
 }): Promise<ManualOrderDocumentResult> {
   const loaded = await loadManualDocumentDispatch({ supabase, row });
   if (loaded.status !== 'ready') return loaded;
@@ -125,6 +127,7 @@ export async function sendManualOrderDocument({
       isPaid,
       pdfDocumentKind,
       invoiceTypeCode,
+      renderDeadline,
     });
   } catch (error) {
     // Deterministic shape failures skip (later triggers re-arm) instead of

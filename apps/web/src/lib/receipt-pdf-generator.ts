@@ -5,6 +5,7 @@ import {
   type ReceiptOrder,
 } from '@baci/shared';
 import { renderHtmlToPdf } from '@/lib/receipt-html-to-pdf';
+import { validateReceiptLogoDataUri } from '@/lib/receipt-logo';
 
 export { resolveReceiptLogoDataUri } from '@/lib/receipt-logo';
 
@@ -18,6 +19,7 @@ interface GenerateReceiptPdfOptions {
   firsCsid?: string | null;
   firsIrn?: string | null;
   invoiceNotes?: string | null;
+  renderDeadline?: number;
   logoDataUri?: string | null;
   paymentTerms?: string | null;
   taxSubtotals?: ReceiptOrder['tax_subtotals'];
@@ -25,8 +27,14 @@ interface GenerateReceiptPdfOptions {
 
 function toDateString(value: Date | string | null | undefined) {
   if (!value) return undefined;
-  if (typeof value === 'string') return value;
-  return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+  const timestamp =
+    typeof value === 'string' ? Date.parse(value) : value.getTime();
+  if (!Number.isFinite(timestamp)) return undefined;
+  const iso = new Date(timestamp).toISOString();
+  if (typeof value !== 'string') return iso;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value) && !iso.startsWith(value))
+    return undefined;
+  return value;
 }
 
 /** Export the admin document. This adapter supplies data, never a second PDF layout. */
@@ -40,7 +48,11 @@ export async function generateReceiptBlob(
       ? 'proforma'
       : options.documentKind;
   const date = toDateString(options.documentDate);
-  const isInvoice = kind === 'invoice' || kind === 'proforma';
+  const issueDate =
+    kind === 'receipt'
+      ? null
+      : (toDateString(order.invoice_issue_date)?.slice(0, 10) ??
+        (date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null));
   const documentOrder: ReceiptOrder = {
     ...order,
     payment_status:
@@ -48,13 +60,12 @@ export async function generateReceiptBlob(
       order.balance <= 0 &&
       order.amount_paid >= order.total
         ? 'paid'
-        : order.payment_status,
-    transaction_date: date ?? order.transaction_date,
-    invoice_issue_date: date
-      ? isInvoice
-        ? date.slice(0, 10)
-        : null
-      : order.invoice_issue_date,
+        : order.payment_status.trim().toLowerCase(),
+    transaction_date:
+      date ??
+      toDateString(order.transaction_date) ??
+      toDateString(order.created_at),
+    invoice_issue_date: issueDate,
     buyer_reference: options.buyerReference ?? order.buyer_reference,
     payment_due_date: toDateString(options.dueDate) ?? order.payment_due_date,
     firs_irn: options.firsIrn ?? order.firs_irn,
@@ -73,14 +84,12 @@ export async function generateReceiptBlob(
     documentOrder,
     {
       ...merchant,
-      logo_url:
-        options.logoDataUri &&
-        /^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(options.logoDataUri)
-          ? options.logoDataUri
-          : null,
+      logo_url: await validateReceiptLogoDataUri(options.logoDataUri),
     },
     documentOptions
   );
-  const pdf = await renderHtmlToPdf(html);
+  const pdf = await (options.renderDeadline === undefined
+    ? renderHtmlToPdf(html)
+    : renderHtmlToPdf(html, options.renderDeadline));
   return new Blob([new Uint8Array(pdf)], { type: 'application/pdf' });
 }

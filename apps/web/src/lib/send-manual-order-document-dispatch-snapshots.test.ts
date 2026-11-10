@@ -146,7 +146,7 @@ describe('send manual order document dispatch snapshots', () => {
     });
   });
 
-  it('excludes the suppressed merchant bank when a VA is selected', async () => {
+  it('snapshots both bank cards when a VA is selected', async () => {
     const db = database(
       { payment_status: 'unpaid', amount_paid: 0 },
       {
@@ -178,9 +178,9 @@ describe('send manual order document dispatch snapshots', () => {
     );
     expect(markCall?.[1]).toMatchObject({
       p_merchant_bank_code: null,
-      p_merchant_bank_account_number: null,
-      p_merchant_bank_name: null,
-      p_merchant_bank_account_name: null,
+      p_merchant_bank_account_number: '1234567890',
+      p_merchant_bank_name: 'GTBank',
+      p_merchant_bank_account_name: 'Shop Ltd',
       p_va_account_number: '9988776655',
       p_va_bank_name: 'Test Bank',
       p_va_account_name: 'Ogabassey Collections',

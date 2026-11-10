@@ -622,6 +622,7 @@ export async function GET(
     };
 
     const receiptOrder: ReceiptOrder = {
+      invoice_issue_date: order.invoice_issue_date,
       order_number: invoiceData.invoice_number,
       created_at: String(order.created_at),
       currency: invoiceData.currency,

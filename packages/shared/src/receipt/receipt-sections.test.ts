@@ -69,6 +69,14 @@ describe('renderLogoHtml', () => {
     expect(html).not.toContain('alt="Bad "><script>');
   });
 
+  it('prints the seller name even when a logo is present', () => {
+    const html = renderLogoHtml(
+      createReceiptMerchant({ logo_url: 'https://cdn.example.com/symbol.png' }),
+      'Seller & Co',
+      undefined
+    );
+    expect(html).toContain('<div class="logo-fallback">Seller &amp; Co</div>');
+  });
   it('uses an encoded and escaped placeholder URL for broken logo images', () => {
     const html = renderLogoHtml(
       createReceiptMerchant({

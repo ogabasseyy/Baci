@@ -46,6 +46,7 @@ describe('next.config core options', () => {
     for (const scope of [
       '/api/orders{,/**}',
       '/api/storefront/account/orders/**',
+      '/api/cron/order-notifications',
     ]) {
       expect(nextConfig.outputFileTracingIncludes?.[scope]).toContain(
         '../../node_modules/@sparticuz/chromium/bin/**/*'

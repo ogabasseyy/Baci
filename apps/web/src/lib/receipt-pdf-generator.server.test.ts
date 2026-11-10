@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { spawnSync } from 'node:child_process';
 import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { renderHtmlToPdf } from '@/lib/receipt-html-to-pdf';
@@ -99,3 +100,28 @@ describe('shared invoice server import', () => {
     );
   });
 });
+
+// Opt in on a host with Chrome/packaged Chromium and Poppler installed.
+it.runIf(process.env.RECEIPT_PDF_SMOKE === '1')(
+  'exports a parseable PDF from real Chromium',
+  async () => {
+    const browserRenderer = await vi.importActual<
+      typeof import('./receipt-html-to-pdf')
+    >('./receipt-html-to-pdf');
+    vi.mocked(renderHtmlToPdf).mockImplementationOnce(
+      browserRenderer.renderHtmlToPdf
+    );
+    const blob = await generateReceiptBlob(
+      createReceiptOrder(),
+      createReceiptMerchant()
+    );
+    const result = spawnSync('pdfinfo', ['-'], {
+      input: Buffer.from(await blob.arrayBuffer()),
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    expect(result.status, result.stderr || result.error?.message).toBe(0);
+    expect(result.stdout).toMatch(/^Pages:\s+[1-9]/m);
+  },
+  35_000
+);

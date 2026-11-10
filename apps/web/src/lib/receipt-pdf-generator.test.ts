@@ -72,7 +72,7 @@ describe('shared invoice PDF export', () => {
         documentKind: 'proforma_invoice',
         documentDate: '2026-11-08',
         dueDate: '2026-11-10',
-        invoiceNotes: '<script>note</script>',
+        invoiceNotes: '<b>note</b>',
         buyerReference: 'PO-42',
         paymentTerms: 'Due on receipt',
         firsIrn: 'IRN-42',
@@ -99,10 +99,60 @@ describe('shared invoice PDF export', () => {
       'CSID-42',
       'UBL artifact attached',
       '7.50%',
-      '&lt;script&gt;note&lt;/script&gt;',
+      '&lt;b&gt;note&lt;/b&gt;',
     ])
       expect(html).toContain(value);
-    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<b>note</b>');
+  });
+  it('preserves a historical charge after VAT registration changes', async () => {
+    await generateReceiptBlob(
+      {
+        ...order,
+        subtotal: 100,
+        total: 107.5,
+        tax_amount: 7.5,
+        shipping_fee: 0,
+        balance: 0,
+        payment_status: 'paid',
+      },
+      { ...merchant, vat_registration_status: null }
+    );
+    expect(vi.mocked(renderHtmlToPdf).mock.calls[0][0]).toMatch(
+      /<span>VAT<\/span><span>[^<]*7\.50/
+    );
+  });
+  it('preserves the Lagos date and time of a transaction timestamp', async () => {
+    await generateReceiptBlob(order, merchant, {
+      documentKind: 'invoice',
+      documentDate: new Date('2026-11-08T23:30:00Z'),
+    });
+    expect(vi.mocked(renderHtmlToPdf).mock.calls[0][0]).toContain(
+      '9 Nov 2026 &middot; 00:30'
+    );
+  });
+  it('falls back to the creation date when supplied dates are invalid', async () => {
+    await generateReceiptBlob(
+      {
+        ...order,
+        transaction_date: 'invalid',
+        created_at: '2026-11-08T12:00:00Z',
+      },
+      merchant,
+      { documentKind: 'invoice', documentDate: 'broken' }
+    );
+    expect(vi.mocked(renderHtmlToPdf).mock.calls[0][0]).toContain(
+      '8 Nov 2026 &middot; 13:00'
+    );
+  });
+  it('renders normalized paid status and ignores inherited invoice title keys', async () => {
+    await generateReceiptBlob(
+      { ...order, payment_status: ' PAID ' },
+      merchant,
+      { documentKind: 'invoice', invoiceTypeCode: 'constructor' }
+    );
+    const html = vi.mocked(renderHtmlToPdf).mock.calls[0][0];
+    expect(html).toContain('class="doc-title">Invoice');
+    expect(html).not.toContain('Automatic Confirmation');
   });
   it('removes remote logo URLs and propagates rendering errors', async () => {
     vi.mocked(renderHtmlToPdf).mockRejectedValueOnce(
@@ -120,10 +170,11 @@ describe('shared invoice PDF export', () => {
   });
   it('uses prevalidated logo bytes supplied by the caller', async () => {
     await generateReceiptBlob(order, merchant, {
-      logoDataUri: 'data:image/png;base64,AQID',
+      logoDataUri:
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==',
     });
     expect(vi.mocked(renderHtmlToPdf).mock.calls[0][0]).toContain(
-      'data:image/png;base64,AQID'
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=='
     );
   });
 });

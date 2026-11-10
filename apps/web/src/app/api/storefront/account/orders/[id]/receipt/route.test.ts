@@ -13,6 +13,9 @@ vi.mock('@/lib/rate-limiter', () => ({
 
 vi.mock('@/lib/receipt-pdf-generator', () => ({
   generateReceiptBlob: vi.fn(),
+  resolveReceiptLogoDataUri: vi
+    .fn()
+    .mockResolvedValue('data:image/png;base64,AQID'),
 }));
 
 vi.mock('@/lib/storefront-account-document-data', async () => {
@@ -212,7 +215,11 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
     expect(vi.mocked(generateReceiptBlob)).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      { documentKind: 'receipt', documentDate: '2026-04-02T10:00:00.000Z' }
+      {
+        documentKind: 'receipt',
+        documentDate: '2026-04-02T10:00:00.000Z',
+        logoDataUri: 'data:image/png;base64,AQID',
+      }
     );
   });
 

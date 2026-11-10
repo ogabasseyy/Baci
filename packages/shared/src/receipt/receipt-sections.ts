@@ -22,8 +22,9 @@ export function renderLogoHtml(
   svgXml: string | undefined
 ): string {
   const safeStoreName = escapeHtml(storeName);
+  const sellerName = `<div class="logo-fallback">${safeStoreName}</div>`;
   if (svgXml) {
-    return `<div class="logo-svg">${sanitizeSvg(svgXml)}</div>`;
+    return `<div class="logo-svg">${sanitizeSvg(svgXml)}</div>${sellerName}`;
   }
 
   if (merchant.logo_url) {
@@ -31,10 +32,10 @@ export function renderLogoHtml(
       storeName
     )}`;
     const fallbackLogoUrlForJs = escapeHtml(escapeJsString(fallbackLogoUrl));
-    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.src='${fallbackLogoUrlForJs}'">`;
+    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.src='${fallbackLogoUrlForJs}'">${sellerName}`;
   }
 
-  return `<div class="logo-fallback">${safeStoreName}</div>`;
+  return sellerName;
 }
 
 export function renderFinancialSummaryLines(
@@ -65,7 +66,10 @@ export function renderFinancialSummaryLines(
   }
 
   if (shouldShowVatLine(order, merchant)) {
-    const vatRate = getReceiptVatRate(merchant, order.currency);
+    const vatRate =
+      merchant.vat_registration_status === 'registered'
+        ? getReceiptVatRate(merchant, order.currency)
+        : null;
     const vatLabel = escapeHtml(vatRate !== null ? `VAT (${vatRate}%)` : 'VAT');
     summaryLines.push(
       `<div class="sum-row"><span>${vatLabel}</span><span>${formatMoney(order.tax_amount)}</span></div>`

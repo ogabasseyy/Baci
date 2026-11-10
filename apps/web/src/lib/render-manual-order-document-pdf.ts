@@ -70,7 +70,9 @@ export async function renderManualOrderDocumentPdf({
   isPaid,
   pdfDocumentKind,
   invoiceTypeCode,
+  renderDeadline,
 }: {
+  renderDeadline?: number;
   taxRows: readonly unknown[];
   transactionRows: readonly unknown[];
   order: z.infer<typeof manualDocumentOrderSchema>;
@@ -211,6 +213,7 @@ export async function renderManualOrderDocumentPdf({
         : (order.invoice_issue_date ?? order.transaction_date)) ||
       order.created_at,
     logoDataUri,
+    ...(renderDeadline !== undefined ? { renderDeadline } : {}),
     invoiceNotes: order.invoice_note || order.notes || undefined,
     taxSubtotals: renderTaxSubtotals,
   });

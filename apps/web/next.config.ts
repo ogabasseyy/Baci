@@ -200,6 +200,10 @@ const nextConfig: NextConfig = {
       './node_modules/@sparticuz/chromium/bin/**/*',
       '../../node_modules/@sparticuz/chromium/bin/**/*',
     ],
+    '/api/cron/order-notifications': [
+      './node_modules/@sparticuz/chromium/bin/**/*',
+      '../../node_modules/@sparticuz/chromium/bin/**/*',
+    ],
     '/middleware': ['./node_modules/@supabase/**/*'],
   },
 

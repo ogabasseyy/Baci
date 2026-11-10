@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { verifyInvoicePdfBuildTrace } from './verify-invoice-pdf-build-traces.mjs';
 
-async function fixture(t, { omitChromium = false, oversized = false } = {}) {
+async function fixture(t, { omitChromium = false, oversized = false, stale = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'baci-pdf-trace-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const routeFile = join(root, 'route.js');
@@ -17,6 +17,7 @@ async function fixture(t, { omitChromium = false, oversized = false } = {}) {
   if (!omitChromium) assets.push('chromium.br');
   const files = assets.map((asset) => `${bin}/${asset}`);
   for (const file of files) await writeFile(join(root, file), 'asset');
+  if (stale) files.push('missing.js');
   await writeFile(`${routeFile}.nft.json`, JSON.stringify({ files }));
   return routeFile;
 }
@@ -34,4 +35,11 @@ test('rejects a trace that omits the executable', async (t) => {
 test('rejects a trace above the function budget', async (t) => {
   const route = await fixture(t, { oversized: true });
   await assert.rejects(verifyInvoicePdfBuildTrace(route), /above the 250 MiB function budget/);
+});
+
+test('names the route and unreadable file when a trace entry is stale', async (t) => {
+  const route = await fixture(t, { stale: true });
+  await assert.rejects(verifyInvoicePdfBuildTrace(route), {
+    message: `${route} cannot read traced file missing.js`,
+  });
 });

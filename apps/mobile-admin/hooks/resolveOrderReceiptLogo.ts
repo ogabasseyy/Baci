@@ -224,9 +224,17 @@ export async function resolveOrderReceiptLogo(
     const type = rasterType(logo);
     if (!type) return absent;
 
-    let binary = '';
-    for (const byte of logo) binary += String.fromCharCode(byte);
-    return { logoUrl: `data:${type};base64,${btoa(binary)}` };
+    // Split on a multiple of three so only the final block can add padding.
+    const bytesPerBlock = 12 * 1024;
+    const encoded = [];
+    for (let offset = 0; offset < logo.length; offset += bytesPerBlock) {
+      encoded.push(
+        btoa(
+          String.fromCharCode(...logo.subarray(offset, offset + bytesPerBlock))
+        )
+      );
+    }
+    return { logoUrl: `data:${type};base64,${encoded.join('')}` };
   } catch {
     return absent;
   } finally {

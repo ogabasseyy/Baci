@@ -11,7 +11,10 @@ import {
   isPostAcceptanceLeaseReset,
   markCorrectiveRetry,
 } from './order-notification-outbox-corrective-retry';
-import { markFailedOrRetry } from './order-notification-outbox-failure';
+import {
+  deferUndispatchedOutboxRow,
+  markFailedOrRetry,
+} from './order-notification-outbox-failure';
 import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
@@ -156,6 +159,12 @@ async function processClaimedRow(
           trackingNumber: shipmentMetadata.trackingNumber,
           trackingToken: shipmentMetadata.trackingToken,
         });
+
+    if (result.status === 'deferred') {
+      await deferUndispatchedOutboxRow(supabase, row);
+      summary.retried += 1;
+      return;
+    }
 
     if (result.status === 'sent') {
       try {

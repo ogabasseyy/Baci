@@ -116,24 +116,48 @@ describe('invoice HTML PDF isolation', () => {
   });
 
   it('rejects a queued render before the worker deadline and never launches it', async () => {
+    vi.useFakeTimers();
+    const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<Uint8Array>();
-    mocks.pdf.mockReturnValueOnce(held.promise);
+    mocks.pdf.mockImplementationOnce(() => {
+      started.resolve();
+      return held.promise;
+    });
     const active = renderHtmlToPdf('<html>active</html>');
     try {
-      await vi.waitFor(() => expect(mocks.pdf).toHaveBeenCalledOnce());
+      await started.promise;
       const expired = renderHtmlToPdf('<html>expired</html>', Date.now() + 10);
-      const outcome = await Promise.race([
-        expired.catch((error: Error) => error.message),
-        new Promise((resolve) => setTimeout(() => resolve('still queued'), 40)),
-      ]);
-      expect(outcome).toMatch(/deadline/);
+      const rejected = expect(expired).rejects.toThrow('deadline');
+      await vi.advanceTimersByTimeAsync(10);
+      await rejected;
     } finally {
       held.resolve(new Uint8Array([1, 2]));
       await active;
+      vi.useRealTimers();
     }
     await renderHtmlToPdf('<html>next</html>');
     expect(mocks.launch).toHaveBeenCalledTimes(2);
-  }, 1000);
+  });
+
+  it('returns retryable 503 when the packaged Chromium executable is unavailable', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', {
+      value: 'linux',
+      configurable: true,
+    });
+    try {
+      mocks.executablePath.mockRejectedValueOnce(new Error('Corrupt archive'));
+      const response = await renderHtmlToPdf('<html>invoice</html>').catch(
+        receiptPdfUnavailableResponse
+      );
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(503);
+      expect((response as Response).headers.get('Retry-After')).toBe('5');
+      expect(mocks.launch).not.toHaveBeenCalled();
+    } finally {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
 
   it('closes an active browser at the deadline before starting the next render', async () => {
     vi.useFakeTimers();

@@ -62,7 +62,7 @@ function renderPaymentInstructions(options: ReceiptOptions): string {
 }
 
 describe('renderBankDetailsHtml', () => {
-  it('renders safe HTTP payment links', () => {
+  it('renders HTTPS payment links', () => {
     const html = renderPaymentInstructions({
       paymentLink: 'https://pay.example.com/checkout?order=ORD-123',
     });
@@ -71,6 +71,14 @@ describe('renderBankDetailsHtml', () => {
       'href="https://pay.example.com/checkout?order=ORD-123"'
     );
     expect(html).toContain('Pay Now');
+  });
+
+  it('drops cleartext HTTP payment links', () => {
+    expect(
+      renderPaymentInstructions({
+        paymentLink: 'http://pay.example.com/checkout',
+      })
+    ).toBe('');
   });
 
   it('does not render unsafe payment link schemes as hrefs', () => {

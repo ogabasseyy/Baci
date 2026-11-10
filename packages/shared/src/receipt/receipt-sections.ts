@@ -31,7 +31,7 @@ export function renderLogoHtml(
       storeName
     )}`;
     const fallbackLogoUrlForJs = escapeHtml(escapeJsString(fallbackLogoUrl));
-    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.src='${fallbackLogoUrlForJs}'">${sellerName}`;
+    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.onerror=null;this.src='${fallbackLogoUrlForJs}'">${sellerName}`;
   }
 
   return sellerName;

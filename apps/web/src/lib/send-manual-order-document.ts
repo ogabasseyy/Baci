@@ -43,10 +43,10 @@ const EMAIL_ADMISSION_MS = zeptomailSendAdmissionBudgetMs(
   EMAIL_ATTEMPTS_PER_SENDER
 );
 
-function assertEmailFits(invocationDeadline: number) {
-  if (invocationDeadline - Date.now() < EMAIL_ADMISSION_MS) {
-    throw new Error('Manual document email transport budget exhausted');
-  }
+const DEFERRED = { status: 'deferred' } as const;
+
+function emailFits(invocationDeadline: number) {
+  return invocationDeadline - Date.now() > EMAIL_ADMISSION_MS;
 }
 
 export type ManualOrderDocumentEventType =
@@ -60,6 +60,7 @@ interface DocumentRow {
   event_type: ManualOrderDocumentEventType;
 }
 export type ManualOrderDocumentResult =
+  | typeof DEFERRED
   | { status: 'sent'; messageId?: string }
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string; deliveryOutcome?: 'unknown' };
@@ -84,16 +85,12 @@ export async function sendManualOrderDocument({
   const rawMerchantBrandColors = (
     snapshot.merchant as { brand_colors?: unknown }
   ).brand_colors;
-  // A fully-covered balance is substantively paid even under a non-paid
-  // label: mirror the trigger so settled orders render receipts.
   const isPaid = paymentStatus === 'paid' || order.amount_paid >= order.total;
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };
   if (isPaid && order.amount_paid < order.total)
     return { status: 'skipped', reason: 'paid_balance_outstanding' };
-  // Invoice-method orders render as proforma (Peppol 325) like the
-  // account view, so the emailed document agrees with it.
   const invoiceTypeCode = isPaid
     ? null
     : resolveInvoiceTypeCode({
@@ -106,7 +103,6 @@ export async function sendManualOrderDocument({
       });
   const pdfDocumentKind =
     invoiceTypeCode === '325' ? 'proforma_invoice' : documentKind;
-  // Attach the assigned virtual account so instructions name the exact account.
   const preferredPaymentAccount = isPaid
     ? null
     : selectInvoicePaymentAccountForRows(
@@ -120,11 +116,10 @@ export async function sendManualOrderDocument({
         }[],
         false
       );
-  // Header-adjacent names need a safe fallback and no line breaks.
   const displayCustomerName = sanitizeEmailDisplayName(
     order.customer_name || 'there'
   );
-  assertEmailFits(invocationDeadline);
+  if (!emailFits(invocationDeadline)) return DEFERRED;
   let rendered: Awaited<ReturnType<typeof renderManualOrderDocumentPdf>>;
   try {
     rendered = await renderManualOrderDocumentPdf({
@@ -143,9 +138,10 @@ export async function sendManualOrderDocument({
     if (error instanceof ManualDocumentValidationError) {
       return { status: 'skipped', reason: error.reason };
     }
+    if (!emailFits(invocationDeadline)) return DEFERRED;
     throw error;
   }
-  assertEmailFits(invocationDeadline);
+  if (!emailFits(invocationDeadline)) return DEFERRED;
   const { pdf, taxSubtotals, transactions } = rendered;
   const claimStep = await prepareManualDocumentClaim({
     supabase,
@@ -157,10 +153,7 @@ export async function sendManualOrderDocument({
   });
   if (claimStep.status === 'skipped') return claimStep;
   const { prepared, claim, customDomain } = claimStep;
-  // The slug supplies the claim host only when no safe custom domain
-  // wins (mirroring buildReceiptClaimUrl's normalization): an unsafe
-  // legacy slug skips only on the fallback path, never when the custom
-  // domain resolves.
+  // Only the fallback claim host depends on the legacy slug.
   const customDomainHost = customDomain
     ?.trim()
     .toLowerCase()
@@ -186,7 +179,9 @@ export async function sendManualOrderDocument({
     }),
   });
   let dispatchStarted = false;
+  let attemptedTransport = false;
   let providerAccepted = false;
+  let deferredBeforeTransport = false;
   async function persistDispatch(started: boolean) {
     await persistManualDocumentDispatch(
       supabase,
@@ -210,10 +205,11 @@ export async function sendManualOrderDocument({
       started
     );
     dispatchStarted = started;
+    attemptedTransport ||= started;
   }
   try {
     const attachment = Buffer.from(await pdf.arrayBuffer()).toString('base64');
-    assertEmailFits(invocationDeadline);
+    if (!emailFits(invocationDeadline)) return DEFERRED;
     const transportDeadline =
       invocationDeadline - ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS;
     const result = await sendEmail({
@@ -238,8 +234,9 @@ export async function sendManualOrderDocument({
       replyTo: resolveNotificationReplyTo(merchant.support_email),
       clientReference: `order:${order.id}:${row.event_type}`,
       beforeTransportDispatch: () => {
-        assertEmailFits(invocationDeadline);
-        return persistDispatch(true);
+        if (emailFits(invocationDeadline)) return persistDispatch(true);
+        deferredBeforeTransport = !attemptedTransport;
+        throw new Error('Manual document email transport budget exhausted');
       },
       resetTransportDispatch: () => persistDispatch(false),
       auditContext: {
@@ -250,6 +247,7 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
+      if (deferredBeforeTransport) return DEFERRED;
       return reportFailedManualDocumentSend(result, () =>
         resetStartedDispatchMarker(dispatchStarted, persistDispatch)
       );
@@ -288,6 +286,7 @@ export async function sendManualOrderDocument({
   } catch (error) {
     // Never re-dispatch after a lost provider response or an accepted send whose
     // database marker could not be persisted. Tokens/PDFs are not logged here.
+    if (deferredBeforeTransport) return DEFERRED;
     if (dispatchStarted || providerAccepted)
       return {
         status: 'failed',

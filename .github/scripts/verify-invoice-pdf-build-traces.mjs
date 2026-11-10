@@ -11,6 +11,15 @@ const CHROMIUM_FILES = [
   'swiftshader.tar.br',
 ];
 
+async function readTracedFile(routeFile, file) {
+  try {
+    const path = await realpath(resolve(dirname(routeFile), file));
+    return [path, (await stat(path)).size];
+  } catch (error) {
+    throw new Error(`${routeFile} cannot read traced file ${file}`, { cause: error });
+  }
+}
+
 export async function verifyInvoicePdfBuildTrace(routeFile) {
   const trace = JSON.parse(await readFile(`${routeFile}.nft.json`, 'utf8'));
   const browserFiles = new Set(
@@ -23,14 +32,10 @@ export async function verifyInvoicePdfBuildTrace(routeFile) {
     throw new Error(`${routeFile} is missing Chromium assets: ${missing.join(', ')}`);
   }
 
-  const files = new Set(
-    await Promise.all([
-      realpath(routeFile),
-      ...trace.files.map((file) => realpath(resolve(dirname(routeFile), file))),
-    ])
-  );
-  const sizes = await Promise.all([...files].map(async (file) => (await stat(file)).size));
-  const bytes = sizes.reduce((total, size) => total + size, 0);
+  const files = new Map(await Promise.all(
+    [resolve(routeFile), ...trace.files].map((file) => readTracedFile(routeFile, file))
+  ));
+  const bytes = [...files.values()].reduce((total, size) => total + size, 0);
   if (bytes > MAX_FUNCTION_BYTES) {
     throw new Error(`${routeFile} traces ${bytes} bytes, above the 250 MiB function budget`);
   }

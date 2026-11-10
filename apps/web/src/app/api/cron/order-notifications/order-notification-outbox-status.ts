@@ -48,7 +48,7 @@ export async function updateOutboxStatus(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
   values: Record<string, unknown>,
-  guard?: OutboxMergeGuard
+  guard?: OutboxMergeGuard | { undispatchedAttemptCount: number }
 ) {
   try {
     const updater = supabase.from('order_notification_outbox').update({
@@ -57,12 +57,12 @@ export async function updateOutboxStatus(
       locked_by: null,
       updated_at: new Date().toISOString(),
     });
-    // Optional optimistic guard for read-merge-write sent transitions: a
-    // write landing between the live re-read and this update must abort
-    // (zero rows) instead of being clobbered by the stale merged copy.
-    // Terminal writes pass no guard; they set full scalar values.
     let guarded = updater;
-    if (guard) {
+    if (guard && 'undispatchedAttemptCount' in guard) {
+      guarded = guarded
+        .eq('attempt_count', guard.undispatchedAttemptCount)
+        .is('dispatch_started_at', null);
+    } else if (guard) {
       guarded =
         guard.metadataRaw === null
           ? guarded.is('metadata', null)
@@ -85,10 +85,7 @@ export async function updateOutboxStatus(
       .maybeSingle();
     if (!error && data?.id === row.id) return;
     if (!error) {
-      // Zero rows, no database error: a correction re-armed the row
-      // mid-flight. Classify on the dispatch marker — undispatched rows
-      // are safely re-picked, but a lost claim after dispatch started
-      // must escalate: quiet retry there could double-send.
+      // A lost claim after dispatch began must never retry quietly.
       const { data: current, error: classifyError } = await supabase
         .from('order_notification_outbox')
         .select('dispatch_started_at')

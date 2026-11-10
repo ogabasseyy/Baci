@@ -153,6 +153,24 @@ describe('resolveOrderReceiptLogo', () => {
     expect(result.svgXml).not.toContain('<script');
   });
 
+  it('encodes a raster spanning multiple blocks without interior padding', async () => {
+    const image = raster(PNG);
+    const payloadSize = 25_000;
+    const chunk = new Uint8Array(payloadSize + 12);
+    new DataView(chunk.buffer).setUint32(0, payloadSize);
+    chunk.set(Uint8Array.of(116, 69, 88, 116), 4); // tEXt
+    const expanded = new Uint8Array(image.length + chunk.length);
+    expanded.set(image.subarray(0, 33));
+    expanded.set(chunk, 33);
+    expanded.set(image.subarray(33), 33 + chunk.length);
+    mockFetch.mockResolvedValue(new Response(expanded));
+
+    const result = await resolveOrderReceiptLogo(logoUrl);
+    expect(result.logoUrl).toBe(
+      `data:image/png;base64,${Buffer.from(expanded).toString('base64')}`
+    );
+  });
+
   it('discards oversized bodies without a content length', async () => {
     mockFetch.mockResolvedValue(new Response(new Uint8Array(256 * 1024 + 1)));
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });

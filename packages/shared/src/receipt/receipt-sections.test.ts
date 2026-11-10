@@ -87,7 +87,7 @@ describe('renderLogoHtml', () => {
     );
 
     expect(html).toContain(
-      'onerror="this.src=\'https://placehold.co/200x80?text=Bad%20%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E\'"'
+      'onerror="this.onerror=null;this.src=\'https://placehold.co/200x80?text=Bad%20%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E\'"'
     );
     expect(html).not.toContain('Bad "><script>');
   });

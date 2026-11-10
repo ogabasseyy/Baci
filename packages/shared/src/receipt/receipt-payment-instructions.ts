@@ -21,7 +21,7 @@ function sanitizePaymentLink(rawLink: string): string | null {
 
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    if (parsed.protocol !== 'https:') {
       return null;
     }
 

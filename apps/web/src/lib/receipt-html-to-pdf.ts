@@ -101,24 +101,35 @@ export async function renderHtmlToPdf(
   }
 }
 
+async function launchReceiptBrowser(deadline: number, signal: AbortSignal) {
+  const isLinux = process.platform === 'linux';
+  try {
+    const executablePath = isLinux
+      ? await chromium.executablePath()
+      : await localChromePath();
+    signal.throwIfAborted();
+    return await puppeteer.launch({
+      signal,
+      executablePath,
+      args: isLinux ? chromium.args : [],
+      headless: isLinux ? 'shell' : true,
+      timeout: remainingTime(deadline),
+      protocolTimeout: remainingTime(deadline),
+    });
+  } catch (error) {
+    if (error instanceof ReceiptPdfUnavailableError) throw error;
+    throw new ReceiptPdfUnavailableError('Invoice PDF browser unavailable', {
+      cause: error,
+    });
+  }
+}
+
 async function renderDocument(
   html: string,
   deadline: number,
   signal: AbortSignal
 ): Promise<Uint8Array> {
-  const isLinux = process.platform === 'linux';
-  const executablePath = isLinux
-    ? await chromium.executablePath()
-    : await localChromePath();
-  signal.throwIfAborted();
-  const browser = await puppeteer.launch({
-    signal,
-    executablePath,
-    args: isLinux ? chromium.args : [],
-    headless: isLinux ? 'shell' : true,
-    timeout: remainingTime(deadline),
-    protocolTimeout: remainingTime(deadline),
-  });
+  const browser = await launchReceiptBrowser(deadline, signal);
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= browser.close());
   const onAbort = () => {

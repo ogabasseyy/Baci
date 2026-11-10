@@ -88,13 +88,26 @@ describe('resolveAdminGiglQuoteFunding', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('treats an existing platform reservation as paid by Baci', async () => {
-    const { supabase } = client({ data: 'merchant_wallet', error: null });
+  it('keeps an existing platform reservation paid by Baci while the flag is on', async () => {
+    const { supabase } = client({ data: 'platform', error: null });
     await expect(
       resolveAdminGiglQuoteFunding(supabase, 'm1', 4500, vi.fn(), {
         existingChargeFundingSource: 'platform',
       })
     ).resolves.toMatchObject({ canBook: true, paidByBaci: true });
+  });
+
+  it('bugfix: falls back to wallet funding for a platform reservation once the flag is revoked', async () => {
+    const { supabase } = client({ data: 'merchant_wallet', error: null });
+    const result = await resolveAdminGiglQuoteFunding(
+      supabase,
+      'm1',
+      4500,
+      async () => 1000,
+      { existingChargeFundingSource: 'platform' }
+    );
+    expect(result).toMatchObject({ ok: true, canBook: false });
+    expect(result).not.toHaveProperty('paidByBaci');
   });
 });
 

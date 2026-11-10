@@ -43,11 +43,12 @@ export async function resolveAdminGiglQuoteFunding(
   readBalance: () => Promise<number | null>,
   options: { existingChargeFundingSource?: string | null } = {}
 ): Promise<AdminGiglQuoteFunding> {
-  // An existing reservation was funded when it was created; the current flag
-  // must not re-label who pays for it.
+  // An existing wallet reservation keeps its payer. An unconsumed platform
+  // reservation is only honoured while the flag is still on (the reserve RPC
+  // rejects it otherwise), so a revoked flag falls back to wallet funding.
   const existing = options.existingChargeFundingSource;
   const mode: GiglShippingFundingMode =
-    existing === 'platform' || existing === 'merchant_wallet'
+    existing === 'merchant_wallet'
       ? existing
       : await readGiglShippingFundingMode(supabase, merchantId);
   if (mode === 'platform') {

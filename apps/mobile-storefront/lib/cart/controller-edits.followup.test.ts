@@ -205,3 +205,15 @@ describe('Codex follow-ups', () => {
     );
   });
 });
+
+describe('second review round', () => {
+  it('never publishes a doubled quantity when a write succeeds', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    await s.controller.write({ type: 'add', item: shopItem(PRODUCT_A, 1) });
+    const shown = s.screen.history.map((items) => items[0]?.quantity);
+    expect(shown).not.toContain(3);
+    expect(quantities(s.screen.items)).toEqual([2]);
+  });
+});

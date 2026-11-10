@@ -12,15 +12,18 @@ export function CartWriteNotice() {
   if (!notice) return null;
   return (
     <View
-      accessible
-      accessibilityRole="alert"
-      accessibilityLiveRegion="assertive"
       style={[
         styles.panel,
         { backgroundColor: colors.background, paddingTop: insets.top + 12 },
       ]}
     >
-      <Text style={[styles.text, { color: colors.text }]}>{notice}</Text>
+      <Text
+        accessibilityRole="alert"
+        accessibilityLiveRegion="assertive"
+        style={[styles.text, { color: colors.text }]}
+      >
+        {notice}
+      </Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Dismiss cart message"
@@ -34,6 +37,11 @@ export function CartWriteNotice() {
 }
 const styles = StyleSheet.create({
   panel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

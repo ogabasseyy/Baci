@@ -10,10 +10,8 @@ import {
 export type EditOutcome = 'rolled_back' | 'unconfirmed';
 
 export function isIndeterminateFailure(error: unknown): boolean {
-  return (
-    error instanceof NativeCartError &&
-    (error.indeterminate || error.code === 'temporarily_unavailable')
-  );
+  // A retained request receipt (checked separately) covers transient codes.
+  return error instanceof NativeCartError && error.indeterminate;
 }
 
 interface EditQueueDeps {
@@ -47,6 +45,7 @@ export function createEditQueue(deps: EditQueueDeps) {
     const unpin = deps.edits.pin(action);
     return deps.serial(async () => {
       try {
+        if (edit) deps.edits.startRun(edit);
         const resolved = deps.edits.resolve(action);
         if (resolved) await deps.run(resolved);
         // The line this tap targeted never reached the cart.

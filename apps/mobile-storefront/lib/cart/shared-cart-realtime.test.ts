@@ -219,3 +219,29 @@ it('retries a hint at the same version after a failed refresh', async () => {
   expect(t.refresh).toHaveBeenCalledTimes(2);
   t.handle.stop();
 });
+
+it('does not carry a finished refresh hint into a different cart', async () => {
+  const t = setup();
+  await flush();
+  let done: () => void = () => undefined;
+  t.refresh.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (done = resolve))
+  );
+  t.emit(event(100));
+  await flush();
+  t.state.cartId = '33333333-3333-4333-8333-333333333333';
+  t.state.version = 1;
+  done();
+  await flush();
+  expect(t.refresh).toHaveBeenCalledTimes(1);
+  t.handle.stop();
+});
+
+it('accepts a grant whose topic differs only by case', async () => {
+  const t = setup({
+    access: { ...access(), topic: `cart:${MERCHANT.toUpperCase()}:${CART}` },
+  });
+  await flush();
+  expect(t.deps.connect).toHaveBeenCalledTimes(1);
+  t.handle.stop();
+});

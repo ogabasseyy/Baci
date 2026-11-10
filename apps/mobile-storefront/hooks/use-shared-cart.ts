@@ -271,7 +271,10 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       stopPolling();
       release();
       const reverted = controller?.revertPending?.();
-      if (reverted) useCartStore.setState({ items: reverted });
+      // Only while this controller still owns the displayed cart: account
+      // teardown clears the shared reference, and nothing may be restored then.
+      if (reverted && useCartStore.getState().sharedCartRef)
+        useCartStore.setState({ items: reverted });
       dropPredictedLines();
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({ ...DISABLED_SHARED_CART_STATE });

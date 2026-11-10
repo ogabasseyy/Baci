@@ -43,6 +43,7 @@ export function startSharedCartRealtime(
   let connectedCartId: string | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let highestHint = 0;
+  let failures = 0;
 
   const live = (run: number) =>
     alive && run === epoch && options.isCurrent() && isForeground();
@@ -62,12 +63,14 @@ export function startSharedCartRealtime(
     }
   }
   function refresh(hint?: number): void {
+    const originCart = options.getCartId();
     void options
       .refresh()
       .then(() => {
         // Remember a hint only once it was fetched, so a failed fetch lets
         // the next broadcast at the same version try again.
-        if (hint !== undefined) highestHint = Math.max(highestHint, hint);
+        if (hint !== undefined && options.getCartId() === originCart)
+          highestHint = Math.max(highestHint, hint);
       })
       .catch(() => undefined);
   }
@@ -87,7 +90,8 @@ export function startSharedCartRealtime(
       if (
         !live(run) ||
         !access ||
-        access.topic !== `cart:${options.merchantId}:${cartId}` ||
+        access.topic.toLowerCase() !==
+          `cart:${options.merchantId}:${cartId}`.toLowerCase() ||
         !Number.isFinite(ttl) ||
         ttl < 1000 ||
         ttl > MAX_TTL_MS
@@ -120,13 +124,23 @@ export function startSharedCartRealtime(
         return;
       }
       connection = joined;
+      failures = 0;
       connectedCartId = cartId;
       timer = setTimeout(
         () => void connect(),
         Math.max(0, ttl - Math.min(30000, ttl / 5))
       );
     } catch {
-      if (live(run)) timer = setTimeout(() => void connect(), RETRY_MS);
+      if (live(run)) {
+        // Back off (with jitter after the first retry) so an outage or a
+        // permanent failure does not hammer the grant endpoint.
+        const wait = Math.min(RETRY_MS * 2 ** failures, 300000);
+        timer = setTimeout(
+          () => void connect(),
+          failures ? wait * (0.75 + Math.random() / 2) : wait
+        );
+        failures += 1;
+      }
     }
   }
   const appState = AppState.addEventListener('change', (state) => {

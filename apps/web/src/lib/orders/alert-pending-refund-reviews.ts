@@ -45,6 +45,7 @@ export interface RefundAlertPassSummary {
   attempted: number;
   deferred: number;
   failed: number;
+  uncertain: number;
 }
 
 async function loadReviewsNeedingAlert(
@@ -94,6 +95,7 @@ export async function alertPendingRefundReviews({
     attempted: 0,
     deferred: 0,
     failed: 0,
+    uncertain: 0,
   };
   const outOfBudget = () =>
     deadlineMs !== undefined && deadlineMs - Date.now() < MIN_ALERT_BUDGET_MS;
@@ -164,12 +166,14 @@ export async function alertPendingRefundReviews({
         senders,
         supabase,
       });
-      if (result === 'alerted') summary.alerted += 1;
-      else if (result === 'skipped') summary.failed += 1;
-      else {
+      if (result === 'delivered') summary.alerted += 1;
+      else if (result === 'failed' || result === 'skipped') summary.failed += 1;
+      else if (result === 'uncertain') summary.uncertain += 1;
+      else if (result === 'deferred') {
         summary.deferred += 1;
         break;
       }
+      // 'duplicate' is benign (another worker owns it): not counted.
     }
   } catch (error) {
     logger.error({ error, message: 'Refund review alert pass failed' });

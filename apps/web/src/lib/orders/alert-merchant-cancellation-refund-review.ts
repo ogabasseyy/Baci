@@ -23,6 +23,20 @@ const ALERT_TIMEOUT_MS = 15_000;
 // detached delivery so a just-late success is confirmed before returning.
 const TIMEOUT_GRACE_MS = 2_000;
 
+/**
+ * delivered: a channel confirmed. failed: every channel definitely failed.
+ * uncertain: ambiguous result or timeout. duplicate: already claimed
+ * elsewhere (benign). deferred: no budget, unclaimed. skipped: the claim or
+ * the attempt itself errored.
+ */
+export type RefundAlertOutcome =
+  | 'delivered'
+  | 'deferred'
+  | 'duplicate'
+  | 'failed'
+  | 'skipped'
+  | 'uncertain';
+
 /** Total send attempts per review before the alert is abandoned. */
 export const REFUND_ALERT_RETRY_CAP = 3;
 
@@ -61,14 +75,16 @@ export async function alertMerchantOfRefundReview({
   review: { candidates: unknown; id: string; metadata?: unknown };
   senders: RefundReviewAlertSenders;
   supabase: AlertSupabase;
-}): Promise<'alerted' | 'deferred' | 'skipped'> {
+}): Promise<RefundAlertOutcome> {
   try {
     const remainingMs =
       deadlineMs === undefined
         ? Number.POSITIVE_INFINITY
         : deadlineMs - Date.now();
     if (remainingMs < MIN_ALERT_BUDGET_MS) return 'deferred';
-    if (!(await claimAlert(supabase, review, order, prior))) return 'skipped';
+    const claim = await claimAlert(supabase, review, order, prior);
+    if (claim === 'duplicate') return 'duplicate';
+    if (claim === 'error') return 'skipped';
     let timer: ReturnType<typeof setTimeout> | undefined;
     let outcome: ChannelOutcome;
     let confirmation: Promise<void> | undefined;
@@ -172,7 +188,8 @@ export async function alertMerchantOfRefundReview({
         reviewId: review.id,
       });
     }
-    return 'alerted';
+    if (outcome === 'delivered') return 'delivered';
+    return outcome === 'failed' ? 'failed' : 'uncertain';
   } catch (error) {
     logger.error({
       error,

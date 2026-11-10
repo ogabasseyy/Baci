@@ -95,6 +95,13 @@ describe('deliverAlert', () => {
     expect(data.order_number).toBe('b12/b');
   });
 
+  it('strips all Unicode control and format characters from labels', () => {
+    // C1 control, bidi override/isolate, BOM, zero-width space, LS/PS
+    expect(
+      sanitizeOrderLabel('A\u0085B\u202EC\u2066D\uFEFFE\u200BF\u2028G')
+    ).toBe('ABCDEFG');
+  });
+
   it('sanitizes labels and falls back to the id when empty', () => {
     expect(sanitizeOrderLabel('A\r\nB C\u0000')).toBe('ABC');
     expect(sanitizeOrderLabel('x'.repeat(100))).toHaveLength(40);

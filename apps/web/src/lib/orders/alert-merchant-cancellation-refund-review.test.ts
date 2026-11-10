@@ -46,7 +46,7 @@ function run(
 describe('alertMerchantOfRefundReview', () => {
   it('claims once, sends, and confirms on delivery', async () => {
     const supabase = makeSupabase();
-    await expect(run(supabase, makeSenders())).resolves.toBe('alerted');
+    await expect(run(supabase, makeSenders())).resolves.toBe('delivered');
     expect(supabase.insert).toHaveBeenCalledWith({
       merchant_id: 'merchant-1',
       order_id: 'order-1',
@@ -61,7 +61,7 @@ describe('alertMerchantOfRefundReview', () => {
   it('stays silent when the review was already claimed', async () => {
     const senders = makeSenders();
     await expect(run(makeSupabase({ code: '23505' }), senders)).resolves.toBe(
-      'skipped'
+      'duplicate'
     );
     expect(senders.sendPush).not.toHaveBeenCalled();
     expect(senders.sendEmail).not.toHaveBeenCalled();
@@ -69,9 +69,17 @@ describe('alertMerchantOfRefundReview', () => {
 
   it('keeps the claim on a definite failure so it enters cool-down, not a hot loop', async () => {
     const supabase = makeSupabase();
-    await expect(run(supabase, failing())).resolves.toBe('alerted');
+    await expect(run(supabase, failing())).resolves.toBe('failed');
     expect(supabase.del).not.toHaveBeenCalled();
     expect(supabase.confirmEq).not.toHaveBeenCalled();
+  });
+
+  it('reports a claim error as skipped, not duplicate', async () => {
+    const senders = makeSenders();
+    await expect(run(makeSupabase({ code: '50000' }), senders)).resolves.toBe(
+      'skipped'
+    );
+    expect(senders.sendPush).not.toHaveBeenCalled();
   });
 
   it('keeps the claim unconfirmed for an uncertain result', async () => {
@@ -109,7 +117,7 @@ describe('alertMerchantOfRefundReview', () => {
     });
     const pending = run(supabase, senders, { deadlineMs: Date.now() + 10_000 });
     await vi.advanceTimersByTimeAsync(10_000);
-    await expect(pending).resolves.toBe('alerted');
+    await expect(pending).resolves.toBe('uncertain');
     expect(supabase.del).not.toHaveBeenCalled();
     expect(supabase.confirmEq).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
@@ -146,7 +154,7 @@ describe('alertMerchantOfRefundReview', () => {
     });
     const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
     await vi.advanceTimersByTimeAsync(17_000);
-    await expect(pending).resolves.toBe('alerted');
+    await expect(pending).resolves.toBe('delivered');
     expect(supabase.confirmEq).toHaveBeenCalledWith('review_id', 'review-1');
   });
 
@@ -164,7 +172,7 @@ describe('alertMerchantOfRefundReview', () => {
     });
     const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
     await vi.advanceTimersByTimeAsync(18_000);
-    await expect(pending).resolves.toBe('alerted');
+    await expect(pending).resolves.toBe('uncertain');
     expect(supabase.confirmEq).not.toHaveBeenCalled();
   });
 
@@ -182,7 +190,7 @@ describe('alertMerchantOfRefundReview', () => {
     });
     const pending = run(supabase, senders, { deadlineMs: Date.now() + 30_000 });
     await vi.advanceTimersByTimeAsync(20_000);
-    await expect(pending).resolves.toBe('alerted');
+    await expect(pending).resolves.toBe('uncertain');
     expect(supabase.confirmEq).not.toHaveBeenCalled();
   });
 
@@ -194,7 +202,7 @@ describe('alertMerchantOfRefundReview', () => {
       deadlineMs: Date.now() + 30_000,
     });
     await vi.advanceTimersByTimeAsync(2_500);
-    await expect(pending).resolves.toBe('alerted');
+    await expect(pending).resolves.toBe('delivered');
   });
 
   it('confirms a success that lands after the timeout', async () => {
@@ -225,7 +233,7 @@ describe('alertMerchantOfRefundReview', () => {
       const senders = makeSenders();
       await expect(
         run(supabase, senders, { prior: { attempts: 2 } })
-      ).resolves.toBe('alerted');
+      ).resolves.toBe('delivered');
       expect(supabase.insert).not.toHaveBeenCalled();
       expect(supabase.update).toHaveBeenCalledWith(
         expect.objectContaining({ attempts: 3 })
@@ -242,7 +250,7 @@ describe('alertMerchantOfRefundReview', () => {
       const senders = makeSenders();
       await expect(
         run(makeSupabase(null, []), senders, { prior: { attempts: 1 } })
-      ).resolves.toBe('skipped');
+      ).resolves.toBe('duplicate');
       expect(senders.sendPush).not.toHaveBeenCalled();
     });
 

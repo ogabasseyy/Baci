@@ -16,7 +16,7 @@ describe('claimAlert', () => {
     const supabase = makeSupabase();
     await expect(
       claimAlert(asSupabase(supabase), review, order, null)
-    ).resolves.toBe(true);
+    ).resolves.toBe('claimed');
     expect(supabase.from).toHaveBeenCalledWith(
       'order_cancellation_refund_alerts'
     );
@@ -27,21 +27,21 @@ describe('claimAlert', () => {
     });
   });
 
-  it('returns false silently on a duplicate claim', async () => {
+  it('reports a duplicate claim silently', async () => {
     vi.mocked(logger.error).mockClear();
     const supabase = makeSupabase({ code: '23505' });
     await expect(
       claimAlert(asSupabase(supabase), review, order, null)
-    ).resolves.toBe(false);
+    ).resolves.toBe('duplicate');
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('logs and returns false on any other insert error', async () => {
+  it('logs and reports an error on any other insert failure', async () => {
     vi.mocked(logger.error).mockClear();
     const supabase = makeSupabase({ code: '50000' });
     await expect(
       claimAlert(asSupabase(supabase), review, order, null)
-    ).resolves.toBe(false);
+    ).resolves.toBe('error');
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
@@ -49,7 +49,7 @@ describe('claimAlert', () => {
     const supabase = makeSupabase();
     await expect(
       claimAlert(asSupabase(supabase), review, order, { attempts: 1 })
-    ).resolves.toBe(true);
+    ).resolves.toBe('claimed');
     expect(supabase.insert).not.toHaveBeenCalled();
     expect(supabase.update).toHaveBeenCalledWith({
       attempts: 2,
@@ -63,11 +63,11 @@ describe('claimAlert', () => {
     expect(supabase.reclaimChain.is).toHaveBeenCalledWith('confirmed_at', null);
   });
 
-  it('returns false when the compare-and-set matches no row', async () => {
+  it('reports a lost compare-and-set race as duplicate', async () => {
     const supabase = makeSupabase(null, []);
     await expect(
       claimAlert(asSupabase(supabase), review, order, { attempts: 1 })
-    ).resolves.toBe(false);
+    ).resolves.toBe('duplicate');
   });
 
   it('keeps the retry cap at three total attempts', () => {

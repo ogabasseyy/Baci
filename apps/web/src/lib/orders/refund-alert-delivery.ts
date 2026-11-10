@@ -16,17 +16,12 @@ const MAX_LABEL_LENGTH = 40;
  * (CR/LF would otherwise reach the email Subject header) and cap length.
  */
 export function sanitizeOrderLabel(raw: string): string {
-  const cleaned = Array.from(raw)
-    .filter((char) => {
-      const code = char.codePointAt(0) ?? 0;
-      return (
-        code >= 0x20 && code !== 0x7f && code !== 0x2028 && code !== 0x2029
-      );
-    })
-    .join('')
+  // Cc/Cf cover C0/C1 controls, bidi overrides/isolates and zero-width marks
+  // (U+FEFF included); LS/PS are Zl/Zp so they are listed explicitly.
+  return raw
+    .replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, '')
     .trim()
     .slice(0, MAX_LABEL_LENGTH);
-  return cleaned;
 }
 
 /**

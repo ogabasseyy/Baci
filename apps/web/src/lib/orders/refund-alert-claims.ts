@@ -11,12 +11,14 @@ import type {
  * workers cannot both re-send. The row is never deleted on failure: every
  * attempt, definite or uncertain, counts toward the cool-down and cap.
  */
+export type ClaimResult = 'claimed' | 'duplicate' | 'error';
+
 export async function claimAlert(
   supabase: AlertSupabase,
   review: { id: string },
   order: RefundReviewAlertOrder,
   prior: PriorAlertAttempt | null
-): Promise<boolean> {
+): Promise<ClaimResult> {
   if (prior) {
     const { data, error } = await supabase
       .from('order_cancellation_refund_alerts')
@@ -34,9 +36,10 @@ export async function claimAlert(
         orderId: order.id,
         reviewId: review.id,
       });
-      return false;
+      return 'error';
     }
-    return Array.isArray(data) && data.length > 0;
+    // No row matched: another worker already re-claimed it (benign).
+    return Array.isArray(data) && data.length > 0 ? 'claimed' : 'duplicate';
   }
   const { error } = await supabase
     .from('order_cancellation_refund_alerts')
@@ -45,15 +48,14 @@ export async function claimAlert(
       order_id: order.id,
       review_id: review.id,
     });
-  if (!error) return true;
-  if ((error as { code?: string }).code !== '23505') {
-    logger.error({
-      message: 'Cancellation refund alert claim failed',
-      orderId: order.id,
-      reviewId: review.id,
-    });
-  }
-  return false;
+  if (!error) return 'claimed';
+  if ((error as { code?: string }).code === '23505') return 'duplicate';
+  logger.error({
+    message: 'Cancellation refund alert claim failed',
+    orderId: order.id,
+    reviewId: review.id,
+  });
+  return 'error';
 }
 
 export async function confirmClaim(

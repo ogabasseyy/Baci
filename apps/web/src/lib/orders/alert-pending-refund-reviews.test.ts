@@ -63,7 +63,7 @@ const senders = { sendEmail: vi.fn(), sendPush: vi.fn() };
 
 describe('alertPendingRefundReviews', () => {
   it('alerts unalerted open reviews, skipping tenant mismatches', async () => {
-    mocks.alert.mockReset().mockResolvedValue('alerted');
+    mocks.alert.mockReset().mockResolvedValue('delivered');
     await alertPendingRefundReviews({
       senders,
       supabase: makeSupabase() as never,
@@ -78,7 +78,7 @@ describe('alertPendingRefundReviews', () => {
   });
 
   it('anti-joins alerted reviews in SQL before the scan limit', async () => {
-    mocks.alert.mockReset().mockResolvedValue('alerted');
+    mocks.alert.mockReset().mockResolvedValue('delivered');
     const supabase = makeSupabase();
     await alertPendingRefundReviews({ senders, supabase: supabase as never });
     expect(supabase.rpc).toHaveBeenCalledWith(
@@ -92,7 +92,7 @@ describe('alertPendingRefundReviews', () => {
   });
 
   it('re-drives an unconfirmed claim with its prior attempt count', async () => {
-    mocks.alert.mockReset().mockResolvedValue('alerted');
+    mocks.alert.mockReset().mockResolvedValue('delivered');
     await alertPendingRefundReviews({
       senders,
       supabase: makeSupabase({
@@ -115,7 +115,7 @@ describe('alertPendingRefundReviews', () => {
   });
 
   it('does not let invalid reviews use up the per-pass alert slots', async () => {
-    mocks.alert.mockReset().mockResolvedValue('alerted');
+    mocks.alert.mockReset().mockResolvedValue('delivered');
     const invalid = ['a', 'b', 'c'].map((id) => ({
       alert_attempts: null,
       candidates: [],
@@ -186,8 +186,9 @@ describe('alertPendingRefundReviews', () => {
   it('returns counts for the pass', async () => {
     mocks.alert
       .mockReset()
-      .mockResolvedValueOnce('alerted')
-      .mockResolvedValueOnce('skipped');
+      .mockResolvedValueOnce('delivered')
+      .mockResolvedValueOnce('failed')
+      .mockResolvedValueOnce('uncertain');
     const supabase = makeSupabase({
       reviews: [
         {
@@ -198,19 +199,32 @@ describe('alertPendingRefundReviews', () => {
           metadata: {},
           order_id: 'o1',
         },
-        {
+        ...['r3', 'r4'].map((id) => ({
           alert_attempts: null,
           candidates: [],
-          id: 'r3',
+          id,
           merchant_id: 'm1',
           metadata: {},
           order_id: 'o1',
-        },
+        })),
       ],
     });
     await expect(
       alertPendingRefundReviews({ senders, supabase: supabase as never })
-    ).resolves.toEqual({ alerted: 1, attempted: 2, deferred: 0, failed: 1 });
+    ).resolves.toEqual({
+      alerted: 1,
+      attempted: 3,
+      deferred: 0,
+      failed: 1,
+      uncertain: 1,
+    });
+  });
+
+  it('does not count a duplicate claim as a failure', async () => {
+    mocks.alert.mockReset().mockResolvedValue('duplicate');
+    await expect(
+      alertPendingRefundReviews({ senders, supabase: makeSupabase() as never })
+    ).resolves.toMatchObject({ alerted: 0, failed: 0, uncertain: 0 });
   });
 
   it('counts a deferral and stops', async () => {

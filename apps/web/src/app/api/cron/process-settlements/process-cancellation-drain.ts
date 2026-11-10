@@ -134,7 +134,13 @@ export async function processCancellationDrain(
       sendPush: sendMerchantPush,
     },
     supabase,
-  })) ?? { alerted: 0, attempted: 0, deferred: 0, failed: 0 };
+  })) ?? {
+    alerted: 0,
+    attempted: 0,
+    deferred: 0,
+    failed: 0,
+    uncertain: 0,
+  };
   if (merchantRefundAlerts.failed > 0) {
     // Warn only: a persistent lookup/claim problem must stay visible without
     // pinning the cron red (alerts retry on the next pass).

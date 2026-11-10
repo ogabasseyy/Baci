@@ -132,6 +132,11 @@ export async function runSavingsGoalSubmission(
     if (result.success !== true) {
       throw new Error('Unable to create savings plan.');
     }
+    // The plan exists now: record it before anything can cut this short (a
+    // form edit or reload in flight), so a later submit never creates another.
+    if (input.deferInitialContribution && input.onContinueInWallet) {
+      input.onHandOffPending?.(result.goalId);
+    }
     if (requestIdempotencyKey) {
       input.setInitialContributionIdempotencyKey((currentKey) =>
         currentKey === requestIdempotencyKey ? null : currentKey

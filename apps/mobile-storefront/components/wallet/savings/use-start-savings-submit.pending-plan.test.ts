@@ -97,6 +97,45 @@ describe('a created plan whose head start has not moved yet', () => {
     readBalance.mockReset();
   });
 
+  it('keeps the created plan when the form is edited during the reload', async () => {
+    let reloaded: (value: unknown) => void = () => undefined;
+    const refetch = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          reloaded = resolve;
+        })
+    );
+    const input = createInput({ refetch });
+    const { result, rerender } = renderHook(
+      (props: ReturnType<typeof createInput>) => useStartSavingsSubmit(props),
+      { initialProps: input }
+    );
+    let pending: Promise<void> = Promise.resolve();
+    await act(async () => {
+      pending = result.current.submitSavingsGoal(primaryOptions);
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    // The customer edits the plan while the wallet reload is still running.
+    const edited = { ...input, effectiveInitialContribution: 30000 };
+    rerender(edited);
+    await act(async () => {
+      reloaded(loaded);
+      await pending;
+    });
+    expect(router.replace).not.toHaveBeenCalled();
+    // Submitting the edited form must not create a second plan.
+    await act(async () => {
+      await result.current.submitSavingsGoal({
+        deferInitialContribution: true,
+      });
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    expect(edited.setFormError).toHaveBeenLastCalledWith(
+      PLAN_ALREADY_CREATED_MESSAGE
+    );
+  });
+
   it('never funds the created plan with an edited product or amount', async () => {
     const { result, rerender, input } = await createStalledPlan();
     rerender({ ...input, effectiveInitialContribution: 30000 });

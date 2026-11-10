@@ -33,7 +33,7 @@ describe('WalletFundPhonePrompt', () => {
     expect(
       screen.getByRole('button', { name: 'Save phone number' })
     ).toHaveStyle({
-      minHeight: 56,
+      minHeight: 48,
     });
   });
 

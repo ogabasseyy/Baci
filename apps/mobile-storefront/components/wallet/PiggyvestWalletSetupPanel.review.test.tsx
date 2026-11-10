@@ -78,7 +78,7 @@ it('shows safe support guidance when a pending refresh returns terminal review',
     screen.getByRole('button', { name: 'Create account number' })
   );
   const refresh = await screen.findByRole('button', {
-    name: 'Refresh PiggyVest account',
+    name: 'Check now',
   });
   fireEvent.press(refresh);
 
@@ -86,9 +86,7 @@ it('shows safe support guidance when a pending refresh returns terminal review',
   expect(
     screen.queryByText('Could not check your account. Please try again later.')
   ).toBeNull();
-  expect(
-    screen.queryByRole('button', { name: 'Refresh PiggyVest account' })
-  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
 });
 
 it('shows support guidance when create returns terminal review', async () => {

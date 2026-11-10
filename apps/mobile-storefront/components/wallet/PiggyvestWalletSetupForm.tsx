@@ -12,6 +12,15 @@ import { BRAND } from '@/constants/Colors';
 import { PiggyvestPrimaryWalletSchemas } from '@/schemas/piggyvest-primary-wallet';
 import { setupStyles } from './piggyvest-wallet-setup.styles';
 
+// Server codes where refreshing cannot help; only waiting can.
+const SETUP_UNAVAILABLE_CODES = new Set([
+  'PROVIDER_UNAVAILABLE',
+  'NOT_CONFIGURED',
+  'PIGGYVEST_NOT_READY',
+  'PIGGYVEST_ONBOARDING_NOT_READY',
+  'PIGGYVEST_UNAVAILABLE',
+]);
+
 const SETUP_BENEFITS: readonly {
   icon: ComponentProps<typeof Ionicons>['name'];
   text: string;
@@ -75,9 +84,16 @@ export function PiggyvestWalletSetupForm({
         // correction-free retry of a possibly-right number.
         setBvn('');
         setError('That BVN was rejected. Check the number and try again.');
-      } else if (code === 'PROVIDER_UNAVAILABLE' || code === 'NOT_CONFIGURED') {
-        // PiggyVest refused before creating anything: nothing to refresh,
-        // so tell the customer plainly to come back later.
+      } else if (code === 'PROFILE_VERIFICATION_REQUIRED') {
+        setError(
+          'Please verify your email and complete your profile, then try again.'
+        );
+      } else if (
+        typeof code === 'string' &&
+        SETUP_UNAVAILABLE_CODES.has(code)
+      ) {
+        // Nothing to refresh: setup or PiggyVest is not available yet, so
+        // tell the customer plainly to come back later.
         setError(
           'Wallet setup is unavailable right now. Please try again later.'
         );

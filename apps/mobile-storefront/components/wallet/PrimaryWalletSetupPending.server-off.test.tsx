@@ -33,7 +33,7 @@ describe('PrimaryWalletSetupPending', () => {
     // Closing loses the local pending state, so never promise it is kept;
     // re-entering the BVN is safe because the server reclaims the intent.
     expect(screen.queryByText(/keep your setup/)).toBeNull();
-    expect(screen.getByText(/safe to re-enter it/)).toBeOnTheScreen();
+    expect(screen.getByText(/re-enter the same number/)).toBeOnTheScreen();
   });
 
   it('says when PiggyVest could not be reached', () => {

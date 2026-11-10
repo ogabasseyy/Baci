@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import {
   forgetRememberedPrimaryFundingAccounts,
+  onLatePrimaryAnswer,
   REMEMBERED_PRIMARY_READ_TTL_MS,
   rememberPrimaryFundingAccount,
 } from './primary-funding-account-memory';
@@ -189,6 +190,75 @@ describe('readPrimaryFundingAccountSoon', () => {
     await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
       status: 'unavailable',
     });
+  });
+
+  it('never lets an older slow read overwrite a newer answer', async () => {
+    let oldAnswer: (value: unknown) => void = () => undefined;
+    mockRead.mockReturnValueOnce(
+      new Promise((resolve) => {
+        oldAnswer = resolve;
+      })
+    );
+    const older = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await older;
+    // A newer read answers first with the post-contribution balance.
+    mockRead.mockResolvedValueOnce({
+      status: 'ready',
+      account,
+      balanceKobo: 4_000_000,
+    });
+    await readPrimaryFundingAccountSoon('m', 'u');
+    // The older read lands late with the stale balance: ignored.
+    oldAnswer({ status: 'ready', account, balanceKobo: 5_000_000 });
+    await Promise.resolve();
+    await Promise.resolve();
+    mockRead.mockResolvedValueOnce({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'ready',
+      account,
+      balanceKobo: 4_000_000,
+    });
+  });
+
+  it('never lets an older slow read bring back a cleared account', async () => {
+    let oldAnswer: (value: unknown) => void = () => undefined;
+    mockRead.mockReturnValueOnce(
+      new Promise((resolve) => {
+        oldAnswer = resolve;
+      })
+    );
+    const older = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await older;
+    mockRead.mockResolvedValueOnce({ status: 'not_ready' });
+    await readPrimaryFundingAccountSoon('m', 'u');
+    oldAnswer({ status: 'ready', account, balanceKobo: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    mockRead.mockResolvedValueOnce({ status: 'unavailable' });
+    await expect(readPrimaryFundingAccountSoon('m', 'u')).resolves.toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('announces a confirmed answer that lands after its load gave up', async () => {
+    const listener = jest.fn();
+    onLatePrimaryAnswer(listener);
+    let answer: (value: unknown) => void = () => undefined;
+    mockRead.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const load = readPrimaryFundingAccountSoon('m', 'u');
+    jest.advanceTimersByTime(PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
+    await load;
+    expect(listener).not.toHaveBeenCalled();
+    answer({ status: 'ready', account, balanceKobo: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

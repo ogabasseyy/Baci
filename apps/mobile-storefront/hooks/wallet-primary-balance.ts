@@ -1,4 +1,6 @@
 import {
+  announceLatePrimaryAnswer,
+  beginPrimaryRead,
   recallPrimaryFundingAccount,
   rememberPrimaryFundingAccount,
 } from './primary-funding-account-memory';
@@ -21,16 +23,25 @@ export async function readPrimaryFundingAccountSoon(
   userId: string
 ): Promise<SettledPrimaryFundingAccount> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   const timeout = new Promise<SettledPrimaryFundingAccount>((resolve) => {
-    timer = setTimeout(
-      () => resolve({ status: 'unavailable' }),
-      PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS
-    );
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve({ status: 'unavailable' });
+    }, PRIMARY_FUNDING_ACCOUNT_TIMEOUT_MS);
   });
+  // Numbered at start: an answer only counts if no newer read has answered.
+  const sequence = beginPrimaryRead(merchantId, userId);
   const read = readPrimaryFundingAccount(merchantId, userId).then((value) => {
     if (timer !== undefined) clearTimeout(timer);
-    // Every answer, on time or late, updates the last confirmed read.
-    rememberPrimaryFundingAccount(merchantId, userId, value);
+    const stored = rememberPrimaryFundingAccount(
+      merchantId,
+      userId,
+      value,
+      sequence
+    );
+    // This load already gave up: tell the screen a confirmed answer landed.
+    if (timedOut && stored) announceLatePrimaryAnswer();
     return value;
   });
   const settled = await Promise.race([read, timeout]);

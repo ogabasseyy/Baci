@@ -296,6 +296,11 @@ describe('runSavingsGoalSubmission', () => {
     );
     // ...and the head start moves from the wallet's Add to savings sheet.
     expect(onContinueInWallet).toHaveBeenCalledWith('goal-1', 10000);
+    // The new goal is loaded into the wallet data before the hand-off.
+    expect(input.refetch).toHaveBeenCalled();
+    const refetchOrder = jest.mocked(input.refetch).mock.invocationCallOrder[0];
+    const handOffOrder = onContinueInWallet.mock.invocationCallOrder[0];
+    expect(refetchOrder).toBeLessThan(handOffOrder ?? 0);
     expect(input.setShowTransferModal).not.toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
     expect(setCreatedGoalId).not.toHaveBeenCalled();

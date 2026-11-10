@@ -1,7 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 import { resolveStartSavingsWalletBalance } from './start-savings-wallet-balance';
-import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
+import {
+  PRIMARY_HEAD_START_SHORT_MESSAGE,
+  useStartSavingsFormFlow,
+} from './use-start-savings-form-flow';
 
 type FlowInput = Parameters<typeof useStartSavingsFormFlow>[0];
 
@@ -31,7 +34,7 @@ function createFlow(overrides: Partial<FlowInput> = {}) {
     ...overrides,
   };
   const { result } = renderHook(() => useStartSavingsFormFlow(input));
-  return { flow: result.current, submitSavingsGoal };
+  return { flow: result.current, submitSavingsGoal, input };
 }
 
 describe('start savings with a PiggyVest wallet', () => {
@@ -42,6 +45,18 @@ describe('start savings with a PiggyVest wallet', () => {
       deferInitialContribution: true,
       continueInWallet: true,
     });
+  });
+
+  it('refuses a head start larger than the PiggyVest balance, creating nothing', async () => {
+    const { flow, submitSavingsGoal, input } = createFlow({
+      primaryWallet: true,
+      requiredTopUpAmount: 2500,
+    });
+    await flow.handleFundingContinue();
+    expect(submitSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_SHORT_MESSAGE
+    );
   });
 
   it('creates a PiggyVest plan with no head start directly', async () => {

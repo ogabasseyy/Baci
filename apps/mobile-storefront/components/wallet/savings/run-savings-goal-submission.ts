@@ -167,6 +167,14 @@ export async function runSavingsGoalSubmission(
       input.setShowFundingModal(false);
       input.setShowPreviewModal(false);
       input.setFormError(null);
+      // Load the new goal into the wallet data first: the wallet opens the
+      // goal by id and would otherwise fall back to an older active plan.
+      try {
+        await input.refetch();
+      } catch {
+        // The wallet reloads on open; the goal id still selects the plan.
+      }
+      if (!isCurrent()) return;
       input.onContinueInWallet(
         result.goalId,
         input.effectiveInitialContribution

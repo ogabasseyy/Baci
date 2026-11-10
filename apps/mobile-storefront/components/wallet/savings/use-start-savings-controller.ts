@@ -99,12 +99,10 @@ export function useStartSavingsController() {
   const { balance: safeWalletBalance, primaryWallet } =
     resolveStartSavingsWalletBalance(walletData?.wallet);
   const fundingAccount = walletData?.wallet.funding_account ?? null;
-
-  const routeVariantId = readParam(params.variantId);
   const { selectVariantOption, variantOptionGroups } =
     useStartSavingsVariantSelection({
       clearProductSelection,
-      routeVariantId,
+      routeVariantId: readParam(params.variantId),
       searchValue,
       selectedCatalogProduct,
       selectedProduct,
@@ -203,6 +201,7 @@ export function useStartSavingsController() {
     initialContributionValue,
     primaryWallet,
     refetch,
+    requiredTopUpAmount,
     selectedFundingOption,
     selectedPaymentMethodId,
     selectedProduct,

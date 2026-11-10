@@ -4,6 +4,9 @@ import type { WalletData } from '@/hooks/wallet-query';
 import { usePrimaryWalletWatch } from './use-primary-wallet-watch';
 
 jest.mock('react-native', () => ({ Alert: { alert: jest.fn() } }));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => ({ user: null }) },
+}));
 
 // The server keeping PiggyVest off never reports a primary balance: the
 // wallet passes through untouched and nothing polls.

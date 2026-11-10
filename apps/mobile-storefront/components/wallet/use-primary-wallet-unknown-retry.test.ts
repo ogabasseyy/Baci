@@ -8,47 +8,105 @@ import {
 } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import {
+  announceLatePrimaryAnswer,
+  forgetRememberedPrimaryFundingAccounts,
+} from '@/hooks/primary-funding-account-memory';
+import {
   PRIMARY_UNKNOWN_RETRY_DELAY_MS,
   PRIMARY_UNKNOWN_RETRY_LIMIT,
   usePrimaryWalletUnknownRetry,
 } from './use-primary-wallet-unknown-retry';
 
+async function tick(ms: number) {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
+}
+
 describe('usePrimaryWalletUnknownRetry', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    forgetRememberedPrimaryFundingAccounts();
   });
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('re-checks a slow PiggyVest read a bounded number of times', () => {
-    const refetch = jest.fn();
+  it('re-checks a slow PiggyVest read a bounded number of times', async () => {
+    const refetch = jest.fn(async () => undefined);
     renderHook(() =>
       usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
     );
     for (let i = 0; i < PRIMARY_UNKNOWN_RETRY_LIMIT + 2; i += 1) {
-      act(() => {
-        jest.advanceTimersByTime(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
-      });
+      await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     }
     expect(refetch).toHaveBeenCalledTimes(PRIMARY_UNKNOWN_RETRY_LIMIT);
   });
 
-  it('stops once the read answers and never runs for a known answer', () => {
-    const refetch = jest.fn();
+  it('waits for a reload to finish before spending the next attempt', async () => {
+    let finish: () => void = () => undefined;
+    const refetch = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+    );
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+    );
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    // The reload is still running: no overlapping second reload.
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 3);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish();
+    });
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('reloads as soon as a late confirmed answer lands', async () => {
+    const refetch = jest.fn(async () => undefined);
+    renderHook(() =>
+      usePrimaryWalletUnknownRetry({ unknown: true, scopeKey: 'a', refetch })
+    );
+    act(() => {
+      announceLatePrimaryAnswer();
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops once the read answers and ignores late answers then', async () => {
+    const refetch = jest.fn(async () => undefined);
     const { rerender } = renderHook(
       ({ unknown }: { unknown: boolean }) =>
         usePrimaryWalletUnknownRetry({ unknown, scopeKey: 'a', refetch }),
       { initialProps: { unknown: true } }
     );
-    act(() => {
-      jest.advanceTimersByTime(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
-    });
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     expect(refetch).toHaveBeenCalledTimes(1);
     rerender({ unknown: false });
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 5);
     act(() => {
-      jest.advanceTimersByTime(PRIMARY_UNKNOWN_RETRY_DELAY_MS * 5);
+      announceLatePrimaryAnswer();
     });
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts the wait when the signed-in account changes', async () => {
+    const refetch = jest.fn(async () => undefined);
+    const { rerender } = renderHook(
+      ({ scopeKey }: { scopeKey: string }) =>
+        usePrimaryWalletUnknownRetry({ unknown: true, scopeKey, refetch }),
+      { initialProps: { scopeKey: 'a' } }
+    );
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS - 1000);
+    rerender({ scopeKey: 'b' });
+    // The old scope's timer is gone; the new one waits a full delay.
+    await tick(1000);
+    expect(refetch).not.toHaveBeenCalled();
+    await tick(PRIMARY_UNKNOWN_RETRY_DELAY_MS - 1000);
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

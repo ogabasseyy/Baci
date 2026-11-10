@@ -11,7 +11,8 @@ export function resolveStartSavingsWalletBalance(
   wallet: WalletData | undefined
 ): { balance: number; primaryWallet: boolean } {
   const kobo = wallet?.primary_balance_kobo;
-  if (typeof kobo === 'number' && Number.isFinite(kobo) && kobo >= 0)
+  // Same gate as the producer (primaryBalanceField): whole kobo, >= 0.
+  if (typeof kobo === 'number' && Number.isSafeInteger(kobo) && kobo >= 0)
     return { balance: kobo / 100, primaryWallet: true };
   return { balance: wallet?.balance ?? 0, primaryWallet: false };
 }

@@ -5,6 +5,9 @@ import type {
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
 
+export const PRIMARY_HEAD_START_SHORT_MESSAGE =
+  'Your wallet balance is less than this head start. Add money to your wallet or lower the head start.';
+
 /**
  * Form-flow handlers for the start-savings form: preview validation,
  * funding continuation (manual vs auto-debit vs bank transfer), source
@@ -19,6 +22,7 @@ export function useStartSavingsFormFlow({
   initialContributionValue,
   primaryWallet = false,
   refetch,
+  requiredTopUpAmount = 0,
   selectedFundingOption,
   selectedPaymentMethodId,
   selectedProduct,
@@ -42,6 +46,8 @@ export function useStartSavingsFormFlow({
   /** The customer's spendable wallet is their PiggyVest main wallet. */
   primaryWallet?: boolean;
   refetch: () => Promise<unknown>;
+  /** Head start minus the spendable wallet balance; > 0 means short. */
+  requiredTopUpAmount?: number;
   selectedFundingOption: SavingsFundingOption;
   selectedPaymentMethodId: string | null | undefined;
   selectedProduct: SavingsProductChoice | null;
@@ -121,6 +127,12 @@ export function useStartSavingsFormFlow({
       initialContributionEnabled &&
       initialContributionValue > 0
     ) {
+      // Refuse up front rather than create a plan whose head start cannot
+      // move: the legacy path fails atomically, so this path must too.
+      if (requiredTopUpAmount > 0) {
+        setFormError(PRIMARY_HEAD_START_SHORT_MESSAGE);
+        return;
+      }
       await submitSavingsGoal({
         deferInitialContribution: true,
         continueInWallet: true,

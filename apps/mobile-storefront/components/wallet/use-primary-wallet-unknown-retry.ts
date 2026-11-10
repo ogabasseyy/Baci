@@ -1,5 +1,6 @@
 // useEffectEvent is stable React since 19.2; this app pins react 19.3.0.
 import { useEffect, useEffectEvent, useState } from 'react';
+import { onLatePrimaryAnswer } from '@/hooks/primary-funding-account-memory';
 
 export const PRIMARY_UNKNOWN_RETRY_DELAY_MS = 4000;
 export const PRIMARY_UNKNOWN_RETRY_LIMIT = 3;
@@ -14,9 +15,10 @@ interface Input {
 
 /**
  * A slow PiggyVest read leaves the wallet without the customer's account
- * number and balance until something reloads it. Re-check by itself a few
- * times, a few seconds apart, while the answer is unknown: the late answer is
- * remembered, so the next load can show it even if PiggyVest is still slow.
+ * number and balance until something reloads it. While the answer is
+ * unknown: reload as soon as a late confirmed answer lands, and otherwise
+ * re-check by itself a few times. Each re-check waits for the previous reload
+ * to finish, so reloads never overlap and every attempt really runs.
  */
 export function usePrimaryWalletUnknownRetry({
   unknown,
@@ -30,13 +32,29 @@ export function usePrimaryWalletUnknownRetry({
   if (state.scopeKey !== scopeKey || (!unknown && state.attempts !== 0)) {
     setState({ scopeKey, attempts: 0 });
   }
-  const retry = useEffectEvent(() => {
-    setState({ scopeKey, attempts: attempts + 1 });
-    void refetch();
+  const retry = useEffectEvent(async (forScope: string) => {
+    try {
+      await refetch();
+    } finally {
+      // Spend the attempt only once the reload has settled.
+      setState((current) =>
+        current.scopeKey === forScope
+          ? { scopeKey: forScope, attempts: current.attempts + 1 }
+          : current
+      );
+    }
   });
+  const reloadForLateAnswer = useEffectEvent(() => {
+    if (unknown) void refetch();
+  });
+  useEffect(() => onLatePrimaryAnswer(reloadForLateAnswer), []);
   useEffect(() => {
     if (!unknown || attempts >= PRIMARY_UNKNOWN_RETRY_LIMIT) return;
-    const timer = setTimeout(retry, PRIMARY_UNKNOWN_RETRY_DELAY_MS);
+    // Bound to this scope: an account switch clears it and starts afresh.
+    const forScope = scopeKey;
+    const timer = setTimeout(() => {
+      void retry(forScope);
+    }, PRIMARY_UNKNOWN_RETRY_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [unknown, attempts]);
+  }, [unknown, attempts, scopeKey]);
 }

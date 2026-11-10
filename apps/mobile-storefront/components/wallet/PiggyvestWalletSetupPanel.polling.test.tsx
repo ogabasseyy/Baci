@@ -53,6 +53,7 @@ it('checks for the account number by itself and finishes when it is ready', asyn
           bankName: 'Test Bank',
           accountName: 'Test User',
         },
+        balanceKobo: 250_000,
       } as never);
     render(
       <PiggyvestWalletSetupPanel
@@ -84,6 +85,7 @@ it('checks for the account number by itself and finishes when it is ready', asyn
       expect.objectContaining({
         status: 'ready',
         account: expect.objectContaining({ accountNumber: '0123456789' }),
+        balanceKobo: 250_000,
       })
     );
   } finally {

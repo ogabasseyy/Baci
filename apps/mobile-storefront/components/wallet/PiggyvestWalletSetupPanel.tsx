@@ -101,11 +101,19 @@ export function PiggyvestWalletSetupPanel({
       if (result.account) {
         // Hand this confirmed read to the wallet reload below, so the sheet
         // closes even when that reload's own PiggyVest read runs slow.
-        if (requestUserId)
+        // Only a full read (account and balance) is handed over: one
+        // without a balance would show the account but not the money.
+        const balanceKobo = result.balanceKobo;
+        if (
+          requestUserId &&
+          typeof balanceKobo === 'number' &&
+          Number.isSafeInteger(balanceKobo) &&
+          balanceKobo >= 0
+        )
           rememberPrimaryFundingAccount(merchantId, requestUserId, {
             status: 'ready',
             account: result.account,
-            balanceKobo: result.balanceKobo ?? null,
+            balanceKobo,
           });
         onRefresh();
       } else setAwaitingAccount(true);

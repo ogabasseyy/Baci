@@ -20,6 +20,7 @@ export type ModalSheetProps = {
   /**
    * 'fade-backdrop': the dimmed backdrop fades in on the spot while only the
    * card slides up, instead of the whole backdrop sliding up with the card.
+   * It takes precedence over `animationType`, which it sets to 'fade'.
    */
   presentation?: 'native' | 'fade-backdrop';
   backdropStyle?: StyleProp<ViewStyle>;

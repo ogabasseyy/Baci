@@ -191,9 +191,10 @@ export function createOrderDetailsStatusActions({
       // the automatic action; for legs the worker cannot refund itself that
       // action sends the refund to owner review, and cancel-only needs refund
       // permission, which the server enforces with a 403.
+      const noteCurrency = order.currency?.trim() || 'NGN';
       const inFlightNote =
         plan && plan.inFlightAmount > 0
-          ? ` The provider is already refunding ${formatCurrency(plan.inFlightAmount, undefined, order.currency || 'NGN')} of this payment: only the remaining ${formatCurrency(plan.amount, undefined, order.currency || 'NGN')} is yours to refund, so do not refund the rest yourself.`
+          ? ` The provider is already refunding ${formatCurrency(plan.inFlightAmount, undefined, noteCurrency)} of this payment: only the remaining ${formatCurrency(plan.amount, undefined, noteCurrency)} is yours to refund, so do not refund the rest yourself.`
           : '';
       Alert.alert(
         'Cancel paid order?',

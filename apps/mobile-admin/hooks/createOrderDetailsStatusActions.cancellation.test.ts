@@ -264,6 +264,8 @@ describe('cancellation refund plan', () => {
   it('limits the cancel-only refund to the amount not already in flight', async () => {
     const { actions } = createPaidOrderStatusActions({
       order: {
+        // Blank currency codes fall back to NGN for both amounts.
+        currency: '   ',
         cancel_refund_plan: {
           amount: 3000,
           automaticSupported: true,
@@ -273,9 +275,9 @@ describe('cancellation refund plan', () => {
     });
     await actions.handleStatusUpdate('cancelled');
     const call = vi.mocked(Alert.alert).mock.calls[0];
-    expect(call?.[1]).toMatch(/refunding .*2,000\.00 of this payment/);
+    expect(call?.[1]).toMatch(/refunding NGN\s2,000\.00 of this payment/);
     expect(call?.[1]).toMatch(
-      /only the remaining .*3,000\.00 is yours to refund/
+      /only the remaining NGN\s3,000\.00 is yours to refund/
     );
     expect(call?.[2]?.map((button) => button.text)).toContain(
       'Cancel only (I will refund them)'

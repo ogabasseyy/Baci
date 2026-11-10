@@ -82,6 +82,10 @@ describe('merchant cancellation refund-mode migration', () => {
     expect(sql).toContain('SECURITY DEFINER');
   });
 
+  it('reloads the PostgREST schema cache after changing the RPC signature', () => {
+    expect(sql.trimEnd().endsWith("NOTIFY pgrst, 'reload schema';")).toBe(true);
+  });
+
   it('stores the mode on the order and keeps the grants exact', () => {
     expect(sql).toContain('cancellation_refund_mode = v_refund_mode');
     expect(sql).toContain(

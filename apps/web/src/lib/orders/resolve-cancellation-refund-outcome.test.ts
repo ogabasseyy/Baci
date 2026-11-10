@@ -128,4 +128,54 @@ describe('resolveCancellationRefundOutcome', () => {
       })
     ).resolves.toEqual({ outcome: 'queued_if_required' });
   });
+
+  it('does not ask for a manual refund on a replay once the full refund was recorded', async () => {
+    const supabase = supabaseWith({
+      ledger: {
+        data: [
+          leg(),
+          leg({
+            id: 'refund-1',
+            payment_transaction_id: 'leg-1',
+            transaction_type: 'refund',
+          }),
+        ],
+        error: null,
+      },
+      mode: { data: { cancellation_refund_mode: 'manual' }, error: null },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({
+        ...manual,
+        alreadyCancelled: true,
+        supabase,
+      })
+    ).resolves.toEqual({
+      details: { currency: 'NGN', inFlightAmount: 0, remainingAmount: 0 },
+      outcome: 'queued_if_required',
+    });
+  });
+
+  it('treats a pending refund row as in flight, not as owed by the merchant', async () => {
+    const supabase = supabaseWith({
+      ledger: {
+        data: [
+          leg(),
+          leg({
+            id: 'refund-1',
+            payment_transaction_id: 'leg-1',
+            status: 'processing',
+            transaction_type: 'refund',
+          }),
+        ],
+        error: null,
+      },
+    });
+    await expect(
+      resolveCancellationRefundOutcome({ ...manual, supabase })
+    ).resolves.toEqual({
+      details: { currency: 'NGN', inFlightAmount: 5000, remainingAmount: 0 },
+      outcome: 'queued_if_required',
+    });
+  });
 });

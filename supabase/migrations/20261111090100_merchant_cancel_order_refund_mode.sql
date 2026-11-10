@@ -215,3 +215,7 @@ REVOKE ALL ON FUNCTION public.cancel_order_as_merchant(uuid, text, text)
   FROM PUBLIC, anon, authenticated, service_role, postgres;
 GRANT EXECUTE ON FUNCTION public.cancel_order_as_merchant(uuid, text, text)
   TO authenticated;
+
+-- PostgREST caches the schema: the new orders column and the replaced RPC
+-- signature must be visible to API callers without a restart.
+NOTIFY pgrst, 'reload schema';

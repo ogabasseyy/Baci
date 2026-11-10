@@ -235,4 +235,82 @@ describe('getAutomaticCancelRefundAmount', () => {
     expect(isPaidStatus('unpaid')).toBe(false);
     expect(isPaidStatus(undefined)).toBe(false);
   });
+
+  it('counts a pending refund row as in flight while the payment leg stays completed', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'processing',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(0);
+    expect(plan.inFlightAmount).toBe(100);
+  });
+
+  it('splits a partly pending refund row from the rest of the leg', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'paystack',
+          payment_transaction_id: 'leg-1',
+          status: 'pending',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(60);
+    expect(plan.inFlightAmount).toBe(40);
+    expect(plan.automaticSupported).toBe(false);
+  });
+
+  it('attributes an unlinked completed refund to the sole payment leg', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 100,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN' }),
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(0);
+  });
+
+  it('leaves an unlinked refund unattributed when several legs could own it', () => {
+    const plan = getCancelRefundPlan({
+      paymentStatus: 'Paid',
+      total: 200,
+      transactions: [
+        leg({ amount: 100, currency: 'NGN', id: 'a' }),
+        leg({ amount: 100, currency: 'NGN', id: 'b' }),
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'paystack',
+          status: 'completed',
+          transaction_type: 'refund',
+        },
+      ],
+    });
+    expect(plan.amount).toBe(200);
+  });
 });

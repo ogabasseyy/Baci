@@ -65,6 +65,18 @@ const FUNDED_LEG_STATUSES: ReadonlySet<string> = new Set([
   'refunded',
 ]);
 
+const DONE_REFUND_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'refunded',
+]);
+
+// Refund-type rows whose provider refund has not finished yet.
+const PENDING_REFUND_STATUSES: ReadonlySet<string> = new Set([
+  'pending',
+  'processing',
+  'refund_pending',
+]);
+
 /** Paid check that tolerates the case variants stored across apps. */
 export function isPaidStatus(value: unknown): boolean {
   return typeof value === 'string' && value.trim().toLowerCase() === 'paid';
@@ -95,63 +107,67 @@ export function getCancelRefundPlan(
       ledgerKnown: false,
     };
   }
-  const refundRows = order.transactions.filter(
-    (row) =>
-      row.transaction_type === 'refund' &&
-      (row.status === 'completed' || row.status === 'refunded') &&
-      row.payment_transaction_id
-  );
   // Money math runs in integer minor units so float remainders (0.1 + 0.7
   // vs 0.8) cannot leave a phantom sliver outstanding.
   const toMinor = (value: number): number => Math.round(value * 100);
-  // A leg is covered only by completed refunds in the same currency and
-  // gateway that together reach the capture; a partial refund leaves the
-  // remainder outstanding.
-  const coveredFor = (leg: (typeof order.transactions)[number]): number =>
+  const legs = order.transactions.filter(
+    (leg) =>
+      leg.transaction_type === 'payment' &&
+      FUNDED_LEG_STATUSES.has(leg.status) &&
+      leg.amount > 0 &&
+      isExternalGateway(leg.gateway)
+  );
+  // An unlinked refund row (legacy, or a manual record against the only
+  // capture) belongs to the sole external payment leg, like the worker's
+  // attribution; with several candidate legs it stays unattributed.
+  const soleLegId = legs.length === 1 ? legs[0]?.id : undefined;
+  const refundRows = order.transactions
+    .filter((row) => row.transaction_type === 'refund')
+    .map((row) => ({
+      ...row,
+      target: row.payment_transaction_id || soleLegId,
+    }));
+  const rowsFor = (
+    leg: (typeof order.transactions)[number],
+    statuses: ReadonlySet<string>
+  ) =>
     refundRows
       .filter(
         (row) =>
-          row.payment_transaction_id === leg.id &&
+          row.target === leg.id &&
+          statuses.has(row.status) &&
           (row.currency ?? null) === (leg.currency ?? null) &&
           normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
       .reduce((sum, row) => sum + toMinor(row.amount), 0);
-  const remaining = order.transactions
-    .filter(
-      (leg) =>
-        leg.transaction_type === 'payment' &&
-        FUNDED_LEG_STATUSES.has(leg.status) &&
-        leg.status !== 'refunded' &&
-        leg.amount > 0 &&
-        isExternalGateway(leg.gateway)
-    )
+  // A leg is covered only by completed refunds in the same currency and
+  // gateway that together reach the capture; a partial refund leaves the
+  // remainder outstanding. Refund rows still pending or processing are
+  // refunds already in flight, even while the payment leg stays completed.
+  const entries = legs
+    .filter((leg) => leg.status !== 'refunded')
     .map((leg) => {
-      const covered = coveredFor(leg);
-      return {
-        covered,
-        leg,
-        remaining: Math.max(toMinor(leg.amount) - covered, 0),
-      };
-    })
-    .filter((entry) => entry.remaining > 0);
-  // A refund_pending leg already has its provider refund in flight: it is
-  // tracked apart so no new refund is promised or asked of the merchant.
-  const inFlight = remaining.filter(
-    ({ leg }) => leg.status === 'refund_pending'
-  );
-  const outstanding = remaining.filter(
-    ({ leg }) => leg.status !== 'refund_pending'
-  );
+      const covered = rowsFor(leg, DONE_REFUND_STATUSES);
+      const open = Math.max(toMinor(leg.amount) - covered, 0);
+      const inFlightMinor =
+        leg.status === 'refund_pending'
+          ? open
+          : Math.min(open, rowsFor(leg, PENDING_REFUND_STATUSES));
+      return { covered, inFlightMinor, leg, owed: open - inFlightMinor };
+    });
+  const outstanding = entries.filter(({ owed }) => owed > 0);
   return {
-    amount: outstanding.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
+    amount: outstanding.reduce((sum, { owed }) => sum + owed, 0) / 100,
     inFlightAmount:
-      inFlight.reduce((sum, { remaining: r }) => sum + r, 0) / 100,
+      entries.reduce((sum, { inFlightMinor }) => sum + inFlightMinor, 0) / 100,
     ledgerKnown: true,
-    // A partially covered leg is a coverage mismatch to the worker, which
-    // withholds it for review instead of refunding the remainder.
+    // A partially covered leg (or one with a refund already in flight) is a
+    // coverage mismatch to the worker, which withholds it for review
+    // instead of refunding the remainder.
     automaticSupported: outstanding.every(
-      ({ covered, leg }) =>
+      ({ covered, inFlightMinor, leg }) =>
         covered === 0 &&
+        inFlightMinor === 0 &&
         Boolean(leg.gateway_reference) &&
         normalizeGateway(leg.gateway) === 'PAYSTACK'
     ),

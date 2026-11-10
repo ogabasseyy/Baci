@@ -18,6 +18,8 @@ SELECT * FROM (VALUES
    'RLS/policy helper evaluated for anon sessions'),
   ('public.claim_immediate_order_notification_with_proof(uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),
+  ('public.commerce_cart_publish_health()',
+   'cron health probe via anon client; two platform-wide counts only'),
   ('public.complete_immediate_order_notification_with_proof(uuid,text,boolean,uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.create_repair_booking_as_owner(uuid,text,text,text,text,text,text,timestamp with time zone,text,text,uuid,uuid)',

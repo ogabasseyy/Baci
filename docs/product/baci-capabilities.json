@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-09T13:20:23+00:00",
-  "source_revision": "efb3ba2de0df089137572bc23bfd2ef5c50dc1b5",
-  "evidence_digest": "ba4611151447925c1a848998a4f8c24e6e136076049303426765c3c8bf22541d",
-  "claims_digest": "855da2fa664a993d34b7b012e816234c91a69b3e6a00e4747297aebd7871113e",
-  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-10T14:10:47+00:00",
+  "source_revision": "2145c4481c8fdd5816c46dc0229b9fce0b449f2c",
+  "evidence_digest": "1c554ee87eb07347a42ee50f5e7029f3a9e136168b5deb92a6a6a8a341da2c87",
+  "claims_digest": "6a04f347ce8a4af12b51f0b61243e48e468e1a55241c23c832ebab4fd1a0154d",
+  "review_scope": "Source evidence only. Preserves main’s reviewed OAuth, cart retention, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. The candidate retains current native listing accessibility and streamed SEO links, with compiled output schema validation separated from digest and import verification. Hosted qualification and production activation require separate evidence.",
   "capabilities": [
     {
       "id": "payments",

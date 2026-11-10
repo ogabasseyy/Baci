@@ -4,6 +4,7 @@ import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import rawNextConfig from './next.config';
+import { INVOICE_PDF_FILE_TRACING_INCLUDES } from './src/config/invoice-pdf-file-tracing';
 import {
   getStorefrontMetadataCacheBucket,
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -43,6 +44,9 @@ describe('next.config core options', () => {
       expect.arrayContaining(['@sparticuz/chromium', 'puppeteer-core'])
     );
     expect(nextConfig.outputFileTracingRoot).toBe(resolve(__dirname, '../..'));
+    expect(nextConfig.outputFileTracingIncludes).toMatchObject(
+      INVOICE_PDF_FILE_TRACING_INCLUDES
+    );
     for (const scope of [
       '/api/orders{,/**}',
       '/api/storefront/account/orders/**',

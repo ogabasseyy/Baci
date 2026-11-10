@@ -333,9 +333,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
-          curl --fail --silent --show-error --location \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          PGDG_KEY="${RUNNER_TEMP}/pgdg-key.asc"
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 45 \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "${PGDG_KEY}"
+          sudo install -m 0644 "${PGDG_KEY}" /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
@@ -715,6 +717,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       # Full checkout includes the base history. The guard reads the
       # event's pinned base commit without an unauthenticated second fetch.
+      - name: Verify CI setup contracts
+        run: node --test ci_scripts/detect-silent-reverts.test.mjs ci_scripts/db-replay-toolchain.test.mjs
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}

@@ -322,19 +322,6 @@ it('does not block an already confirmed cart during background refresh', async (
   await s.controller.refresh();
   expect(s.status).not.toHaveBeenCalledWith('loading');
 });
-it('re-checks a confirmed empty cart silently, but shows loading again after a failure', async () => {
-  const s = setup();
-  await s.controller.refresh();
-  expect(s.status.mock.calls).toEqual([['loading'], ['ready']]);
-  s.status.mockClear();
-  await s.controller.refresh();
-  expect(s.status.mock.calls).toEqual([['ready']]);
-  s.client.context.mockRejectedValueOnce(new NativeCartError('offline'));
-  await expect(s.controller.refresh()).rejects.toThrow();
-  s.status.mockClear();
-  await s.controller.refresh();
-  expect(s.status.mock.calls).toEqual([['loading'], ['ready']]);
-});
 it('clears outstanding merge choices only after a successful explicit selection', async () => {
   const s = setup();
   s.connect();

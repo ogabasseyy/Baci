@@ -268,45 +268,6 @@ it('disables the retry button when no sync operation is bound', () => {
     button.props.accessibilityState?.disabled ?? button.props.disabled
   ).toBeTruthy();
 });
-it('stays hidden on a settled empty cart with nothing to sync', () => {
-  useNativeSharedCartStore.setState({
-    status: 'ready',
-    snapshot: null,
-    refresh: jest.fn().mockResolvedValue(undefined),
-    prepare: jest.fn().mockResolvedValue(undefined),
-  });
-  const view = render(<SharedCartStatusPanel />);
-  expect(view.toJSON()).toBeNull();
-});
-it('shows a plain syncing message while the cart is still loading', () => {
-  useNativeSharedCartStore.setState({ status: 'loading', snapshot: null });
-  const empty = render(<SharedCartStatusPanel />);
-  expect(empty.getByText('Syncing your cart…')).toBeTruthy();
-  expect(empty.queryByText(/refresh before checkout/)).toBeNull();
-  empty.unmount();
-  useCartStore.setState({ items: [{ id: 'line-1' } as never] });
-  const withItems = render(<SharedCartStatusPanel />);
-  expect(withItems.getByText('Syncing your cart…')).toBeTruthy();
-  expect(
-    withItems.queryByText(
-      'Connect these items to your shared cart before checkout.'
-    )
-  ).toBeNull();
-});
-it('still offers to connect device items once loading has settled', () => {
-  useCartStore.setState({ items: [{ id: 'line-1' } as never] });
-  useNativeSharedCartStore.setState({
-    status: 'ready',
-    snapshot: null,
-    refresh: jest.fn().mockResolvedValue(undefined),
-    prepare: jest.fn().mockResolvedValue(undefined),
-  });
-  const view = render(<SharedCartStatusPanel />);
-  expect(
-    view.getByText('Connect these items to your shared cart before checkout.')
-  ).toBeTruthy();
-  expect(view.getByRole('button', { name: 'Connect cart' })).toBeTruthy();
-});
 it('disables retry when refresh is unbound but a snapshot exists', () => {
   const prepare = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({

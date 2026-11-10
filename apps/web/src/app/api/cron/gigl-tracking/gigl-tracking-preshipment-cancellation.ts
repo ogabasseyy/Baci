@@ -8,7 +8,8 @@ export type ReadWaybillCancellation = (
 
 // GIG shows an app-side cancellation only on the preshipment record, never in
 // the track feed. These statuses are already terminal in the feed, so no
-// extra GIG call is spent on them.
+// extra GIG call is spent on them. 'failed' is deliberately NOT here: GIG
+// can still cancel a failed-delivery waybill, so it keeps being checked.
 const FEED_TERMINAL = new Set(['delivered', 'cancelled', 'returned']);
 
 export function needsPreshipmentCancellationRead(
@@ -36,6 +37,8 @@ export function withPreshipmentCancellation(
     provider: 'GIGL',
     trackingNumber,
     hasRecognizedLifecycleEvent: true,
+    estimatedDelivery: undefined,
+    actualDelivery: undefined,
     status,
     events: [
       {

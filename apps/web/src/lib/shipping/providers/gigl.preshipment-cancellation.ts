@@ -49,6 +49,10 @@ export async function readGiglWaybillCancellation(
       envelope.status < 200 ||
       envelope.status >= 300
     ) {
+      io.log('warn', 'GIGL preshipment cancellation check failed', {
+        code: 'gigl_preshipment_cancellation_invalid_envelope',
+        status: envelope?.status ?? null,
+      });
       return 'unknown';
     }
     const data = envelope.data;

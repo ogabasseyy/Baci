@@ -206,12 +206,24 @@ export async function processClaimedGiglTrackingMonitors(
   }
 
   const attestCancellation = createCancellationAttestor(attestWaybillOwnership);
+  const cancellationReads = new Map<
+    string,
+    ReturnType<ReadWaybillCancellation>
+  >();
+  const readCancellationOnce: ReadWaybillCancellation = (trackingNumber) => {
+    let read = cancellationReads.get(trackingNumber);
+    if (!read) {
+      read = readWaybillCancellation(trackingNumber);
+      cancellationReads.set(trackingNumber, read);
+    }
+    return read;
+  };
   await Promise.all(
     monitors.map(async (monitor) => {
       let result = results.get(monitor.tracking_number);
       try {
         if (needsPreshipmentCancellationRead(result)) {
-          const cancellation = await readWaybillCancellation(
+          const cancellation = await readCancellationOnce(
             monitor.tracking_number
           ).catch(() => 'unknown' as const);
           if (cancellation === 'cancelled') {

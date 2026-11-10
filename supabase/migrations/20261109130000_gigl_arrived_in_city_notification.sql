@@ -25,5 +25,11 @@ ALTER TABLE public.shipment_tracking_notification_outbox
 INSERT INTO private.gigl_tracking_notification_policy (
   raw_status, normalized_status, audience, notification_kind
 ) VALUES
-  ('ARRIVED IN DESTINATION CITY', NULL, 'customer', 'arrived_in_city')
-ON CONFLICT DO NOTHING;
+  ('ARRIVED IN DESTINATION CITY', NULL, 'customer', 'arrived_in_city'),
+  ('ARRIVED IN DESTINATION CITY', NULL, 'customer', 'transit_started')
+ON CONFLICT (raw_status, audience, notification_kind) DO NOTHING;
+
+ALTER TABLE private.gigl_tracking_notification_policy
+  VALIDATE CONSTRAINT gigl_tracking_notification_policy_notification_kind_check;
+ALTER TABLE public.shipment_tracking_notification_outbox
+  VALIDATE CONSTRAINT shipment_tracking_notification_outbox_notification_kind_check;

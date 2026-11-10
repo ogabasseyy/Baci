@@ -102,7 +102,7 @@ describe('arrived in your city', () => {
         GIGL_ARRIVED_IN_CITY_RAW_STATUS,
         'in_transit'
       ).map((p) => `${p.audience}:${p.notificationKind}`)
-    ).toEqual(['customer:arrived_in_city']);
+    ).toEqual(['customer:arrived_in_city', 'customer:transit_started']);
   });
 
   it('flags an arrival event whose service centre matches the delivery city', () => {
@@ -161,5 +161,53 @@ describe('in-transit notification is sent once per shipment', () => {
       )
     );
     expect(new Set(kinds)).toEqual(new Set(['transit_started']));
+  });
+});
+
+describe('review hardening: destination matching', () => {
+  const run = (
+    destination: string | undefined,
+    location: string,
+    code = 'MSVC'
+  ) =>
+    normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W9',
+        Destination: destination,
+        MobileShipmentTrackings: [
+          event(code, '11:00:00', { Location: location }),
+        ],
+      },
+      'W9',
+      OBSERVED_AT
+    ).events[0]?.rawStatus;
+
+  it('does not treat ABAKALIKI as arrival for destination ABA', () => {
+    expect(run('ABA', 'ABAKALIKI (CENTRAL PARK)')).toBe('MSVC');
+  });
+  it('does not treat LONDON as arrival for destination ONDO', () => {
+    expect(run('ONDO', 'LONDON (X)')).toBe('MSVC');
+  });
+  it('matches FCT ABUJA against an Abuja centre from the code alone', () => {
+    expect(run('FCT ABUJA', 'WUSE ABUJA (Wuse)')).toBe(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
+  it('does not treat a departure from the destination city as arrival', () => {
+    expect(run('ABUJA', 'WUSE ABUJA (Wuse)', 'DSC')).toBe('DSC');
+  });
+  it('keeps MSHC as pickup en route when the destination is unknown, even after transit events', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W10',
+        MobileShipmentTrackings: [
+          event('DPC', '10:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W10',
+      OBSERVED_AT
+    );
+    expect(result.status).not.toBe('out_for_delivery');
   });
 });

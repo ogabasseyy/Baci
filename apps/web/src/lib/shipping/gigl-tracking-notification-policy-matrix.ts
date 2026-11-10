@@ -79,6 +79,13 @@ export const GIGL_TRACKING_NOTIFICATION_POLICY_MATRIX = [
     notificationKind: 'arrived_in_city',
   },
   {
+    // Raw policies override normalized ones, so an arrival that is the first
+    // in-transit signal must still send transit_started (deduped per shipment).
+    audience: 'customer',
+    rawStatus: GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+    notificationKind: 'transit_started',
+  },
+  {
     audience: 'merchant',
     normalizedStatus: 'out_for_delivery',
     notificationKind: 'out_for_delivery',

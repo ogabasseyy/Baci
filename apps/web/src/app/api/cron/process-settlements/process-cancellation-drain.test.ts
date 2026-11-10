@@ -19,10 +19,7 @@ vi.mock('@/lib/logger', () => ({
     warn: mocks.loggerWarn,
   },
 }));
-
-vi.mock('@/lib/zeptomail', () => ({
-  sendEmail: mocks.sendEmail,
-}));
+vi.mock('@/lib/zeptomail', () => ({ sendEmail: mocks.sendEmail }));
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,

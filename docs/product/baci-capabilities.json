@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-09T13:20:23+00:00",
-  "source_revision": "efb3ba2de0df089137572bc23bfd2ef5c50dc1b5",
-  "evidence_digest": "ba4611151447925c1a848998a4f8c24e6e136076049303426765c3c8bf22541d",
-  "claims_digest": "855da2fa664a993d34b7b012e816234c91a69b3e6a00e4747297aebd7871113e",
-  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-10T14:17:54+00:00",
+  "source_revision": "de1d5aa7126844518ce1cc421b8c1ded82bb6b1c",
+  "evidence_digest": "582d472d15b428a4d7a2635644ad2a62fd5a4375ecbc28421c4578822ebb17b5",
+  "claims_digest": "0c98482d8c87b1e69efdb64f5406002b578c02dfd9cfdaafd97328fbc335099b",
+  "review_scope": "Source evidence only. New OAuth consent allows a refresh-renewed 90-day idle connection. Legacy grants and pending consents and codes retain their deadlines. Carts retain a seven-day absolute lifetime and roll to a fresh empty handle via CAS. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth and PostgreSQL tests pass. Submission activation remains unverified. Uncertain agentic DVA creation or persistence retains the reconciliation claim. Stale claims with unknown outcomes require manual review. Merchant protocol and checkout eligibility remain accurate after CredPal retirement. Oxygen requires separate production runtime and provider configuration. Invoice previews and PDFs share the merchant template. Dispatch rechecks both displayed bank accounts. Production deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",
@@ -92,7 +92,11 @@
       "source_refs": [
         "apps/web/src/lib/invoice-generator.ts",
         "apps/web/src/lib/receipt-pdf-generator.ts",
-        "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts"
+        "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts",
+        "packages/shared/src/receipt/generate-receipt-html.ts",
+        "packages/shared/src/receipt/receipt-payment-instructions.ts",
+        "apps/web/src/lib/receipt-html-to-pdf.ts",
+        "supabase/migrations/20261110150000_recheck_both_invoice_payment_cards.sql"
       ]
     },
     {

@@ -75,7 +75,7 @@ export function PiggyvestWalletSetupForm({
         // correction-free retry of a possibly-right number.
         setBvn('');
         setError('That BVN was rejected. Check the number and try again.');
-      } else if (code === 'PROVIDER_UNAVAILABLE') {
+      } else if (code === 'PROVIDER_UNAVAILABLE' || code === 'NOT_CONFIGURED') {
         // PiggyVest refused before creating anything: nothing to refresh,
         // so tell the customer plainly to come back later.
         setError(

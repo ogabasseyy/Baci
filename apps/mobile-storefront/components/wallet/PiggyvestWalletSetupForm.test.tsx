@@ -92,6 +92,33 @@ it('maps a definitive BVN rejection to correctable guidance', async () => {
   expect(screen.getByLabelText('BVN').props.value).toBe('');
 });
 
+it.each([
+  'PROVIDER_UNAVAILABLE',
+  'NOT_CONFIGURED',
+])('says setup is unavailable (not refresh) for %s', async (code) => {
+  const onSubmit = jest
+    .fn()
+    .mockRejectedValue(Object.assign(new Error('unavailable'), { code }));
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  expect(
+    await screen.findByText(
+      'Wallet setup is unavailable right now. Please try again later.'
+    )
+  ).toBeOnTheScreen();
+  expect(screen.queryByText(/Refresh your account/)).toBeNull();
+});
+
 it('says setup is unavailable when PiggyVest refused before creating anything', async () => {
   const onSubmit = jest
     .fn()

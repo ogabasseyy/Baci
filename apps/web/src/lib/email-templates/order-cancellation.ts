@@ -66,7 +66,7 @@ export function generateOrderCancellationEmail(
         </tr>
       </table>
       <p style="margin: 12px 0 0 0; font-size: 13px; color: #047857;">
-        If you have already paid, the store will refund up to this amount to your original payment method. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
+        If you have already paid, the store will arrange any refund due, up to this amount, to your original payment method. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
       </p>
     </div>
     `
@@ -210,7 +210,7 @@ export function generateOrderCancellationText(
 REFUND INFORMATION
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
 Refund Due (pending): ${formatEmailMoney(data.refundAmount, data.currency)}
-If you have already paid, the store will refund up to this amount to your original payment method. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
+If you have already paid, the store will arrange any refund due, up to this amount, to your original payment method. This email does not confirm that the refund has been sent. Please contact the store for an update on your refund status.
 `
       : '';
 

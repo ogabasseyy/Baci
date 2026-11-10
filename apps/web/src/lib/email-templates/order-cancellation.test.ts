@@ -98,7 +98,7 @@ describe('cancellation refund status wording', () => {
     // must not assert refund-workflow initiation while the refund may still
     // be failed or delivery_uncertain.
     expect(html).not.toContain('Cancellation starts the refund workflow');
-    expect(html).toContain('If you have already paid, the store will refund');
+    expect(html).toContain('the store will arrange any refund due');
     expect(html).toContain('does not confirm that the refund has been sent');
     expect(html).toContain('contact the store');
     expect(html).not.toContain('Refund Amount');
@@ -120,6 +120,8 @@ describe('cancellation refund status wording', () => {
     expect(text).toContain('does not confirm that the refund has been sent');
     expect(text).not.toContain('Refund Amount');
     expect(text).not.toMatch(/business days/i);
-    expect(html).not.toMatch(/within 5 business days/i);
+    expect(html).not.toMatch(/within \d+ business days/i);
+    expect(html).not.toMatch(/will refund/i);
+    expect(text).not.toMatch(/will refund/i);
   });
 });

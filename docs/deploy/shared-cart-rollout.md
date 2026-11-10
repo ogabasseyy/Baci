@@ -137,10 +137,10 @@ and enrollment gates in the release sequence below.
    link) can outlive the cart, so confirm before activating that no
    active cart past `expires_at` still has a live grant, by running
    `SELECT count(*) AS expired_active, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM public.commerce_cart_grants g WHERE g.cart_id = c.id AND g.revoked_at IS NULL AND g.expires_at > now())) AS with_live_grant FROM public.commerce_carts c WHERE c.state = 'active' AND c.expires_at < now();`
-   and requiring `with_live_grant = 0`. In production on 2026-11-10 it
-   returned `expired_active = 528, with_live_grant = 0`; the result is
-   time-sensitive, so re-run it at activation and record the output with
-   the activation evidence. `expired_active` is an upper bound on the
+   and requiring `with_live_grant = 0`. The result is time-sensitive:
+   always run it at activation and record the output with the activation
+   evidence. (Dated example only, not current state: on 2026-11-10 it
+   returned `expired_active = 528, with_live_grant = 0`.) `expired_active` is an upper bound on the
    carts that will flip: the function also skips carts with a live
    checkout session or a live dispatch hold, so fewer flips than that
    count is expected, not a fault. Activated in production on 2026-11-10
@@ -150,11 +150,18 @@ and enrollment gates in the release sequence below.
    UTC) succeeded. It does
    start the 90-day clock after which the terminal purge deletes the cart.
    Dispatch-held carts, handoffs and checkout sessions are skipped by the
-   function's own fences. Schedule it as the database owner (`postgres`,
-   which owns the SECURITY DEFINER function), the same role that owns the
-   terminal-purge job, and verify afterwards with
+   function's own fences. Schedule it as the role that owns the
+   SECURITY DEFINER function, because definer rights follow the function
+   owner: confirm it with
+   `SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.cleanup_commerce_carts()'::regprocedure;`
+   (`postgres` in production, the same role that owns the terminal-purge
+   job). No migration sets that owner explicitly, so it is whichever role
+   applied the chain. This step applies only where pg_cron is installed
+   (`SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'cron'`
+   returns a row); without it there is nothing to schedule. Verify
+   afterwards with
    `SELECT jobname, schedule, username, active FROM cron.job WHERE jobname = 'commerce-cart-retention';`
-   (expect one active row with `username = 'postgres'`). Before
+   (expect one active row whose `username` is the function owner). Before
    activation the same query must return no row. To stop it:
    `SELECT cron.unschedule('commerce-cart-retention');`
    Migration application alone never schedules this job.

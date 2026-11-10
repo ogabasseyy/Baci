@@ -37,7 +37,10 @@ function supabaseWithProduct() {
   };
   return {
     from: vi.fn(() => query),
-    rpc: vi.fn(() => Promise.resolve({ data: [], error: null })),
+    rpc: vi.fn(
+      (): Promise<{ data: unknown[]; error: null }> =>
+        Promise.resolve({ data: [], error: null })
+    ),
   };
 }
 

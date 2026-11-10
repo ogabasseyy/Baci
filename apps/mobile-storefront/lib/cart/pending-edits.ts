@@ -3,7 +3,6 @@ import type { CartItem } from '@/stores/cart-store.types';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 
 const PENDING = 'pending-line::';
-const MAX_REMEMBERED_ADDS = 50;
 
 export const isPendingLineId = (id: string) => id.startsWith(PENDING);
 
@@ -114,16 +113,16 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       edits = [];
       landed.clear();
     },
+    /** Server-confirmed lines when edits are still waiting, else null (nothing to undo). */
+    revert(): CartItem[] | null {
+      return edits.length ? confirmed : null;
+    },
     begin(action: SharedCartWrite): PendingEdit {
       sequence += 1;
       const edit = { action, pendingId: `${PENDING}${sequence}` };
       edits.push(edit);
       if (action.type === 'add') {
         addedLines.set(edit.pendingId, action.item);
-        if (addedLines.size > MAX_REMEMBERED_ADDS) {
-          const oldest = addedLines.keys().next();
-          if (!oldest.done) addedLines.delete(oldest.value);
-        }
       }
       show(view());
       return edit;
@@ -135,6 +134,18 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
     settle(edit: PendingEdit): void {
       landed.delete(edit);
       edits = edits.filter((entry) => entry !== edit);
+      // Keep an added line's identity only while an edit still needs it.
+      for (const id of [...addedLines.keys()])
+        if (
+          !edits.some(
+            (entry) =>
+              entry.pendingId === id ||
+              (entry.action.type !== 'add' &&
+                'id' in entry.action &&
+                entry.action.id === id)
+          )
+        )
+          addedLines.delete(id);
       show(view());
     },
     /**

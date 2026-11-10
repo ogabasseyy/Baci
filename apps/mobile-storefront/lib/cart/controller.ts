@@ -265,6 +265,7 @@ export function createNativeCartController(
         await ensureCart();
       }),
     write: enqueueEdit,
+    revertPending: edits.revert,
     pair: (
       link: CartPairingLink,
       choice: 'connect' | 'merge' | 'keep_existing',

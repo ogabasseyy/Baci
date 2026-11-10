@@ -46,6 +46,13 @@ export function createEditQueue(deps: EditQueueDeps) {
       try {
         const resolved = deps.edits.resolve(action);
         if (resolved) await deps.run(resolved);
+        // The line this tap targeted never reached the cart.
+        else
+          deps.onFailed?.(
+            action,
+            new NativeCartError('invalid_item'),
+            'rolled_back'
+          );
       } catch (error) {
         const outcome: EditOutcome = isIndeterminateFailure(error)
           ? 'unconfirmed'

@@ -309,6 +309,8 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       stopRealtime?.();
       stopPolling();
       release();
+      const reverted = controller?.revertPending?.();
+      if (reverted) useCartStore.setState({ items: reverted });
       dropPredictedLines();
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({ ...DISABLED_SHARED_CART_STATE });

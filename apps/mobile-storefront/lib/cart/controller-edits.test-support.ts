@@ -192,7 +192,7 @@ export function setup(options: { live?: boolean } = {}) {
       void Promise.allSettled(promises).then(() => {
         settled = true;
       });
-      for (let i = 0; i < 50 && !settled; i += 1) {
+      for (let i = 0; i < 300 && !settled; i += 1) {
         for (const gate of gates.splice(0)) gate();
         await flushAsync();
       }

@@ -94,3 +94,66 @@ describe('controller-level gaps', () => {
     expect(snapshotOf(1, []).version).toBe(1);
   });
 });
+
+describe('review follow-ups', () => {
+  it('tells the shopper when a tap targeted a line that never landed', async () => {
+    const s = setup({ live: true });
+    await s.controller.refresh();
+    s.failures.push(new NativeCartError('invalid_item'));
+    const add = s.controller.write({ type: 'add', item: shopItem(PRODUCT_A) });
+    const pendingId = s.screen.items[0].id;
+    const tap = s.controller.write({
+      type: 'quantity',
+      id: pendingId,
+      quantity: 4,
+    });
+    await Promise.allSettled([add, tap]);
+    expect(s.failed).toHaveBeenCalledTimes(2);
+    expect(s.screen.items).toEqual([]);
+    expect(s.client.command).toHaveBeenCalledTimes(1);
+  });
+
+  it('still resolves a tap on a pending line after many other adds', async () => {
+    const s = setup({ live: true });
+    await s.controller.refresh();
+    s.holdCommands();
+    const first = s.controller.write({
+      type: 'add',
+      item: shopItem(PRODUCT_A),
+    });
+    const pendingId = s.screen.items[0].id;
+    const others = Array.from({ length: 60 }, (_, i) =>
+      s.controller.write({
+        type: 'add',
+        item: shopItem(
+          `55555555-5555-4555-8555-${String(i).padStart(12, '0')}`
+        ),
+      })
+    );
+    const bump = s.controller.write({
+      type: 'quantity',
+      id: pendingId,
+      quantity: 4,
+    });
+    await s.drain(first, ...others, bump);
+    expect(
+      s.server.lines.find((l) => l.productId === PRODUCT_A)?.quantity
+    ).toBe(4);
+  });
+
+  it('reverts unconfirmed edits on teardown but leaves a settled cart alone', async () => {
+    const s = setup({ live: true });
+    s.seed([{ id: 'line-1', productId: PRODUCT_A, quantity: 1 }]);
+    await s.controller.refresh();
+    expect(s.controller.revertPending()).toBeNull();
+    s.holdCommands();
+    const edit = s.controller.write({
+      type: 'quantity',
+      id: 'line-1',
+      quantity: 5,
+    });
+    expect(quantities(s.screen.items)).toEqual([5]);
+    expect(quantities(s.controller.revertPending() ?? [])).toEqual([1]);
+    await s.drain(edit);
+  });
+});

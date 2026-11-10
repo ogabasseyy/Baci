@@ -119,5 +119,7 @@ describe('cancellation refund status wording', () => {
     expect(text).toContain('Refund Due (pending): ₦100');
     expect(text).toContain('does not confirm that the refund has been sent');
     expect(text).not.toContain('Refund Amount');
+    expect(text).not.toMatch(/business days/i);
+    expect(html).not.toMatch(/within 5 business days/i);
   });
 });

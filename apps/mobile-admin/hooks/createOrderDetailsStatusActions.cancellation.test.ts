@@ -183,8 +183,8 @@ describe('cancellation refund plan', () => {
     vi.clearAllMocks();
   });
 
-  it('hides the automatic refund when an outstanding leg is not Paystack', async () => {
-    const { actions } = createPaidOrderStatusActions({
+  it('offers a refund-review action instead of an automatic refund when a leg is unsupported', async () => {
+    const { actions, updateStatus } = createPaidOrderStatusActions({
       order: {
         cancel_refund_plan: { amount: 5000, automaticSupported: false },
       },
@@ -193,8 +193,15 @@ describe('cancellation refund plan', () => {
     const buttons = vi.mocked(Alert.alert).mock.calls[0]?.[2];
     expect(buttons?.map((button) => button.text)).toEqual([
       'Keep Order',
+      'Cancel and send the refund to review',
       'Cancel only (I will refund them)',
     ]);
+    buttons?.[1]?.onPress?.();
+    await vi.waitFor(() => {
+      expect(updateStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ refund: 'automatic' })
+      );
+    });
   });
 
   it('uses the plain confirmation when nothing external is refundable', async () => {

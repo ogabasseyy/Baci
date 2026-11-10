@@ -114,4 +114,27 @@ describe('useOrderCancellation', () => {
       expect.objectContaining({ variant: 'destructive' })
     );
   });
+
+  it('does not offer the automatic refund for a partially refunded leg', async () => {
+    const { result } = renderHook(() =>
+      useOrderCancellation({
+        onCancelled: vi.fn(),
+        order: order({
+          transactions: [
+            { ...paystackLeg, amount: 100 },
+            {
+              amount: 20,
+              gateway: 'paystack',
+              payment_transaction_id: 'leg-1',
+              status: 'completed',
+              transaction_type: 'refund',
+            },
+          ],
+        } as Partial<Order>),
+      })
+    );
+    await act(() => result.current.requestCancellation());
+    expect(result.current.dialogProps.refundAmount).toBe(80);
+    expect(result.current.dialogProps.automaticSupported).toBe(false);
+  });
 });

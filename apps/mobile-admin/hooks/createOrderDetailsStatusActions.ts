@@ -185,27 +185,27 @@ export function createOrderDetailsStatusActions({
     const hasRefundChoice = isPaid && (plan === undefined || plan.amount > 0);
     if (hasRefundChoice) {
       const automaticSupported = plan?.automaticSupported ?? true;
-      // The safe automatic refund is listed first (Android positions buttons
-      // by order). Cancel-only needs refund permission, which the server
-      // enforces.
+      // The safe automatic path is listed first (Android positions buttons
+      // by order). Mobile has no staff permission data, so it always offers
+      // the automatic action; for legs the worker cannot refund itself that
+      // action sends the refund to owner review, and cancel-only needs refund
+      // permission, which the server enforces with a 403.
       Alert.alert(
         'Cancel paid order?',
         automaticSupported
           ? 'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.'
-          : 'Part of this payment was not made through Paystack, so it cannot be refunded automatically. Cancel the order, refund the customer yourself, then record the refund. Submit once; if the result is unclear, check the order status instead of cancelling again.',
+          : 'Baci cannot refund all of this payment automatically. You can cancel and send the refund to the store owner for review, or cancel and refund the customer yourself. Submit once; if the result is unclear, check the order status instead of cancelling again.',
         [
           { text: 'Keep Order', style: 'cancel' },
-          ...(automaticSupported
-            ? [
-                {
-                  text: 'Cancel and refund to original payment method',
-                  style: 'destructive' as const,
-                  onPress: () => {
-                    void performStatusUpdate(newStatus, 'automatic');
-                  },
-                },
-              ]
-            : []),
+          {
+            text: automaticSupported
+              ? 'Cancel and refund to original payment method'
+              : 'Cancel and send the refund to review',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus, 'automatic');
+            },
+          },
           {
             text: 'Cancel only (I will refund them)',
             style: 'destructive',

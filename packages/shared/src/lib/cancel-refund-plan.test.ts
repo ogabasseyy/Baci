@@ -121,7 +121,7 @@ describe('getAutomaticCancelRefundAmount', () => {
     expect(plan.automaticSupported).toBe(false);
   });
 
-  it('keeps a partially refunded leg outstanding for the remainder', () => {
+  it('keeps a partially refunded leg outstanding but not automatic', () => {
     const plan = getCancelRefundPlan({
       paymentStatus: 'Paid',
       total: 100,
@@ -137,7 +137,8 @@ describe('getAutomaticCancelRefundAmount', () => {
         },
       ],
     });
-    expect(plan).toEqual({ amount: 80, automaticSupported: true });
+    // Partial coverage is withheld by the worker, so no automatic option.
+    expect(plan).toEqual({ amount: 80, automaticSupported: false });
   });
 
   it('ignores refunds in another currency when judging coverage', () => {

@@ -39,7 +39,8 @@ export interface CancelRefundPlan {
   amount: number;
   /**
    * False when an outstanding leg is one the worker cannot refund
-   * automatically (non-Paystack, or no provider reference): the merchant
+   * automatically (non-Paystack, no provider reference, or only partly
+   * covered by earlier refunds, which the worker withholds): the merchant
    * must refund those themselves and record it.
    */
   automaticSupported: boolean;
@@ -85,8 +86,8 @@ export function getCancelRefundPlan(
   // A leg is covered only by completed refunds in the same currency and
   // gateway that together reach the capture; a partial refund leaves the
   // remainder outstanding.
-  const remainingFor = (leg: (typeof order.transactions)[number]): number => {
-    const covered = refundRows
+  const coveredFor = (leg: (typeof order.transactions)[number]): number =>
+    refundRows
       .filter(
         (row) =>
           row.payment_transaction_id === leg.id &&
@@ -94,8 +95,6 @@ export function getCancelRefundPlan(
           normalizeGateway(row.gateway) === normalizeGateway(leg.gateway)
       )
       .reduce((sum, row) => sum + row.amount, 0);
-    return Math.max(leg.amount - covered, 0);
-  };
   const outstanding = order.transactions
     .filter(
       (leg) =>
@@ -105,12 +104,18 @@ export function getCancelRefundPlan(
         leg.amount > 0 &&
         isExternalGateway(leg.gateway)
     )
-    .map((leg) => ({ leg, remaining: remainingFor(leg) }))
+    .map((leg) => {
+      const covered = coveredFor(leg);
+      return { covered, leg, remaining: Math.max(leg.amount - covered, 0) };
+    })
     .filter(({ remaining }) => remaining > 0);
   return {
     amount: outstanding.reduce((sum, { remaining }) => sum + remaining, 0),
+    // A partially covered leg is a coverage mismatch to the worker, which
+    // withholds it for review instead of refunding the remainder.
     automaticSupported: outstanding.every(
-      ({ leg }) =>
+      ({ covered, leg }) =>
+        covered === 0 &&
         Boolean(leg.gateway_reference) &&
         normalizeGateway(leg.gateway) === 'PAYSTACK'
     ),

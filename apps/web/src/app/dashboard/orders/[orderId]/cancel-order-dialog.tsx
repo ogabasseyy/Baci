@@ -114,16 +114,18 @@ export function CancelOrderDialog({
         </RadioGroup>
         {!automaticSupported && canCancelOnly && (
           <p className="text-sm text-muted-foreground">
-            Part of this payment was not made through Paystack, so Baci cannot
-            refund it automatically. Cancel the order, refund the customer
-            yourself, then record the refund from the Refund card.
+            Baci cannot refund all of this payment automatically (it was not
+            paid through Paystack, or an earlier refund covered only part of
+            it). Cancel the order, refund the customer yourself, then record the
+            refund from the Refund card.
           </p>
         )}
         {refundGoesToReview && (
           <p className="text-sm text-muted-foreground">
-            Part of this payment was not made through Paystack, so Baci cannot
-            refund it automatically. The order will be cancelled and the refund
-            sent to the store owner for review.
+            Baci cannot refund all of this payment automatically (it was not
+            paid through Paystack, or an earlier refund covered only part of
+            it). The order will be cancelled and the refund sent to the store
+            owner for review.
           </p>
         )}
         {choice === 'manual' && canCancelOnly && (

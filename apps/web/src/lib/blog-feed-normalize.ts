@@ -113,3 +113,42 @@ export function xmlSafeFeedImageUrl(
   const stripped = stripInvalidXml10Characters(url);
   return stripped === url ? stripped : undefined;
 }
+
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+};
+
+/**
+ * Derives an accurate IANA media type from an image URL for RSS enclosures.
+ *
+ * The RSS 2.0 <enclosure> specification requires a type attribute. The `feed`
+ * library derives invalid types such as `image/jpg` from `.jpg` URLs or
+ * `image//pathname` when no file extension is present. This normalizer maps
+ * standard image extensions using an explicit lookup table.
+ *
+ * Note: When URLs lack a recognized extension (e.g. dynamic CDN URLs with
+ * `format=auto`), this falls back to `image/jpeg` to ensure a valid enclosure
+ * type is always emitted. Callers should be aware that the declared enclosure type
+ * may differ from dynamic content negotiation on such URLs.
+ */
+export function getImageMimeType(url: string): string {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    const lastDotIndex = pathname.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+      return 'image/jpeg';
+    }
+    const ext = pathname.slice(lastDotIndex + 1);
+    return Object.hasOwn(MIME_BY_EXTENSION, ext)
+      ? (MIME_BY_EXTENSION[ext] ?? 'image/jpeg')
+      : 'image/jpeg';
+  } catch {
+    return 'image/jpeg';
+  }
+}

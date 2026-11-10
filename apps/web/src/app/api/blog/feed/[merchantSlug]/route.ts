@@ -2,8 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
+import { transformImageTitlesToFigureCaptions } from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/blog-post-image-html';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
+  getImageMimeType,
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
@@ -407,8 +409,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       const excerpt =
         post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
 
-      const sanitizedContent = sanitizeForFeed(post.content);
+      const captionedContent = transformImageTitlesToFigureCaptions(
+        post.content || ''
+      );
+      const sanitizedContent = sanitizeForFeed(captionedContent);
       const imageUrls = getBlogStructuredDataImageUrls(post);
+      const primaryImageUrl = xmlSafeFeedImageUrl(imageUrls[0]);
+      const feedImage = primaryImageUrl
+        ? {
+            url: primaryImageUrl,
+            type: getImageMimeType(primaryImageUrl),
+          }
+        : undefined;
 
       feed.addItem({
         title: feedText(post.title),
@@ -423,7 +435,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           },
         ],
         date: publishedDate,
-        image: xmlSafeFeedImageUrl(imageUrls[0]),
+        image: feedImage,
         category:
           post.category && isPublicBlogCategory(post.category)
             ? [{ name: feedText(post.category) }]

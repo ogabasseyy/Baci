@@ -106,42 +106,48 @@ export function buildBlogPostStructuredData({
     videoUploadDate: post.video_upload_date ?? post.videoUploadDate ?? null,
   });
 
+  const blogSchema = generateBlogPostSchema({
+    title,
+    description: schemaDescription,
+    url: postUrl,
+    ...(blogImages.length > 0 ? { imageObjects: blogImages } : {}),
+    ...(blogImageUrls.length > 0 ? { imageUrls: blogImageUrls } : {}),
+    datePublished: post.published_at,
+    dateModified: post.updated_at ?? undefined,
+    author: {
+      name: author.name,
+      id: author.id,
+      url: author.url,
+      jobTitle: post.author_title ?? undefined,
+      description: post.author_bio ?? undefined,
+      sameAs: post.author_name
+        ? getBlogAuthorSameAs(post.author_name, merchant.slug)
+        : [],
+      image: author.image,
+    },
+    publisher: {
+      id: organizationId,
+      name: merchant.business_name,
+      logo: merchant.logo_url || `${baseUrl}/logo.png`,
+      url: baseUrl,
+      sameAs: buildBlogPublisherSameAs(
+        merchant.social_media,
+        merchant.business_name
+      ),
+    },
+    wordCount: post.word_count ?? undefined,
+    keywords: resolveBlogPostKeywords(post),
+    category: post.category ?? undefined,
+    readingTime: post.reading_time_minutes ?? undefined,
+    blogId: `${blogIndexUrl}#blog`,
+  });
+
+  if (post.category?.trim().toLowerCase() === 'tech news') {
+    blogSchema['@type'] = ['BlogPosting', 'NewsArticle'];
+  }
+
   return {
-    blogSchema: generateBlogPostSchema({
-      title,
-      description: schemaDescription,
-      url: postUrl,
-      ...(blogImages.length > 0 ? { imageObjects: blogImages } : {}),
-      ...(blogImageUrls.length > 0 ? { imageUrls: blogImageUrls } : {}),
-      datePublished: post.published_at,
-      dateModified: post.updated_at ?? undefined,
-      author: {
-        name: author.name,
-        id: author.id,
-        url: author.url,
-        jobTitle: post.author_title ?? undefined,
-        description: post.author_bio ?? undefined,
-        sameAs: post.author_name
-          ? getBlogAuthorSameAs(post.author_name, merchant.slug)
-          : [],
-        image: author.image,
-      },
-      publisher: {
-        id: organizationId,
-        name: merchant.business_name,
-        logo: merchant.logo_url || `${baseUrl}/logo.png`,
-        url: baseUrl,
-        sameAs: buildBlogPublisherSameAs(
-          merchant.social_media,
-          merchant.business_name
-        ),
-      },
-      wordCount: post.word_count ?? undefined,
-      keywords: resolveBlogPostKeywords(post),
-      category: post.category ?? undefined,
-      readingTime: post.reading_time_minutes ?? undefined,
-      blogId: `${blogIndexUrl}#blog`,
-    }),
+    blogSchema,
     breadcrumbSchema: generateBreadcrumbSchema([
       {
         name: merchant.business_name,

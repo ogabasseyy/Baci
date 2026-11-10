@@ -1,5 +1,13 @@
 import { escapeHtmlText } from '@/lib/sanitize';
 import { escapeHtmlAttr } from './blog-html-attribute-utils';
+import {
+  findTitleAttribute,
+  sanitizeBlogImageCaptionText,
+  sanitizeFigcaptionHtml,
+  unescapeHtmlText,
+} from './blog-image-caption-sanitizer';
+
+export { sanitizeBlogImageCaptionText, unescapeHtmlText };
 
 const DEFAULT_BLOG_IMAGE_ALT = 'Blog image';
 
@@ -10,43 +18,6 @@ const STANDALONE_IMAGE_BOUNDARY_TAGS = new Set(
 );
 const HTML_TAG_AT_END_REGEX = /<\s*\/?\s*([a-z][a-z0-9-]*)\b[^>]*>\s*$/i;
 const HTML_TAG_AT_START_REGEX = /^\s*<\s*\/?\s*([a-z][a-z0-9-]*)\b[^>]*>/i;
-const HTML_TEXT_UNESCAPE_REGEX =
-  /&(?:amp|lt|gt|quot|apos|#39|nbsp|copy|reg|trade|mdash|ndash|hellip|lsquo|rsquo|ldquo|rdquo|#\d+|#x[\da-f]+);/gi;
-const HTML_TEXT_UNESCAPE_ENTITIES =
-  "&amp;=&|&lt;=<|&gt;=>|&quot;=\"|&apos;='|&#39;='|&nbsp;=\u00a0|&copy;=\u00a9|&reg;=\u00ae|&trade;=\u2122|&mdash;=\u2014|&ndash;=\u2013|&hellip;=\u2026|&lsquo;=\u2018|&rsquo;=\u2019|&ldquo;=\u201c|&rdquo;=\u201d";
-const HTML_TEXT_UNESCAPE_MAP: Record<string, string> = Object.fromEntries(
-  HTML_TEXT_UNESCAPE_ENTITIES.split('|').map((entry) => {
-    const separatorIndex = entry.indexOf('=');
-    return [entry.slice(0, separatorIndex), entry.slice(separatorIndex + 1)];
-  })
-);
-
-export function unescapeHtmlText(value: string): string {
-  if (!value) return '';
-  return value.replace(HTML_TEXT_UNESCAPE_REGEX, (match) => {
-    const normalizedMatch = match.toLowerCase();
-    const mapped = HTML_TEXT_UNESCAPE_MAP[normalizedMatch];
-    if (mapped !== undefined) {
-      return mapped;
-    }
-
-    if (normalizedMatch.startsWith('&#x')) {
-      const codePoint = Number.parseInt(normalizedMatch.slice(3, -1), 16);
-      return Number.isInteger(codePoint) && codePoint <= 0x10ffff
-        ? String.fromCodePoint(codePoint)
-        : match;
-    }
-
-    if (normalizedMatch.startsWith('&#')) {
-      const codePoint = Number.parseInt(normalizedMatch.slice(2, -1), 10);
-      return Number.isInteger(codePoint) && codePoint <= 0x10ffff
-        ? String.fromCodePoint(codePoint)
-        : match;
-    }
-
-    return match;
-  });
-}
 
 function deriveAltFromImageSrc(src: string): string {
   const source = src.trim();
@@ -109,17 +80,50 @@ function formatFigureAttributes(attributes: string | undefined): string {
   return trimmedAttributes ? ` ${trimmedAttributes}` : '';
 }
 
+function sanitizeImageTitleAttribute(imgTag: string): string {
+  const titleAttr = findTitleAttribute(imgTag);
+  if (!titleAttr) return imgTag;
+  const rawTitle = titleAttr.value;
+  const trimmed = rawTitle.trim();
+  if (!trimmed) return imgTag;
+  const unescapedTitle = unescapeHtmlText(rawTitle);
+  const sanitized = sanitizeBlogImageCaptionText(unescapedTitle);
+  if (!sanitized) {
+    return imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end);
+  }
+  // Only rewrite title if sanitization changed the text, avoiding needless round-trips
+  if (sanitized === unescapedTitle) {
+    return imgTag;
+  }
+  const replacement = ` title="${escapeHtmlAttr(sanitized)}"`;
+  return (
+    imgTag.slice(0, titleAttr.start) + replacement + imgTag.slice(titleAttr.end)
+  );
+}
+
 function buildFigureFromTitledImage(
   imgTag: string,
   figureAttributes?: string
 ): string | null {
-  const titleMatch = imgTag.match(/\btitle\s*=\s*(['"])(.*?)\1/i);
-  const rawTitle = titleMatch?.[2] ?? '';
+  const titleAttr = findTitleAttribute(imgTag);
+  if (!titleAttr) return null;
+  const rawTitle = titleAttr.value;
   const trimmedTitle = rawTitle.trim();
   if (!trimmedTitle) return null;
 
-  const captionText = escapeHtmlText(unescapeHtmlText(trimmedTitle));
-  const imageWithoutTitle = imgTag.replace(/\s*title\s*=\s*(['"]).*?\1/i, '');
+  const sanitizedCaption = sanitizeBlogImageCaptionText(
+    unescapeHtmlText(trimmedTitle)
+  );
+  const imageWithoutTitle =
+    imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end);
+
+  if (!sanitizedCaption) {
+    return figureAttributes !== undefined
+      ? `<figure${formatFigureAttributes(figureAttributes)}>${imageWithoutTitle}</figure>`
+      : imageWithoutTitle;
+  }
+
+  const captionText = escapeHtmlText(sanitizedCaption);
 
   return `<figure${formatFigureAttributes(figureAttributes)}>${imageWithoutTitle}<figcaption>${captionText}</figcaption></figure>`;
 }
@@ -163,13 +167,48 @@ function isStandaloneImageBlock(
 }
 
 export function transformImageTitlesToFigureCaptions(html: string): string {
-  const withStandaloneFigures = html.replace(
+  // 1. Sanitize any existing <figcaption> content
+  const withSanitizedCaptions = html.replace(
+    /<figcaption\b([^>]*)>([\s\S]*?)<\/figcaption>/gi,
+    (_match, attrs, content) => {
+      const sanitizedHtml = sanitizeFigcaptionHtml(content);
+      if (!sanitizedHtml) {
+        return '';
+      }
+      return `<figcaption${attrs}>${sanitizedHtml}</figcaption>`;
+    }
+  );
+
+  // 2. Strip title attributes from images inside figures that have a figcaption
+  const withCleanExistingFigures = withSanitizedCaptions.replace(
+    /<figure\b([^>]*)>([\s\S]*?)<\/figure>/gi,
+    (figure, attrs, content) => {
+      if (/<figcaption\b/i.test(content)) {
+        const cleanedContent = content.replace(
+          /<img\b[^<>]*>/gi,
+          (imgTag: string) => {
+            const titleAttr = findTitleAttribute(imgTag);
+            if (!titleAttr) return imgTag;
+            return (
+              imgTag.slice(0, titleAttr.start) + imgTag.slice(titleAttr.end)
+            );
+          }
+        );
+        return `<figure${attrs}>${cleanedContent}</figure>`;
+      }
+      return figure;
+    }
+  );
+
+  // 3. Convert standalone titled images in <figure> to figures with <figcaption>
+  const withStandaloneFigures = withCleanExistingFigures.replace(
     /<figure\b([^>]*)>\s*(<img\b[^<>]*>)\s*<\/figure>/gi,
     (figure, figureAttributes, imgTag) => {
       return buildFigureFromTitledImage(imgTag, figureAttributes) ?? figure;
     }
   );
 
+  // 4. Convert standalone titled images in <p> to <figure>
   const withStandaloneImageParagraphs = withStandaloneFigures.replace(
     /<p\b([^>]*)>\s*(<img\b[^<>]*>)\s*<\/p>/gi,
     (paragraph, paragraphAttributes, imgTag) => {
@@ -179,7 +218,8 @@ export function transformImageTitlesToFigureCaptions(html: string): string {
     }
   );
 
-  return withStandaloneImageParagraphs.replace(
+  // 5. Convert standalone <img> to <figure>
+  const withFigures = withStandaloneImageParagraphs.replace(
     /(<p\b[^>]*>[\s\S]*?<\/p>)|(<img\b[^<>]*>)/gi,
     (match, paragraph, imgTag, offset, fullHtml) => {
       if (paragraph) {
@@ -196,5 +236,10 @@ export function transformImageTitlesToFigureCaptions(html: string): string {
 
       return buildFigureFromTitledImage(imgTag) ?? match;
     }
+  );
+
+  // 6. Sanitize remaining inline image titles that were not converted to figures
+  return withFigures.replace(/<img\b[^<>]*>/gi, (imgTag: string) =>
+    sanitizeImageTitleAttribute(imgTag)
   );
 }

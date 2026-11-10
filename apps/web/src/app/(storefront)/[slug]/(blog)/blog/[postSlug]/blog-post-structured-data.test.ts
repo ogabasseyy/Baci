@@ -188,4 +188,83 @@ describe('buildBlogPostStructuredData', () => {
       '@type': 'FAQPage',
     });
   });
+
+  it('emits NewsArticle and BlogPosting @type for Tech News posts', () => {
+    const data = buildBlogPostStructuredData({
+      author: {
+        name: 'Bassey John',
+        url: 'https://ogabassey.com/blog/author/bassey',
+      },
+      baseUrl: 'https://ogabassey.com',
+      blogIndexUrl: 'https://ogabassey.com/blog',
+      content: '<p>Galaxy Buds On news.</p>',
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        slug: 'ogabassey',
+        social_media: null,
+      },
+      post: {
+        category: 'Tech News',
+        published_at: '2026-11-09T15:00:00.000Z',
+        title:
+          'Galaxy Buds On Bring 9.5-Hour Open-Ear Audio; Nigeria Price Pending',
+      },
+      postUrl: 'https://ogabassey.com/blog/galaxy-buds-on',
+    });
+
+    expect(data.blogSchema['@type']).toEqual(['BlogPosting', 'NewsArticle']);
+  });
+
+  it('emits NewsArticle and BlogPosting @type for tech news with whitespace and mixed case', () => {
+    const data = buildBlogPostStructuredData({
+      author: {
+        name: 'Bassey John',
+        url: 'https://ogabassey.com/blog/author/bassey',
+      },
+      baseUrl: 'https://ogabassey.com',
+      blogIndexUrl: 'https://ogabassey.com/blog',
+      content: '<p>MacBook Pro news.</p>',
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        slug: 'ogabassey',
+        social_media: null,
+      },
+      post: {
+        category: '  tech news  ',
+        published_at: '2026-11-07T15:00:00.000Z',
+        title: 'M6 MacBook Pro News',
+      },
+      postUrl: 'https://ogabassey.com/blog/m6-macbook-pro',
+    });
+
+    expect(data.blogSchema['@type']).toEqual(['BlogPosting', 'NewsArticle']);
+  });
+
+  it('retains BlogPosting @type for other categories', () => {
+    const data = buildBlogPostStructuredData({
+      author: {
+        name: 'Bassey John',
+        url: 'https://ogabassey.com/blog/author/bassey',
+      },
+      baseUrl: 'https://ogabassey.com',
+      blogIndexUrl: 'https://ogabassey.com/blog',
+      content: '<p>Buying guide content.</p>',
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        slug: 'ogabassey',
+        social_media: null,
+      },
+      post: {
+        category: 'Buying Guides',
+        published_at: '2026-11-09T13:00:00.000Z',
+        title: 'Dell Precision Guide',
+      },
+      postUrl: 'https://ogabassey.com/blog/dell-precision-guide',
+    });
+
+    expect(data.blogSchema['@type']).toBe('BlogPosting');
+  });
 });

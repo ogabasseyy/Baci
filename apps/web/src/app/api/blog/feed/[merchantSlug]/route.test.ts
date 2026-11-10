@@ -195,6 +195,8 @@ vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
 }));
 
+import { getImageMimeType } from '@/lib/blog-feed-normalize';
+
 const { GET } = await import('./route');
 
 describe('GET /api/blog/feed/[merchantSlug]', () => {
@@ -872,9 +874,87 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(mockFeedAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Best Android Phones',
-        image: 'https://cdn.example.com/landscape.jpg',
+        image: {
+          url: 'https://cdn.example.com/landscape.jpg',
+          type: 'image/jpeg',
+        },
         category: [{ name: 'Smartphones' }],
       })
     );
+  });
+
+  it('transforms titled images into semantic figure captions and cleans AI prompt instructions in feed content', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'caption-post',
+          title: 'Audio Guide',
+          slug: 'audio-guide',
+          content:
+            '<p><img src="https://cdn.example.com/buds.jpg" title="Editorial illustration: compare models. Use approved hardware references, blank screens and no text or logos." /></p>',
+          excerpt: 'Excerpt',
+          featured_image_url: 'https://cdn.example.com/buds-hero.webp',
+          category: 'Smartphones',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-01T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content:
+          '<figure><img src="https://cdn.example.com/buds.jpg" /><figcaption>Compare models.</figcaption></figure>',
+        image: {
+          url: 'https://cdn.example.com/buds-hero.webp',
+          type: 'image/webp',
+        },
+      })
+    );
+  });
+
+  describe('getImageMimeType', () => {
+    it('maps image file extensions to valid IANA media types', () => {
+      expect(getImageMimeType('https://cdn.example.com/photo.jpg')).toBe(
+        'image/jpeg'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.jpeg')).toBe(
+        'image/jpeg'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.png')).toBe(
+        'image/png'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.webp')).toBe(
+        'image/webp'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.avif')).toBe(
+        'image/avif'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.gif')).toBe(
+        'image/gif'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.svg')).toBe(
+        'image/svg+xml'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo.unknown')).toBe(
+        'image/jpeg'
+      );
+      expect(
+        getImageMimeType('https://cdn.example.com/photo.constructor')
+      ).toBe('image/jpeg');
+      expect(getImageMimeType('https://cdn.example.com/photo.__proto__')).toBe(
+        'image/jpeg'
+      );
+      expect(getImageMimeType('https://cdn.example.com/photo')).toBe(
+        'image/jpeg'
+      );
+      expect(getImageMimeType('not-a-valid-url')).toBe('image/jpeg');
+    });
   });
 });

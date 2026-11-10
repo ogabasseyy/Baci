@@ -128,7 +128,13 @@ this work is not a blanket audit or migration of all cost-bearing tables.
   reads returned 403, and safe public-column reads returned 200 after cutover.
 - The inventory-trigger regression failed before the repair and passed after it
   under real authenticated column restrictions. All five repaired routines retain
-  invoker rights; shopper cart catalog helper checks passed too.
+  invoker rights. The shopper-facing negotiation classifier passed; internal inventory
+  helpers passed in privileged context and correctly denied direct shopper calls.
+- CI historical replay reached the new invoker suite and exposed a missing ACL in
+  the minimal fixture: the inventory-policy dependency is intentionally unavailable
+  to authenticated shoppers. The corrected test preserves that boundary, and all
+  three local SQL suites pass with the historical dependency ACL reproduced.
+  A new full historical replay is still required.
 - Final split-write regressions passed: 55 web route tests and 32 mobile tests.
   An independent review identified the partial-success/cache invalidation issue;
   its remedy was re-reviewed without new findings.

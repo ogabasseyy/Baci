@@ -6,6 +6,11 @@ import { captureCartPairingLink } from './pairing-link';
  * Router unchanged. That is safe only while the router reduces every
  * delivery to an in-app path. This pins that behaviour against the
  * installed router, so an upgrade that changes it fails here.
+ *
+ * The import is a build-internal path on purpose: Expo Router exposes
+ * no public function for this step. If an upgrade moves the file and
+ * this import breaks, do not delete the test: point it at the
+ * router's new URL-to-path function and re-confirm the assertions.
  */
 const config = {
   merchantId: '11111111-1111-4111-8111-111111111111',

@@ -93,10 +93,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       } catch {
         balanceKobo = null;
       }
-      // Whole kobo on both sides: no fractional naira comparison.
-      const headStartKobo = Math.round(
-        input.effectiveInitialContribution * 100
-      );
+      // The wallet's Add to savings sheet moves whole naira, rounding the
+      // prefilled amount up: check the amount that will actually move.
+      const headStartKobo = Math.ceil(input.effectiveInitialContribution) * 100;
       const refusal =
         balanceKobo === null
           ? PRIMARY_BALANCE_CHECK_FAILED_MESSAGE

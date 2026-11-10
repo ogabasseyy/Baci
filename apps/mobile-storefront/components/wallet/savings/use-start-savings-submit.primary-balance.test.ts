@@ -90,9 +90,29 @@ describe('PiggyVest head start balance check at submit', () => {
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
   });
 
-  it('allows a head start the balance covers exactly, to the kobo', async () => {
+  it('checks a fractional head start against the whole naira the wallet will move', async () => {
+    // ₦10,000.10 is prefilled as ₦10,001 in the wallet's Add to savings sheet.
     readBalance.mockResolvedValueOnce(1_000_010);
     const input = createInput({ effectiveInitialContribution: 10_000.1 });
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    await act(async () => {
+      await result.current.submitSavingsGoal(primaryOptions);
+    });
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      PRIMARY_HEAD_START_SHORT_MESSAGE
+    );
+  });
+
+  it('allows a head start the balance covers in whole naira', async () => {
+    readBalance.mockResolvedValueOnce(1_000_100);
+    const input = createInput({
+      effectiveInitialContribution: 10_000.1,
+      refetch: jest.fn(async () => ({
+        isError: false,
+        data: { wallet: { savings_goals: [{ id: 'goal-1' }] } },
+      })),
+    });
     const { result } = renderHook(() => useStartSavingsSubmit(input));
     await act(async () => {
       await result.current.submitSavingsGoal(primaryOptions);

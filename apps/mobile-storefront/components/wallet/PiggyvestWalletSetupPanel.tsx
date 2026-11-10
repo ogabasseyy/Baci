@@ -127,6 +127,9 @@ export function PiggyvestWalletSetupPanel({
             },
             sequence
           );
+        // Reload even when a newer read already answered (the handover is
+        // then ignored): that newer answer is what the reload recalls, and
+        // the reload is what closes this sheet.
         onRefresh();
       } else setAwaitingAccount(true);
     } catch (error) {

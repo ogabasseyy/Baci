@@ -1,0 +1,37 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import type { RefundSummary } from '@/lib/orders/refund-summary';
+import { OrderRefundStatusLine } from './order-refund-status-line';
+
+const summary = (over: Partial<RefundSummary>) =>
+  ({
+    canRecordManual: true,
+    remaining: 5000,
+    status: 'not_started',
+    ...over,
+  }) as RefundSummary;
+
+describe('OrderRefundStatusLine', () => {
+  it('says the refund is pending when a cancel-only order is waiting for a manual record', () => {
+    render(<OrderRefundStatusLine summary={summary({})} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Refund pending');
+    expect(
+      screen.getByText(/no automatic refund was queued/i)
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the neutral label when nothing is outstanding', () => {
+    render(<OrderRefundStatusLine summary={summary({ remaining: 0 })} />);
+    expect(screen.getByRole('status')).not.toHaveTextContent('Refund pending');
+    expect(
+      screen.queryByText(/no automatic refund was queued/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the neutral label when manual recording is unavailable', () => {
+    render(
+      <OrderRefundStatusLine summary={summary({ canRecordManual: false })} />
+    );
+    expect(screen.getByRole('status')).not.toHaveTextContent('Refund pending');
+  });
+});

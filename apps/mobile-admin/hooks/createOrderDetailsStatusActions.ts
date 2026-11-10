@@ -201,7 +201,7 @@ export function createOrderDetailsStatusActions({
     if (isPaid && (plan === undefined || !plan.ledgerKnown)) {
       Alert.alert(
         'Cancel order?',
-        "Refund details could not be loaded. Any refund is queued automatically, so check the order's refund status afterwards instead of refunding the customer yourself. This cannot be undone.",
+        "Refund details couldn't be loaded. Cancel now and check the order's refund status for what happens next; do not refund the customer by hand until it shows what is owed. This cannot be undone.",
         [
           { text: 'Keep Order', style: 'cancel' },
           {

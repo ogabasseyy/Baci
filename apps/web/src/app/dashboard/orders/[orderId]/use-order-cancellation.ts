@@ -128,7 +128,7 @@ export function useOrderCancellation({
     ) {
       if (
         !window.confirm(
-          "Refund details could not be loaded. Cancel this order? Any refund is queued automatically, so check the order's Refund card afterwards instead of refunding the customer yourself."
+          "Refund details couldn't be loaded. Cancel this order now and check its Refund card for what happens next; do not refund the customer by hand until it shows what is owed. Continue?"
         )
       )
         return;

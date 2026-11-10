@@ -141,7 +141,7 @@ describe('cancellation refund plan', () => {
     await actions.handleStatusUpdate('cancelled');
     const call = vi.mocked(Alert.alert).mock.calls[0];
     expect(call?.[0]).toBe('Cancel order?');
-    expect(call?.[1]).toContain('could not be loaded');
+    expect(call?.[1]).toContain("couldn't be loaded");
     const buttons = call?.[2];
     expect(buttons?.map((button) => button.text)).toEqual([
       'Keep Order',
@@ -238,7 +238,7 @@ describe('cancellation refund plan', () => {
     });
     await actions.handleStatusUpdate('cancelled');
     const call = vi.mocked(Alert.alert).mock.calls[0];
-    expect(call?.[1]).toContain('could not be loaded');
+    expect(call?.[1]).toContain("couldn't be loaded");
     expect(call?.[2]?.map((button) => button.text)).not.toContain(
       'Cancel only (I will refund them)'
     );

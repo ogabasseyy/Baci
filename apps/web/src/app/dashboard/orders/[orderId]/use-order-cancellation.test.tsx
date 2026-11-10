@@ -178,7 +178,7 @@ describe('useOrderCancellation', () => {
     await act(() => result.current.requestCancellation());
     expect(result.current.dialogProps.isOpen).toBe(false);
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('could not be loaded')
+      expect.stringContaining("couldn't be loaded")
     );
     expect(mocks.apiPost).toHaveBeenCalledWith(
       '/api/orders/order-1/cancelled',
@@ -255,7 +255,7 @@ describe('useOrderCancellation', () => {
     await act(() => result.current.requestCancellation());
     expect(result.current.dialogProps.isOpen).toBe(false);
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('could not be loaded')
+      expect.stringContaining("couldn't be loaded")
     );
   });
 
@@ -286,7 +286,7 @@ describe('useOrderCancellation', () => {
     await act(() => hook.current.requestCancellation());
     expect(hook.current.dialogProps.isOpen).toBe(false);
     expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('could not be loaded')
+      expect.stringContaining("couldn't be loaded")
     );
     expect(mocks.evidence).toHaveBeenCalledWith(
       'order_has_unresolved_refund_evidence',

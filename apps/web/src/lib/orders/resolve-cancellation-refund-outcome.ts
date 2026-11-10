@@ -124,12 +124,9 @@ export async function resolveCancellationRefundOutcome({
       })),
     });
     if (!plan.ledgerKnown) return { outcome: 'unknown' };
-    // Same trim + uppercase the worker applies to ISO codes.
-    const currency =
-      rows
-        .find((row) => row.transaction_type === 'payment')
-        ?.currency?.trim()
-        .toUpperCase() || null;
+    // Label amounts with the ORDER's currency (trimmed + uppercased like the
+    // worker; blank defaults to NGN as in the plan), never a capture's.
+    const currency = orderRow.currency?.trim().toUpperCase() || 'NGN';
     return {
       details: {
         currency,

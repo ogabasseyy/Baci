@@ -179,7 +179,8 @@ export async function monitorNegotiationCostFloor({
         unreadableProductLines,
       });
     }
-    // One aggregated entry per order (multi-line orders must not spam logs).
+    // One aggregated breach entry per order (multi-line orders must not spam
+    // logs), plus at most two coverage-gap warnings above.
     // Candidates only: the order may still fail later, and prices here are
     // the shopper-visible ones, never the merchant cost.
     if (breaches.length > 0) {

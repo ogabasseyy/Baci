@@ -255,7 +255,7 @@ export async function computeOrderNegotiationDiscount({
       after(run);
     } catch {
       // Outside a request scope (scripts/tests): run detached, never awaited.
-      void run();
+      run().catch(() => undefined);
     }
   }
 

@@ -17,6 +17,7 @@ import {
   type NegotiationLineInput,
 } from './eligible-line-discount';
 import { monitorNegotiationCostFloor } from './negotiation-cost-floor-monitor';
+import { hasCostFloorBreach } from './order-negotiation-cost-floor';
 import { applyPersistedLineOccurrenceKeys } from './order-negotiation-occurrence-keys';
 
 type VariantPriceRow = {
@@ -233,6 +234,24 @@ export async function computeOrderNegotiationDiscount({
     lines,
     MAX_AUTO_NEGOTIATION_DISCOUNT_RATE
   );
+  // Enforcement: a discounted negotiable line may not land under the merchant
+  // cost floor (cost * 1.1). Full-price orders skip the lookup entirely.
+  if (!result.rejectionCode && result.totalDiscount > 0) {
+    const breached = await hasCostFloorBreach({
+      supabase,
+      merchantId,
+      lines,
+      parentPrices: new Map(
+        products.map((product) => [product.id, Number(product.price ?? 0)])
+      ),
+    });
+    if (breached) {
+      return {
+        totalDiscount: 0,
+        rejectionCode: 'negotiated_price_below_floor',
+      };
+    }
+  }
   // Observation only (never alters the result): flag charged discounts that
   // land under the merchant's cost floor so the exposure can be measured.
   // Runs after the response so checkout latency is unaffected.

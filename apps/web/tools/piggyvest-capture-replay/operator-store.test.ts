@@ -189,6 +189,11 @@ describe('readOperatorConnection', () => {
       'postgres://ops@db.example.test/postgres?sslmode=verify-full&sslmode=disable',
       'repeats sslmode',
     ],
+    // Through the pooler the server-side TLS check would attest the wrong hop.
+    [
+      'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
+      'not the pooler',
+    ],
     ['mysql://ops@db.example.test/x', 'postgres URL'],
     ['not a url', 'valid URL'],
   ])('refuses %s before connecting', (url, message) => {

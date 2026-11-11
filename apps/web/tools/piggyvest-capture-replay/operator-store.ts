@@ -98,6 +98,7 @@ export function sessionFailures(
   return failures;
 }
 
+const POOLER_PORT = '6543';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
@@ -131,6 +132,13 @@ export function readOperatorConnection(connectionString: string): {
       'the connection string must name its host directly'
     );
   const loopback = LOOPBACK_HOSTS.has(url.hostname);
+  // Supabase's pooler listens on 6543. Behind it, the server-side transport
+  // check would see the pooler's link, not the operator's, so require the
+  // direct connection.
+  if (url.port === POOLER_PORT)
+    throw new OperatorRefusal(
+      'use the direct database connection (port 5432), not the pooler on 6543'
+    );
   const sslmode = url.searchParams.get('sslmode');
   if (!loopback && sslmode !== null && sslmode !== 'verify-full')
     throw new OperatorRefusal('sslmode must be verify-full (or left out)');

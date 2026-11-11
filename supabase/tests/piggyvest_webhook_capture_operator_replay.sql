@@ -1,4 +1,4 @@
--- Regression coverage for 20261111140000_piggyvest_capture_operator_replay.sql.
+-- Regression coverage for 20261111170000_piggyvest_capture_operator_replay.sql.
 -- Run after migrations on the private disposable PostgreSQL database only:
 -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 --   -f supabase/tests/piggyvest_webhook_capture_operator_replay.sql

@@ -3,7 +3,7 @@ import z from 'zod';
 /**
  * Wire shapes of the operator replay functions for PiggyVest webhook
  * captures parked as needs_review
- * (supabase/migrations/20261111140000_piggyvest_capture_operator_replay.sql).
+ * (supabase/migrations/20261111170000_piggyvest_capture_operator_replay.sql).
  * The database is the authority; these schemas only refuse to act on a
  * response that does not look like it.
  */

@@ -32,7 +32,7 @@ import {
 
 /**
  * End to end over one in-memory capture table that follows the SQL contract
- * of 20261111140000_piggyvest_capture_operator_replay.sql (that SQL itself is
+ * of 20261111170000_piggyvest_capture_operator_replay.sql (that SQL itself is
  * proven by supabase/tests/piggyvest_webhook_capture_operator_replay.sql):
  * operator CLI -> requeue -> the REAL drain (real stored-signature
  * verification) -> a ledger that dedupes on pvb_reference like the real ones.

@@ -76,8 +76,8 @@ function fixture() {
 it('loads unpublished catalog only after owner authorization and returns public-safe fields', async () => {
   const f = fixture();
   const result = await loadOwnerPreviewCatalog(f.ctx, {});
-  expect(result?.products).toHaveLength(1);
-  expect(result?.products[0]).toMatchObject({
+  expect(result?.catalog.products).toHaveLength(1);
+  expect(result?.catalog.products[0]).toMatchObject({
     name: 'Synthetic phone',
     currency: 'NGN',
   });

@@ -103,7 +103,7 @@ export async function loadOwnerPreviewCatalog(
   ctx: OwnerRequestContext,
   selection: unknown,
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
-): Promise<PublicCatalog | null> {
+): Promise<{ catalog: PublicCatalog; currency: string } | null> {
   experienceCatalogSelectionSchema.parse(selection);
   const owner = await requireExperienceOwner(ctx, 'storefront.read');
   const merchant = await owner.supabase
@@ -113,11 +113,12 @@ export async function loadOwnerPreviewCatalog(
     .maybeSingle();
   if (merchant.error || !merchant.data || merchant.data.id !== owner.merchantId)
     throw Error('NOT_FOUND');
+  const currency = merchant.data.payout_currency ?? 'NGN';
   const result = await readCatalog(
     owner.supabase,
     {
       id: merchant.data.id,
-      currency: merchant.data.payout_currency ?? 'NGN',
+      currency,
       is_published: merchant.data.is_published === true,
     },
     selection,
@@ -125,7 +126,7 @@ export async function loadOwnerPreviewCatalog(
     true
   );
   await requireExperienceOwner(owner, 'storefront.read');
-  return result;
+  return result ? { catalog: result, currency } : null;
 }
 
 async function readCatalog(

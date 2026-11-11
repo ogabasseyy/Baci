@@ -15,6 +15,7 @@ import {
   createProductionPrerenderPipeline,
   type PrerenderPipelineSettings,
 } from './local-prerender-pipeline';
+import { loadOwnerPreviewBootstrap } from './owner-preview-bootstrap';
 import { createPreviewVault } from './preview-service';
 import {
   createPrivateExperienceCapture,
@@ -44,7 +45,7 @@ export function createProductionExperienceIntegration(settings: {
     PrerenderPipelineSettings['build'],
     'execute' | 'profile' | 'hostOrigin'
   >;
-  bootstrap(
+  bootstrap?(
     ctx: OwnerRequestContext,
     manifest: ExperienceManifest,
     routeId: string
@@ -52,6 +53,7 @@ export function createProductionExperienceIntegration(settings: {
   recordCapture(capture: RecordedPrivateCapture): Promise<void>;
 }) {
   const previewOrigin = settings.previewOrigin ?? settings.hostOrigin;
+  const bootstrap = settings.bootstrap ?? loadOwnerPreviewBootstrap;
   productionDeliveryOrigins({
     executionOrigin: settings.executionOrigin,
     hostOrigins: [settings.hostOrigin, previewOrigin],
@@ -132,13 +134,13 @@ export function createProductionExperienceIntegration(settings: {
           previewOrigin,
           execute,
         },
-        bootstrap: settings.bootstrap,
+        bootstrap,
       });
       const capture = createPrivateExperienceCapture({
         profile: 'production',
         hostOrigin: canonicalOrigin,
         previewOrigin,
-        bootstrap: settings.bootstrap,
+        bootstrap,
         record: settings.recordCapture,
         capture: (input) => captureExperience(input, execute),
       });

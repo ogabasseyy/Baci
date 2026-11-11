@@ -267,6 +267,11 @@ holder of that key from signing a forged issuance time.
 - Disable new enrollment/realtime first. Migrated carts keep canonical
   ownership; never restore stale local carts as authoritative and never
   drop the canonical tables as a rollback step.
+- Removing `shared_cart` or unpublishing a store reaches the cart read,
+  create and command routes within 30 seconds, not instantly: each warm
+  server instance reuses a published store's mapping and feature row for
+  that long (`CART_MERCHANT_LOOKUP_TTL_MS`). Other cart routes read
+  them on every request.
 - Keep the last compatible server version available while clients
   drain. Native/web clients retain foreground HTTP recovery when
   realtime is disabled.

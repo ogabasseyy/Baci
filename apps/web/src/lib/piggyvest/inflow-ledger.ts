@@ -154,9 +154,10 @@ export async function recordInflowCredit(
   }
 
   // The inbox dedupes by event_id, so a signed redelivery under a new event
-  // id with different financials reaches this key: verify the stored row
-  // before calling it a duplicate. First writer wins; a mismatch is a
-  // provider conflict for quarantine, never a silent ack.
+  // id with different financials reaches this key: verify the stored row's
+  // money and attribution fields before calling it a duplicate. First writer
+  // wins; a mismatch is a provider conflict for quarantine, never a silent
+  // ack.
   const stored = await readStoredPvbCredit(supabase, {
     table: 'piggyvest_inflow_credits',
     schema: storedPvbCreditRowSchemas.inflow,
@@ -192,18 +193,11 @@ export async function recordInflowCredit(
   if (stored.amount_kobo !== detail.amount)
     mismatchedFields.push('amount_kobo');
   if (stored.fee_kobo !== detail.fee) mismatchedFields.push('fee_kobo');
-  if (stored.reference !== detail.reference) mismatchedFields.push('reference');
-  if ((stored.session_id ?? null) !== (detail.session_id ?? null))
-    mismatchedFields.push('session_id');
-  if (stored.event_data_id !== detail.id)
-    mismatchedFields.push('event_data_id');
-  // Epoch compare: the stored timestamptz round-trips in a normalized
-  // format that never string-equals the payload's ISO instant.
-  if (
-    new Date(stored.credited_at).getTime() !==
-    new Date(detail.timestamp).getTime()
-  )
-    mismatchedFields.push('credited_at');
+  // eventData.reference, session_id, id and timestamp are stored for audit
+  // only. pvb_reference identifies the credit (PiggyVest, 2026-11-11) and
+  // PiggyVest guarantees none of these internals stable across retries, so
+  // a drift there is the same credit redelivered, not a conflict. With no
+  // resend endpoint, a false conflict would strand the delivery.
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')
       .update(

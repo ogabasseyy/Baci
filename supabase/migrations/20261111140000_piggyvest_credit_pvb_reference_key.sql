@@ -18,12 +18,15 @@
 --   second distinct pvb_reference that reuses an internal id still cannot
 --   insert, and the app quarantines it as a conflict instead of crediting
 --   or silently acking it.
--- * Fail closed on unresolved legacy rows. A NULL-reference row collides with
---   nothing on pvb_reference, so a redelivery of that same credit carrying a
---   different internal id would insert a second credit. While any such row
---   exists, the insert functions refuse every new credit with a retryable
---   55000 (the receiver answers 503 / the capture drain retries) until an
---   operator sets the legacy row's pvb_reference from verified evidence.
+-- * Fail closed on unresolved legacy rows, scoped to the customer. A
+--   NULL-reference row collides with nothing on pvb_reference, so a
+--   redelivery of that same credit carrying a different internal id would
+--   insert a second credit. A credit's envelope customer_id never changes,
+--   so while such a row exists for a customer, the insert functions refuse
+--   that customer's new credits with a retryable 55000 (the receiver
+--   answers 503 / the capture drain retries) until an operator sets the
+--   legacy row's pvb_reference from verified evidence. Other customers are
+--   unaffected.
 --   This deliberately does not abort the migration: a deploy-blocking
 --   migration would hold every other release hostage to a data repair.
 -- * Insert functions use a target-less ON CONFLICT DO NOTHING so a collision
@@ -33,6 +36,22 @@
 --   pre-migration rows.
 
 BEGIN;
+
+-- Interest inbox rows recorded before this change stored the PVB-internal
+-- eventData.destination_wallet as wallet_id. The inbox treats a redelivery
+-- whose wallet differs from the stored row as an event-id conflict, so the
+-- identical signed payout (now attributed to pvb_wallet) would be
+-- quarantined instead of reaching the corrected ledger. Re-attribute those
+-- rows from their own stored, redacted event details: only rows whose
+-- wallet_id is exactly the stored destination_wallet and whose details
+-- carry a pvb_wallet are touched.
+UPDATE public.piggyvest_webhook_inbox
+SET wallet_id = event_details->>'pvb_wallet'
+WHERE event_type = 'interest-payout.success'
+  AND jsonb_typeof(event_details->'pvb_wallet') = 'string'
+  AND length(btrim(event_details->>'pvb_wallet')) > 0
+  AND wallet_id IS NOT DISTINCT FROM event_details->>'destination_wallet'
+  AND wallet_id IS DISTINCT FROM event_details->>'pvb_wallet';
 
 ALTER TABLE public.piggyvest_inflow_credits
   ADD COLUMN IF NOT EXISTS pvb_reference text;
@@ -85,9 +104,9 @@ ALTER TABLE public.piggyvest_interest_payouts
   ADD CONSTRAINT piggyvest_interest_payouts_pvb_reference_key UNIQUE (pvb_reference);
 
 CREATE INDEX IF NOT EXISTS piggyvest_inflow_credits_legacy_reference_idx
-  ON public.piggyvest_inflow_credits (provider_transaction_id) WHERE pvb_reference IS NULL;
+  ON public.piggyvest_inflow_credits (customer_id) WHERE pvb_reference IS NULL;
 CREATE INDEX IF NOT EXISTS piggyvest_interest_payouts_legacy_reference_idx
-  ON public.piggyvest_interest_payouts (provider_payout_id) WHERE pvb_reference IS NULL;
+  ON public.piggyvest_interest_payouts (customer_id) WHERE pvb_reference IS NULL;
 
 COMMENT ON COLUMN public.piggyvest_inflow_credits.pvb_reference IS
   'PVB credit id (envelope pvb_reference): the unique credit key. NULL only on legacy rows without inbox evidence.';
@@ -108,8 +127,9 @@ BEGIN
     OR length(btrim(p->>'pvb_reference')) = 0 THEN
     RAISE EXCEPTION 'Invalid inflow request' USING ERRCODE = '22023';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.piggyvest_inflow_credits WHERE pvb_reference IS NULL) THEN
-    RAISE EXCEPTION 'Inflow ledger has legacy rows without pvb_reference'
+  IF EXISTS (SELECT 1 FROM public.piggyvest_inflow_credits
+      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id') THEN
+    RAISE EXCEPTION 'Inflow ledger has legacy rows without pvb_reference for this customer'
       USING ERRCODE = '55000';
   END IF;
   WITH inserted AS (
@@ -159,8 +179,9 @@ BEGIN
     OR length(btrim(p->>'pvb_reference')) = 0 THEN
     RAISE EXCEPTION 'Invalid interest request' USING ERRCODE = '22023';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.piggyvest_interest_payouts WHERE pvb_reference IS NULL) THEN
-    RAISE EXCEPTION 'Interest ledger has legacy rows without pvb_reference'
+  IF EXISTS (SELECT 1 FROM public.piggyvest_interest_payouts
+      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id') THEN
+    RAISE EXCEPTION 'Interest ledger has legacy rows without pvb_reference for this customer'
       USING ERRCODE = '55000';
   END IF;
   WITH inserted AS (

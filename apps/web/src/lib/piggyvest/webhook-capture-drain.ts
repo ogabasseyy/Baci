@@ -186,7 +186,7 @@ async function drainRow(
             deps,
             row,
             'OWNER_FAMILY_NOT_RECORDED',
-            'owning family not recorded at admission; request a resend'
+            'owning family not recorded at admission; needs operator review (no provider resend exists)'
           )
         : parkForReview(
             deps,

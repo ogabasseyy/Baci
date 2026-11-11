@@ -113,21 +113,6 @@ function mockSupabase(options: {
 }
 
 describe('recordInterestPayout', () => {
-  it('rejects a reused payout ID with a changed batch under a new event ID', async () => {
-    const { client } = mockSupabase({
-      upsertResult: { data: [], error: null },
-    });
-    await expect(
-      recordInterestPayout(client, {
-        ...interestEvent,
-        eventId: 'different-event',
-        eventData: { ...interestEvent.eventData, batch_id: 'different-batch' },
-      })
-    ).rejects.toMatchObject({
-      code: 'INTEREST_LEDGER_CONFLICT',
-      conflict: { mismatchedFields: ['batch_id'] },
-    });
-  });
   it('credits the reconciled net on first delivery', async () => {
     const { client, upsert } = mockSupabase({
       upsertResult: {

@@ -121,6 +121,14 @@ BEGIN
     RAISE EXCEPTION 'interest insert must fail closed while a legacy NULL row exists';
   EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
   END;
+  -- The gate is per customer: another customer's credit still lands.
+  IF jsonb_array_length(piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01PVBREF10', 'provider_transaction_id', 'pvbref-other-txn',
+      'event_data_id', 'd', 'event_id', 'pvbref-evt-10', 'customer_id', 'other-customer',
+      'wallet_id', 'w2', 'amount_kobo', 1000, 'fee_kobo', 0, 'reference', 'r',
+      'credited_at', '2026-11-11T10:00:00.000Z'))) <> 1 THEN
+    RAISE EXCEPTION 'another customer must not be blocked by a legacy row';
+  END IF;
 END $$;
 
 ROLLBACK;

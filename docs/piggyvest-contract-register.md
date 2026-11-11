@@ -268,10 +268,20 @@ not unique keys either.
   legacy rows by their old key, so a redelivery with the same internal id
   still dedupes. Because a NULL row collides with nothing on
   `pvb_reference`, a redelivery under a NEW internal id could otherwise
-  credit twice, so while any NULL row exists the intake insert functions
-  refuse all new credits with a retryable `55000` (503 / drain retry). An
-  operator must set those rows' `pvb_reference` from verified evidence.
-  The migration does not abort on them, so deploys are not blocked.
+  credit twice, so while a NULL row exists for a customer the intake insert
+  functions refuse THAT customer's new credits with a retryable `55000`
+  (503 / drain retry); other customers are unaffected. An operator must set
+  those rows' `pvb_reference` from verified evidence. The migration does
+  not abort on them, so deploys are not blocked. Runbook check before live
+  traffic (read-only):
+  `SELECT customer_id, count(*) FROM public.piggyvest_inflow_credits WHERE pvb_reference IS NULL GROUP BY 1;`
+  and the same for `piggyvest_interest_payouts`.
+- Duplicate verification compares only money and attribution: customer,
+  wallet, amounts (inflow `amount`/`fee`; interest gross/tax/net/amount) and
+  a non-null stored `pvb_reference`. The eventData internals (`id`,
+  `reference`, `session_id`, `batch_id`, `timestamp`, `transaction_id`)
+  are audit-only, because PiggyVest guarantees only `pvb_reference` and,
+  with no resend endpoint, a false conflict would strand the delivery.
 - Plan-transfer projection key NOT changed: it stays
   `plan-transfer:{provider_transaction_id}` of the stored (first-writer)
   row. Changing it to `pvb_reference` would project already-credited rows a
@@ -291,7 +301,11 @@ is settled on PVB. `eventData.destination_wallet` is PVB's internal wallet;
 inflow probe (§7), where the nested internal id 404s on the wallet API.
 
 - Implemented: the legacy interest ledger and the inbox attribution
-  (`record-input.ts`) use `pvb_wallet`. Before this, a real payout would have
+  (`record-input.ts`) use `pvb_wallet`. Interest inbox rows recorded
+  earlier stored `destination_wallet` as `wallet_id`; the migration
+  re-attributes them to the `pvb_wallet` in their own stored, redacted
+  details, so a redelivery of an earlier (e.g. UNMAPPED-failed) payout
+  matches its inbox row instead of quarantining as an event-id conflict. Before this, a real payout would have
   failed `INTEREST_LEDGER_UNMAPPED` → 503 until retries ran out, and interest
   would never have been credited.
 - Primary-wallet paid-interest path (`primary-wallet-paid-interest-signed`):
@@ -318,8 +332,9 @@ replays the event. What exists on ours:
   drain runner is actually scheduled, the drain re-processes pending rows up
   to 20 attempts, then parks them `needs_review`. If the drain is not
   attested, PiggyVest's own retries are the only retry path.
-- **Missing:** (1) a replay of `needs_review` captures after a fix (several
-  drain messages still say "request a resend", which is no longer possible);
+- **Missing:** (1) a replay of `needs_review` captures after a fix (the
+  drain's park messages now say to replay the capture, not to request a
+  resend);
   (2) a reconciler that lists PVB credits by `pvb_reference` and finds
   credits we never recorded. The daily reconciliation
   (`docs/piggyvest-daily-reconciliation.md`) only reads; a missed credit shows as a wallet holding
@@ -327,5 +342,7 @@ replays the event. What exists on ours:
 
 Follow-ups (not in this change): operator replay for `needs_review`
 captures; a credit-gap reconciler keyed on `pvb_reference`; confirm the
-drain runner is scheduled before live inflows; update the "request a
-resend" drain messages.
+drain runner is scheduled before live inflows; on the first live payout,
+confirm whether `destination_wallet` is stable, and if not stop pinning it
+in the paid-interest crosswalk (or alert when `prerequisite` recurs for an
+already-mapped `pvb_wallet`).

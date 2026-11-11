@@ -175,14 +175,9 @@ export async function recordInterestPayout(
     mismatchedFields.push('withholding_tax_kobo');
   if (stored.net_kobo !== net_interest_payout)
     mismatchedFields.push('net_kobo');
-  if (stored.reference !== detail.reference) mismatchedFields.push('reference');
-  if (stored.batch_id !== detail.batch_id) mismatchedFields.push('batch_id');
-  // Epoch compare: the stored timestamptz round-trips in a normalized
-  // format that never string-equals the payload's ISO instant.
-  if (
-    new Date(stored.paid_at).getTime() !== new Date(detail.timestamp).getTime()
-  )
-    mismatchedFields.push('paid_at');
+  // eventData.reference, batch_id and timestamp are audit-only, like the
+  // inflow internals: pvb_reference identifies the credit, so drift there
+  // is the same payout redelivered, not a conflict that would strand it.
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')
       .update(

@@ -7,6 +7,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, develop]
   schedule:
     # Run weekly on Sundays at 2:00 AM UTC
@@ -22,7 +23,9 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     # The CodeQL CLI license does not cover this private personal repository.
-    if: toJSON(github.event.repository.private) == 'false'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (toJSON(github.event.repository.private) == 'false')
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
@@ -64,7 +67,9 @@ jobs:
 
   private-unavailable:
     name: CodeQL unavailable for private repository
-    if: toJSON(github.event.repository.private) == 'true'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (toJSON(github.event.repository.private) == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}

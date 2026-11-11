@@ -5,7 +5,10 @@ import {
   STALE_PENDING_MINUTES,
 } from '@/config/follow-up-queue';
 import { supabase } from '@/lib/supabase';
-import { ONLINE_CHECKOUT_PAYMENT_METHODS } from './orders/order-list-visibility';
+import {
+  CUSTOMER_CHECKOUT_ORDER_FILTER,
+  ONLINE_CHECKOUT_PAYMENT_METHODS,
+} from './orders/order-list-visibility';
 import { useMerchant } from './useMerchant';
 
 export interface FailedOrder {
@@ -112,7 +115,7 @@ export function useFailedOrders() {
         .eq('merchant_id', merchantId)
         .gte('created_at', windowStart)
         .or(
-          `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS})`
+          `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.${staleCutoff},payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`
         )
         .order('created_at', { ascending: false })
         .limit(FOLLOW_UP_QUERY_LIMIT);

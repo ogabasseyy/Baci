@@ -5,7 +5,7 @@ on:
   pull_request:
     # opened: a PR created with transformer changes must run change
     # detection immediately, not only on a later synchronize/reopen.
-    types: [labeled, opened, synchronize, reopened]
+    types: [labeled, opened, synchronize, reopened, ready_for_review]
     # No paths filter: a workflow-level paths list rejects the
     # pull_request:labeled event before job conditions evaluate, so the
     # pilot-codec-check opt-in label could never request the suite on a
@@ -40,11 +40,14 @@ jobs:
     # while the opt-in label is still present. Fail closed like the
     # transformer gate below: a broken detection run runs the suite.
     if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (
       always() &&
       (github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
       needs.changes.outputs.pilot == 'true' ||
       needs.changes.result != 'success')
+      )
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
@@ -90,6 +93,7 @@ jobs:
   # paths filter cannot do this job because it rejects the labeled
   # event itself.
   changes:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -182,11 +186,14 @@ jobs:
     # job above: gating on the added label alone would let an unrelated
     # label skip the suite while the opt-in label is still present.
     if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (
       always() &&
       (github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
       needs.changes.outputs.transformer == 'true' ||
       needs.changes.result != 'success')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

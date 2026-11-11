@@ -204,9 +204,13 @@ jobs:
           # A completed check that did not clearly pass or fail (timed_out,
           # cancelled, action_required, skipped, stale, startup_failure, …) is an
           # ABSTENTION, not a blocking vote — a reviewer outage must never block.
+          # A skipped run says nothing about the reviewer (a PR title/body edit starts one that
+          # is skipped at once), so it is ignored whenever a real run for the commit exists.
           check_state() {
             printf '%s' "$1" | jq -r --arg c "$2" '
-              ([.check_runs[] | select(.name==$c)]
+              [.check_runs[] | select(.name==$c)] as $all
+              | ([$all[] | select((.conclusion // "") != "skipped")]) as $real
+              | ((if ($real | length) > 0 then $real else $all end)
                 | sort_by(.completed_at // .started_at // .created_at // "")
                 | last) as $run
               | if $run == null then "missing"

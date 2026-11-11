@@ -107,6 +107,38 @@ describe('bugfix: voters that cannot report must not decide the gate', () => {
   });
 });
 
+describe('bugfix: a skipped duplicate check run (a PR title/body edit starts one) must not override the real result', () => {
+  const skippedLater = check('Muse review', 'completed', 'skipped');
+  skippedLater.started_at = '2026-11-11T10:59:00Z';
+  skippedLater.completed_at = '2026-11-11T11:00:00Z';
+
+  test('a real Muse review followed by a skipped run still counts', () => {
+    const result = runTally({
+      statuses: [GEMINI_FAIL],
+      checks: [MUSE_DONE, skippedLater],
+      reviews: [museReview({ findings: ['high'] })],
+    });
+    assert.equal(only(result).state, 'failure');
+  });
+
+  test('a running Muse review followed by a skipped run is still pending', () => {
+    const result = runTally({ statuses: [GEMINI_FAIL], checks: [check('Muse review', 'in_progress'), skippedLater] });
+    assert.equal(only(result).state, 'pending');
+  });
+
+  test('a lone skipped run is still an abstention', () => {
+    const result = runTally({ statuses: [GEMINI_FAIL], checks: [skippedLater], reviews: [] });
+    assert.equal(only(result).state, 'success');
+  });
+
+  test('the same holds for the Gemini check run', () => {
+    const red = check('Gemini review', 'completed', 'failure');
+    const skipped = { ...check('Gemini review', 'completed', 'skipped'), completed_at: '2026-11-11T11:00:00Z' };
+    const result = runTally({ checks: [red, skipped, MUSE_DONE], reviews: [museReview({ findings: ['high'] })] });
+    assert.equal(only(result).state, 'failure');
+  });
+});
+
 test('keeps waiting while an enabled reviewer has not reported yet', () => {
   const result = runTally({
     checks: [MUSE_DONE],

@@ -186,6 +186,8 @@ DECLARE
   v_reason text := pg_catalog.btrim(p_reason);
   v_row record;
   v_replays integer;
+  v_replay_limit constant integer := 5;
+  v_updated integer;
   v_audit_id bigint;
 BEGIN
   IF p_capture_id IS NULL THEN
@@ -211,9 +213,10 @@ BEGIN
   SELECT pg_catalog.count(*)::integer INTO v_replays
     FROM public.piggyvest_webhook_capture_replay_audit a
     WHERE a.capture_id = p_capture_id;
-  IF v_replays >= 5 THEN
+  IF v_replays >= v_replay_limit THEN
     RETURN pg_catalog.jsonb_build_object(
-      'outcome', 'replay_limit_reached', 'operatorReplays', v_replays);
+      'outcome', 'replay_limit_reached', 'operatorReplays', v_replays,
+      'replayLimit', v_replay_limit);
   END IF;
 
   UPDATE public.piggyvest_webhook_captures c
@@ -227,11 +230,18 @@ BEGIN
       updated_at = clock_timestamp()
   WHERE c.id = p_capture_id
     AND c.processing_state = 'needs_review';
+  -- The row lock makes this unreachable today; if the row did not move, write
+  -- no audit and report no success (the whole call rolls back).
+  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  IF v_updated <> 1 THEN
+    RAISE EXCEPTION 'capture % was not requeued; retry', p_capture_id
+      USING ERRCODE = '40001';
+  END IF;
 
   INSERT INTO public.piggyvest_webhook_capture_replay_audit (
     capture_id, actor, reason, previous_state, previous_attempts, previous_last_error)
   VALUES (p_capture_id, v_actor, v_reason, v_row.processing_state, v_row.attempts,
-    pg_catalog.left(v_row.last_error, 200))
+    v_row.last_error)
   RETURNING id INTO v_audit_id;
 
   RETURN pg_catalog.jsonb_build_object(
@@ -239,7 +249,8 @@ BEGIN
     'auditId', v_audit_id,
     'previousAttempts', v_row.attempts,
     'previousLastError', v_row.last_error,
-    'operatorReplays', v_replays + 1);
+    'operatorReplays', v_replays + 1,
+    'replayLimit', v_replay_limit);
 END
 $$;
 

@@ -15,6 +15,7 @@ const goodSession = {
   login_name: 'ops_alice',
   login_safe: true,
   operator_member: true,
+  pipeline_member: false,
   grants_usable: true,
   secure_transport: true,
 };
@@ -55,6 +56,11 @@ describe('sessionFailures', () => {
     [{ login_name: 'service_role' }, 'shared platform login'],
     [{ login_safe: false }, 'elevated attribute'],
     [{ operator_member: false }, 'not a member'],
+    [{ pipeline_member: true }, 'capture pipeline'],
+    [
+      { login_name: 'baci_piggyvest_webhook_capture_drain' },
+      'shared platform login',
+    ],
     [{ grants_usable: false }, 'grants are not usable'],
     [{ secure_transport: false }, 'not encrypted'],
   ])('refuses %o', (override, message) => {
@@ -72,6 +78,7 @@ describe('createOperatorStore', () => {
       previousAttempts: 20,
       previousLastError: 'REPLAY_FAILED',
       operatorReplays: 1,
+      replayLimit: 5,
     };
     const fake = fakeClient(goodSession, { result });
     const store = createOperatorStore({
@@ -86,6 +93,10 @@ describe('createOperatorStore', () => {
     expect(fake.calls.map((call) => call.text)).toEqual([
       OPERATOR_VERIFY_SESSION_SQL,
       OPERATOR_STATEMENTS.requeue,
+    ]);
+    expect(fake.calls[0]?.values).toEqual([
+      'piggyvest_webhook_capture_operator',
+      ['piggyvest_webhook_capture_worker', 'piggyvest_webhook_intake'],
     ]);
     expect(fake.calls[1]?.values).toEqual([CAPTURE, 'fix deployed, replay']);
     expect(fake.configs[0]?.ssl).toEqual({ rejectUnauthorized: true });
@@ -169,6 +180,15 @@ describe('readOperatorConnection', () => {
     ],
     ['postgres:///postgres?host=db.example.test', 'host directly'],
     ['postgres://ops@localhost/postgres?host=db.example.test', 'host directly'],
+    // node-postgres uses the LAST repeated value, so these must not connect.
+    [
+      'postgres://ops@db.example.test/postgres?sslmode=verify-full&sslmode=no-verify',
+      'repeats sslmode',
+    ],
+    [
+      'postgres://ops@db.example.test/postgres?sslmode=verify-full&sslmode=disable',
+      'repeats sslmode',
+    ],
     ['mysql://ops@db.example.test/x', 'postgres URL'],
     ['not a url', 'valid URL'],
   ])('refuses %s before connecting', (url, message) => {

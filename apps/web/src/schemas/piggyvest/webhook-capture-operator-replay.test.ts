@@ -14,10 +14,11 @@ describe('operator replay wire schemas', () => {
         previousAttempts: 20,
         previousLastError: null,
         operatorReplays: 1,
+        replayLimit: 5,
       },
       { outcome: 'not_found' },
       { outcome: 'not_in_review', processingState: 'processed' },
-      { outcome: 'replay_limit_reached', operatorReplays: 5 },
+      { outcome: 'replay_limit_reached', operatorReplays: 5, replayLimit: 5 },
     ])
       expect(piggyvestCaptureRequeueResultSchema.parse(result)).toEqual(result);
   });

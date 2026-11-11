@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import {
   PIGGYVEST_CAPTURE_OPERATOR_FORBIDDEN_LOGINS,
   PIGGYVEST_CAPTURE_OPERATOR_ROLE,
+  PIGGYVEST_CAPTURE_PIPELINE_ROLES,
   type PiggyvestCaptureOperatorSession,
   type PiggyvestCaptureRequeueResult,
   type PiggyvestReviewCapture,
@@ -33,6 +34,9 @@ export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_n
   (login.rolcanlogin AND NOT login.rolsuper AND NOT login.rolbypassrls
     AND NOT login.rolcreaterole AND NOT login.rolcreatedb AND NOT login.rolreplication) AS login_safe,
   pg_catalog.pg_has_role(SESSION_USER, $1::text, 'MEMBER') AS operator_member,
+  EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
+    WHERE r.rolname = ANY ($2::text[])
+      AND pg_catalog.pg_has_role(SESSION_USER, r.oid, 'MEMBER')) AS pipeline_member,
   (pg_catalog.has_schema_privilege(SESSION_USER, 'piggyvest_capture_operator', 'USAGE')
     AND pg_catalog.has_function_privilege(SESSION_USER,
       'piggyvest_capture_operator.list_review_captures(integer)', 'EXECUTE')
@@ -83,6 +87,10 @@ export function sessionFailures(
     failures.push(
       `login is not a member of ${PIGGYVEST_CAPTURE_OPERATOR_ROLE}`
     );
+  if (session.pipeline_member)
+    failures.push(
+      'login is also a capture pipeline (worker or intake) login; use a separate operator login'
+    );
   if (!session.grants_usable) failures.push('operator grants are not usable');
   if (!session.secure_transport) failures.push('connection is not encrypted');
   return failures;
@@ -108,6 +116,14 @@ export function readOperatorConnection(connectionString: string): {
   }
   if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:')
     throw new OperatorRefusal('the connection string must be a postgres URL');
+  const names = [...url.searchParams.keys()];
+  const repeated = names.find((name, i) => names.indexOf(name) !== i);
+  // node-postgres keeps the LAST value of a repeated parameter, so
+  // ?sslmode=verify-full&sslmode=disable would slip past a first-value check.
+  if (repeated !== undefined)
+    throw new OperatorRefusal(
+      `the connection string repeats ${repeated}; give each parameter once`
+    );
   if (url.hostname === '' || url.searchParams.has('host'))
     throw new OperatorRefusal(
       'the connection string must name its host directly'
@@ -148,6 +164,7 @@ export function createOperatorStore(
       await client.connect();
       const verified = await client.query(OPERATOR_VERIFY_SESSION_SQL, [
         PIGGYVEST_CAPTURE_OPERATOR_ROLE,
+        PIGGYVEST_CAPTURE_PIPELINE_ROLES,
       ]);
       const session = piggyvestCaptureOperatorSessionSchema.safeParse(
         verified.rows[0]

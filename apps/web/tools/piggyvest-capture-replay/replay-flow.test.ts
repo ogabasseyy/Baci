@@ -63,7 +63,11 @@ function requeueInMemory(captureId: string, reason: string, actor: string) {
     return { outcome: 'not_in_review', processingState: capture.state };
   const replays = audit.filter((entry) => entry.captureId === captureId).length;
   if (replays >= 5)
-    return { outcome: 'replay_limit_reached', operatorReplays: replays };
+    return {
+      outcome: 'replay_limit_reached',
+      operatorReplays: replays,
+      replayLimit: 5,
+    };
   const previous = { attempts: capture.attempts, lastError: capture.lastError };
   capture.state = 'pending';
   capture.attempts = 0;
@@ -75,6 +79,7 @@ function requeueInMemory(captureId: string, reason: string, actor: string) {
     previousAttempts: previous.attempts,
     previousLastError: previous.lastError,
     operatorReplays: replays + 1,
+    replayLimit: 5,
   };
 }
 
@@ -108,6 +113,7 @@ const operatorSession = {
   login_name: 'ops_alice',
   login_safe: true,
   operator_member: true,
+  pipeline_member: false,
   grants_usable: true,
   secure_transport: true,
 };

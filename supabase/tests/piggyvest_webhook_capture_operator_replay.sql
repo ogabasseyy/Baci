@@ -143,7 +143,8 @@ BEGIN
     v_parked, '  ledger fix #4199 deployed, replay once  ');
   IF v_result->>'outcome' IS DISTINCT FROM 'requeued'
     OR (v_result->>'previousAttempts')::integer IS DISTINCT FROM 20
-    OR v_result->>'previousLastError' IS DISTINCT FROM 'REPLAY_FAILED' THEN
+    OR v_result->>'previousLastError' IS DISTINCT FROM 'REPLAY_FAILED'
+    OR (v_result->>'replayLimit')::integer IS DISTINCT FROM 5 THEN
     RAISE EXCEPTION 'parked capture was not requeued: %', v_result;
   END IF;
 
@@ -247,20 +248,26 @@ BEGIN
     END IF;
     RESET ROLE;
     UPDATE public.piggyvest_webhook_captures
-      SET processing_state = 'needs_review', last_error = 'REPLAY_FAILED_AGAIN'
+      SET processing_state = 'needs_review', last_error = repeat('E', 200)
       WHERE id = v_limit;
     SET LOCAL ROLE piggyvest_webhook_capture_operator;
   END LOOP;
   v_result := piggyvest_capture_operator.requeue_review_capture(
     v_limit, 'sixth replay must be refused');
   IF v_result->>'outcome' IS DISTINCT FROM 'replay_limit_reached'
-    OR (v_result->>'operatorReplays')::integer <> 5 THEN
+    OR (v_result->>'operatorReplays')::integer <> 5
+    OR (v_result->>'replayLimit')::integer IS DISTINCT FROM 5 THEN
     RAISE EXCEPTION 'replay limit was not enforced: %', v_result;
   END IF;
   RESET ROLE;
   IF (SELECT processing_state FROM public.piggyvest_webhook_captures WHERE id = v_limit)
     IS DISTINCT FROM 'needs_review' THEN
     RAISE EXCEPTION 'refused requeue changed the row';
+  END IF;
+  -- The audit keeps the exact parked error (last_error is capped at 200).
+  IF (SELECT count(*) FROM public.piggyvest_webhook_capture_replay_audit
+      WHERE capture_id = v_limit AND previous_last_error = repeat('E', 200)) <> 4 THEN
+    RAISE EXCEPTION 'audit truncated or lost the parked error';
   END IF;
 END
 $$;

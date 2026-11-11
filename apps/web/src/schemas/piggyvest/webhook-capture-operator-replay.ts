@@ -19,6 +19,15 @@ export const PIGGYVEST_CAPTURE_OPERATOR_FORBIDDEN_LOGINS: readonly string[] = [
   'authenticator',
   'anon',
   'authenticated',
+  // The capture pipeline's own logins: an operator must never also drain.
+  'baci_piggyvest_webhook_capture_drain',
+  'baci_piggyvest_webhook_intake',
+];
+
+/** Pipeline roles an operator login must not also hold (separation of duties). */
+export const PIGGYVEST_CAPTURE_PIPELINE_ROLES: readonly string[] = [
+  'piggyvest_webhook_capture_worker',
+  'piggyvest_webhook_intake',
 ];
 
 export const piggyvestReviewCaptureSchema = z.object({
@@ -50,6 +59,7 @@ export const piggyvestCaptureRequeueResultSchema = z.discriminatedUnion(
       previousAttempts: z.int().nonnegative(),
       previousLastError: z.string().nullable(),
       operatorReplays: z.int().positive(),
+      replayLimit: z.int().positive(),
     }),
     z.object({ outcome: z.literal('not_found') }),
     z.object({
@@ -59,6 +69,7 @@ export const piggyvestCaptureRequeueResultSchema = z.discriminatedUnion(
     z.object({
       outcome: z.literal('replay_limit_reached'),
       operatorReplays: z.int().positive(),
+      replayLimit: z.int().positive(),
     }),
   ]
 );
@@ -78,6 +89,7 @@ export const piggyvestCaptureOperatorSessionSchema = z.object({
   login_name: z.string(),
   login_safe: z.boolean(),
   operator_member: z.boolean(),
+  pipeline_member: z.boolean(),
   grants_usable: z.boolean(),
   secure_transport: z.boolean(),
 });

@@ -258,7 +258,10 @@ can be requeued at most five times.
 
 Create a personal operator login for each person who may replay, as a member
 of `piggyvest_webhook_capture_operator` only. Never use `postgres`,
-`service_role` or the drain login; the tool refuses them.
+`service_role`, the drain login or the intake login, and never add an operator
+login to `piggyvest_webhook_capture_worker` or `piggyvest_webhook_intake`: the
+tool refuses those logins by name and refuses any login that also holds a
+pipeline role, so one person cannot both requeue and drain.
 
 ```sql
 CREATE ROLE ops_<name> LOGIN PASSWORD '<generated, kept in your password manager>'

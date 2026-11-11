@@ -80,12 +80,15 @@ describe('capture replay CLI', () => {
       previousAttempts: 20,
       previousLastError: 'REPLAY_FAILED',
       operatorReplays: 1,
+      replayLimit: 7,
     });
     expect(
       await run(['requeue', CAPTURE, '--reason', 'fix #4199 deployed', '--yes'])
     ).toBe(0);
     expect(store.requeue).toHaveBeenCalledWith(CAPTURE, 'fix #4199 deployed');
     expect(out[0]).toContain('audit #9');
+    // The cap shown comes from the database, never a copied literal.
+    expect(out[0]).toContain('operator replay 1 of 7');
   });
 
   it('exits 1 when the database changed nothing', async () => {
@@ -133,7 +136,11 @@ describe('capture replay CLI', () => {
   it('describes every requeue outcome', () => {
     expect(describeRequeue({ outcome: 'not_found' })).toContain('No capture');
     expect(
-      describeRequeue({ outcome: 'replay_limit_reached', operatorReplays: 5 })
-    ).toContain('needs a code fix');
+      describeRequeue({
+        outcome: 'replay_limit_reached',
+        operatorReplays: 3,
+        replayLimit: 3,
+      })
+    ).toContain('the limit is 3');
   });
 });

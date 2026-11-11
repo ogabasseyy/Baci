@@ -50,13 +50,13 @@ const processIo: CliIo = {
 export function describeRequeue(result: PiggyvestCaptureRequeueResult): string {
   switch (result.outcome) {
     case 'requeued':
-      return `Requeued (audit #${result.auditId}, operator replay ${result.operatorReplays} of 5). It was parked after ${result.previousAttempts} attempts with ${result.previousLastError ?? 'no error'}. The drain picks it up on its next run.`;
+      return `Requeued (audit #${result.auditId}, operator replay ${result.operatorReplays} of ${result.replayLimit}). It was parked after ${result.previousAttempts} attempts with ${result.previousLastError ?? 'no error'}. The drain picks it up on its next run.`;
     case 'not_found':
       return 'No capture has that id. Nothing changed.';
     case 'not_in_review':
       return `That capture is ${result.processingState}, not parked for review. Nothing changed.`;
     case 'replay_limit_reached':
-      return `That capture was already requeued ${result.operatorReplays} times. Nothing changed; it needs a code fix, not another replay.`;
+      return `That capture was already requeued ${result.operatorReplays} times (the limit is ${result.replayLimit}). Nothing changed; it needs a code fix, not another replay.`;
   }
 }
 

@@ -73,6 +73,13 @@ anything is wrong. It resends, settles and releases nothing.
    - An inflow we recorded that PiggyVest does not list as settled (missing,
      pending or failed) **pages**
      (`not_on_provider`); check it at PiggyVest before acting.
+   - A list id without the PVB credit-id shape (`PVB…`) is a review line
+     only (`unverified_reference`): the list may use another id namespace than
+     our `pvb_reference`. If none of a wallet's settled list ids is PVB-shaped,
+     its recorded inflows missing from the list are review lines too, not
+     pages. Confirm list id equals `pvb_reference` on the first live credit.
+   - Internal transfers are matched on the category `p2p` after trimming and
+     lower-casing; any other category still pages.
    - An interest payout we recorded that the list does not show is a review
      line only: whether the list includes interest rows is not yet confirmed.
    - A wallet whose list cannot be read, is not newest first, runs past 10

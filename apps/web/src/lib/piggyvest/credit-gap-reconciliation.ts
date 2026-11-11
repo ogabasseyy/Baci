@@ -28,24 +28,41 @@ import type {
  * - `partial_credit` (review only): a settled `partial` PiggyVest credit
  *   neither ledger recorded. Some money may have moved, so a person looks;
  *   `pending` and `failed` credits moved none and are ignored.
+ * - `unverified_reference` (review only): the list id does not have the
+ *   PVB credit-id shape (`PVB…`), so the list may use another id namespace
+ *   than our `pvb_reference` and a mismatch proves nothing. When a wallet's
+ *   settled list rows carry no PVB-shaped id at all, its recorded inflows
+ *   missing from the list are downgraded to this kind too, instead of
+ *   paging `not_on_provider` for every wallet. Confirm list id ===
+ *   pvb_reference on the first live credit.
  *
  * Interest surplus alone (a wallet holding more than recorded principal) is
  * the balance check's `above_expected` and stays non-paging; this check only
  * pages on a specific PVB credit id.
  */
 export const SETTLE_MS = 6 * 3_600_000;
+/** PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11). */
+const PVB_CREDIT_ID = /^PVB/i;
+/**
+ * Wallet-to-wallet categories (our own savings transfers), compared trimmed
+ * and lower-cased. Only `p2p` has been observed; an unknown category still
+ * pages, which fails loud rather than silently skipping money.
+ */
+const INTERNAL_CATEGORIES: ReadonlySet<string> = new Set(['p2p']);
 export const EDGE_MS = 3_600_000;
 
 export type CreditGapKind =
   | 'unrecorded_credit'
   | 'not_on_provider'
   | 'interest_not_listed'
-  | 'partial_credit';
+  | 'partial_credit'
+  | 'unverified_reference';
 
 /** Findings listed for a person to review that never page on their own. */
 const REVIEW_ONLY: ReadonlySet<CreditGapKind> = new Set([
   'interest_not_listed',
   'partial_credit',
+  'unverified_reference',
 ]);
 
 export interface CreditGapFinding {
@@ -117,7 +134,7 @@ export function compareWalletCredits(
   let internalSkipped = 0;
   for (const credit of credits) {
     if (!isSettled(credit) || recorded.has(credit.id)) continue;
-    if (credit.category === 'p2p') {
+    if (INTERNAL_CATEGORIES.has(credit.category.trim().toLowerCase())) {
       internalSkipped += 1;
       continue;
     }
@@ -126,8 +143,11 @@ export function compareWalletCredits(
     findings.push({
       walletId: wallet.walletId,
       reference: credit.id,
-      kind:
-        credit.status === 'partial' ? 'partial_credit' : 'unrecorded_credit',
+      kind: !PVB_CREDIT_ID.test(credit.id)
+        ? 'unverified_reference'
+        : credit.status === 'partial'
+          ? 'partial_credit'
+          : 'unrecorded_credit',
       amountKobo: credit.amountKobo,
       category: credit.category,
       at: credit.createdAt,
@@ -156,7 +176,14 @@ export function compareWalletCredits(
           at: row.at,
         });
   };
-  reverse(wallet.inflow, 'not_on_provider');
+  // A settled listing with no PVB-shaped id cannot prove an inflow missing.
+  const settled = credits.filter(isSettled);
+  const namespaceUnproven =
+    settled.length > 0 && !settled.some((c) => PVB_CREDIT_ID.test(c.id));
+  reverse(
+    wallet.inflow,
+    namespaceUnproven ? 'unverified_reference' : 'not_on_provider'
+  );
   reverse(wallet.interest, 'interest_not_listed');
   return { findings, internalSkipped };
 }

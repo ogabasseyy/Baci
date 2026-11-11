@@ -32,6 +32,8 @@ const FINDING_TEXT: Record<CreditGapFinding['kind'], string> = {
     'we recorded this interest payout but the transaction list does not show it (review only: the list may not include interest)',
   partial_credit:
     'PiggyVest shows a partial credit we never recorded (review only: check at PiggyVest how much moved)',
+  unverified_reference:
+    'this PiggyVest list id does not look like a PVB credit id, so it cannot be matched to our records (review only: confirm the list id is the pvb_reference)',
 };
 
 const UNCHECKED_TEXT: Record<CreditGapUnchecked['reason'], string> = {

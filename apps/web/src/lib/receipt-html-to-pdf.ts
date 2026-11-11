@@ -151,14 +151,15 @@ async function renderDocument(
     const page = await browser.newPage();
     await page.setJavaScriptEnabled(false);
     await page.setRequestInterception(true);
+    let blockedResource = false;
     page.on('request', (request) => {
       // No network or file access: logo bytes were validated and embedded by
       // receipt-logo. This also blocks merchant-controlled URL redirects.
-      const decision = /^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(
+      const allowed = /^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(
         request.url()
-      )
-        ? request.continue()
-        : request.abort();
+      );
+      if (!allowed) blockedResource = true;
+      const decision = allowed ? request.continue() : request.abort();
       // Browser shutdown can race with this decision after a render expires.
       return decision.catch(() => undefined);
     });
@@ -166,6 +167,9 @@ async function renderDocument(
       waitUntil: 'load',
       timeout: remainingTime(deadline),
     });
+    if (blockedResource) {
+      throw new Error('Invoice contains an unsupported external resource');
+    }
     return await page.pdf({
       format: 'A4',
       printBackground: true,

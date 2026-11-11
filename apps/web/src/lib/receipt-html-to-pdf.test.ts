@@ -95,6 +95,22 @@ describe('invoice HTML PDF isolation', () => {
     handle(request);
     expect(request.continue).toHaveBeenCalledOnce();
   });
+  it('rejects an invoice when a required external asset is blocked', async () => {
+    mocks.setContent.mockImplementationOnce(async () => {
+      const handler = mocks.on.mock.calls[0][1];
+      await handler({
+        url: () => 'https://example.com/logo.png',
+        abort: vi.fn().mockResolvedValue(undefined),
+      });
+    });
+
+    await expect(
+      renderHtmlToPdf('<img src="https://example.com/logo.png">')
+    ).rejects.toThrow('Invoice contains an unsupported external resource');
+    expect(mocks.pdf).not.toHaveBeenCalled();
+    expect(mocks.close).toHaveBeenCalledOnce();
+  });
+
   it('handles interception rejection when the browser closes the request', async () => {
     await renderHtmlToPdf('<html>invoice</html>');
     const handle = mocks.on.mock.calls[0][1];

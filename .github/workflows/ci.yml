@@ -642,8 +642,10 @@ jobs:
           .github/scripts/storefront-release-coherence-escalation-safety.test.mjs
           .github/scripts/storefront-release-coherence-host-purge.test.mjs
           .github/scripts/storefront-release-coherence-warming.test.mjs
+          .github/scripts/storefront-release-coherence-deploy-contract.test.mjs
           .github/scripts/storefront-sitemap-purge.test.mjs
           .github/scripts/cloudflare-purge-cache.test.mjs
+          .github/scripts/cloudflare-purge-cache-hosts.test.mjs
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
           .github/scripts/check-gigl-cutover-latch.test.mjs

@@ -223,6 +223,16 @@ describe('readOperatorConnection', () => {
       'not the pooler',
     ],
     ['postgres://ops@my-pgbouncer.internal:5432/postgres', 'not the pooler'],
+    // Query parameters override the URL in node-postgres: only sslmode passes.
+    [
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?port=6543',
+      'only sslmode is allowed',
+    ],
+    [
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=verify-full&options=-c%20role%3Dpostgres',
+      'only sslmode is allowed',
+    ],
+    ['postgres://ops@127.0.0.1/postgres?port=6543', 'only sslmode is allowed'],
     // Allowlist: any other host or port is refused, pooler-looking or not.
     ['postgres://ops@db-proxy.corp.internal:5432/postgres', 'not the pooler'],
     [

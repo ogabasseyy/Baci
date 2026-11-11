@@ -126,6 +126,7 @@ export function sessionFailures(
 // not part of the contract, so any lowercase alphanumeric ref is accepted.
 const DIRECT_HOST = /^db\.[a-z0-9]+\.supabase\.co$/;
 const DIRECT_PORTS = new Set(['', '5432']);
+const ALLOWED_PARAMS = new Set(['sslmode']);
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
@@ -175,6 +176,14 @@ export function readOperatorConnection(connectionString: string): {
   for (const name of ['sslrootcert', 'sslcert', 'sslkey', 'ssl'])
     if (!loopback && url.searchParams.has(name))
       throw new OperatorRefusal(`remove ${name} from the connection string`);
+  // node-postgres copies every query parameter into the client config and it
+  // wins over the URL (?port=6543 would reach the pooler past the host check),
+  // so only sslmode may ride along.
+  const unknown = names.find((name) => !ALLOWED_PARAMS.has(name));
+  if (unknown !== undefined)
+    throw new OperatorRefusal(
+      `remove ${unknown} from the connection string; only sslmode is allowed`
+    );
   return { loopback };
 }
 

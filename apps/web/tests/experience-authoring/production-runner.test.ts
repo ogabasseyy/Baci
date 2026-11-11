@@ -4,13 +4,34 @@ import type {
   ExperienceManifest,
   PublicBootstrap,
 } from '@baci/shared/experience';
+import { NextRequest } from 'next/server';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+const web = vi.hoisted(() => ({ client: undefined as unknown }));
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => web.client,
+}));
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: async () => ({ valid: true }),
+}));
+vi.mock('@/lib/get-merchant-for-api-request', () => ({
+  getMerchantForApiRequest: async (
+    _client: unknown,
+    _user: string,
+    input: { requestedMerchantId: string }
+  ) => ({
+    merchantId: input.requestedMerchantId,
+    staffAccess: { isOwner: true },
+  }),
+}));
+
+import { POST as previewPost } from '@/app/api/builder-experience/preview/route';
 import { queueExperienceBuild } from '@/lib/experience/build-service';
 import { runExperienceBuild } from '@/lib/experience/local-build-supervisor';
 import { digestBytes } from '@/lib/experience/manifest-digest';
+import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
 import { createPreviewLaunch } from '@/lib/experience/preview-launch';
 import { createPreviewVault } from '@/lib/experience/preview-service';
 import {
@@ -215,6 +236,30 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       previewOrigin,
       buildId: build.buildId,
       prerender,
+      viaWeb: async (client) => {
+        web.client = f.owner.supabase;
+        const uninstall = installRemoteOwnerPreview(client);
+        try {
+          const response = await previewPost(
+            new NextRequest(
+              'https://usebaci.com/api/builder-experience/preview',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  merchantId: f.merchantId,
+                  buildId: build.buildId,
+                  routeId: 'home',
+                }),
+              }
+            )
+          );
+          expect(response.status).toBe(200);
+          return await response.json();
+        } finally {
+          uninstall();
+          web.client = undefined;
+        }
+      },
     });
     const delivery = createProductionPreviewDelivery({
       vault,

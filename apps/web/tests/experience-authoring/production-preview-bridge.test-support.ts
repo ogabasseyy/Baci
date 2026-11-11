@@ -23,6 +23,11 @@ export async function launchThroughOwnerBridge(input: {
   buildId: string;
   hostOrigin: string;
   previewOrigin: string;
+  viaWeb(
+    client: ReturnType<typeof createOwnerPreviewBridgeClient>
+  ): Promise<
+    Awaited<ReturnType<ReturnType<typeof createOwnerPreviewBridgeClient>>>
+  >;
 }) {
   const { fixture: f } = input;
   const directory = new URL(
@@ -109,11 +114,7 @@ export async function launchThroughOwnerBridge(input: {
         error: null,
       } as never);
     try {
-      const launch = await client(f.owner.supabase, {
-        merchantId: f.merchantId,
-        buildId: input.buildId,
-        routeId: 'home',
-      });
+      const launch = await input.viaWeb(client);
       expect(launch.merchantId).toBe(f.merchantId);
       expect(JSON.stringify(launch)).not.toContain(f.owner.accessToken);
       return launch;

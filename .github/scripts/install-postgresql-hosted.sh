@@ -53,10 +53,12 @@ apt_get() {
   timeout --kill-after=10 "$APT_LIMIT_SECONDS" sudo apt-get "${APT_BOUNDS[@]}" "$@"
 }
 
-# Recommended extras are skipped. Checked against the noble-pgdg package index for this build: postgresql-18
-# recommends postgresql-18-jit (the JIT library; PostgreSQL turns JIT off for the session when it is absent)
-# and sysstat, postgresql-client-18 recommends nothing, and the contrib modules ship inside postgresql-18
-# (it provides postgresql-contrib-18). The suites need none of the extras, and they would come from Ubuntu.
+# Recommended extras are skipped. Checked against the noble-pgdg package index for 18.6-1.pgdg24.04+2:
+# postgresql-18 recommends postgresql-18-jit (the JIT library; PostgreSQL turns JIT off for the session when
+# it is absent) and sysstat, postgresql-client-18 recommends nothing, and the contrib modules ship inside
+# postgresql-18 (it provides postgresql-contrib-18). The suites need none of the extras, and they would come
+# from Ubuntu. Re-check this list whenever PG_BUILD changes: the installer test fails until the build named
+# here matches PG_BUILD.
 install_pinned() {
   apt_get install -y --no-install-recommends "postgresql-18=${PG_BUILD}" "postgresql-client-18=${PG_BUILD}"
 }
@@ -108,7 +110,13 @@ echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt n
 # Ubuntu's own servers once and refresh every list. Azure stays on the list as the last choice.
 if ! { apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update && install_pinned; }; then
   echo "The PostgreSQL-only refresh or the install failed; switching to the canonical Ubuntu mirrors and refreshing every list once."
-  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n' |
+  # Keep a record of the image's own list in the job log before it is replaced.
+  if [ -f "$UBUNTU_MIRRORS" ]; then
+    echo "Replacing the mirror list ${UBUNTU_MIRRORS}:"
+    sed 's/^/  /' "$UBUNTU_MIRRORS"
+  fi
+  # All three entries use https; Azure's mirror answers over it too.
+  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\nhttps://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n' |
     sudo tee "$UBUNTU_MIRRORS" >/dev/null
   { apt_get update && install_pinned; } || {
     echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the canonical Ubuntu mirrors." >&2

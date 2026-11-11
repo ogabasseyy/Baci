@@ -249,7 +249,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     'sudo tee /etc/apt/apt-mirrors.txt',
     '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:1',
     '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:2',
-    '  stdin: http://azure.archive.ubuntu.com/ubuntu/\tpriority:3',
+    '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:3',
     `timeout ${APT_LIMIT_SECONDS}`,
     `sudo apt-get ${APT_BOUNDS} update`,
     `timeout ${APT_LIMIT_SECONDS}`,
@@ -261,8 +261,15 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /canonical Ubuntu mirrors/);
     assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
-    // Azure is demoted, not deleted, so the list keeps a second path. It is the only cleartext http line.
-    assert.deepEqual(result.commands.filter((line) => line.includes('http://')), ['  stdin: http://azure.archive.ubuntu.com/ubuntu/\tpriority:3']);
+    // Azure is demoted, not deleted, so the list keeps a second path. Every entry, Azure included, uses https.
+    assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
+  });
+
+  test('names the audited PostgreSQL build in the Recommends comment, so a pin bump forces a new audit', () => {
+    const script = readFileSync(SCRIPT, 'utf8');
+    const build = /^PG_BUILD='([^']+)'$/m.exec(script)?.[1];
+    assert.ok(build, 'the installer must define PG_BUILD');
+    assert.ok(script.includes(`package index for ${build}:`), `the --no-install-recommends comment must name ${build}`);
   });
 
   test('takes the same fallback when the PGDG-only refresh itself fails, without trying the install first', () => {

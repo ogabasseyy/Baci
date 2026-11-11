@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 11 November 2026 against source revision
-`b851d8066dd0fecb82642303c84defed3b94509a`. Invoice previews and PDFs share the merchant template.
+`fdac8411c5d3d2ac608623d67d0e65599bd32fc5`. Invoice previews and PDFs share the merchant template.
 Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment

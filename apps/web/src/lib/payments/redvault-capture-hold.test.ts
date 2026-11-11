@@ -4,6 +4,8 @@ import { captureOrHoldRedvaultPayment } from '@/lib/payments/redvault-capture-ho
 function buildRpcClient(
   captureData: unknown,
   captureError: unknown = null,
+  // null = the classification RPC returns no row (order missing or owned by
+  // another merchant). A row with a NULL method is mocked directly below.
   paymentMethod: string | null = 'uba_redvault'
 ) {
   const rpc = vi

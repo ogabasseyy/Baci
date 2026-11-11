@@ -20,6 +20,7 @@ import {
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenVerificationForms } from './OxygenVerificationForms';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import type { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
 import type { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
 import type { useOxygenBookingProgress } from './use-oxygen-booking-progress';
@@ -191,11 +192,7 @@ export function OxygenProviderStages({
             approvalBusy={disabled}
             approvalCodeStarted={snapshot.approvalOtpReady}
             refreshOffers={
-              snapshot.stage === 'approval_required' &&
-              !snapshot.pending &&
-              !s.offers &&
-              !s.paymentComplete &&
-              !s.setupComplete
+              canRefreshSavedOxygenOffers(snapshot)
                 ? () => submit({ action: 'refresh_eligibility' })
                 : undefined
             }
@@ -222,11 +219,7 @@ export function OxygenProviderStages({
             onReplace={() => setReplacingAddress(true)}
             onCheck={bookingProgress.checkAddress}
             onRefreshOffers={
-              s?.booking?.status === 'BOOKED' &&
-              !s.offers &&
-              !snapshot.pending &&
-              !s.paymentComplete &&
-              !s.setupComplete
+              canRefreshSavedOxygenOffers(snapshot)
                 ? () => submit({ action: 'refresh_eligibility' })
                 : undefined
             }

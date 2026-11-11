@@ -126,6 +126,8 @@ export function createProviderJourney() {
           max_loan_amount: 400000,
           minimum_loan_amount: 10000,
           max_tenure: 12,
+          tenure_unit: 'Monthly',
+          offers: [{ loan_amount: 400000, tenor: 3 }],
         };
       if (operation === 'approval_otp')
         return { activity_token: 'synthetic-activity-token' };

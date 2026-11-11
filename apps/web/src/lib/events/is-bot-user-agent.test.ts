@@ -23,3 +23,11 @@ describe('bugfix: ordinary agents mentioning preview or monitor', () => {
     expect(isBotUserAgent('Mozilla/5.0 MyApp/1.0 Monitor Preview')).toBe(false);
   });
 });
+
+describe('bugfix: device names ending in bot', () => {
+  it('does not flag an Android phone called CUBOT', () => {
+    expect(
+      isBotUserAgent('Mozilla/5.0 (Linux; Android 13; CUBOT X30) Chrome/120')
+    ).toBe(false);
+  });
+});

@@ -100,7 +100,10 @@ export async function POST(request: NextRequest) {
     );
   }
   const input = parsed.data;
-  if (isBotUserAgent(request.headers.get('user-agent'))) {
+  if (
+    (input.source ?? 'web') === 'web' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
     // Acknowledge but do not record crawler traffic.
     return NextResponse.json({ success: true, event_id: input.event_id });
   }

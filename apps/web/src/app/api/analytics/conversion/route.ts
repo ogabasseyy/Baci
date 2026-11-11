@@ -11,6 +11,7 @@ import {
 } from '@/lib/events/event-pipeline-config';
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
+import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
 import { redactStoredPageUrl } from '@/lib/events/redact-stored-page-url';
@@ -69,6 +70,16 @@ export async function POST(request: NextRequest) {
       { error: 'Event timestamp outside allowed window' },
       { status: 400 }
     );
+  }
+  if (
+    input.event_source === 'web' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
+    return NextResponse.json({
+      event_id: input.event_id,
+      results: {},
+      success: true,
+    });
   }
   const eventType = normalizeEventType(input.event_name);
   if (!eventType) {

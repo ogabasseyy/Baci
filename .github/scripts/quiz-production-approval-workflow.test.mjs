@@ -63,9 +63,16 @@ test('bugfix: a merge-queue run checks out the trusted base commit, never pull r
     '${{ github.event.merge_group.base_sha || github.sha }}'
   );
   assert.equal(checkouts[0].with['persist-credentials'], false);
+  // A queue run whose payload lacks the base commit must fail before anything is checked out or installed, instead
+  // of falling back to the merge commit while the secrets are in scope.
+  const guard = job.steps[0];
+  assert.match(guard.name, /Refuse a merge-queue run without a trusted base commit/);
+  assert.equal(guard.if, "github.event_name == 'merge_group' && !github.event.merge_group.base_sha");
+  assert.equal(guard.uses, undefined);
+  assert.match(guard.run, /exit 1/);
   // Everything that runs repository code (install scripts, the check itself) comes after the pinned checkout.
   const firstCheckout = job.steps.indexOf(checkouts[0]);
-  assert.equal(firstCheckout, 0);
+  assert.equal(firstCheckout, 1);
   assert.ok(
     job.steps.findIndex(({ name }) => name === 'Verify Quiz Production Approval') >
       firstCheckout

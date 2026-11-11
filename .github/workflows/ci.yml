@@ -740,6 +740,13 @@ jobs:
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && github.event_name == 'push' && fromJSON('["self-hosted","Linux","X64","baci-deploy"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
+      # Fail closed: a queue run whose payload lacks the base commit must not fall back to the merge commit
+      # (which contains pull request code) while the secrets are in scope. Nothing is checked out yet here.
+      - name: Refuse a merge-queue run without a trusted base commit
+        if: github.event_name == 'merge_group' && !github.event.merge_group.base_sha
+        run: |
+          echo "::error::the merge_group payload has no base_sha; refusing to run the secret-bearing quiz check on the merge commit"
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1

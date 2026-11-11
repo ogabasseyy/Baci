@@ -83,6 +83,18 @@ and enrollment gates in the release sequence below.
   health counts are readable with the public anon key by design: an
   accepted, unauthenticated operational signal with no cart, shopper or
   merchant data.
+  Sending is only half of delivery. The second live switch-on
+  (2026-11-11) found every browser was refused when joining its channel:
+  Realtime authorizes a private-channel join with a probe row that never
+  sets `private`, and the receiver policies required `private IS TRUE`
+  (fixed by `20261111100000`). Notices were sent and acknowledged while
+  carts converged only through the 15-second fallback poll, and the send
+  health check stayed green. After any change to the receiver policies or
+  a Realtime upgrade, verify a real join: with live updates on, a
+  storefront tab must poll `/api/storefront/cart` about once a minute, not
+  every 15 seconds, and a second tab must update within about a second of
+  a cart edit. `supabase/tests/commerce_cart_receive_join_probe.sql`
+  replays the join check with a production-shaped probe.
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
 - Worker credential boundary: `20261015157000` revokes the

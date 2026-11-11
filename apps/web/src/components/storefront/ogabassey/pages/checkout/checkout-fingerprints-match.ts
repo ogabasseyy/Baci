@@ -14,6 +14,7 @@ export function checkoutFingerprintsMatch(
         return value;
       const {
         selectedQuoteId: _quote,
+        requestedWalletAmount: _request,
         merchantRateId = null,
         giftWrappingCost = 0,
         items,
@@ -51,15 +52,33 @@ function readFingerprint(value: string): Record<string, unknown> | null {
   }
 }
 
-/** Save the ledger-confirmed debit on a financing checkpoint. */
-export function withConfirmedWalletDebit(fingerprint: string, debit: number): string {
-  const checkout = readFingerprint(fingerprint);
-  return checkout
-    ? stableStringify({ ...checkout, useWalletCredit: true, walletAmountUsed: debit })
-    : fingerprint;
+function readRequestedWalletAmount(checkout: Record<string, unknown> | null) {
+  if (checkout?.useWalletCredit !== true) return undefined;
+  const amount = checkout.requestedWalletAmount ?? checkout.walletAmountUsed;
+  return typeof amount === 'number' && Number.isFinite(amount) ? amount : undefined;
 }
 
-/** A refresh may clear the selection or show the actual debit instead of the request. */
+/** Save the confirmed debit and remember the original request for display lag. */
+export function withConfirmedWalletDebit(
+  fingerprint: string,
+  debit: number,
+  previousFingerprint?: string
+): string {
+  const checkout = readFingerprint(fingerprint);
+  if (!checkout) return fingerprint;
+
+  const requested = previousFingerprint
+    ? readRequestedWalletAmount(readFingerprint(previousFingerprint))
+    : readRequestedWalletAmount(checkout);
+  return stableStringify({
+    ...checkout,
+    useWalletCredit: true,
+    walletAmountUsed: debit,
+    ...(requested !== undefined && requested > debit ? { requestedWalletAmount: requested } : {}),
+  });
+}
+
+/** Wallet display may show zero, the confirmed debit, or the original request. */
 function matchesConfirmedWalletDebit(
   savedFingerprint: string,
   currentFingerprint: string,
@@ -74,14 +93,18 @@ function matchesConfirmedWalletDebit(
   }
   const saved = readFingerprint(savedFingerprint);
   const current = readFingerprint(currentFingerprint);
+  const requested = readRequestedWalletAmount(saved);
   if (
     !saved || !current ||
     saved.useWalletCredit !== true ||
     typeof saved.walletAmountUsed !== 'number' ||
+    !Number.isFinite(saved.walletAmountUsed) ||
     saved.walletAmountUsed < confirmedWalletDebit ||
     typeof current.useWalletCredit !== 'boolean' ||
     (current.walletAmountUsed !== 0 &&
-      (current.useWalletCredit !== true || current.walletAmountUsed !== confirmedWalletDebit))
+      (current.useWalletCredit !== true ||
+        (current.walletAmountUsed !== confirmedWalletDebit &&
+          !(requested !== undefined && requested >= confirmedWalletDebit && current.walletAmountUsed === requested))))
   ) {
     return false;
   }

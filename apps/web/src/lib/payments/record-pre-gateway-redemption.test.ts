@@ -34,14 +34,28 @@ describe('recordPreGatewayRedemption', () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
-  it('keeps unexpected database failures generic', async () => {
+  it('returns review for an unexpected database error without exposing its details', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,
-      error: { message: 'private database detail' },
+      error: { code: '42501', message: 'private database detail' },
     });
     await expect(
       recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
-    ).rejects.toThrow('Store credit could not be confirmed');
+    ).resolves.toEqual({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+      message: 'Store credit requires payment review.',
+    });
+  });
+
+  it('returns review when the projection request rejects with an unknown outcome', async () => {
+    mocks.rpc.mockRejectedValue(new Error('connection dropped'));
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
   });
 
   it.each([

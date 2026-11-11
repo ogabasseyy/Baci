@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { withConfirmedWalletDebit } from './checkout-fingerprints-match';
 import { resolvePendingCheckoutOrder } from './pending-checkout-order';
 
 const pendingOrder = {
@@ -93,15 +94,15 @@ it.each([false, true])('reuses the same saved order after a wallet refresh (wall
   expect(fetchImpl.mock.calls[1][0]).toBe('/api/orders/reuse');
 });
 
-it('consults the server reservation before switching a partially redeemed order after a wallet refresh', async () => {
+it.each([0, 20000])('consults the server reservation before switching when the UI shows %s', async (amount) => {
   const before = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000 });
-  const after = JSON.stringify({ useWalletCredit: false, walletAmountUsed: 0 });
+  const after = JSON.stringify({ useWalletCredit: amount > 0, walletAmountUsed: amount });
   const fetchImpl = vi.fn<typeof fetch>()
     .mockResolvedValueOnce(Response.json({ id: 'order-1', payment_status: 'unpaid', total: 50000 }))
     .mockResolvedValueOnce(Response.json({ error: 'Order is no longer reusable' }, { status: 409 }));
   await expect(resolvePendingCheckoutOrder({
     ...input,
-    pendingOrder: { ...pendingOrder, walletAmountUsed: 10000, checkoutFingerprint: before },
+    pendingOrder: { ...pendingOrder, walletAmountUsed: 10000, checkoutFingerprint: withConfirmedWalletDebit(before, 10000) },
     checkoutFingerprint: after,
     paymentMethod: 'paystack',
     fetchImpl,

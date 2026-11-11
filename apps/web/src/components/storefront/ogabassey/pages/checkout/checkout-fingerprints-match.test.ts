@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
+import { checkoutFingerprintsMatch, withConfirmedWalletDebit } from './checkout-fingerprints-match';
 
 it('recovers a pending order saved before quote UUIDs were removed from fingerprints', () => {
   expect(
@@ -110,4 +110,14 @@ it.each([
 ])('does not normalize a conflicting current selection %j', (selection) => {
   const saved = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000 });
   expect(checkoutFingerprintsMatch(saved, JSON.stringify(selection), 10000)).toBe(false);
+});
+
+it('recovers a canonical checkpoint while the UI still shows the original wallet request', () => {
+  const original = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000, items: ['same'] });
+  const saved = withConfirmedWalletDebit(original, 15000);
+  expect(JSON.parse(saved)).toMatchObject({ walletAmountUsed: 15000, requestedWalletAmount: 20000 });
+  expect(checkoutFingerprintsMatch(saved, original, 15000)).toBe(true);
+  expect(checkoutFingerprintsMatch(saved, original.replace('20000', '21000'), 15000)).toBe(false);
+  const refreshed = withConfirmedWalletDebit(original.replace('20000', '0'), 15000, saved);
+  expect(checkoutFingerprintsMatch(refreshed, original, 15000)).toBe(true);
 });

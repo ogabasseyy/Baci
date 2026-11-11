@@ -26,7 +26,6 @@ export async function recordPreGatewayRedemption(
   supabase: StoreCreditProjectionClient
 ) {
   if (savingsAmountUsed === 0 && walletAmountUsed === 0) return;
-  const failure = 'Store credit could not be confirmed';
   if (
     ![orderTotal, savingsAmountUsed, walletAmountUsed].every(Number.isFinite) ||
     orderTotal <= 0 ||
@@ -36,9 +35,16 @@ export async function recordPreGatewayRedemption(
   )
     return reconciliationFailure;
 
-  const { data, error } = await supabase.rpc('record_order_store_credit', {
-    p_order_id: orderId,
-  });
+  let projection: Awaited<ReturnType<StoreCreditProjectionClient['rpc']>>;
+  try {
+    projection = await supabase.rpc('record_order_store_credit', {
+      p_order_id: orderId,
+    });
+  } catch {
+    // An interrupted request leaves the projection outcome unknown.
+    return reconciliationFailure;
+  }
+  const { data, error } = projection;
   if (error && typeof error === 'object' && 'code' in error) {
     if (error.code === '23514') return reconciliationFailure;
     if (error.code === '40001') {
@@ -48,7 +54,7 @@ export async function recordPreGatewayRedemption(
       return needsReview ? reconciliationFailure : contentionFailure;
     }
   }
-  if (error) throw new Error(failure);
+  if (error) return reconciliationFailure;
   const credit: unknown = data;
   if (
     !credit ||

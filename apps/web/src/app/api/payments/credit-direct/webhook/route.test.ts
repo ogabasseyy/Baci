@@ -497,23 +497,28 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       expect(supabase.rpc).not.toHaveBeenCalled();
     });
 
-    it('requires review when the reference search returns only part of its candidates', async () => {
+    it.each([
+      [[]],
+      [[mockOrder]],
+    ])('requires review when the reference search omits candidates (%j)', async (visibleOrders) => {
       vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
       const supabase = createMockSupabaseClient();
       vi.mocked(createServiceClient).mockReturnValue(supabase as never);
       const chain = supabase.from('orders');
       chain.ilike.mockResolvedValue({
-        data: [mockOrder],
+        data: visibleOrders,
         error: null,
         count: 2,
       });
 
+      supabase.from.mockClear();
       const response = await POST(createMockRequest(merchantPaymentPayload));
 
       expect(response.status).toBe(409);
       expect(await response.json()).toMatchObject({
         code: 'CREDIT_DIRECT_REFERENCE_REVIEW_REQUIRED',
       });
+      expect(supabase.from).toHaveBeenCalledTimes(1);
       expect(chain.update).not.toHaveBeenCalled();
     });
 

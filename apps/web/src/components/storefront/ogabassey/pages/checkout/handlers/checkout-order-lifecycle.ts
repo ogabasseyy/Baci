@@ -217,8 +217,8 @@ export async function runCheckoutOrderLifecycle({
     total: order.total ?? fallbackTotal,
     orderNumber: createdOrderNumber,
   };
-  const walletAmountUsed = wallet?.amountUsed ??
-    (reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder.walletAmountUsed : undefined);
+  const previousOrder = reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder : undefined;
+  const walletAmountUsed = wallet?.amountUsed ?? previousOrder?.walletAmountUsed;
   const snapshot: PendingCheckoutOrderSnapshot = {
     orderId: order.id,
     orderNumber: order.order_number,
@@ -229,7 +229,7 @@ export async function runCheckoutOrderLifecycle({
     checkoutFingerprint:
       walletAmountUsed && walletAmountUsed > 0 &&
       (reuse.paymentMethod === 'credit_direct' || reuse.paymentMethod === 'oxygen')
-        ? withConfirmedWalletDebit(fingerprint, walletAmountUsed)
+        ? withConfirmedWalletDebit(fingerprint, walletAmountUsed, previousOrder?.checkoutFingerprint)
         : fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,

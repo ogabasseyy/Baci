@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -82,108 +82,129 @@ export async function runWithEntries(
     browser = {},
     browserRaw,
     extra = [],
+    nodeExecutable = process.execPath,
     pages,
     provenance,
     provenanceRaw,
     shot = {},
     shotRaw,
+    temporaryRoot = tmpdir(),
   } = {}
 ) {
-  const dir = await mkdtemp(join(tmpdir(), 'pilot-settings-cache-'));
-  const harPath = join(dir, 'browsertime.har');
-  const pngPath = join(dir, 'shot.png');
-  await writeFile(
-    harPath,
-    JSON.stringify({
-      log: {
-        entries: entries.map((item) => {
-          // Plain response object, or { cache, response } for retained
-          // disk-cache markers.
-          const shaped =
-            item && typeof item === 'object' && 'response' in item
-              ? item
-              : { response: item };
-          return {
-            ...(shaped.cache === undefined ? {} : { cache: shaped.cache }),
-            request: {
-              headers: [
-                {
-                  name: 'User-Agent',
-                  value: 'X Chrome/154.0.0.0 Y',
-                },
-              ],
-            },
-            response: shaped.response,
-          };
-        }),
-        pages: pages ?? [{ ...DATED_PAGE }],
-      },
-    })
-  );
-  const shotBytes = await pngBuffer(750, 1334);
-  await writeFile(pngPath, shotBytes);
-  // Provenance is a runner artifact file: {} writes a valid one bound
-  // to the dated pages, a string passes through literally (bogus
-  // paths), and provenanceRaw writes non-JSON bytes. Screenshots and
-  // browser launches bind by default (their gates require them);
-  // shot:false / browser:false omit the binding for the
-  // missing-provenance cases.
-  const provenanceArgs = [];
-  if (typeof provenance === 'string') {
-    provenanceArgs.push(`--cache-provenance=${provenance}`);
-  } else if (provenance !== undefined) {
-    provenanceArgs.push(await provenanceArg(dir, provenance));
-  }
-  if (typeof browser === 'string') {
-    provenanceArgs.push(`--browser-provenance=${browser}`);
-  } else if (browser !== false) {
-    provenanceArgs.push(await browserProvenanceArg(dir, browser ?? {}));
-  }
-  if (browserRaw !== undefined) {
-    const rawPath = join(dir, 'launch-raw.json');
-    await writeFile(rawPath, browserRaw);
-    provenanceArgs.push(`--browser-provenance=${rawPath}`);
-  }
-  if (provenanceRaw !== undefined) {
-    const rawPath = join(dir, 'reset-raw.json');
-    await writeFile(rawPath, provenanceRaw);
-    provenanceArgs.push(`--cache-provenance=${rawPath}`);
-  }
-  if (typeof shot === 'string') {
-    provenanceArgs.push(`--screenshot-provenance=${shot}`);
-  } else if (shot !== false) {
-    provenanceArgs.push(
-      await screenshotProvenanceArg(dir, shotBytes, shot ?? {})
+  const dir = await mkdtemp(join(temporaryRoot, 'pilot-settings-cache-'));
+  try {
+    const harPath = join(dir, 'browsertime.har');
+    const pngPath = join(dir, 'shot.png');
+    await writeFile(
+      harPath,
+      JSON.stringify({
+        log: {
+          entries: entries.map((item) => {
+            // Plain response object, or { cache, response } for retained
+            // disk-cache markers.
+            const shaped =
+              item && typeof item === 'object' && 'response' in item
+                ? item
+                : { response: item };
+            return {
+              ...(shaped.cache === undefined ? {} : { cache: shaped.cache }),
+              request: {
+                headers: [
+                  {
+                    name: 'User-Agent',
+                    value: 'X Chrome/154.0.0.0 Y',
+                  },
+                ],
+              },
+              response: shaped.response,
+            };
+          }),
+          pages: pages ?? [{ ...DATED_PAGE }],
+        },
+      })
     );
+    const shotBytes = await pngBuffer(750, 1334);
+    await writeFile(pngPath, shotBytes);
+    // Provenance is a runner artifact file: {} writes a valid one bound
+    // to the dated pages, a string passes through literally (bogus
+    // paths), and provenanceRaw writes non-JSON bytes. Screenshots and
+    // browser launches bind by default (their gates require them);
+    // shot:false / browser:false omit the binding for the
+    // missing-provenance cases.
+    const provenanceArgs = [];
+    if (typeof provenance === 'string') {
+      provenanceArgs.push(`--cache-provenance=${provenance}`);
+    } else if (provenance !== undefined) {
+      provenanceArgs.push(await provenanceArg(dir, provenance));
+    }
+    if (typeof browser === 'string') {
+      provenanceArgs.push(`--browser-provenance=${browser}`);
+    } else if (browser !== false) {
+      provenanceArgs.push(await browserProvenanceArg(dir, browser ?? {}));
+    }
+    if (browserRaw !== undefined) {
+      const rawPath = join(dir, 'launch-raw.json');
+      await writeFile(rawPath, browserRaw);
+      provenanceArgs.push(`--browser-provenance=${rawPath}`);
+    }
+    if (provenanceRaw !== undefined) {
+      const rawPath = join(dir, 'reset-raw.json');
+      await writeFile(rawPath, provenanceRaw);
+      provenanceArgs.push(`--cache-provenance=${rawPath}`);
+    }
+    if (typeof shot === 'string') {
+      provenanceArgs.push(`--screenshot-provenance=${shot}`);
+    } else if (shot !== false) {
+      provenanceArgs.push(
+        await screenshotProvenanceArg(dir, shotBytes, shot ?? {})
+      );
+    }
+    if (shotRaw !== undefined) {
+      const rawPath = join(dir, 'shot-raw.json');
+      await writeFile(rawPath, shotRaw);
+      provenanceArgs.push(`--screenshot-provenance=${rawPath}`);
+    }
+    const { execFile } = await import('node:child_process');
+    const report = await new Promise((resolve, reject) => {
+      execFile(
+        nodeExecutable,
+        [
+          join(
+            // @ts-expect-error import.meta.dirname is provided by vitest.
+            import.meta.dirname,
+            'merchant-image-pilot-settings.mjs'
+          ),
+          `--har=${harPath}`,
+          `--screenshot=${pngPath}`,
+          '--expect-iterations=1',
+          '--expect-connectivity=native',
+          `--expect-route=${ROUTE}`,
+          '--expect-chrome-major=154',
+          '--expect-viewport=375x667',
+          '--expect-dpr=2',
+          ...extra,
+          ...provenanceArgs,
+        ],
+        { timeout: 30_000, killSignal: 'SIGKILL' },
+        (error, stdout) => {
+          if (error && (error.killed || error.signal || error.code !== 1)) {
+            reject(error);
+            return;
+          }
+          try {
+            resolve({ error, report: JSON.parse(stdout) });
+          } catch (parseError) {
+            reject(
+              new Error('Settings CLI returned invalid JSON', {
+                cause: parseError,
+              })
+            );
+          }
+        }
+      );
+    });
+    return report;
+  } finally {
+    await rm(dir, { recursive: true, force: true, maxRetries: 3 });
   }
-  if (shotRaw !== undefined) {
-    const rawPath = join(dir, 'shot-raw.json');
-    await writeFile(rawPath, shotRaw);
-    provenanceArgs.push(`--screenshot-provenance=${rawPath}`);
-  }
-  const { execFile } = await import('node:child_process');
-  const report = await new Promise((resolve) => {
-    execFile(
-      process.execPath,
-      [
-        join(
-          // @ts-expect-error import.meta.dirname is provided by vitest.
-          import.meta.dirname,
-          'merchant-image-pilot-settings.mjs'
-        ),
-        `--har=${harPath}`,
-        `--screenshot=${pngPath}`,
-        '--expect-iterations=1',
-        '--expect-connectivity=native',
-        `--expect-route=${ROUTE}`,
-        '--expect-chrome-major=154',
-        '--expect-viewport=375x667',
-        '--expect-dpr=2',
-        ...extra,
-        ...provenanceArgs,
-      ],
-      (error, stdout) => resolve({ error, report: JSON.parse(stdout) })
-    );
-  });
-  return report;
 }

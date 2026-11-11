@@ -1,3 +1,7 @@
+vi.mock('@/lib/experience/legacy-execution', () => ({
+  admitLegacyExecution: async () => async () => {},
+}));
+
 import { builderAiEditTestFixture } from '@baci/shared/test-fixtures/builder-ai-edit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleBuilderAiEditRequest } from './handle-builder-ai-edit-request';

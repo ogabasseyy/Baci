@@ -1,0 +1,29 @@
+{
+  "main": "de0e4a5f2fab01aa06964293d0c713fbea07ae6b",
+  "files": {
+    "packages/experience-sdk/src/channel.test.ts": "8e878f61b759ce9393a460a8aceaeea558b94f83d1c434da7874d07d44254896",
+    "packages/experience-sdk/src/channel.ts": "c8e57daaaa33f322b8d69dc563c46db152890b41873ee6440bd376371ee330fc",
+    "packages/experience-sdk/src/index.ts": "812cf2886f19cb177ef06198b4c1756abc73dbf08aa06cd37d61ce88611f3afa",
+    "apps/web/tools/experience-runner/isolated-performance-collector.test.ts": "2cd947e1dce92bf6361c9728de4797765a4671f027e95f07365bf97bfbe558cc",
+    "apps/web/tools/experience-runner/isolated-performance-collector.ts": "a3def4024c83702ed6d8cf82d0f180742415f5bbe6badc894156c59f6a95a6bd",
+    "apps/web/tools/experience-runner/bundle-source.test.ts": "85e4887b06d175048ffc42fcebbba805eba099af435dce9bb43e9b35f1d4928b",
+    "apps/web/tools/experience-runner/bundle-source.ts": "238ac792b0e48f169874dd69297696953b1aeb18b3faad4ace9a54e32cc36e7c",
+    "apps/web/tools/experience-runner/performance-harness.test.ts": "b80cc0d7140a7beef92d75bb92473d5700f9152595b911233d1447dedb433b64",
+    "apps/web/tools/experience-runner/isolated-performance-observer.ts": "f46c0d03323085b5ebb7de3da4b740346968aaf0e45abc513a6edd4b36f22e45",
+    "apps/web/tools/experience-runner/performance-harness.ts": "549addcde0bed068e6078917ecda98d1924dc4367955bf326b152360d505a019",
+    "apps/web/tools/experience-runner/prerender-runtime-entry.ts": "dcf96c1dc22756b61f5fd77d240749be58063d8e3ae8169ba85d6e9b315877c3",
+    "apps/web/tools/experience-runner/prerender-source.test.ts": "a853473c534f398c8583d12002284af1ddf23dc8c5307974885cfb4b4bc642c9",
+    "apps/web/tools/experience-runner/isolated-performance-observer.test.ts": "24dfd4c69a388f6387886af7246dd474c6c1b7eafa63cfa8be0403dd6416ca65",
+    "apps/web/tools/experience-runner/performance-worker.ts": "a2a57d78c0edac10c633fd0840acd288f1f736aa26fdd22fe84a8e3d9e0e0ac3",
+    "apps/web/src/schemas/experience-performance-worker.ts": "34437198576b323e1fa0f52718a8574b1d2767fa3a510d437d8a61fca68d7e24",
+    "apps/web/src/schemas/experience-performance.ts": "a4dea1afce33e7b504dbdedb286ed616efbb6c085a92d14dd805ee88ede416a0",
+    "apps/web/src/components/storefront/experience/experience-launch-channel.test.ts": "a5f76e4e865bd7d170111dd25729d5305f7a25e6e06946e9d1b8bcdb5175ddf1",
+    "apps/web/src/components/storefront/experience/experience-launch-channel.ts": "e834e2542597907cccc0ad637844e77502a217c9ae579b144e8a7b91013d4757",
+    "apps/web/src/lib/experience/private-prerender-document.test.ts": "250e9b315b252eca8ee040bb9b9cf22b443abfa5e8ffc1157502b2df6ccd8065",
+    "apps/web/src/lib/experience/tool-dispatcher.performance-budget.test.ts": "5ff8304d2a2aa0b57a1872b3a0370283b8ff4d1b8788ad1f8eedfc8a2535d5aa",
+    "apps/web/src/lib/experience/private-prerender-document.ts": "6f5d4a8fdfeb34151b795a9f70b71a08c5a655d22f85a012772c5d1b413d9cb5",
+    "apps/web/src/lib/experience/tool-dispatcher.ts": "d6998abd59fe47d63d1a09bee0a93fc7388be57e311656d86a3d14813ee85188",
+    "apps/web/src/lib/experience/candidate-performance-measurement.ts": "7eb72020df9348c038be5729325cb3172d500c6ec83457808b14b6e18f1d6b26",
+    "apps/web/src/lib/experience/candidate-performance-measurement.test.ts": "f543c4fe98d0271a80805ce7111ee85c59fab01003eb04288788bf1c44d481da"
+  }
+}

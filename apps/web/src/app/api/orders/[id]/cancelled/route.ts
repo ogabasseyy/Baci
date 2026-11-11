@@ -6,6 +6,8 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
+import { mapCancellationRpcError } from '@/lib/orders/map-cancellation-rpc-error';
+import { resolveCancellationRefundOutcome } from '@/lib/orders/resolve-cancellation-refund-outcome';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { merchantOrderCancellationSchema } from '@/schemas/orders';
@@ -53,6 +55,7 @@ export async function POST(
       );
     }
     const cancellationReason = parsedBody.data.reason;
+    const refundMode = parsedBody.data.refund;
 
     // Get merchant ID
     const merchantId = await getMerchantIdForApiUser(auth.supabase);
@@ -74,8 +77,9 @@ export async function POST(
       const { data: preCancelItems, error: preCancelItemsError } =
         await supabase
           .from('order_items')
-          .select('product_id')
-          .eq('order_id', id);
+          .select('product_id, orders!inner(merchant_id)')
+          .eq('order_id', id)
+          .eq('orders.merchant_id', merchantId);
       if (!preCancelItemsError) {
         preCancelItemIds = Array.from(
           new Set(
@@ -98,43 +102,26 @@ export async function POST(
       await supabase.rpc('cancel_order_as_merchant', {
         p_order_id: id,
         p_reason: cancellationReason,
+        p_refund_mode: refundMode,
       });
     if (cancellationError) {
-      // PostgREST can wrap the raised sentinel with context, so match
-      // it as a substring: exact equality would silently demote a 409
-      // PAYMENT_RECONCILIATION_REQUIRED to a generic failure.
-      const paymentNeedsReconciliation =
-        cancellationError.code === 'P0001' &&
-        cancellationError.message.includes('payment_capture_in_flight');
-      const status =
-        cancellationError.code === 'P0002'
-          ? 404
-          : cancellationError.code === 'P0001'
-            ? 409
-            : cancellationError.code === '42501'
-              ? 403
-              : 500;
+      const failure = mapCancellationRpcError(cancellationError);
       return NextResponse.json(
-        {
-          error: paymentNeedsReconciliation
-            ? 'A payment attempt needs to be checked before this order can be cancelled. Please contact support.'
-            : status === 409
-              ? 'This order can no longer be cancelled.'
-              : status === 404
-                ? 'Order not found'
-                : status === 403
-                  ? 'You do not have permission to cancel this order.'
-                  : 'Failed to cancel order',
-          code: paymentNeedsReconciliation
-            ? 'PAYMENT_RECONCILIATION_REQUIRED'
-            : status === 409
-              ? 'ORDER_NOT_CANCELLABLE'
-              : undefined,
-        },
-        { status }
+        { error: failure.error, code: failure.code },
+        { status: failure.status }
       );
     }
     const alreadyCancelled = !cancellationPerformed;
+
+    // What the response says about the refund: the persisted mode on a
+    // replay, and never a hand-refund claim we are not sure of.
+    const refund = await resolveCancellationRefundOutcome({
+      alreadyCancelled,
+      merchantId,
+      orderId: id,
+      requested: refundMode,
+      supabase,
+    });
 
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
@@ -142,8 +129,9 @@ export async function POST(
       try {
         const { data, error } = await supabase
           .from('order_items')
-          .select('product_id, variant_id')
-          .eq('order_id', id);
+          .select('product_id, variant_id, orders!inner(merchant_id)')
+          .eq('order_id', id)
+          .eq('orders.merchant_id', merchantId);
         if (error) throw error;
         orderItems = data;
       } catch (itemsError) {
@@ -275,7 +263,11 @@ export async function POST(
         success: true,
         alreadyCancelled,
         message: 'Cancellation completed; side effects are queued',
-        sideEffects: { customerEmail: 'queued', refund: 'queued_if_required' },
+        sideEffects: {
+          customerEmail: 'queued',
+          refund: refund.outcome,
+          ...(refund.details && { refundDetails: refund.details }),
+        },
       },
       { status: 202 }
     );

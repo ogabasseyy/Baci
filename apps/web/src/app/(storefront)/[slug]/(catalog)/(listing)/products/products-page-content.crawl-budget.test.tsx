@@ -19,6 +19,13 @@ const {
   mockStorefrontPagination: vi.fn((_props: Record<string, unknown>) => null),
 }));
 
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);
 vi.mock('next/headers', () => ({ headers: () => mockHeaders() }));
 vi.mock('next/link', () => ({
   default: ({

@@ -1,0 +1,171 @@
+{
+  "synthetic": true,
+  "baseMain": "8b13afa9f7fa798f3aec2474318f67bbfc8b7dde",
+  "desktop": {
+    "path": "/qa1/checkout",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "overflow": false,
+    "images": [
+      {
+        "alt": "Synthetic QA Device",
+        "decoded": true
+      }
+    ],
+    "hasFinalReview": true,
+    "orderButtons": [
+      {
+        "disabled": false
+      }
+    ],
+    "submitted": false
+  },
+  "mobile": {
+    "path": "/qa1/checkout",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "overflow": false,
+    "images": [
+      {
+        "alt": "Synthetic QA Device",
+        "decoded": true
+      }
+    ],
+    "hasFinalReview": true,
+    "orderButtons": [
+      {
+        "disabled": false
+      }
+    ],
+    "submitted": false
+  },
+  "desktopNetwork": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "cart": [
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      }
+    ],
+    "shipping": [
+      {
+        "status": 200
+      }
+    ],
+    "orderOrPaymentRequests": 0
+  },
+  "mobileNetwork": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "cart": [
+      {
+        "path": "/api/storefront/cart",
+        "status": 401
+      },
+      {
+        "path": "/api/storefront/cart/bootstrap",
+        "status": 201
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 201
+      },
+      {
+        "path": "/api/storefront/cart/continuity",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart/commands",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart/checkout",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      },
+      {
+        "path": "/api/storefront/cart",
+        "status": 200
+      }
+    ],
+    "shipping": [
+      {
+        "status": 200
+      }
+    ],
+    "orderOrPaymentRequests": 0
+  },
+  "orderCount": 0,
+  "orderCountVerifiedUsing": "read-only SELECT on this disposable PostgreSQL fixture",
+  "ordersSubmitted": false,
+  "paymentsSubmitted": false,
+  "remainingWarning": "Autocomplete provider is intentionally unconfigured; /api/places/autocomplete returns 500 and manual address parsing/merchant-rate quotes work."
+}

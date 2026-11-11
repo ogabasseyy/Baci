@@ -7,14 +7,14 @@ import { loadPublishConfirmation } from '../../src/lib/website-builder/load-publ
 import { requestStorefrontPublication } from '../../src/lib/website-builder/publish-intent';
 import { getStorefrontStatus } from '../../src/lib/website-builder/read-storefront';
 import { retryCommittedDelivery } from '../../src/lib/website-builder/retry-delivery';
+import { lifecycleFixture } from '../../tests/experience-lifecycle/sql.test-support';
 import { createPublicationProofWriter } from './publication-proof';
 import { publicationRlsClient } from './publication-rls-client';
-import { publicationFixture } from './publication-test-support';
 
-let f: Awaited<ReturnType<typeof publicationFixture>>;
+let f: Awaited<ReturnType<typeof lifecycleFixture>>;
 let verifier: Pool;
 beforeAll(async () => {
-  f = await publicationFixture();
+  f = await lifecycleFixture(false, process.env.BACI_BUILDER_LOCAL_PG === '1');
   verifier = new Pool({
     ...f.pool.options,
     options: '-c role=baci_builder_publication_verifier',

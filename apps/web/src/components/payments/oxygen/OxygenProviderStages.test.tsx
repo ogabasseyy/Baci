@@ -45,6 +45,18 @@ import { OxygenProviderStages } from './OxygenProviderStages';
 import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 
 const submit = vi.fn().mockResolvedValue(true);
+const verified = {
+  applicationReference: '60000000-0000-4000-8000-000000000001',
+  validated: true,
+  kyc: {
+    phone_status: 'DONE',
+    bvn_status: 'DONE',
+    selfie_status: 'DONE',
+    nin_status: 'NOT_DONE',
+    bank_status: 'NOT_DONE',
+    address_status: 'NOT_DONE',
+  },
+} as const;
 function props(
   stage: OxygenRuntimeSnapshot['stage'],
   state: OxygenRuntimeSnapshot['state'],
@@ -116,7 +128,7 @@ it('shows recovery without offers and the plan form after offers arrive', () => 
 it('offers refresh during address review, but not while pending or after payment/setup', () => {
   const booking = oxygenBookedSnapshot.state.booking;
   const { rerender } = render(
-    <OxygenProviderStages {...props('booked', { booking })} />
+    <OxygenProviderStages {...props('booked', { ...verified, booking })} />
   );
   fireEvent.click(
     screen.getByRole('button', { name: 'Refresh during address review' })
@@ -124,15 +136,15 @@ it('offers refresh during address review, but not while pending or after payment
   expect(submit).toHaveBeenCalledWith({ action: 'refresh_eligibility' });
   for (const [state, pending] of [
     [
-      { booking },
+      { ...verified, booking },
       {
         action: 'book',
         status: 'queued',
         idempotencyKey: '80000000-0000-4000-8000-000000000001',
       },
     ],
-    [{ booking, paymentComplete: true }, undefined],
-    [{ booking, setupComplete: true }, undefined],
+    [{ ...verified, booking, paymentComplete: true }, undefined],
+    [{ ...verified, booking, setupComplete: true }, undefined],
   ] as const) {
     rerender(<OxygenProviderStages {...props('booked', state, pending)} />);
     expect(
@@ -141,7 +153,7 @@ it('offers refresh during address review, but not while pending or after payment
   }
 });
 it('refreshes missing offers at approval and suppresses the action for an active command', () => {
-  const state = { booking: oxygenBookedSnapshot.state.booking };
+  const state = { ...verified, booking: oxygenBookedSnapshot.state.booking };
   const { rerender } = render(
     <OxygenProviderStages {...props('approval_required', state)} />
   );

@@ -7,6 +7,7 @@ vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import { preflightCancellationRefundInitiation } from './preflight-cancellation-refund-initiation';
 import {
+  order,
   paystackPayment,
   preflightInput,
 } from './preflight-cancellation-refund-initiation.test-support';
@@ -57,6 +58,23 @@ describe('preflightCancellationRefundInitiation initiation set', () => {
     const result = await preflightCancellationRefundInitiation(
       preflightInput({
         manualLinkedLegIds: new Set(['payment-1']),
+      })
+    );
+    expect(result.initiationTransactions).toHaveLength(0);
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+  });
+
+  it('never initiates or provider-checks legs of a cancel-only order', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        order: {
+          ...order,
+          cancellation_refund_mode: 'manual',
+        },
+        transactions: [
+          paystackPayment,
+          { ...paystackPayment, id: 'payment-2', gateway_reference: 'ref-2' },
+        ],
       })
     );
     expect(result.initiationTransactions).toHaveLength(0);

@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
+import { apiPatch, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
@@ -48,6 +48,7 @@ import { getOrderItems, type OrderDetailsItem } from '../order-items';
 import { getOrderSourceLabel } from '../order-source-display';
 import { OrderSourceIcon } from '../order-source-icon';
 import { StatusBadge } from '../status-badge';
+import { CancelOrderDialog } from './cancel-order-dialog';
 import ConfirmInsuranceDialog, {
   type ConfirmOrderPayload,
 } from './confirm-insurance-dialog';
@@ -55,6 +56,7 @@ import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary
 import { OrderPaymentSummary } from './OrderPaymentSummary';
 import { OrderRefundSection } from './order-refund-section';
 import { ShipmentDetailsCard } from './shipment-details-card';
+import { useOrderCancellation } from './use-order-cancellation';
 
 // Type definitions
 interface OrderDetailsClientPageProps {
@@ -133,6 +135,14 @@ export default function OrderDetailsClientPage({
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = useState(false);
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
+  const cancellation = useOrderCancellation({
+    onCancelled: () =>
+      setOrder((prev) => ({
+        ...prev,
+        shippingStatus: fromDbShippingStatus('cancelled'),
+      })),
+    order,
+  });
 
   if (!order) {
     return null;
@@ -160,38 +170,20 @@ export default function OrderDetailsClientPage({
     }
 
     if (newStatus === 'Canceled') {
-      const warning =
-        order.paymentStatus === 'Paid'
-          ? 'This is a paid order. Cancelling records your account as the actor and starts the refund workflow. Continue?'
-          : 'Cancel this order and restore its tracked inventory?';
-      if (!window.confirm(warning)) return;
+      await cancellation.requestCancellation();
+      return;
     }
 
     try {
-      let result: {
+      const result = await apiPatch<{
         order: {
           shipping_status: string;
           shipping_provider?: string | null;
           tracking_number?: string | null;
         };
-      };
-      if (newStatus === 'Canceled') {
-        await apiPost<{ success: boolean }>(
-          `/api/orders/${order.id}/cancelled`,
-          { cancelled_by: 'merchant', confirm_cancellation: true }
-        );
-        result = { order: { shipping_status: 'cancelled' } };
-      } else {
-        result = await apiPatch<{
-          order: {
-            shipping_status: string;
-            shipping_provider?: string | null;
-            tracking_number?: string | null;
-          };
-        }>(`/api/orders/${order.id}`, {
-          shipping_status: toDbShippingStatus(newStatus),
-        });
-      }
+      }>(`/api/orders/${order.id}`, {
+        shipping_status: toDbShippingStatus(newStatus),
+      });
 
       setOrder((prev) => ({
         ...prev,
@@ -200,9 +192,7 @@ export default function OrderDetailsClientPage({
           result.order.shipping_provider ?? prev.shipping_provider,
         tracking_number: result.order.tracking_number ?? prev.tracking_number,
       }));
-      toast({
-        title: `Order status updated to ${newStatus}`,
-      });
+      toast({ title: `Order status updated to ${newStatus}` });
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -329,6 +319,11 @@ export default function OrderDetailsClientPage({
         onClose={() => setIsConfirmationDialogOpen(false)}
         onConfirm={handleConfirmationSubmit}
         orderItems={displayItems}
+      />
+      <CancelOrderDialog
+        key={cancellation.dialogKey}
+        currency={orderCurrency}
+        {...cancellation.dialogProps}
       />
       <FulfillmentDialog
         isOpen={isFulfillmentDialogOpen}

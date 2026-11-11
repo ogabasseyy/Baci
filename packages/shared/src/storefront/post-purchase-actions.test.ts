@@ -1,10 +1,10 @@
 import {
   BACI_GOOGLE_REVIEW_URL,
+  CUSTOMER_CANCELLATION_REASONS,
   canCancelStorefrontOrder,
   canLeaveStorefrontGoogleReview,
   canRequestStorefrontOrderReturn,
   canShowStorefrontRiderContact,
-  CUSTOMER_CANCELLATION_REASONS,
   isStorefrontReceiptAvailable,
 } from './post-purchase-actions';
 
@@ -73,7 +73,12 @@ describe('post-purchase-actions', () => {
     });
 
     it('blocks cancellation once the order is shipped or beyond', () => {
-      for (const shippingStatus of ['shipped', 'delivered', 'cancelled', 'returned']) {
+      for (const shippingStatus of [
+        'shipped',
+        'delivered',
+        'cancelled',
+        'returned',
+      ]) {
         expect(
           canCancelStorefrontOrder({ shippingStatus, paymentStatus: 'unpaid' })
         ).toBe(false);

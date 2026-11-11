@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { alertPendingRefundReviews } from '@/lib/orders/alert-pending-refund-reviews';
 import {
   CAPPED_RECONCILE_PHASE_MS,
   cancellationDrainDeadlineMs,
@@ -22,6 +23,9 @@ import { reconcileWorkerDeadlineMs } from '@/lib/payments/reconcile-worker-deadl
 import { sweepPaystackRefundRecoveryWatches } from '@/lib/payments/sweep-paystack-refund-recovery-watches';
 import type { createServiceClient } from '@/lib/supabase/service';
 import type { sendEmail } from '@/lib/zeptomail';
+
+// Hard total budget for the merchant alert pass.
+const ALERT_PASS_MAX_MS = 20_000;
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -122,11 +126,40 @@ export async function processCancellationDrain(
           supabase,
         }),
       ]);
+  // Merchant alerts for open refund reviews run after the side-effect
+  // drain whether it ran, was skipped for budget, or rejected (allSettled
+  // above): they have their own refund-phase cutoff and budget check, and
+  // never throw, so a backlog cannot starve them.
+  // Capture the phase start BEFORE the alert pass: the notification drain
+  // limit is derived from it, and the pass has a hard total time cap, so a
+  // slow alert pass cannot shrink notification sends.
+  const alertPhaseStartedAt = Date.now();
+  const merchantRefundAlerts = await alertPendingRefundReviews({
+    deadlineMs: Math.min(
+      cancellationRefundDrainDeadlineMs(workersStartedAt),
+      alertPhaseStartedAt + ALERT_PASS_MAX_MS
+    ),
+    senders: {
+      sendEmail: sendCancellationEmail,
+      sendPush: sendMerchantPush,
+    },
+    supabase,
+  });
+  if (merchantRefundAlerts.failed > 0) {
+    // Warn only: a persistent lookup/claim problem must stay visible without
+    // pinning the cron red (alerts retry on the next pass).
+    logger.warn({
+      message: 'Merchant refund-review alerts had failures',
+      ...merchantRefundAlerts,
+    });
+  }
   // Budget the serial drain from the remaining invocation time: an
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay
   // pending/failed for the next invocation.
-  const drainLimit = notificationDrainLimit(Date.now() - workersStartedAt);
+  const drainLimit = notificationDrainLimit(
+    alertPhaseStartedAt - workersStartedAt
+  );
   const notificationSkippedDueToBudget = drainLimit <= 0;
   if (notificationSkippedDueToBudget) {
     // The zero-limit call below still runs: its exhausted/uncertain
@@ -247,5 +280,6 @@ export async function processCancellationDrain(
     legacyPaystackRefunds: legacyRefundResult.value,
     paystackRefundWatchSweep: watchSweepResult.value,
     paystackRefundNotifications: notificationResult[0].value,
+    merchantRefundAlerts,
   });
 }

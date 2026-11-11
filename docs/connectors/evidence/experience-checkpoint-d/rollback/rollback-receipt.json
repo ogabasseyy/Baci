@@ -1,0 +1,46 @@
+{
+  "schema": "baci.local.rollback-evidence.v1",
+  "normalAuthRls": true,
+  "syntheticOnly": true,
+  "localOnly": true,
+  "toolchain": "341def06a35cd1eddad8079191afe82439a6826e75074fa0bfc8a0c1dd3947af",
+  "previous": "3df46184c8f34314d35648c7ef0e2c5cf3fcb812475a9247ddfc595fd145df05",
+  "current": "92ae7162c76f2cc9e72426f24a080e4ab7c3061fea095bc8ce6b363af09fb8f8",
+  "compatibleRuntime": "react-browser-sandbox/v1",
+  "compatibleSdk": "commerce-bridge/v1",
+  "sourceUnchangedAfterDryRun": true,
+  "publicHeadsBefore": 0,
+  "publicHeadsAfter": 0,
+  "transactionRolledBack": true,
+  "committedPublicationEffects": 0,
+  "orderOperations": 0,
+  "paymentOperations": 0,
+  "aiCalls": 0,
+  "markerDigest": "41380a1357a15bea88f3f10f6040b6bc494157c7d85a7705b48eb3fa3c2dba34",
+  "trial": {
+    "trialPublishedVersion": 3,
+    "trialRollbackBuild": "3df46184c8f34314d35648c7ef0e2c5cf3fcb812475a9247ddfc595fd145df05",
+    "allRoutesRestored": [
+      {
+        "path": "/",
+        "view": "home"
+      },
+      {
+        "path": "/collections/all",
+        "view": "collection"
+      },
+      {
+        "path": "/products/device",
+        "view": "product"
+      },
+      {
+        "path": "/pages/story",
+        "view": "editorial"
+      }
+    ],
+    "responseLossReconciled": true,
+    "fixturePublicMarkerSimulation": true,
+    "trialReceiptState": "live"
+  },
+  "releaseQualified": false
+}

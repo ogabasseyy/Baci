@@ -253,4 +253,24 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
 
     await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(2));
   });
+
+  it('skips begin_checkout when a line has no readable price', async () => {
+    renderHook(() =>
+      useBeginCheckoutTracking(
+        params({
+          checkoutCart: [
+            cartLine(),
+            cartLine({
+              id: 'prod-9',
+              cartItemId: 'line-9',
+              price: 'N/A' as never,
+            }),
+          ],
+        })
+      )
+    );
+    await Promise.resolve();
+
+    expect(loadTracker).not.toHaveBeenCalled();
+  });
 });

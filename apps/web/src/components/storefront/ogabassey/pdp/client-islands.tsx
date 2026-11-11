@@ -19,7 +19,8 @@ export function OgabasseyPdpBelowFoldIsland({
   return (
     <>
       {/* A missing numeric price would report a zero-value view; skip it. */}
-      {typeof product.rawPrice === 'number' ? (
+      {typeof product.rawPrice === 'number' &&
+      Number.isFinite(product.rawPrice) ? (
         <OgabasseyPdpProductViewTracker
           productId={String(product.id)}
           name={product.name}

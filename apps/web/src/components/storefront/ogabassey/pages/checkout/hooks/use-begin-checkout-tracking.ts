@@ -2,7 +2,10 @@
 
 import { useEffect } from 'react';
 import type { CartItem } from '@/hooks/cart';
-import { getCartItemCheckoutUnitPrice } from '@/lib/checkout/cart-entitlement-sanitizer';
+import {
+  getCartItemCheckoutUnitPrice,
+  isQuizVoucherCartItem,
+} from '@/lib/checkout/cart-entitlement-sanitizer';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 
 type EventTrackingModule = typeof import('@/lib/event-tracking');
@@ -13,6 +16,12 @@ function loadEventTracking(): Promise<EventTrackingModule> {
 }
 
 const reportedKeys = new Set<string>();
+
+function hasUnresolvablePrice(item: CartItem): boolean {
+  if (isQuizVoucherCartItem(item)) return false;
+  const price = withNumericPrice(item).price;
+  return typeof price !== 'number' || !Number.isFinite(price);
+}
 
 /**
  * Template grid lines can carry a formatted display string in `price` and
@@ -79,6 +88,9 @@ export function useBeginCheckoutTracking({
 }: UseBeginCheckoutTrackingParams): void {
   useEffect(() => {
     if (!isHydrated || !merchantId || checkoutCart.length === 0) return;
+    // A line with no readable price (malformed, not a free voucher) would
+    // report a misleading zero-value checkout; skip the event instead.
+    if (checkoutCart.some(hasUnresolvablePrice)) return;
     // One report per checkout attempt and set of cart lines (matching the
     // PostHog checkout_started key): refreshes, re-renders, quantity edits
     // and same-cart return visits in this session are not new starts, while

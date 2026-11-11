@@ -93,4 +93,15 @@ describe('OgaBassey PDP client islands', () => {
 
     expect(mockProductViewTracker).not.toHaveBeenCalled();
   });
+
+  it('skips the product view when the price is not finite', () => {
+    mockProductViewTracker.mockClear();
+    const broken = { ...product, rawPrice: Number.NaN } as unknown as Product;
+
+    render(
+      <OgabasseyPdpBelowFoldIsland product={broken} storeSlug="ogabassey" />
+    );
+
+    expect(mockProductViewTracker).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,13 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type z from 'zod';
+import z from 'zod';
+
+/** The identity columns every ledger row carries, read without casts. */
+const rowKeysSchema = z.looseObject({
+  pvb_reference: z.string().nullable(),
+  provider_transaction_id: z.string().optional(),
+  provider_payout_id: z.string().optional(),
+});
 
 /**
  * Reads the stored ledger row for a PVB credit.
@@ -46,22 +53,40 @@ export async function readStoredPvbCredit<Shape extends z.ZodRawShape>(
       .eq(column, value)
       .maybeSingle();
     if (error) throw new Error('Stored credit read failed');
-    return data ? input.schema.parse(data) : null;
+    if (!data) return null;
+    return { row: input.schema.parse(data), keys: rowKeysSchema.parse(data) };
   };
 
   const byReference = await read('pvb_reference', input.pvbReference);
   if (byReference) {
     let legacyKeyOwnedByOther = false;
-    if (Reflect.get(byReference, input.legacyKeyColumn) !== input.legacyKey) {
+    if (byReference.keys[input.legacyKeyColumn] !== input.legacyKey) {
       const owner = await read(input.legacyKeyColumn, input.legacyKey);
       legacyKeyOwnedByOther =
-        owner !== null &&
-        Reflect.get(owner, 'pvb_reference') !== input.pvbReference;
+        owner !== null && owner.keys.pvb_reference !== input.pvbReference;
     }
-    return { row: byReference, legacyKeyOwnedByOther };
+    return { row: byReference.row, legacyKeyOwnedByOther };
   }
   const byLegacyKey = await read(input.legacyKeyColumn, input.legacyKey);
   return byLegacyKey
-    ? { row: byLegacyKey, legacyKeyOwnedByOther: false }
+    ? { row: byLegacyKey.row, legacyKeyOwnedByOther: false }
     : null;
+}
+
+/** SQLSTATE the intake insert functions raise for the legacy-row gate. */
+const LEGACY_REFERENCE_GATE = '55000';
+
+/**
+ * Storage-error message for a failed credit write. The legacy-row gate
+ * (a customer still has a ledger row without pvb_reference) stays a
+ * retryable storage error, but says so, so operators and log drains can tell
+ * "needs a pvb_reference repair" from a database outage.
+ */
+export function creditWriteFailureMessage(
+  error: { code?: string } | null,
+  fallback: string
+): string {
+  return error?.code === LEGACY_REFERENCE_GATE
+    ? `${fallback}: customer has a legacy ledger row without pvb_reference (run the pvb_reference repair)`
+    : fallback;
 }

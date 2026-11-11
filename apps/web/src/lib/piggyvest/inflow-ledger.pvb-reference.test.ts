@@ -138,7 +138,7 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
     // The drifted internal id is paged by name, never silently acked.
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining(
-        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"same pvb_reference, audit fields differ: provider_transaction_id"'
+        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"audit fields differ: provider_transaction_id"'
       )
     );
     alerts.mockRestore();
@@ -159,6 +159,25 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
     await expect(
       recordInflowCredit(client, delivery({ eventId: 'evt-synthetic-003' }))
     ).resolves.toBe('duplicate');
+    expect(rows).toHaveLength(1);
+  });
+
+  it("quarantines a new pvb_reference reusing a legacy row's internal id when its audit fields differ", async () => {
+    // Legacy row (no pvb_reference, matched by internal id only): keep the
+    // strict pre-change comparison instead of calling it a duplicate.
+    const { client, rows } = fakeLedger();
+    await recordInflowCredit(client, delivery());
+    rows[0] = { ...rows[0], pvb_reference: null };
+    const other = delivery({
+      eventId: 'evt-synthetic-007',
+      pvbReference: 'PVB01OTHERCREDIT',
+    });
+    other.eventData = { ...other.eventData, reference: 'faas-ref-other' };
+
+    await expect(recordInflowCredit(client, other)).rejects.toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['reference'] },
+    });
     expect(rows).toHaveLength(1);
   });
 

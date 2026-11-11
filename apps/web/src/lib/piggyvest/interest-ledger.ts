@@ -6,7 +6,10 @@ import type { InterestPayoutSuccessEvent } from '@/schemas/piggyvest/events';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
 import { alertCreditAuditDrift } from './credit-audit-drift';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
-import { readStoredPvbCredit } from './stored-pvb-credit';
+import {
+  creditWriteFailureMessage,
+  readStoredPvbCredit,
+} from './stored-pvb-credit';
 
 /**
  * Verified interest-payout ledger.
@@ -128,7 +131,7 @@ export async function recordInterestPayout(
   if (error) {
     throw new InterestLedgerError(
       'INTEREST_LEDGER_STORAGE_ERROR',
-      'Interest payout record failed'
+      creditWriteFailureMessage(error, 'Interest payout record failed')
     );
   }
   if (inserted !== null && inserted.length > 0) return 'credited';
@@ -180,9 +183,19 @@ export async function recordInterestPayout(
     mismatchedFields.push('withholding_tax_kobo');
   if (stored.net_kobo !== net_interest_payout)
     mismatchedFields.push('net_kobo');
-  // eventData.reference, batch_id and timestamp are audit-only, like the
-  // inflow internals: pvb_reference identifies the credit, so drift there
-  // is the same payout redelivered, not a conflict that would strand it.
+  // eventData internals are audit-only, like the inflow ones: drift is the
+  // same payout redelivered (paged below). A legacy row (NULL
+  // pvb_reference) was matched by its internal id alone, so it keeps the
+  // strict pre-change comparison.
+  const driftedFields = [
+    stored.provider_payout_id !== detail.id && 'provider_payout_id',
+    stored.reference !== detail.reference && 'reference',
+    stored.batch_id !== detail.batch_id && 'batch_id',
+    new Date(stored.paid_at).getTime() !==
+      new Date(detail.timestamp).getTime() && 'paid_at',
+  ].filter((field): field is string => typeof field === 'string');
+  if ((stored.pvb_reference ?? null) === null)
+    mismatchedFields.push(...driftedFields);
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')
       .update(
@@ -211,17 +224,10 @@ export async function recordInterestPayout(
       }
     );
   }
-  // Same payout: page (never conflict) if its audit-only internals drifted.
   alertCreditAuditDrift({
     eventType: 'interest-payout.success',
     pvbReference: event.pvb_reference,
-    driftedFields: [
-      stored.provider_payout_id !== detail.id && 'provider_payout_id',
-      stored.reference !== detail.reference && 'reference',
-      stored.batch_id !== detail.batch_id && 'batch_id',
-      new Date(stored.paid_at).getTime() !==
-        new Date(detail.timestamp).getTime() && 'paid_at',
-    ].filter((field): field is string => typeof field === 'string'),
+    driftedFields,
   });
   return 'duplicate';
 }

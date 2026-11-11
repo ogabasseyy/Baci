@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
-import { readStoredPvbCredit } from './stored-pvb-credit';
+import {
+  creditWriteFailureMessage,
+  readStoredPvbCredit,
+} from './stored-pvb-credit';
 
 const ROW = {
   pvb_reference: 'PVB01SYNTHETIC',
@@ -117,5 +120,25 @@ describe('readStoredPvbCredit', () => {
       pvb_reference: { data: { ...ROW, net_kobo: -1 }, error: null },
     });
     await expect(readStoredPvbCredit(supabase, input)).rejects.toThrow();
+  });
+});
+
+describe('creditWriteFailureMessage', () => {
+  it('names the legacy-row gate so it is not mistaken for an outage', () => {
+    expect(
+      creditWriteFailureMessage(
+        { code: '55000' },
+        'Inflow credit record failed'
+      )
+    ).toContain('legacy ledger row without pvb_reference');
+  });
+
+  it('keeps the generic message for any other storage error', () => {
+    expect(
+      creditWriteFailureMessage(
+        { code: '08006' },
+        'Inflow credit record failed'
+      )
+    ).toBe('Inflow credit record failed');
   });
 });

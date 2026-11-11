@@ -283,6 +283,11 @@ not unique keys either.
   re-attribution and the backfill, e.g. after restoring inbox evidence.
   Rows it still cannot prove need a manual `pvb_reference` from PiggyVest's
   transaction list.
+- The inbox applies the same rule at its boundary: a retry of the same
+  `eventId` is a duplicate when its `pvb_reference` matches (older rows fall
+  back to the inbox `reference` column), even if the internal transaction or
+  payout id changed. Before this, such a retry was quarantined before any
+  ledger saw it.
 - A known `pvb_reference` arriving with an internal id that already belongs
   to a DIFFERENT stored credit is quarantined as a conflict
   (`provider_transaction_id` / `provider_payout_id`), not acked.

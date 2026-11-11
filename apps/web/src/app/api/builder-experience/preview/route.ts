@@ -3,6 +3,7 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { requireExperienceOwner } from '@/lib/experience/authorization';
 import { getRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
+import { getConfiguredOwnerPreview } from '@/lib/experience/owner-preview-web-config';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
       { status: 401, headers }
     );
   const runtime = getExperienceOwnerRuntime();
-  const remote = getRemoteOwnerPreview();
+  const remote = getRemoteOwnerPreview() ?? getConfiguredOwnerPreview();
   if (!runtime && !remote)
     return Response.json(
       { error: 'Private preview is not installed.' },

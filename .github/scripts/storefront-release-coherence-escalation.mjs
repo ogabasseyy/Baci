@@ -162,7 +162,7 @@ export async function verifyWithHostPurgeFallback({
     logger.warn(
       `Page purge left older release HTML on the canaries; escalating to a Cloudflare hostname purge for ${hosts.join(', ')}. The hostname purge clears ALL cached content for those hostnames (HTML, assets, API responses) and refills from the origin on demand. ${error.message}`
     );
-    await hostPurgeImpl({
+    const purge = await hostPurgeImpl({
       cloudflareFetchJson,
       hosts,
       logger,
@@ -170,6 +170,14 @@ export async function verifyWithHostPurgeFallback({
       token: config.token,
       zoneId: config.zoneId,
     });
+    // The default purgeReleaseHosts throws when the purge is skipped; an injected implementation
+    // might return the skip instead, and that must never count as a purge (no second verification).
+    if (purge?.skipped) {
+      throw new Error(
+        `${error.message}; the Cloudflare hostname purge was skipped (${purge.reason || 'unknown reason'}), so the older release HTML was not cleared`,
+        { cause: error }
+      );
+    }
 
     try {
       await verify({

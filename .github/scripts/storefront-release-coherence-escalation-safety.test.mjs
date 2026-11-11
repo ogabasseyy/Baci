@@ -181,8 +181,8 @@ test('says plainly that the hostname purge clears all cached content for the hos
 
 // verifyWithHostPurgeFallback is exported and `verify` is injectable, so these tests drive it
 // with a stale-flagged failure whose staleTargets are chosen by the test.
-function attemptFallback(failure) {
-  const counts = { hostPurges: 0, probes: 0 };
+function attemptFallback(failure, overrides = {}) {
+  const counts = { hostPurges: 0, probes: 0, verifies: 0 };
   const outcome = verifyWithHostPurgeFallback({
     baseUrl: 'https://ogabassey.com',
     config: { attempts: 1, escalationAttempts: 1, expectedMarker: 'release_123', retryDelayMs: 1 },
@@ -196,8 +196,10 @@ function attemptFallback(failure) {
       return 'release_123';
     },
     verify: async () => {
+      counts.verifies += 1;
       throw failure;
     },
+    ...overrides,
   });
   return { counts, outcome };
 }
@@ -249,6 +251,31 @@ test('fails closed on a malformed stale target, before any origin probe or purge
     assert.equal(counts.probes, 0, `no probe for ${JSON.stringify(bad)}`);
     assert.equal(counts.hostPurges, 0, `no hostname purge for ${JSON.stringify(bad)}`);
   }
+});
+
+test('fails closed when the hostname purge is reported as skipped (never a successful purge)', async () => {
+  // purgeReleaseHosts throws on a skipped purge, but hostPurgeImpl is injectable and may return the skip.
+  const failure = staleFailure({
+    staleTargets: [{ url: 'https://ogabassey.com/products', variant: 'browser' }],
+  });
+  let purges = 0;
+  const { counts, outcome } = attemptFallback(failure, {
+    hostPurgeImpl: async () => {
+      purges += 1;
+      return { reason: 'missing-token', skipped: true };
+    },
+  });
+
+  await assert.rejects(outcome, (error) => {
+    assert.match(
+      error.message,
+      /hostname purge was skipped \(missing-token\), so the older release HTML was not cleared/
+    );
+    assert.equal(error.cause, failure);
+    return true;
+  });
+  assert.equal(purges, 1);
+  assert.equal(counts.verifies, 1, 'no second verification after a skipped purge');
 });
 
 test('resolves only the known user-agent variants, never inherited object keys', () => {

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T05:11:36+00:00",
-  "source_revision": "5d73ea7c72041dd0fe213d3bc1ac0b744c020d9a",
-  "evidence_digest": "2ef7be20d36d4e0c480a45aad6736594c3a8f9cd3133c568783f8021860b39e8",
-  "claims_digest": "1f47f0834bd9886994a7414a5a926b923700f0d08b13284867d436e95d21a572",
+  "reviewed_at": "2026-11-11T05:39:29+00:00",
+  "source_revision": "32a27c6fd62f7fda7f22080382e51bd30a8cdeea",
+  "evidence_digest": "d3ef6719f5b404a33fe1069de7c23260d07d6a3a5bd7fe906e3ad88cac53a257",
+  "claims_digest": "4857b203a9287796cce8402ecacf3d5c3153710d068c73b7ccdc4b91d61b4504",
   "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision. Reviewed order-bound wallet recovery and the distinction between store-credit retry and reconciliation. Wallet recovery uses the confirmed debit and recognizes the original request while the display refreshes. Credit Direct retries RPC outages. Store-credit replay stops at an existing gateway payment.",
   "capabilities": [
     {

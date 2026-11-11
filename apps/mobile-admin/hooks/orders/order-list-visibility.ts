@@ -22,10 +22,17 @@ const ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES = [
 export const HIDDEN_CHECKOUT_PAYMENT_STATUSES = `(${HIDDEN_CHECKOUT_PAYMENT_STATUS_VALUES.join(',')})`;
 export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES.join(',')})`;
 
+// Orders staff create (in-store invoices, WhatsApp/Instagram sales) record
+// the staff member. They are never abandoned checkouts, so an unpaid one
+// must stay in the list even when its payment method is an online one.
+export const STAFF_CREATED_ORDER_FILTER = 'recorded_by_user_id.not.is.null';
+export const CUSTOMER_CHECKOUT_ORDER_FILTER = 'recorded_by_user_id.is.null';
+
 export const VISIBLE_PENDING_ORDER_FILTER = [
   'payment_status.not.in.(pending,unpaid)',
   'payment_method.is.null',
   `payment_method.not.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}`,
+  STAFF_CREATED_ORDER_FILTER,
 ].join(',');
 
 export function applyOrderListVisibilityFilter<

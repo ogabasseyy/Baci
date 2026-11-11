@@ -40,4 +40,13 @@ describe('applyOrderListVisibilityFilter', () => {
       `payment_method.not.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}`
     );
   });
+
+  it('keeps unpaid staff-created orders visible even with an online payment method', () => {
+    // Regression: a staff in-store invoice switched to bank transfer while
+    // awaiting payment matched the abandoned-checkout rule and vanished
+    // from the orders list.
+    expect(VISIBLE_PENDING_ORDER_FILTER.split(',')).toContain(
+      'recorded_by_user_id.not.is.null'
+    );
+  });
 });

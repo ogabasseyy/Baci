@@ -100,7 +100,7 @@ describe('useFailedOrders', () => {
         {
           method: 'or',
           args: [
-            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS}),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS})`,
+            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null)`,
           ],
         },
       ])

@@ -107,3 +107,12 @@ it('clears the notice after a successful edit that has no screen prediction', as
   await t.enqueue(assurance);
   expect(t.deps.notify.onWriteSucceeded).toHaveBeenCalledTimes(1);
 });
+
+it('releases the prediction when the queue refuses the slot before running', async () => {
+  const t = setup();
+  t.deps.serial = () => Promise.reject(new Error('superseded'));
+  const enqueue = createEditQueue(t.deps);
+  await expect(enqueue(add)).rejects.toThrow('superseded');
+  expect(t.deps.run).not.toHaveBeenCalled();
+  expect(t.deps.edits.revert()).toBeNull();
+});

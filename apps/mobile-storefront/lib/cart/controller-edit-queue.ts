@@ -45,63 +45,72 @@ export function createEditQueue(deps: EditQueueDeps) {
         ? deps.edits.begin(action)
         : null;
     const unpin = deps.edits.pin(action);
-    return deps.serial(async () => {
-      try {
-        deps.transmission.reset();
-        if (edit) deps.edits.startRun(edit);
-        const resolved = deps.edits.resolve(action);
-        if (resolved) {
-          await deps.run(resolved);
-          deps.notify.onWriteSucceeded?.();
+    let started = false;
+    return deps
+      .serial(async () => {
+        started = true;
+        try {
+          deps.transmission.reset();
+          if (edit) deps.edits.startRun(edit);
+          const resolved = deps.edits.resolve(action);
+          if (resolved) {
+            await deps.run(resolved);
+            deps.notify.onWriteSucceeded?.();
+          }
+          // The line this tap targeted never reached the cart.
+          else
+            deps.notify.onWriteFailed?.(
+              action,
+              new NativeCartError('invalid_item'),
+              'rolled_back'
+            );
+        } catch (error) {
+          // Blocked behind an earlier saved request: this edit was never sent,
+          // so recovering that request says nothing about it.
+          const blocked =
+            error instanceof NativeCartError &&
+            error.code === 'pending_operation';
+          const outcome: EditOutcome =
+            !blocked &&
+            (isIndeterminateFailure(error) ||
+              (await deps.hasRetainedRequest().catch(() => true)))
+              ? 'unconfirmed'
+              : 'rolled_back';
+          // The write may have landed; settle against the server inside this
+          // slot so nothing else (checkout) runs on a guess.
+          let recovered = false;
+          // Recovering a lost cart creation says nothing about an edit never sent.
+          const unsent = outcome === 'unconfirmed' && !deps.transmission.sent();
+          if (outcome === 'unconfirmed') {
+            if (edit && !unsent) deps.edits.markLanded(edit);
+            const refreshed = await deps.refresh().then(
+              () => true,
+              () => false
+            );
+            // Server truth is on screen and nothing is queued for retry: nothing left to explain.
+            recovered =
+              !unsent &&
+              refreshed &&
+              !(await deps.hasRetainedRequest().catch(() => true));
+          }
+          if (recovered) deps.notify.onWriteSucceeded?.();
+          else
+            deps.notify.onWriteFailed?.(
+              action,
+              error,
+              unsent ? 'rolled_back' : outcome
+            );
+          throw error;
+        } finally {
+          unpin();
+          if (edit) deps.edits.settle(edit);
         }
-        // The line this tap targeted never reached the cart.
-        else
-          deps.notify.onWriteFailed?.(
-            action,
-            new NativeCartError('invalid_item'),
-            'rolled_back'
-          );
-      } catch (error) {
-        // Blocked behind an earlier saved request: this edit was never sent,
-        // so recovering that request says nothing about it.
-        const blocked =
-          error instanceof NativeCartError &&
-          error.code === 'pending_operation';
-        const outcome: EditOutcome =
-          !blocked &&
-          (isIndeterminateFailure(error) ||
-            (await deps.hasRetainedRequest().catch(() => true)))
-            ? 'unconfirmed'
-            : 'rolled_back';
-        // The write may have landed; settle against the server inside this
-        // slot so nothing else (checkout) runs on a guess.
-        let recovered = false;
-        // Recovering a lost cart creation says nothing about an edit never sent.
-        const unsent = outcome === 'unconfirmed' && !deps.transmission.sent();
-        if (outcome === 'unconfirmed') {
-          if (edit && !unsent) deps.edits.markLanded(edit);
-          const refreshed = await deps.refresh().then(
-            () => true,
-            () => false
-          );
-          // Server truth is on screen and nothing is queued for retry: nothing left to explain.
-          recovered =
-            !unsent &&
-            refreshed &&
-            !(await deps.hasRetainedRequest().catch(() => true));
-        }
-        if (recovered) deps.notify.onWriteSucceeded?.();
-        else
-          deps.notify.onWriteFailed?.(
-            action,
-            error,
-            unsent ? 'rolled_back' : outcome
-          );
-        throw error;
-      } finally {
+      })
+      .finally(() => {
+        // The queue refused the slot (superseded controller): release here.
+        if (started) return;
         unpin();
         if (edit) deps.edits.settle(edit);
-      }
-    });
+      });
   };
 }

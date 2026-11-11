@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
 import { bindSharedCartRealtime } from '@/lib/cart/bind-shared-cart-realtime';
 import { createNativeCartController } from '@/lib/cart/controller';
@@ -18,6 +18,7 @@ import { dedupeMergeConflictItems } from '@/lib/cart/merge-conflict-items';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
+import { bindPersistedItemsOverride } from '@/lib/cart/persisted-items-override';
 import { publishNativeCart } from '@/lib/cart/publish-native-cart';
 import { retireSharedCartDevice } from '@/lib/cart/retire-shared-cart-device';
 import { cartSessionStorage } from '@/lib/cart/session-storage';
@@ -95,13 +96,12 @@ const defaults: Deps = {
 export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
   const enrollmentTransition = useRef(createEnrollmentTransition());
-  useEffect(() => {
+  useLayoutEffect(() => {
     latest.current = options;
   });
   useEffect(() => {
     if (!options.enabled) {
-      // Enrollment off after a committed enabled period only: cold
-      // starts pass through a placeholder disabled state first.
+      // Only after a committed enabled period; cold starts pass a disabled placeholder.
       const wasEnabled = enrollmentTransition.current.wasEnabled;
       // biome-ignore format: compact tombstone callback preserves the 300-line ceiling.
       void retireEnrollmentSession(enrollmentTransition.current, options.merchantId, (merchantId) => cartSessionStorage.retire?.(merchantId) ?? cartSessionStorage.remove(merchantId));
@@ -251,6 +251,9 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         code: 'invalid_configuration',
       });
     }
+    const unbindPersisted = bindPersistedItemsOverride(
+      () => controller?.revertPending?.() ?? null
+    );
     const stopPolling = startSharedCartPolling({
       getController: () => controller,
       hasSnapshot: () =>
@@ -270,11 +273,15 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       alive = false;
       stopRealtime?.();
       stopPolling();
+      unbindPersisted();
       release();
       const reverted = controller?.revertPending?.();
-      // Only while this controller still owns the displayed cart: account
-      // teardown clears the shared reference, and nothing may be restored then.
-      if (reverted && useCartStore.getState().sharedCartRef)
+      // Same shopper only: a failed sign-out keeps the reference but must not
+      // hand the old account's lines to the next identity.
+      const sameOwner =
+        latest.current.subjectKey === options.subjectKey &&
+        latest.current.merchantId === options.merchantId;
+      if (reverted && sameOwner && useCartStore.getState().sharedCartRef)
         useCartStore.setState({ items: reverted });
       dropPredictedLines();
       useCartStore.setState({ isLoading: false });

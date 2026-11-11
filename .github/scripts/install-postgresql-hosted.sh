@@ -68,7 +68,10 @@ fi
 
 sudo install -d /usr/share/postgresql-common/pgdg
 sudo install -m 0644 "$work/pgdg.asc" "$PGDG_KEYRING"
-echo "deb [signed-by=${PGDG_KEYRING}] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" |
+# https, like the official setup instructions: apt checks the signature either way, but plain http
+# would expose which packages the runner fetches. The one-line format is kept on purpose: apt 2.7
+# on Ubuntu 24.04 supports it fully, and the current runner image has no other PGDG source file to clash with.
+echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" |
   sudo tee "$PGDG_SOURCE" >/dev/null
 
 sudo apt-get -o Acquire::Retries=3 update

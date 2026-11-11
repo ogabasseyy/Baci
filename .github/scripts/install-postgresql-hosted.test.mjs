@@ -102,11 +102,21 @@ test('installs the pinned PostgreSQL 18 build from the signed PGDG repository on
       'sudo install -d /usr/share/postgresql-common/pgdg',
       'sudo install -m 0644 <work>/pgdg.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc',
       'sudo tee /etc/apt/sources.list.d/pgdg.list',
-      '  stdin: deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main',
+      '  stdin: deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main',
       'sudo apt-get -o Acquire::Retries=3 update',
       `sudo apt-get -o Acquire::Retries=3 install -y postgresql-18=${BUILD} postgresql-client-18=${BUILD}`,
     ]
   );
+});
+
+test('talks to the PostgreSQL servers over https only, the same way the official setup does', () => {
+  const result = install();
+  assert.equal(result.status, 0, result.stderr);
+  const sourceLine = result.commands.find((line) => line.startsWith('  stdin: deb '));
+  assert.ok(sourceLine, 'the installer must write an apt source line');
+  assert.match(sourceLine, /\[signed-by=\S+\] https:\/\/apt\.postgresql\.org\/pub\/repos\/apt noble-pgdg main$/);
+  // Neither the signing key download nor the package source may use cleartext http.
+  assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
 });
 
 test('refuses to run anywhere but a GitHub-hosted runner, before any command', () => {

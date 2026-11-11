@@ -96,11 +96,17 @@ test('CI and deploy gate every direct CWV dependency and aggregate its contract 
 
   const quality = ci.jobs.quality;
   assert.ok(quality.needs.includes('cwv-runner-contracts'));
+  const aggregator = quality.steps.find((step) => step.name === 'Verify split quality gate results');
+  assert.ok(aggregator, 'the quality job must keep its split-gate aggregator step');
   assert.equal(
-    quality.steps[0].env.CWV_RUNNER_CONTRACTS_RESULT,
+    aggregator.env.CWV_RUNNER_CONTRACTS_RESULT,
     "${{ needs['cwv-runner-contracts'].result }}",
   );
-  assert.match(quality.steps[0].run, /"\$CWV_RUNNER_CONTRACTS_RESULT"/);
+  const aggregatorScript = aggregator.run.match(/bash (\.github\/scripts\/verify-quality-gate\.sh)\s*$/)?.[1];
+  assert.match(
+    aggregatorScript ? await readFile(new URL(aggregatorScript, root), 'utf8') : aggregator.run,
+    /"\$CWV_RUNNER_CONTRACTS_RESULT"/,
+  );
   assert.doesNotMatch(
     deploy.jobs['deploy-production'].if,
     /cwv_runner/,

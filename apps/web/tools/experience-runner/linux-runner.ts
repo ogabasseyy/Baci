@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { runHelperQualification } from './helper-executor';
 import {
   type LocalTransport,
   outputBudgetExceeded,
@@ -124,5 +125,23 @@ export async function createLinuxRunner(config: {
     key: config.key,
     toolchainDigest: config.toolchainDigest,
     execute: (kind, payload) => runLocalQualification(kind, payload, transport),
+  });
+}
+
+/** Production candidate: the helper, not this service, owns privileged policy. */
+export async function createHelperLinuxRunner(config: {
+  key: Uint8Array;
+  toolchainDigest: string;
+  verifyInstallation(): Promise<{ toolchainDigest: string }>;
+}) {
+  if (process.platform !== 'linux') throw Error('LINUX_RUNNER_REQUIRED');
+  const installed = await config.verifyInstallation();
+  if (installed.toolchainDigest !== config.toolchainDigest)
+    throw Error('TOOLCHAIN_MISMATCH');
+  return createRunnerHandler({
+    key: config.key,
+    toolchainDigest: config.toolchainDigest,
+    execute: (kind, payload) =>
+      runHelperQualification(kind, payload, runCommand),
   });
 }

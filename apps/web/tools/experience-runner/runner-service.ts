@@ -1,13 +1,18 @@
-import { createLinuxRunner } from './linux-runner';
+import { createHelperLinuxRunner } from './linux-runner';
 import { createRunnerSocket } from './runner-socket';
 
 /** The private listener cannot open until the Linux installation preflight passes. */
 export async function startRunnerService(
-  settings: Parameters<typeof createLinuxRunner>[0] & { socketPath: string },
+  settings: Parameters<typeof createHelperLinuxRunner>[0] & {
+    socketPath: string;
+  },
   dependencies: {
-    createRunner: typeof createLinuxRunner;
+    createRunner: typeof createHelperLinuxRunner;
     createSocket: typeof createRunnerSocket;
-  } = { createRunner: createLinuxRunner, createSocket: createRunnerSocket }
+  } = {
+    createRunner: createHelperLinuxRunner,
+    createSocket: createRunnerSocket,
+  }
 ) {
   const handler = await dependencies.createRunner(settings);
   return await dependencies.createSocket({

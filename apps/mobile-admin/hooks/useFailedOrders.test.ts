@@ -43,7 +43,10 @@ import {
   FOLLOW_UP_QUERY_LIMIT,
   FOLLOW_UP_WINDOW_DAYS,
 } from '@/config/follow-up-queue';
-import { ONLINE_CHECKOUT_PAYMENT_METHODS } from './orders/order-list-visibility';
+import {
+  CUSTOMER_CHECKOUT_ORDER_FILTER,
+  ONLINE_CHECKOUT_PAYMENT_METHODS,
+} from './orders/order-list-visibility';
 import { useFailedOrders } from './useFailedOrders';
 
 const NOW = '2026-06-02T02:00:00.000Z';
@@ -101,7 +104,7 @@ describe('useFailedOrders', () => {
         {
           method: 'or',
           args: [
-            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,web,agentic_ai)),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,web,agentic_ai))`,
+            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER}),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},${CUSTOMER_CHECKOUT_ORDER_FILTER})`,
           ],
         },
       ])
@@ -321,6 +324,20 @@ describe('useFailedOrders', () => {
       expect(
         matchesOrFilter(
           { ...staleCheckout, payment_status: paymentStatus },
+          filter
+        )
+      ).toBe(true);
+    });
+
+    it.each([
+      ['a legacy website', 'website'],
+      ['a blank', null],
+    ])('still follows up a stale checkout with %s source', async (_label, source) => {
+      const filter = await followUpFilter();
+
+      expect(
+        matchesOrFilter(
+          { ...staleCheckout, payment_status: 'pending', source },
           filter
         )
       ).toBe(true);

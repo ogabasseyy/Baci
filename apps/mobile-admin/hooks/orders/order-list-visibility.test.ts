@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { CHANNELS } from '../../components/orders/new-order.shared';
 import { type FilterRow, matchesOrFilter } from '../../test/postgrest-filter';
 import {
   applyOrderListVisibilityFilter,
   ORDER_LIST_VISIBILITY_FILTER,
+  STAFF_ORDER_SOURCE_VALUES,
 } from './order-list-visibility';
 
 function isVisible(row: FilterRow): boolean {
@@ -58,6 +60,28 @@ describe('applyOrderListVisibilityFilter', () => {
     ['checkout awaiting BNPL', { payment_status: 'bnpl_pending' }],
   ])('hides a customer %s', (_label, overrides) => {
     expect(isVisible({ ...customerCheckout, ...overrides })).toBe(false);
+  });
+
+  it.each([
+    ['a legacy website', 'website'],
+    ['a blank', null],
+    ['an unknown', 'new_channel'],
+  ])('hides an unpaid online checkout with %s source', (_label, source) => {
+    expect(
+      isVisible({
+        ...customerCheckout,
+        payment_method: 'bank_transfer',
+        payment_status: 'pending',
+        source,
+      })
+    ).toBe(false);
+  });
+
+  it('treats every staff new-order channel as staff-entered', () => {
+    const staffSources: readonly string[] = STAFF_ORDER_SOURCE_VALUES;
+    for (const channel of CHANNELS) {
+      expect(staffSources).toContain(channel.id);
+    }
   });
 
   describe('bugfix: staff invoices hidden from the orders list', () => {

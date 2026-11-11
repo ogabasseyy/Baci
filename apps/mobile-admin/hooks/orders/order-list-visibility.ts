@@ -21,34 +21,42 @@ const ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES = [
 export const HIDDEN_CHECKOUT_PAYMENT_STATUSES = `(${HIDDEN_CHECKOUT_PAYMENT_STATUS_VALUES.join(',')})`;
 export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES.join(',')})`;
 
-// Customer checkouts (storefront, customer app, AI-agent checkout) never
-// record a staff creator. Everything else (in-store invoices, WhatsApp,
-// Instagram and other staff-entered or imported orders) is never an
-// abandoned checkout, so it always stays in the orders list whatever its
-// payment status. Source is checked as well as the creator because the
-// creator is NULL on older staff orders and is cleared if the staff account
-// is deleted.
-const CUSTOMER_CHECKOUT_SOURCE_VALUES = [
-  'online_store',
-  'mobile_app',
-  'storefront',
-  'web',
-  'agentic_ai',
+// Staff-entered orders (in-store invoices, social and marketplace sales,
+// manual entries and imports) are never abandoned checkouts, so they always
+// stay in the orders list whatever their payment status. An order counts as
+// staff-entered when it records a staff creator or comes from a staff sales
+// channel. The channel matters because the creator is NULL on older staff
+// orders and is cleared if the staff account is deleted. Any other source,
+// including a blank or unknown one, is treated as a customer checkout, which
+// keeps the drop-off rules' long-standing behaviour for those orders.
+// Keep in step with CHANNELS in components/orders/new-order.shared.ts.
+export const STAFF_ORDER_SOURCE_VALUES = [
+  'physical',
+  'instagram',
+  'whatsapp',
+  'facebook',
+  'tiktok',
+  'jumia',
+  'jiji',
+  'konga',
+  'twitter',
+  'manual',
+  'staff_entry',
+  'bumpa',
 ] as const;
 
-const CUSTOMER_CHECKOUT_SOURCES = `(${CUSTOMER_CHECKOUT_SOURCE_VALUES.join(',')})`;
+const STAFF_ORDER_SOURCES = `(${STAFF_ORDER_SOURCE_VALUES.join(',')})`;
 
 /** Conditions for use inside and(): the order is a customer checkout. */
 export const CUSTOMER_CHECKOUT_ORDER_FILTER = [
   'recorded_by_user_id.is.null',
-  `source.in.${CUSTOMER_CHECKOUT_SOURCES}`,
+  `or(source.is.null,source.not.in.${STAFF_ORDER_SOURCES})`,
 ].join(',');
 
 /** Conditions for use inside or(): the order was entered by staff. */
 export const STAFF_CREATED_ORDER_FILTER = [
   'recorded_by_user_id.not.is.null',
-  'source.is.null',
-  `source.not.in.${CUSTOMER_CHECKOUT_SOURCES}`,
+  `source.in.${STAFF_ORDER_SOURCES}`,
 ].join(',');
 
 // Customer checkouts are shown unless they are a drop-off: an unpaid

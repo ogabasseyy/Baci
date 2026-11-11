@@ -20,7 +20,9 @@
 # THE VOTERS
 #   Gemini review  commit status from gemini-code-review.yml: success, failure
 #                  (HIGH/CRITICAL finding) or error (could not review: quota,
-#                  outage). `error` is an abstention, never a blocking vote.
+#                  outage). `error` is an abstention, never a blocking vote. A red
+#                  job that wrote no status (a crash) is read from the review it
+#                  posted for this commit; with no such review it abstains.
 #   Muse review    muse-code-review.yml is advisory and posts no status, so its
 #                  vote is read from the review it posted for this exact head
 #                  commit: a `- high:` / `- critical:` finding bullet blocks, a
@@ -37,6 +39,10 @@
 #      becomes the single AI gate. Keep `Build` + `Quality Gate` (tests) required.
 #   3. Escape hatch: add the `bypass-ai-gate` label to a PR to force this green
 #      (same label the individual reviewers already honor).
+#   4. Fork pull requests: the voters do not run automatically for forks, so this
+#      gate posts `failure` for every fork PR until a maintainer has reviewed it
+#      and added `bypass-ai-gate`. Requiring this check therefore makes that label
+#      mandatory for all fork PRs, even ones with clean reviews.
 #
 # TUNING: edit VOTERS (the reviewers to tally; a new voter also needs a case in
 # workflow_for in .github/scripts/diff-guardian/votes.sh) and BLOCK_QUORUM (how many must agree to block) in the env

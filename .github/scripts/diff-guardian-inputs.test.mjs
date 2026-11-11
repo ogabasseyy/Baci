@@ -2,7 +2,7 @@
 // paginated API output, failed API reads). The vote matrix and the guards are in diff-guardian-voters.test.mjs.
 import assert from 'node:assert/strict';
 import test, { describe } from 'node:test';
-import { GEMINI_FAIL, MUSE_DONE, OLD_SHA, check, museReview, only, runTally } from './diff-guardian-harness.mjs';
+import { GEMINI_FAIL, MUSE_DONE, OLD_SHA, check, geminiReview, museReview, only, runTally } from './diff-guardian-harness.mjs';
 
 describe('bugfix: only Muse\'s own, verified finding bullets are a blocking vote', () => {
   const vote = (review) => only(runTally({ statuses: [GEMINI_FAIL], checks: [MUSE_DONE], reviews: [review] })).state;
@@ -95,10 +95,10 @@ describe('bugfix: a skipped duplicate check run (a PR title/body edit starts one
     assert.equal(only(result).state, 'success');
   });
 
-  test('the same holds for the Gemini check run', () => {
+  test('the same holds for the Gemini check run (a red run with a posted failure review still counts, a later skipped run does not hide it)', () => {
     const red = check('Gemini review', 'completed', 'failure');
     const skipped = { ...check('Gemini review', 'completed', 'skipped'), completed_at: '2026-11-11T11:00:00Z' };
-    const result = runTally({ checks: [red, skipped, MUSE_DONE], reviews: [museReview({ findings: ['high'] })] });
+    const result = runTally({ checks: [red, skipped, MUSE_DONE], reviews: [museReview({ findings: ['high'] }), geminiReview({ state: 'failure' })] });
     assert.equal(only(result).state, 'failure');
   });
 });

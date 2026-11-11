@@ -103,6 +103,11 @@ test('contract: the report step receives everything post.mjs reads, and every sc
   }
 });
 
+test('contract: the report step posts with the workflow token, so its review is authored by github-actions[bot], the author Diff Guardian reads', () => {
+  assert.equal(stepEnv('Report Gemini review').GH_TOKEN, '${{ secrets.GITHUB_TOKEN }}');
+  assert.ok(readFileSync('.github/scripts/diff-guardian/votes.sh', 'utf8').includes('github-actions[bot]'));
+});
+
 test('contract: the prompt travels as a file, never through step outputs or environment variables', () => {
   assert.ok(!text.includes('steps.diff.outputs.prompt }}') && !text.includes('GEMINI_PROMPT_EOF'));
   assert.equal(stepEnv('Review with Gemini').PROMPT_FILE, '${{ steps.diff.outputs.prompt_file }}');

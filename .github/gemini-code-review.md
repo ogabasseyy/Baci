@@ -25,7 +25,9 @@ review is still posted, with a note, for a person to read.
 
 `error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
 state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then
-block every merge). If an AI gate is ever wanted, require `Diff Guardian / quorum` instead.
+block every merge). If an AI gate is ever wanted, require `Diff Guardian / quorum` instead. Note
+that this makes the `bypass-ai-gate` label mandatory for every fork pull request (the voters do not
+run for forks, so the check fails until a maintainer adds the label).
 
 `error` is on purpose. Before this rewrite a quota error turned the check red and counted as a
 "Gemini found a problem" vote in Diff Guardian.

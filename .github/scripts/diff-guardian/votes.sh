@@ -67,6 +67,21 @@ muse_review_vote() { # reviews-json
       end'
 }
 
+# A Gemini job that is red but wrote no status (a runner crash, an uncaught error) has given no
+# verdict, and an outage must never block, so the red check run alone is not a vote. The review the
+# job posted just before its status carries the verdict in its hidden first line (state:failure or
+# state:success), so a real finding whose status write was lost still counts. No review for this
+# commit is an abstention.
+gemini_review_vote() { # reviews-json
+  printf '%s' "$1" | jq -r --arg sha "$SHA" '
+    [.[] | select(.user.login == "github-actions[bot]")
+      | ((.body // "") | gsub("\r"; "") | split("\n") | .[0]) as $first
+      | select($first | test("^<!-- gemini-code-review sha:" + $sha + " fp:(none|[0-9a-f]{64}) state:(success|failure) -->$"))
+      | {at: .submitted_at, state: ($first | capture("state:(?<s>success|failure)") | .s)}]
+    | sort_by(.at) | last
+    | if . == null then "abstain" else .state end'
+}
+
 # Combine the surfaces into one vote. A real success/failure wins;
 # otherwise pending (still running) outranks abstain (done, no verdict)
 # outranks missing (never appeared). A commit-status "error" means the
@@ -98,6 +113,10 @@ voter_state() { # statuses-json checks-json context reviews-json
         return
         ;;
     esac
+  fi
+  if [ "$3" = "Gemini review" ] && [ "$cr" = "failure" ]; then
+    gemini_review_vote "$4"
+    return
   fi
   case "$cr" in
     success|failure)

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test, { describe } from 'node:test';
-import { GEMINI_FAIL, GEMINI_OK, MUSE_DONE, OLD_SHA, SCRIPT_DIR, SHA, check, museReview, only, runTally, status, tallyStep, workflow } from './diff-guardian-harness.mjs';
+import { GEMINI_FAIL, GEMINI_OK, MUSE_DONE, OLD_SHA, SCRIPT_DIR, SHA, check, geminiReview, museReview, only, runTally, status, tallyStep, workflow } from './diff-guardian-harness.mjs';
 
 test('contract: the voters are Gemini and Muse with a quorum of two; Jules is no longer tallied', () => {
   assert.equal(tallyStep.env.VOTERS, 'Gemini review|Muse review');
@@ -88,6 +88,40 @@ describe('bugfix: voters that cannot report must not decide the gate', () => {
       statuses: [status('Gemini review', 'error')],
       checks: [check('Gemini review', 'completed', 'failure'), MUSE_DONE],
       reviews: [museReview({ findings: ['high'] })],
+    });
+    assert.equal(only(result).state, 'success');
+  });
+
+  test('bugfix: a Gemini job that crashed without writing a status (red check run, no review) abstains instead of blocking', () => {
+    const result = runTally({
+      checks: [check('Gemini review', 'completed', 'failure'), MUSE_DONE],
+      reviews: [museReview({ findings: ['high'] })],
+    });
+    assert.equal(only(result).state, 'success');
+  });
+
+  test('but a red Gemini job whose posted review says failure still counts: the status write was lost, the finding was not', () => {
+    const result = runTally({
+      checks: [check('Gemini review', 'completed', 'failure'), MUSE_DONE],
+      reviews: [museReview({ findings: ['high'] }), geminiReview({ state: 'failure' })],
+    });
+    assert.equal(only(result).state, 'failure');
+  });
+
+  test('a red Gemini job counts a posted review only when it is for this commit and says failure', () => {
+    for (const review of [geminiReview({ sha: OLD_SHA, state: 'failure' }), geminiReview({ state: 'success' }), { ...geminiReview({ state: 'failure' }), user: { login: 'someone' } }]) {
+      const result = runTally({
+        checks: [check('Gemini review', 'completed', 'failure'), MUSE_DONE],
+        reviews: [museReview({ findings: ['high'] }), review],
+      });
+      assert.equal(only(result).state, 'success', JSON.stringify(review.body.slice(0, 70)));
+    }
+  });
+
+  test('the newest posted Gemini review for the commit decides (a manual re-review replaces the first)', () => {
+    const result = runTally({
+      checks: [check('Gemini review', 'completed', 'failure'), MUSE_DONE],
+      reviews: [museReview({ findings: ['high'] }), geminiReview({ state: 'failure', submitted: '2026-11-11T09:00:00Z' }), geminiReview({ state: 'success', submitted: '2026-11-11T10:30:00Z' })],
     });
     assert.equal(only(result).state, 'success');
   });

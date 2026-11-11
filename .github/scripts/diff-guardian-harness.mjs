@@ -7,6 +7,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import YAML from 'yaml';
+import { buildMarker } from './gemini-review/review.mjs';
 
 export const REPO = 'o/r';
 export const SHA = 'a'.repeat(40);
@@ -81,6 +82,15 @@ export function museReview({ sha = SHA, findings = [], fallback = false, verdict
       ...nextSteps.map((step) => `- ${step}`),
     ].join(lineEnding) + appendix,
   };
+}
+
+/**
+ * Review posted by the Gemini workflow (post.mjs) for `sha`. The hidden first line is built by the
+ * real buildMarker, so a change to its format fails the tests that read it.
+ */
+export function geminiReview({ sha = SHA, state = 'failure', submitted = '2026-11-11T10:00:00Z' } = {}) {
+  const marker = buildMarker({ sha, fingerprint: 'c'.repeat(64), state });
+  return { user: { login: 'github-actions[bot]' }, submitted_at: submitted, body: `${marker}\n## Gemini code review\n\nModel: \`gemini-3.6-flash\`` };
 }
 
 export const status = (context, state) => ({ context, state, updated_at: '2026-11-11T10:00:00Z' });

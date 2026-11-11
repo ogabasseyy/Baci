@@ -31,7 +31,9 @@ function assertPurgeableHostname(value) {
       `Cloudflare hostname purge requires a DNS hostname, received ${hostname || '(empty)'}`
     );
   }
-  if (hostname.startsWith('cdn.')) {
+  // Any label equal to "cdn" (cdn.example.com and assets.cdn.example.com alike) is refused;
+  // names that merely start with the letters, like cdn-store.example.com, are fine.
+  if (hostname.split('.').includes('cdn')) {
     throw new Error('Cloudflare hostname purge must never target cdn.* hostnames');
   }
   return hostname;

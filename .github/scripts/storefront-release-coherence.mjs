@@ -195,6 +195,11 @@ export async function runReleaseCoherence(options = {}) {
     logger,
     // Cache-busted copy of the same page with the failing variant's own user agent, so it reads
     // the origin (Vercel) on the same render path, never a Cloudflare copy.
+    // Cache-key assumption (verified 2026-11-11): the zone's HTML cache rule only caches requests
+    // with an EMPTY query string, so the unique probe query always goes to the origin (Cloudflare
+    // logs show these probes as `dynamic` origin fetches). If a zone ever ignored query strings
+    // for HTML, a healthy origin would look stale here and the gate fails closed: no purge, red
+    // deploy. The raw deployment URL cannot stand in: it lacks the storefront's Host routing.
     probeOrigin: async (target, index) =>
       (
         await fetchMarkedHtml({

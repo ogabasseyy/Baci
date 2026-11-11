@@ -246,6 +246,7 @@ test('skips the hostname purge when the token or hostnames are missing', async (
 test('the hostname purge primitive refuses cdn.* hosts and anything that is not a plain DNS hostname', async () => {
   for (const bad of [
     'cdn.ogabassey.com',
+    'foo.cdn.ogabassey.com',
     'https://ogabassey.com',
     '*.ogabassey.com',
     'ogabassey.com/blog',
@@ -266,6 +267,13 @@ test('the hostname purge primitive refuses cdn.* hosts and anything that is not 
     }),
     /never target cdn\.\* hostnames/
   );
+});
+
+test('the cdn guard rejects any cdn label but not names that merely start with cdn', () => {
+  assert.throws(() => buildHostPurgePayload(['assets.CDN.ogabassey.com']), /cdn\./);
+  assert.deepEqual(buildHostPurgePayload(['cdn-store.example.com', 'shop.example.com']), {
+    hosts: ['cdn-store.example.com', 'shop.example.com'],
+  });
 });
 
 test('the hostname purge payload lowercases and deduplicates hostnames', () => {

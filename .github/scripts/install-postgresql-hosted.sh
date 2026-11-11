@@ -46,13 +46,14 @@ UBUNTU_MIRRORS='/etc/apt/apt-mirrors.txt'
 # (archive.ubuntu.com, security.ubuntu.com) did not answer either, and liburing2, the one package the
 # PostgreSQL 18 build needs from Ubuntu, could not be fetched. apt checks the archive signatures on every
 # mirror, so an independent mirror is as trustworthy as Canonical's. Azure's mirror stays as the last choice.
+# security.ubuntu.com is left out on purpose: archive.ubuntu.com serves the security pocket too, and it is the
+# same Canonical infrastructure, so it would add no independent path.
 # Checked on 2026-11-11: every mirror below answers over https, with a valid certificate, for noble,
 # noble-updates, noble-security and noble-backports (Azure's too, although older documentation lists it as http only).
 FALLBACK_MIRRORS=(
   https://mirrors.edge.kernel.org/ubuntu/
   https://ubuntu.osuosl.org/ubuntu/
   https://archive.ubuntu.com/ubuntu/
-  https://security.ubuntu.com/ubuntu/
   https://azure.archive.ubuntu.com/ubuntu/
 )
 # No single apt command may wait longer than this, whatever the mirrors do. A healthy install
@@ -154,7 +155,8 @@ if [ -n "$failed_step" ]; then
     printf '%s\tpriority:%d\n' "$mirror" "$priority"
   done | sudo tee "$UBUNTU_MIRRORS" >/dev/null
   # A command stopped by the ceiling can leave dpkg half-way through a package; finish that work before the retry.
-  sudo timeout --kill-after=10 "$APT_LIMIT_SECONDS" dpkg --configure -a || true
+  sudo timeout --kill-after=10 "$APT_LIMIT_SECONDS" dpkg --configure -a ||
+    echo "dpkg --configure -a exited with status $? (ignored: the retry below reports any real problem; its output is above)."
   { apt_get update && install_pinned; } || {
     echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the independent and canonical Ubuntu mirrors." >&2
     exit 1

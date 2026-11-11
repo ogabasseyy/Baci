@@ -48,6 +48,7 @@ stub('sudo', [
   `    fi`,
   `  done ;;`,
   `esac`,
+  `case " $* " in *' dpkg '*) if [ -n "\${FAKE_DPKG_FAIL:-}" ]; then exit 2; fi ;; esac`,
 ]);
 stub('curl', [
   `output=''; url=''`,
@@ -244,8 +245,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     '  stdin: https://mirrors.edge.kernel.org/ubuntu/\tpriority:1',
     '  stdin: https://ubuntu.osuosl.org/ubuntu/\tpriority:2',
     '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:3',
-    '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:4',
-    '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:5',
+    '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:4',
     // A command stopped by the ceiling can leave dpkg half-way through a package; finish that work before the retry.
     `sudo timeout --kill-after=10 ${APT_LIMIT_SECONDS} dpkg --configure -a`,
     `${SUDO_APT} ${APT_BOUNDS} update`,
@@ -261,6 +261,13 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
     // Azure is demoted, not deleted, so the list keeps a second path. Every entry, Azure included, uses https.
     assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
+  });
+
+  test('keeps going, and says so, when repairing dpkg before the retry fails', () => {
+    const result = install({ FAKE_APT_INSTALL_FAILURES: '1', FAKE_DPKG_FAIL: '1' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /dpkg --configure -a exited with status 2/);
+    assert.equal(aptCommands(result).filter((line) => line === INSTALL).length, 2, 'the retry still runs');
   });
 
   test('takes the same fallback when the PGDG-only refresh itself fails, without trying the install first', () => {

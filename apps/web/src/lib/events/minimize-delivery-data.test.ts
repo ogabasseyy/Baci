@@ -21,21 +21,39 @@ const full = (analytics: boolean, marketing: boolean): DeliveryData => ({
 
 describe('bugfix: shopper data stored regardless of consent', () => {
   it('keeps only the consent flags for a no-consent page view', () => {
-    expect(minimizeDeliveryData(full(false, false), 'page_view')).toEqual({
+    expect(
+      minimizeDeliveryData(
+        full(false, false),
+        'page_view',
+        'tenant_verified_client'
+      )
+    ).toEqual({
       analytics_consent: false,
       marketing_consent: false,
     });
   });
 
   it('keeps only the consent flags for a no-consent conversion event', () => {
-    expect(minimizeDeliveryData(full(false, false), 'add_to_cart')).toEqual({
+    expect(
+      minimizeDeliveryData(
+        full(false, false),
+        'add_to_cart',
+        'tenant_verified_client'
+      )
+    ).toEqual({
       analytics_consent: false,
       marketing_consent: false,
     });
   });
 
   it('drops personal fields from a consented event no ad platform consumes', () => {
-    expect(minimizeDeliveryData(full(true, true), 'page_view')).toEqual({
+    expect(
+      minimizeDeliveryData(
+        full(true, true),
+        'page_view',
+        'tenant_verified_client'
+      )
+    ).toEqual({
       analytics_consent: true,
       marketing_consent: true,
     });
@@ -43,11 +61,41 @@ describe('bugfix: shopper data stored regardless of consent', () => {
 
   it('keeps every field for a consented conversion event', () => {
     const data = full(true, false);
-    expect(minimizeDeliveryData(data, 'begin_checkout')).toEqual(data);
+    expect(
+      minimizeDeliveryData(data, 'begin_checkout', 'tenant_verified_client')
+    ).toEqual(data);
   });
 
   it('keeps every field when only marketing consent is granted', () => {
     const data = full(false, true);
-    expect(minimizeDeliveryData(data, 'purchase')).toEqual(data);
+    expect(
+      minimizeDeliveryData(data, 'search', 'tenant_verified_client')
+    ).toEqual(data);
+  });
+
+  it('drops personal fields for client purchase, which has no destination', () => {
+    expect(
+      minimizeDeliveryData(
+        full(true, true),
+        'purchase',
+        'tenant_verified_client'
+      )
+    ).toEqual({ analytics_consent: true, marketing_consent: true });
+  });
+
+  it('drops personal fields for place_order, which has no client destination', () => {
+    expect(
+      minimizeDeliveryData(
+        full(true, true),
+        'place_order',
+        'tenant_verified_client'
+      )
+    ).toEqual({ analytics_consent: true, marketing_consent: true });
+  });
+
+  it('drops personal fields for anonymous clients, which never deliver', () => {
+    expect(
+      minimizeDeliveryData(full(true, true), 'add_to_cart', 'anonymous_client')
+    ).toEqual({ analytics_consent: true, marketing_consent: true });
   });
 });

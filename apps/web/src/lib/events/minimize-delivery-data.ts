@@ -1,4 +1,6 @@
+import type { DomainEventV1 } from '@baci/shared/contracts';
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
+import { toClientAnalyticsDomainEventName } from './client-analytics-domain-event-name';
 
 /**
  * Shopper fields that exist only so an ad platform can match a conversion.
@@ -25,18 +27,30 @@ export type DeliveryData = {
   marketing_consent: boolean;
 } & Partial<Record<PersonalDeliveryField, string | undefined>>;
 
+/** Client event names the router resolves to "no destination". */
+const OBSERVATION_ONLY_NAMES = new Set([
+  'analytics.client.observed.v1',
+  'analytics.purchase.observed.v1',
+]);
+
 /**
  * Data minimisation at ingest: keep the shopper's personal matching fields
  * only when the event can fan out to an ad platform (a conversion-class event)
+ * AND the client route for that event/trust level really has destinations
+ * (client purchase/place_order and anonymous clients are observation-only)
  * AND the visitor granted at least one consent. Otherwise only the two consent
  * flags are kept, so the ledger and delivery rows never hold the personal data.
  */
 export function minimizeDeliveryData(
   data: DeliveryData,
-  eventType: string
+  eventType: string,
+  trustLevel: DomainEventV1['trust_level']
 ): DeliveryData {
   const canBeUsed =
     isConversionEvent(eventType) &&
+    !OBSERVATION_ONLY_NAMES.has(
+      toClientAnalyticsDomainEventName(eventType, trustLevel)
+    ) &&
     (data.analytics_consent || data.marketing_consent);
   if (canBeUsed) return data;
   return {

@@ -162,7 +162,8 @@ export async function POST(request: NextRequest) {
         await recordAnalyticsDomainEvent(eventSupabase, {
           deliveryData: minimizeDeliveryData(
             deliveryData(input, request),
-            eventType
+            eventType,
+            context.trustLevel
           ),
           eventData,
           eventName: toClientAnalyticsDomainEventName(

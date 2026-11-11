@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultBuilderSettings } from './builder-default-settings';
 import { loadBuilderData } from './load-builder-data';

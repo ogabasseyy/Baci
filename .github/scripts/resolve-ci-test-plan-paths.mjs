@@ -170,6 +170,28 @@ export function isTargetableMobileStorefrontFile(file) {
   );
 }
 
+// Folders this planner has always targeted by prefix alone, whatever the extension.
+const ALWAYS_TARGETED_PREFIXES = [
+  ...WEB_TARGETED_PREFIXES,
+  ...MOBILE_STOREFRONT_TARGETED_PREFIXES,
+];
+const isAlwaysTargeted = (file) =>
+  ALWAYS_TARGETED_PREFIXES.some((prefix) => file.startsWith(prefix));
+
+/**
+ * True when a fixture in those folders (a JSON, CSS or snapshot file that no
+ * reader family covers) sits in a diff with a file outside them. Neither
+ * `vitest --changed` nor Jest can tell which tests read such a fixture. A diff
+ * made only of files in those folders was targeted before the reader families
+ * and still is. Next to any other file (docs, a migration, a browser test, a
+ * root test) it ran the full suite, which reads the fixture, and still does.
+ */
+export function keepsFullForSourceData(files) {
+  const isFixture = (file) =>
+    isAlwaysTargeted(file) && !MODULE_FILE.test(file) && !isFsReaderFile(file);
+  return files.some(isFixture) && !files.every(isAlwaysTargeted);
+}
+
 // Vitest reruns its whole suite when any package.json or Vite/Vitest config is in
 // the changed list (its default `forceRerunTriggers`). Routed to a targeted plan
 // that would put every test in the single unsharded job, so these files go to

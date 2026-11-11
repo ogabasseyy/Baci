@@ -15,6 +15,7 @@ import {
   isSharedConfigFile,
   isTargetableMobileStorefrontFile,
   isTargetableWebFile,
+  keepsFullForSourceData,
 } from './resolve-ci-test-plan-paths.mjs';
 import { findNonWebReaders } from './resolve-ci-test-plan-readers.mjs';
 import {
@@ -22,6 +23,7 @@ import {
   DELETED_UNKNOWN_REASON,
   NON_WEB_READER_REASON,
   READER_SEARCH_FAILED_REASON,
+  SOURCE_DATA_REASON,
   STOREFRONT_READER_REASON,
   STOREFRONT_REASON,
   WEB_AND_STOREFRONT_REASON,
@@ -209,6 +211,11 @@ export function resolveCiTestPlan({
     return fullAffectedPlan(
       'The diff includes files outside the targeted web test scope.'
     );
+  }
+  // A fixture in the source folders is never traced to the tests that read it:
+  // next to files outside those folders the full suite covers it, as it did before.
+  if (keepsFullForSourceData(scopedFiles)) {
+    return fullAffectedPlan(SOURCE_DATA_REASON);
   }
 
   const runsWebTests = webFiles.length > 0 || readerFiles.length > 0;

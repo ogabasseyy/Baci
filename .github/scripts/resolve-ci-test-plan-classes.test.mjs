@@ -5,8 +5,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveCiTestPlan } from './resolve-ci-test-plan.mjs';
 import {
+  FULL_COMMAND,
   plan,
+  SOURCE_DATA_REASON,
   STOREFRONT_COMMAND,
+  STOREFRONT_SOURCE,
   WEB_COMMAND,
   WEB_SOURCE,
   WEB_SOURCE_REASON,
@@ -142,6 +145,65 @@ test('code files in the browser test folders skip the full suite', () => {
   ]) {
     assert.equal(plan([file]).mode, 'targeted-web-vitest', file);
   }
+});
+
+// bugfix: `vitest --changed` and Jest follow imports, so neither can tell which
+// tests read a JSON, CSS or snapshot fixture in the source folders. Before the
+// reader families such a fixture only got a targeted plan when every other file sat
+// in those folders; beside docs, a migration, a browser test or a root test the
+// full suite ran and read it. Those diffs had gone targeted, and no test read it.
+test('bugfix: a source fixture next to a file of a newer class keeps the full suite', () => {
+  const fixture = 'apps/web/src/lib/orders/fixtures/order.json';
+
+  for (const other of [
+    'docs/guides/ad-tracking-screenshot-review.md',
+    'supabase/migrations/20261111090000_merchant_cancel_order_refund_mode.sql',
+    '.github/workflows/pilot-codec-compatibility.yml',
+    'apps/web/tests/checkout-browser/support/cart-page.ts',
+    'apps/web/next.config.routing.test.ts',
+    'apps/mobile-storefront/__tests__/checkout/contact.test.tsx',
+  ]) {
+    assert.deepEqual(
+      plan([fixture, other]),
+      {
+        mode: 'full-affected',
+        reason: SOURCE_DATA_REASON,
+        command: FULL_COMMAND,
+      },
+      other
+    );
+  }
+  for (const files of [
+    ['apps/mobile-storefront/lib/fixtures/order.json', 'docs/guides/x.md'],
+    [fixture, WEB_SOURCE, 'docs/guides/x.md'],
+  ]) {
+    assert.equal(plan(files).reason, SOURCE_DATA_REASON, files.join(', '));
+  }
+});
+
+test('a source fixture alone, or next to code in the same folders, keeps its targeted plan', () => {
+  for (const files of [
+    ['apps/web/src/lib/orders/fixtures/order.json'],
+    ['apps/web/src/lib/orders/fixtures/order.json', WEB_SOURCE],
+    [
+      'apps/web/src/app/globals.css',
+      'apps/web/src/lib/__snapshots__/a.test.ts.snap',
+    ],
+    ['apps/mobile-storefront/lib/fixtures/order.json'],
+    ['apps/web/src/lib/orders/fixtures/order.json', STOREFRONT_SOURCE],
+  ]) {
+    assert.notEqual(plan(files).mode, 'full-affected', files.join(', '));
+  }
+});
+
+test('markdown in the source folders is a reader file, not a fixture', () => {
+  const result = plan([
+    'apps/web/src/lib/orders/NOTES.md',
+    'docs/guides/ad-tracking-screenshot-review.md',
+  ]);
+
+  assert.equal(result.mode, 'targeted-web-vitest');
+  assert.equal(result.command, WEB_COMMAND);
 });
 
 test('a Turbo env addition next to a documentation note is no longer forced to the full suite', () => {

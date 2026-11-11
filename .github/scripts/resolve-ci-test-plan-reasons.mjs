@@ -25,3 +25,7 @@ export const NON_WEB_READER_REASON =
   'Files that tests outside apps/web read changed, so CI keeps the full affected test path:';
 export const READER_SEARCH_FAILED_REASON =
   'The search for tests outside apps/web that read the changed files failed, so CI keeps the full affected test path.';
+// Neither Vitest nor Jest can tell which tests read a JSON, CSS or snapshot fixture
+// in the source folders; the full path does.
+export const SOURCE_DATA_REASON =
+  'A fixture in the apps/web or mobile storefront source folders changed next to files outside them, and the targeted run cannot tell which tests read it, so CI keeps the full affected test path.';

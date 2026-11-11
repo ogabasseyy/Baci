@@ -5,6 +5,7 @@ import {
   FS_READER_FAMILIES,
   fsReaderFamilyOf,
   isFsReaderFile,
+  keepsFullForSourceData,
   readerNeedlesFor,
 } from './resolve-ci-test-plan-paths.mjs';
 
@@ -162,6 +163,47 @@ test('no search string is broad enough to select a large part of the suite', () 
   for (const needle of needles) {
     assert.ok(needle.length >= 4, `"${needle}" is too short to search for`);
   }
+});
+
+test('a fixture in the source folders only keeps the full suite beside a file outside them', () => {
+  const fixtures = [
+    'apps/web/src/lib/x/order.json',
+    'apps/mobile-storefront/lib/x/theme.css',
+  ];
+
+  assert.equal(keepsFullForSourceData(fixtures), false);
+  assert.equal(
+    keepsFullForSourceData([...fixtures, 'apps/web/src/lib/x/a.ts']),
+    false
+  );
+  assert.equal(
+    keepsFullForSourceData(['apps/web/src/lib/x/a.ts', 'docs/guide.md']),
+    false,
+    'no fixture, nothing to keep'
+  );
+  for (const fixture of fixtures) {
+    for (const other of [
+      'docs/guide.md',
+      'supabase/migrations/20261111090000_x.sql',
+      'apps/web/tests/checkout-browser/a.ts',
+      'apps/web/next.config.routing.test.ts',
+      'apps/mobile-storefront/__tests__/a.test.ts',
+    ]) {
+      assert.equal(keepsFullForSourceData([fixture, other]), true, other);
+    }
+  }
+  // Reader files are found by the provider by name, so they are not fixtures.
+  assert.equal(
+    keepsFullForSourceData(['apps/web/src/lib/x/notes.md', 'docs/guide.md']),
+    false
+  );
+  assert.equal(
+    keepsFullForSourceData([
+      'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt',
+      'supabase/migrations/20261111090000_x.sql',
+    ]),
+    false
+  );
 });
 
 // A new family without an example (and so without a test of what it claims) must

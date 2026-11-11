@@ -69,6 +69,17 @@ Vitest only, and Jest's `--changedSince` cannot follow fs reads (for example a
 storefront test that reads a release workflow), so only the full path runs the
 whole storefront test script.
 
+A fixture in the folders that were always targeted by prefix (a JSON, CSS or
+snapshot file under `apps/web/src`, `tools`, `mcp-server`, `experience-runtime`
+or the eight mobile storefront source folders) is invisible to `vitest
+--changed` and Jest, and no reader family covers it. A diff made only of files
+in those folders stays targeted, as it was before the reader families. Next to
+any file outside them (docs, a migration, a workflow, a browser test, a root
+test) the planner keeps the full suite, which is what the previous planner ran
+for those diffs (`keepsFullForSourceData`). Markdown and the replay registry
+are reader files, not fixtures. A reader family for these fixtures would let
+those diffs leave the full suite; it needs its own measurements.
+
 ## Tests outside apps/web
 
 The provider only reaches tests in `apps/web`. The tests of the mobile apps and

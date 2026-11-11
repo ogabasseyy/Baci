@@ -21,6 +21,8 @@ export const DELETED_SOURCE_REASON =
   'Deleted or renamed source files keep the full affected test path: unchanged tests may still import them.';
 export const STOREFRONT_READER_REASON =
   'Mobile storefront changes next to files that tests read keep the full affected test path: storefront Jest cannot follow fs reads.';
+export const SOURCE_DATA_REASON =
+  'A fixture in the apps/web or mobile storefront source folders changed next to files outside them, and the targeted run cannot tell which tests read it, so CI keeps the full affected test path.';
 
 export function plan(
   changedFiles,

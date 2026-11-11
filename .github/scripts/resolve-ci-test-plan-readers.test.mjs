@@ -122,6 +122,23 @@ test('the file path or its bare name next to a quote counts, a mention of its fo
   ]);
 });
 
+// A test in a sibling workspace reaches the web app as `../web/tools/...`, without
+// the `apps/web/` prefix. Any such path ends in the file's name, behind a
+// separator, which the bare-name search string matches.
+test('a file of apps/web named by a relative path from a sibling workspace is found', () => {
+  const { readers } = readersOf(
+    ['apps/web/tools/db/replay-registry/2026_x/sql-checks.txt'],
+    {
+      'apps/mobile-admin/sibling.test.ts':
+        "readFileSync(resolve(__dirname, '../../web/tools/db/replay-registry/2026_x/sql-checks.txt'))",
+      'apps/mobile-admin/same-folder.test.ts':
+        "readFileSync('../../web/tools/db/replay-registry/2026_x/pending-sources.txt')",
+    }
+  );
+
+  assert.deepEqual(readers, ['apps/mobile-admin/sibling.test.ts']);
+});
+
 test('a new migration is not named by a test that reads one old migration', () => {
   const { readers } = readersOf(
     ['supabase/migrations/20261111090000_new.sql'],

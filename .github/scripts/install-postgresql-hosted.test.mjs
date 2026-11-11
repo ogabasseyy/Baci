@@ -11,7 +11,7 @@ const BUILD = '18.6-1.pgdg24.04+2';
 const FINGERPRINT = 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8';
 // Every apt call is bounded: a few seconds per connection, three tries, and a ceiling for the whole command.
 const APT_LIMIT_SECONDS = 180;
-const APT_BOUNDS = '-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15';
+const APT_BOUNDS = '-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60';
 // The first refresh reads only the PGDG source, so an unreachable Ubuntu mirror cannot stall the step.
 const PGDG_ONLY = '-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/pgdg.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0';
 const INSTALL = `sudo apt-get ${APT_BOUNDS} install -y --no-install-recommends postgresql-18=${BUILD} postgresql-client-18=${BUILD}`;
@@ -32,12 +32,17 @@ function stub(name, lines) {
 stub('sudo', [
   `{ printf 'sudo'; for argument in "$@"; do printf ' %s' "$argument"; done; printf '\\n'; } >> "$FAKE_LOG"`,
   `if [ "$1" = tee ]; then sed 's/^/  stdin: /' >> "$FAKE_LOG"; fi`,
-  // FAKE_APT_INSTALL_FAILURES=1 makes the first apt-get install fail, the way an unreachable mirror does.
+  // FAKE_APT_INSTALL_FAILURES=1 (or FAKE_APT_UPDATE_FAILURES=1) makes the first apt-get install (or update) fail,
+  // the way an unreachable mirror does.
   `if [ "$1" = apt-get ]; then`,
   `  for argument in "$@"; do`,
   `    if [ "$argument" = install ]; then`,
   `      attempts="$(cat "$FAKE_LOG.installs" 2>/dev/null || echo 0)"; attempts=$((attempts + 1)); echo "$attempts" > "$FAKE_LOG.installs"`,
   `      if [ "$attempts" -le "\${FAKE_APT_INSTALL_FAILURES:-0}" ]; then exit 100; fi`,
+  `    fi`,
+  `    if [ "$argument" = update ]; then`,
+  `      attempts="$(cat "$FAKE_LOG.updates" 2>/dev/null || echo 0)"; attempts=$((attempts + 1)); echo "$attempts" > "$FAKE_LOG.updates"`,
+  `      if [ "$attempts" -le "\${FAKE_APT_UPDATE_FAILURES:-0}" ]; then exit 100; fi`,
   `    fi`,
   `  done`,
   `fi`,
@@ -238,21 +243,41 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.match(script, /timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" sudo apt-get/);
   });
 
+  // What the script does after a failed first attempt: Ubuntu's own servers first, Azure demoted to last, one full
+  // refresh, one more install.
+  const FALLBACK = [
+    'sudo tee /etc/apt/apt-mirrors.txt',
+    '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:1',
+    '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:2',
+    '  stdin: http://azure.archive.ubuntu.com/ubuntu/\tpriority:3',
+    `timeout ${APT_LIMIT_SECONDS}`,
+    `sudo apt-get ${APT_BOUNDS} update`,
+    `timeout ${APT_LIMIT_SECONDS}`,
+    INSTALL,
+  ];
+
   test('switches to the canonical Ubuntu mirrors and refreshes everything when the first install fails', () => {
     const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /canonical Ubuntu mirrors/);
-    assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), [
-      'sudo tee /etc/apt/apt-mirrors.txt',
-      '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:1',
-      '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:2',
-      `timeout ${APT_LIMIT_SECONDS}`,
-      `sudo apt-get ${APT_BOUNDS} update`,
-      `timeout ${APT_LIMIT_SECONDS}`,
-      INSTALL,
-    ]);
-    // Nothing the fallback fetches may use cleartext http either.
-    assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
+    assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
+    // Azure is demoted, not deleted, so the list keeps a second path. It is the only cleartext http line.
+    assert.deepEqual(result.commands.filter((line) => line.includes('http://')), ['  stdin: http://azure.archive.ubuntu.com/ubuntu/\tpriority:3']);
+  });
+
+  test('takes the same fallback when the PGDG-only refresh itself fails, without trying the install first', () => {
+    const result = install({ FAKE_APT_UPDATE_FAILURES: '1' });
+    assert.equal(result.status, 0, result.stderr);
+    const afterFirstRefresh = result.commands.slice(result.commands.indexOf(`sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`) + 1);
+    assert.deepEqual(afterFirstRefresh, FALLBACK);
+  });
+
+  test('fails with a clear message, and never installs, when the PGDG-only refresh and the full refresh both fail', () => {
+    const result = install({ FAKE_APT_UPDATE_FAILURES: '2' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Could not install PostgreSQL 18/);
+    assert.equal(aptCommands(result).filter(isUpdate).length, 2, 'the PGDG refresh and one full refresh');
+    assert.ok(!aptCommands(result).includes(INSTALL), 'no install is attempted on lists that did not refresh');
   });
 
   test('fails with a clear message, after exactly one retry, when the install still fails on the canonical mirrors', () => {

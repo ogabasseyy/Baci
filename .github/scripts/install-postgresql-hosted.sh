@@ -45,13 +45,18 @@ UBUNTU_MIRRORS='/etc/apt/apt-mirrors.txt'
 # No single apt command may wait longer than this, whatever the mirrors do. A healthy install
 # takes well under a minute.
 APT_LIMIT_SECONDS=180
-# A few seconds per connection, three tries per file.
-APT_BOUNDS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
+# A few seconds per connection, three tries per file, and up to a minute for a dpkg lock that a background
+# apt job on a fresh runner, or a command stopped by the ceiling above, may still hold.
+APT_BOUNDS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
 
 apt_get() {
   timeout --kill-after=10 "$APT_LIMIT_SECONDS" sudo apt-get "${APT_BOUNDS[@]}" "$@"
 }
 
+# Recommended extras are skipped. Checked against the noble-pgdg package index for this build: postgresql-18
+# recommends postgresql-18-jit (the JIT library; PostgreSQL turns JIT off for the session when it is absent)
+# and sysstat, postgresql-client-18 recommends nothing, and the contrib modules ship inside postgresql-18
+# (it provides postgresql-contrib-18). The suites need none of the extras, and they would come from Ubuntu.
 install_pinned() {
   apt_get install -y --no-install-recommends "postgresql-18=${PG_BUILD}" "postgresql-client-18=${PG_BUILD}"
 }
@@ -98,15 +103,14 @@ echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt n
   sudo tee "$PGDG_SOURCE" >/dev/null
 
 # Refresh only the PGDG index first: it is all the two packages should need, and it keeps an unreachable
-# Ubuntu mirror out of the way. List-Cleanup=0 leaves the Ubuntu lists as they are.
-apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update
-
-if ! install_pinned; then
-  echo "The install failed with the package lists as they are; switching to the canonical Ubuntu mirrors and refreshing every list once."
-  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' |
+# Ubuntu mirror out of the way. List-Cleanup=0 leaves the Ubuntu lists as they are. If that refresh or the
+# install fails (a dependency has to come from Ubuntu's archive, or the refresh itself broke), switch to
+# Ubuntu's own servers once and refresh every list. Azure stays on the list as the last choice.
+if ! { apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update && install_pinned; }; then
+  echo "The PostgreSQL-only refresh or the install failed; switching to the canonical Ubuntu mirrors and refreshing every list once."
+  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n' |
     sudo tee "$UBUNTU_MIRRORS" >/dev/null
-  apt_get update
-  install_pinned || {
+  { apt_get update && install_pinned; } || {
     echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the canonical Ubuntu mirrors." >&2
     exit 1
   }

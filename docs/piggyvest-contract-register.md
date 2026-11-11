@@ -23,13 +23,19 @@ All fixtures in colocated tests use synthetic identifiers.
 - Money: integer kobo, `currency: NGN`. Balances
   (`destination_wallet_balance`, `destination_wallet_ledger_balance`,
   `destination_transaction_balance`), `amount`, `fee` all kobo.
-- Identity: `eventData.id`, `transaction_id`, `reference`,
-  `third_party_reference`, `internal_reference`, `session_id` are candidate
-  reconciliation keys; exact dedupe scope still blocked (see §3).
+- Identity: RESOLVED 2026-11-11 (§8) — the unique key for a credit is the
+  envelope `pvb_reference` (the PVB credit id, `PVB01…`).
+  `eventData.transaction_id` is internal-only and will not match the PVB
+  credit; `internal_reference` and `session_id` are not unique keys either.
+  `eventData.id`, `reference`, `third_party_reference` remain audit fields.
 - Schema: `apps/web/src/schemas/piggyvest/events.ts`
   (`bankTransferInflowSuccessEventSchema`), colocated tests pass.
-- Ledger (implemented 17 Sep 2026): `piggyvest_inflow_credits` dedupes on
-  `eventData.transaction_id`; positive amount enforced in app code and by
+- Ledger (implemented 17 Sep 2026; key changed 2026-11-11, §8):
+  `piggyvest_inflow_credits` dedupes on `pvb_reference` (unique column,
+  migration `20261111140000`). `eventData.transaction_id` is kept as a
+  still-unique audit column and as the plan-transfer projection key of the
+  first writer. Previously it deduped on `eventData.transaction_id`.
+  Positive amount enforced in app code and by
   CHECK constraint; zero-amount inflows ack as failed poison without
   credit. No sender PII columns (register-level rule, enforced by the SQL
   regression test). A credited inflow records provider confirmation —
@@ -50,8 +56,15 @@ All fixtures in colocated tests use synthetic identifiers.
   accrual is never spendable. Each payout needs a durable unique provider
   payout identity before credit; duplicates must not double-credit.
 - Schema: `interestPayoutSuccessEventSchema`, colocated tests pass.
-- Ledger (implemented 17 Sep 2026): `piggyvest_interest_payouts` dedupes
-  on `eventData.id`; gross − tax = net = amount enforced in app code and
+- Attribution: RESOLVED 2026-11-11 (§8) — `interest-payout.success` means
+  the payout is settled on PVB; `pvb_wallet` is the PVB wallet that was
+  credited, `eventData.destination_wallet` is PVB's internal wallet. The
+  ledger attributes to `pvb_wallet` (previously, wrongly, to
+  `destination_wallet`, which would have left every real payout unmapped).
+- Ledger (implemented 17 Sep 2026; key changed 2026-11-11, §8):
+  `piggyvest_interest_payouts` dedupes on `pvb_reference` (previously
+  `eventData.id`, now an audit column); gross − tax = net = amount enforced
+  in app code and
   by CHECK constraints; inconsistent payouts ack as failed poison without
   credit; snapshots sum net per wallet. Inbox claim re-wins `failed` rows
   so storage-error redeliveries re-attempt the credit.
@@ -70,7 +83,10 @@ All fixtures in colocated tests use synthetic identifiers.
 ## 3. Still blocked (do not activate on these samples alone)
 
 - Webhook retry/replay: RESOLVED 17 Sep 2026 — provider confirms up to
-  10 automatic retries, then delivery marked failed, plus manual resend.
+  10 automatic retries, then delivery marked failed. CORRECTED 2026-11-11
+  (§8): there is NO endpoint for us to request a resend; retries are
+  automatic with exponential backoff only. Once they run out, nothing on
+  PiggyVest's side replays the event (operational risk in §8).
   Treat every webhook as at-least-once; handler must be idempotent and
   return 2xx only after the event is durably recorded. Implemented:
   inbox collapses on `event_id` PK, duplicates ack without reprocessing,
@@ -225,3 +241,91 @@ resend needed. Wallet-ID relationship resolved as far as observable:
 `pvb_wallet` retrieves the funded API wallet while the nested
 destination id 404s on that endpoint — `pvb_wallet` is authoritative
 for API reconciliation; the internal id remains undocumented.
+
+## 8. Provider answers — 2026-11-11 (PiggyVest engineer, shared WhatsApp group)
+
+Source: PiggyVest's engineer answering our open contract questions in the
+shared group on 2026-11-11 (owner shared a screenshot). Recorded verbatim in
+substance; no customer data.
+
+(a) **Unique credit key.** The unique key for a credit is `pvb_reference`
+(the PVB credit id, `PVB01…`). `eventData.transaction_id` is internal-only
+and won't match the PVB credit. `internal_reference` and `session_id` are
+not unique keys either.
+
+- Implemented: `piggyvest_inflow_credits` and `piggyvest_interest_payouts`
+  gain a `pvb_reference` column with a UNIQUE constraint; the intake insert
+  functions require it and use a target-less `ON CONFLICT DO NOTHING`, and
+  the read functions take either key. Two deliveries with the same
+  `pvb_reference` but a different `transaction_id` credit once.
+- The old keys (`provider_transaction_id`, `provider_payout_id`) stay as
+  still-unique audit columns, so a different `pvb_reference` reusing an
+  internal id cannot insert and is quarantined as a conflict
+  (`mismatched_fields: ['pvb_reference']`) rather than credited or acked.
+- Existing rows are backfilled from the webhook inbox (`reference` stores the
+  envelope `pvb_reference` for these event types). A row with no inbox
+  evidence, or whose value would collide, stays NULL; the ledgers find such
+  legacy rows by their old key, so a redelivery with the same internal id
+  still dedupes. Because a NULL row collides with nothing on
+  `pvb_reference`, a redelivery under a NEW internal id could otherwise
+  credit twice, so while any NULL row exists the intake insert functions
+  refuse all new credits with a retryable `55000` (503 / drain retry). An
+  operator must set those rows' `pvb_reference` from verified evidence.
+  The migration does not abort on them, so deploys are not blocked.
+- Plan-transfer projection key NOT changed: it stays
+  `plan-transfer:{provider_transaction_id}` of the stored (first-writer)
+  row. Changing it to `pvb_reference` would project already-credited rows a
+  second time on their next redelivery, and the projection RPC rejects a
+  reused key whose transaction id differs. A redelivery with a new
+  `transaction_id` therefore re-projects under the stored id and dedupes.
+- Interest dedupe also moved from `eventData.id` to `pvb_reference`:
+  answer (a) defines the key for any PVB credit, and `eventData.id` was only
+  ever seen in a sample, like the internal ids PiggyVest said not to key on.
+
+(b) **No resend endpoint.** There is no endpoint for us to request a webhook
+resend. PiggyVest retries automatically with exponential backoff.
+
+(c) **Interest payout semantics.** `interest-payout.success` means the payout
+is settled on PVB. `eventData.destination_wallet` is PVB's internal wallet;
+`pvb_wallet` is the PVB wallet that was credited. This matches the 18 Sep
+inflow probe (§7), where the nested internal id 404s on the wallet API.
+
+- Implemented: the legacy interest ledger and the inbox attribution
+  (`record-input.ts`) use `pvb_wallet`. Before this, a real payout would have
+  failed `INTEREST_LEDGER_UNMAPPED` → 503 until retries ran out, and interest
+  would never have been credited.
+- Primary-wallet paid-interest path (`primary-wallet-paid-interest-signed`):
+  unchanged in SQL. Its `sourceWalletId` selection key already carries
+  `pvb_wallet`; the operator crosswalk pins all five envelope values exactly
+  and credits `apiWalletId`. Operators must provision `apiWalletId` as the
+  API id of `pvb_wallet`, never of `destination_wallet`. Open question: the
+  crosswalk also pins `destination_wallet`; if PVB's internal wallet can
+  differ between payouts, each payout would need re-provisioning
+  (`prerequisite`) — confirm on the first live payout.
+
+### Operational risk: unmapped events after retries run out
+
+`INFLOW_LEDGER_UNMAPPED` / `INTEREST_LEDGER_UNMAPPED` (and any other
+retryable processing failure) answer 503 so PiggyVest redelivers. With no
+resend endpoint, once PiggyVest's backoff is exhausted nothing on their side
+replays the event. What exists on ours:
+
+- **Durable capture (exists).** The receiver stores the signed bytes before
+  processing (route.ts, R5), so the event is never lost; the capture row
+  stays pending (or `needs_review`).
+- **Capture drain (exists, gated).** When
+  `PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED` is exactly `true` and the
+  drain runner is actually scheduled, the drain re-processes pending rows up
+  to 20 attempts, then parks them `needs_review`. If the drain is not
+  attested, PiggyVest's own retries are the only retry path.
+- **Missing:** (1) a replay of `needs_review` captures after a fix (several
+  drain messages still say "request a resend", which is no longer possible);
+  (2) a reconciler that lists PVB credits by `pvb_reference` and finds
+  credits we never recorded. The daily reconciliation
+  (`docs/piggyvest-daily-reconciliation.md`) only reads; a missed credit shows as a wallet holding
+  MORE than recorded, which is listed `above_expected` and never pages.
+
+Follow-ups (not in this change): operator replay for `needs_review`
+captures; a credit-gap reconciler keyed on `pvb_reference`; confirm the
+drain runner is scheduled before live inflows; update the "request a
+resend" drain messages.

@@ -2,18 +2,24 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BankTransferInflowSuccessEvent } from '@/schemas/piggyvest/events';
+import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
+import { readStoredPvbCredit } from './stored-pvb-credit';
 
 /**
  * Verified bank-transfer inflow ledger.
  *
  * Money-flow rules enforced here:
- * - One row per provider transaction identity
- *   (`eventData.transaction_id`). Redeliveries — even across distinct
- *   event_ids — collapse on that key and can never double-credit.
- *   A redelivery whose financial fields differ from the stored row is a
- *   conflict: first writer wins and the processor quarantines the
- *   observation instead of acking it as a duplicate.
+ * - One row per PVB credit (`pvb_reference`, the `PVB01…` credit id).
+ *   PiggyVest confirmed on 2026-11-11 that pvb_reference is the credit's
+ *   unique key and that `eventData.transaction_id` is internal-only.
+ *   Redeliveries — even across distinct event_ids and with a different
+ *   transaction_id — collapse on pvb_reference and never double-credit.
+ *   transaction_id is kept as an audit column (still unique): a distinct
+ *   pvb_reference reusing it cannot insert and is quarantined as a
+ *   conflict. A redelivery whose financial fields differ from the stored
+ *   row is a conflict: first writer wins and the processor quarantines
+ *   the observation instead of acking it as a duplicate.
  * - Amount must be positive. A zero-amount inflow is poison: acked as
  *   failed without credit, never retried into existence.
  * - No credit is written unless the event's provider (customer, wallet)
@@ -28,7 +34,13 @@ import { resolvePlanWalletMapping } from './plan-wallet-mapping';
  *   movement: wallet balances remain live provider reads.
  * - Every credit-or-verified-duplicate then projects onto a savings goal
  *   via `allocate_plan_transfer_contribution`, keyed by
- *   `plan-transfer:{provider_transaction_id}`. The destination
+ *   `plan-transfer:{provider_transaction_id}` of the STORED row (the first
+ *   writer's transaction id). The key deliberately did not move to
+ *   pvb_reference: rows projected before the switch already hold the
+ *   transaction-id key, and a new key would project them a second time.
+ *   The RPC also rejects a reused key with a different transaction id, so
+ *   a redelivery carrying a new transaction_id must reuse the stored one.
+ *   The destination
  *   (provider wallet, customer) pair is passed so the RPC binds to the
  *   funding flow's mapped goal instead of inferring from the goal count;
  *   unmapped wallets fall back to the single-candidate census. Zero
@@ -107,6 +119,7 @@ export async function recordInflowCredit(
     .from('piggyvest_inflow_credits')
     .upsert(
       {
+        pvb_reference: event.pvb_reference,
         provider_transaction_id: detail.transaction_id,
         event_data_id: detail.id,
         event_id: event.eventId,
@@ -118,9 +131,9 @@ export async function recordInflowCredit(
         session_id: detail.session_id ?? null,
         credited_at: detail.timestamp,
       },
-      { onConflict: 'provider_transaction_id', ignoreDuplicates: true }
+      { onConflict: 'pvb_reference', ignoreDuplicates: true }
     )
-    .select('provider_transaction_id');
+    .select('pvb_reference');
 
   if (error) {
     throw new InflowLedgerError(
@@ -144,27 +157,34 @@ export async function recordInflowCredit(
   // id with different financials reaches this key: verify the stored row
   // before calling it a duplicate. First writer wins; a mismatch is a
   // provider conflict for quarantine, never a silent ack.
-  const existing = await supabase
-    .from('piggyvest_inflow_credits')
-    .select(
-      'customer_id, wallet_id, amount_kobo, fee_kobo, reference, session_id, event_data_id, credited_at'
-    )
-    .eq('provider_transaction_id', detail.transaction_id)
-    .maybeSingle();
-  if (existing.error) {
+  const stored = await readStoredPvbCredit(supabase, {
+    table: 'piggyvest_inflow_credits',
+    schema: storedPvbCreditRowSchemas.inflow,
+    pvbReference: event.pvb_reference,
+    legacyKeyColumn: 'provider_transaction_id',
+    legacyKey: detail.transaction_id,
+  }).catch(() => {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_STORAGE_ERROR',
       'Inflow duplicate verify failed'
     );
-  }
-  if (!existing.data) {
+  });
+  if (!stored) {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_STORAGE_ERROR',
       'Inflow duplicate receipt vanished before verify'
     );
   }
-  const stored = existing.data;
   const mismatchedFields: string[] = [];
+  // A legacy row (NULL pvb_reference) is the same credit by its old key; a
+  // different non-null pvb_reference means the internal transaction id was
+  // reused by another credit. transaction_id itself is audit-only: the same
+  // pvb_reference under a new transaction_id is a duplicate.
+  if (
+    (stored.pvb_reference ?? null) !== null &&
+    stored.pvb_reference !== event.pvb_reference
+  )
+    mismatchedFields.push('pvb_reference');
   if (stored.customer_id !== event.customer_id)
     mismatchedFields.push('customer_id');
   if (stored.wallet_id !== mapping.wallet_id)
@@ -196,6 +216,7 @@ export async function recordInflowCredit(
           session_id: detail.session_id ?? null,
           event_data_id: detail.id,
           credited_at: detail.timestamp,
+          pvb_reference: event.pvb_reference,
           provider_transaction_id: detail.transaction_id,
         })
       )
@@ -212,12 +233,14 @@ export async function recordInflowCredit(
   }
   // Redeliveries retry the projection: the first delivery may have
   // credited-then-thrown on ambiguity, and only a later delivery can
-  // project once the goal set resolves to one candidate.
+  // project once the goal set resolves to one candidate. Project under the
+  // stored (first writer's) transaction id so the key matches any earlier
+  // projection even when this delivery carries a different transaction_id.
   await projectPlanTransferOntoGoal(supabase, {
     customerId: mapping.customer_id,
     merchantId: mapping.merchant_id,
     amountKobo: detail.amount,
-    providerTransactionId: detail.transaction_id,
+    providerTransactionId: stored.provider_transaction_id,
     providerWalletId: event.pvb_wallet,
     providerCustomerId: event.customer_id,
   });

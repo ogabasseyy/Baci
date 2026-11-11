@@ -27,10 +27,10 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  *
  * The receiver stores the exact request and answers 200; this drain
  * consumes stored rows and runs the same processing pipeline over the
- * stored bytes. Because processing is keyed on the provider transaction id
- * (inflow transaction id, payout id) by the downstream ledgers, replaying a
- * row any number of times, including after a crash between processing and
- * completion, applies each provider transaction once.
+ * stored bytes. Because processing is keyed on the PVB credit id
+ * (`pvb_reference`, PiggyVest 2026-11-11) by the downstream ledgers,
+ * replaying a row any number of times, including after a crash between
+ * processing and completion, applies each provider credit once.
  *
  * Authenticity is re-established on every replay: the stored bytes and
  * signature are re-verified against current, overlap and replay-only

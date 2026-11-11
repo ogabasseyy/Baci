@@ -63,6 +63,8 @@ const MAPPING_ROW = {
 };
 
 const STORED_CREDIT_ROW = {
+  pvb_reference: 'pvb-txn-synthetic-001',
+  provider_transaction_id: 'provider-txn-synthetic-001',
   customer_id: 'faas-customer-synthetic-001',
   wallet_id: 'pvb-wallet-synthetic-001',
   amount_kobo: 1750000,
@@ -149,7 +151,7 @@ describe('recordInflowCredit', () => {
         fee_kobo: 0,
         session_id: '000000000001',
       }),
-      { onConflict: 'provider_transaction_id', ignoreDuplicates: true }
+      { onConflict: 'pvb_reference', ignoreDuplicates: true }
     );
     const persisted = upsert.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(persisted).not.toHaveProperty('sender_name');

@@ -117,7 +117,10 @@ beforeEach(() => {
       status: 'ready',
     }),
     inflow_credit_insert: () => [
-      { provider_transaction_id: inflowEvent.eventData.transaction_id },
+      {
+        pvb_reference: inflowEvent.pvb_reference,
+        provider_transaction_id: inflowEvent.eventData.transaction_id,
+      },
     ],
     allocate_plan_transfer: () => [],
     resolve_event: () => true,

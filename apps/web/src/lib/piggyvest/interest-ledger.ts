@@ -3,25 +3,32 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import z from 'zod';
 import type { InterestPayoutSuccessEvent } from '@/schemas/piggyvest/events';
+import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
+import { readStoredPvbCredit } from './stored-pvb-credit';
 
 /**
  * Verified interest-payout ledger.
  *
  * Money-flow rules enforced here:
- * - One row per provider payout identity (`eventData.id`). Redeliveries —
- *   even across distinct event_ids — collapse on that key and can never
- *   double-credit. A redelivery whose financial fields differ from the
- *   stored row is a conflict: first writer wins and the processor
- *   quarantines the observation instead of acking it as a duplicate.
+ * - One row per PVB credit (`pvb_reference`). PiggyVest confirmed on
+ *   2026-11-11 that pvb_reference is a credit's unique key; `eventData.id`
+ *   sits beside the internal ids PiggyVest said not to key on and was only
+ *   ever seen in a sample, so it is kept as a (still unique) audit column.
+ *   Redeliveries — even across distinct event_ids — collapse on
+ *   pvb_reference and can never double-credit. A redelivery whose
+ *   financial fields differ from the stored row is a conflict: first
+ *   writer wins and the processor quarantines the observation instead of
+ *   acking it as a duplicate.
  * - Arithmetic is verified before credit: gross − tax must equal net, and
  *   the envelope amount must equal net. A violation fails closed as
  *   poison (ack-without-credit), never as a partial or adjusted credit.
  *   The table's CHECK constraints backstop the app check.
- * - No credit is written unless the event's provider (customer, wallet)
- *   pair resolves to a known plan-wallet mapping. Unmapped payouts fail
- *   retryable (INTEREST_LEDGER_UNMAPPED): attribution, not arithmetic, is
- *   what is missing, and a later mapping must still be able to credit.
+ * - No credit is written unless the event's provider (customer,
+ *   pvb_wallet) pair resolves to a known plan-wallet mapping. Unmapped
+ *   payouts fail retryable (INTEREST_LEDGER_UNMAPPED): attribution, not
+ *   arithmetic, is what is missing, and a later mapping must still be
+ *   able to credit.
  * - Only reconciled net payouts are credited. Pending accrual is never
  *   spendable and is never written here.
  */
@@ -73,14 +80,16 @@ export async function recordInterestPayout(
     );
   }
 
-  // Exact attribution only: the credited plan wallet is the nested
-  // destination_wallet. The envelope pvb_wallet is the source
-  // accrued-interest wallet, which has no plan mapping; attributing to it
-  // would mark every authentic payout unmapped. Ambiguous attribution
-  // fails retryable without credit.
+  // Exact attribution only: the credited plan wallet is the envelope
+  // pvb_wallet. PiggyVest confirmed on 2026-11-11 that
+  // eventData.destination_wallet is PVB's internal wallet id (it never
+  // matches a plan-wallet mapping, and live inflow probes showed the nested
+  // internal id 404s on the wallet API), while pvb_wallet is the PVB wallet
+  // the payout credited. Ambiguous attribution fails retryable without
+  // credit.
   const mapping = await resolvePlanWalletMapping(supabase, {
     piggyvestCustomerId: event.customer_id,
-    walletId: detail.destination_wallet,
+    walletId: event.pvb_wallet,
   }).catch((error: unknown) => {
     throw new InterestLedgerError(
       'INTEREST_LEDGER_STORAGE_ERROR',
@@ -98,6 +107,7 @@ export async function recordInterestPayout(
     .from('piggyvest_interest_payouts')
     .upsert(
       {
+        pvb_reference: event.pvb_reference,
         provider_payout_id: detail.id,
         event_id: event.eventId,
         customer_id: event.customer_id,
@@ -110,9 +120,9 @@ export async function recordInterestPayout(
         batch_id: detail.batch_id,
         paid_at: detail.timestamp,
       },
-      { onConflict: 'provider_payout_id', ignoreDuplicates: true }
+      { onConflict: 'pvb_reference', ignoreDuplicates: true }
     )
-    .select('provider_payout_id');
+    .select('pvb_reference');
 
   if (error) {
     throw new InterestLedgerError(
@@ -126,27 +136,33 @@ export async function recordInterestPayout(
   // id with different financials reaches this key: verify the stored row
   // before calling it a duplicate. First writer wins; a mismatch is a
   // provider conflict for quarantine, never a silent ack.
-  const existing = await supabase
-    .from('piggyvest_interest_payouts')
-    .select(
-      'customer_id, wallet_id, amount_kobo, gross_kobo, withholding_tax_kobo, net_kobo, reference, batch_id, paid_at'
-    )
-    .eq('provider_payout_id', detail.id)
-    .maybeSingle();
-  if (existing.error) {
+  const stored = await readStoredPvbCredit(supabase, {
+    table: 'piggyvest_interest_payouts',
+    schema: storedPvbCreditRowSchemas.interest,
+    pvbReference: event.pvb_reference,
+    legacyKeyColumn: 'provider_payout_id',
+    legacyKey: detail.id,
+  }).catch(() => {
     throw new InterestLedgerError(
       'INTEREST_LEDGER_STORAGE_ERROR',
       'Interest duplicate verify failed'
     );
-  }
-  if (!existing.data) {
+  });
+  if (!stored) {
     throw new InterestLedgerError(
       'INTEREST_LEDGER_STORAGE_ERROR',
       'Interest duplicate receipt vanished before verify'
     );
   }
-  const stored = existing.data;
   const mismatchedFields: string[] = [];
+  // A legacy row (NULL pvb_reference) is the same payout by its old key; a
+  // different non-null pvb_reference means another credit reused the id.
+  // provider_payout_id itself is audit-only, like the inflow transaction id.
+  if (
+    (stored.pvb_reference ?? null) !== null &&
+    stored.pvb_reference !== event.pvb_reference
+  )
+    mismatchedFields.push('pvb_reference');
   if (stored.customer_id !== event.customer_id)
     mismatchedFields.push('customer_id');
   if (stored.wallet_id !== mapping.wallet_id)
@@ -180,6 +196,7 @@ export async function recordInterestPayout(
           reference: detail.reference,
           batch_id: detail.batch_id,
           paid_at: detail.timestamp,
+          pvb_reference: event.pvb_reference,
           provider_payout_id: detail.id,
         })
       )

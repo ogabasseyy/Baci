@@ -550,7 +550,10 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       expect(chain.ilike).toHaveBeenCalledWith('notes', '%"txn\\%\\_replay"%');
     });
 
-    it('uses metadata fallback lookup so stale provider switches can be classified', async () => {
+    it.each([
+      true,
+      false,
+    ])('uses the by-ID metadata fallback after an empty notes search (found: %s)', async (found) => {
       vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
 
       const supabaseMock = createMockSupabaseClient();
@@ -563,16 +566,17 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       firstLookupChain.eq = vi.fn().mockReturnValue(firstLookupChain);
       firstLookupChain.ilike = vi
         .fn()
-        .mockResolvedValue({ data: [], error: null });
+        .mockResolvedValue({ data: [], error: null, count: 0 });
 
       const metadataLookupChain = {
         ...createMockSupabaseClient().from('orders'),
       };
       metadataLookupChain.select = vi.fn().mockReturnValue(metadataLookupChain);
       metadataLookupChain.eq = vi.fn().mockReturnValue(metadataLookupChain);
-      metadataLookupChain.single = vi
-        .fn()
-        .mockResolvedValue({ data: null, error: null });
+      metadataLookupChain.single = vi.fn().mockResolvedValue({
+        data: found ? { ...mockOrder, payment_status: 'bnpl_approved' } : null,
+        error: null,
+      });
 
       supabaseMock.from
         .mockReturnValueOnce(firstLookupChain)
@@ -582,6 +586,17 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       const response = await POST(request);
 
       expect(response.status).toBe(200);
+      if (found) {
+        expect(ensurePaidOrderInventoryConfirmed).toHaveBeenCalledWith(
+          supabaseMock,
+          mockOrder.merchant_id,
+          mockOrder.id
+        );
+      } else {
+        expect(await response.json()).toMatchObject({
+          warning: 'Order not found',
+        });
+      }
       expect(metadataLookupChain.eq).toHaveBeenCalledWith(
         'id',
         customerPaymentPayload.metaData

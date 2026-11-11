@@ -34,8 +34,17 @@ describe('recordPreGatewayRedemption', () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
+  it('keeps unexpected database failures generic', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'private database detail' },
+    });
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).rejects.toThrow('Store credit could not be confirmed');
+  });
+
   it.each([
-    { data: null, error: { message: 'private database detail' } },
     { data: null, error: null },
     { data: { wallet: 0, savings: 0 }, error: null },
     { data: { wallet: 20000, savings: 5000 }, error: null },
@@ -43,7 +52,10 @@ describe('recordPreGatewayRedemption', () => {
     mocks.rpc.mockResolvedValue(result);
     await expect(
       recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
-    ).rejects.toThrow('Store credit could not be confirmed');
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
   });
 
   it.each([

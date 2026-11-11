@@ -31,7 +31,7 @@ export function getWebhookProductsTotal(
 
 type WalletProductAmounts = readonly { productAmount: number | string }[];
 
-export function getWebhookWalletProductsTotal(products: WalletProductAmounts) {
+function getWebhookWalletProductsKobo(products: WalletProductAmounts) {
   let totalKobo = 0;
   for (const product of products) {
     const decimal = String(product.productAmount).trim();
@@ -44,7 +44,12 @@ export function getWebhookWalletProductsTotal(products: WalletProductAmounts) {
     totalKobo += kobo;
     if (!Number.isSafeInteger(totalKobo)) return null;
   }
-  return totalKobo / 100;
+  return totalKobo;
+}
+
+export function getWebhookWalletProductsTotal(products: WalletProductAmounts) {
+  const kobo = getWebhookWalletProductsKobo(products);
+  return kobo === null ? null : kobo / 100;
 }
 
 export function matchesRecordedFinancedAmount(
@@ -52,8 +57,10 @@ export function matchesRecordedFinancedAmount(
   recordedAmount: number
 ): boolean {
   // The recorded fee split can include fractional kobo before summation.
+  const recordedKobo = Math.round(recordedAmount * 100);
   return (
-    getWebhookWalletProductsTotal(products) ===
-    Math.round(recordedAmount * 100) / 100
+    Number.isSafeInteger(recordedKobo) &&
+    recordedKobo > 0 &&
+    getWebhookWalletProductsKobo(products) === recordedKobo
   );
 }

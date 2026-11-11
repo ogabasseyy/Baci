@@ -48,9 +48,9 @@ export async function recordPreGatewayRedemption(
       return needsReview ? reconciliationFailure : contentionFailure;
     }
   }
+  if (error) throw new Error(failure);
   const credit: unknown = data;
   if (
-    error ||
     !credit ||
     typeof credit !== 'object' ||
     !('wallet' in credit) ||
@@ -58,5 +58,5 @@ export async function recordPreGatewayRedemption(
     Number(credit.wallet) !== walletAmountUsed ||
     Number(credit.savings) !== savingsAmountUsed
   )
-    throw new Error(failure);
+    return reconciliationFailure;
 }

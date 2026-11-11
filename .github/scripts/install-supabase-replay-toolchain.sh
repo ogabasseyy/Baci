@@ -16,9 +16,11 @@ set -euo pipefail
 # pre-installed (PostgreSQL 18.6 and the Supabase CLI), so only the checks below run there.
 if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
   sudo install -d /usr/share/postgresql-common/pgdg
-  curl --fail --silent --show-error --location \
-    https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-    | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+  PGDG_KEY="${RUNNER_TEMP}/pgdg-key.asc"
+  curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+    --connect-timeout 15 --max-time 45 \
+    https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "${PGDG_KEY}"
+  sudo install -m 0644 "${PGDG_KEY}" /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
   echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
     | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
   sudo apt-get update

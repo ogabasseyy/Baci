@@ -11,7 +11,12 @@ test('retries a failed PostgreSQL key download before installing the key', () =>
     workflow
       .split('name: Install Supabase replay toolchain')[1]
       ?.split('      - name:')[0] ?? '';
-  const download = toolchain.split('sudo apt-get update')[0];
+  assert.match(toolchain, /bash \.github\/scripts\/install-supabase-replay-toolchain\.sh/);
+  const script = readFileSync(
+    new URL('../.github/scripts/install-supabase-replay-toolchain.sh', import.meta.url),
+    'utf8'
+  );
+  const download = script.split('sudo apt-get update')[0];
   assert.match(download, /--retry 3 --retry-all-errors/);
   assert.match(download, /--output "\${PGDG_KEY}"/);
   assert.match(download, /sudo install -m 0644 "\${PGDG_KEY}"/);

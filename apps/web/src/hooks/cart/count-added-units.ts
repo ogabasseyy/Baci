@@ -1,8 +1,13 @@
 import type { CartItem } from './cart-types';
 
-function productUnits(cart: readonly CartItem[], productId: string): number {
+function productUnits(
+  cart: readonly CartItem[],
+  productId: string | number
+): number {
+  // Template products can carry numeric ids: compare as strings.
   return cart.reduce(
-    (sum, item) => (item.id === productId ? sum + item.quantity : sum),
+    (sum, item) =>
+      String(item.id) === String(productId) ? sum + item.quantity : sum,
     0
   );
 }
@@ -15,7 +20,7 @@ function productUnits(cart: readonly CartItem[], productId: string): number {
 export function countAddedUnits(
   previousCart: readonly CartItem[],
   nextCart: readonly CartItem[],
-  productId: string
+  productId: string | number
 ): number {
   return Math.max(
     0,

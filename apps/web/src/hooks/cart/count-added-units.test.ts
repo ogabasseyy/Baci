@@ -29,4 +29,9 @@ describe('countAddedUnits', () => {
   it('never returns a negative count', () => {
     expect(countAddedUnits([line('a', 3)], [], 'a')).toBe(0);
   });
+
+  it('matches a numeric template id against a string cart id', () => {
+    // Regression: strict equality dropped the add when the ids' types differed.
+    expect(countAddedUnits([], [line('7', 1)], 7)).toBe(1);
+  });
 });

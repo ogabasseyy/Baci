@@ -1,6 +1,7 @@
 // Test harness for the Diff Guardian tally step: runs the step's real bash script with a
 // fake `gh` on PATH that serves canned GitHub API responses and records every status POST.
 // Bash 3.2 compatible on purpose (macOS ships 3.2; CI runners ship 5).
+import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -89,6 +90,16 @@ export const check = (name, statusValue, conclusion = null) => ({
   completed_at: statusValue === 'completed' ? '2026-11-11T10:00:00Z' : null,
 });
 
+export const GEMINI_OK = status('Gemini review', 'success');
+export const GEMINI_FAIL = status('Gemini review', 'failure');
+export const MUSE_DONE = check('Muse review', 'completed', 'success');
+
+/** The single status POST a run is expected to make. */
+export const only = (result) => {
+  assert.equal(result.posted.length, 1, `expected exactly one status POST, got ${JSON.stringify(result.posted)}\n${result.stderr}`);
+  return result.posted[0];
+};
+
 /**
  * Runs the tally script once.
  * options: statuses, checks, reviews, workflows ({file: state | {error}}), labels, headRepo,
@@ -109,6 +120,9 @@ export function runTally(options = {}) {
       });
     }
     put(`repos/${REPO}/commits/${sha}/status`, { statuses: options.statuses ?? [] });
+    // Simulated API failures: options.errors = { status, checks, reviews } -> the error text gh prints.
+    const failures = { status: `repos/${REPO}/commits/${sha}/status`, checks: `repos/${REPO}/commits/${sha}/check-runs`, reviews: `repos/${REPO}/pulls/${PR}/reviews` };
+    for (const [name, text] of Object.entries(options.errors ?? {})) writeFileSync(join(dir, `${key(failures[name])}.error`), text);
     // `gh api --paginate` prints one JSON document per page, back to back.
     const putPages = (path, pages) => writeFileSync(join(dir, `${key(path)}.json`), pages.map((page) => JSON.stringify(page)).join('\n'));
     putPages(

@@ -32,12 +32,15 @@ if [ -z "${PR:-}" ]; then
   exit 0
 fi
 
-# A transient API failure must not turn the job red or overwrite a decided status: keep the
-# previous status; the next event (a reviewer finishing, a push) tallies again.
-if ! pr_json="$(gh api "repos/$REPO/pulls/$PR" 2>/dev/null)"; then
-  echo "::warning::Diff Guardian could not read pull request #$PR; keeping the previous status until the next event re-tallies."
+# A transient API failure must not turn the job red, and must not be mistaken for "no results"
+# (an empty list would read as every reviewer abstaining and could overwrite a decided status):
+# keep the previous status; the next event (a reviewer finishing, a push) tallies again.
+keep_previous_status() { # what could not be read
+  echo "::warning::Diff Guardian could not read $1; keeping the previous status until the next event re-tallies."
   exit 0
-fi
+}
+
+pr_json="$(gh api "repos/$REPO/pulls/$PR" 2>/dev/null)" || keep_previous_status "pull request #$PR"
 current_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha')"
 if [ -z "${SHA:-}" ]; then
   SHA="$current_sha"
@@ -103,10 +106,11 @@ echo "Voters ($voter_count): $(printf '%s' "$VOTERS")  |  block quorum: $BLOCK_Q
 # shellcheck source=votes.sh
 . "${SCRIPT_DIR}/votes.sh"
 
-combined="$(gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null || echo '{"statuses":[]}')"
-checks="$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs?per_page=100" 2>/dev/null | jq -s '{"check_runs":[.[].check_runs[]?]}' 2>/dev/null || echo '{"check_runs":[]}')"
-reviews_raw="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null)" || reviews_raw='[]'
-reviews="$(printf '%s' "$reviews_raw" | jq -s 'add // []' 2>/dev/null)" || reviews='[]'
+combined="$(gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null)" || keep_previous_status "the commit statuses"
+checks_raw="$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs?per_page=100" 2>/dev/null)" || keep_previous_status "the check runs"
+checks="$(printf '%s' "$checks_raw" | jq -s '{"check_runs":[.[].check_runs[]?]}' 2>/dev/null)" || keep_previous_status "the check runs"
+reviews_raw="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null)" || keep_previous_status "the pull request reviews"
+reviews="$(printf '%s' "$reviews_raw" | jq -s 'add // []' 2>/dev/null)" || keep_previous_status "the pull request reviews"
 
 reported=0 ; blocking=0 ; active_pending=0 ; abstained=0 ; missing=0 ; summary=""
 while IFS= read -r ctx; do

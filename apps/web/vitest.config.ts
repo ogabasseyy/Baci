@@ -7,6 +7,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 import { escapeGlob } from './vitest.escape-glob';
 import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
+import { SlowFilesFirstSequencer } from './vitest.sequencer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -164,6 +165,11 @@ export default defineConfig({
     // the full suite spawns one per core. CI (process.env.CI) keeps full
     // parallelism for speed.
     ...(process.env.CI ? {} : { maxWorkers: '50%', minWorkers: 1 }),
+    // Start the few multi-minute tests first (vitest.slow-test-files.ts). Only
+    // the order inside a run or CI shard changes; the `--shard` split does not.
+    // Vitest sequences all projects together and a project cannot set its own
+    // sequencer, so this one root setting covers node, jsdom and holdouts.
+    sequence: { sequencer: SlowFilesFirstSequencer },
     alias: {
       '@/app/(platform)/onboarding/actions': path.resolve(
         __dirname,

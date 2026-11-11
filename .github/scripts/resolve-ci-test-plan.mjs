@@ -62,9 +62,11 @@ export const WEB_FULL_TEST_FILES = new Set([
   'apps/web/vitest.jsdom-holdouts.ts',
   'apps/web/vitest.next-image-mock.ts',
   'apps/web/vitest.node-folders.ts',
+  'apps/web/vitest.sequencer.ts',
   'apps/web/vitest.setup.node.ts',
   'apps/web/vitest.setup.shared.ts',
   'apps/web/vitest.setup.ts',
+  'apps/web/vitest.slow-test-files.ts',
 ]);
 
 export const MOBILE_STOREFRONT_FULL_TEST_FILES = new Set([

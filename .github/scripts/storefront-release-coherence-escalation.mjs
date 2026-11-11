@@ -79,6 +79,20 @@ export async function purgeReleaseHosts({
   }
 }
 
+// `verify` is injectable, so the shape of the targets it attaches to a stale failure is not
+// trusted: a malformed one must fail closed with a clear message, before any probe or purge.
+function describeInvalidStaleTarget(target) {
+  if (typeof target?.url !== 'string' || typeof target.variant !== 'string') {
+    return 'it needs a url and a variant';
+  }
+  try {
+    const { protocol } = new URL(target.url);
+    return protocol === 'https:' || protocol === 'http:' ? null : `${target.url} is not an http(s) URL`;
+  } catch {
+    return `${target.url} is not a valid URL`;
+  }
+}
+
 /**
  * Runs `verify` with the normal retry window. If canaries are still on an older release
  * (`error.stale`) AND the origin serves the expected release, sends one hostname purge and
@@ -110,6 +124,15 @@ export async function verifyWithHostPurgeFallback({
     // this function is exported with an injectable `verify`, so never purge without that gate.
     const staleTargets = Array.isArray(error.staleTargets) ? error.staleTargets : [];
     if (staleTargets.length === 0) throw error;
+    for (const target of staleTargets) {
+      const problem = describeInvalidStaleTarget(target);
+      if (problem) {
+        throw new Error(
+          `${error.message}; invalid stale target (${problem}), so no hostname purge was attempted`,
+          { cause: error }
+        );
+      }
+    }
     const probes = await Promise.all(
       staleTargets.map(async (target, index) => {
         try {

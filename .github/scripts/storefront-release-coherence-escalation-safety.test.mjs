@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RELEASE_USER_AGENTS } from './storefront-release-coherence.mjs';
+import { RELEASE_USER_AGENTS, resolveReleaseUserAgent } from './storefront-release-coherence.mjs';
 import { verifyWithHostPurgeFallback } from './storefront-release-coherence-escalation.mjs';
 import {
   isOriginProbe,
@@ -179,37 +179,86 @@ test('says plainly that the hostname purge clears all cached content for the hos
   );
 });
 
+// verifyWithHostPurgeFallback is exported and `verify` is injectable, so these tests drive it
+// with a stale-flagged failure whose staleTargets are chosen by the test.
+function attemptFallback(failure) {
+  const counts = { hostPurges: 0, probes: 0 };
+  const outcome = verifyWithHostPurgeFallback({
+    baseUrl: 'https://ogabassey.com',
+    config: { attempts: 1, escalationAttempts: 1, expectedMarker: 'release_123', retryDelayMs: 1 },
+    hostPurgeImpl: async () => {
+      counts.hostPurges += 1;
+      return { skipped: false };
+    },
+    logger: { log: () => {}, warn: () => {} },
+    probeOrigin: async () => {
+      counts.probes += 1;
+      return 'release_123';
+    },
+    verify: async () => {
+      throw failure;
+    },
+  });
+  return { counts, outcome };
+}
+
+const staleFailure = (extra) =>
+  Object.assign(new Error('Storefront release coherence failed: stale'), { stale: true, ...extra });
+
 test('fails closed when a stale failure arrives without stale targets (no origin proof possible)', async () => {
-  // verifyWithHostPurgeFallback is exported and `verify` is injectable: a stale-flagged error with
-  // no (or empty) staleTargets must never reach the hostname purge without the per-target origin gate.
+  // A stale-flagged error with no (or empty) staleTargets must never reach the hostname purge
+  // without the per-target origin gate.
   for (const staleTargets of [undefined, [], 'https://ogabassey.com/products']) {
-    const failure = Object.assign(new Error('Storefront release coherence failed: stale'), {
-      stale: true,
-      ...(staleTargets === undefined ? {} : { staleTargets }),
-    });
-    let hostPurges = 0;
-    let probes = 0;
+    const failure = staleFailure(staleTargets === undefined ? {} : { staleTargets });
+    const { counts, outcome } = attemptFallback(failure);
+
+    await assert.rejects(outcome, (error) => error === failure);
+    assert.equal(counts.hostPurges, 0, `no hostname purge for staleTargets=${JSON.stringify(staleTargets)}`);
+    assert.equal(counts.probes, 0);
+  }
+});
+
+test('fails closed on a malformed stale target, before any origin probe or purge', async () => {
+  const valid = { url: 'https://ogabassey.com/products', variant: 'browser' };
+  for (const bad of [
+    null,
+    'https://ogabassey.com/products',
+    {},
+    { url: 'https://ogabassey.com/products' },
+    { variant: 'browser' },
+    { url: 42, variant: 'browser' },
+    { url: '/products', variant: 'browser' },
+    { url: 'not a url', variant: 'browser' },
+    { url: 'ftp://ogabassey.com/products', variant: 'browser' },
+    { url: 'https://ogabassey.com/products', variant: 7 },
+  ]) {
+    const failure = staleFailure({ staleTargets: [valid, bad] });
+    const { counts, outcome } = attemptFallback(failure);
 
     await assert.rejects(
-      verifyWithHostPurgeFallback({
-        baseUrl: 'https://ogabassey.com',
-        config: { attempts: 1, escalationAttempts: 1, expectedMarker: 'release_123', retryDelayMs: 1 },
-        hostPurgeImpl: async () => {
-          hostPurges += 1;
-          return { skipped: false };
-        },
-        logger: { log: () => {}, warn: () => {} },
-        probeOrigin: async () => {
-          probes += 1;
-          return 'release_123';
-        },
-        verify: async () => {
-          throw failure;
-        },
-      }),
-      (error) => error === failure
+      outcome,
+      (error) => {
+        assert.match(error.message, /invalid stale target \(.+\), so no hostname purge was attempted/);
+        assert.match(error.message, /Storefront release coherence failed: stale/);
+        assert.equal(error.cause, failure);
+        return true;
+      },
+      `rejects ${JSON.stringify(bad)}`
     );
-    assert.equal(hostPurges, 0, `no hostname purge for staleTargets=${JSON.stringify(staleTargets)}`);
-    assert.equal(probes, 0);
+    // The valid target is not probed either: every target is checked before any probe starts.
+    assert.equal(counts.probes, 0, `no probe for ${JSON.stringify(bad)}`);
+    assert.equal(counts.hostPurges, 0, `no hostname purge for ${JSON.stringify(bad)}`);
+  }
+});
+
+test('resolves only the known user-agent variants, never inherited object keys', () => {
+  assert.equal(resolveReleaseUserAgent('browser'), RELEASE_USER_AGENTS.browser);
+  assert.equal(resolveReleaseUserAgent('googlebot'), RELEASE_USER_AGENTS.googlebot);
+  for (const unknown of ['bingbot', 'constructor', 'toString', '__proto__', '', undefined, 7]) {
+    assert.throws(
+      () => resolveReleaseUserAgent(unknown),
+      /unknown user-agent variant/,
+      `rejects ${String(unknown)}`
+    );
   }
 });

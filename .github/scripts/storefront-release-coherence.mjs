@@ -22,6 +22,14 @@ export const RELEASE_USER_AGENTS = Object.freeze({
     'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 });
 
+export function resolveReleaseUserAgent(variant) {
+  // Object.hasOwn: a plain object also answers for inherited names such as "constructor".
+  if (!Object.hasOwn(RELEASE_USER_AGENTS, variant)) {
+    throw new Error(`unknown user-agent variant ${JSON.stringify(variant)}`);
+  }
+  return RELEASE_USER_AGENTS[variant];
+}
+
 export function extractDeploymentMarker(html, label = 'HTML response') {
   const markers = new Set();
   for (const match of String(html).matchAll(/data-dpl-id=["']([^"']+)["']/g)) {
@@ -211,7 +219,7 @@ export async function runReleaseCoherence(options = {}) {
             new URL(target.url).pathname,
             `${requestId}-origin-${index}`
           ),
-          userAgent: RELEASE_USER_AGENTS[target.variant],
+          userAgent: resolveReleaseUserAgent(target.variant),
         })
       ).marker,
     sleep: options.sleep,

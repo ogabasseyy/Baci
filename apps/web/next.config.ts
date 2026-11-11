@@ -9,7 +9,6 @@ import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
 import { composePostHogNextConfig } from './src/config/compose-posthog-next-config';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
 import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
-import { INVOICE_PDF_FILE_TRACING_INCLUDES } from './src/config/invoice-pdf-file-tracing';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
 import { applyPilotPublicGate } from './src/config/pilot-next-gate';
@@ -192,7 +191,6 @@ const nextConfig: NextConfig = {
   // See: https://github.com/vercel/next.js/issues/71818
   outputFileTracingRoot: path.join(__dirname, '../..'),
   outputFileTracingIncludes: {
-    ...INVOICE_PDF_FILE_TRACING_INCLUDES,
     '/middleware': ['./node_modules/@supabase/**/*'],
   },
 

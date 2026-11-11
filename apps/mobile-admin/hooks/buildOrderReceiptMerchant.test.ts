@@ -73,6 +73,12 @@ describe('buildOrderReceiptMerchant', () => {
   });
 
   it('leaves an unresolved name unset when the directory fails', async () => {
+    const options = paystackBanksQueryOptions(3000);
+    queryClient.setQueryData(
+      options.queryKey,
+      [{ code: merchant.bank_code, name: 'Old Bank' }],
+      { updatedAt: Date.now() - options.staleTime - 1 }
+    );
     vi.mocked(apiClient).mockRejectedValue(new Error('offline'));
     const result = await buildOrderReceiptMerchant(
       merchant,

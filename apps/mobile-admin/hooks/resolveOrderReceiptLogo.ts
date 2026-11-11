@@ -222,14 +222,17 @@ export async function resolveOrderReceiptLogo(
       reader.releaseLock();
     }
     const logo = bytes.subarray(0, size);
-    // Preserve the sanitized SVG preview in mobile. Server PDFs accept only
-    // bounded single-image rasters, so an SVG uses the seller-name fallback there.
-    if (url.pathname.toLowerCase().endsWith('.svg')) {
-      const svgXml = sanitizeSvg(new TextDecoder().decode(logo));
+    const type = rasterType(logo);
+    if (!type) {
+      // Only hand actual SVG markup to the mobile preview. Server PDFs use
+      // the seller name for SVG logos.
+      const markup = new TextDecoder().decode(logo);
+      const svgRoot =
+        /^\s*(?:<\?xml[^?]*\?>\s*)?(?:<!--(?:[^-]|-(?!->))*-->\s*)*<svg[\s/>]/i;
+      if (!svgRoot.test(markup)) return absent;
+      const svgXml = sanitizeSvg(markup);
       return svgXml ? { logoUrl: null, svgXml } : absent;
     }
-    const type = rasterType(logo);
-    if (!type) return absent;
 
     // Split on a multiple of three so only the final block can add padding.
     const bytesPerBlock = 12 * 1024;

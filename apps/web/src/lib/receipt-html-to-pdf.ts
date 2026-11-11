@@ -2,6 +2,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
+import { resolvePackagedChromiumDirectory } from './receipt-chromium-directory';
 
 const RENDER_TIMEOUT_MS = 30_000;
 const MAX_PENDING_RENDERS = 8;
@@ -110,7 +111,7 @@ async function launchReceiptBrowser(deadline: number, signal: AbortSignal) {
   const isLinux = process.platform === 'linux';
   try {
     const executablePath = isLinux
-      ? await chromium.executablePath()
+      ? await chromium.executablePath(resolvePackagedChromiumDirectory())
       : await localChromePath();
     signal.throwIfAborted();
     return await puppeteer.launch({

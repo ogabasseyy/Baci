@@ -46,11 +46,7 @@ export async function buildOrderReceiptMerchant(
     const options = paystackBanksQueryOptions(3000);
     const banks = await queryClient
       .fetchQuery({ ...options, retry: false })
-      .catch(() =>
-        queryClient.getQueryData<Awaited<ReturnType<typeof options.queryFn>>>(
-          options.queryKey
-        )
-      );
+      .catch(() => undefined);
     bankName = resolveMerchantBankName(
       banks?.find((bank) => bank.code === merchant.bank_code)?.name,
       merchant.bank_code

@@ -9,7 +9,6 @@ import {
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildPdfContentDisposition } from '@/lib/download-filename';
 import {
   buildAssuranceInvoiceLineItem,
   nextInvoiceLineId,
@@ -24,17 +23,10 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
-import {
-  generatePeppolInvoiceXml,
-  PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
-} from '@/lib/peppol-ubl-invoice';
 import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
-import {
-  generateReceiptBlob,
-  resolveReceiptLogoDataUri,
-} from '@/lib/receipt-pdf-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
+import { buildInvoicePdfResponse } from './build-invoice-pdf-response';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
@@ -703,67 +695,12 @@ export async function GET(
       social_media: merchant.social_media,
       pages: merchant.pages,
     };
-    let complianceNote: string | undefined;
-    // Peppol UBL is a commercial-invoice artifact: proforma (325)
-    // documents skip the XML call and carry no compliance note.
-    if (invoiceData.invoice_type_code !== '325') {
-      try {
-        generatePeppolInvoiceXml(invoiceData);
-        complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
-      } catch (peppolError) {
-        console.error(
-          'Failed to generate Peppol UBL invoice XML:',
-          peppolError
-        );
-      }
-    }
-
-    // Generate the branded PDF
-    let logoDataUri: string | null = null;
-    try {
-      logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-    } catch (logoError) {
-      console.warn(
-        'Failed to resolve invoice logo; using fallback PDF branding',
-        {
-          orderId,
-          error: logoError,
-        }
-      );
-    }
-
-    const pdfBlob = await generateReceiptBlob(receiptOrder, receiptMerchant, {
-      buyerReference: invoiceData.buyer_reference,
-      complianceNote,
-      documentDate: invoiceData.issue_date,
-      documentKind:
-        invoiceData.invoice_type_code === '325'
-          ? 'proforma_invoice'
-          : 'invoice',
-      dueDate: invoiceData.due_date,
-      firsCsid: invoiceData.firs_csid,
-      firsIrn: invoiceData.firs_irn,
-      invoiceTypeCode: invoiceData.invoice_type_code,
-      invoiceNotes: invoiceData.notes,
-      logoDataUri,
-      paymentTerms: invoiceData.payment_terms,
-      taxSubtotals: invoiceData.tax_subtotals,
-    });
-
-    // Return the PDF as a response
-    const pdfArrayBuffer = await pdfBlob.arrayBuffer();
-
-    return new NextResponse(pdfArrayBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': buildPdfContentDisposition(
-          invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
-          invoiceData.invoice_number
-        ),
-        'Cache-Control': 'no-cache',
-      },
-    });
+    return await buildInvoicePdfResponse(
+      orderId,
+      invoiceData,
+      receiptOrder,
+      receiptMerchant
+    );
   } catch (error) {
     const unavailable = receiptPdfUnavailableResponse(error);
     if (unavailable) return unavailable;

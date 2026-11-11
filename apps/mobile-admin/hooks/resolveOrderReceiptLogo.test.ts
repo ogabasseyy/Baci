@@ -81,6 +81,13 @@ describe('resolveOrderReceiptLogo', () => {
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
   });
 
+  it('embeds valid raster bytes under an SVG filename', async () => {
+    mockFetch.mockResolvedValue(new Response(raster(PNG)));
+    await expect(
+      resolveOrderReceiptLogo('https://cdn.ogabassey.com/media/logo.svg')
+    ).resolves.toEqual({ logoUrl: `data:image/png;base64,${PNG}` });
+  });
+
   it('rejects an animated PNG before embedding', async () => {
     const image = raster(PNG);
     const animationControl = Uint8Array.of(
@@ -144,13 +151,13 @@ describe('resolveOrderReceiptLogo', () => {
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
   });
 
-  it('preserves sanitized SVG for mobile preview only', async () => {
+  it('detects and sanitizes SVG markup under a raster filename', async () => {
     mockFetch.mockResolvedValue(
-      new Response('<svg><script>alert(1)</script><rect /></svg>')
+      new Response(
+        '<?xml version="1.0"?><!-- Logo --><svg><script>alert(1)</script><rect /></svg>'
+      )
     );
-    const result = await resolveOrderReceiptLogo(
-      'https://cdn.ogabassey.com/media/logo.svg'
-    );
+    const result = await resolveOrderReceiptLogo(logoUrl);
     expect(result.logoUrl).toBeNull();
     expect(result.svgXml).toContain('<rect');
     expect(result.svgXml).not.toContain('<script');

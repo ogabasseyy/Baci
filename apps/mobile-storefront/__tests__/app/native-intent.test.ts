@@ -35,10 +35,12 @@ describe('redirectSystemPath', () => {
     mockEnv.rootDomain = undefined;
   });
 
-  it('keeps the Expo Router synthesized native launcher root on the home route', () => {
-    expect(redirectSystemPath({ path: 'ogabassey:///', initial: true })).toBe(
-      '/'
-    );
+  it.each([
+    'ogabassey:///',
+    'ogabassey://',
+    'OGABASSEY:///',
+  ])('keeps the initial bare native launcher root %s on Home', (path) => {
+    expect(redirectSystemPath({ path, initial: true })).toBe('/');
     expect(mockCapture).not.toHaveBeenCalled();
   });
 

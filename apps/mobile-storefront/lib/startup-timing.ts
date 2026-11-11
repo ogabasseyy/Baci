@@ -9,6 +9,7 @@ export type StartupMilestone =
   | 'native_intro_completed'
   | 'native_intro_skipped'
   | 'native_intro_wait_failed'
+  | 'native_intro_timeout'
   | 'splash_hide_requested'
   | 'splash_hide_completed'
   | 'splash_hide_failed';

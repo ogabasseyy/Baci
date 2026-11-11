@@ -20,6 +20,14 @@ test('native splash embeds all artwork and preserves independent motion layers',
   assert.ok(find('watch').ks.o.k[1].t < find('laptop').ks.o.k[1].t);
   const walker = find('phone-motion');
   const walkerFrames = walker.ks.p.k;
+  const [start, middle] = walkerFrames;
+  const torso = find('torso');
+  const torsoAsset = animation.assets.find((asset) => asset.id === torso.refId);
+  const halfTorso = torsoAsset.w * torso.ks.s.k[0] / 200;
+  const firstOpaqueFrame = torso.ks.o.k[1].t;
+  const walkerAtFirstOpaque = start.s[0] + (middle.s[0] - start.s[0]) * firstOpaqueFrame / middle.t;
+  assert.ok(start.s[0] + torso.ks.p.k[0] - halfTorso <= 0, 'phone enters from the left edge');
+  assert.ok(walkerAtFirstOpaque + torso.ks.p.k[0] + halfTorso <= animation.w / 4, 'the first fully visible pose stays in the left quarter');
   const [endX] = walkerFrames.at(-1).s;
   assert.ok(endX >= animation.w + 100, 'phone exits completely to the right');
   assert.ok(walkerFrames.every((frame, index) => !index || frame.s[0] > walkerFrames[index - 1].s[0]), 'walker keeps moving right');
@@ -36,11 +44,13 @@ test('native splash embeds all artwork and preserves independent motion layers',
     const asset = animation.assets.find((entry) => entry.id === device.refId);
     const width = asset.w * device.ks.s.k[0] / 100;
     const height = asset.h * device.ks.s.k[1] / 100;
-    for (const { s: [x, y] } of walker.ks.p.k) {
-      const [dx, dy] = device.ks.p.k;
-      assert.ok(x + dx - width / 2 >= 0, `${name} does not exit left`);
+    for (const { s: [, y] } of walker.ks.p.k) {
+      const [, dy] = device.ks.p.k;
       assert.ok(y + dy - height / 2 >= 0 && y + dy + height / 2 <= animation.h, `${name} vertical bounds`);
     }
+    const fullyVisible = device.ks.o.k[2].t;
+    const parentX = start.s[0] + (middle.s[0] - start.s[0]) * fullyVisible / middle.t;
+    assert.ok(parentX + device.ks.p.k[0] - width / 2 >= 0, `${name} is on screen when fully visible`);
     assert.ok(endX + device.ks.p.k[0] - width / 2 >= animation.w, `${name} exits right`);
   }
   assert.deepEqual(JSON.parse(readFileSync(new URL('../assets/splash-scene/native-splash.json', import.meta.url))), animation);

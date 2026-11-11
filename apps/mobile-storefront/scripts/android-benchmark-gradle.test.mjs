@@ -9,9 +9,9 @@ import { createAndroidBenchmarkGradleInit } from './android-benchmark-gradle.mjs
 const wrapper = readFileSync(new URL('../android/gradle/wrapper/gradle-wrapper.properties', import.meta.url), 'utf8');
 const version = wrapper.match(/gradle-([\d.]+)-bin\.zip/)?.[1];
 const cache = join(homedir(), '.gradle/wrapper/dists', `gradle-${version}-bin`);
-const gradle = existsSync(cache) ? readdirSync(cache).map((entry) => join(cache, entry, `gradle-${version}/bin/gradle`)).find(existsSync) : undefined;
+const gradle = process.platform !== 'win32' && existsSync(cache) ? readdirSync(cache).map((entry) => join(cache, entry, `gradle-${version}/bin/gradle`)).find(existsSync) : undefined;
 
-test('client environment changes refresh the JS bundle while unrelated native output stays cached', { skip: !gradle && 'Gradle distribution is not cached locally' }, () => {
+test('client environment changes refresh the JS bundle while unrelated native output stays cached', { skip: process.platform === 'win32' ? 'This fixture uses the Unix Gradle launcher' : !gradle && 'Gradle distribution is not cached locally' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'benchmark-gradle-regression-'));
   try {
     writeFileSync(join(dir, 'settings.gradle'), "rootProject.name = 'app'\n");

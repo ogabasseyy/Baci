@@ -1,3 +1,4 @@
+import { useNavigation } from 'expo-router';
 import { useLayoutEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { dismissKeyboardForNavigation } from '@/components/ui/dismiss-keyboard-for-navigation';
@@ -20,6 +21,7 @@ export function useProductSearchNavigation({
   onSelectionStart,
   onNavigate,
 }: ProductSearchNavigationOptions) {
+  const navigation = useNavigation();
   const generation = useRef(0);
   const pending = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Query edits invalidate the in-flight selection through effect cleanup.
@@ -31,9 +33,12 @@ export function useProductSearchNavigation({
   }, [isVisible, query]);
 
   return async (product: Product) => {
-    if (!isVisible || pending.current) return;
+    if (!isVisible || pending.current || !navigation.isFocused()) return;
     pending.current = true;
     const request = generation.current;
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      generation.current += 1;
+    });
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') generation.current += 1;
     });
@@ -41,11 +46,12 @@ export function useProductSearchNavigation({
       onSelectionStart?.();
       saveSearch(query.trim() || product.name);
       await dismissKeyboardForNavigation();
-      if (request !== generation.current) return;
+      if (request !== generation.current || !navigation.isFocused()) return;
       // Keep the results visible while the keyboard closes, then slide in.
       onClose();
       onNavigate(product);
     } finally {
+      unsubscribeBlur();
       subscription.remove();
       pending.current = false;
     }

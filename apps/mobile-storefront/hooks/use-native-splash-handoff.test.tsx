@@ -158,3 +158,26 @@ it('records only the first layout even when callbacks arrive in the same batch',
   expect(markStartupTiming).toHaveBeenCalledTimes(1);
   expect(markStartupTiming).toHaveBeenCalledWith('root_first_layout');
 });
+
+it('reveals recovery after a stalled native intro and hides the splash without a loop', async () => {
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: false })
+  );
+  act(() => jest.advanceTimersByTime(14999));
+  expect(result.current.shouldRenderApp).toBe(false);
+  act(() => jest.advanceTimersByTime(1));
+  expect(result.current.shouldRenderApp).toBe(true);
+  expect(result.current.timedOut).toBe(true);
+  expect(mockHide).not.toHaveBeenCalled();
+  act(() => result.current.onFirstLayout());
+  await waitFor(() =>
+    expect(mockHide).toHaveBeenCalledWith({
+      waitForLoop: false,
+      minDuration: 0,
+      fade: 220,
+    })
+  );
+  await act(async () => intro.resolve(true));
+  expect(mockHide).toHaveBeenCalledTimes(1);
+  expect(markStartupTiming).not.toHaveBeenCalledWith('native_intro_completed');
+});

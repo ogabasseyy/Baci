@@ -27,7 +27,7 @@ export function createSplashAnimation() {
   };
   const layers = [];
   // A parent layer keeps the feet and body together along the floor.
-  const walker = { ddd: 0, ind: ++id, ty: 3, nm: 'phone-motion', sr: 1, ks: { o: animate([[0,[0]],[9,[100]],[180,[100]]]), r: still(0), p: animate([[0,[40,537,0]],[90,[295,550,0]],[180,[550,576,0]]], true), a: still([0,0,0]), s: still([100,100,100]) }, ao: 0, ip: 0, op: duration, st: 0, bm: 0 };
+  const walker = { ddd: 0, ind: ++id, ty: 3, nm: 'phone-motion', sr: 1, ks: { o: animate([[0,[0]],[9,[100]],[180,[100]]]), r: still(0), p: animate([[0,[-90,537,0]],[90,[245,550,0]],[180,[550,576,0]]], true), a: still([0,0,0]), s: still([100,100,100]) }, ao: 0, ip: 0, op: duration, st: 0, bm: 0 };
   const phoneFade = animate([[0,[0]],[9,[100]],[180,[100]]]);
   const torso = image('torso','torso',81,65,162,{parent:walker.ind,opacity:phoneFade});
   const legAsset = assets.find((asset) => asset.id === 'leg');

@@ -11,7 +11,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createTransientOutputStore } from '../../../tools/experience-runner/transient-output-store';
 import { experienceBootstrapFingerprint } from './experience-bootstrap-fingerprint';
 import { createLocalPerformanceReports } from './local-performance-reports';
-import { createLocalPrerenderPipeline } from './local-prerender-pipeline';
+import {
+  createLocalPrerenderPipeline,
+  selectInitialExperienceView,
+} from './local-prerender-pipeline';
 import { readExperiencePerformance } from './performance-read';
 import { createPreviewVault } from './preview-service';
 
@@ -22,6 +25,26 @@ vi.mock('./authorization', () => ({
 }));
 
 const directories: string[] = [];
+
+it('uses a non-product route for initial build bootstrap when product is listed first', () => {
+  expect(
+    selectInitialExperienceView([
+      { path: '/products/[handle]', view: 'product' },
+      { path: '/', view: 'home' },
+    ])
+  ).toBe('home');
+  expect(
+    selectInitialExperienceView([
+      { path: '/products/[handle]', view: 'product' },
+      { path: '/collections/[handle]', view: 'collection' },
+    ])
+  ).toBe('collection');
+  expect(
+    selectInitialExperienceView([
+      { path: '/products/[handle]', view: 'product' },
+    ])
+  ).toBe('product');
+});
 
 afterEach(() => vi.unstubAllEnvs());
 type PipelineSettings = Parameters<typeof createLocalPrerenderPipeline>[0];

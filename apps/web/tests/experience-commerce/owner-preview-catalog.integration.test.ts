@@ -131,6 +131,24 @@ it('authorizes an unpublished synthetic catalog through signed user tokens and R
       )
     ).resolves.toBeNull();
     await f.pool.query(
+      "UPDATE products SET status='inactive' WHERE merchant_id=$1",
+      [ids.merchant]
+    );
+    const emptyManifest = {
+      routes: [
+        { path: '/', view: 'home' },
+        { path: '/products/[handle]', view: 'product' },
+      ],
+      capabilities: ['catalog.read'],
+    } as never;
+    expect(
+      (await loadOwnerPreviewBootstrap(ctx, emptyManifest, 'home')).catalog
+        .products
+    ).toEqual([]);
+    await expect(
+      loadOwnerPreviewBootstrap(ctx, emptyManifest, 'product')
+    ).rejects.toThrow('NO_REPRESENTATIVE_PRODUCT');
+    await f.pool.query(
       "UPDATE builder_authorization.connections SET status='revoked',revoked_at=now() WHERE id=$1",
       [connection]
     );

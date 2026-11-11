@@ -227,6 +227,17 @@ it('propagates owner authorization failures from route bootstrap', async () => {
   );
 });
 
+it('reports not-measured when a new store has no representative product', async () => {
+  const input = makeInput(vi.fn());
+  input.bootstrap.mockRejectedValueOnce(Error('NO_REPRESENTATIVE_PRODUCT'));
+  await expect(
+    measureCandidatePerformance(input as never)
+  ).resolves.toMatchObject({
+    status: 'not-measured',
+    report: undefined,
+  });
+});
+
 it('supplies complete rewritten prerender HTML and verified asset bytes to the worker', async () => {
   const assetBytes = Buffer.from('local image bytes');
   const assetUrl = `http://127.0.0.1:4101/resource/${candidate.digest}/assets/hero-image`;

@@ -77,7 +77,7 @@ it('rejects missing routes and does not invent a product for an empty store', as
   ).toBe('EUR');
   await expect(
     loadOwnerPreviewBootstrap(ctx, manifest, 'product')
-  ).rejects.toThrow('NOT_FOUND');
+  ).rejects.toThrow('NO_REPRESENTATIVE_PRODUCT');
 });
 it('does not return data when authorization is revoked after catalog read', async () => {
   authorize.mockRejectedValue(Error('NOT_FOUND'));

@@ -24,6 +24,8 @@ export async function loadOwnerPreviewBootstrap(
   if (!data) throw Error('CATALOG_UNAVAILABLE');
   const { catalog, currency } = data;
   const product = catalog.products[0];
+  if (selected.view === 'product' && !product)
+    throw Error('NO_REPRESENTATIVE_PRODUCT');
   const path =
     selected.view === 'collection'
       ? '/collections/all'

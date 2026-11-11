@@ -255,10 +255,13 @@ BEGIN
 
   SELECT count(*), sum(quantity) INTO v_total_items, v_total_qty FROM public.order_items WHERE order_id = p_order_id;
   IF v_total_items = 1 AND v_total_qty = 1 THEN
-    -- A sole unlinked line was skipped above, so it has no confirmation
-    -- payload; keep any order-level details staff saved for it.
+    -- A sole line skipped above (unlinked, or linked but untracked) has no
+    -- confirmation payload; keep any order-level details staff saved for it.
     SELECT fulfillment_data INTO v_fulfillment_data FROM public.order_items
-    WHERE order_id = p_order_id AND product_id IS NOT NULL LIMIT 1;
+    WHERE order_id = p_order_id
+      AND product_id IS NOT NULL
+      AND fulfillment_data IS NOT NULL
+    LIMIT 1;
     IF FOUND THEN
       UPDATE public.orders SET fulfillment_details = v_fulfillment_data WHERE id = p_order_id;
     END IF;

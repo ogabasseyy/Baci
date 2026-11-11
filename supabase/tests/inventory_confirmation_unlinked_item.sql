@@ -151,4 +151,63 @@ BEGIN
 END;
 $mixed$;
 
+-- Sole linked line whose product does not track stock: the loop skips it, so
+-- there is no confirmation payload and staff-saved order details must stay.
+INSERT INTO public.products (
+  id, merchant_id, name, price, slug, status, manage_stock, stock_quantity,
+  inventory_tracking_policy
+)
+VALUES (
+  '88888888-8888-4888-8888-888888888888',
+  '11111111-1111-4111-8111-111111111111',
+  'Untracked laptop', 7000.00, 'untracked-laptop', 'active', false, 0,
+  'off'
+);
+
+INSERT INTO public.orders (
+  id, merchant_id, order_number, total, subtotal, source, shipping_status,
+  payment_status
+)
+VALUES (
+  '99999999-9999-4999-8999-999999999999',
+  '11111111-1111-4111-8111-111111111111',
+  'UNLINKED-ITEM-3', 7000.00, 7000.00, 'physical', 'pending', 'paid'
+);
+
+UPDATE public.orders
+SET fulfillment_details = '{"identifierType":"serial","identifierValue":"SN-UNTRACKED-1"}'::jsonb
+WHERE id = '99999999-9999-4999-8999-999999999999';
+
+INSERT INTO public.order_items (
+  order_id, product_id, name, price, quantity, product_match_status
+)
+VALUES (
+  '99999999-9999-4999-8999-999999999999',
+  '88888888-8888-4888-8888-888888888888',
+  'Untracked laptop', 7000.00, 1, 'linked'
+);
+
+DO $untracked$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := private.confirm_order_inventory_reservations(
+    '11111111-1111-4111-8111-111111111111',
+    '99999999-9999-4999-8999-999999999999'
+  );
+
+  IF v_result -> 'exceptionCodes' IS DISTINCT FROM '[]'::jsonb THEN
+    RAISE EXCEPTION 'unexpected confirmation result for untracked line: %', v_result;
+  END IF;
+
+  IF (
+    SELECT fulfillment_details ->> 'identifierValue'
+    FROM public.orders
+    WHERE id = '99999999-9999-4999-8999-999999999999'
+  ) IS DISTINCT FROM 'SN-UNTRACKED-1' THEN
+    RAISE EXCEPTION 'order fulfillment details for a sole untracked line were wiped';
+  END IF;
+END;
+$untracked$;
+
 ROLLBACK;

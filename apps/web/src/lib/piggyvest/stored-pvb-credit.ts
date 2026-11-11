@@ -13,6 +13,11 @@ import type z from 'zod';
  * pvb_reference is a different non-null value is returned as-is so the
  * caller's mismatch check reports it as a conflict, never a duplicate.
  *
+ * Also reports when the incoming internal id is already owned by a
+ * DIFFERENT stored credit (stored A/X and B/Y, incoming A/Y): the
+ * pvb_reference hit alone would call it a duplicate, but the reuse of Y is
+ * a provider conflict the caller must quarantine.
+ *
  * Returns null when neither key finds a row. Throws on storage errors and
  * on rows that do not match the expected shape.
  */
@@ -25,21 +30,38 @@ export async function readStoredPvbCredit<Shape extends z.ZodRawShape>(
     legacyKeyColumn: 'provider_transaction_id' | 'provider_payout_id';
     legacyKey: string;
   }
-): Promise<z.infer<z.ZodObject<Shape>> | null> {
+): Promise<{
+  row: z.infer<z.ZodObject<Shape>>;
+  legacyKeyOwnedByOther: boolean;
+} | null> {
   // Columns derive from the schema so the projection can never drift from
-  // what the caller compares.
+  // what the caller compares. pvb_reference and the legacy key are always
+  // in the schema; the legacy key is the table's primary key, so it is
+  // never NULL on any row, legacy or new.
   const columns = Object.keys(input.schema.shape).join(', ');
-  for (const [column, value] of [
-    ['pvb_reference', input.pvbReference],
-    [input.legacyKeyColumn, input.legacyKey],
-  ] as const) {
+  const read = async (column: string, value: string) => {
     const { data, error } = await supabase
       .from(input.table)
       .select(columns)
       .eq(column, value)
       .maybeSingle();
     if (error) throw new Error('Stored credit read failed');
-    if (data) return input.schema.parse(data);
+    return data ? input.schema.parse(data) : null;
+  };
+
+  const byReference = await read('pvb_reference', input.pvbReference);
+  if (byReference) {
+    let legacyKeyOwnedByOther = false;
+    if (Reflect.get(byReference, input.legacyKeyColumn) !== input.legacyKey) {
+      const owner = await read(input.legacyKeyColumn, input.legacyKey);
+      legacyKeyOwnedByOther =
+        owner !== null &&
+        Reflect.get(owner, 'pvb_reference') !== input.pvbReference;
+    }
+    return { row: byReference, legacyKeyOwnedByOther };
   }
-  return null;
+  const byLegacyKey = await read(input.legacyKeyColumn, input.legacyKey);
+  return byLegacyKey
+    ? { row: byLegacyKey, legacyKeyOwnedByOther: false }
+    : null;
 }

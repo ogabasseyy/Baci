@@ -278,6 +278,14 @@ not unique keys either.
   traffic (read-only):
   `SELECT customer_id, count(*) FROM public.piggyvest_inflow_credits WHERE pvb_reference IS NULL GROUP BY 1;`
   and the same for `piggyvest_interest_payouts`.
+  Repair path: `SELECT public.piggyvest_repair_pvb_reference_attribution();`
+  (migration owner only; evidence-only, idempotent) re-runs the inbox
+  re-attribution and the backfill, e.g. after restoring inbox evidence.
+  Rows it still cannot prove need a manual `pvb_reference` from PiggyVest's
+  transaction list.
+- A known `pvb_reference` arriving with an internal id that already belongs
+  to a DIFFERENT stored credit is quarantined as a conflict
+  (`provider_transaction_id` / `provider_payout_id`), not acked.
 - Duplicate verification compares only money and attribution: customer,
   wallet, amounts (inflow `amount`/`fee`; interest gross/tax/net/amount) and
   a non-null stored `pvb_reference`. The eventData internals (`id`,

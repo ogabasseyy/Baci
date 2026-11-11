@@ -147,4 +147,56 @@ BEGIN
   END IF;
 END $$;
 
+-- Regression (bugfix): an interest inbox row recorded before the fix with
+-- the PVB-internal destination_wallet becomes replay-compatible, rows
+-- without matching stored evidence stay untouched, and legacy ledger rows
+-- take their own event's pvb_reference.
+RESET ROLE;
+DO $$
+DECLARE
+  result jsonb;
+BEGIN
+  IF has_function_privilege('anon', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('piggyvest_webhook_intake', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'repair function must not be executable by API or intake roles';
+  END IF;
+
+  INSERT INTO public.piggyvest_webhook_inbox (event_id, event_type, event_category, customer_id,
+    wallet_id, reference, amount_kobo, status, event_details)
+  VALUES
+    ('repair-evt-old', 'interest-payout.success', 'interest-payout', 'repair-c', 'pvb-internal',
+     'PVB01REPAIR1', 90, 'failed', '{"pvb_wallet": "plan-wallet", "destination_wallet": "pvb-internal"}'),
+    ('repair-evt-other', 'interest-payout.success', 'interest-payout', 'repair-c', 'something-else',
+     'PVB01REPAIR2', 90, 'failed', '{"pvb_wallet": "plan-wallet", "destination_wallet": "pvb-internal"}'),
+    ('repair-evt-nowallet', 'interest-payout.success', 'interest-payout', 'repair-c', 'pvb-internal',
+     'PVB01REPAIR3', 90, 'failed', '{"destination_wallet": "pvb-internal"}'),
+    ('repair-evt-inflow', 'bank-transfer.inflow.success', 'bank-transfer', 'repair-c', 'plan-wallet',
+     'PVB01REPAIR4', 1000, 'processed', NULL);
+  INSERT INTO public.piggyvest_inflow_credits (provider_transaction_id, event_data_id, event_id,
+    customer_id, wallet_id, amount_kobo, fee_kobo, reference, credited_at)
+  VALUES ('repair-txn', 'd', 'repair-evt-inflow', 'repair-c', 'plan-wallet', 1000, 0, 'r', now());
+
+  result := public.piggyvest_repair_pvb_reference_attribution();
+  IF (result->>'inbox_reattributed')::int <> 1 OR (result->>'inflow_backfilled')::int < 1 THEN
+    RAISE EXCEPTION 'repair counts unexpected: %', result;
+  END IF;
+  IF (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-old') <> 'plan-wallet' THEN
+    RAISE EXCEPTION 'destination-attributed interest inbox row must move to pvb_wallet';
+  END IF;
+  IF (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-other') <> 'something-else'
+    OR (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-nowallet') <> 'pvb-internal' THEN
+    RAISE EXCEPTION 'rows without matching stored evidence must stay untouched';
+  END IF;
+  IF (SELECT pvb_reference FROM public.piggyvest_inflow_credits WHERE provider_transaction_id = 'repair-txn')
+      IS DISTINCT FROM 'PVB01REPAIR4' THEN
+    RAISE EXCEPTION 'legacy inflow row must take its own event pvb_reference';
+  END IF;
+  result := public.piggyvest_repair_pvb_reference_attribution();
+  IF (result->>'inbox_reattributed')::int <> 0 THEN
+    RAISE EXCEPTION 'repair must be idempotent: %', result;
+  END IF;
+END $$;
+
 ROLLBACK;

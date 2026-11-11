@@ -159,7 +159,7 @@ export async function recordInflowCredit(
   // money and attribution fields before calling it a duplicate. First writer
   // wins; a mismatch is a provider conflict for quarantine, never a silent
   // ack.
-  const stored = await readStoredPvbCredit(supabase, {
+  const found = await readStoredPvbCredit(supabase, {
     table: 'piggyvest_inflow_credits',
     schema: storedPvbCreditRowSchemas.inflow,
     pvbReference: event.pvb_reference,
@@ -171,13 +171,18 @@ export async function recordInflowCredit(
       'Inflow duplicate verify failed'
     );
   });
-  if (!stored) {
+  if (!found) {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_STORAGE_ERROR',
       'Inflow duplicate receipt vanished before verify'
     );
   }
+  const stored = found.row;
   const mismatchedFields: string[] = [];
+  // The incoming internal id belongs to a different stored credit: a reuse
+  // the pvb_reference match alone would miss.
+  if (found.legacyKeyOwnedByOther)
+    mismatchedFields.push('provider_transaction_id');
   // A legacy row (NULL pvb_reference) is the same credit by its old key; a
   // different non-null pvb_reference means the internal transaction id was
   // reused by another credit. transaction_id itself is audit-only: the same

@@ -137,7 +137,7 @@ export async function recordInterestPayout(
   // id with different financials reaches this key: verify the stored row
   // before calling it a duplicate. First writer wins; a mismatch is a
   // provider conflict for quarantine, never a silent ack.
-  const stored = await readStoredPvbCredit(supabase, {
+  const found = await readStoredPvbCredit(supabase, {
     table: 'piggyvest_interest_payouts',
     schema: storedPvbCreditRowSchemas.interest,
     pvbReference: event.pvb_reference,
@@ -149,13 +149,17 @@ export async function recordInterestPayout(
       'Interest duplicate verify failed'
     );
   });
-  if (!stored) {
+  if (!found) {
     throw new InterestLedgerError(
       'INTEREST_LEDGER_STORAGE_ERROR',
       'Interest duplicate receipt vanished before verify'
     );
   }
+  const stored = found.row;
   const mismatchedFields: string[] = [];
+  // The incoming internal id belongs to a different stored credit: a reuse
+  // the pvb_reference match alone would miss.
+  if (found.legacyKeyOwnedByOther) mismatchedFields.push('provider_payout_id');
   // A legacy row (NULL pvb_reference) is the same payout by its old key; a
   // different non-null pvb_reference means another credit reused the id.
   // provider_payout_id itself is audit-only, like the inflow transaction id.

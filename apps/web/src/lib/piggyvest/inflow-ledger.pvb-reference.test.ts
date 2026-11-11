@@ -178,6 +178,34 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("quarantines a known pvb_reference arriving with another credit's internal id", async () => {
+    // Stored A/txn-1 and B/txn-2; incoming A/txn-2.
+    const { client, rows } = fakeLedger();
+    await recordInflowCredit(client, delivery());
+    await recordInflowCredit(
+      client,
+      delivery({
+        eventId: 'evt-synthetic-005',
+        pvbReference: 'PVB01SYNTHETIC002',
+        transactionId: 'internal-txn-synthetic-002',
+      })
+    );
+
+    await expect(
+      recordInflowCredit(
+        client,
+        delivery({
+          eventId: 'evt-synthetic-006',
+          transactionId: 'internal-txn-synthetic-002',
+        })
+      )
+    ).rejects.toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['provider_transaction_id'] },
+    });
+    expect(rows).toHaveLength(2);
+  });
+
   it('writes pvb_reference on every new credit', async () => {
     const { client, rows } = fakeLedger();
     await recordInflowCredit(client, delivery({ pvbReference: 'PVB01NEW' }));

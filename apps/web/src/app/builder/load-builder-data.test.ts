@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { Data } from '@puckeditor/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyTheme } from '@/lib/theme-manager';

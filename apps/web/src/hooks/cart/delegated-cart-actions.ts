@@ -142,7 +142,15 @@ export function createDelegatedCartActions(
     applyNegotiatedPrice,
     clearNegotiatedPrice,
     applyCartWideNegotiation,
-    addToCart(product: Product, quantity: number, options?: AddToCartOptions) {
+    /**
+     * Returns the units actually sent (0 when the add is a no-op), so the
+     * provider reports the clamped quantity rather than the request.
+     */
+    addToCart(
+      product: Product,
+      quantity: number,
+      options?: AddToCartOptions
+    ): number {
       // A capped, out-of-stock, or variant-blocked add is a no-op in
       // the shared hook; it must not void the group deal on its way
       // out, and the provider must not announce it as added.
@@ -153,10 +161,10 @@ export function createDelegatedCartActions(
         options,
         cartWideNegotiationActiveRef.current
       );
-      if (sendQuantity <= 0) return false;
+      if (sendQuantity <= 0) return 0;
       voidDelegatedGroupDeal();
       shared.addToCart(product, sendQuantity, options);
-      return true;
+      return sendQuantity;
     },
     clearCart() {
       setCartWideNegotiationActive(false);

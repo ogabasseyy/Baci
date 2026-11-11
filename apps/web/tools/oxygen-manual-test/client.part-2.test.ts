@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { expect, it, vi } from 'vitest';
 import { click, setup } from './client.test-helpers';
 import { renderProbeUi } from './ui';

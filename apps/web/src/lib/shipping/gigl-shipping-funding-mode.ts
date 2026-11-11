@@ -56,7 +56,8 @@ export async function resolveAdminGiglQuoteFunding(
       ok: true,
       availableBalance: 0,
       shortfall: 0,
-      canBook: true,
+      // Baci pays, but only for a real price (same rule as the mobile helper).
+      canBook: price > 0,
       paidByBaci: true,
     };
   }

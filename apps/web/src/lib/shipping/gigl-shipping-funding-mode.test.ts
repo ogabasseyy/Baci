@@ -111,6 +111,15 @@ describe('resolveAdminGiglQuoteFunding', () => {
   });
 });
 
+describe('bugfix: platform funding with a non-positive price', () => {
+  it('does not mark a zero price as bookable', async () => {
+    const { supabase } = client({ data: 'platform', error: null });
+    await expect(
+      resolveAdminGiglQuoteFunding(supabase, 'm1', 0, vi.fn())
+    ).resolves.toMatchObject({ ok: true, canBook: false, paidByBaci: true });
+  });
+});
+
 describe('bugfix: funding-mode RPC throws', () => {
   it('falls back to merchant_wallet when the RPC rejects', async () => {
     const supabase = {

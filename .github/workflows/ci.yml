@@ -192,6 +192,9 @@ jobs:
         working-directory: apps/web
         # A drifted route union OOM-aborts after ~20 min; fail within the step instead of the job.
         timeout-minutes: 15
+        env:
+          # Same soft GC budget as the deploy build; the TypeScript 7 compiler is a Go binary.
+          GOMEMLIMIT: 6GiB
         run: pnpm run typecheck:build
 
   quality-test:

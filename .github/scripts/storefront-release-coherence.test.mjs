@@ -83,6 +83,14 @@ test('discovers a PDP and builds only the five exact origin HTML canaries', () =
   );
 });
 
+test('refuses canary hosts that carry a cdn label anywhere, not only a leading cdn.', () => {
+  for (const base of ['https://cdn.ogabassey.com', 'https://assets.cdn.ogabassey.com']) {
+    assert.throws(() => buildCanaryUrls(base, PDP_PATH), /five origin HTML canaries/, base);
+  }
+  // Only a label EQUAL to cdn is refused; names that merely start with the letters are fine.
+  assert.equal(buildCanaryUrls('https://cdn-store.example.com', PDP_PATH).length, 5);
+});
+
 test('delegates whole-site purge then verifies browser and Googlebot canaries', async () => {
   const { calls, fetchImpl } = makeSuccessfulFetch();
   const purgeCalls = [];

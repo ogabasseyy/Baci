@@ -69,7 +69,8 @@ export function buildCanaryUrls(baseUrl, pdpPath) {
   const urls = ['/', '/products', '/smartphones', normalizedPdpPath, '/blog'].map(
     (path) => new URL(path, origin).href
   );
-  if (new Set(urls).size !== 5 || urls.some((url) => new URL(url).hostname.startsWith('cdn.'))) {
+  // Same rule as the hostname-purge primitive: any label equal to "cdn" is refused.
+  if (new Set(urls).size !== 5 || urls.some((url) => new URL(url).hostname.split('.').includes('cdn'))) {
     throw new Error('Release coherence requires exactly five origin HTML canaries');
   }
   return urls;

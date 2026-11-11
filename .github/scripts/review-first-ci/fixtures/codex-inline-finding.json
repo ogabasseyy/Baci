@@ -1,0 +1,14 @@
+{
+  "id": 4538427833,
+  "user": {
+    "login": "chatgpt-codex-connector[bot]",
+    "type": "Bot"
+  },
+  "path": "apps/web/src/app/api/webhooks/piggyvest/record-input.ts",
+  "line": 34,
+  "commit_id": "33d8a3b086a5c501701a9000b04b97091148c553",
+  "original_commit_id": "c00e55a83a988b1122b9cbe714ddb93dc60e6813",
+  "created_at": "2026-11-11T13:25:11Z",
+  "in_reply_to_id": null,
+  "body": "**<sub><sub>![P1 Badge](https://img.shields.io/badge/P1-orange?style=flat)</sub></sub>  Preserve replay compatibility for existing interest inbox rows**\n\nFor interest payouts received before this deployment, the inbox already stores `eventData.destination_wallet` as `wallet_id`, including payouts left failed by `INTEREST_LEDGER_UNMAPPED`. Replaying the identical signed event now supplies `pvb_wallet`, but `recordPiggyvestEvent` in `webhook-inbox.ts` requires the stored and incoming wallet IDs to match. Consequently, `process-delivery.ts` quarantines and acknowledges those retries before reaching the corrected interest ledger, leaving the previously missed payouts uncredited. Migrate the existing inbox attribution from verified evidence or add a narrowly validated compatibility path so those failed deliveries can actually recover.\n\nUseful? React with 👍 / 👎.\n\n<!-- codex-code-review-finding:v1 -->"
+}

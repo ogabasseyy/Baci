@@ -15,7 +15,7 @@ on:
   pull_request_target:
     # edited: only base retargets run (see job if below); title/body edits
     # would otherwise burn quota for an unchanged diff.
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, converted_to_draft, edited]
 
 permissions:
   contents: read
@@ -42,7 +42,7 @@ jobs:
       contents: read
       pull-requests: write
     if: >-
-      github.event.pull_request.draft == false &&
+      github.event.pull_request.draft == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest

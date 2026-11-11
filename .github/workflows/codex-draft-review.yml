@@ -1,0 +1,50 @@
+name: Codex draft review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-draft-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  request-review:
+    if: >-
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Base-owned orchestration only. PR contents are never executed.
+      - name: Request one review for the current draft commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER")
+          if ! jq -e --arg sha "$EXPECTED_SHA" \
+            '.state == "open" and .draft == true and .head.sha == $sha' <<< "$pr" >/dev/null; then
+            echo 'PR is no longer a draft at this commit; skipping stale request.'
+            exit 0
+          fi
+          marker="<!-- codex-draft-review:$EXPECTED_SHA -->"
+          comments=$(gh api --paginate --slurp "repos/$GH_REPO/issues/$PR_NUMBER/comments")
+          if jq -e --arg marker "$marker" \
+            'any(.[][]; .user.login == "github-actions[bot]" and (.body | contains($marker)))' \
+            <<< "$comments" >/dev/null; then
+            echo 'This commit already has an automatic review request.'
+            exit 0
+          fi
+          body=$(printf '@codex review\n\n%s\n' "$marker")
+          gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -f body="$body"

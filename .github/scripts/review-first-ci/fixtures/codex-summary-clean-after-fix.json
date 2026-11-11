@@ -1,0 +1,15 @@
+{
+  "id": 6796973998,
+  "node_id": null,
+  "user": {
+    "login": "chatgpt-codex-connector[bot]",
+    "type": "Bot"
+  },
+  "author_association": "NONE",
+  "created_at": "2026-11-11T13:22:17Z",
+  "updated_at": "2026-11-11T13:39:16Z",
+  "performed_via_github_app": {
+    "slug": "chatgpt-codex-connector"
+  },
+  "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"33d8a3b086a5c501701a9000b04b97091148c553\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":\"c00e55a83a988b1122b9cbe714ddb93dc60e6813\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"completed\"}} -->\n<!-- codex-security-review:v1 {\"blockingSeverityThreshold\":\"P0\",\"headSha\":\"c00e55a83a988b1122b9cbe714ddb93dc60e6813\",\"mergeGateEnabled\":false,\"pullRequestNumber\":4199,\"repository\":\"ogabasseyy/Baci\",\"status\":\"completed\"} -->\n<details>\n<summary><strong>Codex Review Summary</strong>: ✅ Completed</summary>\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | ✅ **Completed** <relative-time datetime=\"2026-11-11T13:39:15.007503Z\">2026-11-11T13:39:15.007503Z</relative-time> | `33d8a3b` | New commits |\n| 🔒 **Security Review** | ✅ **Completed** <relative-time datetime=\"2026-11-11T13:29:05.133786Z\">2026-11-11T13:29:05.133786Z</relative-time> | `c00e55a` | PR opened |\n\n\n\n<details> <summary>ℹ️ About Codex in GitHub</summary>\n<br/>\n\n[Your team has set up Codex to review pull requests in this repo](https://chatgpt.com/codex/cloud/settings/general). Reviews are triggered when you\n- Open a pull request for review\n- Mark a draft as ready\n- Comment \"@codex review\" or \"@codex security review\".\n\nCodex reacts with 👀 while any review is running, comments if it has suggestions, and reacts with 👍 once all reviews finish with no findings.\n\n</details>\n\n</details>"
+}

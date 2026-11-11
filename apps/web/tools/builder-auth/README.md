@@ -22,6 +22,14 @@ fixture permits its own self-signed certificate; production uses normal TLS.
 Node may emit a module-type detection warning when loading the existing shared
 HTML escaping utility. No TLS downgrade or global certificate bypass is used.
 
+The runtime's `listenPrivate(socketPath)` exposes the broker only on a private
+owner-only Unix socket. Its parent must be owned by the service user and private;
+the listener rejects untrusted ancestors, validates the expected issuer host,
+and replaces forwarded headers before enabling the provider's proxy mode. A
+separately configured HTTPS ingress must run with access to that socket and
+route only the intended broker endpoints. The listener is not started by
+importing or constructing the runtime and does not provision an ingress.
+
 ## Authority and storage
 
 - `createBuilderAuthRuntime` requires the private `baci_builder_auth_storage`

@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Pool } from 'pg';
+import { listenPrivateAuth } from './auth-listener.ts';
 import { createLinkedEditRunner } from './edit-runner.ts';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createBuilderProvider, type ProviderSettings } from './provider.ts';
@@ -80,6 +81,13 @@ export async function createBuilderAuthRuntime(settings: {
   });
   return {
     handler,
+    listenPrivate: (socketPath: string) =>
+      listenPrivateAuth({
+        socketPath,
+        issuer: settings.provider.issuer,
+        provider,
+        handler,
+      }),
     readConnection: storage.readConnection,
     resolveLinkedAccessToken,
     editRunner: createLinkedEditRunner({

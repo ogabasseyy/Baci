@@ -18,7 +18,17 @@ The raw index and AMD64 manifest bytes were independently hashed and matched
 their advertised digests. These are source-image observations, not an
 approved production rootfs inventory or a release attestation.
 
-The compiler and browser root filesystems, fixed workers, independent complete
-installation pin, signed runner, private HTTPS transport, production boot and
-synthetic authenticated end-to-end test are still required. No merchant code
-was run during this smoke test.
+At the time of the initial smoke test, the compiler and browser filesystems,
+fixed workers, independent installation pin, runner service, private HTTPS
+transport, production boot and authenticated end-to-end test were still
+required. No merchant code was run during that smoke test.
+
+The v2 installation pin also binds the full `gvisor-bin` helper directory. A v1
+receipt does not qualify these helpers and must not be accepted for this host.
+
+An offline synthetic signed compile subsequently passed through the native
+Linux runner with a v2 observed installation pin, gVisor networking disabled,
+Node 24.21.0 for compilation, Node 24.20.0 for browser work, and no orders or
+publication. The observed pin was generated on the same host and is qualification
+evidence only: it is not independent release provenance or permission to activate
+the runner for merchants. Desktop/mobile browser capture is a separate test.

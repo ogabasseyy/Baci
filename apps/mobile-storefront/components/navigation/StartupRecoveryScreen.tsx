@@ -1,6 +1,6 @@
 import { reloadAppAsync } from 'expo';
 import { useRef, useState } from 'react';
-import { Appearance, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, useColorScheme, View } from 'react-native';
 import { errorBoundaryStyles as styles } from '@/components/error-boundary.styles';
 import Colors from '@/constants/Colors';
 
@@ -11,8 +11,8 @@ interface StartupRecoveryScreenProps {
 export function StartupRecoveryScreen({
   onLayout,
 }: StartupRecoveryScreenProps) {
-  const colors =
-    Colors[Appearance.getColorScheme() === 'dark' ? 'dark' : 'light'];
+  const systemScheme = useColorScheme();
+  const colors = Colors[systemScheme === 'dark' ? 'dark' : 'light'];
   const [failed, setFailed] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const pending = useRef(false);

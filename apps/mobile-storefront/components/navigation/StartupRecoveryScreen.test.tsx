@@ -6,9 +6,33 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { reloadAppAsync } from 'expo';
+import Colors from '@/constants/Colors';
 import { StartupRecoveryScreen } from './StartupRecoveryScreen';
 
+jest.unmock('react-native/Libraries/Utilities/useColorScheme');
 jest.mock('expo', () => ({ reloadAppAsync: jest.fn() }));
+const mockAppearanceListeners = new Set<() => void>();
+let mockSystemScheme: 'light' | 'dark' = 'light';
+jest.mock('react-native/Libraries/Utilities/Appearance', () => ({
+  addChangeListener: (listener: () => void) => {
+    mockAppearanceListeners.add(listener);
+    return { remove: () => mockAppearanceListeners.delete(listener) };
+  },
+  getColorScheme: () => mockSystemScheme,
+}));
+
+it('updates the visible recovery screen when the system appearance changes', () => {
+  mockSystemScheme = 'light';
+  render(<StartupRecoveryScreen onLayout={jest.fn()} />);
+  const recovery = () => screen.getByTestId('startup-recovery-screen');
+  expect(recovery()).toHaveStyle({ backgroundColor: Colors.light.background });
+  act(() => {
+    mockSystemScheme = 'dark';
+    for (const notify of mockAppearanceListeners) notify();
+  });
+  expect(recovery()).toHaveStyle({ backgroundColor: Colors.dark.background });
+});
+
 const reload = jest.mocked(reloadAppAsync);
 afterEach(() => jest.clearAllMocks());
 

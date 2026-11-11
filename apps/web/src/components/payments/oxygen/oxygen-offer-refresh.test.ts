@@ -1,9 +1,6 @@
 import { expect, it } from 'vitest';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
-import {
-  canRefreshSavedOxygenOffers,
-  shouldReviewOxygenBooking,
-} from './oxygen-offer-refresh';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 
 it('only allows refresh for an unapproved saved booking with no active command', () => {
   const snapshot = {
@@ -29,5 +26,4 @@ it('only allows refresh for an unapproved saved booking with no active command',
       state: { ...snapshot.state, paymentComplete: true },
     })
   ).toBe(false);
-  expect(shouldReviewOxygenBooking(null)).toBe(false);
 });

@@ -11,10 +11,8 @@ import { OxygenProductSummary } from './OxygenProductSummary';
 import { OxygenProviderStages } from './OxygenProviderStages';
 import { OxygenSignIn } from './OxygenSignIn';
 import { OxygenWorkflowError } from './OxygenWorkflowError';
-import {
-  canRefreshSavedOxygenOffers,
-  shouldReviewOxygenBooking,
-} from './oxygen-offer-refresh';
+import { shouldReviewOxygenBooking } from './oxygen-booking-review';
+import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import type { OxygenProviderFlowProps } from './oxygen-provider-flow-types';
 import { awaitingOxygenConfirmation } from './oxygen-read-recovery';
 import { submitOxygenVerificationForm } from './submit-oxygen-verification-form';

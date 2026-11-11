@@ -166,7 +166,8 @@ export async function resolveReceiptLogoDataUri(merchant: ReceiptMerchant) {
     if (!imageBytes) return null;
 
     const bytes = Buffer.from(imageBytes);
-    const mime = contentType.split(';')[0].trim().toLowerCase();
+    const contentMime = contentType.split(';')[0].trim().toLowerCase();
+    const mime = contentMime === 'image/jpg' ? 'image/jpeg' : contentMime;
     return (await isSafeLogo(bytes, mime.slice(6)))
       ? `data:${mime};base64,${bytes.toString('base64')}`
       : null;

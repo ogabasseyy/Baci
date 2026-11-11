@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveReceiptLogoDataUri } from '@/lib/receipt-logo';
 
@@ -90,6 +91,29 @@ describe('receipt logo safety', () => {
         signal: expect.any(AbortSignal),
       })
     );
+  });
+
+  it('normalizes a fetched image/jpg logo to the standard JPEG MIME', async () => {
+    const jpeg = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: '#ffffff' },
+    })
+      .jpeg()
+      .toBuffer();
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(jpeg, { headers: { 'content-type': 'image/jpg' } })
+        )
+    );
+
+    await expect(
+      resolveReceiptLogoDataUri({
+        ...baseMerchant,
+        logo_url: 'https://cdn.ogabassey.com/media/logo.jpg',
+      })
+    ).resolves.toBe(`data:image/jpeg;base64,${jpeg.toString('base64')}`);
   });
 
   it('allows existing Supabase images bucket logo URLs', async () => {

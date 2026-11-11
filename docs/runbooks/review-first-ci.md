@@ -61,9 +61,10 @@ run):
   `<!-- codex-code-review-finding:v1 -->` / P1-P2 badge, or a summary with findings) after it win. A review that is
   still running means "wait".
 * A verdict for an **older** commit counts only when the pull request's net diff is provably unchanged: every file
-  the pull request touches has the same status and the same blob SHA at the old and the new commit (this is the
-  "sync merge from main" case). Anything else (a changed file, a failed lookup, more than 300 files) means "not
-  clean".
+  the pull request touches has the same status, the same final blob SHA **and the same hunks** (so a sync that changed
+  main's side of a touched file, even if the final file is the same, does not pass) at the old and the new commit
+  (this is the "sync merge from main" case; line-number shifts are ignored). Anything else (a changed file, a
+  binary or oversized patch, a failed lookup, more than 300 files) means "not clean".
 * Formats have changed before. If Codex items exist but none is understood, or the API cannot be read, the run
   fails closed (quick checks only) and says so in a warning on the `changes` job and in the job summary.
 
@@ -109,6 +110,52 @@ or `ci-now` run can make them green without a Codex verdict.
   timeout makes the stage "full". Base-owned: it runs from `main` and never checks out pull-request code.
 * `.github/scripts/review-first-ci/`: the logic and its tests.
 
-## Measuring it
+## What you will see
 
-See "Measurement plan" at the end of this file (filled in with the before snapshot and the after procedure).
+* **While waiting for Codex:** the pull request shows the quick checks plus `Semgrep SAST`. The two deferred jobs
+  appear as skipped entries whose name is the raw name expression (GitHub does not evaluate the name of a skipped
+  job). That is expected and harmless: no check is called exactly `Build` or `Quality Gate`, so the merge box says
+  the required checks are missing. The `changes` job writes the reason for the stage into its summary and an
+  annotation, and the nudge workflow keeps a `Review-first CI` commit status ("Quick checks passed. Codex is still
+  reviewing ...").
+* **After the re-run:** the same run shows attempt 2. The heavy jobs run, `Build` and `Quality Gate` appear under their
+  real names, and the merge box behaves as before (strict, up to date, threads resolved).
+* **Re-runs of quick jobs:** attempt 2 repeats the quick jobs (lint, typecheck, misc, guards), about 20 job-minutes per
+  pull request. Skipping them when attempt 1 already passed them is a possible later optimisation.
+
+## Measurement plan
+
+Goal: hosted job-minutes per merged pull request, before and after, from the GitHub API (not from the billing page).
+
+```bash
+GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=ogabasseyy/Baci \
+  node .github/scripts/review-first-ci/measure-ci-minutes.mjs --day 2026-11-10 --sample 60
+```
+
+It reads the `CI Quality Gate` and `Checkout browser regression` runs of one UTC day, bills every job that ran on a
+GitHub-hosted runner rounded up to whole minutes (all attempts count; skipped and self-hosted jobs cost nothing),
+splits the minutes into the quick and the heavy stage, scales a sample of runs to the day's run count and divides by
+the pull requests merged that day.
+
+| | Before (2026-11-10, no review-first CI) | After (fill in) |
+| --- | --- | --- |
+| Workflow runs (CI + browser) | 518 | |
+| Quick-stage job-minutes | about 5,300 | |
+| Heavy-stage job-minutes | about 14,000 | |
+| Total hosted job-minutes | about 19,300 | |
+| Merged pull requests | 15 | |
+| **Job-minutes per merged pull request** | **about 1,285** | |
+
+How to read the "after" column:
+
+1. Switch to `on`, ignore the first day (open pull requests change mode mid-flight), then measure three ordinary
+   days and compare the average.
+2. Also record, from the `changes` job annotations (`title=Review-first CI`): how many stage decisions were
+   `codex-clean`, `timeout`, `break-glass`, `codex-findings`, `api-error`. Many `timeout` or `api-error` entries mean the
+   Codex integration or the token needs attention.
+3. Median minutes from the push to the start of the heavy stage (Codex latency), and the number of pull requests
+   that waited more than 90 minutes for it (should be close to zero because of the timeout).
+4. Expectation to hold the change to: quick stage about 17-23 job-minutes per push, heavy stage about 85 plus the
+   repeated quick jobs once per pull request that reaches a clean Codex verdict. With about 260 pushes and 35-40 heavy
+   runs a day that is roughly 8,000-9,500 job-minutes a day: 2-2.5 times lower than before. The planner change in
+   PR #4173, skipping the repeated quick jobs, and syncing pull requests only at merge time cut it further.

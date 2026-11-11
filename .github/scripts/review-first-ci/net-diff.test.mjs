@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildCarryOver, sameNetDiff } from './net-diff.mjs';
 
-const file = (filename, sha, extra = {}) => ({ filename, sha, status: 'modified', ...extra });
+const PATCH = '@@ -10,3 +10,3 @@ function f() {\n   const a = 1;\n-  return a;\n+  return a + 1;\n }';
+const file = (filename, sha, extra = {}) => ({ filename, sha, status: 'modified', patch: PATCH, changes: 2, ...extra });
 
 describe('sameNetDiff', () => {
   it('is true when every touched file has the same status and blob', () => {
@@ -20,6 +21,32 @@ describe('sameNetDiff', () => {
   it('is false when a status or rename differs', () => {
     assert.equal(sameNetDiff([file('a.ts', '1')], [file('a.ts', '1', { status: 'added' })]), false);
     assert.equal(sameNetDiff([file('b.ts', '1', { previous_filename: 'a.ts', status: 'renamed' })], [file('b.ts', '1', { previous_filename: 'c.ts', status: 'renamed' })]), false);
+  });
+
+  it('bugfix: the same final blob with a different base side is NOT the same diff', () => {
+    // Main changed the file's base content from A to B and the sync kept the PR's version C: the
+    // final blob is still C, but the reviewed change A->C became B->C (it now reverts main's edit).
+    const reviewed = file('a.ts', 'C', { patch: '@@ -1 +1 @@\n-A\n+C' });
+    const afterSync = file('a.ts', 'C', { patch: '@@ -1 +1 @@\n-B\n+C' });
+    assert.equal(sameNetDiff([reviewed], [afterSync]), false);
+  });
+
+  it('ignores line-number shifts when the hunks themselves are identical', () => {
+    const before = file('a.ts', '1', { patch: '@@ -10,3 +10,3 @@ function f() {\n x\n-y\n+z' });
+    const after = file('a.ts', '1', { patch: '@@ -42,3 +45,3 @@ function f() {\n x\n-y\n+z' });
+    assert.equal(sameNetDiff([before], [after]), true);
+  });
+
+  it('cannot prove a modified file that has no patch (binary or too large)', () => {
+    const binary = file('logo.png', '1', { patch: undefined, changes: 0 });
+    assert.equal(sameNetDiff([binary], [binary]), false);
+  });
+
+  it('can prove an added file, a removed file and a pure rename', () => {
+    const added = file('new.ts', '1', { status: 'added', patch: '@@ -0,0 +1 @@\n+x', changes: 1 });
+    const removed = file('old.ts', '2', { status: 'removed', patch: '@@ -1 +0,0 @@\n-x', changes: 1 });
+    const renamed = file('b.ts', '3', { status: 'renamed', previous_filename: 'a.ts', patch: undefined, changes: 0 });
+    assert.equal(sameNetDiff([added, removed, renamed], [added, removed, renamed]), true);
   });
 
   it('refuses to prove anything for an empty diff', () => {

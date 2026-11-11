@@ -46,7 +46,7 @@ describe('evaluatePullRequestStage', () => {
   });
 
   it('reuses a clean receipt for an older commit when the net diff is identical (sync merge)', async () => {
-    const files = [{ filename: 'a', sha: '1', status: 'modified' }];
+    const files = [{ filename: 'a', sha: '1', status: 'modified', patch: '@@ -1 +1 @@\n-x\n+y', changes: 2 }];
     const client = fakeGithub({
       ...codexRoutes({ issueComments: [receipt] }),
       [`GET /repos/${REPO}/commits/256f2d6bf4`]: { sha: '256f2d6bf4aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },

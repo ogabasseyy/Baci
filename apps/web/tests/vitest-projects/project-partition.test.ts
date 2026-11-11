@@ -59,6 +59,10 @@ function expectedProject(file: string): string {
   return inNodeFolder ? 'node' : 'jsdom';
 }
 
+// Expected cost: one `vitest list` of the whole suite (about 2-3 s), run once in
+// beforeAll. It is the only check that sees the real file-to-project assignment,
+// so it deliberately runs everywhere instead of being skipped locally.
+//
 // The CI shards (`vitest run --shard=N/6`) split the combined list of both
 // projects by file path, so they only cover every test exactly once if every
 // file belongs to exactly one project.

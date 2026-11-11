@@ -3,7 +3,9 @@ import { vi } from 'vitest';
 
 type MockImageSrc = string | { src: string } | { default: { src: string } };
 
-type MockNextImageProps = ImgHTMLAttributes<HTMLImageElement> & {
+// `src` is replaced, not intersected: ImgHTMLAttributes already types it as a
+// string, which would hide the object shapes statically imported images have.
+type MockNextImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
   src?: MockImageSrc;
   alt?: string;
 };

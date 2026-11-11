@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { escapeGlob } from './vitest.escape-glob';
 import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
 
@@ -87,12 +88,6 @@ const sharedAliases = [
     replacement: path.join(sharedPackagePath, 'gmc-feed/index.ts'),
   },
 ];
-
-// Folder names are literal paths, but Next.js route groups `(storefront)` and
-// dynamic segments `[slug]` are glob syntax unless escaped.
-function escapeGlob(value: string): string {
-  return value.replace(/[()[\]{}!*?+@\\]/g, '\\$&');
-}
 
 // Test files of the folders listed in vitest.node-folders.ts. The `node`
 // project runs these except the files listed in vitest.jsdom-holdouts.ts; the

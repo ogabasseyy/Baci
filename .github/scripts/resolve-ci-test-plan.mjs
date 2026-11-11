@@ -40,6 +40,7 @@ const WEB_FULL_TEST_FILES = new Set([
   'apps/web/package.json',
   'apps/web/tsconfig.json',
   'apps/web/vitest.config.ts',
+  'apps/web/vitest.escape-glob.ts',
   'apps/web/vitest.experience-runner.config.ts',
   'apps/web/vitest.jsdom-holdouts.ts',
   'apps/web/vitest.next-image-mock.ts',

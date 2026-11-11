@@ -35,7 +35,7 @@ export interface TrackCartAddInput {
   send?: typeof sendTrackedEvent;
 }
 
-/** Mirrors the cart's own voucher test (delegated-add-preflight). */
+/** Exactly the cart's own voucher test (delegated-add-preflight). */
 function isQuizVoucherAdd(
   product: AnalyticsProduct,
   options: AddToCartOptions | undefined
@@ -44,7 +44,6 @@ function isQuizVoucherAdd(
   return Boolean(
     options?.quizAwardId ||
       options?.quizVoucherToken ||
-      record.quizAwardId ||
       record.quizVoucherToken ||
       record.isQuizPrize
   );

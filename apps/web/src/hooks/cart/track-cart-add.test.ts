@@ -187,4 +187,19 @@ describe('trackCartAdd', () => {
       })
     ).not.toThrow();
   });
+
+  it('still tracks a catalog product that merely carries a quizAwardId field', () => {
+    // The cart gate does not treat this as a voucher, so analytics must not.
+    const { send, loadPixels } = setupTracker();
+
+    trackCartAdd({
+      merchant: { id: 'merchant-1' },
+      product: { ...product, quizAwardId: 'stale' } as never,
+      quantity: 1,
+      loadPixels,
+      send,
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });

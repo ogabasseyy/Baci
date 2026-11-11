@@ -3,7 +3,7 @@ import { oxygenRuntimeSnapshotSchema } from '@/schemas/oxygen-runtime-view';
 import { selectOxygenActionKey } from './oxygen-address-recovery';
 import { pendingReadRecovery } from './oxygen-read-recovery';
 
-it('resumes only a queued saved-booking offer refresh with its original key', () => {
+it('resumes queued reads and offers a safe retry for interrupted saved-booking reads', () => {
   const id = '60000000-0000-4000-8000-000000000001';
   const key = '80000000-0000-4000-8000-000000000001';
   const snapshot = oxygenRuntimeSnapshotSchema.parse({
@@ -52,16 +52,23 @@ it('resumes only a queued saved-booking offer refresh with its original key', ()
       pendingReadRecovery(snapshot)
     )
   ).toBe(key);
+  const interrupted = {
+    ...snapshot,
+    pending: {
+      action: 'refresh_eligibility',
+      idempotencyKey: key,
+      status: 'executing' as const,
+    },
+  };
+  expect(pendingReadRecovery(interrupted)).toBe('refresh_eligibility');
   expect(
-    pendingReadRecovery({
-      ...snapshot,
-      pending: {
-        action: 'refresh_eligibility',
-        idempotencyKey: key,
-        status: 'executing',
-      },
-    })
-  ).toBeNull();
+    selectOxygenActionKey(
+      'refresh_eligibility',
+      interrupted,
+      null,
+      pendingReadRecovery(interrupted)
+    )
+  ).not.toBe(key);
   expect(
     pendingReadRecovery({
       ...snapshot,

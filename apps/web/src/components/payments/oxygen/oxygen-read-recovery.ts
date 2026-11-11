@@ -74,7 +74,6 @@ export function pendingReadRecovery(
     return 'validate_nin';
   if (
     pending.action === 'refresh_eligibility' &&
-    pending.status === 'queued' &&
     ['booked', 'approval_required'].includes(snapshot.stage) &&
     snapshot.state.applicationReference &&
     snapshot.state.bookingReference &&

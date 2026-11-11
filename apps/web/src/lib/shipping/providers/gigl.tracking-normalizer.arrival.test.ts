@@ -249,3 +249,23 @@ describe('bugfix: MSHC after an explicit out-for-delivery scan is not demoted to
     );
   });
 });
+
+describe('bugfix: MSHC retry after a failed delivery attempt is not demoted to pickup', () => {
+  it('keeps out_for_delivery for SDR followed by MSHC with no earlier transit scans', () => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W13',
+        MobileShipmentTrackings: [
+          event('SDR', '10:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W13',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('out_for_delivery');
+    expect(result.events.some((e) => e.status === 'pickup_scheduled')).toBe(
+      false
+    );
+  });
+});

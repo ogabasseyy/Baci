@@ -51,10 +51,9 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
   }
 });
 
-// Every workflow, composite action, CI script and SQL test runner, so a new caller anywhere cannot bring PostgreSQL 16 back.
+// Every file, whatever its extension, so a new workflow, action, script, SQL harness or helper cannot bring PostgreSQL 16 back.
 function filesUnder(dir) {
   return readdirSync(dir, { recursive: true })
-    .filter((name) => /\.(ya?ml|sh|py|mjs)$/.test(name))
     .map((name) => join(dir, name))
     .filter((path) => statSync(path).isFile());
 }
@@ -64,7 +63,10 @@ test('nothing under .github or supabase/tests uses PostgreSQL 16 any more; every
   assert.ok(files.includes('.github/workflows/ci.yml') && files.includes(INSTALLER), 'the scan must cover the workflow and the installer');
   const pgBins = new Set();
   for (const file of files) {
-    const text = readFileSync(file, 'utf8');
+    const content = readFileSync(file);
+    // A binary file (an image, an archive) cannot name a package, and decoding it as text only invites false matches.
+    if (content.includes(0)) continue;
+    const text = content.toString('utf8');
     assert.doesNotMatch(text, /postgresql[-/]16\b/, `${file} must not use PostgreSQL 16`);
     // Only workflows and actions set PG_BIN; test files mention it inside patterns.
     if (/\.ya?ml$/.test(file)) for (const match of text.matchAll(/\bPG_BIN(?:DIR)?: (\S+)/g)) pgBins.add(match[1]);

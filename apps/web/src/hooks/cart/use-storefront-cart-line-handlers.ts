@@ -91,6 +91,10 @@ export function useStorefrontCartLineHandlers({
         quantity,
         normalizedOptions
       );
+      // Tracked when the shared cart accepts and shows the add, the same
+      // moment the shopper sees it land (as on the legacy path). A later
+      // server-side rejection is rare and reconciled in the cart itself;
+      // ad-platform add_to_cart measures the shopper's add intent.
       if (sentQuantity > 0) {
         noteAddedProduct(productForCart, sentQuantity, normalizedOptions);
       }

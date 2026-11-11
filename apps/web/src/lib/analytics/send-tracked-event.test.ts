@@ -15,6 +15,16 @@ vi.mock('@/lib/marketing-consent', () => ({
 
 import { sendTrackedEvent } from './send-tracked-event';
 
+const addToCart = {
+  event_type: 'add_to_cart',
+  merchant_id: 'merchant-1',
+  product_id: 'prod-1',
+  product_name: 'Phone',
+  product_price: 100,
+  quantity: 1,
+  currency: 'NGN',
+} as const;
+
 const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
 
 function sentInit(): RequestInit {
@@ -33,10 +43,7 @@ describe('sendTrackedEvent', () => {
   });
 
   it('sends with keepalive so an add right before navigation is not cancelled', async () => {
-    await sendTrackedEvent({
-      event_type: 'add_to_cart',
-      merchant_id: 'merchant-1',
-    });
+    await sendTrackedEvent(addToCart);
 
     expect(fetchMock).toHaveBeenCalledWith('/api/events', expect.anything());
     expect(sentInit().keepalive).toBe(true);
@@ -53,10 +60,7 @@ describe('sendTrackedEvent', () => {
   });
 
   it('keeps passing the current consent flags unchanged', async () => {
-    await sendTrackedEvent({
-      event_type: 'product_view',
-      merchant_id: 'merchant-1',
-    });
+    await sendTrackedEvent({ ...addToCart, event_type: 'product_view' });
 
     const body = JSON.parse(String(sentInit().body));
     expect(body).toMatchObject({
@@ -71,9 +75,7 @@ describe('sendTrackedEvent', () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    await expect(
-      sendTrackedEvent({ event_type: 'add_to_cart', merchant_id: 'merchant-1' })
-    ).resolves.toBeUndefined();
+    await expect(sendTrackedEvent(addToCart)).resolves.toBeUndefined();
     warn.mockRestore();
   });
 });

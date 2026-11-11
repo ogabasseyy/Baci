@@ -4,7 +4,7 @@ import { analytics } from '@/lib/analytics';
 import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
 import { sendTrackedEvent } from '@/lib/analytics/send-tracked-event';
 import type {
-  BaseEvent,
+  PageViewEvent,
   ProductEvent,
   PurchaseEvent,
   SearchEvent,
@@ -228,7 +228,7 @@ export const trackEvent = {
       event_type: 'page_view',
       merchant_id: merchantId,
       page_url: pageUrl,
-    } satisfies BaseEvent);
+    } satisfies PageViewEvent);
 
     analytics.pageView(pageUrl, pageTitle);
   },

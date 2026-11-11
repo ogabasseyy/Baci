@@ -22,7 +22,17 @@ export interface BaseEvent {
   page_url?: string;
 }
 
+/** Events that carry no payload beyond the common fields. */
+export interface PageViewEvent extends BaseEvent {
+  event_type: 'page_view' | 'share';
+}
+
 export interface ProductEvent extends BaseEvent {
+  event_type:
+    | 'product_view'
+    | 'add_to_cart'
+    | 'remove_from_cart'
+    | 'add_to_wishlist';
   product_id: string;
   product_name: string;
   product_category?: string;
@@ -32,6 +42,7 @@ export interface ProductEvent extends BaseEvent {
 }
 
 export interface PurchaseEvent extends BaseEvent {
+  event_type: 'begin_checkout' | 'purchase';
   order_id: string;
   total: number;
   subtotal: number;
@@ -48,12 +59,17 @@ export interface PurchaseEvent extends BaseEvent {
 }
 
 export interface SearchEvent extends BaseEvent {
+  event_type: 'search';
   search_term: string;
   results_count?: number;
 }
 
+/**
+ * Discriminated by `event_type`: a funnel event (add_to_cart,
+ * begin_checkout, ...) must carry its full product or order payload.
+ */
 export type TrackedEvent =
-  | BaseEvent
+  | PageViewEvent
   | ProductEvent
   | PurchaseEvent
   | SearchEvent;

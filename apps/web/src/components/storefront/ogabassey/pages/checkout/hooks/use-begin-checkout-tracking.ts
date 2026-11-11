@@ -66,8 +66,11 @@ export function useBeginCheckoutTracking({
 }: UseBeginCheckoutTrackingParams): void {
   useEffect(() => {
     if (!isHydrated || !merchantId || checkoutCart.length === 0) return;
-    // Key on which lines are in the cart, not their quantities: editing a
-    // quantity on the checkout page is not a new checkout start.
+    // One report per checkout attempt and set of cart lines (matching the
+    // PostHog checkout_started key): refreshes, re-renders, quantity edits
+    // and same-cart return visits in this session are not new starts, while
+    // a different set of lines is a new basket and reports again. The
+    // in-memory set holds a few short keys per page and needs no eviction.
     const cartKey = checkoutCart
       .map((item) => item.cartItemId || item.id)
       .sort()

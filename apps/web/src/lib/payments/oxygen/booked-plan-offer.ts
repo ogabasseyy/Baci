@@ -13,10 +13,15 @@ export function bookedPlanIsOffered(s: OxygenProviderState): boolean {
     booking.loan_tenure > s.maxTenure
   )
     return false;
-  const principal = toOxygenMinorUnits(booking.loan_amount, 'NGN');
-  return (
-    principal >= toOxygenMinorUnits(s.minimumAmount, 'NGN') &&
-    principal <=
-      toOxygenMinorUnits(Math.min(offer.loanAmount, s.eligibleAmount), 'NGN')
-  );
+  try {
+    const principal = toOxygenMinorUnits(booking.loan_amount, 'NGN');
+    const offerLimit = toOxygenMinorUnits(offer.loanAmount, 'NGN');
+    const overallLimit = toOxygenMinorUnits(s.eligibleAmount, 'NGN');
+    return (
+      principal >= toOxygenMinorUnits(s.minimumAmount, 'NGN') &&
+      principal <= Math.min(offerLimit, overallLimit)
+    );
+  } catch {
+    return false;
+  }
 }

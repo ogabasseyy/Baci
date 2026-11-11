@@ -62,6 +62,15 @@ const context: OxygenProviderContext = {
   },
 };
 const action = { action: 'book' as const, equityPercentage: 35, tenure: 6 };
+it('rejects booking admission when the selected tenure has no offer', () => {
+  expect(oxygenActionAllowed(context, { ...action, tenure: 5 })).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...context, state: { ...context.state, offers: undefined } },
+      action
+    )
+  ).toBe(false);
+});
 it('does not start or submit approval for a booked plan without a matching offer', () => {
   const legacy = { ...context, state: { ...context.state, offers: undefined } };
   expect(oxygenActionAllowed(legacy, { action: 'trigger_approval_otp' })).toBe(

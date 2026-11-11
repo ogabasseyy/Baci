@@ -106,7 +106,8 @@ export function oxygenActionAllowed(
           c.state.booking?.equity_percentage !== a.equityPercentage ||
           c.state.booking?.loan_tenure !== a.tenure) &&
         preBookingKyc(c.state) &&
-        c.state.eligible === true
+        c.state.eligible === true &&
+        Boolean(c.state.offers?.some((offer) => offer.tenure === a.tenure))
       );
     case 'submit_address':
       return Boolean(

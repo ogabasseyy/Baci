@@ -25,6 +25,9 @@ import type {
  *   Whether the transaction list shows interest rows is not yet confirmed
  *   (contract evidence 2026-10-31: none observed at 0% sandbox rates), so
  *   this never pages until a live payout proves it does.
+ * - `partial_credit` (review only): a settled `partial` PiggyVest credit
+ *   neither ledger recorded. Some money may have moved, so a person looks;
+ *   `pending` and `failed` credits moved none and are ignored.
  *
  * Interest surplus alone (a wallet holding more than recorded principal) is
  * the balance check's `above_expected` and stays non-paging; this check only
@@ -36,7 +39,14 @@ export const EDGE_MS = 3_600_000;
 export type CreditGapKind =
   | 'unrecorded_credit'
   | 'not_on_provider'
-  | 'interest_not_listed';
+  | 'interest_not_listed'
+  | 'partial_credit';
+
+/** Findings listed for a person to review that never page on their own. */
+const REVIEW_ONLY: ReadonlySet<CreditGapKind> = new Set([
+  'interest_not_listed',
+  'partial_credit',
+]);
 
 export interface CreditGapFinding {
   walletId: string;
@@ -102,7 +112,9 @@ export function compareWalletCredits(
   const findings: CreditGapFinding[] = [];
   let internalSkipped = 0;
   for (const credit of credits) {
-    if (credit.status !== 'successful' || recorded.has(credit.id)) continue;
+    const settled =
+      credit.status === 'successful' || credit.status === 'partial';
+    if (!settled || recorded.has(credit.id)) continue;
     if (credit.category === 'p2p') {
       internalSkipped += 1;
       continue;
@@ -112,7 +124,8 @@ export function compareWalletCredits(
     findings.push({
       walletId: wallet.walletId,
       reference: credit.id,
-      kind: 'unrecorded_credit',
+      kind:
+        credit.status === 'partial' ? 'partial_credit' : 'unrecorded_credit',
       amountKobo: credit.amountKobo,
       category: credit.category,
       at: credit.createdAt,
@@ -168,7 +181,10 @@ async function checkWallet(
     return unchecked('list_unreadable');
   }
   if (listing.outcome === 'unreadable') return unchecked('list_unreadable');
-  if (listing.outcome === 'incomplete') return unchecked('list_incomplete');
+  if (listing.outcome === 'incomplete')
+    return unchecked(
+      listing.reason === 'deadline' ? 'deadline' : 'list_incomplete'
+    );
   return {
     checked: true,
     comparison: compareWalletCredits(wallet, listing.credits, window),
@@ -244,6 +260,6 @@ export function creditGapPages(report: CreditGapReport): boolean {
   if (report.status === 'failed') return true;
   return (
     report.unchecked.length > 0 ||
-    report.findings.some((finding) => finding.kind !== 'interest_not_listed')
+    report.findings.some((finding) => !REVIEW_ONLY.has(finding.kind))
   );
 }

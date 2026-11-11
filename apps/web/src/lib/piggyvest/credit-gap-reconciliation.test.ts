@@ -128,6 +128,26 @@ describe('credit-gap check', () => {
     expect(result).toEqual({ findings: [], internalSkipped: 1 });
   });
 
+  it('lists an unrecorded partial credit for review without paging', async () => {
+    const report = await runCreditGapCheck(
+      ports(ledger([wallet()]), {
+        outcome: 'complete',
+        credits: [credit('PVB01PARTIAL000000000000001', { status: 'partial' })],
+      })
+    );
+    expect(report).toMatchObject({
+      findings: [{ kind: 'partial_credit', amountKobo: 250000 }],
+    });
+    expect(creditGapPages(report)).toBe(false);
+  });
+
+  it('reports a wallet whose list read hit the deadline as unchecked for time', async () => {
+    const report = await runCreditGapCheck(
+      ports(ledger([wallet()]), { outcome: 'incomplete', reason: 'deadline' })
+    );
+    expect(report).toMatchObject({ unchecked: [{ reason: 'deadline' }] });
+  });
+
   it('ignores credits that are not successful or are still inside the settle time', () => {
     const result = compareWalletCredits(
       wallet(),

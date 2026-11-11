@@ -30,6 +30,8 @@ const FINDING_TEXT: Record<CreditGapFinding['kind'], string> = {
     'we recorded this inflow but PiggyVest does not list it for this wallet. Check it at PiggyVest before acting',
   interest_not_listed:
     'we recorded this interest payout but the transaction list does not show it (review only: the list may not include interest)',
+  partial_credit:
+    'PiggyVest shows a partial credit we never recorded (review only: check at PiggyVest how much moved)',
 };
 
 const UNCHECKED_TEXT: Record<CreditGapUnchecked['reason'], string> = {

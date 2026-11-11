@@ -47,6 +47,23 @@ function page(edges: unknown[], endCursor: string | null = null) {
 }
 
 describe('listWalletCreditsSince', () => {
+  it('starts no further page once the shared budget is spent', async () => {
+    const listPage = vi
+      .fn()
+      .mockResolvedValue(page([row('PVB01NEW', '2026-11-10T00:00:00Z')], 'n'));
+    const expired = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+
+    const listing = await listWalletCreditsSince({
+      walletId: 'plan-wallet-a',
+      sinceMs: SINCE,
+      listPage,
+      expired,
+    });
+
+    expect(listing).toEqual({ outcome: 'incomplete', reason: 'deadline' });
+    expect(listPage).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps credits since the window start and stops at the first older row', async () => {
     const listPage = vi
       .fn()

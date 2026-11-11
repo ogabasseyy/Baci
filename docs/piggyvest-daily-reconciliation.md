@@ -62,13 +62,21 @@ anything is wrong. It resends, settles and releases nothing.
    - A successful credit older than 6 hours that neither ledger recorded
      **pages** (`unrecorded_credit`). Resolve it by replaying the stored
      webhook capture, or by hand. Wallet-to-wallet (`p2p`) credits are our own
-     savings transfers (checked in 1.) and are only counted.
+     savings transfers (checked in 1.) and are only counted: the contract
+     evidence (2026-11-02) shows every wallet-to-wallet transfer lands as
+     `p2p`, while outside money (even into a goal wallet's own account number)
+     is a bank deposit, which is checked. The email shows how many were
+     skipped.
+   - A `partial` credit that neither ledger recorded is a review line only
+     (`partial_credit`): check at PiggyVest how much moved. `pending` and
+     `failed` credits moved no money and are ignored.
    - An inflow we recorded that PiggyVest does not list **pages**
      (`not_on_provider`); check it at PiggyVest before acting.
    - An interest payout we recorded that the list does not show is a review
      line only: whether the list includes interest rows is not yet confirmed.
    - A wallet whose list cannot be read, is not newest first, runs past 10
-     pages, or has more than 1,000 recorded credits in the window is reported
+     pages, runs into the shared 200-second budget (checked before every
+     page), or has more than 1,000 recorded credits in the window is reported
      NOT checked and pages. Rows recorded before `pvb_reference` existed have
      no key; they are counted and never matched.
 

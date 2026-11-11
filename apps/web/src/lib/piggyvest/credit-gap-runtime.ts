@@ -43,7 +43,12 @@ export function buildCreditGapPorts(input: {
         : { rejected: true };
     },
     listWalletCredits: (walletId, sinceMs) =>
-      listWalletCreditsSince({ walletId, sinceMs, listPage: input.listPage }),
+      listWalletCreditsSince({
+        walletId,
+        sinceMs,
+        listPage: input.listPage,
+        expired: input.expired,
+      }),
     expired: input.expired,
   };
 }

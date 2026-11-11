@@ -64,7 +64,7 @@ run):
   the pull request touches has the same status, the same final blob SHA **and the same hunks** (so a sync that changed
   main's side of a touched file, even if the final file is the same, does not pass) at the old and the new commit
   (this is the "sync merge from main" case; line-number shifts are ignored). Anything else (a changed file, a
-  binary or oversized patch, a failed lookup, more than 300 files) means "not clean".
+  binary or oversized patch, a failed lookup, 100 or more files) means "not clean".
 * Formats have changed before. If Codex items exist but none is understood, or the API cannot be read, the run
   fails closed (quick checks only) and says so in a warning on the `changes` job and in the job summary.
 

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import YAML from 'yaml';
 import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 
@@ -193,4 +193,36 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   });
   assert.notEqual(inside.status, 0);
   assert.match(inside.stdout + inside.stderr, /outside the workspace/);
+});
+
+describe('bugfix: shared-host SQL tests must not share fixed /tmp files', () => {
+  const script = readFileSync('supabase/tests/run-order-refund-claim-manual-concurrency-test.sh', 'utf8');
+
+  test('the refund concurrency test has no fixed /tmp marker or log names', () => {
+    // Two runner processes on one host can run this script at the same moment. With fixed names, one run deletes the
+    // other run's lock-ready marker or truncates the log that its statement-timeout assertion reads.
+    assert.doesNotMatch(script, /\/tmp\/order-refund-claim-race/);
+  });
+
+  test('every run gets its own scratch directory for the marker and the logs, and removes it on exit', () => {
+    const setup = script.split('\n').filter((line) => /^(scratch_dir|HOLD_MARKER|SESSION_A_LOG|CLAIM_LOG)=/.test(line));
+    assert.equal(setup.length, 4, 'scratch_dir, HOLD_MARKER, SESSION_A_LOG and CLAIM_LOG must each be one assignment line');
+    const probe = `set -euo pipefail\n${setup.join('\n')}\nprintf '%s\\n%s\\n%s\\n%s\\n' "$scratch_dir" "$HOLD_MARKER" "$SESSION_A_LOG" "$CLAIM_LOG"`;
+    const runs = [1, 2].map(() => {
+      const result = spawnSync('bash', ['-c', probe], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim().split('\n');
+    });
+    try {
+      assert.notEqual(runs[0][0], runs[1][0], 'two runs must not share a scratch directory');
+      for (const [dir, ...files] of runs) {
+        assert.ok(existsSync(dir), `${dir} must exist after setup`);
+        for (const file of files) assert.ok(file.startsWith(`${dir}/`), `${file} must live inside ${dir}`);
+      }
+    } finally {
+      for (const [dir] of runs) rmSync(dir, { recursive: true, force: true });
+    }
+    // The cleanup function also runs mid-script in full mode, so only the exit trap may remove the directory.
+    assert.match(script, /^trap 'cleanup; rm -rf "\$scratch_dir"' EXIT$/m);
+  });
 });

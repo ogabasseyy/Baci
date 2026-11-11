@@ -6,6 +6,9 @@
 # the same psql version before any replay runs, and with the two pins below.
 set -euo pipefail
 
+# RUNNER_ENVIRONMENT is a default variable the runner sets for every job ("github-hosted" or "self-hosted", see
+# GitHub's "Default environment variables" reference), so the step needs no `env:` entry for it, and `env:` could not
+# override it anyway. The version and checksum come from the step's `env:`.
 : "${SUPABASE_CLI_VERSION:?}" "${SUPABASE_CLI_SHA256:?}" "${RUNNER_ENVIRONMENT:?}" "${RUNNER_TEMP:?}" "${GITHUB_ENV:?}"
 
 # GitHub-hosted runners start empty and may use administrator rights. The self-hosted CI server

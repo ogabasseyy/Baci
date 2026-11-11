@@ -20,7 +20,10 @@ it('explains when no offers fit the maximum repayment period', () => {
   expect(screen.queryByRole('form')).not.toBeInTheDocument();
 });
 
-it('selects the same fallback tenure regardless of Oxygen offer ordering', () => {
+it.each([
+  [1, 6],
+  [6, 1],
+])('selects the same fallback tenure for offer order %i, %i', (first, second) => {
   render(
     <OxygenPlanForm
       busy={false}
@@ -30,8 +33,8 @@ it('selects the same fallback tenure regardless of Oxygen offer ordering', () =>
       maxTenure={6}
       submit={vi.fn()}
       offers={[
-        { tenure: 1, loanAmount: 100000 },
-        { tenure: 6, loanAmount: 100000 },
+        { tenure: first, loanAmount: 100000 },
+        { tenure: second, loanAmount: 100000 },
       ]}
     />
   );

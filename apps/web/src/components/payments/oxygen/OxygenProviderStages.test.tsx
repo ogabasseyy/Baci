@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { expect, it, vi } from 'vitest';
+import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 
 vi.mock('./OxygenGuidedVerification', () => ({
   OxygenGuidedVerification: () => null,
@@ -41,16 +42,17 @@ vi.mock('./OxygenAddressProgress', () => ({
 }));
 
 import { OxygenProviderStages } from './OxygenProviderStages';
+import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 
 const submit = vi.fn().mockResolvedValue(true);
 function props(
-  stage: string,
-  state: Record<string, unknown>,
-  pending?: unknown
+  stage: OxygenRuntimeSnapshot['stage'],
+  state: OxygenRuntimeSnapshot['state'],
+  pending?: OxygenRuntimeSnapshot['pending']
 ): ComponentProps<typeof OxygenProviderStages> {
   return {
     snapshot: {
-      workflowId: 'workflow',
+      ...oxygenBookedSnapshot,
       stage,
       state,
       pending,
@@ -76,11 +78,22 @@ function props(
       setReplacingAddress: vi.fn(),
       setComparingPlans: vi.fn(),
     },
-    approval: { approvePlan: vi.fn(), requestApprovalCode: vi.fn() },
-    bookingProgress: { checkAddress: vi.fn() },
-    residentialContext: { ready: false },
-    residential: { waiting: false },
-  } as unknown as ComponentProps<typeof OxygenProviderStages>;
+    approval: {
+      autoOpenReference: undefined,
+      approvePlan: vi.fn(),
+      requestApprovalCode: vi.fn(),
+    },
+    bookingProgress: {
+      checkAddress: vi.fn(),
+      checkPending: vi.fn(),
+      manualReviewNeeded: false,
+      addressStatusUnavailable: false,
+      addressDelayed: false,
+      restartAddressReview: vi.fn(),
+    },
+    residentialContext: { ready: false, fromCheckout: false, address: {} },
+    residential: { waiting: false, proof: undefined, prepare: vi.fn() },
+  };
 }
 it('shows recovery without offers and the plan form after offers arrive', () => {
   const { rerender } = render(
@@ -101,7 +114,7 @@ it('shows recovery without offers and the plan form after offers arrive', () => 
   expect(screen.getByText('Plan form')).toBeVisible();
 });
 it('offers refresh during address review, but not while pending or after payment/setup', () => {
-  const booking = { status: 'BOOKED' };
+  const booking = oxygenBookedSnapshot.state.booking;
   const { rerender } = render(
     <OxygenProviderStages {...props('booked', { booking })} />
   );
@@ -110,7 +123,14 @@ it('offers refresh during address review, but not while pending or after payment
   );
   expect(submit).toHaveBeenCalledWith({ action: 'refresh_eligibility' });
   for (const [state, pending] of [
-    [{ booking }, { action: 'book', status: 'queued' }],
+    [
+      { booking },
+      {
+        action: 'book',
+        status: 'queued',
+        idempotencyKey: '80000000-0000-4000-8000-000000000001',
+      },
+    ],
     [{ booking, paymentComplete: true }, undefined],
     [{ booking, setupComplete: true }, undefined],
   ] as const) {
@@ -121,7 +141,7 @@ it('offers refresh during address review, but not while pending or after payment
   }
 });
 it('refreshes missing offers at approval and suppresses the action for an active command', () => {
-  const state = { booking: { status: 'BOOKED' } };
+  const state = { booking: oxygenBookedSnapshot.state.booking };
   const { rerender } = render(
     <OxygenProviderStages {...props('approval_required', state)} />
   );
@@ -132,6 +152,7 @@ it('refreshes missing offers at approval and suppresses the action for an active
       {...props('approval_required', state, {
         action: 'approve_booking',
         status: 'queued',
+        idempotencyKey: '80000000-0000-4000-8000-000000000001',
       })}
     />
   );

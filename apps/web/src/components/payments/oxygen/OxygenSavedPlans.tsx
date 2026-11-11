@@ -8,6 +8,7 @@ import summaryStyles from './OxygenComparisonSummary.module.css';
 import { OxygenDownPayment } from './OxygenDownPayment';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenTenurePicker } from './OxygenTenurePicker';
+import { OxygenUnavailablePlanRecovery } from './OxygenUnavailablePlanRecovery';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
 import { oxygenPlanLimits } from './plan-limits';
 import { useOxygenSavedPlans } from './use-oxygen-saved-plans';
@@ -24,6 +25,7 @@ export function OxygenSavedPlans({
   onAccept,
   refreshOffers,
   approvalCodeStarted = false,
+  cancelUnavailablePlan,
 }: {
   workflowId: string;
   state: OxygenProviderState;
@@ -41,6 +43,7 @@ export function OxygenSavedPlans({
   onAccept?: (reference: string) => void;
   refreshOffers?: () => Promise<boolean>;
   approvalCodeStarted?: boolean;
+  cancelUnavailablePlan?: () => Promise<boolean>;
 }) {
   const [signingReference, setSigningReference] = useState<string>();
   const { data, selected, error, select, reload, quote, quoting } =
@@ -203,13 +206,21 @@ export function OxygenSavedPlans({
           </button>
         </div>
       )}
-      {state.offers && confirmed && !offered(percentage, tenure) && (
-        <p role="status">
-          {approvalCodeStarted
-            ? 'We could not confirm this saved plan. Please contact support for help.'
-            : 'This saved plan is no longer available. Choose another down payment or repayment period.'}
-        </p>
-      )}
+      {state.offers &&
+        confirmed &&
+        !offered(percentage, tenure) &&
+        (approvalCodeStarted && cancelUnavailablePlan ? (
+          <OxygenUnavailablePlanRecovery
+            busy={approvalBusy || quoting}
+            cancel={cancelUnavailablePlan}
+          />
+        ) : (
+          <p role="status">
+            {approvalCodeStarted
+              ? 'We could not confirm this saved plan. Please contact support for help.'
+              : 'This saved plan is no longer available. Choose another down payment or repayment period.'}
+          </p>
+        ))}
       {ready && (
         <div className={summaryStyles.footer}>
           {confirmed && (

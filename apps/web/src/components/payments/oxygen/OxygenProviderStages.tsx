@@ -191,6 +191,7 @@ export function OxygenProviderStages({
             approvePlan={approval.approvePlan}
             approvalBusy={disabled}
             approvalCodeStarted={snapshot.approvalOtpReady}
+            cancelUnavailablePlan={() => submit({ action: 'cancel_booking' })}
             refreshOffers={
               canRefreshSavedOxygenOffers(snapshot)
                 ? () => submit({ action: 'refresh_eligibility' })

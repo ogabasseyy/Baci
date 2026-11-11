@@ -44,6 +44,38 @@ function plan(ref: string, equity: number, tenure = 3) {
     updatedAt: '2026-10-23T12:00:00Z',
   };
 }
+it('requires explicit confirmation before cancelling a no-longer-offered plan with an active code', async () => {
+  const cancel = vi.fn().mockResolvedValue(true);
+  mocks.fetch.mockResolvedValue(
+    Response.json({ selectedReference: ref25, plans: [plan(ref25, 25)] })
+  );
+  render(
+    <OxygenSavedPlans
+      workflowId={id}
+      approvalReference={ref25}
+      approvalCodeStarted
+      cancelUnavailablePlan={cancel}
+      state={oxygenProviderStateSchema.parse({
+        ...plan(ref25, 25).state,
+        eligibleAmount: 400000,
+        minimumAmount: 10000,
+        maxTenure: 3,
+        offers: [{ tenure: 3, loanAmount: 200000 }],
+      })}
+    />
+  );
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Choose another plan' })
+  );
+  expect(cancel).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole('heading', { name: /sign and accept/i })
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Cancel plan and continue' })
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+});
 it('lets an unapproved legacy booking refresh its missing offers without losing the saved plan', async () => {
   const refreshOffers = vi.fn().mockResolvedValue(true);
   mocks.fetch.mockResolvedValue(
@@ -54,6 +86,7 @@ it('lets an unapproved legacy booking refresh its missing offers without losing 
       workflowId={id}
       state={oxygenProviderStateSchema.parse(plan(ref25, 25).state)}
       refreshOffers={refreshOffers}
+      requestApprovalCode={vi.fn()}
     />
   );
   const button = await screen.findByRole('button', {

@@ -71,6 +71,19 @@ export function pendingReadRecovery(
     return 'validate_nin';
   if (
     pending.action === 'refresh_eligibility' &&
+    pending.status === 'queued' &&
+    ['booked', 'approval_required'].includes(snapshot.stage) &&
+    snapshot.state.applicationReference &&
+    snapshot.state.bookingReference &&
+    snapshot.state.booking?.status === 'BOOKED' &&
+    !snapshot.state.offers &&
+    !snapshot.state.paymentComplete &&
+    !snapshot.state.setupComplete &&
+    oxygenEligibilityPrerequisites(snapshot.state)
+  )
+    return 'refresh_eligibility';
+  if (
+    pending.action === 'refresh_eligibility' &&
     ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&
     snapshot.state.applicationReference &&
     snapshot.state.eligible === undefined &&

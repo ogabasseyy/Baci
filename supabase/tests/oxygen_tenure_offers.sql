@@ -55,10 +55,10 @@ END $$;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000001',true);
 DO $$ DECLARE r jsonb; BEGIN
  r:=public.oxygen_runtime('status','efae0000-0000-4000-8000-000000000041');
- IF r->'state'->'offers'->1->>'loanAmount' <> '189000' THEN RAISE EXCEPTION 'Owner snapshot missing offers'; END IF;
+ IF r->'state'->'offers'->1->>'loanAmount' IS DISTINCT FROM '189000' THEN RAISE EXCEPTION 'Owner snapshot missing offers'; END IF;
 END $$;
 RESET ROLE;
 DO $$ BEGIN
- IF (SELECT state->'offers'->1->>'loanAmount' FROM oxygen_private.provider_states WHERE workflow_id='efae0000-0000-4000-8000-000000000041') <> '189000' THEN RAISE EXCEPTION 'Offers not saved'; END IF;
+ IF (SELECT state->'offers'->1->>'loanAmount' FROM oxygen_private.provider_states WHERE workflow_id='efae0000-0000-4000-8000-000000000041') IS DISTINCT FROM '189000' THEN RAISE EXCEPTION 'Offers not saved'; END IF;
 END $$;
 ROLLBACK;

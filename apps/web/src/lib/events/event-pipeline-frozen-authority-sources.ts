@@ -126,8 +126,13 @@ export const eventPipelineFrozenRoutes = {
   // signs server-verified claims for the existing order RPC. The rollout flag
   // defaults off; this change adds no privileged-client construction, payment,
   // notification, tenant, credential, or event-dispatch authority.
+  // Re-pinned for the negotiation cost-floor observation log (#4157): the
+  // route passes a monitor flag and shares the server-derived-discount gate
+  // helper. Cost is read only through the caller's RLS client in a
+  // post-response log; no privileged-client construction, payment,
+  // notification, tenant, credential, or event-dispatch authority is added.
   'apps/web/src/app/api/orders/route.ts':
-    'a5589c0931eb28e0e579925aa97978be7faec6246fefada2c781a9217bd38b90',
+    'af7f092268900735f5d2f7c35ea67d9ffc657d41487f617ea85c8f59e7c756c0',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

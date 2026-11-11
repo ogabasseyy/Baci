@@ -4,8 +4,22 @@ import { sanitizeText } from './sanitize.mjs';
 
 const ZWSP = '​';
 
-test('keeps ordinary markdown: code, links, lists and fences', () => {
-  const input = 'Use `select(id)` here.\n\n```ts\nconst a = 1;\n```\n- see [docs](https://example.com/a)';
+test('keeps ordinary markdown: code, lists and fences', () => {
+  const input = 'Use `select(id)` here.\n\n```ts\nconst a = 1;\n```\n- see docs/a.md\n1. Run `curl https://example.com/x` first';
+  assert.equal(sanitizeText(input), input);
+});
+
+test('bugfix: defuses clickable links (a prompt-injected review must not post trusted-looking links)', () => {
+  const out = sanitizeText('See [the docs](https://evil.example/login) or <https://evil.example/b> or https://evil.example/c now.');
+  assert.doesNotMatch(out, /\]\(/);
+  assert.doesNotMatch(out, /(^|[^`])https?:\/\//, 'every URL is code-formatted, so GitHub does not link it');
+  assert.match(out, /the docs \(`https:\/\/evil\.example\/login`\)/);
+  assert.match(out, /`https:\/\/evil\.example\/b`/);
+  assert.match(out, /`https:\/\/evil\.example\/c`/);
+});
+
+test('leaves URLs that are already inside inline code or a fence alone', () => {
+  const input = 'Run `curl https://example.com/x` or:\n\n```sh\ncurl https://example.com/y\n```';
   assert.equal(sanitizeText(input), input);
 });
 
@@ -36,7 +50,7 @@ test('bugfix: removes reference-style images (full, collapsed, shortcut) and the
   const out = sanitizeText(input);
   assert.doesNotMatch(out, /attacker\.example/);
   assert.doesNotMatch(out, /!\[/);
-  assert.match(out, /\[a normal link\]\(https:\/\/example\.com\/ok\)/);
+  assert.match(out, /a normal link \(`https:\/\/example\.com\/ok`\)/);
   assert.match(out, /full proof done/);
 });
 

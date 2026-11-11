@@ -156,6 +156,12 @@ test('bugfix: a file name with a newline cannot add lines to the prompt or to th
   assert.ok(run.prompt.includes('<file path="(unprintable name)">(content omitted: file name has control characters)</file>'));
   assert.deepEqual(run.changed.trim().split('\n'), ['ok.ts']);
   assert.ok(run.prompt.includes('const fine = true;'));
+  assert.equal(run.outputs.unreviewable_files, '1', 'the post step must know a file went unchecked');
+});
+
+test('reports zero unreviewable files for ordinary names (and ignores removed files)', () => {
+  const run = collect({ files: [file('ok.ts'), file('gone\nname.ts', 'removed')], diff: DIFF, contents: { 'ok.ts': 'x' } });
+  assert.equal(run.outputs.unreviewable_files, '0');
 });
 
 test('a file name with a backslash or a space is read normally', () => {

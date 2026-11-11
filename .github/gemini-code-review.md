@@ -15,6 +15,10 @@ tallies. Muse, Codex and CodeRabbit are separate reviewers and are not affected.
 | `failure` | Reviewed. A critical or high finding on a changed file. Fix it, or add the `bypass-ai-gate` label. | red |
 | `error` | Gemini could not review (quota, outage, bad key, unknown model, private repo). Not a vote either way. | green, with a warning |
 
+`error` also covers two cases where a clean answer would prove nothing: the changed-file list is
+empty or unreadable, or a changed file has control characters in its name (the model is never shown
+such files). A real finding is still `failure` in the second case.
+
 `error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
 state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then
 block every merge). If an AI gate is ever wanted, require `Diff Guardian / quorum` instead.
@@ -72,5 +76,7 @@ comment always reviews.
 
 - Review rules sent to the model: `.github/scripts/gemini-review/contract.md`.
 - Request shape, retries and error classes: `api.mjs`. Review parsing and rendering: `review.mjs`.
-- Posted text is scrubbed (`sanitize.mjs`): no @mentions, images, HTML comments or secret shapes.
+- Posted text is scrubbed (`sanitize.mjs`): no @mentions, images, HTML comments or secret shapes, and
+  links are turned into code so nothing the model writes is clickable. A status write that fails is
+  retried once and then only warned about (a lost write is an infrastructure miss, not a finding).
 - The scripts run from the default branch, so a change takes effect after it is merged.

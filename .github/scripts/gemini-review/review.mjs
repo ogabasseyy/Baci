@@ -54,7 +54,9 @@ export function parseReview(text) {
   };
 }
 
-const touches = (finding, changedFiles) => changedFiles.length === 0 || changedFiles.includes(normalizePath(finding.path));
+// With no changed-file list nothing can be verified, so nothing counts as a finding on the pull
+// request (post.mjs abstains in that case instead of trusting every path).
+const touches = (finding, changedFiles) => changedFiles.includes(normalizePath(finding.path));
 
 /** failure only for a critical/high finding on a file this pull request changes. */
 export function reviewState(review, changedFiles = []) {

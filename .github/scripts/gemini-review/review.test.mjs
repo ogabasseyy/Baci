@@ -44,8 +44,9 @@ test('the status is failure only for a critical or high finding on a file the pu
   assert.equal(reviewState(review(finding({ path: 'somewhere/else.ts' })), files), 'success');
   assert.equal(reviewState(review(finding({ path: './apps/web/src/a.ts' })), files), 'failure');
   assert.equal(reviewState(review(finding({ path: 'b/apps/web/src/a.ts' })), files), 'failure');
-  // Without a changed-file list every finding counts.
-  assert.equal(reviewState(review(finding({ path: 'somewhere/else.ts' })), []), 'failure');
+  // With no changed-file list nothing can be verified, so nothing blocks (post.mjs abstains instead).
+  assert.equal(reviewState(review(finding({ path: 'somewhere/else.ts' })), []), 'success');
+  assert.equal(reviewState(review(finding({ path: 'apps/web/src/a.ts' })), []), 'success');
 });
 
 test('renders the verdict, finding bullets with severity words, and next steps', () => {
@@ -55,6 +56,11 @@ test('renders the verdict, finding bullets with severity words, and next steps',
   assert.match(md, /^- high: Unscoped query in apps\/web\/src\/a\.ts:12$/m);
   assert.match(md, /^- low: Typo in x\/y\.ts \(path not in changed files — unverified\)$/m);
   assert.match(md, /## Suggested next steps\n\n- Add a test\./);
+});
+
+test('without a changed-file list every finding is tagged unverified', () => {
+  const { review } = parseReview(json());
+  assert.match(renderReview({ review, changedFiles: [] }), /unverified/);
 });
 
 test('renders an explicit no-issues line', () => {

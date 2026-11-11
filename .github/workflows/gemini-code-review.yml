@@ -196,5 +196,6 @@ jobs:
           SHOULD_REVIEW: ${{ steps.diff.outputs.should_review }}
           RESPONSE_FILE: ${{ runner.temp }}/gemini-response.json
           CHANGED_FILES_FILE: ${{ steps.diff.outputs.changed_files_file }}
+          UNREVIEWABLE_FILES: ${{ steps.diff.outputs.unreviewable_files }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node "${SCRIPT_DIR}/post.mjs"

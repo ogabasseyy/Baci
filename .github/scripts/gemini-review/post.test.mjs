@@ -35,7 +35,7 @@ function setup({ response, changed = 'apps/web/src/a.ts\n', env = {}, failPaths 
   const logs = [];
   return {
     calls, logs, github, env: merged,
-    run: () => post({ env: merged, github, log: (line) => logs.push(line), now: () => '2026-11-11T12:00:00Z' }),
+    run: () => post({ env: merged, github, log: (line) => logs.push(line), now: () => '2026-11-11T12:00:00Z', sleep: async () => {} }),
     status: () => calls.find((c) => c.path === `statuses/${HEAD}`)?.body,
     reviews: () => calls.filter((c) => c.path === 'pulls/7/reviews'),
     summary: () => readFileSync(files.summary, 'utf8'),
@@ -154,13 +154,52 @@ test('a rejected review comment does not lose the status', () =>
     assert.ok(t.logs.some((line) => line.startsWith('::warning::')));
   }));
 
-test('a status that cannot be written fails the job loudly', async () => {
-  const t = setup({ response: okResponse([]), failPaths: ['statuses/'] });
-  try {
-    await assert.rejects(t.run(), /GitHub API 500/);
-  } finally {
-    t.done();
-  }
+describe('bugfix: a lost status write is an infrastructure miss, not a finding', () => {
+  test('is retried once; when it still fails the job stays green for a clean or abstained review', async () => {
+    for (const options of [{ response: okResponse([]) }, { response: failure('unavailable') }]) {
+      const t = setup({ ...options, failPaths: ['statuses/'] });
+      try {
+        const result = await t.run();
+        assert.equal(t.calls.filter((call) => call.path.startsWith('statuses/')).length, 2, 'one retry');
+        assert.equal(result.exitCode, 0);
+        assert.ok(t.logs.some((line) => line.startsWith('::warning::') && /status/i.test(line)));
+      } finally {
+        t.done();
+      }
+    }
+  });
+
+  test('a finding still fails the job even when its status cannot be written', () =>
+    scenario({ response: okResponse([finding('high')]), failPaths: ['statuses/'] }, (t, result) => {
+      assert.equal(result.exitCode, 1);
+    }));
+});
+
+describe('bugfix: files Gemini could not check must not produce a green review', () => {
+  test('an empty or unreadable changed-file list abstains instead of trusting every path', async () => {
+    await scenario({ response: okResponse([finding('high')]), changed: '' }, (t, result) => {
+      assert.equal(t.status().state, 'error');
+      assert.equal(t.reviews().length, 0);
+      assert.equal(result.exitCode, 0);
+    });
+    await scenario({ response: okResponse([finding('high')]), env: { CHANGED_FILES_FILE: '/nonexistent/file' } }, (t) => {
+      assert.equal(t.status().state, 'error');
+    });
+  });
+
+  test('file names with control characters turn a clean review into an abstention, not a success', () =>
+    scenario({ response: okResponse([finding('low')]), env: { UNREVIEWABLE_FILES: '2' } }, (t, result) => {
+      assert.equal(t.status().state, 'error');
+      assert.match(t.status().description, /file names/i);
+      assert.equal(result.exitCode, 0);
+      assert.equal(t.reviews().length, 1, 'the review itself is still posted');
+    }));
+
+  test('but a real finding is still a failure', () =>
+    scenario({ response: okResponse([finding('high')]), env: { UNREVIEWABLE_FILES: '1' } }, (t, result) => {
+      assert.equal(t.status().state, 'failure');
+      assert.equal(result.exitCode, 1);
+    }));
 });
 
 test('an unverified HIGH finding on a file the pull request does not change cannot block', () =>

@@ -40,7 +40,24 @@ function evaluateReview(env, readFile) {
   const parsed = parseReview(response.text);
   if (!parsed.ok) return abstain('Gemini returned an unreadable review: not counted', `unreadable answer (${parsed.reason})`);
   const changedFiles = readFileSafe(readFile, env.CHANGED_FILES_FILE).split('\n').map((line) => line.trim()).filter(Boolean);
+  // Without the list no path can be verified; do not trust every path a model names.
+  if (changedFiles.length === 0) {
+    return abstain('Changed-file list unavailable: Gemini review not counted', 'the changed-file list is empty or unreadable');
+  }
   const state = reviewState(parsed.review, changedFiles);
+  const unreviewable = Number.parseInt(env.UNREVIEWABLE_FILES, 10) || 0;
+  if (state === 'success' && unreviewable > 0) {
+    // File names with control characters are hidden from the model, so a clean answer proves nothing.
+    return {
+      state: 'error',
+      description: 'Some file names could not be read by Gemini: not counted',
+      why: `${unreviewable} file name(s) with control characters were not reviewed`,
+      review: parsed.review,
+      response,
+      changedFiles,
+      unreviewable,
+    };
+  }
   return {
     state,
     description: state === 'failure' ? 'HIGH/CRITICAL findings flagged by Gemini' : 'No HIGH/CRITICAL findings',
@@ -82,16 +99,39 @@ function reviewBody({ outcome, env, now }) {
   const { response, review, changedFiles, state } = outcome;
   const model = /^[a-z0-9][a-z0-9.-]{0,62}$/.test(String(response.model)) ? response.model : 'unknown';
   return [
-    buildMarker({ sha: env.HEAD_SHA, fingerprint: env.FINGERPRINT, state }),
+    // Only a counted result is remembered; later pushes ignore a review without a marker.
+    ...(state === 'error' ? [] : [buildMarker({ sha: env.HEAD_SHA, fingerprint: env.FINGERPRINT, state })]),
     '## Gemini code review',
     '',
     `Model: \`${model}\` · ${formatUsage(model, response.usage, now())} · Workflow: ${env.RUN_URL}`,
+    ...(outcome.unreviewable ? ['', `> ${outcome.unreviewable} changed file(s) have names with control characters and were not reviewed, so this review is not counted.`] : []),
     '',
     renderReview({ review, changedFiles }),
   ].join('\n');
 }
 
-export async function post({ env, github, log = console.log, now = () => new Date().toISOString(), readFile = readFileSync, appendFile = appendFileSync }) {
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A lost status write is an infrastructure miss, not a finding: retry once, then warn. The job's
+// result still follows the review (only a finding fails it), so a GitHub hiccup cannot make a
+// clean review look like a blocking one.
+async function writeStatus({ github, env, payload, log, sleep }) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await github.post(`statuses/${env.HEAD_SHA}`, payload);
+      return true;
+    } catch (error) {
+      if (attempt === 2) {
+        log(`::warning::Could not write the Gemini review status (${error.message}); Diff Guardian will not see this vote.`);
+        return false;
+      }
+      await sleep(2000);
+    }
+  }
+  return false;
+}
+
+export async function post({ env, github, log = console.log, now = () => new Date().toISOString(), readFile = readFileSync, appendFile = appendFileSync, sleep = defaultSleep }) {
   if (env.SHOULD_REVIEW === 'false') {
     log('::notice::The pull request is not open any more; nothing to report.');
     return { state: null, exitCode: 0 };
@@ -111,12 +151,12 @@ export async function post({ env, github, log = console.log, now = () => new Dat
       log(`::warning::Could not post the Gemini review comment: ${error.message}`);
     }
   }
-  // Written last and never swallowed: a missing status would leave Diff Guardian waiting.
-  await github.post(`statuses/${env.HEAD_SHA}`, {
-    state,
-    context: CONTEXT,
-    description: outcome.description.slice(0, 140),
-    target_url: env.RUN_URL,
+  await writeStatus({
+    github,
+    env,
+    log,
+    sleep,
+    payload: { state, context: CONTEXT, description: outcome.description.slice(0, 140), target_url: env.RUN_URL },
   });
 
   if (state === 'failure') {

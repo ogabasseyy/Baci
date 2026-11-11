@@ -36,6 +36,10 @@ gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=
 changed_files_file="${RUNNER_TEMP}/gemini-changed-files.txt"
 jq -r '.[] | select(.filename | explode | any(. < 32 or . == 127) | not) | .filename' "${files_file}" > "${changed_files_file}"
 echo "changed_files_file=${changed_files_file}" >> "${GITHUB_OUTPUT}"
+# Files the model cannot be shown (control characters in the name) make a clean answer meaningless;
+# the post step turns a "success" into an abstention when this is not zero.
+unreviewable_files="$(jq '[.[] | select(.status != "removed") | select(.filename | explode | any(. < 32 or . == 127))] | length' "${files_file}")"
+echo "unreviewable_files=${unreviewable_files}" >> "${GITHUB_OUTPUT}"
 
 files_summary="$(
   jq -r '.[] | "- \(.filename | explode | map(if . < 32 or . == 127 then 63 else . end) | implode) [\(.status)] +\(.additions) / -\(.deletions)"' "${files_file}"

@@ -45,11 +45,17 @@ exit 1
 
 const key = (path) => path.replaceAll('/', '__');
 
-/** Review posted by the Muse workflow for `sha` (format taken from .github/scripts/muse-review/post.sh). */
-export function museReview({ sha = SHA, findings = [], fallback = false, submitted = '2026-11-11T10:00:00Z' } = {}) {
-  const lines = findings.length
-    ? findings.map((finding) => `- ${finding}: Something in apps/web/src/a.ts:1 (see inline)`).join('\n')
-    : '- No meaningful issues found.';
+/**
+ * Review posted by the Muse workflow for `sha` (format taken from .github/scripts/muse-review/post.sh).
+ * findings: a severity string, or { severity, unverified, body } (bodies are indented two spaces,
+ * as post.sh prints them for summary-only findings).
+ */
+export function museReview({ sha = SHA, findings = [], fallback = false, verdict = 'Reviewed.', nextSteps = [], submitted = '2026-11-11T10:00:00Z' } = {}) {
+  const bullets = findings.flatMap((entry) => {
+    const { severity, unverified = false, body = '' } = typeof entry === 'string' ? { severity: entry } : entry;
+    const suffix = unverified ? ' (path not in changed files — unverified)' : body ? '' : ' (see inline)';
+    return [`- ${severity}: Something in apps/web/src/a.ts:1${suffix}`, ...(body ? [`  ${body}`] : [])];
+  });
   return {
     user: { login: 'github-actions[bot]' },
     submitted_at: submitted,
@@ -60,13 +66,15 @@ export function museReview({ sha = SHA, findings = [], fallback = false, submitt
       '',
       '## Verdict',
       '',
-      'Reviewed.',
+      verdict,
       '',
       '## Findings',
       '',
-      lines,
+      ...(bullets.length ? bullets : ['- No meaningful issues found.']),
       '',
       '## Suggested next steps',
+      '',
+      ...nextSteps.map((step) => `- ${step}`),
     ].join('\n'),
   };
 }

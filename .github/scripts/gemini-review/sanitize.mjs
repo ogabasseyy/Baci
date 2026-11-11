@@ -21,6 +21,27 @@ const KEY_VALUE = /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d)[
 
 const RISKY_TAG = /<\/?(?:img|picture|source|video|audio|iframe|script|style|link|object|embed|svg|form|input)\b[^>]*>/gi;
 
+// Links and URLs outside code become inline code, so GitHub does not make them clickable: a
+// prompt-injected review must not post trusted-looking links under the bot's name. Code spans and
+// fences are left alone (the URL there is already inert).
+const CODE = /(```[\s\S]*?```|`[^`\n]*`)/;
+
+function defuseLinks(text) {
+  return text
+    .split(CODE)
+    .map((part, index) =>
+      index % 2 === 1
+        ? part
+        : part
+            .replace(/\[([^\]\n]*)\]\(\s*<?([^)\s>]*)>?(?:\s+"[^"]*")?\s*\)/g, (_match, label, url) =>
+              url ? `${label} (\`${url.replaceAll('`', '')}\`)` : label,
+            )
+            .replace(/<((?:https?|ftp):\/\/[^>\s]+)>/gi, (_match, url) => `\`${url.replaceAll('`', '')}\``)
+            .replace(/(?<!`)\b(?:https?|ftp):\/\/[^\s<>`)\]]+/gi, (url) => `\`${url}\``),
+    )
+    .join('');
+}
+
 export function sanitizeText(input, { max = 2000 } = {}) {
   let text = input === undefined || input === null ? '' : String(input);
   text = text.replaceAll('\r\n', '\n');
@@ -41,6 +62,7 @@ export function sanitizeText(input, { max = 2000 } = {}) {
     .replaceAll('![', `!${ZERO_WIDTH_SPACE}[`)
     .replace(RISKY_TAG, '')
     .replace(/(^|[^A-Za-z0-9_@])@(?=[A-Za-z0-9_])/g, `$1@${ZERO_WIDTH_SPACE}`);
+  text = defuseLinks(text);
 
   if (text.length > max) {
     return `${text.slice(0, Math.max(0, max - 1))}…`;

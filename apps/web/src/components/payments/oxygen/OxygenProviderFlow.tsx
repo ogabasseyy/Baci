@@ -216,6 +216,14 @@ function OxygenProviderSession({
           workflowId={snapshot.workflowId}
           state={s}
           busy={disabled || acceptance.busy}
+          refreshOffers={
+            !s.offers &&
+            !snapshot.pending &&
+            !s.paymentComplete &&
+            !s.setupComplete
+              ? () => submit({ action: 'refresh_eligibility' })
+              : undefined
+          }
           onAccept={(reference) => {
             void acceptance
               .accept(snapshot.workflowId, reference, readSaved)

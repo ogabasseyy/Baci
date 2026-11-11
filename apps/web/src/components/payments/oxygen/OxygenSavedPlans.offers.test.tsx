@@ -14,12 +14,13 @@ beforeEach(() => mocks.fetch.mockReset());
 const id = '60000000-0000-4000-8000-000000000001';
 const ref25 = '70000000-0000-4000-8000-000000000025';
 const ref50 = '70000000-0000-4000-8000-000000000050';
-function plan(ref: string, equity: number) {
+const ref6 = '70000000-0000-4000-8000-000000000006';
+function plan(ref: string, equity: number, tenure = 3) {
   return {
     bookingReference: ref,
     productAmount: 400000,
     equityPercentage: equity,
-    tenure: 3,
+    tenure,
     state: {
       bookingReference: ref,
       booking: {
@@ -29,12 +30,12 @@ function plan(ref: string, equity: number) {
         equity_percentage: equity,
         equity_amount: 4000 * equity,
         loan_amount: 400000 - 4000 * equity,
-        loan_tenure: 3,
+        loan_tenure: tenure,
       },
       quotedCharges: 5000,
-      schedule: [1, 2, 3].map((period) => ({
-        period,
-        dueDate: [2026, 10 + period, 27],
+      schedule: Array.from({ length: tenure }, (_, i) => ({
+        period: i + 1,
+        dueDate: [2027, i + 1, 27],
         amount: 110000,
         principal: 100000,
         interest: 10000,
@@ -163,4 +164,33 @@ it('checks the selected saved plan against its offer rather than the previous bo
   expect(accept).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '50%' }));
   expect(accept).toBeEnabled();
+});
+
+it('keeps an older saved repayment period visible after the maximum changes', async () => {
+  mocks.fetch.mockImplementation(async () =>
+    Response.json({
+      selectedReference: ref25,
+      plans: [plan(ref25, 25), plan(ref6, 25, 6)],
+    })
+  );
+  render(
+    <OxygenSavedPlans
+      workflowId={id}
+      onAccept={vi.fn()}
+      state={oxygenProviderStateSchema.parse({
+        ...plan(ref25, 25).state,
+        eligibleAmount: 400000,
+        minimumAmount: 10000,
+        maxTenure: 3,
+        offers: [
+          { tenure: 3, loanAmount: 400000 },
+          { tenure: 6, loanAmount: 400000 },
+        ],
+      })}
+    />
+  );
+  fireEvent.click(await screen.findByRole('radio', { name: '6 months' }));
+  expect(
+    screen.getByRole('button', { name: 'Accept payment plan' })
+  ).toBeDisabled();
 });

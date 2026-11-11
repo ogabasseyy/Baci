@@ -84,12 +84,12 @@ export function OxygenSavedPlans({
   );
   const tenures = [
     ...new Set([
-      ...(state.offers?.map((offer) => offer.tenure) ?? []),
+      ...(state.offers
+        ?.filter((offer) => offer.tenure <= maxTenure)
+        .map((offer) => offer.tenure) ?? []),
       ...plans.map((plan) => plan.tenure),
     ]),
-  ]
-    .filter((month) => month <= maxTenure)
-    .sort((a, b) => a - b);
+  ].sort((a, b) => a - b);
   function offered(value: number | null, months: number) {
     const offer = state.offers?.find((item) => item.tenure === months);
     const limit = oxygenPlanLimits(
@@ -101,6 +101,7 @@ export function OxygenSavedPlans({
     );
     return (
       value !== null &&
+      months <= maxTenure &&
       limit.kind === 'available' &&
       value >= limit.min &&
       value <= limit.max

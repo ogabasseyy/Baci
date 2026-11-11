@@ -13,11 +13,13 @@ export function OxygenBookedPlanReview({
   state,
   busy,
   onAccept,
+  refreshOffers,
 }: {
   workflowId: string;
   state: OxygenProviderState;
   busy: boolean;
   onAccept: (reference: string) => void;
+  refreshOffers?: () => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing)
@@ -27,6 +29,7 @@ export function OxygenBookedPlanReview({
         state={state}
         approvalBusy={busy}
         onAccept={onAccept}
+        refreshOffers={refreshOffers}
       />
     );
   const ready = Boolean(

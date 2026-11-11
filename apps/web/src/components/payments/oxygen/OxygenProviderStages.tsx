@@ -221,6 +221,15 @@ export function OxygenProviderStages({
             busy={disabled || Boolean(snapshot.pending)}
             onReplace={() => setReplacingAddress(true)}
             onCheck={bookingProgress.checkAddress}
+            onRefreshOffers={
+              s?.booking?.status === 'BOOKED' &&
+              !s.offers &&
+              !snapshot.pending &&
+              !s.paymentComplete &&
+              !s.setupComplete
+                ? () => submit({ action: 'refresh_eligibility' })
+                : undefined
+            }
           />
         )}
       {snapshot.stage === 'booked' && replacingAddress && (

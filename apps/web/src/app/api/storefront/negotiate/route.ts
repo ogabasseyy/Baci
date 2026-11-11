@@ -100,7 +100,12 @@ export async function POST(request: NextRequest) {
         costFloor == null ||
         !Number.isFinite(costFloorPrice)
       ) {
-        console.error('Negotiation cost floor lookup error:', costFloorError);
+        console.error(
+          costFloorError
+            ? 'Negotiation cost floor lookup error:'
+            : 'Negotiation cost floor unavailable (product inactive or RPC returned no value)',
+          costFloorError ?? { productId: product.id }
+        );
         return NextResponse.json(
           { error: 'Failed to process negotiation' },
           { status: 500 }

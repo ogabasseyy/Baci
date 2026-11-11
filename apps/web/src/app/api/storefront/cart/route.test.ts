@@ -93,6 +93,10 @@ describe('GET /api/storefront/cart', () => {
     });
 
     expect(response.status).toBe(404);
+    // Failures report the steps that ran, so slow errors can be diagnosed.
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^auth-features;dur=[\d.]+, auth;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     expect((await response.json()).code).toBe('not_found');
     expect(mocks.capturedPrincipal).toBeNull();
   });
@@ -100,6 +104,7 @@ describe('GET /api/storefront/cart', () => {
   it('rejects missing proofs and foreign merchants', async () => {
     const missing = await getCart({ headers: {} });
     expect(missing.status).toBe(401);
+    expect(missing.headers.get('Server-Timing')).toMatch(/total;dur=[\d.]+$/);
     expect((await missing.json()).code).toBe('missing_proof');
 
     const foreign = await getCart({

@@ -16,7 +16,10 @@ import {
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
-import { createCartServerTimer } from '@/lib/cart/server-timing';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -38,8 +41,16 @@ import { contextDeps } from '../context-deps';
  * instead of overwriting newer state; operation-id retries converge.
  */
 export async function POST(request: NextRequest) {
+  // Every outcome, including errors, reports its step timings.
+  const timer = createCartServerTimer();
+  return timer.apply(await applyCommand(request, timer));
+}
+
+async function applyCommand(
+  request: NextRequest,
+  timer: CartServerTimer
+): Promise<Response> {
   try {
-    const timer = createCartServerTimer();
     const csrf = await timer.measure('csrf', () =>
       checkCsrfProtection(request)
     );
@@ -180,7 +191,7 @@ export async function POST(request: NextRequest) {
     if (proof && maxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, maxAge);
     }
-    return timer.apply(response);
+    return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {
       message: error instanceof Error ? error.message : 'unknown',

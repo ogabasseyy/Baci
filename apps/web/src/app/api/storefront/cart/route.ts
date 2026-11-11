@@ -17,7 +17,10 @@ import {
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
-import { createCartServerTimer } from '@/lib/cart/server-timing';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -39,8 +42,16 @@ import { contextDeps } from './context-deps';
  * plus body for device callers), so older carts stay editable.
  */
 export async function GET(request: NextRequest) {
+  // Every outcome, including errors, reports its step timings.
+  const timer = createCartServerTimer();
+  return timer.apply(await readCart(request, timer));
+}
+
+async function readCart(
+  request: NextRequest,
+  timer: CartServerTimer
+): Promise<Response> {
   try {
-    const timer = createCartServerTimer();
     const context = await timer.measure('auth', () =>
       resolveCartRequestContext(
         request,
@@ -126,7 +137,7 @@ export async function GET(request: NextRequest) {
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }
-    return timer.apply(response);
+    return response;
   } catch (error) {
     console.error('Unexpected error in GET /api/storefront/cart:', {
       message: error instanceof Error ? error.message : 'unknown',

@@ -1,5 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  SearchQueryDraftSession,
+  useSearchQueryDraft,
+} from '@/components/storefront/search-refinements/search-query-draft';
 import { SearchPageForm } from './search-page-form';
 
 const fetchMock = vi.fn();
@@ -82,6 +86,21 @@ it('shows catalog suggestions beside the focused input and hides them on blur', 
   expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
 });
 
+it('does not show unfocused suggestions when the duplicate form is hidden', () => {
+  render(
+    <SearchPageForm
+      action="/search"
+      pathPrefix=""
+      defaultQuery="iphone"
+      currency="NGN"
+      refinements={{ brands: [], sort: 'relevance' }}
+      suggestionProducts={[{ price: 250000, condition: 'used' }]}
+      suggestionsOnly
+    />
+  );
+  expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
+});
+
 it('themes the search outline from the merchant palette', () => {
   // The outline follows the per-merchant primary token (Ogabassey's brand
   // red included) instead of a fixed Tailwind red, so dark themes and
@@ -98,4 +117,36 @@ it('themes the search outline from the merchant palette', () => {
     'border-store-primary',
     'focus:border-store-primary'
   );
+});
+
+it('announces shared draft errors without rendering the duplicate form', () => {
+  function SetDraftError() {
+    const draft = useSearchQueryDraft();
+    return (
+      <button type="button" onClick={() => draft?.setError('Invalid search')}>
+        Set error
+      </button>
+    );
+  }
+  render(
+    <SearchQueryDraftSession initialQuery="phone">
+      <SetDraftError />
+      <SearchPageForm
+        action="/search"
+        pathPrefix=""
+        defaultQuery="phone"
+        currency="NGN"
+        suggestionsOnly
+      />
+    </SearchQueryDraftSession>
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Set error' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('Invalid search');
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Use the search bar to update your search.'
+  );
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('form', { name: 'Edit search' })
+  ).not.toBeInTheDocument();
 });

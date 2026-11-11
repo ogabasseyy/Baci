@@ -51,7 +51,7 @@ export function SavingsGoalRetryPrompt({
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
-  body: { fontSize: 14, lineHeight: 21 },
+  body: { fontSize: 13, lineHeight: 21 },
   submit: {
     minHeight: 44,
     alignItems: 'center',

@@ -108,6 +108,15 @@ describe('OgabasseyV2LegalDispute', () => {
         screen.getByText(/2 Olaide Tomori St, Ikeja, Lagos, Nigeria/i),
       ).toBeInTheDocument();
     });
+
+    it('renders the approved 14-day return policy note without 7-day claims', () => {
+      render(<OgabasseyV2LegalDispute />);
+
+      expect(screen.getByText('14-Day Return Policy')).toBeInTheDocument();
+      expect(
+        screen.queryByText(/7-day return policy/i)
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('custom content via merchant.pages.terms', () => {

@@ -42,7 +42,7 @@ test('invalid clock output cannot enable the review', () => {
 
 test('preserves trusted event eligibility and does not grant the window job permissions', () => {
   const condition = workflow.jobs.window.if;
-  assert.equal(condition, String.raw`(github.event_name == 'pull_request' && github.event.pull_request.draft == (github.head_ref == 'codex/draft-review-pilot') && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && (github.event.comment.body == '/jules deep review' || startsWith(toJSON(github.event.comment.body), '"/jules deep review\n') || startsWith(toJSON(github.event.comment.body), '"/jules deep review\r\n')) && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR'))`);
+  assert.equal(condition, String.raw`(github.event_name == 'pull_request' && github.event.pull_request.draft == true && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'issue_comment' && github.event.issue.pull_request && (github.event.comment.body == '/jules deep review' || startsWith(toJSON(github.event.comment.body), '"/jules deep review\n') || startsWith(toJSON(github.event.comment.body), '"/jules deep review\r\n')) && (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER' || github.event.comment.author_association == 'COLLABORATOR'))`);
   assert.deepEqual(workflow.jobs.window.permissions, {});
   const submit = workflow.jobs.review.steps.find((step) => step.name === 'Submit Jules review');
   assert.equal(submit.if, '${{ always() && !cancelled() }}');

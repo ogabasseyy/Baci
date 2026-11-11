@@ -89,6 +89,10 @@ vi.mock('@/hooks/useOrders', () => ({
   useRecordPayment: () => ({ mutateAsync: vi.fn() }),
 }));
 
+vi.mock('@/hooks/orders/refundEvidenceBlocksChoice', () => ({
+  refundEvidenceBlocksChoice: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('@/hooks/orders/useOrderAuditEvents', () => ({
   useOrderAuditEvents: () => auditEventsState.current,
 }));

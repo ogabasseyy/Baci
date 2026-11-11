@@ -7,6 +7,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, develop]
   schedule:
     # Run daily at 3:00 AM UTC
@@ -25,6 +26,7 @@ concurrency:
 
 jobs:
   changes:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Detect Semgrep scope
     runs-on: ubuntu-latest
     outputs:
@@ -139,11 +141,14 @@ jobs:
     runs-on: ubuntu-latest
     # Skip for forked PRs where SEMGREP_APP_TOKEN is not available
     # Forked PRs don't have access to secrets, which would cause Semgrep CI to fail
-    if: |
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (
       github.event_name != 'pull_request' ||
       (
         github.event.pull_request.head.repo.full_name == github.repository &&
         needs.changes.outputs.semgrep_relevant == 'true'
+      )
       )
     timeout-minutes: 60
     permissions:
@@ -451,6 +456,7 @@ jobs:
           retention-days: 7
 
   secrets-scan:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Secret Scanning
     runs-on: ubuntu-latest
     permissions:

@@ -26,6 +26,7 @@ export interface DashboardOrderRecord {
   tax_basis?: string | null;
   discount_amount?: string | number | null;
   currency?: string | null;
+  amount_paid?: string | number | null;
   shipping_status: string;
   payment_status: string;
   payment_method: string | null;
@@ -60,12 +61,22 @@ interface DashboardTransactionRecord {
   currency: string;
   gateway: string;
   created_at: string;
+  payment_transaction_id?: string | null;
+  provider_refund_id?: string | null;
+  provider_refund_status?: string | null;
+  refund_method?: string | null;
 }
 
 interface MapDashboardOrderRecordOptions {
   includeDetails?: boolean;
   orderItemImageMap: ReadonlyMap<string, string>;
   transactions?: readonly DashboardTransactionRecord[] | null;
+}
+
+function parseRecordedAmountPaid(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function formatStatus(status: string): string {
@@ -92,6 +103,8 @@ export function mapDashboardOrderRecord(
     total: Number.parseFloat(order.total),
     ...mapOrderFinancialFields(order),
     currency: order.currency?.trim() || null,
+    // Recorded paid amount for the cancel plan; null when absent or unreadable.
+    amountPaid: parseRecordedAmountPaid(order.amount_paid),
     shippingStatus: formatStatus(order.shipping_status) as ShippingStatus,
     paymentStatus: formatStatus(order.payment_status) as PaymentStatus,
     paymentMethod: order.payment_method,
@@ -162,6 +175,11 @@ export function mapDashboardOrderRecord(
             currency: transaction.currency,
             gateway: transaction.gateway,
             created_at: transaction.created_at,
+            gateway_reference: transaction.gateway_reference,
+            payment_transaction_id: transaction.payment_transaction_id,
+            provider_refund_id: transaction.provider_refund_id,
+            provider_refund_status: transaction.provider_refund_status,
+            refund_method: transaction.refund_method,
           })),
         }
       : {}),

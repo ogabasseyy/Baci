@@ -175,6 +175,7 @@ export function OxygenBankFields({
       </label>
       <div
         aria-live="polite"
+        hidden={!name && !resolving}
         className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3"
       >
         <label className="grid gap-1 text-xs font-medium text-gray-500">
@@ -184,11 +185,7 @@ export function OxygenBankFields({
             name="account_name"
             value={name}
             readOnly
-            placeholder={
-              resolving
-                ? 'Verifying account…'
-                : 'Waiting for your account details'
-            }
+            placeholder={resolving ? 'Verifying account…' : undefined}
           />
         </label>
         {resolving && (

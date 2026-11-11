@@ -99,4 +99,68 @@ describe('formatVerifiedProductSpecHighlights', () => {
       })
     ).toEqual(['8GB RAM', '256GB storage']);
   });
+
+  it('supports refresh_rate_hz formatting in default highlight order', () => {
+    const highlights = formatVerifiedProductSpecHighlights({
+      specs: {
+        refresh_rate_hz: 120,
+      },
+      category: 'Monitors',
+    });
+    expect(highlights).toEqual(['120Hz refresh rate']);
+
+    const stringHighlights = formatVerifiedProductSpecHighlights({
+      specs: {
+        refresh_rate_hz: '144',
+      },
+      category: 'Monitors',
+    });
+    expect(stringHighlights).toEqual(['144Hz refresh rate']);
+  });
+
+  it('filters refresh_rate_hz for accessory categories and retains it for supported device categories', () => {
+    const specs = { refresh_rate_hz: 144 };
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        category: 'Phone Cases',
+      })
+    ).toEqual([]);
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        category: 'Accessories',
+      })
+    ).toEqual([]);
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        categorySlugs: ['phone-cases'],
+      })
+    ).toEqual([]);
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        category: 'Monitors',
+      })
+    ).toEqual(['144Hz refresh rate']);
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        categorySlugs: ['monitors'],
+      })
+    ).toEqual(['144Hz refresh rate']);
+
+    expect(
+      formatVerifiedProductSpecHighlights({
+        specs,
+        categorySlugs: ['smartphones'],
+      })
+    ).toEqual(['144Hz refresh rate']);
+  });
 });

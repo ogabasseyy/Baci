@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import { parseReviewHandoff } from './parse-review-handoff';

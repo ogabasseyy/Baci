@@ -640,6 +640,7 @@ it('resolves queued edits when PostgreSQL returns lower-case UUIDs for an upper-
 it.each([
   'success',
   'rejection',
+  'cancel',
 ] as const)('clears coverage overlays after definitive %s so later device values are visible', (outcome) => {
   let state = sharedCartReducer(linked(), {
     generation: 1,
@@ -670,13 +671,19 @@ it.each([
             lines: [cartLine({ hasAssurance: true })],
           }),
         })
-      : sharedCartReducer(state, {
-          generation: 1,
-          type: 'command/failed',
-          operationId: 'coverage',
-          code: 'invalid_item',
-          retryable: false,
-        });
+      : outcome === 'cancel'
+        ? sharedCartReducer(state, {
+            generation: 1,
+            type: 'command/cancel',
+            operationId: 'coverage',
+          })
+        : sharedCartReducer(state, {
+            generation: 1,
+            type: 'command/failed',
+            operationId: 'coverage',
+            code: 'invalid_item',
+            retryable: false,
+          });
   expect(state.assuranceOverlays).toEqual({});
   state = sharedCartReducer(state, {
     generation: 1,

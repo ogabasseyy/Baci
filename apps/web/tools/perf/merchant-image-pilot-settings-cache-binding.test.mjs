@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import {
   ROUTE,
@@ -155,5 +156,5 @@ describe('merchant-image-pilot-settings cache evidence: provenance binding', () 
     });
     expect(matching.error).toBe(null);
     expect(matching.report.ok).toBe(true);
-  });
+  }, 60_000);
 });

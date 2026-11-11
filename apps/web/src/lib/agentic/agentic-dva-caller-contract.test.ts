@@ -1,24 +1,15 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { privilegedCallerAnalysis } from './agentic-dva-caller-contract-test-support';
+import { collectDvaSourceFiles } from './agentic-dva-caller-source-files.test-support';
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../../..'
 );
-const excludedDirectories = new Set([
-  '.git',
-  '.next',
-  '.turbo',
-  '.worktrees',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-]);
-const sourceFiles = collectSourceFiles(repositoryRoot);
+const sourceFiles = collectDvaSourceFiles(repositoryRoot);
 const sourcesByPath = new Map(
   sourceFiles.map(({ path, source }) => [path, source])
 );
@@ -209,32 +200,6 @@ describe('Paystack DVA caller contract', () => {
     expect(packageJson.scripts).not.toHaveProperty('agentic:dva-cutover:drain');
   });
 });
-
-function collectSourceFiles(
-  directory: string
-): Array<{ path: string; source: string }> {
-  return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
-      const absolutePath = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        return excludedDirectories.has(entry.name)
-          ? []
-          : collectSourceFiles(absolutePath);
-      }
-      if (!['.js', '.mjs', '.ts', '.tsx'].includes(extname(entry.name)))
-        return [];
-      if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(entry.name)) return [];
-      return [
-        {
-          path: relative(repositoryRoot, absolutePath),
-          source: readFileSync(absolutePath, 'utf8'),
-        },
-      ];
-    })
-    .sort((left, right) =>
-      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-    );
-}
 
 function countMatches(source: string, pattern: RegExp): number {
   return source.match(pattern)?.length ?? 0;

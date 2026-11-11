@@ -1,0 +1,36 @@
+:root {
+  color: #302b25;
+  background: #faf6ee;
+  font-family: Georgia, serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 68rem;
+  margin: auto;
+  padding: clamp(1rem, 7vw, 5rem);
+}
+nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+h1 {
+  font-weight: 400;
+  font-size: clamp(2.5rem, 8vw, 6rem);
+  line-height: 1;
+}
+button {
+  padding: 0.8rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  cursor: pointer;
+}
+section {
+  border-top: 1px solid;
+  margin-top: 2rem;
+}

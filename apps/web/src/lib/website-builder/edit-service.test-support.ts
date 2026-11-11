@@ -5,7 +5,12 @@ import type { BuilderContext } from '@/lib/builder-connector/types';
 export const id = '10000000-0000-4000-8000-000000000001';
 export function setup(data: unknown) {
   const rpc = vi.fn().mockImplementation(async (name: string) => ({
-    data: name === 'builder_prepare_apply' ? null : data,
+    data:
+      name === 'experience_authoring_mode_for_merchant'
+        ? 'legacy'
+        : name === 'builder_prepare_apply'
+          ? null
+          : data,
     error: null,
   }));
   const ctx: BuilderContext = {

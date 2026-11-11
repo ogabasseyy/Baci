@@ -1245,7 +1245,7 @@ describe('WalletScreen', () => {
       expect(mockRefetch).toHaveBeenCalled();
       expect(alertSpy).toHaveBeenCalledWith(
         'Savings updated',
-        'Added ₦500 to your savings goal.'
+        "Nice! ₦500 added. You're 1% of the way to your iPhone 15 Pro. Keep it going!"
       );
     } finally {
       alertSpy.mockRestore();

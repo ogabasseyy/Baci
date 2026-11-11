@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { headers } from 'next/headers';
-import { type ReactNode, Suspense } from 'react';
+import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getMerchantByIdentifier,
@@ -44,28 +44,6 @@ vi.mock('@/templates/registry', () => ({
   getTemplate: vi.fn(() => null),
 }));
 
-// The Help page is imported directly by the route; stub it to keep the
-// heavy page module out of this test's module graph.
-vi.mock('@/components/storefront/ogabassey/pages/help-support', () => ({
-  OgabasseyV2HelpSupport: vi.fn(() => null),
-}));
-
-vi.mock('@/types/faq', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/types/faq')>();
-  return {
-    ...actual,
-    parseLegacyFAQ: vi.fn(() => []),
-  };
-});
-
-const { parseLegacyFAQ } = await import('@/types/faq');
-
-vi.mock('../pages/faq/faq-page-client', () => ({
-  FAQPageClient: ({ children }: { children?: ReactNode }) => (
-    <div data-testid="faq-client">FAQ UI{children}</div>
-  ),
-}));
-
 const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
@@ -74,6 +52,15 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
+vi.mock('@/types/faq', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('@/types/faq');
+  return {
+    ...actual,
+    parseLegacyFAQ: vi.fn(() => []),
+  };
+});
+
+const { parseLegacyFAQ } = await import('@/types/faq');
 const { default: FAQPage, generateMetadata } = await import('./page');
 
 describe('FAQPage', () => {
@@ -183,7 +170,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.robots).toEqual({ index: false, follow: true });
     expect(notFound).not.toHaveBeenCalled();
   });
@@ -191,6 +178,7 @@ describe('generateMetadata', () => {
   it('returns indexable metadata for Ogabassey template even when faq_items is empty', async () => {
     vi.mocked(getMerchantByIdentifier).mockResolvedValue({
       business_name: 'Ogabassey',
+      slug: 'ogabassey',
       template_id: 'ogabassey',
       faq_items: [],
       pages: {},
@@ -201,6 +189,22 @@ describe('generateMetadata', () => {
     });
 
     expect(metadata.robots).toEqual({ index: true, follow: true });
+  });
+
+  it('returns noindex metadata for non-Ogabassey merchant using Ogabassey template when no FAQs exist', async () => {
+    vi.mocked(getMerchantByIdentifier).mockResolvedValue({
+      business_name: 'Custom Store',
+      slug: 'custom-store',
+      template_id: 'ogabassey',
+      faq_items: [],
+      pages: {},
+    } as unknown as Awaited<ReturnType<typeof getMerchantByIdentifier>>);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'custom-store' }),
+    });
+
+    expect(metadata.robots).toEqual({ index: false, follow: true });
   });
 
   it('returns metadata for the advertised FAQ page when no FAQ items exist', async () => {
@@ -220,7 +224,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/faq');
     expect(notFound).not.toHaveBeenCalled();
   });
@@ -238,7 +242,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(notFound).not.toHaveBeenCalled();
   });
 
@@ -259,7 +263,7 @@ describe('generateMetadata', () => {
       params: Promise.resolve({ slug: 'test' }),
     });
 
-    expect(metadata.title).toBe('FAQ | Test Store');
+    expect(metadata.title).toBe('FAQ');
     expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/faq');
     expect(metadata.openGraph?.url).toBe('https://ogabassey.com/faq');
     expect(metadata.robots).toEqual({ index: true, follow: true });

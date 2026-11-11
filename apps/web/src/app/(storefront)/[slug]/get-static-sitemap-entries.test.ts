@@ -88,6 +88,19 @@ describe('getStaticSitemapEntries', () => {
         }),
       ])
     );
+
+    const withOtherTemplateMerchant = getStaticSitemapEntries({
+      merchant: {
+        slug: 'other-store',
+        is_published: true,
+        business_name: 'Other Store',
+        template_id: 'ogabassey',
+      },
+      storeUrl: 'https://other-store.usebaci.com',
+    });
+    expect(
+      withOtherTemplateMerchant.some((entry) => entry.url.endsWith('/faq'))
+    ).toBe(false);
   });
 
   it('gates /about on merchant about content or ogabassey template', () => {

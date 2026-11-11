@@ -6,7 +6,8 @@ export type MerchantShippingWalletBalance =
   | { ok: false };
 
 /**
- * Reads only the merchant wallet's available balance for GIG shipping. The
+ * Reads only the merchant wallet's spendable balance for GIG shipping (available
+ * balance minus Paystack direct-split exposure, as reserve_merchant_shipping_charge spends). The
  * DEFINER RPC admits the owner and staff granted orders.fulfill, so fulfil
  * staff see whether booking is covered without get_wallet_summary's earnings,
  * withdrawals, settlements or payout schedule.

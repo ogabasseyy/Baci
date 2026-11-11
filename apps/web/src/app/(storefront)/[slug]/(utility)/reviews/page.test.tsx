@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CachedMerchant } from '@/lib/cached-data';
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { mockMerchant } from '@/lib/cached-data.test-utils';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -33,6 +35,12 @@ vi.mock('next/navigation', () => ({
 
 const { default: ReviewsPage, metadata } = await import('./page');
 
+const baseMerchant: CachedMerchant = {
+  ...mockMerchant,
+  slug: 'ogabassey',
+  template_id: 'ogabassey',
+};
+
 describe('ReviewsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,14 +50,11 @@ describe('ReviewsPage', () => {
 
   it('declares noindex robots in metadata', () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
-    expect(metadata.title).toBe('My Reviews | Ogabassey');
+    expect(metadata.title).toBe('My Reviews');
   });
 
   it('renders reviews UI for ogabassey merchant slug', async () => {
-    vi.mocked(getCachedMerchant).mockResolvedValue({
-      slug: 'ogabassey',
-      template_id: 'ogabassey',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+    vi.mocked(getCachedMerchant).mockResolvedValue(baseMerchant);
 
     render(
       await ReviewsPage({
@@ -63,10 +68,7 @@ describe('ReviewsPage', () => {
 
   it('resolves merchant by domain when slug is domain identifier', async () => {
     vi.mocked(isDomainIdentifier).mockReturnValue(true);
-    vi.mocked(getCachedMerchantByDomain).mockResolvedValue({
-      slug: 'ogabassey',
-      template_id: 'ogabassey',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchantByDomain>>);
+    vi.mocked(getCachedMerchantByDomain).mockResolvedValue(baseMerchant);
 
     render(
       await ReviewsPage({
@@ -90,9 +92,10 @@ describe('ReviewsPage', () => {
 
   it('calls notFound when merchant template is not ogabassey', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
+      ...baseMerchant,
       slug: 'other',
       template_id: 'default',
-    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+    });
 
     await expect(
       ReviewsPage({

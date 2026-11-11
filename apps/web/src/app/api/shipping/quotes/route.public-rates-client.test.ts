@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => mocks.admin,
 }));
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => mocks.public,
+}));
 vi.mock('@/lib/supabase/public', () => ({
   createPublicClient: () => mocks.public,
 }));

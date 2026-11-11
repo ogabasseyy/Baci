@@ -1,7 +1,11 @@
 import { Alert } from 'react-native';
+import { triggerHaptic } from '@/hooks/use-haptics';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
 
 export async function checkPendingPrimarySavings(input: {
+  /** The goal as it stood before this confirmation. */
+  goal?: WalletActiveSavingsGoal | null;
   merchantId?: string;
   operationId: string;
   clearOperation: () => void;
@@ -18,11 +22,27 @@ export async function checkPendingPrimarySavings(input: {
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();
-      await input.refetchWallet().catch(() => undefined);
-      Alert.alert(
-        'Savings updated',
-        'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+      triggerHaptic('success');
+      const refreshFailed = await input.refetchWallet().then(
+        () => false,
+        () => true
       );
+      // The status endpoint returns neither the amount nor the goal balance,
+      // and the amount field may have been edited since the transfer began,
+      // so the cheer names the goal without an amount or percentage.
+      const { goal } = input;
+      if (goal) {
+        Alert.alert(
+          'Savings updated',
+          `Nice! PiggyVest confirmed your savings. Every naira gets you closer to your ${goal.title}. Keep it going!${
+            refreshFailed ? ' Pull to refresh your latest balance.' : ''
+          }`
+        );
+      } else
+        Alert.alert(
+          'Savings updated',
+          'PiggyVest has confirmed your contribution. Your savings balance has been updated.'
+        );
     } else if (result.status === 'cancelled') {
       input.clearOperation();
       await input.refetchWallet().catch(() => undefined);

@@ -25,6 +25,7 @@ const actions = {
   onFundWallet: vi.fn(),
   onRefreshFundingAccount: vi.fn(),
   onModeChange: vi.fn(),
+  onPlaceSelect: vi.fn(),
   onRetryQuote: vi.fn(),
   onTransferred: vi.fn(),
 };

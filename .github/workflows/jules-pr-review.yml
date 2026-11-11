@@ -35,7 +35,7 @@ jobs:
     # JULES_API_KEY, so running them would only post noisy fallback reviews instead of useful output.
     if: >-
       (github.event_name == 'pull_request' &&
-      github.event.pull_request.draft == (github.head_ref == 'codex/draft-review-pilot') &&
+      github.event.pull_request.draft == true &&
       github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
@@ -829,6 +829,7 @@ jobs:
           marker="<!-- jules-pr-review mode:${REVIEW_MODE} sha:${reviewed_sha} -->"
 
           if [[ ! -f "${body_file}" ]]; then
+            body_file="$RUNNER_TEMP/jules-review-submit-fallback.md"
             cat > "${body_file}" <<EOF
           ${marker}
           ## Jules PR review
@@ -901,11 +902,31 @@ jobs:
       #   - Low / Minor              → pass (advisory)
       #   - Empty body / workflow noise → pass (matches prior behaviour;
       #     Jules's fast mode emits empty bodies on infra hiccups)
+      - name: Decide whether findings filter is needed
+        id: findings_preflight
+        if: github.event_name == 'pull_request'
+        env:
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          if [[ -f "${RUNNER_TEMP}/jules-review.md" ]] && ! echo "${PR_LABELS}" | jq -e '.[] | select(.name == "bypass-ai-gate")' >/dev/null 2>&1; then
+            echo 'needs_filter=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'needs_filter=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout findings filter
+        if: github.event_name == 'pull_request' && steps.findings_preflight.outputs.needs_filter == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Gate on Jules findings
         if: github.event_name == 'pull_request'
         env:
           RUNNER_TEMP: ${{ runner.temp }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           body_file="${RUNNER_TEMP}/jules-review.md"
@@ -921,16 +942,39 @@ jobs:
             exit 0
           fi
 
+          reviewed_sha="$(sed -n 's/^REVIEWED_SHA=//p' "${RUNNER_TEMP}/jules-review-meta.env" 2>/dev/null | tail -n 1 || true)"
+          if [[ ! "${EVENT_HEAD_SHA:-}" =~ ^[0-9a-f]{40}$ || "$reviewed_sha" != "$EVENT_HEAD_SHA" ]]; then
+            echo '::error::Jules reviewed revision does not match this workflow event.'
+            exit 1
+          fi
+
           # 2. Strict Severity Regex: Only match true structured bullet findings (2026 Best Practice)
           # Matches bullet items starting with the severity name, avoiding false-positive triggers from code diffs or conversation text.
           any_severity_re='(^|\n)[[:space:]]*[-*][[:space:]]+(high|critical|major|medium|low|minor)\b[[:space:]]*:'
           any_severity_bold='(^|\n)[[:space:]]*[-*][[:space:]]+\*\*(Severity[: ]*)?(High|Critical|Major|Medium|Low|Minor)([: ]|\s+severity)?\*\*[[:space:]:]*'
+          affirmative_prose_re='\b(I|we)[[:space:]]+(found|identified)[[:space:]]+(a|an|one|two|three|four|five|[0-9]+)[[:space:]]+(high|critical|major|medium|low|minor)([-[:space:]]+severity)?[[:space:]]+([[:alpha:]]+[[:space:]]+){0,3}(issues?|findings?|defects?|vulnerabilit(y|ies))\b'
 
-          if grep -qiE "${any_severity_re}" "${body_file}" || \
-             grep -qiE "${any_severity_bold}" "${body_file}"; then
+          # Jules sometimes labels an explicit absence of findings as a severity bullet.
+          # Remove only its exact standalone sentences, never arbitrary negations.
+          findings_file="${RUNNER_TEMP}/jules-findings-filtered.md"
+          # Retain a sentinel if the next line could continue its bullet.
+          # Read the committed blob, not mutable worktree files, and verify before execution.
+          # After reviewing filter changes, update the digest using:
+          # sha256sum .github/scripts/filter-jules-findings.awk
+          filter="$(mktemp "${RUNNER_TEMP}/jules-filter.XXXXXX")"
+          trap 'rm -f "$filter"' EXIT
+          [[ "${WORKFLOW_COMMIT_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid workflow commit.'; exit 1; }
+          git show "${WORKFLOW_COMMIT_SHA}:.github/scripts/filter-jules-findings.awk" > "$filter" || { echo "::error::Missing findings filter."; exit 1; }
+          actual_digest="$(sha256sum "$filter" | cut -d ' ' -f1)"
+          [[ "$actual_digest" == '15adccf0aa68ecba337442a2a71f325ddc5c31faf277a4ddad157cd4df395118' ]] || { echo "::error::Findings filter digest mismatch."; exit 1; }
+          awk -f "$filter" "${body_file}" > "${findings_file}"
+
+          if grep -qiE "${any_severity_re}" "${findings_file}" || \
+             grep -qiE "${any_severity_bold}" "${findings_file}" || \
+             grep -qiE "${affirmative_prose_re}" "${findings_file}"; then
             echo "::error::Jules flagged findings on this PR. All findings must be addressed before merge, or add the 'bypass-ai-gate' label."
             echo "------- Flagged Findings -------"
-            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}" "${body_file}" | head -80 || true
+            grep -iE -B1 -A4 "${any_severity_re}|${any_severity_bold}|${affirmative_prose_re}" "${findings_file}" | head -80 || true
             exit 1
           fi
 

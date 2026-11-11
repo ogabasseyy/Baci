@@ -19,26 +19,31 @@ function applyLegacyAlias(path: string): string {
   return `${pathname}${url.search}${url.hash}`;
 }
 
+function isInvalidRelativePath(value: string): boolean {
+  return (
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.startsWith('/\\') ||
+    value.includes('\\') ||
+    hasControlCharacter(value) ||
+    /^[a-z][a-z0-9+.-]*:/i.test(value)
+  );
+}
+
 export function sanitizeRelativeRedirectPath(
   rawRedirect: string | null | undefined,
   defaultPath = DEFAULT_AUTH_REDIRECT_PATH
 ): string {
-  if (!rawRedirect) {
-    return defaultPath;
-  }
-
-  if (
-    !rawRedirect.startsWith('/') ||
-    rawRedirect.startsWith('//') ||
-    rawRedirect.includes('\\') ||
-    hasControlCharacter(rawRedirect) ||
-    /^[a-z][a-z0-9+.-]*:/i.test(rawRedirect)
-  ) {
+  if (!rawRedirect || isInvalidRelativePath(rawRedirect)) {
     return defaultPath;
   }
 
   try {
-    return applyLegacyAlias(rawRedirect);
+    const candidate = applyLegacyAlias(rawRedirect);
+    if (isInvalidRelativePath(candidate)) {
+      return defaultPath;
+    }
+    return candidate;
   } catch {
     return defaultPath;
   }

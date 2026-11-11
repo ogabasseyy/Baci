@@ -2,6 +2,7 @@ name: Checkout browser regression
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   push:
     branches: [main]
@@ -17,6 +18,7 @@ concurrency:
 
 jobs:
   checkout-browser:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Checkout - Chromium and WebKit
     runs-on: ubuntu-24.04
     container:

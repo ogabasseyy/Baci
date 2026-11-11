@@ -90,8 +90,22 @@ export function getDebugBearCategoryScore(body, names) {
   if (!body || typeof body !== 'object') return null;
 
   for (const name of names) {
+    const score = normalizeScore(body.categories?.[name]?.score);
+    if (score !== null) return score;
+  }
+
+  for (const name of names) {
+    const score = normalizeScore(body.metrics?.[`${name}.score`]);
+    if (score !== null) return score;
+  }
+
+  for (const name of names) {
+    const score = normalizeScore(body.summary?.[`${name}.score`]);
+    if (score !== null) return score;
+  }
+
+  for (const name of names) {
     const score =
-      normalizeScore(body.categories?.[name]?.score) ??
       normalizeScore(body.lighthouseResult?.categories?.[name]?.score) ??
       normalizeScore(body[name]?.score);
 

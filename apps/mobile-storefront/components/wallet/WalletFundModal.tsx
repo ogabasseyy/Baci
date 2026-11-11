@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
+import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
@@ -51,6 +53,7 @@ export function WalletFundModal({
   showFundPanel,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  const isDark = useColorScheme() === 'dark';
   // Card top-ups credit the legacy wallet, so only primary-funded flows (a
   // savings shortfall or a plain top-up) lose the card option; any other
   // return flow (e.g. IMEI check) still spends the legacy balance.
@@ -66,9 +69,18 @@ export function WalletFundModal({
     isPiggyvestPrimaryMerchant(merchantId) &&
     primaryCapability !== false &&
     fundingAccount?.provider !== 'piggyvest';
+  // Keep the panel rendered while the card slides down on close, so the
+  // exit animation shows the sheet instead of an empty card; it unmounts
+  // (clearing any retained BVN state) once the slide has finished.
+  const [retainContent, setRetainContent] = useState(showFundPanel);
+  if (showFundPanel && !retainContent) setRetainContent(true);
   return (
     <ModalSheet
-      backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+      presentation="fade-backdrop"
+      backdropStyle={{
+        // Soft blue-white wash in light mode; plain dim in dark mode.
+        backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(226,232,240,0.72)',
+      }}
       cardStyle={{
         backgroundColor: colors.card,
         borderTopLeftRadius: 28,
@@ -81,8 +93,9 @@ export function WalletFundModal({
       visible={showFundPanel}
       onRequestClose={onResetFund}
       onBackdropPress={onResetFund}
+      onClosed={() => setRetainContent(false)}
     >
-      {showFundPanel ? (
+      {showFundPanel || retainContent ? (
         <ScrollView
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"

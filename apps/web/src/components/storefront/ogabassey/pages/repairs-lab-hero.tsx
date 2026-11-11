@@ -61,8 +61,7 @@ export function RepairsLabHero({ repairHref, swapHref }: RepairsLabHeroProps) {
           and help the planet.
         </p>
         <p>
-          Our certified technicians use genuine parts to give your gadget a
-          second life.
+          Confirm available parts and repair terms with our team before approving a repair.
         </p>
       </div>
     </>

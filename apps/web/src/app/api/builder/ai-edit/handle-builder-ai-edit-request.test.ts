@@ -1,3 +1,10 @@
+const legacyExecution = vi.hoisted(() => ({
+  admit: vi.fn(async () => async () => {}),
+}));
+vi.mock('@/lib/experience/legacy-execution', () => ({
+  admitLegacyExecution: legacyExecution.admit,
+}));
+
 import { builderAiEditTestFixture } from '@baci/shared/test-fixtures/builder-ai-edit';
 import { describe, expect, it, vi } from 'vitest';
 import { handleBuilderAiEditRequest } from './handle-builder-ai-edit-request';
@@ -229,19 +236,24 @@ describe('handleBuilderAiEditRequest', () => {
   });
 
   it('returns a stable 429 before provider materialization when route rate limiting rejects', async () => {
+    legacyExecution.admit.mockClear();
     const materializeProviders = vi.fn();
+    const runProviderChain = vi.fn();
     const response = await handleBuilderAiEditRequest(
       new Request('http://localhost/api/builder/ai-edit', { method: 'POST' }),
       {
         dependencies: permittedDependencies({
           materializeProviders,
+          runProviderChain,
           rateLimit: () => ({ allowed: false, remaining: 0, resetIn: 60_000 }),
         }) as never,
       }
     );
 
     expect(response.status).toBe(429);
+    expect(legacyExecution.admit).not.toHaveBeenCalled();
     expect(materializeProviders).not.toHaveBeenCalled();
+    expect(runProviderChain).not.toHaveBeenCalled();
   });
 
   it('seeds a missing component id before projecting the AI prompt', async () => {

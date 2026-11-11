@@ -1,3 +1,4 @@
+import { bindPersistedItemsOverride } from '@/lib/cart/persisted-items-override';
 import type { CartState } from './cart-store-state';
 import { partializeCartStore } from './partialize-cart-store';
 
@@ -56,4 +57,19 @@ it('persists checkout identity fields with the cart', () => {
     items: [{ id: 'line-1' }],
     lineSequence: 2,
   });
+});
+
+it('saves the server-confirmed lines, not unconfirmed predictions, while edits wait', () => {
+  const unbind = bindPersistedItemsOverride(() => [
+    { id: 'line-1', quantity: 1 } as never,
+  ]);
+  const persisted = partializeCartStore({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: 'cart-one',
+    items: [{ id: 'line-1', quantity: 9 }],
+    lineSequence: 1,
+    sharedCartRef: { merchantId: 'm-1', cartId: 'c-1' },
+  } as CartState);
+  unbind();
+  expect(persisted.items).toEqual([{ id: 'line-1', quantity: 1 }]);
 });

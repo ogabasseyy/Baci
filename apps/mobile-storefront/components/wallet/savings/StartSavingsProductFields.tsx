@@ -111,12 +111,17 @@ function ProductSearchSection({
                 accessibilityRole="button"
                 accessibilityLabel="Change savings device"
                 onPress={() => controller.setSearchValue('')}
-                style={{ paddingVertical: 12, alignSelf: 'flex-start' }}
+                style={{
+                  minHeight: 44,
+                  justifyContent: 'center',
+                  paddingVertical: 10,
+                  alignSelf: 'flex-start',
+                }}
               >
                 <Text
                   style={{
                     color: colors.primary,
-                    fontSize: 12,
+                    fontSize: 11,
                     textDecorationLine: 'underline',
                   }}
                 >

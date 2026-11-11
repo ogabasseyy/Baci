@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   reconcile: vi.fn(),
   configuration: vi.fn(),
   refreshBanks: vi.fn(),
+  readBanks: vi.fn(),
   getRedis: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
@@ -19,6 +20,7 @@ vi.mock('@/lib/payments/oxygen/runtime-configuration', () => ({
 }));
 vi.mock('@/lib/payments/oxygen/supported-bank-cache', () => ({
   refreshSupportedBanks: mocks.refreshBanks,
+  readSupportedBanks: mocks.readBanks,
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: mocks.getRedis }));
 
@@ -152,68 +154,5 @@ describe('Oxygen callback reconciliation cron', () => {
       error: 'Callback backlog requires attention',
       code: 'oxygen_callback_backlog',
     });
-  });
-});
-
-describe('Oxygen bank-list refresh task', () => {
-  const refreshRequest = (authorization?: string) =>
-    new Request(
-      'https://example.test/api/cron/oxygen-callback-reconciliation?task=refresh-banks',
-      { headers: authorization ? { authorization } : {} }
-    );
-
-  beforeEach(() => {
-    vi.stubEnv('CRON_SECRET', 'secret');
-    vi.stubEnv('OXYGEN_CALLBACK_DRAIN_ENABLED', 'false');
-    mocks.connect.mockReset().mockReturnValue({
-      provider: { environment: 'production' },
-    });
-    mocks.reconcile.mockReset();
-    mocks.configuration.mockReset().mockReturnValue({
-      environment: 'production',
-      reference: 'partner',
-    });
-    mocks.getRedis.mockReset().mockReturnValue({});
-    mocks.refreshBanks
-      .mockReset()
-      .mockResolvedValue([{ name: 'Access Bank', code: '044' }]);
-  });
-
-  afterEach(() => vi.unstubAllEnvs());
-
-  it('refreshes the configured provider environment outside the drain gate', async () => {
-    const response = await GET(refreshRequest('Bearer secret'));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(await response.json()).toEqual({ count: 1 });
-    expect(mocks.refreshBanks).toHaveBeenCalledExactlyOnceWith(
-      {},
-      { environment: 'production' },
-      'production',
-      'partner'
-    );
-    expect(mocks.reconcile).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unauthenticated refresh before touching the provider', async () => {
-    expect((await GET(refreshRequest())).status).toBe(401);
-    expect(mocks.refreshBanks).not.toHaveBeenCalled();
-  });
-
-  it('refuses an environment mismatch without calling the provider', async () => {
-    mocks.connect.mockReturnValue({ provider: { environment: 'staging' } });
-
-    expect((await GET(refreshRequest('Bearer secret'))).status).toBe(503);
-    expect(mocks.refreshBanks).not.toHaveBeenCalled();
-  });
-
-  it('keeps the last good cache when the provider refresh fails', async () => {
-    mocks.refreshBanks.mockRejectedValue(new Error('private provider detail'));
-
-    const response = await GET(refreshRequest('Bearer secret'));
-
-    expect(response.status).toBe(503);
-    expect(await response.text()).not.toContain('private provider detail');
   });
 });

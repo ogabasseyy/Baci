@@ -133,3 +133,37 @@ describe('PDP preflight', () => {
     expect(response?.headers.get('X-Robots-Tag')).toBe('noindex, follow');
   });
 });
+
+it.each([
+  ['https://shop.example/collections/all', '/collections/all', 'shop.example'],
+  [
+    'https://shop.usebaci.com/collections/all',
+    '/collections/all',
+    'shop.usebaci.com',
+  ],
+  [
+    'https://usebaci.com/qa1/collections/all',
+    '/qa1/collections/all',
+    'usebaci.com',
+  ],
+])('never treats collection documents as categorized PDPs: %s', async (url, path, host) => {
+  vi.clearAllMocks();
+  const request = new NextRequest(url, { headers: { accept: 'text/html' } });
+  expect(
+    await resolveStorefrontPdpHardNotFound(
+      request,
+      path,
+      host,
+      'Mozilla',
+      'qa1'
+    )
+  ).toBeNull();
+  const result = await resolveStorefrontPdpCanonicalRedirect(
+    request,
+    path,
+    host,
+    'qa1'
+  );
+  expect(result.response).toBeNull();
+  expect(getStorefrontProductCanonicalRedirectResult).not.toHaveBeenCalled();
+});

@@ -50,7 +50,7 @@ describe('Order cancellation email', () => {
       ].join('\n');
 
       expect(output).toContain('₹5,000');
-      expect(output).toContain('Refund Amount: ₹5,000');
+      expect(output).toContain('Potential refund (pending): ₹5,000');
       expect(output).not.toContain('₦');
     });
   });
@@ -99,8 +99,58 @@ describe('cancellation refund status wording', () => {
     // be failed or delivery_uncertain.
     expect(html).not.toContain('Cancellation starts the refund workflow');
     expect(html).toContain(
-      'Please contact the store for an update on your refund status.'
+      'The store will review your order to confirm whether a refund'
     );
+    expect(html).not.toContain('If you have already paid');
+    expect(html).not.toMatch(/will (review your order and )?arrange/i);
+    expect(html).not.toContain('original payment method');
+    expect(html).toContain('does not confirm that the refund has been sent');
+    expect(html).toContain('contact the store');
+    expect(html).not.toContain('Refund Amount');
+    expect(html).not.toMatch(/has been refunded|was refunded|refunded to you/i);
     expect(html).not.toContain('will be processed within 3-5 business days');
+    const text = generateOrderCancellationText({
+      orderNumber: 'ORD-1',
+      customerName: 'Buyer',
+      items: [],
+      totalAmount: 100,
+      amountPaid: 100,
+      refundAmount: 100,
+      cancelledBy: 'merchant',
+      merchantName: 'Store',
+      merchantUrl: 'https://example.com',
+      currency: 'NGN',
+    });
+    expect(text).toContain('Potential refund (pending): ₦100');
+    expect(text).toContain('does not confirm that the refund has been sent');
+    expect(text).not.toContain('Refund Amount');
+    expect(text).not.toMatch(/business days/i);
+    expect(html).not.toMatch(/within \d+ business days/i);
+    expect(html).not.toMatch(/will refund/i);
+    expect(html).toContain('Refund Information (pending)');
+    expect(html).not.toContain('#ecfdf5');
+    expect(text).not.toMatch(/will refund/i);
+    expect(text).not.toContain('original payment method');
+    expect(text).toContain('REFUND INFORMATION (PENDING)');
+  });
+  it('omits the refund block when nothing is refundable', () => {
+    const data = {
+      orderNumber: 'ORD-0',
+      customerName: 'Buyer',
+      items: [],
+      totalAmount: 100,
+      amountPaid: 0,
+      refundAmount: 0,
+      cancelledBy: 'customer' as const,
+      merchantName: 'Store',
+      merchantUrl: 'https://example.com',
+      currency: 'NGN',
+    };
+    const html = generateOrderCancellationEmail(data);
+    const text = generateOrderCancellationText(data);
+    expect(html).not.toContain('Refund Information');
+    expect(html).not.toContain('Potential refund');
+    expect(text).not.toContain('REFUND INFORMATION');
+    expect(text).not.toContain('Potential refund');
   });
 });

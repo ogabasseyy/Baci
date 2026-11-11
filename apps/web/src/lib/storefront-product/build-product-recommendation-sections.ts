@@ -4,6 +4,7 @@ import { buildCanonicalProductCompareSlug } from '@/lib/storefront-compare/compa
 import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
 import { buildProductCardDescription } from './build-product-card-description';
 import { buildProductHref } from './build-product-semantic-compare-support';
+import { buildSupplementalSameBrandCandidates } from './build-supplemental-same-brand-candidates';
 import type {
   BuildProductSemanticModelInput,
   ProductSemanticCandidate,
@@ -12,7 +13,9 @@ import type {
 } from './product-semantic-types';
 
 function isInStock(product: ProductSemanticCandidate) {
-  return product.stock == null || product.stock > 0;
+  return (
+    product.manage_stock === false || product.stock == null || product.stock > 0
+  );
 }
 
 function normalizeText(value?: string | null): string {
@@ -210,10 +213,20 @@ export function buildRecommendationSections(
   const currentBrand = normalizedInput.currentProduct.brand?.trim();
   const normalizedCurrentBrand = normalizeText(currentBrand);
   const allAlternatives = buildAlternativesCandidates(normalizedInput);
-  const sameBrandPool = currentBrand
+  const inventorySameBrand = currentBrand
     ? allAlternatives.filter(
         (p) => normalizeText(p.brand) === normalizedCurrentBrand
       )
+    : [];
+  const sameBrandPool = currentBrand
+    ? [
+        ...inventorySameBrand,
+        ...buildSupplementalSameBrandCandidates(
+          normalizedInput,
+          normalizedCurrentBrand,
+          new Set(allAlternatives.map((p) => p.slug))
+        ),
+      ].sort(rankAlternatives(normalizedInput.currentProduct))
     : [];
   const nonSameBrandAlternatives = currentBrand
     ? allAlternatives.filter(
@@ -228,9 +241,9 @@ export function buildRecommendationSections(
       conditionBucketMatches(normalizedInput.currentProduct, p)
   );
   const reservedSpecialistSlugs = new Set<string>(
-    nonSameBrandAlternatives.length >= 1 && sameBrandPool.length >= 1
-      ? sameBrandPool
-          .slice(0, Math.min(2, sameBrandPool.length))
+    nonSameBrandAlternatives.length >= 1 && inventorySameBrand.length >= 1
+      ? inventorySameBrand
+          .slice(0, Math.min(2, inventorySameBrand.length))
           .map((p) => p.slug)
       : []
   );

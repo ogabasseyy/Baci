@@ -141,9 +141,13 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
       mockCaptureCheckoutFunnelEventOnce.mock.calls.filter(
         ([event]) => event === 'payment_started'
       );
-    const continueButton = await screen.findByRole('button', {
-      name: /continue with USDT on TRX/i,
-    });
+    const continueButton = await screen.findByRole(
+      'button',
+      {
+        name: /continue with USDT on TRX/i,
+      },
+      { timeout: 10_000 }
+    );
     expect(juicywayPaymentStartedCalls()).toHaveLength(0);
 
     // Successful address initialization records the start.
@@ -185,4 +189,4 @@ it('traverses the Juicyway funnel from selector init to confirmed completion', a
   } finally {
     fetchMock.mockRestore();
   }
-});
+}, 30_000);

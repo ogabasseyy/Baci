@@ -49,7 +49,7 @@ describe('QuizPage', () => {
     expect(metadata.alternates).toEqual({
       canonical: 'https://ogabassey.usebaci.com/quiz',
     });
-    expect(metadata.title).toBe('Super Quiz | Ogabassey');
+    expect(metadata.title).toBe('Super Quiz');
   });
 
   it('uses custom domain for canonical when available', async () => {

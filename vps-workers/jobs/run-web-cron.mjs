@@ -15,6 +15,7 @@ const WEB_CRON_CONFIG = new Map([
   ['/api/ai-jobs/worker', { method: 'GET', timeoutMs: 15 * 60_000 }],
   ['/api/cron/alert-stuck-bnpl', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/merchant-signup-health', { method: 'GET', timeoutMs: 60_000 }],
+  ['/api/cron/cart-notice-health', { method: 'GET', timeoutMs: 60_000 }],
   ['/api/cron/cleanup-orders', { method: 'GET', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-settlements', { method: 'POST', timeoutMs: 5 * 60_000 }],
   ['/api/cron/process-redvault-refunds', { method: 'POST', timeoutMs: 5 * 60_000 }],

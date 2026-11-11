@@ -166,7 +166,7 @@ export function SavingsGoalSummary({
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
+  eyebrow: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
   encouragement: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   encouragementCopy: { flex: 1, gap: 3 },
   accentDot: { width: 7, height: 7, borderRadius: 4, marginTop: 7 },
@@ -182,9 +182,9 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: SPACING.xs,
   },
-  goalTitle: { fontSize: 18, lineHeight: 23, fontWeight: '700' },
-  cheerTitle: { fontSize: 14, fontWeight: '700', marginTop: 2 },
-  cheerBody: { fontSize: 13, lineHeight: 18 },
+  goalTitle: { fontSize: 16, lineHeight: 23, fontWeight: '700' },
+  cheerTitle: { fontSize: 13, fontWeight: '700', marginTop: 2 },
+  cheerBody: { fontSize: 12, lineHeight: 18 },
   colourSwatch: {
     width: 20,
     height: 20,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     marginTop: 20,
   },
-  detail: { fontSize: 12, lineHeight: 16 },
+  detail: { fontSize: 11, lineHeight: 16 },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -201,13 +201,13 @@ const styles = StyleSheet.create({
   },
   metaPill: {
     borderRadius: RADIUS.full,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     overflow: 'hidden',
     paddingHorizontal: SPACING.sm,
     paddingVertical: 3,
   },
-  hint: { fontSize: 14, lineHeight: 18, marginTop: SPACING.sm },
+  hint: { fontSize: 13, lineHeight: 18, marginTop: SPACING.sm },
   variantButton: {
     alignItems: 'center',
     borderRadius: RADIUS.lg,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     minHeight: 44,
   },
-  variantText: { fontSize: 14, fontWeight: '600' },
+  variantText: { fontSize: 13, fontWeight: '600' },
   progressCard: {
     borderRadius: RADIUS['2xl'],
     borderWidth: 1,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     justifyContent: 'space-between',
   },
-  saved: { flexShrink: 1, fontSize: 24, fontWeight: '700' },
-  small: { flexShrink: 1, fontSize: 12, fontWeight: '500' },
-  nudge: { fontSize: 12, fontWeight: '500', lineHeight: 18 },
+  saved: { flexShrink: 1, fontSize: 22, fontWeight: '700' },
+  small: { flexShrink: 1, fontSize: 11, fontWeight: '500' },
+  nudge: { fontSize: 11, fontWeight: '500', lineHeight: 18 },
 });

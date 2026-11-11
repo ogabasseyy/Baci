@@ -1,15 +1,16 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { BRAND } from '@/constants/Colors';
+import { useColorScheme } from '@/components/useColorScheme';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
+import { WalletHeroLoyaltyPill } from './WalletHeroLoyaltyPill';
+import { WalletHeroStartSavingsButton } from './WalletHeroStartSavingsButton';
 import { WalletQuickUtilities } from './WalletQuickUtilities';
-import { WALLET_COLORS } from './wallet.colors';
 import { styles } from './wallet.styles';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
@@ -28,6 +29,8 @@ type WalletHeroSectionProps = {
   loyaltyTier?: string | null;
   onOpenFundPanel: () => void;
   onOpenRedeemPanel: () => void;
+  /** Set when there is no savings plan: shows Start Savings inside the card. */
+  onStartSavings?: () => void;
   savingsBalance: number;
   totalBalance: number;
 };
@@ -55,35 +58,24 @@ export function WalletHeroSection({
   loyaltyTier,
   onOpenFundPanel,
   onOpenRedeemPanel,
+  onStartSavings,
   savingsBalance,
   totalBalance,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
+  const isDark = useColorScheme() === 'dark';
   return (
-    <Animated.View entering={FadeIn.duration(400)} style={styles.walletHero}>
+    <Animated.View
+      entering={FadeIn.duration(400)}
+      style={[styles.walletHero, isDark && styles.walletHeroDark]}
+    >
       <View style={styles.walletHeroHeader}>
         <SavingsProviderPreview />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add money"
-          accessibilityHint="Opens wallet funding options"
-          hitSlop={6}
-          // Keep the funding action as the single bright accent in the hero.
-          style={[
-            styles.addMoneyButton,
-            { borderColor: BRAND.primary, borderWidth: 2 },
-          ]}
-          onPress={onOpenFundPanel}
-        >
-          <Ionicons
-            accessible={false}
-            importantForAccessibility="no"
-            name="add-circle-outline"
-            size={14}
-            color={WALLET_COLORS.white}
-          />
-          <Text style={styles.addMoneyButtonText}>Add Money</Text>
-        </Pressable>
+        <WalletHeroLoyaltyPill
+          loyaltyPoints={loyaltyPoints}
+          visibleTier={visibleTier}
+          onOpenRedeemPanel={onOpenRedeemPanel}
+        />
       </View>
       <View style={styles.balanceAndAccountRow}>
         <View style={styles.balanceBlock}>
@@ -117,8 +109,10 @@ export function WalletHeroSection({
 
       <View style={styles.balanceSummaryRow}>
         <View style={styles.balanceSummaryCell}>
-          <Ionicons name="trending-up-outline" size={18} color="#50D6A3" />
-          <Text style={styles.balanceSummaryLabel}>Earnings</Text>
+          <View style={styles.loyaltyActionRow}>
+            <Ionicons name="trending-up-outline" size={16} color="#50D6A3" />
+            <Text style={styles.balanceSummaryLabel}>Earnings</Text>
+          </View>
           <Text
             style={styles.balanceSummaryValue}
             numberOfLines={1}
@@ -130,9 +124,12 @@ export function WalletHeroSection({
               : '—'}
           </Text>
         </View>
+        <View style={styles.balanceSummaryDivider} />
         <View style={styles.balanceSummaryCell}>
-          <Ionicons name="wallet-outline" size={18} color="#7CA7FF" />
-          <Text style={styles.balanceSummaryLabel}>Savings</Text>
+          <View style={styles.loyaltyActionRow}>
+            <Ionicons name="wallet-outline" size={16} color="#7CA7FF" />
+            <Text style={styles.balanceSummaryLabel}>Savings</Text>
+          </View>
           <Text
             style={styles.balanceSummaryValue}
             numberOfLines={1}
@@ -140,33 +137,6 @@ export function WalletHeroSection({
             minimumFontScale={0.5}
           >
             {formatNgnCurrency(savingsBalance)}
-          </Text>
-        </View>
-        <View style={styles.balanceSummaryCell}>
-          <View style={styles.loyaltyActionRow}>
-            <Ionicons name="star-outline" size={18} color="#F8B84C" />
-            {loyaltyPoints > 0 ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Redeem loyalty points"
-                accessibilityHint="Opens the loyalty redemption panel"
-                onPress={onOpenRedeemPanel}
-                style={styles.redeemPill}
-              >
-                <Text style={styles.redeemPillText}>Redeem</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <Text style={styles.balanceSummaryLabel}>
-            {visibleTier ? `Loyalty · ${visibleTier}` : 'Loyalty'}
-          </Text>
-          <Text
-            style={styles.balanceSummaryValue}
-            numberOfLines={1}
-            adjustsFontSizeToFit={true}
-            minimumFontScale={0.5}
-          >
-            {loyaltyPoints.toLocaleString()} pts
           </Text>
         </View>
       </View>
@@ -177,6 +147,9 @@ export function WalletHeroSection({
           textColor="#FFFFFF"
           watch={creditWatch}
         />
+      ) : null}
+      {onStartSavings ? (
+        <WalletHeroStartSavingsButton onPress={onStartSavings} />
       ) : null}
     </Animated.View>
   );

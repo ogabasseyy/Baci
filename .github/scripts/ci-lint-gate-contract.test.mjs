@@ -5,6 +5,7 @@ import { matchesGlob } from 'node:path';
 import test from 'node:test';
 
 import YAML from 'yaml';
+import { privateRunnerRoute, privateRunnerRouteWithTrust } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(
   await readFile('.github/workflows/ci.yml', 'utf8')
@@ -20,26 +21,8 @@ const NO_CHANGES = {
   test_plan_mode: 'targeted',
 };
 
-function lintRunner({ isPrivate, enabled, event, headRepository, repository }) {
-  const expression = workflow.jobs['quality-lint']['runs-on'];
-  assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
-  const values = {
-    'github.event.repository.private': isPrivate,
-    'vars.BACI_PRIVATE_CI_ENABLED': enabled,
-    'github.event_name': event,
-    'github.event.pull_request.head.repo.full_name': headRepository,
-    'github.repository': repository,
-  };
-  let source = expression.slice(3, -2);
-  for (const [key, value] of Object.entries(values)) {
-    const identifier = new RegExp(`${key.replaceAll('.', '\\.')}(?![\\w.])`, 'g');
-    source = source.replace(identifier, JSON.stringify(value));
-  }
-  source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) =>
-    JSON.stringify(JSON.parse(json))
-  );
-  assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
-  return Function(`"use strict"; return (${source});`)();
+function lintRunner({ isPrivate, enabled, event, headRepository, repository }, field = 'runs-on') {
+  return privateRunnerRoute(workflow, 'quality-lint', { 'github.event.repository.private': isPrivate, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': headRepository, 'github.repository': repository }, field);
 }
 
 test('routes lint to the private runner only for an opted-in private repository and trusted PR head', () => {
@@ -52,35 +35,86 @@ test('routes lint to the private runner only for an opted-in private repository 
   };
   const privateRunner = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
   assert.deepEqual(lintRunner(trusted), privateRunner);
+  assert.equal(lintRunner(trusted, 'timeout-minutes'), 30);
+  assert.equal(lintRunner({ ...trusted, isPrivate: false }, 'timeout-minutes'), 15);
+  assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }, 'timeout-minutes'), 15);
+  assert.equal(lintRunner({ ...trusted, event: 'merge_group' }, 'timeout-minutes'), 15);
+  for (const variant of [
+    { isPrivate: null }, { enabled: '' }, { enabled: 'false' },
+    { headRepository: '' }, { event: 'pull_request_target' },
+    { event: 'issue_comment' },
+  ]) assert.equal(lintRunner({ ...trusted, ...variant }, 'timeout-minutes'), 15);
   assert.equal(lintRunner({ ...trusted, isPrivate: false }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, isPrivate: null }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, enabled: '' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, enabled: 'false' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: '' }), 'ubuntu-24.04');
-  for (const event of ['push', 'merge_group', 'workflow_dispatch']) {
+  for (const event of ['merge_group', 'pull_request_target', 'issue_comment']) {
+    assert.equal(lintRunner({ ...trusted, event, headRepository: '' }), 'ubuntu-24.04');
+  }
+  for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
   }
 });
 
-test('does not expose remote-cache credentials to the private runner', () => {
-  const lint = workflow.jobs['quality-lint'].steps.find(
-    (step) => step.name === 'Run Lint'
-  );
-  for (const name of ['TURBO_TOKEN', 'TURBO_TEAM']) {
-    const expression = lint.env[name];
-    assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
-    const evaluate = (environment) => {
-      const source = expression
-        .slice(3, -2)
-        .replaceAll('runner.environment', JSON.stringify(environment))
-        .replaceAll(`secrets.${name}`, JSON.stringify('test-value'));
-      assert.match(source, /^[\s()'"\w=!&|\-]+$/);
-      return Function(`"use strict"; return (${source});`)();
-    };
-    assert.equal(evaluate('self-hosted'), '');
-    assert.equal(evaluate(null), '');
-    assert.equal(evaluate('github-hosted'), 'test-value');
+test('Knip receives a step-scoped 4 GiB heap limit', () => {
+  const job = workflow.jobs['quality-misc'];
+  const knip = job.steps.find((step) => step.name === 'Run Knip Dead Code Check');
+  assert.ok(knip);
+  assert.equal(knip.env.NODE_OPTIONS, '--max-old-space-size=4096');
+  assert.equal(knip.run, 'pnpm knip');
+  assert.equal(job.env?.NODE_OPTIONS, undefined);
+});
+
+test('silent revert guard verifies exact commit objects without persisting or refetching credentials', () => {
+  const job = workflow.jobs['silent-revert-guard'];
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  const verify = job.steps.find((step) => step.name === 'Verify checked-out commit history');
+  const detect = job.steps.find((step) => step.name === 'Detect silent reverts of recent main commits');
+  assert.equal(checkout.with['fetch-depth'], 0);
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha }}');
+  assert.ok(job.steps.indexOf(checkout) < job.steps.indexOf(verify));
+  assert.ok(job.steps.indexOf(verify) < job.steps.indexOf(detect));
+  assert.equal(verify.env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');
+  assert.equal(verify.env.HEAD_SHA, '${{ github.event.pull_request.head.sha }}');
+  assert.equal(detect.env.BASE_SHA, verify.env.BASE_SHA);
+  assert.equal(detect.env.HEAD_SHA, verify.env.HEAD_SHA);
+  assert.doesNotMatch(JSON.stringify(job), /git fetch|secrets\./);
+  for (const [base, head, failGit, success] of [
+    ['a'.repeat(40), 'b'.repeat(40), '', true],
+    ['', 'b'.repeat(40), '', false],
+    ['a'.repeat(40), '-bad', '', false],
+    ['a'.repeat(40), 'b'.repeat(40), 'yes', false],
+  ]) {
+    const script = `git() { [[ "$1" == cat-file && "$2" == -e && -z "$FAIL_GIT" ]] || return 1; printf '%s\\n' "$3"; }; ${verify.run}`;
+    const result = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8', env: { ...process.env, BASE_SHA: base, HEAD_SHA: head, FAIL_GIT: failGit },
+    });
+    assert.equal(result.status === 0, success, result.stderr);
+    if (success) assert.deepEqual(result.stdout.trim().split('\n'), [`${base}^{commit}`, `${head}^{commit}`]);
+  }
+});
+
+test('lint job does not reference secrets', () => {
+  const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
+  assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(workflow.env);
+  noSecrets(workflow.jobs['quality-lint']);
+});
+
+test('missing or false shared trust output never selects Contabo', () => {
+  const values = {
+    'vars.BACI_PRIVATE_TYPECHECK_ENABLED': 'true',
+    'vars.BACI_PRIVATE_WEB_TEST_ENABLED': 'true',
+    'vars.BACI_PRIVATE_BUILD_ENABLED': 'true',
+  };
+  for (const job of ['quality-lint', 'quality-typecheck', 'quality-test-web', 'build']) {
+    for (const trusted of ['', 'false']) {
+      assert.equal(privateRunnerRouteWithTrust(workflow, job, values, trusted), 'ubuntu-24.04');
+    }
   }
 });
 
@@ -95,7 +129,7 @@ function evaluateJobCondition(condition, outputs) {
   return Function(`"use strict"; return (${source});`)();
 }
 
-function runAggregator({ changesResult = 'success', lintResult, outputs }) {
+function runAggregator({ lintResult, outputs }) {
   const step = workflow.jobs.quality.steps.find(
     (candidate) => candidate.name === 'Verify split quality gate results'
   );
@@ -109,7 +143,6 @@ function runAggregator({ changesResult = 'success', lintResult, outputs }) {
     env: {
       PATH: process.env.PATH,
       ...results,
-      CHANGES_RESULT: changesResult,
       LINT_RESULT: lintResult,
       QUIZ_DB_CHANGED: outputs.quiz_db,
       WEB_CHANGED: outputs.web,
@@ -235,14 +268,4 @@ test('stays wired into the CI contract run', async () => {
         step.run.includes('.github/scripts/resolve-ci-test-plan-config.test.mjs')
     )
   );
-});
-
-test('blocks the required Quality Gate while the pilot change detection is deferred', () => {
-  const result = runAggregator({
-    changesResult: 'skipped',
-    lintResult: 'skipped',
-    outputs: NO_CHANGES,
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /CI is deferred until this pilot PR is marked ready/);
 });

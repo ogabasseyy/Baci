@@ -66,7 +66,7 @@ export function WalletSavingsVariantResolutionModal({
       }}
     >
       <View style={{ gap: 16, padding: 20 }}>
-        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700' }}>
+        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
           Choose the exact device variant
         </Text>
         <Text style={{ color: colors.textSecondary }}>

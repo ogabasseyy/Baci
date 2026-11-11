@@ -91,9 +91,9 @@ export function SavingsPlanWalletNote({
 
 const styles = StyleSheet.create({
   section: { gap: 10 },
-  heading: { fontSize: 17, fontWeight: '700' },
-  body: { fontSize: 14, lineHeight: 21 },
-  action: { fontSize: 14, fontWeight: '500' },
+  heading: { fontSize: 15, fontWeight: '700' },
+  body: { fontSize: 13, lineHeight: 21 },
+  action: { fontSize: 13, fontWeight: '500' },
   refresh: {
     minHeight: 44,
     flexDirection: 'row',

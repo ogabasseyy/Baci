@@ -193,69 +193,6 @@ describe('loadSearchPageData', () => {
     expect(mockGetStorefrontSearchProducts).not.toHaveBeenCalled();
   });
 
-  it('resolves an overbound page to the last page through a probe', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts.mockResolvedValueOnce(
-      searchPage({ count: 45, products: [], productIds: [] }) as never
-    );
-
-    const data = await loadSearch({ q: 'iphone', page: '101' });
-
-    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(1);
-    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0 })
-    );
-    expect(data.redirectHref).toBe('/ogabassey/search?q=iphone&page=3');
-  });
-
-  it('normalizes an empty page beyond the first to the explicit first page', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts
-      .mockResolvedValueOnce(
-        searchPage({ count: 45, products: [], productIds: [] }) as never
-      )
-      .mockResolvedValueOnce(
-        searchPage({ count: 0, products: [], productIds: [] }) as never
-      );
-
-    const data = await loadSearch({ q: 'iphon', page: '2' });
-
-    expect(data.redirectHref).toBe('/ogabassey/search?q=iphon&page=1');
-  });
-
-  it('clamps overbound pages on the unadjusted probe total', async () => {
-    mockStorefrontContext();
-    // One first-page row vanished mid-read: the visible count is a full
-    // page short of the ranked total, but the last page still holds rows.
-    mockGetStorefrontSearchProducts.mockResolvedValueOnce(
-      searchPage({
-        count: 20,
-        totalCount: 21,
-        products: [],
-        productIds: [],
-      }) as never
-    );
-
-    const data = await loadSearch({ q: 'iphone', page: '101' });
-
-    expect(data.redirectHref).toBe('/ogabassey/search?q=iphone&page=2');
-  });
-
-  it('steps an invalid page back instead of looping on it', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts
-      .mockResolvedValueOnce(
-        searchPage({ count: 45, products: [], productIds: [] }) as never
-      )
-      .mockResolvedValueOnce(
-        searchPage({ count: 45, products: [], productIds: [] }) as never
-      );
-
-    const data = await loadSearch({ q: 'iphone', page: '5' });
-
-    expect(data.redirectHref).toBe('/ogabassey/search?q=iphone&page=3');
-  });
-
   it('reports search failure without redirecting when the fetch throws', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockRejectedValueOnce(

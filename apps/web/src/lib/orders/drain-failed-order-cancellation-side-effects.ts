@@ -207,7 +207,9 @@ export async function drainFailedOrderCancellationSideEffects({
     try {
       const { data: order, error: orderError } = await supabase
         .from('orders')
-        .select(`${ORDER_WITH_ITEMS_QUERY}, cancelled_at, cancellation_reason`)
+        .select(
+          `${ORDER_WITH_ITEMS_QUERY}, cancelled_at, cancellation_reason, cancellation_refund_mode`
+        )
         .eq('id', orderId)
         .single();
       if (orderError || !order) {

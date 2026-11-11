@@ -185,20 +185,26 @@ describe('INVARIANT B — every backend interaction is time-bounded', () => {
   /* ================================================================ */
 
   it('opens the write circuit when set() HANGS (not just when it rejects)', async () => {
-    const backend = healthyBackend();
-    backend.set.mockImplementation(hang);
-    const handler = makeHandler(backend);
+    vi.useFakeTimers();
+    try {
+      const backend = healthyBackend();
+      backend.set.mockImplementation(hang);
+      const handler = makeHandler(backend);
 
-    // Each of these must resolve (bounded), and each timeout is a breaker failure.
-    await handler.set('k1', Promise.resolve(makeEntry()));
-    await handler.set('k2', Promise.resolve(makeEntry()));
-    await handler.set('k3', Promise.resolve(makeEntry()));
-    expect(backend.set).toHaveBeenCalledTimes(3);
+      // Each of these must resolve (bounded), and each timeout is a breaker failure.
+      for (const key of ['k1', 'k2', 'k3']) {
+        const write = handler.set(key, Promise.resolve(makeEntry()));
+        await vi.advanceTimersByTimeAsync(TIMEOUT_MS);
+        await write;
+      }
+      expect(backend.set).toHaveBeenCalledTimes(3);
 
-    // Circuit is now open: a hung backend is no longer written to at all.
-    await handler.set('k4', Promise.resolve(makeEntry()));
-    expect(backend.set).toHaveBeenCalledTimes(3);
-
+      // Circuit is now open: a hung backend is no longer written to at all.
+      await handler.set('k4', Promise.resolve(makeEntry()));
+      expect(backend.set).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
     await flush();
     expect(unhandled).toEqual([]);
   });

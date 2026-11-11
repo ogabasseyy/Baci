@@ -67,6 +67,18 @@ describe('buildProductTrustBullets', () => {
     );
   });
 
+  it('emits in-stock bullet when manage_stock is false with null stock and omits when manage_stock is undefined with null stock', () => {
+    expect(
+      buildProductTrustBullets(makeInput({ manage_stock: false, stock: null }))
+    ).toContain('In stock for immediate dispatch');
+
+    expect(
+      buildProductTrustBullets(
+        makeInput({ manage_stock: undefined, stock: null })
+      )
+    ).not.toContain('In stock for immediate dispatch');
+  });
+
   it('formats up to 3 verified positive key specs into bullet', () => {
     const bullets = buildProductTrustBullets(
       makeInput({

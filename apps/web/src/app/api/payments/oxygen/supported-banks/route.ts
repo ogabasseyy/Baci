@@ -11,14 +11,29 @@ export async function GET(request: Request) {
   if (auth.error || !auth.user)
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers });
   try {
-    if (
-      !(await checkOxygenProviderRateLimit(auth.user.id, 'supported-banks', 30))
-        .allowed
-    )
+    const limit = await checkOxygenProviderRateLimit(
+      auth.user.id,
+      'supported-banks',
+      30
+    );
+    if (!limit.allowed) {
+      const retryAfter = Math.max(
+        1,
+        Math.ceil((limit.resetTime - Date.now()) / 1000)
+      );
       return Response.json(
         { error: 'Too many requests' },
-        { status: 429, headers }
+        {
+          status: 429,
+          headers: {
+            ...headers,
+            'Retry-After': String(retryAfter),
+            'X-Oxygen-Rate-Limit-Scope': 'user',
+            'X-Oxygen-Rate-Limit-User': auth.user.id,
+          },
+        }
       );
+    }
     const config = readOxygenRuntimeConfiguration();
     const cache = getRedis();
     if (!config || !cache) throw new Error('Unavailable');

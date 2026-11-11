@@ -239,4 +239,30 @@ describe('product-response', () => {
 
     expect(mapped.colors).toEqual([]);
   });
+
+  it('preserves InStock availability, purchasability, and projected gallery image when advertised variant is in stock despite parent zero stock', () => {
+    const rawProduct: RawDbProduct = {
+      id: 'phone-managed-variant',
+      name: 'iPhone 16 Pro',
+      price: 1500000,
+      advertised_price: 1650000,
+      advertised_image: 'https://cdn.example.com/phone-cellular.png',
+      stock: 0,
+      stock_quantity: 0,
+      manage_stock: true,
+      availability: 'InStock',
+      category: 'Smartphones',
+      images: ['https://cdn.example.com/phone.png'],
+    };
+
+    const mapped = mapStorefrontProduct(rawProduct);
+
+    expect(mapped.availability).toBe('in_stock');
+    expect(mapped.is_purchasable).toBe(true);
+    expect(mapped.quantity_available).toBe(1);
+    expect(mapped.stock).toBe(1);
+    expect(mapped.images[0]?.url).toBe(
+      'https://cdn.example.com/phone-cellular.png'
+    );
+  });
 });

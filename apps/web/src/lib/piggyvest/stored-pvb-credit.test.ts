@@ -5,6 +5,8 @@ import {
   creditWriteFailureMessage,
   readStoredPvbCredit,
 } from './stored-pvb-credit';
+import { createPiggyvestIntakeClientFromExecutor } from './webhook-intake-client';
+import { PiggyvestIntakeDbError } from './webhook-intake-executor';
 
 const ROW = {
   pvb_reference: 'PVB01SYNTHETIC',
@@ -140,5 +142,24 @@ describe('creditWriteFailureMessage', () => {
         'Inflow credit record failed'
       )
     ).toBe('Inflow credit record failed');
+  });
+});
+
+describe('legacy-row gate diagnostic through the intake facade', () => {
+  it('keeps SQLSTATE 55000 from the intake insert so the ledger names the repair', async () => {
+    const execute = vi.fn(async () => {
+      throw new PiggyvestIntakeDbError('55000');
+    });
+    const client = createPiggyvestIntakeClientFromExecutor(execute);
+
+    const { error } = await client
+      .from('piggyvest_inflow_credits')
+      .upsert({ pvb_reference: 'PVB01GATED' } as never)
+      .select('pvb_reference');
+
+    expect(error).toMatchObject({ code: '55000' });
+    expect(
+      creditWriteFailureMessage(error, 'Inflow credit record failed')
+    ).toContain('legacy ledger row without pvb_reference');
   });
 });

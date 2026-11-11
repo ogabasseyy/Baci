@@ -19,6 +19,14 @@
 # On the hosted image (which already carries PostgreSQL 16) installing the server package
 # creates and starts no database, so nothing binds port 5432 next to a job's service
 # container (seen in the DB Replay install log). A bare image would get a default cluster.
+#
+# Ubuntu mirror outages: hosted runners read Ubuntu packages through /etc/apt/apt-mirrors.txt, Azure's
+# mirror first. On 2026-11-11 that mirror stopped answering, and the full `apt-get update` this script used
+# to run waited on it for minutes and then failed, which took down every job that installs PostgreSQL while
+# the PostgreSQL repository itself answered at once. On the hosted image the server and client packages are
+# expected to need nothing from Ubuntu's archive, so the first refresh reads the PGDG source only and
+# recommended extras are skipped. Every apt command is bounded in time. Only if the install still fails does
+# the script point apt at Ubuntu's own servers, refresh every list once and try one more time.
 set -euo pipefail
 
 if [ "${RUNNER_ENVIRONMENT:-}" != "github-hosted" ]; then
@@ -32,6 +40,21 @@ PGDG_KEY_URL='https://www.postgresql.org/media/keys/ACCC4CF8.asc'
 PGDG_KEY_FINGERPRINT='B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8'
 PGDG_KEYRING='/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc'
 PGDG_SOURCE='/etc/apt/sources.list.d/pgdg.list'
+# Where the hosted image lists its Ubuntu mirrors (see the comment at the top).
+UBUNTU_MIRRORS='/etc/apt/apt-mirrors.txt'
+# No single apt command may wait longer than this, whatever the mirrors do. A healthy install
+# takes well under a minute.
+APT_LIMIT_SECONDS=180
+# A few seconds per connection, three tries per file.
+APT_BOUNDS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15)
+
+apt_get() {
+  timeout --kill-after=10 "$APT_LIMIT_SECONDS" sudo apt-get "${APT_BOUNDS[@]}" "$@"
+}
+
+install_pinned() {
+  apt_get install -y --no-install-recommends "postgresql-18=${PG_BUILD}" "postgresql-client-18=${PG_BUILD}"
+}
 
 installed_build() {
   # shellcheck disable=SC2016 # dpkg-query expands ${Version} itself
@@ -74,6 +97,17 @@ sudo install -m 0644 "$work/pgdg.asc" "$PGDG_KEYRING"
 echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" |
   sudo tee "$PGDG_SOURCE" >/dev/null
 
-sudo apt-get -o Acquire::Retries=3 update
-sudo apt-get -o Acquire::Retries=3 install -y \
-  "postgresql-18=${PG_BUILD}" "postgresql-client-18=${PG_BUILD}"
+# Refresh only the PGDG index first: it is all the two packages should need, and it keeps an unreachable
+# Ubuntu mirror out of the way. List-Cleanup=0 leaves the Ubuntu lists as they are.
+apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update
+
+if ! install_pinned; then
+  echo "The install failed with the package lists as they are; switching to the canonical Ubuntu mirrors and refreshing every list once."
+  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' |
+    sudo tee "$UBUNTU_MIRRORS" >/dev/null
+  apt_get update
+  install_pinned || {
+    echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the canonical Ubuntu mirrors." >&2
+    exit 1
+  }
+fi

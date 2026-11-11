@@ -3,14 +3,20 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test, { after } from 'node:test';
+import test, { after, describe } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT = fileURLToPath(new URL('./install-postgresql-hosted.sh', import.meta.url));
 const BUILD = '18.6-1.pgdg24.04+2';
 const FINGERPRINT = 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8';
+// Every apt call is bounded: a few seconds per connection, three tries, and a ceiling for the whole command.
+const APT_LIMIT_SECONDS = 180;
+const APT_BOUNDS = '-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15';
+// The first refresh reads only the PGDG source, so an unreachable Ubuntu mirror cannot stall the step.
+const PGDG_ONLY = '-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/pgdg.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0';
+const INSTALL = `sudo apt-get ${APT_BOUNDS} install -y --no-install-recommends postgresql-18=${BUILD} postgresql-client-18=${BUILD}`;
 
-// The script is run for real, but sudo, curl, gpg and dpkg-query are stand-ins that only
+// The script is run for real, but sudo, timeout, curl, gpg and dpkg-query are stand-ins that only
 // write what they were asked to do into a log. Nothing privileged ever runs here.
 const root = mkdtempSync(join(tmpdir(), 'install-postgresql-hosted-'));
 const bin = join(root, 'bin');
@@ -26,6 +32,22 @@ function stub(name, lines) {
 stub('sudo', [
   `{ printf 'sudo'; for argument in "$@"; do printf ' %s' "$argument"; done; printf '\\n'; } >> "$FAKE_LOG"`,
   `if [ "$1" = tee ]; then sed 's/^/  stdin: /' >> "$FAKE_LOG"; fi`,
+  // FAKE_APT_INSTALL_FAILURES=1 makes the first apt-get install fail, the way an unreachable mirror does.
+  `if [ "$1" = apt-get ]; then`,
+  `  for argument in "$@"; do`,
+  `    if [ "$argument" = install ]; then`,
+  `      attempts="$(cat "$FAKE_LOG.installs" 2>/dev/null || echo 0)"; attempts=$((attempts + 1)); echo "$attempts" > "$FAKE_LOG.installs"`,
+  `      if [ "$attempts" -le "\${FAKE_APT_INSTALL_FAILURES:-0}" ]; then exit 100; fi`,
+  `    fi`,
+  `  done`,
+  `fi`,
+]);
+// GNU timeout is missing on a Mac; the stand-in records the limit it was given and runs the command.
+stub('timeout', [
+  `while [ "$#" -gt 0 ]; do case "$1" in --kill-after=*) shift ;; *) break ;; esac; done`,
+  `limit="$1"; shift`,
+  `printf 'timeout %s\\n' "$limit" >> "$FAKE_LOG"`,
+  `exec "$@"`,
 ]);
 stub('curl', [
   `output=''; url=''`,
@@ -103,8 +125,10 @@ test('installs the pinned PostgreSQL 18 build from the signed PGDG repository on
       'sudo install -m 0644 <work>/pgdg.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc',
       'sudo tee /etc/apt/sources.list.d/pgdg.list',
       '  stdin: deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main',
-      'sudo apt-get -o Acquire::Retries=3 update',
-      `sudo apt-get -o Acquire::Retries=3 install -y postgresql-18=${BUILD} postgresql-client-18=${BUILD}`,
+      `timeout ${APT_LIMIT_SECONDS}`,
+      `sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`,
+      `timeout ${APT_LIMIT_SECONDS}`,
+      INSTALL,
     ]
   );
 });
@@ -146,7 +170,7 @@ test('still installs when only one package, or another build, is present', () =>
   ]) {
     const result = install(installed);
     assert.equal(result.status, 0, result.stderr);
-    assert.ok(result.privileged.some((line) => line.includes(`install -y postgresql-18=${BUILD}`)), JSON.stringify(installed));
+    assert.ok(result.privileged.some((line) => line.includes(`install -y --no-install-recommends postgresql-18=${BUILD}`)), JSON.stringify(installed));
   }
 });
 
@@ -183,4 +207,59 @@ test('pins an exact PostgreSQL 18 Ubuntu 24.04 build, not a moving package name'
   assert.match(script, /^PG_BUILD='18\.\d+-1\.pgdg24\.04\+\d+'$/m);
   assert.match(script, /"postgresql-18=\$\{PG_BUILD\}" "postgresql-client-18=\$\{PG_BUILD\}"/);
   assert.match(script, new RegExp(`^PGDG_KEY_FINGERPRINT='${FINGERPRINT}'$`, 'm'));
+});
+
+const aptCommands = (result) => result.privileged.filter((line) => line.startsWith('sudo apt-get'));
+const isUpdate = (line) => / update$/.test(line);
+
+describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (2026-11-11 outage)', () => {
+  // On 2026-11-11 the Azure Ubuntu mirror that hosted runners use stopped answering. The installer ran a full
+  // `apt-get update`, which waited 20 seconds per mirror entry, three times over, and then failed. Disposable SQL,
+  // DB Replay and Misc failed on every pull request, although the PostgreSQL repository itself answered at once.
+  test('refreshes only the PGDG package index, so an unreachable Ubuntu mirror cannot stall a healthy install', () => {
+    const result = install();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(aptCommands(result).filter(isUpdate), [`sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`]);
+    assert.ok(!result.privileged.some((line) => line.includes('apt-mirrors.txt')), 'a healthy install must leave the mirror list alone');
+  });
+
+  test('bounds every apt command: a time ceiling for the whole command and short, retried connections', () => {
+    for (const fake of [{}, { FAKE_APT_INSTALL_FAILURES: '1' }]) {
+      const result = install(fake);
+      assert.equal(result.status, 0, result.stderr);
+      result.commands.forEach((line, index) => {
+        if (!line.startsWith('sudo apt-get')) return;
+        assert.equal(result.commands[index - 1], `timeout ${APT_LIMIT_SECONDS}`, `${line} must run under the time ceiling`);
+        assert.ok(line.includes(APT_BOUNDS), line);
+      });
+    }
+    const script = readFileSync(SCRIPT, 'utf8');
+    assert.match(script, new RegExp(`^APT_LIMIT_SECONDS=${APT_LIMIT_SECONDS}$`, 'm'));
+    assert.match(script, /timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" sudo apt-get/);
+  });
+
+  test('switches to the canonical Ubuntu mirrors and refreshes everything when the first install fails', () => {
+    const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /canonical Ubuntu mirrors/);
+    assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), [
+      'sudo tee /etc/apt/apt-mirrors.txt',
+      '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:1',
+      '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:2',
+      `timeout ${APT_LIMIT_SECONDS}`,
+      `sudo apt-get ${APT_BOUNDS} update`,
+      `timeout ${APT_LIMIT_SECONDS}`,
+      INSTALL,
+    ]);
+    // Nothing the fallback fetches may use cleartext http either.
+    assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
+  });
+
+  test('fails with a clear message, after exactly one retry, when the install still fails on the canonical mirrors', () => {
+    const result = install({ FAKE_APT_INSTALL_FAILURES: '2' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Could not install PostgreSQL 18/);
+    assert.equal(aptCommands(result).filter((line) => line === INSTALL).length, 2, 'one try plus one retry, never a loop');
+    assert.equal(aptCommands(result).filter(isUpdate).length, 2, 'the PGDG refresh and one full refresh');
+  });
 });

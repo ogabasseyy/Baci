@@ -50,8 +50,9 @@ runs:
     # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
     # Only the two named contabo-baci-ci runners qualify: an exact allowlist, because runner labels are
     # not available inside a composite action (register a new CI runner here too, or it just uses the
-    # slower GitHub cache path). Each runner process has its own tool cache
-    # directory, so two runners never share a store. The deploy runner shares the production
+    # slower GitHub cache path). Each runner gets its own store directory named after the runner
+    # (pnpm-store-<runner name> under its tool cache), so two runners never share or prune one store,
+    # whatever the server layout. The deploy runner shares the production
     # server (tight disk) and runs these installs rarely, so it keeps the GitHub cache path.
     # The cache save below never runs for a persistent store (it would archive the wrong path).
     - id: pnpm-store
@@ -67,7 +68,8 @@ runs:
         dir="$STORE_DIR"
         if [ "$PERSISTENT_RUNNER" = 'true' ] && [ "$STORE_DIR" = '.pnpm-store' ]; then
           persistent=true
-          dir="$TOOL_CACHE/pnpm-store"
+          # RUNNER_NAME is a default variable the runner sets for every job; the allowlist above makes it path-safe.
+          dir="$TOOL_CACHE/pnpm-store-${RUNNER_NAME:?}"
           # A store inside the checkout would be wiped by `git clean`, which is the problem this avoids.
           if [ -n "${GITHUB_WORKSPACE:-}" ]; then
             case "$dir" in
@@ -147,7 +149,11 @@ runs:
         MAX_STORE_KB: '16777216'
       run: |
         set -euo pipefail
-        size_kb="$(du -sk "$STORE_DIR" | cut -f1)"
+        size_kb="$(du -sk "$STORE_DIR" 2>/dev/null | cut -f1 || true)"
+        if [ -z "$size_kb" ]; then
+          echo "::warning::could not measure the pnpm store at $STORE_DIR; skipping the size check"
+          exit 0
+        fi
         if [ "$size_kb" -gt "$MAX_STORE_KB" ]; then
           echo "pnpm store is ${size_kb} KB (limit ${MAX_STORE_KB} KB); pruning unreferenced packages"
           # Name the store explicitly so the prune hits the directory measured above, and never fail the job

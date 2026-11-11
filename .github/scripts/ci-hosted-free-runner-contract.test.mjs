@@ -182,21 +182,30 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.equal(prune.if, "steps.pnpm-store.outputs.persistent == 'true'");
   // The prune names the measured store explicitly and is housekeeping only: a failure warns instead of failing the job.
   assert.match(prune.run, /pnpm store prune --store-dir "\$STORE_DIR" \|\| echo "::warning::/);
+  // Measuring the store is housekeeping too: an unreadable size skips the check instead of failing the job.
+  assert.match(prune.run, /could not measure the pnpm store/);
   assert.ok(steps.indexOf(configure) < steps.indexOf(prune) && steps.indexOf(prune) < steps.findIndex((step) => step.name === 'Install Dependencies'));
-  const run = (persistent, storeDir) => {
+  const run = (persistent, storeDir, runnerName = 'contabo-baci-ci') => {
     const out = spawnSync('bash', ['-c', `${select.run}\ncat "$GITHUB_OUTPUT"`], {
       encoding: 'utf8',
-      env: { ...process.env, PERSISTENT_RUNNER: persistent, STORE_DIR: storeDir, TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-${persistent}-${storeDir.replace(/\W/g, '_')}`) },
+      env: { ...process.env, PERSISTENT_RUNNER: persistent, STORE_DIR: storeDir, RUNNER_NAME: runnerName, TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-${persistent}-${runnerName}-${storeDir.replace(/\W/g, '_')}`) },
     });
     return out.stdout;
   };
-  assert.equal(run('true', '.pnpm-store'), `persistent=true\ndir=${tmpdir()}/pnpm-store\n`);
+  assert.equal(run('true', '.pnpm-store'), `persistent=true\ndir=${tmpdir()}/pnpm-store-contabo-baci-ci\n`);
+  // Each runner gets its own store directory, so two runners can never share or prune one store.
+  assert.equal(run('true', '.pnpm-store', 'contabo-baci-ci-2'), `persistent=true\ndir=${tmpdir()}/pnpm-store-contabo-baci-ci-2\n`);
   assert.equal(run('false', '.pnpm-store'), 'persistent=false\ndir=.pnpm-store\n');
   assert.equal(run('true', '/custom/store'), 'persistent=false\ndir=/custom/store\n');
+  const noName = spawnSync('bash', ['-c', select.run], {
+    encoding: 'utf8',
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'RUNNER_NAME')), PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-no-name`) },
+  });
+  assert.notEqual(noName.status, 0, 'a persistent store without a runner name must fail instead of sharing one directory');
   // A persistent store inside the checkout would be wiped by `git clean`; the step must refuse it.
   const inside = spawnSync('bash', ['-c', select.run], {
     encoding: 'utf8',
-    env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', GITHUB_WORKSPACE: join(tmpdir(), 'ws'), TOOL_CACHE: join(tmpdir(), 'ws', 'tool'), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-inside`) },
+    env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', RUNNER_NAME: 'contabo-baci-ci', GITHUB_WORKSPACE: join(tmpdir(), 'ws'), TOOL_CACHE: join(tmpdir(), 'ws', 'tool'), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-inside`) },
   });
   assert.notEqual(inside.status, 0);
   assert.match(inside.stdout + inside.stderr, /outside the workspace/);

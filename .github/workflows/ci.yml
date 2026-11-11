@@ -723,6 +723,9 @@ jobs:
   # The only CI step holding the Supabase service-role key. It must never run on
   # the general private runner, which executes branch code. Trusted main pushes
   # run it on the deploy runner; merge_group (not in use) falls back to hosted.
+  # OPEN OWNER DECISION before any merge-queue pilot: a merge_group commit contains pull request code, so
+  # that arm would run PR code with the key on a hosted runner (as the old Misc step did). Either drop
+  # merge_group from the condition below, or check out the base ref for that event.
   quality-quiz-approval:
     name: Quality Gate - Quiz Approval
     needs: [changes]

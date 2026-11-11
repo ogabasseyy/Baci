@@ -35,9 +35,9 @@ env:
 
 jobs:
   changes:
-    # Same trust rule as private_ci_trusted below, evaluated from event data so it
-    # needs no upstream job: forks and untrusted events stay on GitHub-hosted runners.
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    # This job holds the capability-gate step, so the base-owned capability-gate
+    # contract pins it to a plain, unconditional ubuntu-24.04 runner. Keep it there.
+    runs-on: ubuntu-24.04
     outputs:
       mobile_admin: ${{ steps.gate.outputs.mobile_admin }}
       mobile_storefront: ${{ steps.gate.outputs.mobile_storefront }}

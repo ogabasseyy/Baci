@@ -10,7 +10,7 @@ import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const PRIVATE = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
 const MOVED_BY_NEEDS = ['cwv-runner-contracts', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc', 'mobile-quality'];
-const MOVED_INLINE = ['changes', 'silent-revert-guard', 'quality'];
+const MOVED_INLINE = ['silent-revert-guard', 'quality'];
 
 function values({ privateRepo = true, enabled = 'true', event = 'pull_request', head = 'owner/repo' } = {}) {
   return {
@@ -41,10 +41,15 @@ test('forks, untrusted events and a disabled switch stay on GitHub-hosted runner
   }
 });
 
-test('the changes job trust rule matches the private_ci_trusted output', () => {
-  const trusted = workflow.jobs.changes.outputs.private_ci_trusted.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
-  const runsOn = workflow.jobs.changes['runs-on'];
-  assert.ok(runsOn.includes(trusted), 'changes runs-on must reuse the exact trust expression');
+test('the changes job holds the capability gate, so it stays a plain unconditional ubuntu-24.04 job', () => {
+  // The base-owned capability-gate contract (capability_gate_contract_ci_checks.py) fails the PR otherwise.
+  const job = workflow.jobs.changes;
+  assert.equal(job['runs-on'], 'ubuntu-24.04');
+  for (const key of ['if', 'needs', 'continue-on-error', 'container', 'uses', 'env']) {
+    assert.equal(Object.hasOwn(job, key), false, `changes must not set ${key}`);
+  }
+  assert.ok(job.steps.some((step) => step.uses === './.github/actions/capability-gate'));
+  assert.match(job.outputs.private_ci_trusted, /github\.event\.repository\.private/);
 });
 
 test('no job on the general private runner references repository secrets', () => {

@@ -121,7 +121,10 @@ test('missing or false shared trust output never selects Contabo', () => {
 // GitHub expressions limited to `needs.changes.outputs.*`, quoted strings,
 // ==, !=, &&, || and parentheses are also valid JavaScript.
 function evaluateJobCondition(condition, outputs) {
-  const source = condition.replace(
+  const source = condition
+    .replaceAll('github.event_name', "'pull_request'")
+    .replaceAll('github.event.pull_request.draft', 'false')
+    .replace(
     /needs\.changes\.outputs\.(\w+)/g,
     (_match, name) => JSON.stringify(outputs[name] ?? '')
   );

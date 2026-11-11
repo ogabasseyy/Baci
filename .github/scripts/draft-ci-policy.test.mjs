@@ -24,7 +24,7 @@ for (const name of names) {
 test('main CI admits ready PRs, main pushes, merge queues and manual runs', () => {
   const workflow = load('ci');
   assert.ok(workflow.on.pull_request.types.includes('ready_for_review'));
-  const condition = workflow.jobs.changes.if;
+  const condition = workflow.jobs.build.if;
   assert.equal(evaluate(condition, 'pull_request', true), false);
   for (const event of ['pull_request', 'push', 'merge_group', 'workflow_dispatch']) {
     assert.equal(evaluate(condition, event, false), true, event);

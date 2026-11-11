@@ -36,9 +36,6 @@ env:
 
 jobs:
   changes:
-    # Skipping change detection also defers all dependent heavy jobs.
-    # The always-running Quality Gate fails on skipped detection.
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     # This job holds the capability-gate step, so the base-owned capability-gate
     # contract pins it to a plain, unconditional ubuntu-24.04 runner. Keep it there.
     runs-on: ubuntu-24.04
@@ -118,7 +115,9 @@ jobs:
   cwv-runner-contracts:
     name: CWV Runner Contracts
     needs: [changes]
-    if: needs.changes.outputs.cwv_runner == 'true'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.cwv_runner == 'true')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
@@ -141,7 +140,9 @@ jobs:
     # mobile filters; otherwise the bypassable pre-commit hook is their only
     # Biome gate. `turbo lint --affected` keeps the run scoped to the changed
     # packages.
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      ((needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke')
     # Opt in only after the repository is private and its dedicated runner is
     # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
@@ -165,7 +166,9 @@ jobs:
   quality-typecheck:
     name: Quality Gate - Typecheck
     needs: [changes]
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Cold hosted runs can exceed 15 minutes for install plus the normal typecheck; the production
     # build typecheck adds a second pass (~7 min warm, capped at 15 by its own step timeout).
@@ -217,7 +220,9 @@ jobs:
   quality-test:
     name: Quality Gate - Test
     needs: [changes]
-    if: needs.changes.outputs.web == 'true'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.web == 'true')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Full web/mobile test fan-out reached ~15 minutes warm, but cold runs
     # (Turbo remote cache unavailable) measure 31m+ on GitHub-hosted runners —
@@ -311,7 +316,9 @@ jobs:
     needs: [changes]
     # Only the full-affected plan runs the complete web suite; targeted plans
     # keep their narrow vitest invocations inside quality-test.
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
     env:
@@ -345,7 +352,9 @@ jobs:
   quality-db-replay:
     name: Quality Gate - DB Replay
     needs: [changes]
-    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
@@ -431,7 +440,9 @@ jobs:
   quality-disposable-sql:
     name: Quality Gate - Disposable SQL Suites
     needs: [changes]
-    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      (needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     services:
@@ -544,7 +555,9 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: >-
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      ((needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke')
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
@@ -743,10 +756,11 @@ jobs:
     name: Quality Gate - Quiz Approval
     needs: [changes]
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'merge_group') &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'merge_group') &&
       (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') &&
       needs.changes.outputs.test_plan_mode != 'config-smoke' &&
-      (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production')
+      (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production'))
     # Same kill switch as every private route (private repo + BACI_PRIVATE_CI_ENABLED, via
     # private_ci_trusted). While the repo is public, or with the switch off, this stays on a
     # GitHub-hosted runner; only trusted pushes reach the deploy runner.
@@ -819,6 +833,11 @@ jobs:
     runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 5
     steps:
+      - name: Require ready state before passing CI
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo 'CI is deferred until this PR is marked ready for review.'
+          exit 1
       - name: Verify split quality gate results
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -880,6 +899,7 @@ jobs:
           echo "Split quality gates passed."
 
   mobile-quality:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Mobile Admin Guardrails
     needs: [changes]
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
@@ -907,6 +927,7 @@ jobs:
         run: echo "No mobile-admin changes — skipping mobile guardrail checks"
 
   build:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Build
     # Only `changes` outputs are consumed below. Running in parallel with the
     # quality jobs (instead of after them) halves the critical path of every

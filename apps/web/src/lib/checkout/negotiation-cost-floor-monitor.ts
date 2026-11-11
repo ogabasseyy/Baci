@@ -128,6 +128,9 @@ export async function monitorNegotiationCostFloor({
         line.variantId &&
         variantProduct.get(line.variantId) !== line.productId
       ) {
+        // Foreign variant: its cost must not be used, but the line must not
+        // vanish from the coverage counts either.
+        unreadableVariantLines += 1;
         continue;
       }
       const cost =

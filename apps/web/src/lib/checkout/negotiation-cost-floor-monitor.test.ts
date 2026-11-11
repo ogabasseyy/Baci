@@ -146,7 +146,8 @@ describe('monitorNegotiationCostFloor', () => {
       merchantId: 'm1',
       lines: [line(98, 'v1')],
     });
-    expect(warn).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatchObject({ unreadableVariantLines: 1 });
   });
 
   it('includes the line quantity in the breach entry', async () => {

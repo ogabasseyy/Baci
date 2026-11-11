@@ -68,6 +68,20 @@ describe('dispatch snapshot builders', () => {
     expect(snapshot.merchantBankName).toBe('Guaranty Trust Bank');
   });
 
+  it('snapshots an account whose bank name cannot be resolved', () => {
+    const snapshot = buildDispatchPaymentSnapshot(
+      Object.assign({}, merchant, {
+        bank_name: null,
+        bank_code: 'unknown-code',
+      }),
+      null,
+      ngnInvoice,
+      'invoice'
+    );
+    expect(snapshot.merchantBankAccountNumber).toBe('1234567890');
+    expect(snapshot.merchantBankName).toBe('');
+  });
+
   it('excludes hidden bank data from the snapshot', () => {
     const va = {
       account_number: '9990001111',

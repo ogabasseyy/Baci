@@ -27,8 +27,7 @@ export function buildDispatchPaymentSnapshot(
     merchant.bank_code
   );
   const merchantBankRendered =
-    instructionsRendered &&
-    Boolean(merchant.bank_account_number && merchantBankName);
+    instructionsRendered && Boolean(merchant.bank_account_number);
   return {
     merchantBankCode: null,
     merchantBankAccountNumber: merchantBankRendered

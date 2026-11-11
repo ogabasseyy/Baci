@@ -118,6 +118,26 @@ describe('renderBankDetailsHtml', () => {
     expect(html).not.toContain('Transfer here for instant order confirmation');
   });
 
+  it('shows the manual account when the merchant bank name is unknown', () => {
+    const html = renderBankDetailsHtml({
+      order: createReceiptOrder(),
+      merchant: createReceiptMerchant({
+        bank_code: 'unknown-code',
+        bank_account_number: '1234567890',
+      }),
+      options: {},
+      brandPrimary: '#111827',
+      brandAccent: '#d10f1f',
+      contactEmail: null,
+      contactPhone: null,
+      isPaid: false,
+    });
+
+    expect(html).toContain('Manual Confirmation');
+    expect(html).toContain('1234567890');
+    expect(html).toContain('Bank name unavailable');
+  });
+
   it('renders manual merchant bank details for invoice payments', () => {
     const html = renderBankDetailsHtml({
       order: createReceiptOrder({ currency: 'INR' }),

@@ -120,10 +120,6 @@ function renderMerchantBankCard({
     merchant.bank_name,
     merchant.bank_code
   );
-  if (!resolvedBankName) {
-    return '';
-  }
-
   const contactRow = renderManualConfirmationContactRow({
     brandPrimary,
     contactEmail,
@@ -137,7 +133,7 @@ function renderMerchantBankCard({
               Manual Confirmation
             </div>
             <div class="bank-hint">Transfer here &amp; notify merchant to confirm</div>
-            <div class="bank-row"><span class="bank-key">Bank</span><span class="bank-val">${escapeHtml(resolvedBankName)}</span></div>
+            <div class="bank-row"><span class="bank-key">Bank</span><span class="bank-val">${escapeHtml(resolvedBankName || 'Bank name unavailable')}</span></div>
             <div class="bank-row"><span class="bank-key">Account Name</span><span class="bank-val">${escapeHtml(merchant.bank_account_name || merchant.business_name || '')}</span></div>
             <div class="bank-row"><span class="bank-key">Account Number</span><span class="bank-val bank-acct">${escapeHtml(merchant.bank_account_number || '')}</span></div>
             ${contactRow}

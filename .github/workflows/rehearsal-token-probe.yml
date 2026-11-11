@@ -1,0 +1,49 @@
+name: Rehearsal token probe
+
+# THROWAWAY (rehearsal PR only, never merged): checks three things about the default GITHUB_TOKEN.
+#  1. can it re-run a finished workflow run, and does the re-run execute jobs?
+#  2. does Codex react to an "@codex review" comment posted by the github-actions bot?
+#  3. does marking a draft ready with that token start workflows listening for ready_for_review?
+on:
+  pull_request:
+    types: [opened, labeled, ready_for_review]
+
+permissions: {}
+
+jobs:
+  ready-listener:
+    if: github.event.action == 'ready_for_review'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "ready_for_review event seen. actor=${{ github.actor }} triggering_actor=${{ github.triggering_actor }}"
+
+  rerun-witness:
+    if: github.event.action == 'opened'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "witness ran. run_attempt=${{ github.run_attempt }}"
+
+  probe:
+    if: github.event.action == 'labeled' && github.event.label.name == 'probe-token'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: 1. re-run the finished "opened" run with the workflow token
+        run: |
+          run_id=$(gh api "repos/$REPO/actions/workflows/rehearsal-token-probe.yml/runs?event=pull_request&head_sha=$SHA" --jq '[.workflow_runs[] | select(.status == "completed")] | sort_by(.run_number) | first | .id')
+          echo "re-running run $run_id"
+          gh api -X POST "repos/$REPO/actions/runs/$run_id/rerun"
+          echo "rerun requested"
+      - name: 2. post a Codex review request as the github-actions bot
+        run: gh pr comment "$PR" --repo "$REPO" --body "@codex review"
+      - name: 3. mark the draft ready with the workflow token
+        run: gh pr ready "$PR" --repo "$REPO"

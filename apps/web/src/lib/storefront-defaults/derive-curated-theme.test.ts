@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { expect, it } from 'vitest';
 import { getContrastRatio } from '@/lib/color-utils';
 import { applyTheme } from '@/lib/theme-manager';

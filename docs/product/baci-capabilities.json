@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T00:43:38+00:00",
-  "source_revision": "467c8056f771918b42828ff795eff947f7f82ddd",
-  "evidence_digest": "573e7defc0673993335acaba06d15c86e5ab623666dabebe8ec431e0dadd73b3",
-  "claims_digest": "d58411bd1bcc947002c562e0f9d71822dcbd6194b85a0de98a296fb3c5bb5d44",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments.",
+  "reviewed_at": "2026-11-11T01:01:23+00:00",
+  "source_revision": "c60dc9b799777610c84a8a2838775065940599f5",
+  "evidence_digest": "aeeae29911d5ab300f24425ff97e3f55f005adf4701ce0d3eba31d4acab05a55",
+  "claims_digest": "9b8475ab60296500bcb4422b9f177162439311084756c8b22c33ee011dc6dd02",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Ambiguous Credit Direct references require reconciliation. Oxygen retains its admitted funding basis when the merchant records an authorized manual payment.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
@@ -29,7 +29,10 @@
         "supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql",
         "supabase/migrations/20261107165000_credit_direct_wallet_attempt_reservation.sql",
         "supabase/migrations/20261110170000_allow_captured_credit_direct_wallet_cancellation.sql",
-        "supabase/migrations/20261111170000_accept_legacy_credit_direct_cancellation_spelling.sql"
+        "supabase/migrations/20261111170000_accept_legacy_credit_direct_cancellation_spelling.sql",
+        "apps/web/src/app/api/payments/credit-direct/webhook/webhook-payment-amount.ts",
+        "apps/web/src/schemas/oxygen-checkout-order.ts",
+        "supabase/migrations/20261111180000_preserve_oxygen_order_settlement_paths.sql"
       ]
     },
     {

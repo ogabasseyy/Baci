@@ -1,13 +1,14 @@
 # Baci capabilities and agent access
 
 Reviewed 11 November 2026 against source revision
-`467c8056f771918b42828ff795eff947f7f82ddd`. Agentic checkout session quotes now include
+`c60dc9b799777610c84a8a2838775065940599f5`. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility
 reflects CredPal retirement.
 Eligible saved orders can finance the balance after wallet credit using verified funding evidence.
-Klump is retired for new payments.
+Klump is retired for new payments. Ambiguous Credit Direct references require payment review.
+Oxygen retains the admitted invoice basis when an authorized merchant records a manual payment.
 Oxygen supports local staging and a separately configured, policy-controlled production pilot; production transactions are not yet verified. This is a navigation map, not authorization or proof of
 current deployment. Check the current implementation, live tool discovery and
 merchant entitlement before calling or claiming a tool.

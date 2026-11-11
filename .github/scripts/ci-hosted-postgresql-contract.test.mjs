@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
 import { scriptText } from './ci-step-script-text.mjs';
@@ -50,12 +51,25 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
   }
 });
 
-test('no CI step or install script uses PostgreSQL 16 any more; every PG_BIN is PostgreSQL 18', async () => {
-  for (const file of ['.github/workflows/ci.yml', INSTALLER, '.github/scripts/install-supabase-replay-toolchain.sh']) {
-    assert.doesNotMatch(await readFile(file, 'utf8'), /postgresql[-/]16\b/, `${file} must not use PostgreSQL 16`);
+// Every workflow, composite action, CI script and SQL test runner, so a new caller anywhere cannot bring PostgreSQL 16 back.
+function filesUnder(dir) {
+  return readdirSync(dir, { recursive: true })
+    .filter((name) => /\.(ya?ml|sh|py|mjs)$/.test(name))
+    .map((name) => join(dir, name))
+    .filter((path) => statSync(path).isFile());
+}
+
+test('nothing under .github or supabase/tests uses PostgreSQL 16 any more; every PG_BIN is PostgreSQL 18', () => {
+  const files = [...filesUnder('.github'), ...filesUnder('supabase/tests')];
+  assert.ok(files.includes('.github/workflows/ci.yml') && files.includes(INSTALLER), 'the scan must cover the workflow and the installer');
+  const pgBins = new Set();
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /postgresql[-/]16\b/, `${file} must not use PostgreSQL 16`);
+    // Only workflows and actions set PG_BIN; test files mention it inside patterns.
+    if (/\.ya?ml$/.test(file)) for (const match of text.matchAll(/\bPG_BIN(?:DIR)?: (\S+)/g)) pgBins.add(match[1]);
   }
-  const text = await readFile('.github/workflows/ci.yml', 'utf8');
-  assert.deepEqual([...new Set([...text.matchAll(/PG_BIN: (\S+)/g)].map((match) => match[1]))], ['/usr/lib/postgresql/18/bin']);
+  assert.deepEqual([...pgBins], ['/usr/lib/postgresql/18/bin']);
 });
 
 test('the shared PostgreSQL installer is called only by the PostgreSQL install steps and DB Replay', () => {

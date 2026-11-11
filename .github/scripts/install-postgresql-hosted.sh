@@ -15,7 +15,7 @@
 # PG_BUILD is the one place the PostgreSQL 18 release is pinned for hosted runners: the DB Replay
 # toolchain script (install-supabase-replay-toolchain.sh) calls this installer too. Keep that script's
 # psql check, apps/web/tools/db/supabase-replay-contract.ts and the Disposable SQL service container
-# on the same release; ci-hosted-free-runner-contract.test.mjs fails otherwise.
+# on the same release; ci-hosted-postgresql-contract.test.mjs fails otherwise.
 # On the hosted image (which already carries PostgreSQL 16) installing the server package
 # creates and starts no database, so nothing binds port 5432 next to a job's service
 # container (seen in the DB Replay install log). A bare image would get a default cluster.

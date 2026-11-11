@@ -4,6 +4,27 @@ import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const plugin = require('./withSplashMotionWindowBackground.js');
+test('leaves Android system splash ownership with SplashMotion after Expo prebuild', async () => {
+  const config = plugin({});
+  const result = await config.mods.android.mainActivity({
+    modResults: {
+      language: 'kt',
+      contents: [
+        'import expo.modules.splashscreen.SplashScreenManager',
+        'class MainActivity : ReactActivity() {',
+        '  override fun onCreate(savedInstanceState: Bundle?) {',
+        '    // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-test',
+        '    SplashScreenManager.registerOnActivity(this)',
+        '    // @generated end expo-splashscreen',
+        '    super.onCreate(null)',
+        '  }',
+        '}',
+      ].join('\n'),
+    },
+  });
+  assert.doesNotMatch(result.modResults.contents, /SplashScreenManager/);
+  assert.match(result.modResults.contents, /super\.onCreate\(null\)/);
+});
 function transform(resources) {
   const config = plugin({});
   return config.mods.android.styles({ modResults: { resources } });

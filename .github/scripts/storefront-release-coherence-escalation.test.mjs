@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { RELEASE_USER_AGENTS } from './storefront-release-coherence.mjs';
+import { describeCacheHeaders } from './storefront-release-coherence-escalation.mjs';
 import {
   MARKER,
   makeStorefront,
@@ -138,4 +139,14 @@ test('adds Cloudflare cache diagnostics to stale canary errors', async () => {
     run({ fetchImpl, hostPurgeImpl: async () => ({ skipped: false }) }),
     /received release_122 \[cf-cache-status=HIT age=224s x-vercel-cache=HIT filled=08:50:17Z cf-ray=a58c4af01ae52103-MAN\]/
   );
+});
+
+test('omits the fill time, without failing, when x-vercel-id has no millisecond timestamp (undocumented format)', () => {
+  const headers = new Headers({
+    age: '12',
+    'cf-cache-status': 'HIT',
+    'x-vercel-id': 'fra1::6srnh-0b7546e9c018',
+  });
+  assert.equal(describeCacheHeaders(headers), ' [cf-cache-status=HIT age=12s]');
+  assert.equal(describeCacheHeaders(new Headers()), '');
 });

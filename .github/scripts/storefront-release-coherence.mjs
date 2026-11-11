@@ -157,7 +157,8 @@ export async function warmAndAssertCanaries({
   // a 5xx, timeout or missing marker on another page means a partial outage, where Cloudflare may
   // be serving stale-if-error copies that a purge would delete.
   failure.stale = failures.length > 0 && failures.every(({ error }) => error.stale === true);
-  failure.staleUrls = [...new Set(failures.map(({ target }) => target.url))];
+  // Keep the variant (user agent) with each URL: the origin renders them on different paths.
+  failure.staleTargets = failures.map(({ target }) => ({ url: target.url, variant: target.variant }));
   throw failure;
 }
 
@@ -192,8 +193,9 @@ export async function runReleaseCoherence(options = {}) {
     config,
     hostPurgeImpl: options.hostPurgeImpl,
     logger,
-    // Cache-busted copy of the same page, so it reads the origin (Vercel), never a Cloudflare copy.
-    probeOrigin: async (canaryUrl, index) =>
+    // Cache-busted copy of the same page with the failing variant's own user agent, so it reads
+    // the origin (Vercel) on the same render path, never a Cloudflare copy.
+    probeOrigin: async (target, index) =>
       (
         await fetchMarkedHtml({
           fetchImpl: options.fetchImpl,
@@ -201,10 +203,10 @@ export async function runReleaseCoherence(options = {}) {
           timeoutMs: config.timeoutMs,
           url: buildReleaseProbeUrl(
             config.baseUrl,
-            new URL(canaryUrl).pathname,
+            new URL(target.url).pathname,
             `${requestId}-origin-${index}`
           ),
-          userAgent: RELEASE_USER_AGENTS.browser,
+          userAgent: RELEASE_USER_AGENTS[target.variant],
         })
       ).marker,
     sleep: options.sleep,

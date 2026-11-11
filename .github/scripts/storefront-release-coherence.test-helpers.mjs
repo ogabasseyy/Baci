@@ -49,7 +49,7 @@ export function makeStorefront({
     state.calls.push({ options, url });
     const extra = url.pathname === '/products' ? `<a href="${PDP_PATH}">Phone</a>` : '';
     if (url.search) {
-      return originFails(url)
+      return originFails(url, options)
         ? response('unavailable', { status: 503 })
         : response(html(originMarker, extra));
     }

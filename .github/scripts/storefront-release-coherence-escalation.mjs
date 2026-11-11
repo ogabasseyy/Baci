@@ -23,6 +23,9 @@ const DEFAULT_HOST_PURGE_MAX_RETRY_DELAY_MS = 30_000;
  * ` [cf-cache-status=HIT age=224s x-vercel-cache=HIT filled=08:50:17Z cf-ray=...-MAN]`.
  * `filled` is when Cloudflare last fetched the page from Vercel (the millisecond
  * timestamp inside x-vercel-id), which shows whether a copy pre-dates the purge.
+ * It is a best-effort heuristic: the `region::id-<epoch ms>-hash` shape of x-vercel-id is
+ * observed, not a documented contract, so if Vercel changes it `filled` is simply omitted.
+ * Read a missing `filled` as "unknown", never as a cache-timing signal.
  */
 export function describeCacheHeaders(headers) {
   const parts = [];
@@ -98,27 +101,35 @@ export async function verifyWithHostPurgeFallback({
     if (!error?.stale) throw error;
 
     // Purge only when the origin is proven healthy AND on the expected release for EVERY stale
-    // page. If the origin is erroring, Cloudflare may be serving stale pages as a fallback
+    // (page, variant) target, probed with that variant's own user agent: the browser and Googlebot
+    // renders are distinct origin paths, so a healthy browser render proves nothing about the bot's.
+    // If the origin is erroring, Cloudflare may be serving stale pages as a fallback
     // (stale-if-error) and a hostname purge would delete exactly those copies; if the origin
     // serves another release, a purge cannot help.
-    // Fail closed: with no stale page URLs there is nothing to prove the origin healthy for, and
+    // Fail closed: with no stale targets there is nothing to prove the origin healthy for, and
     // this function is exported with an injectable `verify`, so never purge without that gate.
-    const staleUrls = Array.isArray(error.staleUrls) ? error.staleUrls : [];
-    if (staleUrls.length === 0) throw error;
-    for (const [index, canaryUrl] of staleUrls.entries()) {
-      const { pathname } = new URL(canaryUrl);
-      let originMarker;
-      try {
-        originMarker = await probeOrigin(canaryUrl, index);
-      } catch (probeError) {
+    const staleTargets = Array.isArray(error.staleTargets) ? error.staleTargets : [];
+    if (staleTargets.length === 0) throw error;
+    const probes = await Promise.all(
+      staleTargets.map(async (target, index) => {
+        try {
+          return { marker: await probeOrigin(target, index), target };
+        } catch (probeError) {
+          return { probeError, target };
+        }
+      })
+    );
+    for (const { marker, probeError, target } of probes) {
+      const { pathname } = new URL(target.url);
+      if (probeError) {
         throw new Error(
-          `${error.message}; origin probe failed for ${pathname} (${probeError.message}), so no hostname purge was attempted`,
+          `${error.message}; origin probe failed for ${target.variant} ${pathname} (${probeError.message}), so no hostname purge was attempted`,
           { cause: error }
         );
       }
-      if (originMarker !== config.expectedMarker) {
+      if (marker !== config.expectedMarker) {
         throw new Error(
-          `${error.message}; the origin itself serves ${originMarker} on ${pathname}, so a Cloudflare purge cannot fix this`,
+          `${error.message}; the origin itself serves ${marker} on ${pathname} (${target.variant}), so a Cloudflare purge cannot fix this`,
           { cause: error }
         );
       }

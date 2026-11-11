@@ -215,14 +215,27 @@ test('every Playwright spec folder is run by the browser workflow on every pull 
   const NO_PULL_REQUEST_WORKFLOW = new Set([
     'apps/web/tests/experience-browser',
   ]);
+  // Filtered in Node, not with a git pathspec, so the result cannot depend on how
+  // git expands `**`; the checks below fail if the list ever comes back empty.
   const folders = new Set(
-    execFileSync('git', ['ls-files', 'apps/web/**/*.pw.ts'], {
+    execFileSync('git', ['ls-files', 'apps/web'], {
       encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
     })
       .split('\n')
-      .filter(Boolean)
+      .filter((file) => file.endsWith('.pw.ts'))
       .map((file) => file.split('/').slice(0, 4).join('/'))
   );
+  assert.ok(
+    folders.size > 0,
+    'found no Playwright spec: the enumeration broke'
+  );
+  for (const folder of [...covered, ...NO_PULL_REQUEST_WORKFLOW]) {
+    assert.ok(
+      folders.has(folder),
+      `${folder} no longer holds Playwright specs: drop it from this list`
+    );
+  }
   for (const folder of folders) {
     assert.ok(
       covered.has(folder) || NO_PULL_REQUEST_WORKFLOW.has(folder),

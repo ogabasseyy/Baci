@@ -53,8 +53,10 @@ const TEST_FILE =
 const FILE_ACCESS =
   /(?:node:)?fs(?:\/promises)?['"]|fs-extra|graceful-fs|fast-glob|globby|tinyglobby|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|lstatSync|accessSync|globSync)\b|\b(?:readFile|readdir|opendir|createReadStream|stat|lstat|access|realpath|glob)\s*\(|(?:node:)?path['"]|__dirname|import\.meta\.(?:url|dirname)|process\.cwd\(\)/;
 
-// A git failure must stop the run: returning an empty list would tell Vitest
-// that nothing changed and select no tests at all.
+/**
+ * A git failure must stop the run: returning an empty list would tell Vitest
+ * that nothing changed and select no tests at all.
+ */
 function git(args, cwd) {
   try {
     return execFileSync('git', args, {
@@ -73,9 +75,11 @@ function git(args, cwd) {
 
 const lines = (output) => output.split('\n').filter(Boolean);
 
-// Same sources as Vitest's built-in git provider (commits since the base,
-// staged, then unstaged or untracked), except that renames are listed as a
-// deletion plus an addition so the old path is not lost.
+/**
+ * Same sources as Vitest's built-in git provider (commits since the base,
+ * staged, then unstaged or untracked), except that renames are listed as a
+ * deletion plus an addition so the old path is not lost.
+ */
 export function listGitChangedFiles({ root, changedSince }) {
   const top = git(['rev-parse', '--show-toplevel'], root).trim();
   const committed =
@@ -97,6 +101,7 @@ export function listGitChangedFiles({ root, changedSince }) {
   return { top, files: [...new Set([...committed, ...staged, ...unstaged])] };
 }
 
+/** Tracked and untracked source files that may read a data file. */
 export function listCandidateSources(top) {
   return lines(
     git(
@@ -113,6 +118,7 @@ export function listCandidateSources(top) {
   );
 }
 
+/** The file's text, `TOO_LARGE` over the size cap, or `undefined` when unreadable. */
 function readSource(path) {
   try {
     const text = readFileSync(path, 'utf8');
@@ -122,8 +128,10 @@ function readSource(path) {
   }
 }
 
-// `join('a', 'b')`, `'a/b'`, Windows slashes and a regex-escaped `a\/b` must all
-// look the same.
+/**
+ * `join('a', 'b')`, `'a/b'`, Windows slashes and a regex-escaped `a\/b` must all
+ * look the same.
+ */
 export function normalizeForNeedles(text) {
   return text
     .replace(/\\/g, '/')
@@ -134,8 +142,10 @@ export function normalizeForNeedles(text) {
 const QUOTES = new Set(["'", '"', '`']);
 const MAX_LITERAL_LENGTH = 300;
 
-// Walks from `from` in `step` direction to the nearest quote; whitespace first
-// means the text around it is a sentence, not a path.
+/**
+ * Walks from `from` in `step` direction to the nearest quote; whitespace first
+ * means the text around it is a sentence, not a path.
+ */
 function reachesQuote(text, from, step) {
   const stop = from + step * MAX_LITERAL_LENGTH;
   for (let i = from; i !== stop && i >= 0 && i < text.length; i += step) {
@@ -149,9 +159,11 @@ function reachesQuote(text, from, step) {
   return false;
 }
 
-// A path needle is a path constant when it sits in a quoted literal that holds
-// nothing but a path (`'../../supabase/migrations'`), unlike a message such as
-// `'apply supabase/migrations first'`. Bare words (`'docs'`) never qualify.
+/**
+ * A path needle is a path constant when it sits in a quoted literal that holds
+ * nothing but a path (`'../../supabase/migrations'`), unlike a message such as
+ * `'apply supabase/migrations first'`. Bare words (`'docs'`) never qualify.
+ */
 function namesPathLiteral(text, needle) {
   if (!/[/.]/.test(needle.replace(/^['"`]|['"`]$/g, ''))) {
     return false;
@@ -173,6 +185,7 @@ function namesPathLiteral(text, needle) {
   return false;
 }
 
+/** Source files that read, or hold the path of, any of the changed data files. */
 export function findFsReaders({ changedFiles, listCandidates, readText }) {
   const needles = [...new Set(changedFiles.flatMap(readerNeedlesFor))];
   if (needles.length === 0) {
@@ -207,6 +220,7 @@ export function findFsReaders({ changedFiles, listCandidates, readText }) {
   return readers;
 }
 
+/** The changed files plus the readers of the changed data files, as absolute paths. */
 export function findChangedFilesWithFsReaders({ root, changedSince }) {
   const { top, files } = listGitChangedFiles({ root, changedSince });
   const unsearched = [];
@@ -237,7 +251,9 @@ export function findChangedFilesWithFsReaders({ root, changedSince }) {
   return [...new Set([...files, ...readers])].map((file) => resolve(top, file));
 }
 
-// Vitest's contract is `findChangedFiles(options): Promise<string[]>`.
+/**
+ * Vitest's contract is `findChangedFiles(options): Promise<string[]>`.
+ */
 export default {
   findChangedFiles(options) {
     return Promise.resolve().then(() => findChangedFilesWithFsReaders(options));

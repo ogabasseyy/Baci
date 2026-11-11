@@ -144,6 +144,7 @@ export const FS_READER_FAMILIES = [
   { id: 'vercel', matches: (file) => file === 'vercel.json', floor: 1 },
 ];
 
+/** True for web files whose tests `vitest --changed` can select through imports. */
 export function isTargetableWebFile(file) {
   return (
     WEB_TARGETED_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
@@ -153,6 +154,7 @@ export function isTargetableWebFile(file) {
   );
 }
 
+/** True for mobile storefront files whose tests Jest can select through imports. */
 export function isTargetableMobileStorefrontFile(file) {
   return (
     MOBILE_STOREFRONT_TARGETED_PREFIXES.some((prefix) =>
@@ -172,6 +174,7 @@ export function isTargetableMobileStorefrontFile(file) {
 const PACKAGE_JSON = /(?:^|\/)package\.json$/;
 const VITE_CONFIG = /(?:^|\/)(?:vitest|vite)\.config\.[^/]+$/;
 
+/** True for any `package.json` or Vite/Vitest config, which reruns every test. */
 export function isSharedConfigFile(file) {
   return PACKAGE_JSON.test(file) || VITE_CONFIG.test(file);
 }
@@ -179,13 +182,15 @@ export function isSharedConfigFile(file) {
 // Unit tests and Playwright specs (`*.pw.ts`) are leaf files: nothing imports them.
 const TEST_FILE_NAME = /\.(?:test|spec|pw)\.[^/]+$/;
 
-// A deleted (or renamed-away) source file can leave unchanged tests that still
-// import it. Neither `vitest --changed` nor Jest can select those tests, because
-// the import no longer resolves, so such a deletion keeps the full suite, and so
-// does a deleted fixture next to the code in a targeted folder. Deleted tests and
-// deleted files of the reader families (docs, migrations, workflows, the replay
-// registry, ...) do not: nothing imports a test, and the provider finds the
-// readers of a family file by name.
+/**
+ * A deleted (or renamed-away) source file can leave unchanged tests that still
+ * import it. Neither `vitest --changed` nor Jest can select those tests, because
+ * the import no longer resolves, so such a deletion keeps the full suite, and so
+ * does a deleted fixture next to the code in a targeted folder. Deleted tests and
+ * deleted files of the reader families (docs, migrations, workflows, the replay
+ * registry, ...) do not: nothing imports a test, and the provider finds the
+ * readers of a family file by name.
+ */
 export function isDeletedSourceFile(file) {
   return (
     (isTargetableWebFile(file) || isTargetableMobileStorefrontFile(file)) &&
@@ -194,26 +199,32 @@ export function isDeletedSourceFile(file) {
   );
 }
 
+/** The reader family that claims `file`, if any. */
 export function fsReaderFamilyOf(file) {
   return FS_READER_FAMILIES.find((family) => family.matches(file));
 }
 
+/** True when tests may read `file` through fs. */
 export function isFsReaderFile(file) {
   return fsReaderFamilyOf(file) !== undefined;
 }
 
-// A bare file name only counts when a path separator or a quote sits right before
-// it (`join(dir, 'config.toml')`, `../vercel.json`), so `wrangler.config.toml` or a
-// word in prose does not select tests.
+/**
+ * A bare file name only counts when a path separator or a quote sits right before
+ * it (`join(dir, 'config.toml')`, `../vercel.json`), so `wrangler.config.toml` or a
+ * word in prose does not select tests.
+ */
 function bareNameNeedles(name) {
   return [`/${name}`, `'${name}`, `"${name}`, `\`${name}`];
 }
 
-// Strings to look for in test sources to find the readers of `file`: the file
-// itself, its ancestor directories down to the family floor, and (for files at
-// the repo or app root, or one folder deep) its bare name. Anything inside
-// apps/web is also offered relative to the app root, because tests resolve
-// paths from `process.cwd()`.
+/**
+ * Strings to look for in test sources to find the readers of `file`: the file
+ * itself, its ancestor directories down to the family floor, and (for files at
+ * the repo or app root, or one folder deep) its bare name. Anything inside
+ * apps/web is also offered relative to the app root, because tests resolve
+ * paths from `process.cwd()`.
+ */
 export function readerNeedlesFor(file) {
   const family = fsReaderFamilyOf(file);
   if (!family) {

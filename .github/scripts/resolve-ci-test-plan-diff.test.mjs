@@ -32,6 +32,19 @@ test('bugfix: the diff arguments keep deleted files and both sides of a rename',
   assert.ok(!args.some((arg) => arg.startsWith('--diff-filter')));
 });
 
+test('extra git options go before the revision range, not after it', () => {
+  assert.deepEqual(
+    changedFilesDiffArgs('origin/main', 'HEAD', ['--diff-filter=D']),
+    [
+      'diff',
+      '--name-only',
+      '--no-renames',
+      '--diff-filter=D',
+      'origin/main...HEAD',
+    ]
+  );
+});
+
 test('bugfix: deleted, renamed, modified and added files all reach the planner', () => {
   const repo = createGitFixture();
   try {

@@ -72,6 +72,7 @@ export const MOBILE_STOREFRONT_FULL_TEST_FILES = new Set([
   'apps/mobile-storefront/tsconfig.json',
 ]);
 
+/** True for a file whose change always keeps the full affected test path. */
 export function isFullAffectedTrigger(file) {
   return (
     ROOT_FULL_TEST_FILES.has(file) ||
@@ -123,6 +124,12 @@ function fullAffectedPlan(reason) {
   return { mode: 'full-affected', reason, command: FULL_AFFECTED_COMMAND };
 }
 
+/**
+ * Picks the tests a CI run executes. Only listed classes of files get a targeted
+ * plan; an unknown path, a full trigger, a non-pull-request event or an empty
+ * diff keeps the full affected test path. `changedFiles` includes deletions and
+ * the old side of a rename; `deletedFiles` is the part that no longer exists.
+ */
 export function resolveCiTestPlan({
   baseRef,
   changedFileContents = {},
@@ -226,6 +233,7 @@ export function resolveCiTestPlan({
   };
 }
 
+/** Reads `--base`, `--event` and `--head` from the command line. */
 function parseArgs(argv) {
   const args = {
     baseRef: 'origin/main',
@@ -250,6 +258,7 @@ function parseArgs(argv) {
   return args;
 }
 
+/** Publishes the plan as step outputs when CI provides an output file. */
 function writeGithubOutput(plan) {
   if (!process.env.GITHUB_OUTPUT) {
     return;

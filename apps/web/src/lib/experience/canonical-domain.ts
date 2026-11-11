@@ -23,7 +23,7 @@ function safeHostname(host: string) {
 }
 
 /** Existing scalar RPC returns only an active authoritative custom domain. */
-export async function resolveVerifierCanonicalBase(
+export async function resolveCanonicalBase(
   client: SupabaseClient,
   slug: string,
   rootDomain: string
@@ -40,6 +40,6 @@ export async function resolveVerifierCanonicalBase(
   return safeHostname(result.data ?? `${slug}.${rootDomain}`);
 }
 
-export function validateVerifierRootDomain(rootDomain: string) {
+export function validateCanonicalRootDomain(rootDomain: string) {
   safeHostname(rootDomain);
 }

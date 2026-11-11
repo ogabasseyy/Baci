@@ -22,7 +22,7 @@ interface Options {
   prerenderDelivery?: boolean;
   client?: SupabaseClient;
   runtimeBase: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (slug: string) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
 }
 /** Normal anonymous/RLS reads only; startup remains explicitly uninstalled. */
@@ -163,13 +163,12 @@ export function createPublicExperienceRuntime(
         manifest(merchant),
         loadMerchant(merchant.id),
       ]);
-      if (
-        !head ||
-        !m ||
-        !head.hostOrigin ||
-        new URL(options.canonicalBase(m.slug)).origin !== head.hostOrigin
-      )
-        return null;
+      if (!head || !m || !head.hostOrigin) return null;
+      const canonicalBase = (await options.canonicalBase(m.slug)).replace(
+        /\/$/,
+        ''
+      );
+      if (new URL(canonicalBase).origin !== head.hostOrigin) return null;
       if (
         head.capabilities.some(
           (c) => c.startsWith('cart.') || c.startsWith('checkout.')
@@ -215,7 +214,6 @@ export function createPublicExperienceRuntime(
         head.capabilities,
         m.currency
       );
-      const canonicalBase = options.canonicalBase(m.slug).replace(/\/$/, '');
       const resources = `${base.origin}/published/${m.slug}/${head.buildDigest}`;
       bootstrap.assets = Object.fromEntries(
         (head.assets ?? []).map((a) => [

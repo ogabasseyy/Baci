@@ -23,7 +23,13 @@ it('binds the stack broker to the fixed private auth configuration', async () =>
   const stack = { close: vi.fn() };
   fixture.startStack.mockResolvedValueOnce(stack);
   const settings = {
-    integration: { hostOrigin: 'https://builder.baci.test' },
+    integration: {
+      hostOrigin: 'https://builder.baci.test',
+      publicClient: {
+        rpc: vi.fn(async () => ({ data: 'shop.example.com', error: null })),
+      },
+    },
+    rootDomain: 'usebaci.com',
     port: 10001,
     deliveryPort: 10002,
   } as never;
@@ -31,6 +37,9 @@ it('binds the stack broker to the fixed private auth configuration', async () =>
   const input = fixture.startStack.mock.calls.at(-1)?.[0];
   expect(input.port).toBe(10001);
   expect(input.host.integration.hostOrigin).toBe('https://builder.baci.test');
+  await expect(input.host.integration.canonicalBase('synthetic')).resolves.toBe(
+    'https://shop.example.com'
+  );
   await input.host.startBroker();
   expect(fixture.readConfig).toHaveBeenCalledWith(
     '/var/lib/baci-builder-auth/auth.json',

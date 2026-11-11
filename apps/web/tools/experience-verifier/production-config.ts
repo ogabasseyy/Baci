@@ -1,11 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import {
+  resolveCanonicalBase,
+  validateCanonicalRootDomain,
+} from '@/lib/experience/canonical-domain';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
 import { runnerEndpoint } from '../experience-runner/runner-transport';
-import {
-  resolveVerifierCanonicalBase,
-  validateVerifierRootDomain,
-} from './canonical-domain';
 
 const bytes32 = z
   .string()
@@ -67,7 +67,7 @@ export function parseVerifierProductionConfig(input: unknown) {
       !/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(config.supabase.anonKey)
     )
       throw Error();
-    validateVerifierRootDomain(config.rootDomain);
+    validateCanonicalRootDomain(config.rootDomain);
     productionDeliveryOrigins({
       executionOrigin: config.executionOrigin,
       hostOrigins: [
@@ -83,7 +83,7 @@ export function parseVerifierProductionConfig(input: unknown) {
         key: Buffer.from(config.runner.key, 'base64url'),
       },
       canonicalBase: (slug: string, client: SupabaseClient) =>
-        resolveVerifierCanonicalBase(client, slug, config.rootDomain),
+        resolveCanonicalBase(client, slug, config.rootDomain),
     };
   } catch {
     throw Error('INVALID_VERIFIER_CONFIG');

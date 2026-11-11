@@ -33,7 +33,7 @@ export function createProductionExperienceIntegration(settings: {
   previewOrigin?: string;
   executionOrigin: string;
   artifactDirectory: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (slug: string) => string | Promise<string>;
   publicClient: SupabaseClient;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   authenticate: ExperienceCompositionSettings['authenticate'];
@@ -114,7 +114,7 @@ export function createProductionExperienceIntegration(settings: {
       !/^[a-z0-9][a-z0-9-]{0,99}$/.test(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
-    const canonicalBase = settings.canonicalBase(merchant.data.slug);
+    const canonicalBase = await settings.canonicalBase(merchant.data.slug);
     const canonicalOrigin = new URL(canonicalBase).origin;
     productionDeliveryOrigins({
       executionOrigin: settings.executionOrigin,

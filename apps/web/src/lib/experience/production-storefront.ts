@@ -13,7 +13,7 @@ export function createProductionStorefront(settings: {
   client: SupabaseClient;
   artifactDirectory: string;
   executionOrigin: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (slug: string) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   execute: typeof runLocalQualification;
 }) {
@@ -97,7 +97,7 @@ export function createProductionStorefront(settings: {
         headers: { 'Cache-Control': 'no-store' },
       });
     try {
-      const hostOrigin = new URL(settings.canonicalBase(slug)).origin;
+      const hostOrigin = new URL(await settings.canonicalBase(slug)).origin;
       return await createProductionPublishedDelivery({
         reader,
         hostOrigin,

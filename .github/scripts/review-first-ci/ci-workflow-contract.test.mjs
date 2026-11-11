@@ -5,6 +5,8 @@
 // a skipped job as passed, so a skipped "Build" or "Quality Gate" would let a pull
 // request merge before Codex has looked at it. (The nudge workflow has its own file.)
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const launcher = readFileSync(new URL('./launch-stage.sh', import.meta.url), 'utf8');
 import { describe, it } from 'node:test';
 import YAML from 'yaml';
 import { evaluateExpression } from './expression.mjs';
@@ -138,7 +140,7 @@ describe('the changes job (pinned by the capability-gate contract)', () => {
   }
 
   it('runs the resolver only through the fail-closed wrapper', () => {
-    const run = byId('stage_review').run;
+    const run = launcher;
     assert.match(run, /node "\$entry"/);
     assert.match(run, /stage=quick/);
     assert.equal(byId('stage_review').env.GITHUB_TOKEN, '${{ github.token }}');
@@ -150,13 +152,13 @@ describe('the changes job (pinned by the capability-gate contract)', () => {
     const step = byId('stage_review');
     assert.equal(step.env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');
     // the base commit must be there, then the scripts are taken from it (git archive), not from the checkout
-    assert.match(step.run, /git cat-file -e "\$\{BASE_SHA\}\^\{commit\}"/);
-    assert.match(step.run, /git archive "\$BASE_SHA" \.github\/scripts\/review-first-ci/);
+    assert.match(launcher, /git cat-file -e "\$\{BASE_SHA\}\^\{commit\}"/);
+    assert.match(launcher, /git archive "\$BASE_SHA" \.github\/scripts\/review-first-ci/);
     // only the pull request that introduces the scripts falls back to its own copy, with a warning
-    assert.match(step.run, /the base branch has no review-first scripts yet/);
-    assert.doesNotMatch(step.run, /node \.github\/scripts/);
+    assert.match(launcher, /the base branch has no review-first scripts yet/);
+    assert.doesNotMatch(launcher, /node \.github\/scripts/);
     // a missing base commit fails closed instead of falling back
-    assert.match(step.run, /the base commit is not in this checkout/);
+    assert.match(launcher, /the base commit is not in this checkout/);
   });
 
   it('runs the stage step after the capability gate (no PR-controlled script before it)', () => {
@@ -181,7 +183,7 @@ describe('checkout browser regression follows the same stage', () => {
     assert.equal(job['runs-on'], 'ubuntu-24.04');
     assert.deepEqual(job.permissions, { contents: 'read', issues: 'read', 'pull-requests': 'read' });
     assert.deepEqual(job.steps.map((step) => step.id).filter(Boolean), ['stage_full', 'stage_review']);
-    assert.match(job.steps.find((step) => step.id === 'stage_review').run, /resolve-stage\.mjs/);
+    assert.equal(job.steps.find((step) => step.id === 'stage_review').run, 'bash .github/scripts/review-first-ci/launch-stage.sh');
   });
 
   it('decides the stage with exactly the same base-owned script step as ci.yml', () => {
@@ -206,3 +208,10 @@ describe('checkout browser regression follows the same stage', () => {
     assert.deepEqual(Object.keys(browser.on).sort(), ['merge_group', 'pull_request', 'push', 'workflow_dispatch']);
   });
 });
+
+ it('shares the extracted stage launcher between both workflows', () => {
+   for (const workflow of [ci, browser]) {
+     const step = Object.values(workflow.jobs).flatMap((job) => job.steps ?? []).find((entry) => entry.id === 'stage_review');
+     assert.equal(step.run, 'bash .github/scripts/review-first-ci/launch-stage.sh');
+   }
+ });

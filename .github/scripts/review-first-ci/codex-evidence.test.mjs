@@ -214,8 +214,10 @@ describe('findings arrive as reviews and inline comments', () => {
     assert.notEqual(item.sha, inlineFinding.commit_id);
   });
 
-  it('ignores Codex replies inside an existing thread', () => {
-    assert.deepEqual(evidenceFromReviewComment({ ...inlineFinding, in_reply_to_id: 42 }).evidence, []);
+  it('collects marked Codex findings posted as thread replies', () => {
+    const [finding] = evidenceFromReviewComment({ ...inlineFinding, in_reply_to_id: 42 }).evidence;
+    assert.equal(finding.kind, 'findings');
+    assert.equal(finding.sha, inlineFinding.original_commit_id);
   });
 
   it('ignores inline comments from other authors', () => {

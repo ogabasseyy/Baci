@@ -36,6 +36,7 @@ function scenario({ baseScript, prScript, baseSha }) {
   // the "pull request" commit rewrites the script in its own checkout
   mkdirSync(path.join(repo, path.dirname(ENTRY)), { recursive: true });
   writeFileSync(path.join(repo, ENTRY), prScript);
+  writeFileSync(path.join(repo, '.github/scripts/review-first-ci/launch-stage.sh'), readFileSync(new URL('./launch-stage.sh', import.meta.url)));
   git(repo, 'add', '-A');
   git(repo, 'commit', '-q', '-m', 'pull request');
 

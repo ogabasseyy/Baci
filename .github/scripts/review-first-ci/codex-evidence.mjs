@@ -129,7 +129,7 @@ export function evidenceFromReview(review) {
 }
 
 export function evidenceFromReviewComment(comment) {
-  if (!comment || !isCodexAuthor(comment.user) || comment.in_reply_to_id) return none();
+  if (!comment || !isCodexAuthor(comment.user)) return none();
   const body = String(comment.body ?? '');
   const problems = versionProblem(body);
   if (problems.length > 0) {

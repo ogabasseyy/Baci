@@ -155,6 +155,14 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
     assert.match(guarded, /^ +bash \.github\/scripts\/install-postgresql-hosted\.sh$/m, `${job} / ${name} installs through the shared script`);
     assert.match(script.slice(script.lastIndexOf('\nfi\n')), /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/, `${job} / ${name}`);
   }
+  // The scratch-database suites run on these same binaries, so each install step also checks the release they report:
+  // a server with older binaries would otherwise run the suites silently, and only DB Replay would notice.
+  for (const [job, name] of POSTGRESQL_STEPS) {
+    const script = scriptOf(job, name);
+    const afterInstall = script.slice(script.lastIndexOf('\nfi\n'));
+    assert.match(afterInstall, /^\/usr\/lib\/postgresql\/18\/bin\/postgres --version \| grep -Eq '\^postgres /m, `${job} / ${name} checks the postgres release`);
+    assert.match(afterInstall, /^\/usr\/lib\/postgresql\/18\/bin\/psql --version \| grep -Eq '\^psql /m, `${job} / ${name} checks the psql release`);
+  }
 });
 
 test('no CI step or install script uses PostgreSQL 16 any more; every PG_BIN is PostgreSQL 18', async () => {
@@ -191,6 +199,12 @@ test('every PostgreSQL 18 pin names the same release: hosted install, psql check
   const checked = checkedAll[0];
   assert.equal(checkedAll.length, 2, 'both the psql and the postgres version checks must exist');
   assert.deepEqual([...new Set(checkedAll)], [build[1]], 'the psql and postgres version checks must match the pinned release');
+  // The scratch-database install steps check the release of the binaries they use: postgres and psql, both the pinned one.
+  for (const [job, name] of POSTGRESQL_STEPS) {
+    const stepScript = scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
+    const stepChecks = [...stepScript.matchAll(/PostgreSQL\\\) 18\\\.(\d+)\(/g)].map((match) => match[1]);
+    assert.deepEqual(stepChecks, [build[1], build[1]], `${job} / ${name} must check the pinned release for postgres and psql`);
+  }
   // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
   const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
   assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');

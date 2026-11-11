@@ -50,7 +50,10 @@ describe('readStoredPvbCredit', () => {
       pvb_reference: { data: ROW, error: null },
     });
 
-    await expect(readStoredPvbCredit(supabase, input)).resolves.toEqual(ROW);
+    await expect(readStoredPvbCredit(supabase, input)).resolves.toEqual({
+      row: ROW,
+      legacyKeyOwnedByOther: false,
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       column: 'pvb_reference',
@@ -67,11 +70,32 @@ describe('readStoredPvbCredit', () => {
       provider_payout_id: { data: legacy, error: null },
     });
 
-    await expect(readStoredPvbCredit(supabase, input)).resolves.toEqual(legacy);
+    await expect(readStoredPvbCredit(supabase, input)).resolves.toEqual({
+      row: legacy,
+      legacyKeyOwnedByOther: false,
+    });
     expect(calls.map((call) => call.column)).toEqual([
       'pvb_reference',
       'provider_payout_id',
     ]);
+  });
+
+  it('flags an incoming internal id already owned by a different credit', async () => {
+    // Stored A/payout-0 and B/payout-1; incoming A/payout-1.
+    const { supabase } = client({
+      pvb_reference: {
+        data: { ...ROW, provider_payout_id: 'payout-0' },
+        error: null,
+      },
+      provider_payout_id: {
+        data: { ...ROW, pvb_reference: 'PVB01OTHER' },
+        error: null,
+      },
+    });
+
+    await expect(readStoredPvbCredit(supabase, input)).resolves.toMatchObject({
+      legacyKeyOwnedByOther: true,
+    });
   });
 
   it('returns null when neither key finds a row', async () => {

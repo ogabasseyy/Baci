@@ -121,6 +121,22 @@ BEGIN
     RAISE EXCEPTION 'interest insert must fail closed while a legacy NULL row exists';
   EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
   END;
+  -- The legacy credit's own redelivery (same internal ids) is exempt: it
+  -- reports [] for the app's duplicate path instead of raising.
+  IF piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01PVBREF11', 'provider_transaction_id', 'pvbref-legacy-txn',
+      'event_data_id', 'd', 'event_id', 'pvbref-evt-11', 'customer_id', 'c', 'wallet_id', 'w',
+      'amount_kobo', 1000, 'fee_kobo', 0, 'reference', 'r',
+      'credited_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'legacy inflow redelivery must dedupe, not raise';
+  END IF;
+  IF piggyvest_webhook_intake.interest_payout_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01PVBREF12', 'provider_payout_id', 'pvbref-legacy-payout',
+      'event_id', 'pvbref-evt-12', 'customer_id', 'c', 'wallet_id', 'w', 'amount_kobo', 90,
+      'gross_kobo', 100, 'withholding_tax_kobo', 10, 'net_kobo', 90, 'reference', 'r',
+      'batch_id', 'b', 'paid_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'legacy interest redelivery must dedupe, not raise';
+  END IF;
   -- The gate is per customer: another customer's credit still lands.
   IF jsonb_array_length(piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
       'pvb_reference', 'PVB01PVBREF10', 'provider_transaction_id', 'pvbref-other-txn',
@@ -128,6 +144,58 @@ BEGIN
       'wallet_id', 'w2', 'amount_kobo', 1000, 'fee_kobo', 0, 'reference', 'r',
       'credited_at', '2026-11-11T10:00:00.000Z'))) <> 1 THEN
     RAISE EXCEPTION 'another customer must not be blocked by a legacy row';
+  END IF;
+END $$;
+
+-- Regression (bugfix): an interest inbox row recorded before the fix with
+-- the PVB-internal destination_wallet becomes replay-compatible, rows
+-- without matching stored evidence stay untouched, and legacy ledger rows
+-- take their own event's pvb_reference.
+RESET ROLE;
+DO $$
+DECLARE
+  result jsonb;
+BEGIN
+  IF has_function_privilege('anon', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE')
+    OR has_function_privilege('piggyvest_webhook_intake', 'public.piggyvest_repair_pvb_reference_attribution()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'repair function must not be executable by API or intake roles';
+  END IF;
+
+  INSERT INTO public.piggyvest_webhook_inbox (event_id, event_type, event_category, customer_id,
+    wallet_id, reference, amount_kobo, status, event_details)
+  VALUES
+    ('repair-evt-old', 'interest-payout.success', 'interest-payout', 'repair-c', 'pvb-internal',
+     'PVB01REPAIR1', 90, 'failed', '{"pvb_wallet": "plan-wallet", "destination_wallet": "pvb-internal"}'),
+    ('repair-evt-other', 'interest-payout.success', 'interest-payout', 'repair-c', 'something-else',
+     'PVB01REPAIR2', 90, 'failed', '{"pvb_wallet": "plan-wallet", "destination_wallet": "pvb-internal"}'),
+    ('repair-evt-nowallet', 'interest-payout.success', 'interest-payout', 'repair-c', 'pvb-internal',
+     'PVB01REPAIR3', 90, 'failed', '{"destination_wallet": "pvb-internal"}'),
+    ('repair-evt-inflow', 'bank-transfer.inflow.success', 'bank-transfer', 'repair-c', 'plan-wallet',
+     'PVB01REPAIR4', 1000, 'processed', NULL);
+  INSERT INTO public.piggyvest_inflow_credits (provider_transaction_id, event_data_id, event_id,
+    customer_id, wallet_id, amount_kobo, fee_kobo, reference, credited_at)
+  VALUES ('repair-txn', 'd', 'repair-evt-inflow', 'repair-c', 'plan-wallet', 1000, 0, 'r', now());
+
+  result := public.piggyvest_repair_pvb_reference_attribution();
+  IF (result->>'inbox_reattributed')::int <> 1 OR (result->>'inflow_backfilled')::int < 1 THEN
+    RAISE EXCEPTION 'repair counts unexpected: %', result;
+  END IF;
+  IF (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-old') <> 'plan-wallet' THEN
+    RAISE EXCEPTION 'destination-attributed interest inbox row must move to pvb_wallet';
+  END IF;
+  IF (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-other') <> 'something-else'
+    OR (SELECT wallet_id FROM public.piggyvest_webhook_inbox WHERE event_id = 'repair-evt-nowallet') <> 'pvb-internal' THEN
+    RAISE EXCEPTION 'rows without matching stored evidence must stay untouched';
+  END IF;
+  IF (SELECT pvb_reference FROM public.piggyvest_inflow_credits WHERE provider_transaction_id = 'repair-txn')
+      IS DISTINCT FROM 'PVB01REPAIR4' THEN
+    RAISE EXCEPTION 'legacy inflow row must take its own event pvb_reference';
+  END IF;
+  result := public.piggyvest_repair_pvb_reference_attribution();
+  IF (result->>'inbox_reattributed')::int <> 0 THEN
+    RAISE EXCEPTION 'repair must be idempotent: %', result;
   END IF;
 END $$;
 

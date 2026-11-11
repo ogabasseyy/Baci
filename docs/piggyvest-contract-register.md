@@ -270,18 +270,31 @@ not unique keys either.
   `pvb_reference`, a redelivery under a NEW internal id could otherwise
   credit twice, so while a NULL row exists for a customer the intake insert
   functions refuse THAT customer's new credits with a retryable `55000`
-  (503 / drain retry); other customers are unaffected. An operator must set
+  (503 / drain retry); other customers are unaffected, and a redelivery
+  whose internal id is already stored (the legacy credit itself) is exempt
+  and dedupes normally. An operator must set
   those rows' `pvb_reference` from verified evidence. The migration does
   not abort on them, so deploys are not blocked. Runbook check before live
   traffic (read-only):
   `SELECT customer_id, count(*) FROM public.piggyvest_inflow_credits WHERE pvb_reference IS NULL GROUP BY 1;`
   and the same for `piggyvest_interest_payouts`.
+  Repair path: `SELECT public.piggyvest_repair_pvb_reference_attribution();`
+  (migration owner only; evidence-only, idempotent) re-runs the inbox
+  re-attribution and the backfill, e.g. after restoring inbox evidence.
+  Rows it still cannot prove need a manual `pvb_reference` from PiggyVest's
+  transaction list.
+- A known `pvb_reference` arriving with an internal id that already belongs
+  to a DIFFERENT stored credit is quarantined as a conflict
+  (`provider_transaction_id` / `provider_payout_id`), not acked.
 - Duplicate verification compares only money and attribution: customer,
   wallet, amounts (inflow `amount`/`fee`; interest gross/tax/net/amount) and
   a non-null stored `pvb_reference`. The eventData internals (`id`,
   `reference`, `session_id`, `batch_id`, `timestamp`, `transaction_id`)
   are audit-only, because PiggyVest guarantees only `pvb_reference` and,
   with no resend endpoint, a false conflict would strand the delivery.
+  Drift in those internals on a deduped credit still pages
+  (`PIGGYVEST_CREDIT_AUDIT_DRIFT`, field names only), so a reused
+  `pvb_reference` or provider bug is seen rather than silently acked.
 - Plan-transfer projection key NOT changed: it stays
   `plan-transfer:{provider_transaction_id}` of the stored (first-writer)
   row. Changing it to `pvb_reference` would project already-credited rows a

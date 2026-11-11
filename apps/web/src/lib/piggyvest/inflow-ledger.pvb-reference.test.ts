@@ -113,6 +113,7 @@ function fakeLedger(seed: Row[] = []) {
 describe('bugfix: inflow credits deduped on internal transaction_id', () => {
   it('credits once when two deliveries share pvb_reference but differ in transaction_id', async () => {
     // Arrange
+    const alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { client, rows, rpc } = fakeLedger();
     const first = delivery();
     const retry = delivery({
@@ -134,6 +135,13 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
       pvb_reference: 'PVB01SYNTHETIC001',
       provider_transaction_id: 'internal-txn-synthetic-001',
     });
+    // The drifted internal id is paged by name, never silently acked.
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"same pvb_reference, audit fields differ: provider_transaction_id"'
+      )
+    );
+    alerts.mockRestore();
     expect(rpc).toHaveBeenCalledTimes(2);
     for (const [, args] of rpc.mock.calls as unknown as [string, Row][]) {
       expect(args).toMatchObject({
@@ -168,6 +176,34 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
       conflict: { mismatchedFields: ['pvb_reference'] },
     });
     expect(rows).toHaveLength(1);
+  });
+
+  it("quarantines a known pvb_reference arriving with another credit's internal id", async () => {
+    // Stored A/txn-1 and B/txn-2; incoming A/txn-2.
+    const { client, rows } = fakeLedger();
+    await recordInflowCredit(client, delivery());
+    await recordInflowCredit(
+      client,
+      delivery({
+        eventId: 'evt-synthetic-005',
+        pvbReference: 'PVB01SYNTHETIC002',
+        transactionId: 'internal-txn-synthetic-002',
+      })
+    );
+
+    await expect(
+      recordInflowCredit(
+        client,
+        delivery({
+          eventId: 'evt-synthetic-006',
+          transactionId: 'internal-txn-synthetic-002',
+        })
+      )
+    ).rejects.toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['provider_transaction_id'] },
+    });
+    expect(rows).toHaveLength(2);
   });
 
   it('writes pvb_reference on every new credit', async () => {

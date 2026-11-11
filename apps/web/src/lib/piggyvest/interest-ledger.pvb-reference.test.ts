@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { InterestPayoutSuccessEvent } from '@/schemas/piggyvest/events';
 import { recordInterestPayout } from './interest-ledger';
 
@@ -92,6 +92,7 @@ function fakeLedger() {
 
 describe('interest payouts deduped on pvb_reference', () => {
   it('credits once when a retry changes the internal id, batch, reference and timestamp', async () => {
+    const alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { client, rows } = fakeLedger();
 
     const outcomes = [
@@ -110,6 +111,12 @@ describe('interest payouts deduped on pvb_reference', () => {
 
     expect(outcomes).toEqual(['credited', 'duplicate']);
     expect(rows).toHaveLength(1);
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'audit fields differ: provider_payout_id, reference, batch_id, paid_at'
+      )
+    );
+    alerts.mockRestore();
   });
 
   it('quarantines a different pvb_reference that reuses an internal payout id', async () => {

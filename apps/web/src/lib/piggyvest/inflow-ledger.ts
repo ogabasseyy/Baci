@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BankTransferInflowSuccessEvent } from '@/schemas/piggyvest/events';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
+import { alertCreditAuditDrift } from './credit-audit-drift';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
 import { readStoredPvbCredit } from './stored-pvb-credit';
 
@@ -158,7 +159,7 @@ export async function recordInflowCredit(
   // money and attribution fields before calling it a duplicate. First writer
   // wins; a mismatch is a provider conflict for quarantine, never a silent
   // ack.
-  const stored = await readStoredPvbCredit(supabase, {
+  const found = await readStoredPvbCredit(supabase, {
     table: 'piggyvest_inflow_credits',
     schema: storedPvbCreditRowSchemas.inflow,
     pvbReference: event.pvb_reference,
@@ -170,13 +171,18 @@ export async function recordInflowCredit(
       'Inflow duplicate verify failed'
     );
   });
-  if (!stored) {
+  if (!found) {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_STORAGE_ERROR',
       'Inflow duplicate receipt vanished before verify'
     );
   }
+  const stored = found.row;
   const mismatchedFields: string[] = [];
+  // The incoming internal id belongs to a different stored credit: a reuse
+  // the pvb_reference match alone would miss.
+  if (found.legacyKeyOwnedByOther)
+    mismatchedFields.push('provider_transaction_id');
   // A legacy row (NULL pvb_reference) is the same credit by its old key; a
   // different non-null pvb_reference means the internal transaction id was
   // reused by another credit. transaction_id itself is audit-only: the same
@@ -225,6 +231,21 @@ export async function recordInflowCredit(
       }
     );
   }
+  // Same credit: page (never conflict) if its audit-only internals drifted.
+  alertCreditAuditDrift({
+    eventType: 'bank-transfer.inflow.success',
+    pvbReference: event.pvb_reference,
+    driftedFields: [
+      stored.provider_transaction_id !== detail.transaction_id &&
+        'provider_transaction_id',
+      stored.event_data_id !== detail.id && 'event_data_id',
+      stored.reference !== detail.reference && 'reference',
+      (stored.session_id ?? null) !== (detail.session_id ?? null) &&
+        'session_id',
+      new Date(stored.credited_at).getTime() !==
+        new Date(detail.timestamp).getTime() && 'credited_at',
+    ].filter((field): field is string => typeof field === 'string'),
+  });
   // Redeliveries retry the projection: the first delivery may have
   // credited-then-thrown on ambiguity, and only a later delivery can
   // project once the goal set resolves to one candidate. Project under the

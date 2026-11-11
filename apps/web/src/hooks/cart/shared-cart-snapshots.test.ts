@@ -266,6 +266,59 @@ describe('useSharedCart polling', () => {
     }
   });
 
+  it('shares one read between visibility and focus firing together', async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useSharedCart({
+          merchantId: MERCHANT_ID,
+          merchantSlug: SLUG,
+          sessionGeneration: 1,
+        })
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.cartId).toBe(CART_ID);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1);
+
+      // Returning to the tab fires both events before the first read
+      // settles; a second read would hold the cart request lock and delay
+      // the shopper's next edit by a full round trip.
+      let settle: (value: unknown) => void = () => {};
+      vi.mocked(fetchSharedCartSnapshot).mockReturnValueOnce(
+        new Promise((resolve) => {
+          settle = resolve;
+        }) as ReturnType<typeof fetchSharedCartSnapshot>
+      );
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        window.dispatchEvent(new Event('focus'));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2);
+
+      // A failed read gives the window back so the next focus retries.
+      await act(async () => {
+        settle({
+          code: 'temporarily_unavailable',
+          ok: false,
+          retryable: true,
+          snapshot: null,
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        window.dispatchEvent(new Event('focus'));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('converges a dropped realtime update within one poll window', async () => {
     vi.useFakeTimers();
     try {

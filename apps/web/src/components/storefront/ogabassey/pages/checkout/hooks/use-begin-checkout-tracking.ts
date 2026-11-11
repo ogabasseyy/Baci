@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import type { CartItem } from '@/hooks/cart';
+import { getCartItemCheckoutUnitPrice } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 
 type EventTrackingModule = typeof import('@/lib/event-tracking');
@@ -80,7 +81,9 @@ export function useBeginCheckoutTracking({
       product: {
         id: item.id,
         name: item.name,
-        price: item.negotiatedPrice ?? item.price,
+        // Same unit price checkout charges: unaccepted price proposals
+        // stay at catalog and quiz vouchers are free.
+        price: getCartItemCheckoutUnitPrice(item),
         category: item.category,
         categories: item.categories,
       },

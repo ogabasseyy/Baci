@@ -143,4 +143,28 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
 
     await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
   });
+
+  it('reports the catalog price for an unaccepted price proposal', async () => {
+    renderHook(() =>
+      useBeginCheckoutTracking(
+        params({
+          checkoutCart: [
+            cartLine({ negotiatedPrice: 700_000, negotiationStatus: 'pending' }),
+          ],
+        })
+      )
+    );
+
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+    expect(beginCheckout).toHaveBeenCalledWith(
+      'merchant-1',
+      [
+        {
+          product: expect.objectContaining({ price: 900_000 }),
+          quantity: 1,
+        },
+      ],
+      'NGN'
+    );
+  });
 });

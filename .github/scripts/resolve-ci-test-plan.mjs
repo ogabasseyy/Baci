@@ -4,13 +4,68 @@ import { pathToFileURL } from 'node:url';
 import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import {
   isFsReaderFile,
-  isFullAffectedTrigger,
   isTargetableMobileStorefrontFile,
   isTargetableWebFile,
 } from './resolve-ci-test-plan-paths.mjs';
 
 const FULL_AFFECTED_COMMAND =
   'pnpm turbo run test --concurrency=3 --log-order=stream';
+
+export const ROOT_FULL_TEST_FILES = new Set([
+  '.github/scripts/experience-runner-ci.test.mjs',
+  '.npmrc',
+  '.github/scripts/resolve-ci-test-plan.mjs',
+  '.github/scripts/resolve-ci-test-plan-config.mjs',
+  '.github/scripts/resolve-ci-test-plan-config.test.mjs',
+  '.github/scripts/resolve-ci-test-plan.test.mjs',
+  '.github/workflows/ci.yml',
+  'biome.json',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'turbo.json',
+]);
+
+export const ROOT_FULL_TEST_PREFIXES = [
+  '.github/actions/',
+  // The planner, its path classes and the Vitest provider decide what CI runs.
+  '.github/scripts/resolve-ci-test-plan',
+  '.github/scripts/vitest-changed-files-provider',
+  'packages/shared/',
+  'packages/experience-sdk/',
+  'tsconfig',
+];
+
+export const WEB_FULL_TEST_FILES = new Set([
+  'apps/web/jest.config.mjs',
+  'apps/web/jest.setup.js',
+  'apps/web/next.config.test.ts',
+  'apps/web/next.config.ts',
+  'apps/web/package.json',
+  'apps/web/tsconfig.json',
+  'apps/web/vitest.config.ts',
+  'apps/web/vitest.experience-runner.config.ts',
+  'apps/web/vitest.setup.ts',
+]);
+
+export const MOBILE_STOREFRONT_FULL_TEST_FILES = new Set([
+  'apps/mobile-storefront/app.config.ts',
+  'apps/mobile-storefront/babel.config.js',
+  'apps/mobile-storefront/jest.config.js',
+  'apps/mobile-storefront/jest.setup.ts',
+  'apps/mobile-storefront/metro.config.js',
+  'apps/mobile-storefront/package.json',
+  'apps/mobile-storefront/tsconfig.json',
+]);
+
+export function isFullAffectedTrigger(file) {
+  return (
+    ROOT_FULL_TEST_FILES.has(file) ||
+    WEB_FULL_TEST_FILES.has(file) ||
+    MOBILE_STOREFRONT_FULL_TEST_FILES.has(file) ||
+    ROOT_FULL_TEST_PREFIXES.some((prefix) => file.startsWith(prefix))
+  );
+}
 
 const WEB_SOURCE_REASON =
   'Pull request changes are limited to apps/web source or test files.';

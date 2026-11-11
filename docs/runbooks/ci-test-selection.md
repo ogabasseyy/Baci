@@ -23,7 +23,8 @@ all. A contract test (`resolve-ci-test-plan-contract.test.mjs`) fails if you do.
 
 ## Which files keep the full suite
 
-The classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
+The full triggers are listed in `.github/scripts/resolve-ci-test-plan.mjs`; the
+other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
 
 - **Full suite:** CI wiring (`ci.yml`, `.github/actions`, the planner and the
   Vitest provider), shared packages, `package.json`, lockfile, `tsconfig`,
@@ -63,5 +64,9 @@ edit still runs the full suite.
   and a test in `resolve-ci-test-plan-paths.test.mjs`.
 - Upgrading Vitest: `experimental.vcsProvider` is experimental. The contract
   test fails if the new version drops it; replace the provider before upgrading.
+- Keep file-name lists in the planner file itself. The storefront release gate
+  (`storefront-release-gate-references.mjs`) follows script file names out of
+  `ci.yml` at most 6 hops and fails the `changes` job beyond that; moving the
+  lists into another module pushed an existing chain over the limit.
 - Local check:
   `node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs`

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import YAML from 'yaml';
-import { isFullAffectedTrigger } from './resolve-ci-test-plan-paths.mjs';
+import { isFullAffectedTrigger } from './resolve-ci-test-plan.mjs';
 
 const PLANNER_SOURCES = [
   '.github/scripts/resolve-ci-test-plan.mjs',

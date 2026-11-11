@@ -7,6 +7,10 @@
 //
 // A changed path is checked against these classes:
 //   1. full trigger      - shared code, CI wiring or test setup: run everything.
+//                          (Listed in resolve-ci-test-plan.mjs, not here: the
+//                          storefront release gate follows file names out of
+//                          ci.yml at most 6 hops, and these names lead into
+//                          apps/web, so they must stay one hop from the planner.)
 //   2. web targeted      - apps/web code and tests: `vitest --changed` follows imports.
 //   3. storefront        - mobile storefront code and tests: `jest --changedSince`.
 //   4. fs-reader family  - data files that tests READ through fs (SQL, docs,
@@ -15,53 +19,6 @@
 //                          that mention the changed path.
 //   5. in none of them   - unknown, so the planner keeps the full suite.
 // One full trigger, or one unknown path, is enough to keep the full suite.
-
-export const ROOT_FULL_TEST_FILES = new Set([
-  '.github/scripts/experience-runner-ci.test.mjs',
-  '.npmrc',
-  '.github/scripts/resolve-ci-test-plan.mjs',
-  '.github/scripts/resolve-ci-test-plan-config.mjs',
-  '.github/scripts/resolve-ci-test-plan-config.test.mjs',
-  '.github/scripts/resolve-ci-test-plan.test.mjs',
-  '.github/workflows/ci.yml',
-  'biome.json',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'turbo.json',
-]);
-
-export const ROOT_FULL_TEST_PREFIXES = [
-  '.github/actions/',
-  // The planner, its path classes and the Vitest provider decide what CI runs.
-  '.github/scripts/resolve-ci-test-plan',
-  '.github/scripts/vitest-changed-files-provider',
-  'packages/shared/',
-  'packages/experience-sdk/',
-  'tsconfig',
-];
-
-export const WEB_FULL_TEST_FILES = new Set([
-  'apps/web/jest.config.mjs',
-  'apps/web/jest.setup.js',
-  'apps/web/next.config.test.ts',
-  'apps/web/next.config.ts',
-  'apps/web/package.json',
-  'apps/web/tsconfig.json',
-  'apps/web/vitest.config.ts',
-  'apps/web/vitest.experience-runner.config.ts',
-  'apps/web/vitest.setup.ts',
-]);
-
-export const MOBILE_STOREFRONT_FULL_TEST_FILES = new Set([
-  'apps/mobile-storefront/app.config.ts',
-  'apps/mobile-storefront/babel.config.js',
-  'apps/mobile-storefront/jest.config.js',
-  'apps/mobile-storefront/jest.setup.ts',
-  'apps/mobile-storefront/metro.config.js',
-  'apps/mobile-storefront/package.json',
-  'apps/mobile-storefront/tsconfig.json',
-]);
 
 export const WEB_TARGETED_PREFIXES = [
   'apps/web/mcp-server/',
@@ -168,15 +125,6 @@ export const FS_READER_FAMILIES = [
     floor: Number.POSITIVE_INFINITY,
   },
 ];
-
-export function isFullAffectedTrigger(file) {
-  return (
-    ROOT_FULL_TEST_FILES.has(file) ||
-    WEB_FULL_TEST_FILES.has(file) ||
-    MOBILE_STOREFRONT_FULL_TEST_FILES.has(file) ||
-    ROOT_FULL_TEST_PREFIXES.some((prefix) => file.startsWith(prefix))
-  );
-}
 
 export function isTargetableWebFile(file) {
   return (

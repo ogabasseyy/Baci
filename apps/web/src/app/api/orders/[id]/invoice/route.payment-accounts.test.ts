@@ -9,6 +9,9 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { GET } from './route';
 
+vi.mock('@/lib/rate-limiter', () => ({
+  checkRateLimit: vi.fn(async () => true),
+}));
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 vi.mock('@/lib/peppol-ubl-invoice', () => ({

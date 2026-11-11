@@ -23,6 +23,7 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
+import { checkRateLimit } from '@/lib/rate-limiter';
 import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
@@ -101,6 +102,19 @@ export async function GET(
       return NextResponse.json(
         { error: 'Invalid order ID', code: 'INVALID_ID' },
         { status: 400 }
+      );
+    }
+    const isAllowed = await checkRateLimit(
+      supabase,
+      user.id,
+      'merchant_invoice_download',
+      10,
+      1
+    );
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': '60' } }
       );
     }
     const orderId = parsed.data.id;

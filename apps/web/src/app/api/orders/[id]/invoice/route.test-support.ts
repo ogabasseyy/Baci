@@ -5,12 +5,17 @@ import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
 } from '@/lib/peppol-ubl-invoice';
+import { checkRateLimit } from '@/lib/rate-limiter';
 import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
 import { createClient } from '@/lib/supabase/server';
 import { GET } from './route';
+
+vi.mock('@/lib/rate-limiter', () => ({
+  checkRateLimit: vi.fn(async () => true),
+}));
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(),
@@ -232,6 +237,7 @@ function getGeneratedReceiptItems() {
 }
 
 export const invoiceTestSupport = {
+  checkRateLimit,
   cookies,
   NextRequest,
   generatePeppolInvoiceXml,

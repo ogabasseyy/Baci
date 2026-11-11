@@ -50,6 +50,32 @@ describe('POST /api/events durable pipeline', () => {
     expect(mocks.record).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
+        deliveryData: {
+          analytics_consent: true,
+          marketing_consent: true,
+        },
+        eventName: 'analytics.page_view.v1',
+        trustLevel: 'tenant_verified_client',
+      })
+    );
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('records ad-matching fields for a consented conversion event', async () => {
+    mocks.record.mockResolvedValue({ queue_message_id: 1 });
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: MERCHANT_ID,
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+
+    const response = await POST(request(MERCHANT_ID, true, 'add_to_cart'));
+
+    expect(response.status).toBe(200);
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
         deliveryData: expect.objectContaining({
           fbc: 'fb.1.click',
           fbp: 'fbp.1',
@@ -58,11 +84,28 @@ describe('POST /api/events durable pipeline', () => {
           ttp: 'ttp.1',
           ua: 'Baci test agent',
         }),
-        eventName: 'analytics.page_view.v1',
-        trustLevel: 'tenant_verified_client',
       })
     );
-    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it('records no personal fields for a no-consent page view', async () => {
+    mocks.record.mockResolvedValue({ queue_message_id: 1 });
+    mocks.resolveContext.mockResolvedValue({
+      merchantId: MERCHANT_ID,
+      ok: true,
+      trustLevel: 'tenant_verified_client',
+      verified: true,
+    });
+
+    const response = await POST(request(MERCHANT_ID, false, 'page_view'));
+
+    expect(response.status).toBe(200);
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        deliveryData: { analytics_consent: false, marketing_consent: false },
+      })
+    );
   });
 
   it('rejects a host and body merchant mismatch', async () => {

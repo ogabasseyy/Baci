@@ -16,6 +16,7 @@ import {
 } from '@/lib/events/event-pipeline-config';
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
+import { minimizeDeliveryData } from '@/lib/events/minimize-delivery-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
 import { logger } from '@/lib/logger';
@@ -152,7 +153,10 @@ export async function POST(request: NextRequest) {
       });
       try {
         await recordAnalyticsDomainEvent(eventSupabase, {
-          deliveryData: deliveryData(input, request),
+          deliveryData: minimizeDeliveryData(
+            deliveryData(input, request),
+            eventType
+          ),
           eventData,
           eventName: toClientAnalyticsDomainEventName(
             eventType,

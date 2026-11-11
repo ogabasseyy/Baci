@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
+import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -37,14 +38,37 @@ it('uses normal authenticated RLS for owner preview handoff and denies another u
     const consumeNonce = await createOwnerPreviewNonceStore(noncePool);
     const key = new Uint8Array(32).fill(9);
     const now = Date.now();
-    const launch = vi.fn(async () => ({ ok: true }));
+    const launch = vi.fn(async () => ({
+      src: `https://output.runtime.test/resource/${'a'.repeat(64)}/index.html`,
+      bindingId: randomUUID(),
+      merchantId: f.merchantId,
+      buildDigest: 'b'.repeat(64),
+      instanceId: randomUUID(),
+      nonce: randomUUID(),
+      expiresAt: now + 300000,
+      canonicalBase: 'https://merchant.synthetic.test/shop',
+      routes: [{ path: '/', view: 'home' }],
+      bootstrap: {
+        route: {
+          epoch: 1,
+          routeId: 'home',
+          params: {},
+          canonicalPath: '/',
+          publicDataRevision: 'r',
+        },
+        catalog: { products: [], revision: 'r' },
+        capabilities: [],
+      },
+    }));
     const bridge = createOwnerPreviewBridge({
       key,
       now: () => now,
       previewOrigin: 'https://builder.synthetic.test',
       consumeNonce,
       resolveUserClient: async (token) =>
-        token === 'owner.fixture.token' ? f.owner.supabase : f.other.supabase,
+        token === 'owner.fixture.token' || token === f.owner.accessToken
+          ? f.owner.supabase
+          : f.other.supabase,
       launch,
     });
     const call = (
@@ -75,13 +99,29 @@ it('uses normal authenticated RLS for owner preview handoff and denies another u
     const nonce = 'f'.repeat(64);
     expect((await call('owner.fixture.token', nonce)).status).toBe(200);
     expect((await call('owner.fixture.token', nonce)).status).toBe(409);
+    vi.spyOn(f.owner.supabase.auth, 'getSession').mockResolvedValue({
+      data: { session: { access_token: f.owner.accessToken } },
+      error: null,
+    } as never);
+    const client = createOwnerPreviewBridgeClient({
+      key,
+      now: () => now,
+      executionOrigin: 'https://output.runtime.test',
+      fetch: (url, init) => bridge(new Request(url, init)),
+    });
+    expect(
+      await client(f.owner.supabase, {
+        merchantId: f.merchantId,
+        buildId: randomUUID(),
+      })
+    ).toMatchObject({ merchantId: f.merchantId });
     expect((await call('other.fixture.token')).status).toBe(404);
     await f.db.pool.query(
       "UPDATE auth.sessions SET not_after=now()-interval '1 second' WHERE id=$1",
       [f.sessionId]
     );
     expect((await call('owner.fixture.token')).status).toBe(404);
-    expect(launch).toHaveBeenCalledOnce();
+    expect(launch).toHaveBeenCalledTimes(2);
   } finally {
     await noncePool?.end();
     await f.close();

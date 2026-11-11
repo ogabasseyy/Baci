@@ -175,6 +175,7 @@ export async function experienceDataFixture() {
         .sign(key.privateKey);
       return {
         merchantId: m,
+        accessToken: token,
         supabase: createClient('http://synthetic.local', 'synthetic-anon', {
           auth: { persistSession: false, autoRefreshToken: false },
           global: {

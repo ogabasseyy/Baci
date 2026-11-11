@@ -3,7 +3,7 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
-import { oxygenPhoneRecoverySchema } from '@/schemas/oxygen-phone-recovery';
+import { oxygenLegacyOfferRecoverySchema } from '@/schemas/oxygen-legacy-offer-recovery';
 
 const headers = {
   'Cache-Control': 'no-store',
@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
   const body = await readBoundedJsonBody(request, 1024);
-  const input = oxygenPhoneRecoverySchema.safeParse(body.ok ? body.body : null);
+  const input = oxygenLegacyOfferRecoverySchema.safeParse(
+    body.ok ? body.body : null
+  );
   if (!input.success)
     return NextResponse.json(
       { error: 'Invalid request' },

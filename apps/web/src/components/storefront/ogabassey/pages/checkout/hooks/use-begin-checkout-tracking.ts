@@ -77,18 +77,6 @@ export function useBeginCheckoutTracking({
       .sort()
       .join('|');
     const reportKey = `${merchantId}:${attemptId}:${cartKey}`;
-    const items = checkoutCart.map((item) => ({
-      product: {
-        id: item.id,
-        name: item.name,
-        // Same unit price checkout charges: unaccepted price proposals
-        // stay at catalog and quiz vouchers are free.
-        price: getCartItemCheckoutUnitPrice(item),
-        category: item.category,
-        categories: item.categories,
-      },
-      quantity: item.quantity,
-    }));
     return runWhenPageActivated(() => {
       if (isBeginCheckoutReported(reportKey)) return;
       void loadTracker()
@@ -96,6 +84,20 @@ export function useBeginCheckoutTracking({
           // Claim only once the tracker loaded, so a failed chunk load
           // leaves this attempt free to report on the next render.
           if (!claimBeginCheckoutReport(reportKey)) return;
+          // Built at send time so a prerender-delayed report carries the
+          // basket as presented, not as scheduled.
+          const items = checkoutCart.map((item) => ({
+            product: {
+              id: item.id,
+              name: item.name,
+              // Same unit price checkout charges: unaccepted price proposals
+              // stay at catalog and quiz vouchers are free.
+              price: getCartItemCheckoutUnitPrice(item),
+              category: item.category,
+              categories: item.categories,
+            },
+            quantity: item.quantity,
+          }));
           trackEvent.beginCheckout(merchantId, items, currency);
         })
         .catch(() => {

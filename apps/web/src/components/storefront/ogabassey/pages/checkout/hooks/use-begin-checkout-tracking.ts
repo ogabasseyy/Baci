@@ -84,18 +84,25 @@ export function useBeginCheckoutTracking({
     // and same-cart return visits in this session are not new starts, while
     // a different set of lines is a new basket and reports again. The
     // in-memory set holds a few short keys per page and needs no eviction.
-    // Logical line identity (product, variant, condition), not cartItemId:
+    // Logical line identity (product, variant, condition, offer), not cartItemId:
     // a shared-cart line swaps its temp: id for the server id on sync,
     // which is the same basket.
     const cartKey = checkoutCart
-      .map((item) => `${item.id}:${item.variantId ?? ''}:${item.condition ?? ''}`)
+      .map(
+        (item) =>
+          `${item.id}:${item.variantId ?? ''}:${item.condition ?? ''}:${item.offerId ?? ''}`
+      )
       .sort()
       .join('|');
     const reportKey = `${merchantId}:${attemptId}:${cartKey}`;
-    return runWhenPageActivated(() => {
+    // A newer cart supersedes this run: its pending send must not claim
+    // the key with an outdated basket while the tracker chunk loads.
+    let superseded = false;
+    const cancelActivation = runWhenPageActivated(() => {
       if (isBeginCheckoutReported(reportKey)) return;
       void loadTracker()
         .then(({ trackEvent }) => {
+          if (superseded) return;
           // Claim only once the tracker loaded, so a failed chunk load
           // leaves this attempt free to report on the next render.
           if (!claimBeginCheckoutReport(reportKey)) return;
@@ -119,5 +126,9 @@ export function useBeginCheckoutTracking({
           // Analytics must never break checkout.
         });
     });
+    return () => {
+      superseded = true;
+      cancelActivation();
+    };
   }, [attemptId, checkoutCart, currency, isHydrated, merchantId, loadTracker]);
 }

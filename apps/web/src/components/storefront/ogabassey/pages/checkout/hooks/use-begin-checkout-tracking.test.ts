@@ -214,4 +214,43 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
       'NGN'
     );
   });
+
+  it('sends the latest basket when the cart changes while the tracker loads', async () => {
+    // Regression: the superseded run used to claim the key and send the
+    // outdated one-unit basket.
+    let resolveFirst: (value: never) => void = () => {};
+    loadTracker.mockImplementationOnce(
+      () =>
+        new Promise<never>((resolve) => {
+          resolveFirst = resolve;
+        })
+    );
+    const shared = params();
+    const { rerender } = renderHook(
+      (props) => useBeginCheckoutTracking(props),
+      { initialProps: shared }
+    );
+    rerender({ ...shared, checkoutCart: [cartLine({ quantity: 3 })] });
+    resolveFirst({ trackEvent: { beginCheckout } } as never);
+
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+    expect(beginCheckout).toHaveBeenCalledWith(
+      'merchant-1',
+      [{ product: expect.objectContaining({ id: 'prod-1' }), quantity: 3 }],
+      'NGN'
+    );
+  });
+
+  it('reports a different condition offer as a new basket', async () => {
+    const shared = params({ checkoutCart: [cartLine({ offerId: 'offer-a' })] });
+    const { rerender } = renderHook(
+      (props) => useBeginCheckoutTracking(props),
+      { initialProps: shared }
+    );
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+
+    rerender({ ...shared, checkoutCart: [cartLine({ offerId: 'offer-b' })] });
+
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(2));
+  });
 });

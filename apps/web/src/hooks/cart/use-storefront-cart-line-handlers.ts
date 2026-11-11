@@ -198,7 +198,9 @@ export function useStorefrontCartLineHandlers({
     }
 
     if (outcome === 'applied') {
-      // Caps can accept fewer units than requested: report what landed.
+      // Caps can accept fewer units than requested: report what the add
+      // put in (same probe as the outcome; the documented same-tick
+      // remove/edit race above can make the commit differ).
       noteAddedProduct(
         productForCart,
         countAddedUnits(previousCartForProbe, probeResult, productForCart.id),

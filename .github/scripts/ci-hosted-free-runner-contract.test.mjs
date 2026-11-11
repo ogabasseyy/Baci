@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -202,6 +202,21 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
     env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'RUNNER_NAME')), PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-no-name`) },
   });
   assert.notEqual(noName.status, 0, 'a persistent store without a runner name must fail instead of sharing one directory');
+  // A missing, empty or relative tool cache must fail closed: not a store at the filesystem root, not one in the checkout.
+  const scratchCwd = mkdtempSync(join(tmpdir(), 'store-select-cwd-'));
+  try {
+    for (const toolCache of ['', 'relative/tool']) {
+      const bad = spawnSync('bash', ['-c', select.run], {
+        cwd: scratchCwd,
+        encoding: 'utf8',
+        env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', RUNNER_NAME: 'contabo-baci-ci', TOOL_CACHE: toolCache, GITHUB_OUTPUT: join(scratchCwd, 'out') },
+      });
+      assert.notEqual(bad.status, 0, `tool cache "${toolCache}" must be refused`);
+      assert.match(bad.stdout + bad.stderr, /runner tool cache must be an absolute path/, `tool cache "${toolCache}" needs the explicit refusal message`);
+    }
+  } finally {
+    rmSync(scratchCwd, { recursive: true, force: true });
+  }
   // A persistent store inside the checkout would be wiped by `git clean`; the step must refuse it.
   const inside = spawnSync('bash', ['-c', select.run], {
     encoding: 'utf8',

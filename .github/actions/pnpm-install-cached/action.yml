@@ -68,6 +68,15 @@ runs:
         dir="$STORE_DIR"
         if [ "$PERSISTENT_RUNNER" = 'true' ] && [ "$STORE_DIR" = '.pnpm-store' ]; then
           persistent=true
+          # runner.tool_cache is always set by the runner; refuse a missing, empty or relative value instead of
+          # creating a store at the filesystem root or inside the checkout.
+          case "${TOOL_CACHE:-}" in
+            /*) ;;
+            *)
+              echo "::error::the runner tool cache must be an absolute path (got '${TOOL_CACHE:-}')"
+              exit 1
+              ;;
+          esac
           # RUNNER_NAME is a default variable the runner sets for every job; the allowlist above makes it path-safe.
           dir="$TOOL_CACHE/pnpm-store-${RUNNER_NAME:?}"
           # A store inside the checkout would be wiped by `git clean`, which is the problem this avoids.

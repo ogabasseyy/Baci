@@ -84,5 +84,13 @@ active. No public ingress, orders or storefront publication were involved.
 An initial temporary privileged preflight test using the same-host observed
 pin did not return within its 300-second deadline while inventory hashing was
 active alongside CI. The temporary user, sudo rule, pin and executable files
-were removed. The startup timeout has been raised for a further test, but no
-successful privileged preflight or production provenance is claimed yet.
+were removed. The startup timeout was raised for a further test; that first
+attempt did not establish a successful privileged preflight or provenance.
+
+The longer temporary-account retry completed successfully in approximately
+539 seconds, returning toolchain digest
+`6db6c3ab85ea3d4a196eff3c63204a8c17f0821cd910ca892503245f7bd4af80`.
+It used the same-host observed pin, not an independently approved release pin.
+The temporary account, sudo rule, preflight executables and protected pin were
+removed, and both existing CI runner services remained active. The long startup
+time needs operational consideration; this test does not authorize activation.

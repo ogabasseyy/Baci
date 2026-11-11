@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@baci/shared/experience": [
+        "../../packages/shared/src/experience/index.ts"
+      ]
+    },
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "tools/experience-sql/**/*.ts",
+    "tests/experience-authoring/**/*.ts",
+    "tests/builder-chatgpt/experience-upload.test.ts",
+    "tests/experience-browser/checkpoint-b-*.ts",
+    "tests/experience-browser/checkpoint-b-*.tsx",
+    "src/**/*.d.ts",
+    "src/lib/consent-mode.ts",
+    "tests/experience-lifecycle/**/*.ts",
+    "src/app/builder/experience/**/*.tsx",
+    "src/app/api/builder-experience/**/*.ts",
+    "src/instrumentation-experience-boot.ts"
+  ],
+  "exclude": ["node_modules"]
+}

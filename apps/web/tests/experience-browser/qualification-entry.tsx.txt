@@ -1,0 +1,22 @@
+import {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import Experience from './Experience';
+import {QualificationCommerce} from './qualification-commerce';
+import {RuntimeBoundary} from './runtime-boundary';
+window.addEventListener('message',function connect(event){
+ if(event.source!==parent || event.origin!=='http://127.0.0.1:4100' || event.data!=='qualification-connect' || event.ports.length!==1)return;
+ window.removeEventListener('message',connect);
+ const port=event.ports[0];
+ port.onmessage=(initial)=>{
+  if(initial.data.type!=='bootstrap')return;
+  port.onmessage=null;
+  const bootstrap=initial.data.bootstrap;
+  function App(){
+   const [route,setRoute]=useState(bootstrap.route);
+   port.onmessage=(event)=>{if(event.data.type==='route')setRoute(event.data.route)};
+   return <RuntimeBoundary><QualificationCommerce navigate={path=>port.postMessage({type:'navigate',path})}><Experience route={route} catalog={bootstrap.catalog}/></QualificationCommerce><button type="button" onClick={()=>port.postMessage({type:"open",requestId:"synthetic-one",routeId:"product"})}>Request trusted product link</button><div className="qualification-asset-swatch">Offline authored CSS image and font</div></RuntimeBoundary>;
+  }
+  createRoot(document.getElementById('root')).render(<App/>);
+ };
+ port.start();port.postMessage({type:'ready'});
+});

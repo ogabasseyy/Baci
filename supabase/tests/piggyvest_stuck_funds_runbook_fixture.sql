@@ -17,6 +17,7 @@ CREATE TABLE public.orders (
   total numeric(10,2) NOT NULL, currency text DEFAULT 'NGN', payment_method text,
   wallet_amount_used numeric(12,2) DEFAULT 0.00, amount_paid numeric(10,2) DEFAULT 0,
   cancelled_at timestamptz, cancellation_reason text, cancelled_by text,
+  cancellation_refund_mode text,
   created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE public.order_wallet_funding_intents (
   id uuid PRIMARY KEY, merchant_id uuid NOT NULL, customer_id uuid NOT NULL, order_id uuid NOT NULL,

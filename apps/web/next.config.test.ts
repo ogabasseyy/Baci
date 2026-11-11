@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
@@ -40,6 +40,14 @@ describe('next.config core options', () => {
 
   it('lets proxy handle legacy Klump webhook trailing slash compatibility', () => {
     expect(nextConfig.skipTrailingSlashRedirect).toBe(true);
+  });
+
+  it('declares the loopback development origin option exactly once after integration', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'next.config.ts'),
+      'utf8'
+    );
+    expect(source.match(/allowedDevOrigins\s*:/g)).toHaveLength(1);
   });
 
   it('allows the IPv4 loopback host used by the local storefront browser', () => {

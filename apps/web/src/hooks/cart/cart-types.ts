@@ -1,5 +1,7 @@
 import type { CartErrorCode } from '@baci/shared/cart';
+import type { ReactNode } from 'react';
 import type { Product } from '@/lib/products';
+import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 /**
  * Link markers for a shared-cart display line. `serverLineId` is the
@@ -80,6 +82,7 @@ export interface AddToCartOptions {
 export type AddToCartOutcome = 'applied' | 'rejected';
 
 export interface CartContextType {
+  experienceCommandPort?: ExperienceCartHostPort;
   cart: CartItem[];
   merchantSlug: string | null;
   addToCart: (
@@ -145,4 +148,21 @@ export interface CartContextType {
   resolveImportConflicts?: (
     resolutions: import('@baci/shared/cart').CartMergeResolution[]
   ) => void;
+}
+
+export interface StorefrontCartProviderProps {
+  children: ReactNode;
+  enableSmartCartPro?: boolean;
+  merchantSlug?: string | null;
+  deferValidationUntilIdle?: boolean;
+  validationActivationTimeoutMs?: number;
+  /**
+   * Enrolled merchant identity for shared-cart delegation. The server frame
+   * evaluates enrollment; the provider delegates only while the active slug
+   * matches the enrolled merchant. Null/flag-missing means legacy local cart.
+   */
+  merchantId?: string | null;
+  sharedCartEnabled?: boolean;
+  sharedCartAccountsEnabled?: boolean;
+  sharedCartRealtimeEnabled?: boolean;
 }

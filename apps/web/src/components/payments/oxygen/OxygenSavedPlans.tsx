@@ -8,6 +8,7 @@ import { OxygenDownPayment } from './OxygenDownPayment';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenTenurePicker } from './OxygenTenurePicker';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
+import { oxygenPlanLimits } from './plan-limits';
 import { useOxygenSavedPlans } from './use-oxygen-saved-plans';
 
 export function OxygenSavedPlans({
@@ -20,6 +21,7 @@ export function OxygenSavedPlans({
   approvalBusy = false,
   resumeQueuedApproval = false,
   onAccept,
+  refreshOffers,
 }: {
   workflowId: string;
   state: OxygenProviderState;
@@ -35,6 +37,7 @@ export function OxygenSavedPlans({
   approvalBusy?: boolean;
   resumeQueuedApproval?: boolean;
   onAccept?: (reference: string) => void;
+  refreshOffers?: () => Promise<boolean>;
 }) {
   const [signingReference, setSigningReference] = useState<string>();
   const { data, selected, error, select, reload, quote, quoting } =
@@ -76,7 +79,30 @@ export function OxygenSavedPlans({
     12,
     state.maxTenure ?? Math.max(1, ...plans.map((p) => p.tenure))
   );
-  const tenures = Array.from({ length: maxTenure }, (_, i) => i + 1);
+  const tenures = [
+    ...new Set([
+      ...(state.offers?.map((offer) => offer.tenure) ?? []),
+      ...plans.map((plan) => plan.tenure),
+    ]),
+  ]
+    .filter((month) => month <= maxTenure)
+    .sort((a, b) => a - b);
+  function offered(value: number | null, months: number) {
+    const offer = state.offers?.find((item) => item.tenure === months);
+    const limit = oxygenPlanLimits(
+      chosen?.productAmount,
+      offer && state.eligibleAmount !== undefined
+        ? Math.min(offer.loanAmount, state.eligibleAmount)
+        : undefined,
+      state.minimumAmount
+    );
+    return (
+      value !== null &&
+      limit.kind === 'available' &&
+      value >= limit.min &&
+      value <= limit.max
+    );
+  }
   function requestPlan(
     value: number | null,
     months = tenure,
@@ -84,7 +110,10 @@ export function OxygenSavedPlans({
   ) {
     if (value === null || quoting) return;
     if (updateSelection) choose(value, months);
-    if (!plans.some((p) => p.equityPercentage === value && p.tenure === months))
+    if (
+      !plans.some((p) => p.equityPercentage === value && p.tenure === months) &&
+      offered(value, months)
+    )
       void quote(value, months);
   }
   const percentages = [...new Set(plans.map((p) => p.equityPercentage))];
@@ -128,6 +157,13 @@ export function OxygenSavedPlans({
             disabled={quoting}
             onChange={(months) => requestPlan(percentage, months)}
           />
+          {!confirmed && !offered(percentage, tenure) && (
+            <p role="status">
+              {state.offers
+                ? 'Adjust your down payment or choose an available repayment period to see another plan.'
+                : 'Your saved plan is available. New payment options are temporarily unavailable.'}
+            </p>
+          )}
         </>
       )}
       {!ready ? (
@@ -142,6 +178,22 @@ export function OxygenSavedPlans({
           loading={quoting}
           tenure={tenure}
         />
+      )}
+      {!state.offers && refreshOffers && (
+        <div className="grid gap-2 text-sm">
+          <p>
+            Update your payment options to compare more plans. Your saved plan
+            is still available.
+          </p>
+          <button
+            type="button"
+            className="min-h-11 font-semibold text-store-primary underline"
+            disabled={approvalBusy || quoting}
+            onClick={() => void refreshOffers()}
+          >
+            Update payment options
+          </button>
+        </div>
       )}
       {ready && (
         <div className={summaryStyles.footer}>
@@ -159,6 +211,7 @@ export function OxygenSavedPlans({
               quoting ||
               percentage === null ||
               Boolean(error) ||
+              (!confirmed && !offered(percentage, tenure)) ||
               (Boolean(confirmed) &&
                 ((!onAccept && !requestApprovalCode) ||
                   (!onAccept &&

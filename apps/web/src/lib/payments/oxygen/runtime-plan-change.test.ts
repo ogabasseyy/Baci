@@ -39,6 +39,7 @@ const context: OxygenProviderContext = {
     eligibleAmount: 400000,
     minimumAmount: 10000,
     maxTenure: 12,
+    offers: [{ tenure: 6, loanAmount: 400000 }],
     kyc: {
       bvn_status: 'DONE',
       nin_status: 'DONE',
@@ -61,6 +62,44 @@ const context: OxygenProviderContext = {
   },
 };
 const action = { action: 'book' as const, equityPercentage: 35, tenure: 6 };
+it('allows an unapproved legacy booking to refresh offers but protects approval and payment states', () => {
+  const refresh = { action: 'refresh_eligibility' as const };
+  const legacy = { ...context, state: { ...context.state, offers: undefined } };
+  expect(oxygenActionAllowed(legacy, refresh)).toBe(true);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, activityToken: 'pending' } },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, paymentComplete: true } },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, state: { ...legacy.state, setupComplete: true } },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...legacy,
+        state: { ...legacy.state, booking: { ...booking, status: 'APPROVED' } },
+      },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
+      { ...legacy, stage: 'reconciliation_required' },
+      refresh
+    )
+  ).toBe(false);
+});
 it('allows a changed tenure on an unapproved booking but rejects duplicate, approved, OTP-active and uncertain bookings', () => {
   expect(oxygenActionAllowed(context, action)).toBe(true);
   expect(oxygenActionAllowed(context, { ...action, tenure: 3 })).toBe(false);

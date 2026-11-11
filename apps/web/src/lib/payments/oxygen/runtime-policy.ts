@@ -78,7 +78,13 @@ export function oxygenActionAllowed(
       return Boolean(
         c.state.applicationReference &&
           oxygenEligibilityPrerequisites(c.state) &&
-          !c.state.bookingReference
+          (!c.state.bookingReference ||
+            (!c.state.offers &&
+              ['booked', 'approval_required'].includes(stage) &&
+              c.state.booking?.status === 'BOOKED' &&
+              !c.state.activityToken &&
+              !c.state.paymentComplete &&
+              !c.state.setupComplete))
       );
     case 'selfie_link':
       return Boolean(

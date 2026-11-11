@@ -19,6 +19,7 @@ import {
 } from './OxygenProductSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenVerificationForms } from './OxygenVerificationForms';
+import { oxygenButtonClass } from './oxygen-checkout-styles';
 import type { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
 import type { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
 import type { useOxygenBookingProgress } from './use-oxygen-booking-progress';
@@ -136,14 +137,32 @@ export function OxygenProviderStages({
         error={error}
         submit={submit}
       />
-      {snapshot.stage === 'plan_required' && !activeLoanError && (
+      {snapshot.stage === 'plan_required' && !activeLoanError && !s?.offers && (
+        <div role="status">
+          <p>We need to update your payment options before you continue.</p>
+          <p>
+            If Oxygen can’t provide them, close this window and choose another
+            payment method.
+          </p>
+          <button
+            type="button"
+            className={oxygenButtonClass}
+            disabled={disabled}
+            onClick={() => void submit({ action: 'refresh_eligibility' })}
+          >
+            Update payment options
+          </button>
+        </div>
+      )}
+      {snapshot.stage === 'plan_required' && !activeLoanError && s?.offers && (
         <OxygenPlanForm
-          key={`${productAmount}:${s?.eligibleAmount}:${s?.minimumAmount}:${s?.maxTenure}`}
+          key={`${productAmount}:${s?.eligibleAmount}:${s?.minimumAmount}:${s?.maxTenure}:${JSON.stringify(s?.offers)}`}
           busy={disabled}
           maxTenure={s?.maxTenure}
           productAmount={productAmount}
           eligibleAmount={s?.eligibleAmount}
           minimumAmount={s?.minimumAmount}
+          offers={s?.offers}
           submit={submit}
         />
       )}
@@ -170,6 +189,16 @@ export function OxygenProviderStages({
             }
             approvePlan={approval.approvePlan}
             approvalBusy={disabled}
+            refreshOffers={
+              snapshot.stage === 'approval_required' &&
+              !snapshot.pending &&
+              !snapshot.approvalOtpReady &&
+              !s.offers &&
+              !s.paymentComplete &&
+              !s.setupComplete
+                ? () => submit({ action: 'refresh_eligibility' })
+                : undefined
+            }
             resumeQueuedApproval={
               snapshot.pending?.action === 'approve_booking' &&
               snapshot.pending.status === 'queued'

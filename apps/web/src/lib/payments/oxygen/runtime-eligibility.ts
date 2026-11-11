@@ -50,9 +50,26 @@ export async function refreshOxygenEligibility(
     state.minimumAmount =
       response.minimum_loan_amount ?? OXYGEN_MINIMUM_LOAN_AMOUNT_NAIRA;
     state.maxTenure = requireValue(response.max_tenure);
+    if (response.offers) {
+      if (response.tenure_unit?.toLowerCase() !== 'monthly') {
+        throw new Error('Invalid eligibility offer period');
+      }
+      const seen = new Set<number>();
+      for (const offer of response.offers) {
+        if (seen.has(offer.tenor) || offer.tenor > state.maxTenure) {
+          throw new Error('Invalid eligibility offers');
+        }
+        seen.add(offer.tenor);
+      }
+      state.offers = response.offers.map((offer) => ({
+        loanAmount: offer.loan_amount,
+        tenure: offer.tenor,
+      }));
+    } else delete state.offers;
   } else {
     delete state.eligibleAmount;
     delete state.minimumAmount;
     delete state.maxTenure;
+    delete state.offers;
   }
 }

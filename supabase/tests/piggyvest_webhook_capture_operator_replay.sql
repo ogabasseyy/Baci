@@ -4,10 +4,12 @@
 --   -f supabase/tests/piggyvest_webhook_capture_operator_replay.sql
 --
 -- Denials are asserted through the catalog (has_*_privilege, ACLs); nothing
--- calls a denied statement and catches the error. Behaviour runs inside one
--- transaction as a throwaway operator login (SET SESSION AUTHORIZATION),
--- then rolls back. requeue checks the session login itself, so SET ROLE from
--- another login is refused (asserted below).
+-- calls a denied statement and catches the error. Everything runs inside one
+-- transaction and rolls back. The replay connects as a non-superuser, so the
+-- suite cannot become another login: behaviour goes through the internal
+-- functions with an explicit actor, session refusals through
+-- session_refusal(login) and the public functions refusing this connection.
+-- Under a superuser it also runs the public path as a real operator login.
 BEGIN;
 
 -- 1. Authority: only the operator group can reach the operator surface.
@@ -144,8 +146,9 @@ BEGIN
 END
 $$;
 
--- 2. Behaviour, called by a login whose only authority is the operator group.
--- The audit actor must be that login, never the group or the function owner.
+-- 2. Behaviour of the internal functions the public ones delegate to. The
+-- audit actor is exactly the login passed in (the public function passes
+-- SESSION_USER; section 4 proves that end to end under a superuser).
 CREATE ROLE pv_operator_probe LOGIN IN ROLE piggyvest_webhook_capture_operator;
 DO $$
 DECLARE
@@ -159,9 +162,8 @@ DECLARE
   v_audit record;
   v_i integer;
 BEGIN
-  SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
 
-  v_list := piggyvest_capture_operator.list_review_captures(50);
+  v_list := piggyvest_capture_operator.review_captures(50);
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.jsonb_array_elements(v_list) e
     WHERE e->>'captureId' = v_parked::text AND e->>'lastError' = 'REPLAY_FAILED'
@@ -175,7 +177,7 @@ BEGIN
   END IF;
 
   -- A parked capture is requeued once, with an audit row.
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_parked, '  ledger fix #4199 deployed, replay once  ');
   IF v_result->>'outcome' IS DISTINCT FROM 'requeued'
     OR (v_result->>'previousAttempts')::integer IS DISTINCT FROM 20
@@ -185,34 +187,32 @@ BEGIN
   END IF;
 
   -- A second request for the same row changes nothing and writes no audit.
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_parked, 'second click on the same capture');
   IF v_result->>'outcome' IS DISTINCT FROM 'not_in_review'
     OR v_result->>'processingState' IS DISTINCT FROM 'pending' THEN
     RAISE EXCEPTION 'second requeue was not a no-op: %', v_result;
   END IF;
 
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_done, 'already processed capture');
   IF v_result->>'outcome' IS DISTINCT FROM 'not_in_review'
     OR v_result->>'processingState' IS DISTINCT FROM 'processed' THEN
     RAISE EXCEPTION 'processed capture was touched: %', v_result;
   END IF;
 
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     gen_random_uuid(), 'capture id that does not exist');
   IF v_result->>'outcome' IS DISTINCT FROM 'not_found' THEN
     RAISE EXCEPTION 'unknown capture was not reported: %', v_result;
   END IF;
 
   BEGIN
-    PERFORM piggyvest_capture_operator.requeue_review_capture(v_limit, 'short');
+    PERFORM piggyvest_capture_operator.requeue_capture('pv_operator_probe', v_limit, 'short');
     RAISE EXCEPTION 'a short reason was accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
     NULL;
   END;
-
-  RESET SESSION AUTHORIZATION;
 
   SELECT * INTO v_row FROM public.piggyvest_webhook_captures WHERE id = v_parked;
   IF v_row.processing_state IS DISTINCT FROM 'pending' OR v_row.attempts <> 0
@@ -275,27 +275,23 @@ BEGIN
   END;
 
   -- At most five operator requeues per capture.
-  SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
   FOR v_i IN 1..5 LOOP
-    v_result := piggyvest_capture_operator.requeue_review_capture(
+    v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
       v_limit, 'bounded replay attempt ' || v_i);
     IF v_result->>'outcome' IS DISTINCT FROM 'requeued' THEN
       RAISE EXCEPTION 'requeue % was refused: %', v_i, v_result;
     END IF;
-    RESET SESSION AUTHORIZATION;
     UPDATE public.piggyvest_webhook_captures
       SET processing_state = 'needs_review', last_error = repeat('E', 200)
       WHERE id = v_limit;
-    SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
   END LOOP;
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_limit, 'sixth replay must be refused');
   IF v_result->>'outcome' IS DISTINCT FROM 'replay_limit_reached'
     OR (v_result->>'operatorReplays')::integer <> 5
     OR (v_result->>'replayLimit')::integer IS DISTINCT FROM 5 THEN
     RAISE EXCEPTION 'replay limit was not enforced: %', v_result;
   END IF;
-  RESET SESSION AUTHORIZATION;
   IF (SELECT processing_state FROM public.piggyvest_webhook_captures WHERE id = v_limit)
     IS DISTINCT FROM 'needs_review' THEN
     RAISE EXCEPTION 'refused requeue changed the row';
@@ -334,10 +330,8 @@ BEGIN
 
   FOREACH v_id IN ARRAY v_rows
   LOOP
-    SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
-    v_result := piggyvest_capture_operator.requeue_review_capture(
+    v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
       v_id, 'credit replay before dedupe ships');
-    RESET SESSION AUTHORIZATION;
     IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
       RAISE EXCEPTION 'credit capture % replayed without pvb_reference dedupe: %', v_id, v_result;
     END IF;
@@ -356,10 +350,8 @@ BEGIN
   ALTER TABLE public.piggyvest_inflow_credits ADD COLUMN IF NOT EXISTS pvb_reference text;
   ALTER TABLE public.piggyvest_inflow_credits
     ADD CONSTRAINT piggyvest_inflow_credits_pvb_reference_key UNIQUE (pvb_reference);
-  SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_credit, 'credit replay with one ledger protected');
-  RESET SESSION AUTHORIZATION;
   IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
     RAISE EXCEPTION 'credit replayed with only one ledger protected: %', v_result;
   END IF;
@@ -373,10 +365,8 @@ BEGIN
     DROP CONSTRAINT IF EXISTS piggyvest_interest_payouts_pvb_reference_key;
   CREATE UNIQUE INDEX pv_operator_partial_probe
     ON public.piggyvest_interest_payouts (pvb_reference) WHERE pvb_reference <> '';
-  SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_credit, 'credit replay with a partial index only');
-  RESET SESSION AUTHORIZATION;
   IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
     RAISE EXCEPTION 'a partial unique index opened the credit gate: %', v_result;
   END IF;
@@ -386,10 +376,8 @@ BEGIN
   -- constraint, the other by a plain CREATE UNIQUE INDEX.
   CREATE UNIQUE INDEX pv_operator_unique_probe
     ON public.piggyvest_interest_payouts (pvb_reference);
-  SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
-  v_result := piggyvest_capture_operator.requeue_review_capture(
+  v_result := piggyvest_capture_operator.requeue_capture('pv_operator_probe',
     v_credit, 'credit replay after dedupe ships');
-  RESET SESSION AUTHORIZATION;
   IF v_result->>'outcome' IS DISTINCT FROM 'requeued' THEN
     RAISE EXCEPTION 'credit was not requeued once both ledgers dedupe: %', v_result;
   END IF;
@@ -397,40 +385,46 @@ END
 $$;
 
 -- 4. The database enforces the operator session checks itself, so calling
--- the function directly cannot skip what the CLI refuses.
+-- the public functions directly cannot skip what the CLI refuses.
 CREATE ROLE pv_operator_dual LOGIN
   IN ROLE piggyvest_webhook_capture_operator, piggyvest_webhook_capture_worker;
 DO $$
 DECLARE
   v_row uuid := pg_temp.pv_operator_row('operator-session-checks', 'needs_review', 20);
   v_refused integer := 0;
+  v_fn regprocedure;
+  v_role text;
+  v_result jsonb;
 BEGIN
-  -- A login holding the operator and the worker role.
+  -- Clean operator login: no refusal. Others: refused, with the reason.
+  IF piggyvest_capture_operator.session_refusal('pv_operator_probe') <> '' THEN
+    RAISE EXCEPTION 'a clean operator login was refused: %',
+      piggyvest_capture_operator.session_refusal('pv_operator_probe');
+  END IF;
+  IF piggyvest_capture_operator.session_refusal('pv_operator_dual')
+      NOT LIKE '%besides the operator role%' THEN
+    RAISE EXCEPTION 'a login holding the worker role was not refused';
+  END IF;
+  IF piggyvest_capture_operator.session_refusal('piggyvest_webhook_capture_operator') = ''
+    OR piggyvest_capture_operator.session_refusal('no_such_login_pv') = ''
+    OR piggyvest_capture_operator.session_refusal(SESSION_USER) = '' THEN
+    RAISE EXCEPTION 'a group role, an unknown login or this connection was accepted';
+  END IF;
+
+  -- This connection is not a clean operator, so both public functions refuse
+  -- it before reading or changing anything.
   BEGIN
-    SET LOCAL SESSION AUTHORIZATION pv_operator_dual;
-    PERFORM piggyvest_capture_operator.requeue_review_capture(v_row, 'dual role login replay');
+    PERFORM piggyvest_capture_operator.requeue_review_capture(v_row, 'direct call bypass attempt');
   EXCEPTION WHEN insufficient_privilege THEN
     v_refused := v_refused + 1;
   END;
-  RESET SESSION AUTHORIZATION;
-  -- The listing applies the same checks.
   BEGIN
-    SET LOCAL SESSION AUTHORIZATION pv_operator_dual;
     PERFORM piggyvest_capture_operator.list_review_captures(10);
   EXCEPTION WHEN insufficient_privilege THEN
     v_refused := v_refused + 1;
   END;
-  RESET SESSION AUTHORIZATION;
-  -- A superuser borrowing the operator group with SET ROLE.
-  BEGIN
-    SET LOCAL ROLE piggyvest_webhook_capture_operator;
-    PERFORM piggyvest_capture_operator.requeue_review_capture(v_row, 'set role from superuser');
-  EXCEPTION WHEN insufficient_privilege THEN
-    v_refused := v_refused + 1;
-  END;
-  RESET ROLE;
-  IF v_refused <> 3 THEN
-    RAISE EXCEPTION 'database did not refuse % of 3 bad operator calls', 3 - v_refused;
+  IF v_refused <> 2 THEN
+    RAISE EXCEPTION 'database did not refuse % of 2 direct calls', 2 - v_refused;
   END IF;
   IF (SELECT processing_state FROM public.piggyvest_webhook_captures WHERE id = v_row)
       IS DISTINCT FROM 'needs_review'
@@ -438,13 +432,59 @@ BEGIN
       WHERE capture_id = v_row) THEN
     RAISE EXCEPTION 'a refused operator session changed the row or wrote an audit';
   END IF;
-  -- The internal check is callable only by its owner.
-  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
-      WHERE r.rolname IN ('piggyvest_webhook_capture_operator', 'anon',
-        'authenticated', 'service_role', 'pv_operator_probe')
-        AND pg_catalog.has_function_privilege(r.oid,
-          'piggyvest_capture_operator.session_refusal()', 'EXECUTE')) THEN
-    RAISE EXCEPTION 'session_refusal() is executable outside its owner';
+
+  -- The internal functions are callable only by their owner, and are not
+  -- SECURITY DEFINER.
+  FOREACH v_fn IN ARRAY ARRAY[
+    'piggyvest_capture_operator.review_captures(integer)'::regprocedure,
+    'piggyvest_capture_operator.requeue_capture(text,uuid,text)'::regprocedure,
+    'piggyvest_capture_operator.session_refusal(text)'::regprocedure
+  ] LOOP
+    IF (SELECT p.prosecdef FROM pg_catalog.pg_proc p WHERE p.oid = v_fn) THEN
+      RAISE EXCEPTION '% must not be SECURITY DEFINER', v_fn;
+    END IF;
+    FOREACH v_role IN ARRAY ARRAY['piggyvest_webhook_capture_operator', 'anon',
+      'authenticated', 'service_role', 'pv_operator_probe', 'pv_operator_dual'] LOOP
+      IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = v_role)
+        AND pg_catalog.has_function_privilege(v_role, v_fn, 'EXECUTE') THEN
+        RAISE EXCEPTION '% can execute internal %', v_role, v_fn;
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  -- End to end through the public functions as real logins, where this
+  -- connection may switch login (a superuser; the CI replay cannot).
+  IF (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user) THEN
+    SET LOCAL SESSION AUTHORIZATION pv_operator_probe;
+    v_result := piggyvest_capture_operator.requeue_review_capture(
+      v_row, 'end to end operator replay');
+    PERFORM piggyvest_capture_operator.list_review_captures(10);
+    RESET SESSION AUTHORIZATION;
+    IF v_result->>'outcome' IS DISTINCT FROM 'requeued'
+      OR (SELECT actor FROM public.piggyvest_webhook_capture_replay_audit
+          WHERE capture_id = v_row) IS DISTINCT FROM 'pv_operator_probe' THEN
+      RAISE EXCEPTION 'end to end requeue failed or recorded the wrong actor: %', v_result;
+    END IF;
+    v_refused := 0;
+    BEGIN
+      SET LOCAL SESSION AUTHORIZATION pv_operator_dual;
+      PERFORM piggyvest_capture_operator.list_review_captures(10);
+    EXCEPTION WHEN insufficient_privilege THEN
+      v_refused := v_refused + 1;
+    END;
+    RESET SESSION AUTHORIZATION;
+    BEGIN
+      SET LOCAL ROLE piggyvest_webhook_capture_operator;
+      PERFORM piggyvest_capture_operator.list_review_captures(10);
+    EXCEPTION WHEN insufficient_privilege THEN
+      v_refused := v_refused + 1;
+    END;
+    RESET ROLE;
+    IF v_refused <> 2 THEN
+      RAISE EXCEPTION 'a dual-role login or SET ROLE was not refused';
+    END IF;
+  ELSE
+    RAISE NOTICE 'not a superuser: end-to-end login switch skipped';
   END IF;
 END
 $$;

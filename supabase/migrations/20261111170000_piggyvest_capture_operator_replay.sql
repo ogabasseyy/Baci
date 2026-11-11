@@ -137,22 +137,18 @@ REVOKE ALL ON SCHEMA piggyvest_capture_operator
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA piggyvest_capture_operator TO piggyvest_webhook_capture_operator;
 
+-- The parts that act take the actor as an argument and are internal: no
+-- role is granted EXECUTE on them, so only their owner (the migration role,
+-- which the public functions below run as) can call them. The public
+-- functions first prove the calling session, then pass SESSION_USER on.
+
 -- Review metadata, newest first. Never bodies, signatures or headers.
-CREATE OR REPLACE FUNCTION piggyvest_capture_operator.list_review_captures(p_limit integer)
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.review_captures(p_limit integer)
 RETURNS jsonb
-LANGUAGE plpgsql
+LANGUAGE sql
 STABLE
-SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
-DECLARE
-  v_refusal text := piggyvest_capture_operator.session_refusal();
-BEGIN
-  -- Same in-database session checks as requeue (session_refusal is below).
-  IF v_refusal <> '' THEN
-    RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
-  END IF;
-  RETURN (
   SELECT COALESCE(pg_catalog.jsonb_agg(r ORDER BY r."receivedAt" DESC, r."captureId"), '[]'::jsonb)
   FROM (
     SELECT c.id AS "captureId",
@@ -172,8 +168,7 @@ BEGIN
     WHERE c.processing_state = 'needs_review'
     ORDER BY c.received_at DESC, c.id
     LIMIT least(greatest(COALESCE(p_limit, 50), 1), 200)
-  ) AS r);
-END
+  ) AS r
 $$;
 
 -- Requeue one parked capture. Outcomes (jsonb {"outcome": ...}):
@@ -189,86 +184,26 @@ $$;
 --                         valid unique index on that column alone, as the
 --                         UNIQUE constraints of PR #4199 create);
 --                         replaying it could credit a partial credit twice
--- The session checks the operator tool makes, enforced again in the database
--- so a direct call from psql cannot skip them. Returns '' when the session
--- may requeue, otherwise why not. Internal: no role is granted EXECUTE; only
--- the SECURITY DEFINER function below (running as the owner) calls it.
-CREATE OR REPLACE FUNCTION piggyvest_capture_operator.session_refusal()
-RETURNS text
-LANGUAGE sql
-STABLE
-SET search_path = pg_catalog
-AS $$
-  SELECT COALESCE((
-    SELECT CASE
-      WHEN NOT login.rolcanlogin OR login.rolsuper OR login.rolbypassrls
-        OR login.rolcreaterole OR login.rolcreatedb OR login.rolreplication
-        THEN 'the session login carries an elevated attribute'
-      WHEN NOT pg_catalog.pg_has_role(
-          SESSION_USER, 'piggyvest_webhook_capture_operator', 'MEMBER')
-        THEN 'the session login is not a member of piggyvest_webhook_capture_operator'
-      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
-          WHERE r.rolname NOT IN (SESSION_USER, 'piggyvest_webhook_capture_operator')
-            AND pg_catalog.pg_has_role(SESSION_USER, r.oid, 'MEMBER'))
-        THEN 'the session login holds a role besides the operator role'
-      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
-          CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) g
-          JOIN pg_catalog.pg_roles r ON r.oid = g.grantee
-          WHERE r.rolname IN ('piggyvest_webhook_capture_worker', 'piggyvest_webhook_intake')
-            AND g.privilege_type = 'EXECUTE'
-            AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE'))
-        THEN 'the session login can run capture pipeline functions'
-      -- By name too, so access through PUBLIC's default EXECUTE is caught.
-      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
-          JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-          WHERE (n.nspname = 'piggyvest_webhook_intake'
-              OR (n.nspname = 'public' AND p.proname ~ 'piggyvest_webhook_capture'))
-            AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE'))
-        THEN 'the session login can run capture pipeline functions'
-      WHEN pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_captures',
-          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-        OR pg_catalog.has_table_privilege(SESSION_USER,
-          'public.piggyvest_webhook_capture_replay_audit',
-          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-        THEN 'the session login can reach the capture or audit tables directly'
-      WHEN NOT (
-          COALESCE((SELECT s.ssl FROM pg_catalog.pg_stat_ssl s
-            WHERE s.pid = pg_catalog.pg_backend_pid()), false)
-          OR pg_catalog.inet_client_addr() IS NULL
-          OR pg_catalog.inet_client_addr() <<= '127.0.0.0/8'::inet
-          OR pg_catalog.inet_client_addr() = '::1'::inet)
-        THEN 'the session connection is not encrypted'
-      ELSE ''
-    END
-    FROM pg_catalog.pg_roles login
-    WHERE login.rolname = SESSION_USER), 'the session login is unknown')
-$$;
-
-REVOKE ALL ON FUNCTION piggyvest_capture_operator.session_refusal()
-  FROM PUBLIC, anon, authenticated, service_role;
-
-CREATE OR REPLACE FUNCTION piggyvest_capture_operator.requeue_review_capture(
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.requeue_capture(
+  p_actor text,
   p_capture_id uuid,
   p_reason text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
 DECLARE
-  v_actor text := SESSION_USER;
+  v_actor text := p_actor;
   v_reason text := pg_catalog.btrim(p_reason);
   v_row record;
   v_replays integer;
   v_replay_limit constant integer := 5;
   v_updated integer;
   v_audit_id bigint;
-  v_refusal text;
 BEGIN
-  v_refusal := piggyvest_capture_operator.session_refusal();
-  IF v_refusal <> '' THEN
-    RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
+  IF v_actor IS NULL OR v_actor = '' THEN
+    RAISE EXCEPTION 'an actor is required' USING ERRCODE = '22023';
   END IF;
   IF p_capture_id IS NULL THEN
     RAISE EXCEPTION 'a capture id is required' USING ERRCODE = '22023';
@@ -359,6 +294,99 @@ BEGIN
 END
 $$;
 
+-- Why a login may not act as an operator, or '' when it may. Mirrors the
+-- operator tool's own session checks so a direct call from psql cannot skip
+-- them. Transport (TLS) is not judged here: from SQL the server only sees the
+-- last hop, so it is enforced by the tool's direct-host allowlist and
+-- verify-full TLS, and by the project's SSL enforcement.
+DROP FUNCTION IF EXISTS piggyvest_capture_operator.session_refusal();
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.session_refusal(p_login text)
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog
+AS $$
+  SELECT COALESCE((
+    SELECT CASE
+      WHEN NOT login.rolcanlogin OR login.rolsuper OR login.rolbypassrls
+        OR login.rolcreaterole OR login.rolcreatedb OR login.rolreplication
+        THEN 'the session login carries an elevated attribute'
+      WHEN NOT pg_catalog.pg_has_role(
+          p_login, 'piggyvest_webhook_capture_operator', 'MEMBER')
+        THEN 'the session login is not a member of piggyvest_webhook_capture_operator'
+      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
+          WHERE r.rolname NOT IN (p_login, 'piggyvest_webhook_capture_operator')
+            AND pg_catalog.pg_has_role(p_login, r.oid, 'MEMBER'))
+        THEN 'the session login holds a role besides the operator role'
+      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+          CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) g
+          JOIN pg_catalog.pg_roles r ON r.oid = g.grantee
+          WHERE r.rolname IN ('piggyvest_webhook_capture_worker', 'piggyvest_webhook_intake')
+            AND g.privilege_type = 'EXECUTE'
+            AND pg_catalog.has_function_privilege(p_login, p.oid, 'EXECUTE'))
+        THEN 'the session login can run capture pipeline functions'
+      -- By name too, so access through PUBLIC's default EXECUTE is caught.
+      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+          JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+          WHERE (n.nspname = 'piggyvest_webhook_intake'
+              OR (n.nspname = 'public' AND p.proname ~ 'piggyvest_webhook_capture'))
+            AND pg_catalog.has_function_privilege(p_login, p.oid, 'EXECUTE'))
+        THEN 'the session login can run capture pipeline functions'
+      WHEN pg_catalog.has_table_privilege(p_login, 'public.piggyvest_webhook_captures',
+          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+        OR pg_catalog.has_table_privilege(p_login,
+          'public.piggyvest_webhook_capture_replay_audit',
+          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+        THEN 'the session login can reach the capture or audit tables directly'
+      ELSE ''
+    END
+    FROM pg_catalog.pg_roles login
+    WHERE login.rolname = p_login), 'the session login is unknown')
+$$;
+
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.list_review_captures(p_limit integer)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_refusal text := piggyvest_capture_operator.session_refusal(SESSION_USER);
+BEGIN
+  IF v_refusal <> '' THEN
+    RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
+  END IF;
+  RETURN piggyvest_capture_operator.review_captures(p_limit);
+END
+$$;
+
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.requeue_review_capture(
+  p_capture_id uuid,
+  p_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  v_refusal text := piggyvest_capture_operator.session_refusal(SESSION_USER);
+BEGIN
+  IF v_refusal <> '' THEN
+    RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
+  END IF;
+  -- The actor is the session login: who acted cannot be typed in.
+  RETURN piggyvest_capture_operator.requeue_capture(SESSION_USER, p_capture_id, p_reason);
+END
+$$;
+
+REVOKE ALL ON FUNCTION piggyvest_capture_operator.review_captures(integer)
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION piggyvest_capture_operator.requeue_capture(text, uuid, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION piggyvest_capture_operator.session_refusal(text)
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_capture_operator.list_review_captures(integer)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_capture_operator.requeue_review_capture(uuid, text)

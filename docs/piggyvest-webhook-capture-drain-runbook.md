@@ -266,8 +266,10 @@ login to `piggyvest_webhook_capture_worker` or `piggyvest_webhook_intake`: the
 tool refuses those logins by name and refuses any login that also holds a
 pipeline role, so one person cannot both requeue and drain. Both database
 functions (list and requeue) enforce the same session checks (operator role only, no pipeline
-grants, no direct table access, encrypted or local connection), so calling it
-directly from `psql` cannot skip them.
+grants, no direct table access), so calling them directly from `psql`
+cannot skip them. Encryption is enforced by the tool (direct host only,
+`verify-full` TLS) and by the project's SSL enforcement: from SQL the
+server can only see the last network hop.
 
 Generate the password in the password manager and, as with the drain login,
 never put it in any SQL text. Create the login without a password:

@@ -19,6 +19,10 @@ An explicitly requested local listener can use `pnpm --filter @baci/web mcp:buil
 origin are constants, not tool arguments. No listener starts merely by importing
 `server.ts` or `node.ts`.
 
+Pass `--experience` after the port to advertise the full-code experience tools.
+The default listener keeps those tools disabled. Discovery does not install the
+web gateway or the isolated runner.
+
 The standalone process has only public JWKS verification and an HTTPS forwarder.
 It accepts the dedicated outer builder token, never a normal Supabase token. The
 private gateway independently verifies issuer/audience/expiry and live canonical

@@ -3,10 +3,14 @@ import { createRemoteJWKSet } from 'jose';
 import { createBuilderBackendClient } from './backend-client';
 import { createBuilderMcpHttpHandler } from './http';
 import { BUILDER_ISSUER } from './metadata';
+import type { BuilderMcpDependencies } from './registry';
 import { createBuilderTransportVerifier } from './token-verifier';
 /** Public JWKS + outer-token HTTPS forwarder only. No vault, database, cookies or admin client. */
-export function createBuilderMcpNodeServer() {
+export function createBuilderMcpNodeServer(
+  options: { experience?: BuilderMcpDependencies['experience'] } = {}
+) {
   const handler = createBuilderMcpHttpHandler({
+    experience: options.experience,
     // The listener is loopback-only; the local proxy overwrites X-Forwarded-For.
     trustedProxies: ['127.0.0.1', '::1'],
     verifyAccessToken: createBuilderTransportVerifier(

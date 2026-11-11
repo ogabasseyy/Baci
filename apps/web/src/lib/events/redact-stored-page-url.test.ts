@@ -25,4 +25,12 @@ describe('bugfix: shopper PII stored in analytics page URLs', () => {
       redactStoredPageUrl('https://shop.example/p?fbclid=abc&email=a@b.com')
     ).toBe('https://shop.example/p?fbclid=abc');
   });
+
+  it('matches attribution parameter names case-insensitively', () => {
+    expect(
+      redactStoredPageUrl(
+        'https://shop.example/p?FBCLID=abc&UTM_Source=x&token=t'
+      )
+    ).toBe('https://shop.example/p?FBCLID=abc&UTM_Source=x');
+  });
 });

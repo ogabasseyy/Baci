@@ -25,9 +25,11 @@ export function redactStoredPageUrl(value: string): string {
   try {
     const url = new URL(value);
     const kept = new URLSearchParams();
-    for (const key of KEPT_PARAMS) {
-      const param = url.searchParams.get(key);
-      if (param) kept.set(key, param.slice(0, 500));
+    const wanted = new Set(KEPT_PARAMS.map((key) => key.toLowerCase()));
+    for (const [key, param] of url.searchParams) {
+      if (param && wanted.has(key.toLowerCase())) {
+        kept.set(key, param.slice(0, 500));
+      }
     }
     url.username = '';
     url.password = '';

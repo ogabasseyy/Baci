@@ -41,12 +41,84 @@ describe('applyOrderListVisibilityFilter', () => {
     );
   });
 
-  it('keeps unpaid staff-created orders visible even with an online payment method', () => {
-    // Regression: a staff in-store invoice switched to bank transfer while
-    // awaiting payment matched the abandoned-checkout rule and vanished
-    // from the orders list.
-    expect(VISIBLE_PENDING_ORDER_FILTER.split(',')).toContain(
-      'recorded_by_user_id.not.is.null'
-    );
+  describe('bugfix: unpaid staff invoice hidden after switching to bank transfer', () => {
+    type Row = Record<string, string | null>;
+
+    // Split a PostgREST or() group on top-level commas only.
+    function splitTopLevel(filter: string): string[] {
+      const parts: string[] = [];
+      let depth = 0;
+      let current = '';
+      for (const char of filter) {
+        if (char === '(') depth += 1;
+        if (char === ')') depth -= 1;
+        if (char === ',' && depth === 0) {
+          parts.push(current);
+          current = '';
+          continue;
+        }
+        current += char;
+      }
+      parts.push(current);
+      return parts;
+    }
+
+    // Evaluates the predicate forms these filters use, with SQL NULL
+    // semantics (a NULL compared with not.in matches nothing).
+    function matches(row: Row, predicate: string): boolean {
+      const [column, ...rest] = predicate.split('.');
+      const operator = rest.slice(0, -1).join('.');
+      const operand = rest[rest.length - 1];
+      const value = row[column] ?? null;
+      const list = () => operand.replace(/^\(|\)$/g, '').split(',');
+      if (operator === 'is' && operand === 'null') return value === null;
+      if (operator === 'not.is' && operand === 'null') return value !== null;
+      if (operator === 'not.in')
+        return value !== null && !list().includes(value);
+      throw new Error(`unsupported predicate: ${predicate}`);
+    }
+
+    function isVisible(row: Row): boolean {
+      const hidden = HIDDEN_CHECKOUT_PAYMENT_STATUS_VALUES as readonly string[];
+      if (row.payment_status !== null && hidden.includes(row.payment_status)) {
+        return false;
+      }
+      return splitTopLevel(VISIBLE_PENDING_ORDER_FILTER).some((predicate) =>
+        matches(row, predicate)
+      );
+    }
+
+    const staffInvoice: Row = {
+      payment_method: 'bank_transfer',
+      payment_status: 'pending',
+      recorded_by_user_id: 'staff-user-1',
+    };
+
+    it('shows an unpaid staff invoice whose payment method is bank transfer', () => {
+      expect(isVisible(staffInvoice)).toBe(true);
+    });
+
+    it('still hides an abandoned customer checkout with the same payment details', () => {
+      expect(isVisible({ ...staffInvoice, recorded_by_user_id: null })).toBe(
+        false
+      );
+    });
+
+    it('still shows paid customer orders and unpaid ones with no payment method', () => {
+      expect(
+        isVisible({
+          payment_method: 'paystack',
+          payment_status: 'paid',
+          recorded_by_user_id: null,
+        })
+      ).toBe(true);
+      expect(
+        isVisible({
+          payment_method: null,
+          payment_status: 'pending',
+          recorded_by_user_id: null,
+        })
+      ).toBe(true);
+    });
   });
 });

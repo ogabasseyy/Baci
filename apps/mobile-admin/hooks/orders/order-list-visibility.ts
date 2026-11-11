@@ -25,6 +25,8 @@ export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHO
 // Orders staff create (in-store invoices, WhatsApp/Instagram sales) record
 // the staff member. They are never abandoned checkouts, so an unpaid one
 // must stay in the list even when its payment method is an online one.
+// A NULL recorded_by_user_id means a customer checkout (storefront or
+// customer app), which is what the abandoned-checkout rules target.
 export const STAFF_CREATED_ORDER_FILTER = 'recorded_by_user_id.not.is.null';
 export const CUSTOMER_CHECKOUT_ORDER_FILTER = 'recorded_by_user_id.is.null';
 

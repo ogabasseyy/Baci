@@ -200,9 +200,17 @@ describe('resolveOrderReceiptLogo', () => {
   });
 
   it('discards oversized bodies without a content length', async () => {
-    mockFetch.mockResolvedValue(new Response(new Uint8Array(256 * 1024 + 1)));
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(256 * 1024 + 1));
+      },
+      cancel,
+    });
+    mockFetch.mockResolvedValue(new Response(body));
     expect(await resolveOrderReceiptLogo(logoUrl)).toEqual({ logoUrl: null });
     expect(mockFetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('discards invalid image content', async () => {

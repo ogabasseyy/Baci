@@ -120,6 +120,8 @@ async function launchReceiptBrowser(deadline: number, signal: AbortSignal) {
       signal,
       executablePath,
       args: isLinux ? chromium.args : [],
+      // Sparticuz packages chrome-headless-shell, while local Chrome uses
+      // the regular headless browser. CI smoke-tests the packaged Linux path.
       headless: isLinux ? 'shell' : true,
       timeout: remainingTime(deadline),
       protocolTimeout: remainingTime(deadline),

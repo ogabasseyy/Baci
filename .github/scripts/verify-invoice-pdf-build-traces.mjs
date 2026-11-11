@@ -31,8 +31,15 @@ export async function verifyInvoicePdfBuildTrace(routeFile) {
     throw new Error(`${routeFile} is missing Chromium assets: ${missing.join(', ')}`);
   }
 
+  // Each path appears once in the deployment; distinct paths count separately.
+  const files = new Map(
+    [resolve(routeFile), ...trace.files].map((file) => [
+      resolve(dirname(routeFile), file),
+      file,
+    ])
+  );
   const sizes = await Promise.all(
-    [resolve(routeFile), ...trace.files].map((file) => readTracedFile(routeFile, file))
+    [...files.values()].map((file) => readTracedFile(routeFile, file))
   );
   const bytes = sizes.reduce((total, size) => total + size, 0);
   if (bytes > MAX_FUNCTION_BYTES) {

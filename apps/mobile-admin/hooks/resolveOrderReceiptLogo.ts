@@ -214,6 +214,7 @@ export async function resolveOrderReceiptLogo(
         if (done) break;
         if (size + chunk.byteLength > MAX_LOGO_BYTES) {
           controller.abort();
+          await reader.cancel().catch(() => undefined);
           return absent;
         }
         bytes.set(chunk, size);

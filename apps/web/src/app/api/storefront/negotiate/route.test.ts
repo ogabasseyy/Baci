@@ -1,73 +1,10 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
+import { callNegotiate, MERCHANT_ID, PRODUCT_ID } from './route.test-support';
 
 vi.mock('next/headers', () => ({ cookies: () => Promise.resolve({}) }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
-
-const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
-const MERCHANT_ID = '22222222-2222-4222-8222-222222222222';
-
-// Per-table chainable mock: products/merchants select/eq return self and
-// resolve their own fixture, insert resolves a thenable for the
-// negotiation_logs write. Defaults the merchant fixture to an NGN merchant so
-// existing callers (that don't care about currency) keep working unchanged.
-function supabaseFor(
-  product: Record<string, unknown> | null,
-  merchant: Record<string, unknown> | null = {
-    payout_currency: 'NGN',
-    country: 'NG',
-  }
-) {
-  const insert = vi.fn(() => Promise.resolve({ error: null }));
-
-  const productChain: Record<string, unknown> = {};
-  productChain.select = () => productChain;
-  productChain.eq = () => productChain;
-  productChain.single = () =>
-    Promise.resolve({
-      data: product,
-      error: product ? null : { message: 'not found' },
-    });
-
-  const merchantChain: Record<string, unknown> = {};
-  merchantChain.select = () => merchantChain;
-  merchantChain.eq = () => merchantChain;
-  merchantChain.maybeSingle = () =>
-    Promise.resolve({ data: merchant, error: null });
-
-  const logsChain: Record<string, unknown> = { insert };
-
-  const from = (table: string) => {
-    if (table === 'products') return productChain;
-    if (table === 'merchants') return merchantChain;
-    return logsChain;
-  };
-
-  return { supabase: { from }, insert };
-}
-
-async function callNegotiate(
-  product: Record<string, unknown> | null,
-  offeredPrice: number,
-  attemptNumber = 1,
-  merchant?: Record<string, unknown> | null
-) {
-  const { createClient } = await import('@/lib/supabase/server');
-  const { supabase, insert } = supabaseFor(product, merchant);
-  vi.mocked(createClient).mockReturnValue(supabase as never);
-  const request = new NextRequest('http://localhost/api/storefront/negotiate', {
-    method: 'POST',
-    body: JSON.stringify({
-      productId: PRODUCT_ID,
-      merchantId: MERCHANT_ID,
-      offeredPrice,
-      attemptNumber,
-    }),
-  });
-  const response = await POST(request);
-  return { response, body: await response.json(), insert };
-}
 
 describe('POST /api/storefront/negotiate', () => {
   beforeEach(() => vi.clearAllMocks());

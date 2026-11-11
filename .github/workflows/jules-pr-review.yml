@@ -1,3 +1,10 @@
+# Why the shell below stays inline instead of in scripts under .github/scripts: the "Run Jules
+# review" and "Submit Jules review" steps run before any checkout and hold JULES_API_KEY and a
+# pull-requests write token, so scripts from the pull request itself must not run in them. (The
+# gate step runs after a checkout and reads its filter from a committed blob, checked against a
+# pinned digest.) The real steps are covered offline by jules-sunset-contract.test.mjs and
+# jules-findings-gate.test.mjs. Google retires Jules on 2026-12-31 and this workflow goes with
+# it, so splitting it up is not worth the extra trust boundary.
 name: Jules PR Review
 
 on:

@@ -139,7 +139,12 @@ test('the web Vitest config uses the changed-files provider', async () => {
 
   assert.match(
     config,
-    /experimental:\s*\{\s*vcsProvider:\s*path\.resolve\(\s*__dirname,\s*'\.\.\/\.\.\/\.github\/scripts\/vitest-changed-files-provider\.mjs'/
+    /const changedFilesProvider = path\.resolve\(\s*__dirname,\s*'\.\.\/\.\.\/\.github\/scripts\/vitest-changed-files-provider\.mjs'/
+  );
+  // A missing file must not stop Vitest from starting (sparse checkouts).
+  assert.match(
+    config,
+    /existsSync\(changedFilesProvider\)\s*\?\s*\{\s*experimental:\s*\{\s*vcsProvider:\s*changedFilesProvider/
   );
   const provider = await import(new URL(`../../${PROVIDER}`, import.meta.url));
   assert.equal(typeof provider.default.findChangedFiles, 'function');

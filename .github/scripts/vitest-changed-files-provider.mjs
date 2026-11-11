@@ -137,8 +137,9 @@ export function findChangedFilesWithFsReaders({ root, changedSince }) {
   });
   const added = readers.filter((file) => !files.includes(file));
   if (added.length > 0) {
+    const sample = added.slice(0, 3).join(', ');
     console.error(
-      `changed-files provider: added ${added.length} source file(s) that read the changed paths`
+      `changed-files provider: added ${added.length} source file(s) that read the changed paths (for example ${sample})`
     );
   }
 

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,14 @@ const reactDomPath = appRequire.resolve('react-dom');
 const reactDomClientPath = appRequire.resolve('react-dom/client');
 const reactDomTestUtilsPath = appRequire.resolve('react-dom/test-utils');
 const reactDomServerPath = appRequire.resolve('react-dom/server');
+// `vitest --changed` follows imports only. This provider also selects the tests
+// that read a changed data file (SQL, docs, workflows) through fs. It lives in
+// .github/scripts, which a sparse checkout may leave out; Vitest then falls back
+// to its own git provider instead of failing to start.
+const changedFilesProvider = path.resolve(
+  __dirname,
+  '../../.github/scripts/vitest-changed-files-provider.mjs'
+);
 const sharedPackagePath = path.resolve(__dirname, '../../packages/shared/src');
 const sharedAliases = [
   {
@@ -130,14 +139,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,
-    // `vitest --changed` follows imports only. This provider also selects the
-    // tests that read a changed data file (SQL, docs, workflows) through fs.
-    experimental: {
-      vcsProvider: path.resolve(
-        __dirname,
-        '../../.github/scripts/vitest-changed-files-provider.mjs'
-      ),
-    },
+    ...(existsSync(changedFilesProvider)
+      ? { experimental: { vcsProvider: changedFilesProvider } }
+      : {}),
     setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
     // Cap worker parallelism when running locally (e.g. the pre-push hook) to
     // avoid OOM/SIGTERM under memory pressure — each jsdom worker is heavy and

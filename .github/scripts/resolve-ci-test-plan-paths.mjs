@@ -5,7 +5,7 @@
 // uses Node built-ins: the planner runs in the `changes` job before any
 // dependency install.
 //
-// A changed path falls into exactly one class, checked in this order:
+// A changed path is checked against these classes:
 //   1. full trigger      - shared code, CI wiring or test setup: run everything.
 //   2. web targeted      - apps/web code and tests: `vitest --changed` follows imports.
 //   3. storefront        - mobile storefront code and tests: `jest --changedSince`.
@@ -13,7 +13,8 @@
 //                          workflows, ...). `vitest --changed` cannot follow
 //                          those, so the changed-files provider adds the tests
 //                          that mention the changed path.
-//   5. anything else     - unknown, so the planner keeps the full suite.
+//   5. in none of them   - unknown, so the planner keeps the full suite.
+// One full trigger, or one unknown path, is enough to keep the full suite.
 
 export const ROOT_FULL_TEST_FILES = new Set([
   '.github/scripts/experience-runner-ci.test.mjs',
@@ -109,8 +110,9 @@ export const MOBILE_STOREFRONT_TARGETED_PREFIXES = [
 //   - replay registry  validated by the DB replay job as well; its readers are
 //                      the tools/db tests that mention the registry folder.
 //   - docs/            read by a handful of tests (storefront-edge inventory,
-//                      piggyvest runbooks, ad-tracking guide); everything else
-//                      has no reader at all.
+//                      piggyvest runbooks, ad-tracking guide); the provider
+//                      finds the readers of whichever file changed, and most
+//                      docs files have none.
 //   - .github metadata workflows other than ci.yml, filters, templates: read by
 //                      a few contract tests; CI wiring itself stays a trigger.
 //   - vps-workers/     has its own test job (`deploy_scripts` filter).

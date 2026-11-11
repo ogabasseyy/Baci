@@ -101,12 +101,15 @@ const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quali
 const INSTALLER = '.github/scripts/install-postgresql-hosted.sh';
 // The shared PostgreSQL installer runs sudo and apt-get itself, so calling it counts as privileged too.
 const PRIVILEGED_COMMAND = /\b(sudo|apt-get)\b|install-postgresql-hosted\.sh/;
-// The steps that install PostgreSQL 18 for the scratch-database suites (the DB Replay step is checked separately).
+// The steps that install PostgreSQL 18 for the scratch-database suites, and the DB Replay step, whose
+// toolchain script installs it the same way before adding the Supabase CLI.
+const REPLAY_STEP = ['quality-db-replay', 'Install Supabase replay toolchain'];
 const POSTGRESQL_STEPS = [
   ['quality-disposable-sql', 'Install PostgreSQL client and server binaries'],
   ['quality-misc', 'Run PiggyVest legacy runbook SQL against scratch PostgreSQL'],
   ['quality-misc', 'Test cart quota guard staging and signed PostgREST'],
 ];
+const INSTALLER_CALLERS = [...POSTGRESQL_STEPS, REPLAY_STEP];
 const HOSTED_GUARD = /^(\s*)if \[ "\$RUNNER_ENVIRONMENT" = 'github-hosted' \]; then\s*$/;
 
 function privilegedLinesOutsideHostedGuard(step) {
@@ -136,12 +139,11 @@ test('privileged installs run only on GitHub-hosted runners; the self-hosted run
 
 test('jobs that need PostgreSQL verify the pre-installed toolchain on the private runner', () => {
   const scriptOf = (job, name) => scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
-  const replay = scriptOf('quality-db-replay', 'Install Supabase replay toolchain');
+  const replay = scriptOf(...REPLAY_STEP);
   const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));
-  assert.match(afterGuard, /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/);
   assert.match(afterGuard, /test -x \/usr\/local\/bin\/supabase-go/);
   assert.match(afterGuard, /supabase --version/);
-  for (const [job, name] of POSTGRESQL_STEPS) {
+  for (const [job, name] of INSTALLER_CALLERS) {
     const script = scriptOf(job, name);
     const guarded = script.slice(0, script.lastIndexOf('\nfi\n'));
     assert.match(guarded, /^ +bash \.github\/scripts\/install-postgresql-hosted\.sh$/m, `${job} / ${name} installs through the shared script`);
@@ -157,39 +159,34 @@ test('no CI step or install script uses PostgreSQL 16 any more; every PG_BIN is 
   assert.deepEqual([...new Set([...text.matchAll(/PG_BIN: (\S+)/g)].map((match) => match[1]))], ['/usr/lib/postgresql/18/bin']);
 });
 
-test('the shared PostgreSQL installer is called only by the PostgreSQL install steps', () => {
+test('the shared PostgreSQL installer is called only by the PostgreSQL install steps and DB Replay', () => {
   const callers = [];
   for (const [job, definition] of Object.entries(workflow.jobs)) {
     for (const step of definition.steps ?? []) {
-      if (typeof step.run === 'string' && step.run.includes(INSTALLER)) callers.push({ job, name: step.name });
+      // A step may call the installer itself or through the script it runs (DB Replay).
+      if (typeof step.run === 'string' && (step.run.includes(INSTALLER) || scriptText(step).includes(INSTALLER))) callers.push({ job, name: step.name });
     }
   }
-  assert.deepEqual(callers.map(({ job, name }) => [job, name]).sort(), [...POSTGRESQL_STEPS].sort());
+  assert.deepEqual(callers.map(({ job, name }) => [job, name]).sort(), [...INSTALLER_CALLERS].sort());
   // A caller outside a private job would escape the hosted-guard check above.
   for (const { job, name } of callers) assert.ok(PRIVATE_JOBS.includes(job), `${job} / ${name} must be covered by the hosted-guard test`);
 });
 
-test('every PostgreSQL 18 pin names the same release: hosted install, psql check, replay contract, service container', () => {
-  const script = scriptText(workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain'));
-  const pinned = new Set([...script.matchAll(/postgresql(?:-client)?-18=18\.(\d+)-1\.pgdg24\.04\+\d+/g)].map((match) => match[1]));
+test('every PostgreSQL 18 pin names the same release: hosted install, psql check, replay contract, service container', async () => {
+  const script = scriptText(workflow.jobs[REPLAY_STEP[0]].steps.find((step) => step.name === REPLAY_STEP[1]));
+  // The shared installer is the one place the hosted build is pinned; a second copy could drift.
+  const installer = await readFile(INSTALLER, 'utf8');
+  const build = /^PG_BUILD='18\.(\d+)-1\.pgdg24\.04\+\d+'$/m.exec(installer);
+  assert.ok(build, 'the installer must define PG_BUILD as an exact PostgreSQL 18 build');
+  assert.match(installer, /"postgresql-18=\$\{PG_BUILD\}" "postgresql-client-18=\$\{PG_BUILD\}"/, 'server and client must both use PG_BUILD');
+  assert.doesNotMatch(script, /postgresql(?:-client)?-18=/, 'the replay toolchain script must install PostgreSQL through the shared installer, not pin its own copy');
   const checked = /PostgreSQL\\\) 18\\\.(\d+)\(/.exec(script)?.[1];
-  assert.equal(pinned.size, 1, 'server and client packages must pin the same minor release');
-  assert.equal([...pinned][0], checked, 'the psql version check must match the pinned release');
+  assert.equal(build[1], checked, 'the psql version check must match the pinned release');
   // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
   const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
   assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
   const image = workflow.jobs['quality-disposable-sql'].services.postgres.image;
   assert.match(image, new RegExp(`^postgres:18\\.${checked}@sha256:[0-9a-f]{64}$`), 'the Disposable SQL database container must use the same release, pinned by digest');
-});
-
-test('the shared PostgreSQL installer pins the same build as DB Replay', async () => {
-  const replay = scriptText(workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain'));
-  const installer = await readFile(INSTALLER, 'utf8');
-  const build = /^PG_BUILD='(18\.\d+-1\.pgdg24\.04\+\d+)'$/m.exec(installer)?.[1];
-  assert.ok(build, 'the installer must define PG_BUILD as an exact PostgreSQL 18 build');
-  assert.match(installer, /"postgresql-18=\$\{PG_BUILD\}" "postgresql-client-18=\$\{PG_BUILD\}"/, 'server and client must both use PG_BUILD');
-  const replayBuilds = [...new Set([...replay.matchAll(/postgresql(?:-client)?-18=(18\.\d+-1\.pgdg24\.04\+\d+)/g)].map((match) => match[1]))];
-  assert.deepEqual(replayBuilds, [build], 'DB Replay and the shared installer must pin the same build');
 });
 
 test('the shared PostgreSQL installer refuses to run before any privileged command outside a hosted runner', async () => {

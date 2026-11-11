@@ -153,5 +153,5 @@ it('bugfix: sends GA4 page_view without order tokens or shopper details', () => 
     page_location: 'https://shop.example/track-order?orderId=1',
     page_title: 'Track',
   });
-  delete window.gtag;
+  Reflect.deleteProperty(window, 'gtag');
 });

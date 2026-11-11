@@ -15,14 +15,8 @@ vi.mock('@/lib/consent-mode', () => ({
   initializeConsentMode: vi.fn(),
 }));
 
-declare global {
-  interface Window {
-    dataLayer?: IArguments[];
-  }
-}
-
 afterEach(() => {
-  delete window.dataLayer;
+  Reflect.deleteProperty(window, 'dataLayer');
   window.history.replaceState(null, '', '/');
   vi.restoreAllMocks();
 });
@@ -35,9 +29,8 @@ async function runInlineConfigScript(): Promise<Record<string, unknown>> {
   const source = container.querySelector('script#google-analytics')
     ?.textContent as string;
   new Function(source)();
-  const config = (window.dataLayer ?? []).find(
-    (entry) => entry[0] === 'config'
-  );
+  const entries = (window.dataLayer ?? []) as ArrayLike<unknown>[];
+  const config = entries.find((entry) => entry[0] === 'config');
   return config?.[2] as Record<string, unknown>;
 }
 

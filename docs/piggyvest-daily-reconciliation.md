@@ -80,6 +80,8 @@ anything is wrong. It resends, settles and releases nothing.
      pages. Confirm list id equals `pvb_reference` on the first live credit.
      When that downgrade happens for a wallet, one `list_namespace_unproven`
      line **pages** for it, so a list format change never silences the check.
+     Treat it with the same urgency as a missing credit: until list ids are
+     matchable, that wallet's missing credits are only review lines.
    - Internal transfers are matched on the category `p2p` after trimming and
      lower-casing; any other category still pages.
    - An interest payout we recorded that the list does not show is a review

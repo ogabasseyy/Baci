@@ -66,4 +66,77 @@ BEGIN
 END;
 $check$;
 
+-- Mixed invoice: one catalogue line with tracked stock (no units on hand)
+-- plus one typed line. The tracked line must still be processed and
+-- reported while the typed line is skipped.
+INSERT INTO public.products (
+  id, merchant_id, name, price, slug, status, manage_stock, stock_quantity,
+  inventory_tracking_policy
+)
+VALUES (
+  '44444444-4444-4444-8444-444444444444',
+  '11111111-1111-4111-8111-111111111111',
+  'Tracked laptop', 5000.00, 'tracked-laptop', 'active', true, 0,
+  'serialized_then_unlimited'
+);
+
+INSERT INTO public.orders (
+  id, merchant_id, order_number, total, subtotal, source, shipping_status,
+  payment_status
+)
+VALUES (
+  '55555555-5555-4555-8555-555555555555',
+  '11111111-1111-4111-8111-111111111111',
+  'UNLINKED-ITEM-2', 14000.00, 14000.00, 'physical', 'pending', 'paid'
+);
+
+INSERT INTO public.order_items (
+  id, order_id, product_id, name, price, quantity, product_match_status
+)
+VALUES
+  (
+    '66666666-6666-4666-8666-666666666666',
+    '55555555-5555-4555-8555-555555555555',
+    '44444444-4444-4444-8444-444444444444',
+    'Tracked laptop', 5000.00, 1, 'matched'
+  ),
+  (
+    '77777777-7777-4777-8777-777777777777',
+    '55555555-5555-4555-8555-555555555555',
+    NULL,
+    'Typed charger line', 9000.00, 1, 'custom'
+  );
+
+DO $mixed$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := private.confirm_order_inventory_reservations(
+    '11111111-1111-4111-8111-111111111111',
+    '55555555-5555-4555-8555-555555555555'
+  );
+
+  IF (v_result ->> 'missingUnitCount')::integer IS DISTINCT FROM 1
+     OR v_result -> 'exceptionCodes' IS DISTINCT FROM '[]'::jsonb THEN
+    RAISE EXCEPTION 'unexpected confirmation result for mixed order: %', v_result;
+  END IF;
+
+  IF (
+    SELECT fulfillment_data ->> 'source'
+    FROM public.order_items
+    WHERE id = '66666666-6666-4666-8666-666666666666'
+  ) IS DISTINCT FROM 'merchant_stock' THEN
+    RAISE EXCEPTION 'tracked line fulfillment_data was not written';
+  END IF;
+
+  IF (
+    SELECT fulfillment_data
+    FROM public.order_items
+    WHERE id = '77777777-7777-4777-8777-777777777777'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'typed line should be skipped by inventory confirmation';
+  END IF;
+END;
+$mixed$;
+
 ROLLBACK;

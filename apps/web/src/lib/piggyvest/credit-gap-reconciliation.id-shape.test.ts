@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { compareWalletCredits } from './credit-gap-reconciliation';
+import {
+  compareWalletCredits,
+  creditGapPages,
+} from './credit-gap-reconciliation';
 
 const window = {
   startMs: Date.parse('2026-11-08T23:00:00.000Z'),
@@ -133,5 +136,29 @@ describe('credit-gap reverse scan settle grace', () => {
     );
 
     expect(findings).toEqual([]);
+  });
+});
+
+describe('bugfix: an unmatchable credit id must not be fail-quiet', () => {
+  it('pages for a credit whose list id is not PVB01-shaped', () => {
+    const { findings } = compareWalletCredits(
+      wallet(),
+      [credit('PVB1-UNEXPECTED-SHAPE')],
+      window
+    );
+
+    expect(
+      creditGapPages({
+        status: 'checked',
+        windowStart: '2026-11-08T23:00:00.000Z',
+        walletsTotal: 1,
+        walletsChecked: 1,
+        walletsDeferred: 0,
+        findings,
+        unchecked: [],
+        internalSkipped: 0,
+        unkeyed: 0,
+      })
+    ).toBe(true);
   });
 });

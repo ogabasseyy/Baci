@@ -35,7 +35,7 @@ const FINDING_TEXT: Record<CreditGapFinding['kind'], string> = {
   list_namespace_unproven:
     "none of this wallet's settled PiggyVest list ids is a PVB01 credit id, so its recorded inflows could not be matched. Check whether the list id format changed before trusting this wallet's results",
   unverified_reference:
-    'this PiggyVest list id does not look like a PVB credit id, so it cannot be matched to our records (review only: confirm the list id is the pvb_reference)',
+    'this PiggyVest list id is not a PVB01 credit id, so it cannot be matched to our records. Check it at PiggyVest: it may be a credit we never recorded',
 };
 
 const UNCHECKED_TEXT: Record<CreditGapUnchecked['reason'], string> = {

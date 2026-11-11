@@ -39,6 +39,43 @@ VALUES
   ('f3830000-0000-4000-8000-0000000000c2', 'f3830000-0000-4000-8000-000000000002', 'pvc-2', 'gap-wallet-b', 'gap-b', 'restricted'),
   ('f3830000-0000-4000-8000-0000000000c3', 'f3830000-0000-4000-8000-000000000002', 'pvc-3', 'gap-wallet-c', 'gap-c', 'provisioning'),
   ('f3830000-0000-4000-8000-0000000000c4', 'f3830000-0000-4000-8000-000000000012', 'pvc-4', 'gap-wallet-d', 'gap-d', 'ready');
+-- Dedicated goal wallets the ledgers can credit through an enabled staging
+-- mapping are read too (gap-wallet-e). A mapping whose wallet also has a
+-- plan-wallet row is not listed twice (gap-wallet-a), and one whose
+-- integration is disabled is not read (gap-wallet-f).
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', 'f3830000-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
+INSERT INTO auth.users (id, email) VALUES
+  ('f3830000-0000-4000-8000-000000000021', 'piggyvest-credit-gap-shopper@example.test');
+INSERT INTO public.customers (id, merchant_id, user_id) VALUES
+  ('f3830000-0000-4000-8000-000000000022', 'f3830000-0000-4000-8000-000000000002',
+   'f3830000-0000-4000-8000-000000000021');
+INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity) VALUES
+  ('f3830000-0000-4000-8000-000000000023', 'f3830000-0000-4000-8000-000000000002',
+   'Gap goal product', 100000, 'active', 3);
+INSERT INTO public.customer_savings_goals (id, merchant_id, customer_id, product_id, title, status,
+  source_mode, target_amount, current_amount, contribution_amount, contribution_frequency,
+  start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
+SELECT goal_id::uuid, 'f3830000-0000-4000-8000-000000000002', 'f3830000-0000-4000-8000-000000000022',
+  'f3830000-0000-4000-8000-000000000023', 'Gap goal', 'active', 'manual', 100000, 0, 20000, 'daily',
+  current_date, current_date + 30, now(), now()
+FROM unnest(ARRAY['f3830000-0000-4000-8000-000000000024', 'f3830000-0000-4000-8000-000000000025',
+  'f3830000-0000-4000-8000-000000000026']) goal_id;
+SELECT set_config('request.jwt.claims', '{}', true);
+INSERT INTO piggyvest_staging.integrations (id, expected_provider_account_id, enabled) VALUES
+  ('f3830000-0000-4000-8000-000000000027', 'gap-provider-account-on', true),
+  ('f3830000-0000-4000-8000-000000000028', 'gap-provider-account-off', true);
+INSERT INTO piggyvest_staging.wallet_goal_mappings
+  (integration_id, provider_wallet_id, provider_customer_id, merchant_id, customer_id, goal_id)
+VALUES
+  ('f3830000-0000-4000-8000-000000000027', 'gap-wallet-e', 'pvc-5', 'f3830000-0000-4000-8000-000000000002',
+   'f3830000-0000-4000-8000-000000000022', 'f3830000-0000-4000-8000-000000000024'),
+  ('f3830000-0000-4000-8000-000000000027', 'gap-wallet-a', 'pvc-5', 'f3830000-0000-4000-8000-000000000002',
+   'f3830000-0000-4000-8000-000000000022', 'f3830000-0000-4000-8000-000000000025'),
+  ('f3830000-0000-4000-8000-000000000028', 'gap-wallet-f', 'pvc-6', 'f3830000-0000-4000-8000-000000000002',
+   'f3830000-0000-4000-8000-000000000022', 'f3830000-0000-4000-8000-000000000026');
+UPDATE piggyvest_staging.integrations SET enabled = false
+  WHERE id = 'f3830000-0000-4000-8000-000000000028';
 INSERT INTO public.piggyvest_inflow_credits
   (pvb_reference, provider_transaction_id, event_data_id, event_id, customer_id, wallet_id,
    amount_kobo, fee_kobo, reference, credited_at, created_at)
@@ -62,13 +99,13 @@ BEGIN
     INTO before_rows FROM public.piggyvest_inflow_credits;
   ledger:=piggyvest_primary.read_credit_gap_ledger(integration,'staging','{"rotationSlot":0}');
   IF ledger->>'businessId' IS DISTINCT FROM 'synthetic-gap-business'
-    OR (ledger->>'walletsTotal')::int IS DISTINCT FROM 2
+    OR (ledger->>'walletsTotal')::int IS DISTINCT FROM 3
     OR (ledger->>'walletsDeferred')::int IS DISTINCT FROM 0
     OR (ledger->>'windowStart')::timestamptz >= (ledger->>'generatedAt')::timestamptz THEN
     RAISE EXCEPTION 'Unexpected credit gap header: %', ledger;
   END IF;
   IF (SELECT array_agg(item->>'walletId') FROM jsonb_array_elements(ledger->'wallets') item)
-    IS DISTINCT FROM ARRAY['gap-wallet-a','gap-wallet-b'] THEN
+    IS DISTINCT FROM ARRAY['gap-wallet-a','gap-wallet-b','gap-wallet-e'] THEN
     RAISE EXCEPTION 'Wrong wallets: %', ledger->'wallets';
   END IF;
   -- Wallet a: the recent keyed inflow only (the 60-day row is outside the

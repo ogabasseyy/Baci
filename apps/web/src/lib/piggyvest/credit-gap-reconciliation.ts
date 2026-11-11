@@ -23,7 +23,7 @@ import {
  * - `partial_credit` (review only): a settled `partial` PiggyVest credit
  *   neither ledger recorded. Some money may have moved, so a person looks;
  *   `pending` and `failed` credits moved none and are ignored.
- * - `unverified_reference` (review only): the list id does not have the
+ * - `unverified_reference` (pages): the list id does not have the
  *   PVB credit-id shape (`PVB01…`), so the list may use another id namespace
  *   than our `pvb_reference` and a mismatch proves nothing. When a wallet's
  *   settled list rows carry no PVB-shaped id at all, its recorded inflows

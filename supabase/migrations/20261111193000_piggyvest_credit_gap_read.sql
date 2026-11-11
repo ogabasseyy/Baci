@@ -9,7 +9,11 @@ BEGIN;
 -- `pvb_reference` values both credit ledgers recorded for the same wallets.
 --
 -- Wallets: the plan wallets of the integration's merchant that are ready or
--- restricted, sorted by wallet id, 100 per run. rotationSlot (the day count)
+-- restricted, plus its dedicated goal wallets (piggyvest_staging
+-- wallet_goal_mappings) that the ledgers can credit: exactly one enabled
+-- mapping owns the pair and no plan-wallet row exists for the wallet, the
+-- same rule resolve_staging_wallet_owner applies. Sorted by wallet id, 100
+-- per run. rotationSlot (the day count)
 -- moves the window one page per slot, wrapping, so every wallet is returned
 -- within ceil(total/100) runs. The look-back window is sized from that, plus
 -- two days, so consecutive visits of the same wallet always overlap.
@@ -39,6 +43,7 @@ DECLARE
   window_start timestamptz;
   wallets jsonb;
   wallets_total integer;
+  wallet_ids text[];
 BEGIN
   IF options IS NULL OR jsonb_typeof(options)<>'object'
     OR EXISTS (SELECT 1 FROM jsonb_object_keys(options) option_key WHERE option_key<>'rotationSlot')
@@ -55,8 +60,22 @@ BEGIN
     FOR SHARE OF binding,authority;
   IF NOT FOUND THEN RAISE EXCEPTION 'credit gap authority unavailable' USING ERRCODE='42501'; END IF;
   as_of:=pg_catalog.clock_timestamp();
-  SELECT count(*)::integer INTO wallets_total FROM public.piggyvest_plan_wallets plan
-    WHERE plan.merchant_id=merchant AND plan.status IN ('ready','restricted');
+  SELECT COALESCE(pg_catalog.array_agg(census.wallet_id ORDER BY census.wallet_id),ARRAY[]::text[])
+    INTO wallet_ids FROM (
+      SELECT plan.wallet_id FROM public.piggyvest_plan_wallets plan
+        WHERE plan.merchant_id=merchant AND plan.status IN ('ready','restricted')
+      UNION
+      SELECT mapping.provider_wallet_id COLLATE "default" FROM piggyvest_staging.wallet_goal_mappings mapping
+        JOIN piggyvest_staging.integrations registry ON registry.id=mapping.integration_id AND registry.enabled
+        WHERE mapping.merchant_id=merchant
+          AND NOT EXISTS (SELECT 1 FROM public.piggyvest_plan_wallets plan
+            WHERE plan.wallet_id=mapping.provider_wallet_id COLLATE "default")
+          AND (SELECT count(*) FROM piggyvest_staging.wallet_goal_mappings other
+            JOIN piggyvest_staging.integrations other_registry
+              ON other_registry.id=other.integration_id AND other_registry.enabled
+            WHERE other.provider_wallet_id=mapping.provider_wallet_id
+              AND other.provider_customer_id=mapping.provider_customer_id)=1) census;
+  wallets_total:=pg_catalog.cardinality(wallet_ids);
   window_start:=as_of-pg_catalog.make_interval(days=>(((wallets_total+99)/100)+2)::integer);
   IF wallets_total=0 THEN
     RETURN pg_catalog.jsonb_build_object('generatedAt',as_of,'windowStart',window_start,'businessId',business,
@@ -92,9 +111,8 @@ BEGIN
             AND (payout.created_at>=window_start-interval '1 day' OR payout.paid_at>=window_start-interval '1 day')) row_
       ) AS interest
     FROM (
-      SELECT plan.wallet_id,pg_catalog.row_number() OVER (ORDER BY plan.wallet_id)-1 AS position
-      FROM public.piggyvest_plan_wallets plan
-      WHERE plan.merchant_id=merchant AND plan.status IN ('ready','restricted')) ranked
+      SELECT listed.wallet_id,listed.ordinal-1 AS position
+      FROM pg_catalog.unnest(wallet_ids) WITH ORDINALITY AS listed(wallet_id,ordinal)) ranked
     WHERE ((ranked.position-((slot*100)%wallets_total)+wallets_total)%wallets_total)<100) item;
   RETURN pg_catalog.jsonb_build_object('generatedAt',as_of,'windowStart',window_start,'businessId',business,
     'wallets',wallets,'walletsTotal',wallets_total,

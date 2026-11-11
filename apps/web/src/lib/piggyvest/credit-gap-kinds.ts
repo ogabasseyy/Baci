@@ -26,5 +26,7 @@ export type CreditGapKind =
 export const REVIEW_ONLY: ReadonlySet<CreditGapKind> = new Set([
   'interest_not_listed',
   'partial_credit',
-  'unverified_reference',
 ]);
+// `unverified_reference` pages on purpose: a credit PiggyVest made that we
+// cannot match is money until proven otherwise, and the report is one alert
+// per daily run, so failing loud costs one page, not one per credit.

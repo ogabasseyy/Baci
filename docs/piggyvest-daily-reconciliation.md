@@ -74,15 +74,17 @@ anything is wrong. It resends, settles and releases nothing.
      pending or failed) **pages**
      (`not_on_provider`) once it is older than the same 6-hour settle window
      the forward check uses; check it at PiggyVest before acting.
-   - A list id without the PVB credit-id shape (`PVB01…`) is a review line
-     only (`unverified_reference`): the list may use another id namespace than
+   - A list id without the PVB credit-id shape (`PVB01…`) **pages**
+     (`unverified_reference`): it may be a credit we never recorded, so the
+     check fails loud rather than quiet: the list may use another id namespace than
      our `pvb_reference`. If none of a wallet's settled list ids is PVB-shaped,
-     its recorded inflows missing from the list are review lines too, not
-     pages. Confirm list id equals `pvb_reference` on the first live credit.
+     its recorded inflows missing from the list are reported the same way. Confirm list id equals `pvb_reference` on the first live credit.
      When that downgrade happens for a wallet, one `list_namespace_unproven`
      line **pages** for it, so a list format change never silences the check.
-     Treat it with the same urgency as a missing credit: until list ids are
-     matchable, that wallet's missing credits are only review lines.
+     Treat it with the same urgency as a missing credit.
+   - Wallets checked: ready/restricted plan wallets plus dedicated goal
+     wallets the ledgers credit through exactly one enabled staging
+     goal-wallet mapping (when no plan-wallet row exists for that wallet).
    - Internal transfers are matched on the category `p2p` after trimming and
      lower-casing; any other category still pages.
    - An interest payout we recorded that the list does not show is a review

@@ -18,7 +18,8 @@ describe('credit-gap kinds', () => {
     expect(REVIEW_ONLY.has('unrecorded_credit')).toBe(false);
     expect(REVIEW_ONLY.has('not_on_provider')).toBe(false);
     expect(REVIEW_ONLY.has('list_namespace_unproven')).toBe(false);
-    expect(REVIEW_ONLY.has('unverified_reference')).toBe(true);
+    // An unmatchable credit fails loud: never review-only.
+    expect(REVIEW_ONLY.has('unverified_reference')).toBe(false);
   });
 
   it('treats only the observed p2p category as internal', () => {

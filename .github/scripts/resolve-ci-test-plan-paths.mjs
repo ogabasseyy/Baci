@@ -179,9 +179,11 @@ const TEST_FILE_NAME = /\.(?:test|spec)\.[^/]+$/;
 
 // A deleted (or renamed-away) source file can leave unchanged tests that still
 // import it. Neither `vitest --changed` nor Jest can select those tests, because
-// the import no longer resolves, so such a deletion keeps the full suite. Deleted
-// tests and deleted data files (docs, migrations, ...) do not: nothing imports a
-// test, and the provider finds the readers of a data file by name.
+// the import no longer resolves, so such a deletion keeps the full suite, and so
+// does a deleted fixture next to the code in a targeted folder. Deleted tests and
+// deleted files of the reader families (docs, migrations, workflows, the replay
+// registry, ...) do not: nothing imports a test, and the provider finds the
+// readers of a family file by name.
 export function isDeletedSourceFile(file) {
   return (
     (isTargetableWebFile(file) || isTargetableMobileStorefrontFile(file)) &&

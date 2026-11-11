@@ -102,8 +102,10 @@ The planner lists deleted files and both sides of a rename (`git diff
 --name-only --no-renames`, no `--diff-filter`). Deleting or renaming away a
 source file keeps the full suite: an unchanged test may still import it, and
 neither `vitest --changed` nor Jest can select that test because the import no
-longer resolves. Deleting a test, a doc, a migration or a registry entry does
-not: nothing imports a test, and the provider finds the readers of a data file.
+longer resolves; the same goes for a fixture deleted next to the code in a
+targeted folder. Deleting a test, or a file of the reader families (a doc, a
+migration, a workflow, a registry entry), does not: nothing imports a test, and
+the provider finds the readers of such a file by name.
 
 ## Changing this
 

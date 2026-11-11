@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { once } from 'node:events';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { BUILDER_METADATA_PATH } from './metadata';
 import { createBuilderMcpNodeServer } from './node';
 
@@ -61,6 +61,48 @@ it.each([
     expect(
       body.result.tools.some((tool) => tool.name === 'create_storefront_draft')
     ).toBe(true);
+  } finally {
+    await runtime.close();
+  }
+});
+
+it('uses explicitly supplied trusted transport dependencies for a co-located gateway', async () => {
+  const execute = vi.fn(async () => ({ stores: [], nextCursor: null }));
+  const verify = vi.fn(async () => {});
+  const runtime = createBuilderMcpNodeServer({
+    executeBuilderTool: execute,
+    verifyAccessToken: verify,
+  });
+  runtime.server.listen(0, '127.0.0.1');
+  await once(runtime.server, 'listening');
+  try {
+    const address = runtime.server.address();
+    if (!address || typeof address === 'string') throw Error('fixture');
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/builder/mcp`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: 'Bearer synthetic.token',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'list_storefronts', arguments: {} },
+        }),
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(verify).toHaveBeenCalledWith('synthetic.token');
+    expect(execute).toHaveBeenCalledWith(
+      'synthetic.token',
+      'list_storefronts',
+      { pageSize: 20 },
+      expect.any(AbortSignal)
+    );
   } finally {
     await runtime.close();
   }

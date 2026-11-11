@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ vi.mock('server-only', () => ({}));
 
 import { getInstalledBuilderGateway } from '@/lib/builder-gateway/runtime';
 import { startProductionBuilderHost } from '@/lib/experience/production-builder-host';
+import { createProductionBuilderListener } from '@/lib/experience/production-builder-listener';
 import { lifecycleFixture } from '../../tests/experience-lifecycle/sql.test-support';
 import { startDraftApi } from '../builder-auth/draft-api-fixture.ts';
 import { createTransientOutputStore } from '../experience-runner/transient-output-store';
@@ -22,6 +24,7 @@ it('creates and lists an unpublished synthetic store through the co-located gate
   const dir = mkdtempSync(join(tmpdir(), 'baci-host-rls-'));
   let api: Awaited<ReturnType<typeof startDraftApi>> | undefined;
   let host: Awaited<ReturnType<typeof startProductionBuilderHost>> | undefined;
+  let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
   try {
     const actor = randomUUID();
     const connection = randomUUID();
@@ -197,6 +200,34 @@ it('creates and lists an unpublished synthetic store through the co-located gate
         }),
       ])
     );
+    listener = createProductionBuilderListener(host.publicJwks);
+    listener.server.listen(0, '127.0.0.1');
+    await once(listener.server, 'listening');
+    const address = listener.server.address();
+    if (!address || typeof address === 'string') throw Error('NO_LISTENER');
+    const mcpList = (bearer: string) =>
+      fetch(`http://127.0.0.1:${address.port}/builder/mcp`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'list_storefronts', arguments: {} },
+        }),
+      });
+    const mcpResult = await mcpList(token);
+    expect(mcpResult.status).toBe(200);
+    expect(JSON.stringify(await mcpResult.json())).toContain(
+      'synthetic-host-store'
+    );
+    expect(
+      JSON.stringify(await (await mcpList(otherToken)).json())
+    ).not.toContain('synthetic-host-store');
     const stored = await db.pool.query(
       'SELECT is_published FROM merchants WHERE id=$1',
       [created.storefrontId]
@@ -219,7 +250,11 @@ it('creates and lists an unpublished synthetic store through the co-located gate
       [connection]
     );
     expect((await call('list_storefronts', {}))?.status).toBe(401);
+    expect(JSON.stringify(await (await mcpList(token)).json())).not.toContain(
+      'synthetic-host-store'
+    );
   } finally {
+    await listener?.close();
     await host?.close();
     await api?.close();
     await db.close();

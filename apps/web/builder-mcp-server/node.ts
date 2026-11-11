@@ -7,16 +7,23 @@ import type { BuilderMcpDependencies } from './registry';
 import { createBuilderTransportVerifier } from './token-verifier';
 /** Public JWKS + outer-token HTTPS forwarder only. No vault, database, cookies or admin client. */
 export function createBuilderMcpNodeServer(
-  options: { experience?: BuilderMcpDependencies['experience'] } = {}
+  options: {
+    experience?: BuilderMcpDependencies['experience'];
+    executeBuilderTool?: BuilderMcpDependencies['executeBuilderTool'];
+    verifyAccessToken?: (token: string) => Promise<void>;
+  } = {}
 ) {
   const handler = createBuilderMcpHttpHandler({
     experience: options.experience,
     // The listener is loopback-only; the local proxy overwrites X-Forwarded-For.
     trustedProxies: ['127.0.0.1', '::1'],
-    verifyAccessToken: createBuilderTransportVerifier(
-      createRemoteJWKSet(new URL(`${BUILDER_ISSUER}/jwks`))
-    ),
-    executeBuilderTool: createBuilderBackendClient(),
+    verifyAccessToken:
+      options.verifyAccessToken ??
+      createBuilderTransportVerifier(
+        createRemoteJWKSet(new URL(`${BUILDER_ISSUER}/jwks`))
+      ),
+    executeBuilderTool:
+      options.executeBuilderTool ?? createBuilderBackendClient(),
   });
   const server = createServer((req, res) => {
     void handler.handle(req, res).catch(() => {

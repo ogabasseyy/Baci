@@ -30,6 +30,7 @@ export async function startProductionBuilderHost(settings: {
     let closing: Promise<void> | undefined;
     return {
       deliver: installed.deliver,
+      publicJwks: broker.publicBinding.jwks,
       close() {
         closing ??= (async () => {
           try {

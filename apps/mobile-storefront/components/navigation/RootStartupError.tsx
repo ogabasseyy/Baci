@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Appearance, View } from 'react-native';
+import { useColorScheme, View } from 'react-native';
 import { ErrorFallbackView } from '@/components/ErrorFallbackView';
 import {
   classifyError,
@@ -19,8 +19,8 @@ export function RootStartupError({ error, retry }: RootStartupErrorProps) {
     initialVisible: true,
     ready: true,
   });
-  const colors =
-    Colors[Appearance.getColorScheme() === 'dark' ? 'dark' : 'light'];
+  const systemScheme = useColorScheme();
+  const colors = Colors[systemScheme === 'dark' ? 'dark' : 'light'];
   useEffect(() => {
     logError(error, undefined, 'expo-router-fallback');
   }, [error]);

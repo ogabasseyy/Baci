@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T01:40:09+00:00",
-  "source_revision": "7312bcb75592bf0b2799076be8298429b3394c7b",
-  "evidence_digest": "6a11ac9f1375b66ece6faa12133e219a148a5f169b58cdd98a9f6affccb516cb",
-  "claims_digest": "eb559999aae99234cbce8bb703666bc3c790357e9feed32c6282f4e79dcb9a1a",
+  "reviewed_at": "2026-11-11T01:48:42+00:00",
+  "source_revision": "e390e78497676d16a09afa96d5120219bd296f35",
+  "evidence_digest": "0da72fd824629a0c9abcf11b74fb22592d2f350a1b3e9da9e3a2dbe42eab8614",
+  "claims_digest": "4f33ed6d5df24c61bdd302774e588eb398aa6ed20ff78a719f191a728d4aa4f0",
   "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision. Reviewed order-bound wallet recovery and the distinction between store-credit retry and reconciliation.",
   "capabilities": [
     {

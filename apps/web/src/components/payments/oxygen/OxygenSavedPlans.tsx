@@ -206,21 +206,26 @@ export function OxygenSavedPlans({
           </button>
         </div>
       )}
-      {confirmed &&
-        !offered(percentage, tenure) &&
-        (approvalCodeStarted && cancelUnavailablePlan ? (
+      {approvalCodeStarted &&
+        cancelUnavailablePlan &&
+        state.bookingReference &&
+        !bookedPlanIsOffered(state) && (
           <OxygenUnavailablePlanRecovery
             busy={approvalBusy || quoting}
             cancel={cancelUnavailablePlan}
             offersMissing={!state.offers}
           />
-        ) : state.offers ? (
+        )}
+      {confirmed &&
+        !offered(percentage, tenure) &&
+        !(approvalCodeStarted && cancelUnavailablePlan) &&
+        state.offers && (
           <p role="status">
             {approvalCodeStarted
               ? 'We could not confirm this saved plan. Please contact support for help.'
               : 'This saved plan is no longer available. Choose another down payment or repayment period.'}
           </p>
-        ) : null)}
+        )}
       {ready && (
         <div className={summaryStyles.footer}>
           {confirmed && (

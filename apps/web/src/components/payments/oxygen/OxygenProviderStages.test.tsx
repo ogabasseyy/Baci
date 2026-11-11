@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 
 vi.mock('./OxygenGuidedVerification', () => ({
@@ -45,6 +45,7 @@ import { OxygenProviderStages } from './OxygenProviderStages';
 import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 
 const submit = vi.fn().mockResolvedValue(true);
+beforeEach(() => submit.mockClear());
 const verified = {
   applicationReference: '60000000-0000-4000-8000-000000000001',
   validated: true,

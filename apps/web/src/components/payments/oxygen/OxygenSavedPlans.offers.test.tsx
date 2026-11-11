@@ -15,6 +15,35 @@ const id = '60000000-0000-4000-8000-000000000001';
 const ref25 = '70000000-0000-4000-8000-000000000025';
 const ref50 = '70000000-0000-4000-8000-000000000050';
 const ref6 = '70000000-0000-4000-8000-000000000006';
+it('allows confirmed cancellation if no saved plans are returned', async () => {
+  const cancel = vi.fn().mockResolvedValue(true);
+  mocks.fetch.mockResolvedValue(
+    Response.json({ selectedReference: null, plans: [] })
+  );
+  render(
+    <OxygenSavedPlans
+      workflowId={id}
+      approvalReference={ref25}
+      approvalCodeStarted
+      cancelUnavailablePlan={cancel}
+      state={oxygenProviderStateSchema.parse(plan(ref25, 25).state)}
+    />
+  );
+  expect(
+    await screen.findByRole('region', { name: 'Loan breakdown' })
+  ).toBeVisible();
+  expect(
+    screen.queryByText(/Saved plan choices are unavailable/i)
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Choose another plan' })
+  );
+  expect(cancel).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Cancel plan and continue' })
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+});
 it('offers confirmed cancellation when a completed eligibility check has no offers', async () => {
   const cancel = vi.fn().mockResolvedValue(true);
   mocks.fetch.mockResolvedValue(

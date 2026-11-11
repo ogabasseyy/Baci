@@ -2,19 +2,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MerchantFeatureSource } from '@/lib/merchant-has-feature';
 import { SingleFlight } from '@/lib/single-flight';
 import { storefrontAuthMerchantRpcRowSchema } from '@/schemas/storefront-auth-merchant';
+import {
+  CART_MERCHANT_LOOKUP_MAX_ENTRIES,
+  CART_MERCHANT_LOOKUP_TTL_MS,
+} from './merchant-lookup-cache-constants';
 import { createAnonMerchantFeatureLookup } from './merchant-resolution';
 import type {
   MerchantRpcClient,
   ResolveCartMerchantDeps,
 } from './merchant-resolution-types';
-
-/**
- * How long one warm instance may reuse a merchant's published mapping and
- * feature row. Unpublishing a store or removing `shared_cart` therefore
- * reaches the hot cart routes within this window, not instantly.
- */
-export const CART_MERCHANT_LOOKUP_TTL_MS = 30_000;
-const MAX_ENTRIES = 500;
 
 type FeatureLookup = NonNullable<
   ResolveCartMerchantDeps['loadMerchantFeatures']
@@ -40,7 +36,10 @@ function createTtlCache<T>() {
       return undefined;
     },
     set(key: string, value: T, now: number) {
-      if (entries.size >= MAX_ENTRIES && !entries.has(key)) {
+      if (
+        entries.size >= CART_MERCHANT_LOOKUP_MAX_ENTRIES &&
+        !entries.has(key)
+      ) {
         const oldest = entries.keys().next().value;
         if (oldest !== undefined) entries.delete(oldest);
       }

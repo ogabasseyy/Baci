@@ -2,9 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetCartMerchantLookupCacheForTesting,
-  CART_MERCHANT_LOOKUP_TTL_MS,
   cachedCartMerchantLookups,
 } from './merchant-lookup-cache';
+import { CART_MERCHANT_LOOKUP_TTL_MS } from './merchant-lookup-cache-constants';
 
 const MERCHANT_ROW = {
   business_name: 'Oga Bassey',

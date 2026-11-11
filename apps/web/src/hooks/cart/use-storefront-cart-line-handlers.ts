@@ -16,6 +16,7 @@ import type {
   CartItem,
 } from './cart-types';
 import { gateAddToCart } from './gate-add-to-cart';
+import { trackCartAdd } from './track-cart-add';
 import type { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
 type DelegatedActions = ReturnType<
@@ -30,6 +31,7 @@ export function useStorefrontCartLineHandlers({
   delegatedActions,
   enableSmartCartPro,
   merchantContext,
+  merchantId,
   merchantSlugRef,
   setCart,
   setCartWideNegotiationActive,
@@ -43,6 +45,7 @@ export function useStorefrontCartLineHandlers({
   delegatedActions: DelegatedActions;
   enableSmartCartPro: boolean;
   merchantContext: MerchantContextType | null;
+  merchantId: string | null;
   merchantSlugRef: RefObject<string | null>;
   setCart: Dispatch<SetStateAction<CartItem[]>>;
   setCartWideNegotiationActive: (active: boolean) => void;
@@ -50,7 +53,21 @@ export function useStorefrontCartLineHandlers({
   setShowUpsell: Dispatch<SetStateAction<boolean>>;
   upsellTimerRef: RefObject<ReturnType<typeof setTimeout> | null>;
 }) {
-  const noteAddedProduct = (added: Product) => {
+  // Runs exactly once per applied add, on both the delegated (shared cart)
+  // and legacy paths, so every storefront entry point is tracked here and
+  // callers must not report add_to_cart themselves.
+  const noteAddedProduct = (
+    added: Product,
+    quantity: number,
+    options: AddToCartOptions | undefined
+  ) => {
+    trackCartAdd({
+      merchant: merchantContext?.merchant,
+      fallbackMerchantId: merchantId,
+      product: added,
+      quantity,
+      options,
+    });
     if (enableSmartCartPro) {
       setLastAddedProduct(added);
       if (upsellTimerRef.current) clearTimeout(upsellTimerRef.current);
@@ -76,7 +93,9 @@ export function useStorefrontCartLineHandlers({
         quantity,
         normalizedOptions
       );
-      if (accepted) noteAddedProduct(productForCart);
+      if (accepted) {
+        noteAddedProduct(productForCart, quantity, normalizedOptions);
+      }
       return accepted ? 'applied' : 'rejected';
     }
 
@@ -176,7 +195,7 @@ export function useStorefrontCartLineHandlers({
     }
 
     if (outcome === 'applied') {
-      noteAddedProduct(productForCart);
+      noteAddedProduct(productForCart, quantity, normalizedOptions);
     }
     return outcome;
   };

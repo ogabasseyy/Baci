@@ -4,8 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/components/storefront/ogabassey/types';
 import { OgabasseyPdpBelowFoldIsland } from './client-islands';
 
-const { mockDeferredDetailIsland } = vi.hoisted(() => ({
-  mockDeferredDetailIsland: vi.fn(),
+const { mockDeferredDetailIsland, mockProductViewTracker } = vi.hoisted(
+  () => ({
+    mockDeferredDetailIsland: vi.fn(),
+    mockProductViewTracker: vi.fn(),
+  })
+);
+
+vi.mock('./product-view-tracker.client', () => ({
+  OgabasseyPdpProductViewTracker: (props: unknown) => {
+    mockProductViewTracker(props);
+    return null;
+  },
 }));
 
 vi.mock('./deferred-detail-island', () => ({
@@ -31,6 +41,7 @@ const product = {
   name: 'Lenovo Legion Pro 9',
   price: '₦5,985,000',
   rawPrice: 5_985_000,
+  category: 'Laptops',
   slug: 'lenovo-legion-pro-9',
 } as unknown as Product;
 
@@ -55,5 +66,20 @@ describe('OgaBassey PDP client islands', () => {
     );
     expect(screen.getByLabelText('Server product details')).toBeInTheDocument();
     expect(screen.getByLabelText('Related buying guidance')).toBeInTheDocument();
+  });
+
+  it('reports the product view from the ogabassey product page', () => {
+    // Regression: this page never called the product_view tracker, so web
+    // product views were missing for ogabassey in Baci and the ad platforms.
+    render(
+      <OgabasseyPdpBelowFoldIsland product={product} storeSlug="ogabassey" />
+    );
+
+    expect(mockProductViewTracker).toHaveBeenCalledWith({
+      productId: 'product-1',
+      name: 'Lenovo Legion Pro 9',
+      price: 5_985_000,
+      category: 'Laptops',
+    });
   });
 });

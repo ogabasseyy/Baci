@@ -1,9 +1,8 @@
 'use client';
 
 import { analytics } from '@/lib/analytics';
-import { isAnalyticsAllowed } from '@/lib/analytics-consent';
-import { isMarketingAllowed } from '@/lib/marketing-consent';
-import type { Product } from '@/lib/products';
+import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
+import { sendTrackedEvent } from '@/lib/analytics/send-tracked-event';
 
 /**
  * Event Tracking System for Baci
@@ -65,57 +64,6 @@ interface SearchEvent extends BaseEvent {
   results_count?: number;
 }
 
-// Get or create session ID
-function getSessionId(): string {
-  if (typeof window === 'undefined') return '';
-
-  let sessionId = sessionStorage.getItem('baci_session_id');
-  if (!sessionId) {
-    // Use crypto.randomUUID() for cryptographically secure session IDs
-    sessionId = `sess_${crypto.randomUUID()}`;
-    sessionStorage.setItem('baci_session_id', sessionId);
-  }
-  return sessionId;
-}
-
-// Get common event metadata
-function getEventMetadata(): Partial<BaseEvent> {
-  if (typeof window === 'undefined') return {};
-
-  return {
-    session_id: getSessionId(),
-    user_agent: navigator.userAgent,
-    referrer: document.referrer || undefined,
-    page_url: window.location.href,
-  };
-}
-
-// Send event to our API (stores in Supabase)
-async function sendEvent(
-  event: BaseEvent | ProductEvent | PurchaseEvent | SearchEvent
-): Promise<void> {
-  try {
-    const response = await fetch('/api/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...event,
-        ...getEventMetadata(),
-        analytics_consent: isAnalyticsAllowed(),
-        marketing_consent: isMarketingAllowed(),
-        timestamp: new Date().toISOString(),
-      }),
-    });
-
-    if (!response.ok) {
-      console.warn('Failed to track event:', event.event_type);
-    }
-  } catch (error) {
-    // Silently fail - don't break user experience for analytics
-    console.warn('Event tracking error:', error);
-  }
-}
-
 /**
  * Track events - stores in Supabase AND sends to GA4/Facebook
  */
@@ -125,7 +73,7 @@ export const trackEvent = {
    */
   productView: (
     merchantId: string,
-    product: Product,
+    product: AnalyticsProduct,
     currency: string = 'USD'
   ) => {
     const eventId = crypto.randomUUID();
@@ -134,7 +82,7 @@ export const trackEvent = {
       product.categories?.name || product.category || undefined;
 
     // Store in Supabase for merchant dashboard
-    sendEvent({
+    sendTrackedEvent({
       event_id: eventId,
       event_type: 'product_view',
       merchant_id: merchantId,
@@ -154,7 +102,7 @@ export const trackEvent = {
    */
   addToCart: (
     merchantId: string,
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD'
   ) => {
@@ -163,7 +111,7 @@ export const trackEvent = {
     const categoryName =
       product.categories?.name || product.category || undefined;
 
-    sendEvent({
+    sendTrackedEvent({
       event_id: eventId,
       event_type: 'add_to_cart',
       merchant_id: merchantId,
@@ -183,7 +131,7 @@ export const trackEvent = {
    */
   removeFromCart: (
     merchantId: string,
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD'
   ) => {
@@ -191,7 +139,7 @@ export const trackEvent = {
     const categoryName =
       product.categories?.name || product.category || undefined;
 
-    sendEvent({
+    sendTrackedEvent({
       event_type: 'remove_from_cart',
       merchant_id: merchantId,
       product_id: product.id,
@@ -210,7 +158,7 @@ export const trackEvent = {
    */
   beginCheckout: (
     merchantId: string,
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     currency: string = 'USD'
   ) => {
     const eventId = crypto.randomUUID();
@@ -219,7 +167,7 @@ export const trackEvent = {
       0
     );
 
-    sendEvent({
+    sendTrackedEvent({
       event_id: eventId,
       event_type: 'begin_checkout',
       merchant_id: merchantId,
@@ -245,7 +193,7 @@ export const trackEvent = {
   purchase: (
     merchantId: string,
     orderId: string,
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     total: number,
     currency: string = 'USD',
     shipping?: number,
@@ -256,7 +204,7 @@ export const trackEvent = {
       0
     );
 
-    sendEvent({
+    sendTrackedEvent({
       event_type: 'purchase',
       merchant_id: merchantId,
       order_id: orderId,
@@ -281,7 +229,7 @@ export const trackEvent = {
    * Track search
    */
   search: (merchantId: string, searchTerm: string, resultsCount?: number) => {
-    sendEvent({
+    sendTrackedEvent({
       event_type: 'search',
       merchant_id: merchantId,
       search_term: searchTerm,
@@ -296,14 +244,14 @@ export const trackEvent = {
    */
   addToWishlist: (
     merchantId: string,
-    product: Product,
+    product: AnalyticsProduct,
     currency: string = 'USD'
   ) => {
     // Use joined categories.name from category_id, fallback to legacy TEXT field
     const categoryName =
       product.categories?.name || product.category || undefined;
 
-    sendEvent({
+    sendTrackedEvent({
       event_type: 'add_to_wishlist',
       merchant_id: merchantId,
       product_id: product.id,
@@ -320,7 +268,7 @@ export const trackEvent = {
    * Track page view
    */
   pageView: (merchantId: string, pageUrl: string, pageTitle?: string) => {
-    sendEvent({
+    sendTrackedEvent({
       event_type: 'page_view',
       merchant_id: merchantId,
       page_url: pageUrl,

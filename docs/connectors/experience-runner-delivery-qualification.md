@@ -25,6 +25,12 @@ const runner = await createLinuxRunner({ key: runnerKey, toolchainDigest, verify
 // Adapt only the fixed signed route to the approved HTTPS ingress.
 ```
 
+`startRunnerService` composes this preflight with a same-user, mode-0600 Unix
+socket for the fixed `/v1/execute` route. Its HTTPS ingress and production
+configuration are still operator responsibilities: the socket does not provide
+TLS, provision a trusted pin or authorize access on its own. The signed runner
+handler remains responsible for request limits, replay protection and lanes.
+
 ## Baci boot and database boundaries
 
 Use `createProductionExperienceIntegration` with the established connector authenticator, normal user-client resolver, normal anonymous public client, trusted canonical merchant-domain resolver, owner bootstrap reader, scoped evidence verifier/recorder, retained artifact directory and normal owner-intent/approval callbacks. Do not supply a service-role client or accept merchant identity/approval/renderer bytes from MCP arguments.

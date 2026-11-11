@@ -272,10 +272,6 @@ export default function RootLayout() {
     return null;
   }
 
-  if (!isStorageReady && !showSplash) {
-    return null;
-  }
-
   if (!isStorageReady) return null;
 
   return (

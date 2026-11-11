@@ -137,6 +137,20 @@ BEGIN
       'batch_id', 'b', 'paid_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
     RAISE EXCEPTION 'legacy interest redelivery must dedupe, not raise';
   END IF;
+  -- A known pvb_reference retried with a rotated internal id is exempt too:
+  -- seed a backfilled credit for the same customer, then retry it.
+  RESET ROLE;
+  INSERT INTO public.piggyvest_inflow_credits (pvb_reference, provider_transaction_id,
+    event_data_id, event_id, customer_id, wallet_id, amount_kobo, fee_kobo, reference, credited_at)
+  VALUES ('PVB01KNOWN', 'pvbref-known-txn', 'd', 'pvbref-known-evt', 'c', 'w', 1000, 0, 'r', now());
+  SET LOCAL ROLE piggyvest_webhook_intake;
+  IF piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01KNOWN', 'provider_transaction_id', 'pvbref-known-txn-rotated',
+      'event_data_id', 'd', 'event_id', 'pvbref-evt-13', 'customer_id', 'c', 'wallet_id', 'w',
+      'amount_kobo', 1000, 'fee_kobo', 0, 'reference', 'r',
+      'credited_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'known pvb_reference retry must dedupe, not raise';
+  END IF;
   -- The gate is per customer: another customer's credit still lands.
   IF jsonb_array_length(piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
       'pvb_reference', 'PVB01PVBREF10', 'provider_transaction_id', 'pvbref-other-txn',

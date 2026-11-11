@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import YAML from 'yaml';
 
-const names = ['checkout-browser', 'security', 'codeql', 'ios-runtime-scheduler-pr',
+// Heavy workflows that still wait for ready_for_review. The two big ones follow review-first CI
+// instead (ci.yml, checkout-browser.yml: see review-first-ci/ci-workflow-contract.test.mjs), and
+// security.yml keeps scanning every push, drafts included (Semgrep SAST is a cheap required check).
+const names = ['codeql', 'ios-runtime-scheduler-pr',
   'rn-find-shadow-node-gtest', 'pilot-codec-compatibility', 'chatwoot-synthetic-handoff', 'link-checker'];
 const load = (name) => YAML.parse(readFileSync(`.github/workflows/${name}.yml`, 'utf8'));
 function evaluate(condition, eventName, draft) {
@@ -21,15 +24,22 @@ for (const name of names) {
     }
   });
 }
-test('main CI admits ready PRs, main pushes, merge queues and manual runs', () => {
+test('main CI no longer depends on the draft flag or on ready_for_review', () => {
   const workflow = load('ci');
-  assert.ok(workflow.on.pull_request.types.includes('ready_for_review'));
-  const condition = workflow.jobs.build.if;
-  assert.equal(evaluate(condition, 'pull_request', true), false);
-  for (const event of ['pull_request', 'push', 'merge_group', 'workflow_dispatch']) {
-    assert.equal(evaluate(condition, event, false), true, event);
+  // The capability-gate contract forbids any `types:` filter on ci.yml's pull_request trigger.
+  assert.equal('types' in workflow.on.pull_request, false);
+  for (const [id, job] of Object.entries(workflow.jobs)) {
+    assert.doesNotMatch(String(job.if ?? ''), /\.draft/, id);
   }
+  // Heavy jobs wait for the review-first stage instead (full contract: review-first-ci tests).
+  assert.match(workflow.jobs['quality-test'].if, /needs\.changes\.outputs\.stage == 'full'/);
   assert.match(workflow.jobs.quality.if, /always\(\)/);
+});
+test('security scans and Semgrep SAST run on every push, drafts included', () => {
+  const workflow = load('security');
+  for (const [id, job] of Object.entries(workflow.jobs)) {
+    assert.doesNotMatch(String(job.if ?? ''), /\.draft/, id);
+  }
 });
 test('Muse reviews draft pushes and retains same-repository isolation', () => {
   const workflow = load('muse-code-review');

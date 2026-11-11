@@ -1,7 +1,6 @@
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
 import { createCartCommandCoordinator } from './command-coordinator';
-import { createEditQueue } from './controller-edit-queue';
-import { createEditRunner } from './controller-legacy-edit';
+import { wireEditQueue } from './controller-edit-wiring';
 import type {
   NativeCartControllerOptions,
   NativeCartStatus,
@@ -248,20 +247,15 @@ export function createNativeCartController(
     refresh,
     status: options.status,
   });
-  const enqueueEdit = createEditQueue({
+  const enqueueEdit = wireEditQueue({
     edits,
-    live: () => Boolean(snapshot) && !terminal && !incoming,
+    options,
+    receipts,
     serial,
     refresh,
     transmission,
-    hasRetainedRequest: () => receipts.read(options.merchantId).then(Boolean),
-    notify: options,
-    run: createEditRunner(
-      options,
-      receipts,
-      () => Boolean(snapshot) || terminal || Boolean(incoming),
-      (action) => operations.write(action)
-    ),
+    write: (action) => operations.write(action),
+    state: () => ({ snapshot, terminal, incoming }),
   });
   return {
     refresh: () => serial(refresh),

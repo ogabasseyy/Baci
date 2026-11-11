@@ -20,7 +20,7 @@ const python = String.raw`
 import sys, zipfile
 artifact, prefix, *abis = sys.argv[1:]
 machines = {'armeabi-v7a': (40, 1), 'arm64-v8a': (183, 2), 'x86': (3, 1), 'x86_64': (62, 2)}
-libraries = ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libsplashmotion.so')
+libraries = ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libhermestooling.so', 'libsplashmotion.so')
 try:
     with zipfile.ZipFile(artifact) as archive:
         names = archive.namelist()
@@ -30,10 +30,17 @@ try:
                 path = f'{prefix}/{abi}/{library}'
                 if names.count(path) != 1:
                     raise ValueError(f'{path}: expected exactly one entry')
+                header_size, header_size_offset = (64, 52) if elf_class == 2 else (52, 40)
                 with archive.open(path) as entry:
-                    header = entry.read(20)
-                if len(header) < 20 or header[:4] != b'\x7fELF' or header[4] != elf_class or header[5] != 1 or int.from_bytes(header[18:20], 'little') != machine:
+                    header = entry.read(header_size)
+                if len(header) != header_size:
+                    raise ValueError(f'{path}: incomplete ELF header for {abi}')
+                if header[:4] != b'\x7fELF' or header[4] != elf_class or header[5] != 1 or int.from_bytes(header[18:20], 'little') != machine:
                     raise ValueError(f'{path}: invalid ELF class, byte order, or machine for {abi}')
+                if header[6] != 1 or int.from_bytes(header[20:24], 'little') != 1 or int.from_bytes(header[header_size_offset:header_size_offset + 2], 'little') != header_size:
+                    raise ValueError(f'{path}: invalid ELF header size or version for {abi}')
+                if int.from_bytes(header[16:18], 'little') != 3:
+                    raise ValueError(f'{path}: ELF entry is not a shared object for {abi}')
     print('Native library ABI check passed for ' + ', '.join(abis))
 except (OSError, ValueError, zipfile.BadZipFile) as error:
     print(f'Native library ABI check failed: {error}', file=sys.stderr)

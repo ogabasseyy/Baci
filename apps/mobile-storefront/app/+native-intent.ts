@@ -48,10 +48,14 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
-  // Expo Router falls back to Expo Linking's createURL('/') on a bare-app
-  // launcher start without a link. Match that exact storefront URL so
-  // decorated and later deliveries still go through pairing validation.
-  if (initial && path === 'ogabassey:///') return '/';
+  // A bare launcher start has no authority, route, query or fragment.
+  // Keep decorated links and later deliveries in pairing validation.
+  const launcherPath = path.toLowerCase();
+  if (
+    initial &&
+    (launcherPath === 'ogabassey://' || launcherPath === 'ogabassey:///')
+  )
+    return '/';
 
   let apiHostname = '';
   try {

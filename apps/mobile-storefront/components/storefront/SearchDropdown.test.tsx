@@ -15,6 +15,7 @@ const mockUseProducts = jest.fn();
 const mockUseCategories = jest.fn();
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
   useRouter: () => ({ push: mockPush }),
 }));
 

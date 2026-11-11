@@ -36,7 +36,7 @@ test('accepts private complete configuration without displaying values', () => w
 test('reports missing and non-string fields without revealing values', () => withFile(JSON.stringify({ ...fixture, SENTRY_ORG: 2, SENTRY_PROJECT: '', extra: 'synthetic-secret' }), (file) => {
   const result = run(file); assert.notEqual(result.status, 0); assert.match(result.stderr, /SENTRY_ORG/); assert.match(result.stderr, /SENTRY_PROJECT/); assert.doesNotMatch(result.stderr, /synthetic-/);
 }));
-test('rejects insecure permissions', () => withFile(JSON.stringify(fixture), (file) => {
+test('rejects insecure permissions', { skip: process.platform === 'win32' && 'POSIX permission bits are not enforced on Windows' }, () => withFile(JSON.stringify(fixture), (file) => {
   chmodSync(file, 0o644); const result = run(file); assert.notEqual(result.status, 0); assert.match(result.stderr, /permissions/i);
 }));
 test('process env overrides file and dotenv is supported', () => withFile(Object.entries({ ...fixture, SENTRY_ORG: '' }).map(([k,v]) => `${k}=${v}`).join('\n'), (file) => {

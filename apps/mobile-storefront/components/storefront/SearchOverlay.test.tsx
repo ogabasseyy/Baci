@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { SearchOverlay } from './SearchOverlay';
 
 jest.mock('expo-router', () => ({
+  useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
   useRouter: jest.fn(() => ({ push: jest.fn() })),
   useIsFocused: () => true,
 }));

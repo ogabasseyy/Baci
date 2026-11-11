@@ -3,6 +3,9 @@ import SplashMotion from 'react-native-splash-motion';
 import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
 import { markStartupTiming } from '@/lib/startup-timing';
 
+// Leave headroom beyond the six-second scene for native startup on older phones.
+const NATIVE_INTRO_TIMEOUT_MS = 15_000;
+
 /** Native playback owns this boundary; app rendering must not race its frames. */
 export function useNativeSplashIntro(initialVisible: boolean) {
   const [intro, setIntro] = useState({
@@ -27,9 +30,18 @@ export function useNativeSplashIntro(initialVisible: boolean) {
       }
     }
 
+    const watchdog = setTimeout(() => {
+      if (!active) return;
+      active = false;
+      recordCrashBreadcrumb('root_layout:native_intro_timeout');
+      markStartupTiming('native_intro_timeout');
+      setIntro({ settled: true, completed: false });
+    }, NATIVE_INTRO_TIMEOUT_MS);
+
     void promiseRef.current.then(
       (completed) => {
         if (!active) return;
+        clearTimeout(watchdog);
         markStartupTiming(
           completed ? 'native_intro_completed' : 'native_intro_skipped'
         );
@@ -37,6 +49,7 @@ export function useNativeSplashIntro(initialVisible: boolean) {
       },
       () => {
         if (!active) return;
+        clearTimeout(watchdog);
         recordCrashBreadcrumb('root_layout:native_intro_wait_failed');
         markStartupTiming('native_intro_wait_failed');
         setIntro({ settled: true, completed: false });
@@ -44,6 +57,7 @@ export function useNativeSplashIntro(initialVisible: boolean) {
     );
     return () => {
       active = false;
+      clearTimeout(watchdog);
     };
   }, [initialVisible]);
 

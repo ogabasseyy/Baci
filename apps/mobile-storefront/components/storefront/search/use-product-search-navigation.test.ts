@@ -4,6 +4,8 @@ import type { Product } from '@/types/product';
 import { useProductSearchNavigation } from './use-product-search-navigation';
 
 const mockDismiss = jest.fn();
+const mockNavigation = { addListener: jest.fn(), isFocused: jest.fn() };
+jest.mock('expo-router', () => ({ useNavigation: () => mockNavigation }));
 jest.mock('@/components/ui/dismiss-keyboard-for-navigation', () => ({
   dismissKeyboardForNavigation: () => mockDismiss(),
 }));
@@ -42,6 +44,8 @@ function setup() {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  mockNavigation.isFocused.mockReturnValue(true);
+  mockNavigation.addListener.mockReturnValue(jest.fn());
   jest
     .spyOn(AppState, 'addEventListener')
     .mockReturnValue({ remove: jest.fn() });
@@ -113,6 +117,19 @@ it('cancels a pending selection when the search query changes', async () => {
   const h = setup();
   const navigation = h.result.current(product);
   h.rerender({ isVisible: true, query: 'laptop' });
+  await act(async () => {
+    h.release();
+    await navigation;
+  });
+  expect(h.onClose).not.toHaveBeenCalled();
+  expect(h.onNavigate).not.toHaveBeenCalled();
+});
+
+it('cancels a selection when Cart covers search before the keyboard settles', async () => {
+  const h = setup();
+  const navigation = h.result.current(product);
+  const blur = mockNavigation.addListener.mock.calls[0]?.[1];
+  blur?.();
   await act(async () => {
     h.release();
     await navigation;

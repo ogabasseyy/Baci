@@ -1,3 +1,4 @@
+import { bookedPlanIsOffered } from '@/lib/payments/oxygen/booked-plan-offer';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 
 export function canRefreshSavedOxygenOffers(
@@ -7,7 +8,7 @@ export function canRefreshSavedOxygenOffers(
   return Boolean(
     ['booked', 'approval_required'].includes(snapshot.stage) &&
       state?.booking?.status === 'BOOKED' &&
-      !state.offers &&
+      !bookedPlanIsOffered(state) &&
       !snapshot.pending &&
       !state.paymentComplete &&
       !state.setupComplete

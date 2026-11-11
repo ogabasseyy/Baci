@@ -190,7 +190,7 @@ export function OxygenSavedPlans({
           tenure={tenure}
         />
       )}
-      {!state.offers && refreshOffers && (
+      {refreshOffers && !bookedPlanIsOffered(state) && (
         <div className="grid gap-2 text-sm">
           <p>
             Update your payment options to check your saved plan before

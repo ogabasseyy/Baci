@@ -18,9 +18,27 @@ it('only allows refresh for an unapproved saved booking with no active command',
   expect(
     canRefreshSavedOxygenOffers({
       ...snapshot,
-      state: { ...snapshot.state, offers: [{ tenure: 3, loanAmount: 1 }] },
+      state: {
+        ...snapshot.state,
+        eligibleAmount: 100000,
+        minimumAmount: 10000,
+        maxTenure: 3,
+        offers: [{ tenure: 3, loanAmount: 100000 }],
+      },
     })
   ).toBe(false);
+  expect(
+    canRefreshSavedOxygenOffers({
+      ...snapshot,
+      state: {
+        ...snapshot.state,
+        eligibleAmount: 100000,
+        minimumAmount: 10000,
+        maxTenure: 3,
+        offers: [{ tenure: 3, loanAmount: 50000 }],
+      },
+    })
+  ).toBe(true);
   expect(
     canRefreshSavedOxygenOffers({
       ...snapshot,

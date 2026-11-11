@@ -20,7 +20,7 @@ INSERT INTO oxygen_private.partner_workers(partner_reference,worker_user_id) VAL
 INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_reference,enabled)
  VALUES('efad0000-0000-4000-8000-000000000011','efad0000-0000-4000-8000-000000000003','OXYGEN-RETRY-TEST',true);
 INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES('efad0000-0000-4000-8000-000000000041',
- '{"bookingReference":"efad0000-0000-4000-8000-000000000071","activityToken":"synthetic-only","kyc":{"address_status":"DONE"},"booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","product_amount":400000}}');
+ '{"bookingReference":"efad0000-0000-4000-8000-000000000071","activityToken":"synthetic-only","eligibleAmount":400000,"minimumAmount":10000,"maxTenure":3,"offers":[{"tenure":3,"loanAmount":400000}],"kyc":{"address_status":"DONE"},"booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","product_amount":400000}}');
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,started_at,completed_at)
  VALUES('efad0000-0000-4000-8000-000000000081','efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000091',0,'web','{"action":"approve_booking"}','indeterminate',now(),now());
 INSERT INTO oxygen_private.attempt_diagnostics(command_id,workflow_id,diagnostic)
@@ -43,8 +43,8 @@ END $$;
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status) VALUES('efad0000-0000-4000-8000-000000000082','efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000093',0,'web','{"action":"trigger_approval_otp"}','succeeded');
 SELECT oxygen_private.authorize_staging_approval_retry('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000081','efad0000-0000-4000-8000-000000000071',0,'Synthetic provider authorization for this test');
 INSERT INTO oxygen_private.saved_plans(workflow_id,booking_reference,product_amount,equity_percentage,tenure,state) VALUES
-('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',400000,25,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000071","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED"},"schedule":[]}'),
-('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000072',400000,35,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000072","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000072","status":"BOOKED"},"schedule":[]}');
+('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000071',400000,25,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000071","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000071","status":"BOOKED","loan_amount":300000,"loan_tenure":3},"schedule":[]}'),
+('efad0000-0000-4000-8000-000000000041','efad0000-0000-4000-8000-000000000072',400000,35,3,'{"bookingReference":"efad0000-0000-4000-8000-000000000072","booking":{"loan_reference":"efad0000-0000-4000-8000-000000000072","status":"BOOKED","loan_amount":260000,"loan_tenure":3},"schedule":[]}');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efad0000-0000-4000-8000-000000000001',true);
 DO $$ DECLARE r jsonb; BEGIN

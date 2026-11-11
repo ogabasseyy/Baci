@@ -105,6 +105,30 @@ it('allows an unapproved legacy booking to refresh offers but protects approval 
   expect(oxygenActionAllowed(legacy, refresh)).toBe(true);
   expect(
     oxygenActionAllowed(
+      {
+        ...context,
+        state: {
+          ...context.state,
+          offers: [{ tenure: 3, loanAmount: 100000 }],
+        },
+      },
+      refresh
+    )
+  ).toBe(true);
+  expect(
+    oxygenActionAllowed(
+      {
+        ...context,
+        state: {
+          ...context.state,
+          offers: [{ tenure: 3, loanAmount: 400000 }],
+        },
+      },
+      refresh
+    )
+  ).toBe(false);
+  expect(
+    oxygenActionAllowed(
       { ...legacy, state: { ...legacy.state, activityToken: 'pending' } },
       refresh
     )

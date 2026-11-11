@@ -80,7 +80,7 @@ export function oxygenActionAllowed(
         c.state.applicationReference &&
           oxygenEligibilityPrerequisites(c.state) &&
           (!c.state.bookingReference ||
-            (!c.state.offers &&
+            (!bookedPlanIsOffered(c.state) &&
               ['booked', 'approval_required'].includes(stage) &&
               c.state.booking?.status === 'BOOKED' &&
               !c.state.paymentComplete &&

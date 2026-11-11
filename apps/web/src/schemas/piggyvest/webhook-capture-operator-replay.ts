@@ -38,7 +38,7 @@ export const piggyvestReviewCaptureSchema = z.object({
   attempts: z.int().nonnegative(),
   lastError: z.string().nullable(),
   receivedAt: z.string(),
-  parkedAt: z.string(),
+  lastChangedAt: z.string(),
   operatorReplays: z.int().nonnegative(),
 });
 
@@ -64,7 +64,11 @@ export const piggyvestCaptureRequeueResultSchema = z.discriminatedUnion(
     z.object({ outcome: z.literal('not_found') }),
     z.object({
       outcome: z.literal('not_in_review'),
-      processingState: z.enum(['pending', 'claimed', 'processed']),
+      // Any state the database reports; the CLI still says nothing changed.
+      processingState: z
+        .string()
+        .min(1)
+        .refine((state) => state !== 'needs_review'),
     }),
     z.object({
       outcome: z.literal('replay_limit_reached'),
@@ -90,6 +94,8 @@ export const piggyvestCaptureOperatorSessionSchema = z.object({
   login_safe: z.boolean(),
   operator_member: z.boolean(),
   pipeline_member: z.boolean(),
+  extra_membership: z.boolean(),
+  direct_table_access: z.boolean(),
   grants_usable: z.boolean(),
   secure_transport: z.boolean(),
 });

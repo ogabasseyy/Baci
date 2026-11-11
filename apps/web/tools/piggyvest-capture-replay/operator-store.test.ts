@@ -16,6 +16,8 @@ const goodSession = {
   login_safe: true,
   operator_member: true,
   pipeline_member: false,
+  extra_membership: false,
+  direct_table_access: false,
   grants_usable: true,
   secure_transport: true,
 };
@@ -57,6 +59,8 @@ describe('sessionFailures', () => {
     [{ login_safe: false }, 'elevated attribute'],
     [{ operator_member: false }, 'not a member'],
     [{ pipeline_member: true }, 'capture pipeline'],
+    [{ extra_membership: true }, 'only'],
+    [{ direct_table_access: true }, 'directly'],
     [
       { login_name: 'baci_piggyvest_webhook_capture_drain' },
       'shared platform login',
@@ -192,6 +196,11 @@ describe('readOperatorConnection', () => {
     // Through the pooler the server-side TLS check would attest the wrong hop.
     [
       'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
+      'not the pooler',
+    ],
+    // A pooler host on another port is refused too.
+    [
+      'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
       'not the pooler',
     ],
     ['mysql://ops@db.example.test/x', 'postgres URL'],

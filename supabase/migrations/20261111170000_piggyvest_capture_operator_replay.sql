@@ -154,7 +154,9 @@ AS $$
       c.attempts,
       c.last_error AS "lastError",
       c.received_at AS "receivedAt",
-      c.updated_at AS "parkedAt",
+      -- Last change to the row, which is the park time unless it was
+      -- requeued and parked again since.
+      c.updated_at AS "lastChangedAt",
       (SELECT pg_catalog.count(*)::integer
          FROM public.piggyvest_webhook_capture_replay_audit a
          WHERE a.capture_id = c.id) AS "operatorReplays"

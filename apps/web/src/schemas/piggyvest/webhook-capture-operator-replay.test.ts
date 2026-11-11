@@ -35,6 +35,15 @@ describe('operator replay wire schemas', () => {
     ).toBe(false);
   });
 
+  it('accepts a capture state it does not know yet as "not in review"', () => {
+    expect(
+      piggyvestCaptureRequeueResultSchema.parse({
+        outcome: 'not_in_review',
+        processingState: 'archived',
+      })
+    ).toEqual({ outcome: 'not_in_review', processingState: 'archived' });
+  });
+
   it('bounds the reason at 10 to 500 characters after trimming', () => {
     expect(
       piggyvestCaptureRequeueReasonSchema.safeParse('   short   ').success
@@ -57,7 +66,7 @@ describe('operator replay wire schemas', () => {
         attempts: 0,
         lastError: null,
         receivedAt: 'x',
-        parkedAt: 'x',
+        lastChangedAt: 'x',
         operatorReplays: 0,
       }).success
     ).toBe(false);

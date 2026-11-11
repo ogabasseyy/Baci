@@ -39,6 +39,13 @@ export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_n
   EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
     WHERE r.rolname = ANY ($2::text[])
       AND pg_catalog.pg_has_role(SESSION_USER, r.oid, 'MEMBER')) AS pipeline_member,
+  EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
+    WHERE r.rolname NOT IN (SESSION_USER, $1::text)
+      AND pg_catalog.pg_has_role(SESSION_USER, r.oid, 'MEMBER')) AS extra_membership,
+  (pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_captures',
+      'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    OR pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_capture_replay_audit',
+      'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) AS direct_table_access,
   (pg_catalog.has_schema_privilege(SESSION_USER, 'piggyvest_capture_operator', 'USAGE')
     AND pg_catalog.has_function_privilege(SESSION_USER,
       'piggyvest_capture_operator.list_review_captures(integer)', 'EXECUTE')
@@ -93,12 +100,21 @@ export function sessionFailures(
     failures.push(
       'login is also a capture pipeline (worker or intake) login; use a separate operator login'
     );
+  if (session.extra_membership)
+    failures.push(
+      `login must be a member of ${PIGGYVEST_CAPTURE_OPERATOR_ROLE} only`
+    );
+  if (session.direct_table_access)
+    failures.push(
+      'login can reach the capture or audit tables directly; revoke those grants'
+    );
   if (!session.grants_usable) failures.push('operator grants are not usable');
   if (!session.secure_transport) failures.push('connection is not encrypted');
   return failures;
 }
 
 const POOLER_PORT = '6543';
+const POOLER_HOST_SUFFIX = '.pooler.supabase.com';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
@@ -135,9 +151,9 @@ export function readOperatorConnection(connectionString: string): {
   // Supabase's pooler listens on 6543. Behind it, the server-side transport
   // check would see the pooler's link, not the operator's, so require the
   // direct connection.
-  if (url.port === POOLER_PORT)
+  if (url.port === POOLER_PORT || url.hostname.endsWith(POOLER_HOST_SUFFIX))
     throw new OperatorRefusal(
-      'use the direct database connection (port 5432), not the pooler on 6543'
+      'use the direct database connection (db.<ref>.supabase.co:5432), not the pooler'
     );
   const sslmode = url.searchParams.get('sslmode');
   if (!loopback && sslmode !== null && sslmode !== 'verify-full')

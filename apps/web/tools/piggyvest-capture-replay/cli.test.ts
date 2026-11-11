@@ -14,7 +14,7 @@ const parked = {
   attempts: 20,
   lastError: 'REPLAY_FAILED',
   receivedAt: '2026-11-10T10:00:00Z',
-  parkedAt: '2026-11-10T12:00:00Z',
+  lastChangedAt: '2026-11-10T12:00:00Z',
   operatorReplays: 0,
 };
 

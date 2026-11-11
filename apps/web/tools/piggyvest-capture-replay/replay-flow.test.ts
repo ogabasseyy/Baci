@@ -114,6 +114,8 @@ const operatorSession = {
   login_safe: true,
   operator_member: true,
   pipeline_member: false,
+  extra_membership: false,
+  direct_table_access: false,
   grants_usable: true,
   secure_transport: true,
 };

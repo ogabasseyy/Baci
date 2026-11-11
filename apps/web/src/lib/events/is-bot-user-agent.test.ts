@@ -31,3 +31,12 @@ describe('bugfix: device names ending in bot', () => {
     ).toBe(false);
   });
 });
+
+describe('suffixed crawler names', () => {
+  it('flags Twitterbot and MJ12bot', () => {
+    expect(isBotUserAgent('Twitterbot/1.0')).toBe(true);
+    expect(isBotUserAgent('Mozilla/5.0 (compatible; MJ12bot/v1.4.8)')).toBe(
+      true
+    );
+  });
+});

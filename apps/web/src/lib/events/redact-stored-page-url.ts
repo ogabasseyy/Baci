@@ -4,6 +4,14 @@ const KEPT_PARAMS = [
   'utm_campaign',
   'utm_term',
   'utm_content',
+  // Ad click ids are opaque and needed for ad-platform attribution.
+  'fbclid',
+  'gclid',
+  'gbraid',
+  'wbraid',
+  'ttclid',
+  'msclkid',
+  'ScCid',
 ];
 
 /**
@@ -19,7 +27,7 @@ export function redactStoredPageUrl(value: string): string {
     const kept = new URLSearchParams();
     for (const key of KEPT_PARAMS) {
       const param = url.searchParams.get(key);
-      if (param) kept.set(key, param.slice(0, 100));
+      if (param) kept.set(key, param.slice(0, 500));
     }
     url.username = '';
     url.password = '';

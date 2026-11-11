@@ -100,18 +100,18 @@ export async function POST(request: NextRequest) {
     );
   }
   const input = parsed.data;
+  if (input.timestamp && !isEventTimestampWithinWindow(input.timestamp)) {
+    return NextResponse.json(
+      { error: 'Event timestamp outside allowed window' },
+      { status: 400 }
+    );
+  }
   if (
     (input.source ?? 'web') === 'web' &&
     isBotUserAgent(request.headers.get('user-agent'))
   ) {
     // Acknowledge but do not record crawler traffic.
     return NextResponse.json({ success: true, event_id: input.event_id });
-  }
-  if (input.timestamp && !isEventTimestampWithinWindow(input.timestamp)) {
-    return NextResponse.json(
-      { error: 'Event timestamp outside allowed window' },
-      { status: 400 }
-    );
   }
   const rawEventType = input.event_type ?? input.event_name ?? '';
   const eventType = normalizeEventType(rawEventType) ?? rawEventType;

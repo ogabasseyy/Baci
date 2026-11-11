@@ -19,4 +19,10 @@ describe('bugfix: shopper PII stored in analytics page URLs', () => {
   it('strips query from unparsable values', () => {
     expect(redactStoredPageUrl('/x?email=a@b.com')).toBe('/x');
   });
+
+  it('keeps ad click ids for attribution', () => {
+    expect(
+      redactStoredPageUrl('https://shop.example/p?fbclid=abc&email=a@b.com')
+    ).toBe('https://shop.example/p?fbclid=abc');
+  });
 });

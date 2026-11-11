@@ -34,9 +34,12 @@ importing or constructing the runtime and does not provision an ingress.
 TLS-verified pool only for the dedicated auth-storage role. It rejects secret
 Supabase keys, mismatched upstream origins, unsafe callback/socket paths and
 reused key material, then starts the private socket only after runtime checks
-pass. It closes the listener and pool on shutdown. Configuration loading,
-credential provisioning, process supervision and HTTPS ingress remain separate
-deployment tasks. The direct broker disconnect endpoint is disabled; the normal
+pass. It closes the listener and pool on shutdown. The Linux non-root entrypoint
+loads `/var/lib/baci-builder-auth/auth.json` from a private, service-owned
+directory and rejects unsafe files. Credential provisioning, process supervision
+and HTTPS ingress remain separate deployment tasks. The private socket is
+service-owned and requires the ingress to have appropriate access. The direct
+broker disconnect endpoint is disabled; the normal
 owner dashboard/RLS disconnect path is separately gated and must be enabled and
 tested before merchant activation. Never pass configuration from an HTTP or MCP
 request, and do not log configuration or raw upstream/database errors.

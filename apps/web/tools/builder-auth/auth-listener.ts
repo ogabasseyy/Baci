@@ -1,11 +1,12 @@
 import { once } from 'node:events';
-import { chmod, lstat, realpath } from 'node:fs/promises';
+import { chmod } from 'node:fs/promises';
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
 import { dirname, isAbsolute } from 'node:path';
+import { assertPrivateDirectory } from './private-directory.ts';
 
 export async function listenPrivateAuth(settings: {
   socketPath: string;
@@ -53,31 +54,9 @@ export async function createAuthListener(settings: {
   handler(req: IncomingMessage, res: ServerResponse): Promise<void>;
 }): Promise<{ close(): Promise<void> }> {
   const directory = dirname(settings.socketPath);
-  if (
-    !isAbsolute(settings.socketPath) ||
-    (await realpath(directory)) !== directory
-  )
+  if (!isAbsolute(settings.socketPath))
     throw Error('UNTRUSTED_SOCKET_DIRECTORY');
-  const stat = await lstat(directory);
-  if (
-    !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    stat.uid !== process.getuid?.() ||
-    (stat.mode & 0o077) !== 0
-  )
-    throw Error('UNTRUSTED_SOCKET_DIRECTORY');
-  for (let ancestor = dirname(directory); ; ancestor = dirname(ancestor)) {
-    const parent = await lstat(ancestor);
-    const stickyRoot = parent.uid === 0 && (parent.mode & 0o1000) !== 0;
-    if (
-      !parent.isDirectory() ||
-      parent.isSymbolicLink() ||
-      (parent.uid !== 0 && parent.uid !== process.getuid?.()) ||
-      ((parent.mode & 0o022) !== 0 && !stickyRoot)
-    )
-      throw Error('UNTRUSTED_SOCKET_DIRECTORY');
-    if (ancestor === '/') break;
-  }
+  await assertPrivateDirectory(directory);
   if (!/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(settings.authority))
     throw Error('INVALID_AUTHORITY');
 

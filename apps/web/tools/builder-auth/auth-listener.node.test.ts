@@ -225,6 +225,44 @@ test('the actual provider advertises the HTTPS issuer through the private listen
       new URL(metadata.authorization_endpoint).origin,
       'https://mcp.usebaci.com'
     );
+    const params = new URLSearchParams({
+      client_id: 'synthetic-client',
+      redirect_uri: 'https://chatgpt.com/approved-callback',
+      response_type: 'code',
+      scope: 'openid',
+      state: 'synthetic-state',
+      code_challenge: 'x'.repeat(43),
+      code_challenge_method: 'plain',
+      resource: 'https://mcp.usebaci.com/builder/mcp',
+    });
+    const errorRedirect = await new Promise<{
+      status: number;
+      location?: string;
+    }>((resolve, reject) => {
+      const req = request(
+        {
+          socketPath,
+          path: `/auth?${params}`,
+          headers: { host: 'mcp.usebaci.com' },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              location: res.headers.location,
+            })
+          );
+        }
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(errorRedirect.status, 303);
+    const location = new URL(errorRedirect.location ?? '');
+    assert.equal(location.origin, 'https://chatgpt.com');
+    assert.equal(location.searchParams.get('iss'), 'https://mcp.usebaci.com');
+    assert(location.searchParams.get('error'));
   } finally {
     await listener.close();
     assert.equal(provider.proxy, false);

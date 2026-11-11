@@ -1,0 +1,153 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import {
+  FS_READER_FAMILIES,
+  fsReaderFamilyOf,
+  isFsReaderFile,
+  readerNeedlesFor,
+} from './resolve-ci-test-plan-paths.mjs';
+
+test('each fs-reader family claims its files and leaves code alone', () => {
+  const expected = {
+    'supabase/migrations/20261111090000_x.sql': 'supabase',
+    'supabase/config.toml': 'supabase',
+    'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt':
+      'replay-registry',
+    'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json': 'docs',
+    '.github/workflows/pilot-codec-compatibility.yml': 'github-metadata',
+    '.github/filters/ci.yml': 'github-metadata',
+    '.github/copilot-instructions.md': 'github-metadata',
+    'vps-workers/deploy.sh': 'vps-workers',
+    '.jules/atlas.md': 'agent-notes',
+    '.ruler/01-critical-rules.md': 'agent-notes',
+    '.coderabbit.yaml': 'agent-notes',
+    'AGENTS.md': 'markdown',
+    'apps/web/src/lib/x/notes.md': 'markdown',
+    'vercel.json': 'vercel',
+    'apps/web/tests/checkout-browser/contact.pw.ts': 'playwright',
+  };
+  for (const [file, family] of Object.entries(expected)) {
+    assert.equal(fsReaderFamilyOf(file)?.id, family, file);
+  }
+
+  for (const code of [
+    'apps/web/src/lib/a.ts',
+    'apps/web/tools/cost/a.ts',
+    'apps/mobile-admin/app/index.tsx',
+    'packages/shared/src/index.ts',
+    'tools/staging/x.mjs',
+    'scripts/backfill.ts',
+    '.github/scripts/run-ci-web-shard.sh',
+    '.github/actions/pnpm-install-cached/action.yml',
+    'pnpm-workspace.yaml',
+  ]) {
+    assert.equal(isFsReaderFile(code), false, code);
+  }
+});
+
+test('the reader search covers the file, its folders down to the family floor, and bare names', () => {
+  assert.deepEqual(
+    readerNeedlesFor('supabase/migrations/20261111090000_x.sql').sort(),
+    ['supabase/migrations', 'supabase/migrations/20261111090000_x.sql']
+  );
+  assert.deepEqual(readerNeedlesFor('supabase/tests/deep/run.sql').sort(), [
+    'supabase/tests',
+    'supabase/tests/deep',
+    'supabase/tests/deep/run.sql',
+  ]);
+  assert.deepEqual(readerNeedlesFor('vercel.json'), ['vercel.json']);
+  assert.deepEqual(readerNeedlesFor('README.md'), ['README.md']);
+
+  const registry = readerNeedlesFor(
+    'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt'
+  );
+  for (const needle of [
+    'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt',
+    'apps/web/tools/db/replay-registry/2026_x',
+    'apps/web/tools/db/replay-registry',
+    // Tests resolve paths from the app root (`process.cwd()` is apps/web).
+    'tools/db/replay-registry/2026_x/sql-checks.txt',
+    'tools/db/replay-registry',
+    'replay-registry',
+  ]) {
+    assert.ok(registry.includes(needle), needle);
+  }
+
+  const docs = readerNeedlesFor(
+    'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+  );
+  for (const needle of [
+    'docs/superpowers/evidence/storefront-edge',
+    'docs/superpowers/evidence',
+    'docs/superpowers',
+    "'docs'",
+  ]) {
+    assert.ok(docs.includes(needle), needle);
+  }
+});
+
+test('markdown and Playwright specs outside a directory family are matched by their own path only', () => {
+  assert.deepEqual(readerNeedlesFor('apps/web/src/lib/x/notes.md'), [
+    'apps/web/src/lib/x/notes.md',
+    'src/lib/x/notes.md',
+  ]);
+  assert.deepEqual(
+    readerNeedlesFor('apps/web/tests/checkout-browser/contact.pw.ts'),
+    [
+      'apps/web/tests/checkout-browser/contact.pw.ts',
+      'tests/checkout-browser/contact.pw.ts',
+    ]
+  );
+  assert.deepEqual(readerNeedlesFor('apps/web/src/lib/a.ts'), []);
+});
+
+test('no search string is broad enough to select a large part of the suite', () => {
+  const tracked = execFileSync('git', ['ls-files'], {
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+  })
+    .split('\n')
+    .filter(Boolean)
+    .filter(isFsReaderFile);
+  const needles = new Set(tracked.flatMap(readerNeedlesFor));
+  const tooBroad = [
+    'apps',
+    'apps/web',
+    'web',
+    'src',
+    'docs',
+    'supabase',
+    'packages',
+    'tools',
+    'scripts',
+    '.github',
+    'vps-workers',
+    '.github/scripts',
+    '.github/actions',
+  ];
+
+  assert.ok(tracked.length > 100, 'expected fs-reader files in the repository');
+  for (const broad of tooBroad) {
+    assert.equal(
+      needles.has(broad),
+      false,
+      `${broad} would match too many tests`
+    );
+  }
+  for (const needle of needles) {
+    assert.ok(needle.length >= 4, `"${needle}" is too short to search for`);
+  }
+});
+
+test('every family documents why it is safe to hand to the provider', () => {
+  const header = readFileSync(
+    '.github/scripts/resolve-ci-test-plan-paths.mjs',
+    'utf8'
+  );
+  for (const { id } of FS_READER_FAMILIES) {
+    assert.ok(typeof id === 'string' && id.length > 0);
+  }
+  assert.match(header, /Why each family is safe/);
+});

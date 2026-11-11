@@ -130,6 +130,14 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,
+    // `vitest --changed` follows imports only. This provider also selects the
+    // tests that read a changed data file (SQL, docs, workflows) through fs.
+    experimental: {
+      vcsProvider: path.resolve(
+        __dirname,
+        '../../.github/scripts/vitest-changed-files-provider.mjs'
+      ),
+    },
     setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
     // Cap worker parallelism when running locally (e.g. the pre-push hook) to
     // avoid OOM/SIGTERM under memory pressure — each jsdom worker is heavy and

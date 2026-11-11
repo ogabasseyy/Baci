@@ -2,103 +2,32 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
+import {
+  isFsReaderFile,
+  isFullAffectedTrigger,
+  isTargetableMobileStorefrontFile,
+  isTargetableWebFile,
+} from './resolve-ci-test-plan-paths.mjs';
 
 const FULL_AFFECTED_COMMAND =
   'pnpm turbo run test --concurrency=3 --log-order=stream';
 
-const ROOT_FULL_TEST_FILES = new Set([
-  '.github/scripts/experience-runner-ci.test.mjs',
-  '.npmrc',
-  '.github/scripts/resolve-ci-test-plan.mjs',
-  '.github/scripts/resolve-ci-test-plan-config.mjs',
-  '.github/scripts/resolve-ci-test-plan-config.test.mjs',
-  '.github/scripts/resolve-ci-test-plan.test.mjs',
-  '.github/workflows/ci.yml',
-  'biome.json',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'turbo.json',
-]);
-
-const ROOT_FULL_TEST_PREFIXES = [
-  '.github/actions/',
-  'packages/shared/',
-  'packages/experience-sdk/',
-  'tsconfig',
-];
-
-// Plain-text lists read through fs: `vitest --changed` cannot map them to the
-// tests that consume them, so a targeted run would skip their validation.
-const WEB_FULL_TEST_PREFIXES = ['apps/web/tools/db/replay-registry/'];
-
-const WEB_FULL_TEST_FILES = new Set([
-  'apps/web/jest.config.mjs',
-  'apps/web/jest.setup.js',
-  'apps/web/next.config.test.ts',
-  'apps/web/next.config.ts',
-  'apps/web/package.json',
-  'apps/web/tsconfig.json',
-  'apps/web/vitest.config.ts',
-  'apps/web/vitest.experience-runner.config.ts',
-  'apps/web/vitest.setup.ts',
-]);
-
-const MOBILE_STOREFRONT_FULL_TEST_FILES = new Set([
-  'apps/mobile-storefront/app.config.ts',
-  'apps/mobile-storefront/babel.config.js',
-  'apps/mobile-storefront/jest.config.js',
-  'apps/mobile-storefront/jest.setup.ts',
-  'apps/mobile-storefront/metro.config.js',
-  'apps/mobile-storefront/package.json',
-  'apps/mobile-storefront/tsconfig.json',
-]);
-
-const WEB_TARGETED_PREFIXES = [
-  'apps/web/mcp-server/',
-  'apps/web/src/',
-  'apps/web/tools/',
-  'apps/web/experience-runtime/',
-  'apps/web/tests/experience-browser/',
-];
-
-const MOBILE_STOREFRONT_TARGETED_PREFIXES = [
-  'apps/mobile-storefront/app/',
-  'apps/mobile-storefront/components/',
-  'apps/mobile-storefront/constants/',
-  'apps/mobile-storefront/hooks/',
-  'apps/mobile-storefront/lib/',
-  'apps/mobile-storefront/schemas/',
-  'apps/mobile-storefront/services/',
-  'apps/mobile-storefront/stores/',
-];
+const WEB_SOURCE_REASON =
+  'Pull request changes are limited to apps/web source or test files.';
+const WEB_READER_REASON =
+  'Pull request changes are limited to apps/web source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.';
+const WEB_AND_STOREFRONT_REASON =
+  'Pull request changes are limited to apps/web and mobile storefront source or test files.';
+const WEB_AND_STOREFRONT_READER_REASON =
+  'Pull request changes are limited to apps/web and mobile storefront source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.';
+const STOREFRONT_REASON =
+  'Pull request changes are limited to mobile storefront source or test files.';
 
 function normalizeChangedFile(file) {
-  return file.trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
-}
-
-function isFullAffectedTrigger(file) {
-  if (
-    ROOT_FULL_TEST_FILES.has(file) ||
-    WEB_FULL_TEST_FILES.has(file) ||
-    MOBILE_STOREFRONT_FULL_TEST_FILES.has(file)
-  ) {
-    return true;
-  }
-
-  return [...ROOT_FULL_TEST_PREFIXES, ...WEB_FULL_TEST_PREFIXES].some(
-    (prefix) => file.startsWith(prefix)
-  );
-}
-
-function isTargetableWebFile(file) {
-  return WEB_TARGETED_PREFIXES.some((prefix) => file.startsWith(prefix));
-}
-
-function isTargetableMobileStorefrontFile(file) {
-  return MOBILE_STOREFRONT_TARGETED_PREFIXES.some((prefix) =>
-    file.startsWith(prefix)
-  );
+  return file
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '');
 }
 
 function targetedWebCommand(baseRef) {
@@ -107,6 +36,10 @@ function targetedWebCommand(baseRef) {
 
 function targetedMobileStorefrontCommand(baseRef) {
   return `pnpm --filter @baci/mobile-storefront exec jest --changedSince ${baseRef} --runInBand --passWithNoTests`;
+}
+
+function fullAffectedPlan(reason) {
+  return { mode: 'full-affected', reason, command: FULL_AFFECTED_COMMAND };
 }
 
 export function resolveCiTestPlan({
@@ -120,19 +53,15 @@ export function resolveCiTestPlan({
     .filter(Boolean);
 
   if (eventName !== 'pull_request') {
-    return {
-      mode: 'full-affected',
-      reason: 'Non-pull-request events keep the full affected test path.',
-      command: FULL_AFFECTED_COMMAND,
-    };
+    return fullAffectedPlan(
+      'Non-pull-request events keep the full affected test path.'
+    );
   }
 
   if (normalizedFiles.length === 0) {
-    return {
-      mode: 'full-affected',
-      reason: 'No changed files were detected, so CI keeps the safer full affected test path.',
-      command: FULL_AFFECTED_COMMAND,
-    };
+    return fullAffectedPlan(
+      'No changed files were detected, so CI keeps the safer full affected test path.'
+    );
   }
 
   const safeConfigFiles = normalizedFiles.filter((file) =>
@@ -152,51 +81,60 @@ export function resolveCiTestPlan({
   }
 
   if (scopedFiles.some(isFullAffectedTrigger)) {
+    return fullAffectedPlan(
+      'Shared, package, CI, or test setup changes require the full affected test path.'
+    );
+  }
+
+  const webFiles = scopedFiles.filter(isTargetableWebFile);
+  const storefrontFiles = scopedFiles.filter(
+    (file) =>
+      !isTargetableWebFile(file) && isTargetableMobileStorefrontFile(file)
+  );
+  // Data files that tests read through fs. They run through the web Vitest
+  // command, whose changed-files provider adds the tests that mention them
+  // (it does this for any changed file in these families, wherever it lives).
+  const readerFiles = scopedFiles.filter(isFsReaderFile);
+
+  // Unknown paths keep the full suite: only listed classes may skip it.
+  const hasUnknownFiles = scopedFiles.some(
+    (file) =>
+      !isTargetableWebFile(file) &&
+      !isTargetableMobileStorefrontFile(file) &&
+      !isFsReaderFile(file)
+  );
+  if (hasUnknownFiles) {
+    return fullAffectedPlan(
+      'The diff includes files outside the targeted web test scope.'
+    );
+  }
+
+  const runsWebTests = webFiles.length > 0 || readerFiles.length > 0;
+  const runsStorefrontTests = storefrontFiles.length > 0;
+  const hasReaderFiles = readerFiles.length > 0;
+
+  if (runsWebTests && runsStorefrontTests) {
     return {
-      mode: 'full-affected',
-      reason: 'Shared, package, CI, or test setup changes require the full affected test path.',
-      command: FULL_AFFECTED_COMMAND,
+      mode: 'targeted-web-and-storefront-tests',
+      reason: hasReaderFiles
+        ? WEB_AND_STOREFRONT_READER_REASON
+        : WEB_AND_STOREFRONT_REASON,
+      command: `${targetedWebCommand(baseRef)} && ${targetedMobileStorefrontCommand(baseRef)}`,
     };
   }
 
-  const hasTargetableWebFiles = scopedFiles.some(isTargetableWebFile);
-  const hasTargetableMobileStorefrontFiles = scopedFiles.some(
-    isTargetableMobileStorefrontFile
-  );
-  const allFilesAreTargetable = scopedFiles.every(
-    (file) => isTargetableWebFile(file) || isTargetableMobileStorefrontFile(file)
-  );
-
-  if (allFilesAreTargetable && hasTargetableWebFiles) {
-    if (hasTargetableMobileStorefrontFiles) {
-      return {
-        mode: 'targeted-web-and-storefront-tests',
-        reason:
-          'Pull request changes are limited to apps/web and mobile storefront source or test files.',
-        command: `${targetedWebCommand(baseRef)} && ${targetedMobileStorefrontCommand(baseRef)}`,
-      };
-    }
-
+  if (runsWebTests) {
     return {
       mode: 'targeted-web-vitest',
-      reason: 'Pull request changes are limited to apps/web source or test files.',
+      reason: hasReaderFiles ? WEB_READER_REASON : WEB_SOURCE_REASON,
       command: targetedWebCommand(baseRef),
     };
   }
 
-  if (allFilesAreTargetable && hasTargetableMobileStorefrontFiles) {
-    return {
-      mode: 'targeted-storefront-jest',
-      reason:
-        'Pull request changes are limited to mobile storefront source or test files.',
-      command: targetedMobileStorefrontCommand(baseRef),
-    };
-  }
-
   return {
-    mode: 'full-affected',
-    reason: 'The diff includes files outside the targeted web test scope.',
-    command: FULL_AFFECTED_COMMAND,
+    mode: 'targeted-storefront-jest',
+    reason: STOREFRONT_REASON,
+    command: targetedMobileStorefrontCommand(baseRef),
   };
 }
 
@@ -224,18 +162,20 @@ function parseArgs(argv) {
   return args;
 }
 
-function getChangedFiles(baseRef, headRef) {
+// Deleted files and both sides of a rename are real changes: a PR that deletes
+// a shared file, or moves it out of a package, can break tests that still
+// import it. `--no-renames` lists the old path of a rename as a deletion, and
+// the absence of a `--diff-filter` keeps deletions in the list.
+export function changedFilesDiffArgs(baseRef, headRef) {
+  return ['diff', '--name-only', '--no-renames', `${baseRef}...${headRef}`];
+}
+
+export function getChangedFiles(baseRef, headRef, { cwd } = {}) {
   try {
-    return execFileSync(
-      'git',
-      [
-        'diff',
-        '--name-only',
-        '--diff-filter=ACMRTUXB',
-        `${baseRef}...${headRef}`,
-      ],
-      { encoding: 'utf8' }
-    )
+    return execFileSync('git', changedFilesDiffArgs(baseRef, headRef), {
+      cwd,
+      encoding: 'utf8',
+    })
       .split('\n')
       .filter(Boolean);
   } catch {

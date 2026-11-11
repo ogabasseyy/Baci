@@ -242,6 +242,7 @@ export async function computeOrderNegotiationDiscount({
       variantId: validatedVariantIds[index] ?? null,
       catalogUnitPrice: line.catalogUnitPrice,
       clientUnitPrice: line.clientUnitPrice,
+      quantity: line.quantity,
       negotiable: line.negotiable,
     }));
     const run = () =>

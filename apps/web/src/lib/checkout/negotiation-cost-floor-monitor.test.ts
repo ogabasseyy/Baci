@@ -104,6 +104,63 @@ describe('monitorNegotiationCostFloor', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it('does not flag a price exactly on the 10% margin (regression: 100 * 1.1 float error)', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 100 }], error: null },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [{ ...line(110), catalogUnitPrice: 112 }],
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('reports unreadable variant cost instead of falling back to the parent (regression: RLS-empty variant read)', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
+      product_variants: { data: [], error: null },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98, 'v1')],
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatchObject({
+      message: 'Negotiation cost-floor monitor could not read variant cost',
+      unreadableVariantLines: 1,
+    });
+  });
+
+  it('skips a variant that belongs to another product', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
+      product_variants: {
+        data: [{ id: 'v1', product_id: 'other', cost_price: 99 }],
+        error: null,
+      },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98, 'v1')],
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('includes the line quantity in the breach entry', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 99 }], error: null },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [{ ...line(98), quantity: 10 }],
+    });
+    expect(warn.mock.calls[0][0].breaches[0]).toMatchObject({ quantity: 10 });
+  });
+
   it('stays silent when the price clears the cost floor', async () => {
     const { client } = clientReturning({
       products: { data: [{ id: 'p1', cost_price: 60 }], error: null },

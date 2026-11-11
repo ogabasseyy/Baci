@@ -197,7 +197,10 @@ describe('monitorNegotiationCostFloor', () => {
         lines: [line(98)],
       })
     ).resolves.toBeUndefined();
-    expect(warn).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatchObject({
+      message: 'Negotiation cost-floor monitor could not read product cost',
+    });
   });
 
   it('never throws when the client itself throws', async () => {

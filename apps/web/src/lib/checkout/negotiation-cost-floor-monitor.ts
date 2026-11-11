@@ -71,7 +71,16 @@ export async function monitorNegotiationCostFloor({
       .eq('merchant_id', merchantId)
       .in('id', productIds)
       .overrideTypes<CostRow[], { merge: false }>();
-    if (error || !data) return;
+    if (error || !data) {
+      // Make a lost cost_price grant/RLS visible: zero breaches must not be
+      // indistinguishable from zero visibility. No cost values are logged.
+      logger.warn({
+        message: 'Negotiation cost-floor monitor could not read product cost',
+        merchantId,
+        code: (error as { code?: string } | null)?.code ?? null,
+      });
+      return;
+    }
     const productCost = new Map(
       data.map((row) => [row.id, positiveCost(row.cost_price)])
     );

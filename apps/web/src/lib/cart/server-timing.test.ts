@@ -38,6 +38,17 @@ describe('cart server timing', () => {
     );
   });
 
+  it('keeps timing entries already on the response', async () => {
+    const timer = createCartServerTimer(clock(0, 5, 25, 30));
+    await timer.measure('cart', () => null);
+    const response = timer.apply(
+      new Response(null, { headers: { 'Server-Timing': 'edge;dur=3.0' } })
+    );
+    expect(response.headers.get('Server-Timing')).toBe(
+      'edge;dur=3.0, cart;dur=20.0, total;dur=30.0'
+    );
+  });
+
   it('rejects step names that are not fixed tokens', async () => {
     const timer = createCartServerTimer();
     await expect(timer.measure('bad name;x=1', () => null)).rejects.toThrow(

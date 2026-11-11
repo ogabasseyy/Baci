@@ -7,7 +7,10 @@
 export interface CartServerTimer {
   /** Runs one step and records how long it took, even when it throws. */
   measure<T>(name: string, step: () => PromiseLike<T> | T): Promise<T>;
-  /** Adds the recorded steps, plus the total so far, to the response. */
+  /**
+   * Adds the recorded steps, plus the total so far, to the response,
+   * keeping any timing entries already on it.
+   */
   apply<R extends Response>(response: R): R;
 }
 
@@ -38,7 +41,8 @@ export function createCartServerTimer(
         ({ name, duration }) =>
           `${name};dur=${Math.max(0, duration).toFixed(1)}`
       );
-      response.headers.set('Server-Timing', entries.join(', '));
+      // Append: the framework or a proxy may already report its own steps.
+      response.headers.append('Server-Timing', entries.join(', '));
       return response;
     },
   };

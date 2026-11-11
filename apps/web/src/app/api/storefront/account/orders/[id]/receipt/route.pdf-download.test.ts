@@ -12,6 +12,7 @@ const {
   authenticateApiRequest,
   getStorefrontAccountDocumentData,
   generateReceiptBlob,
+  resolveReceiptLogoDataUri,
 } = receiptRouteMocks;
 
 describe('storefront receipt PDF downloads', () => {
@@ -49,6 +50,28 @@ describe('storefront receipt PDF downloads', () => {
         documentDate: '2026-04-02T10:00:00.000Z',
         logoDataUri: 'data:image/png;base64,AQID',
       }
+    );
+  });
+
+  it('downloads the receipt when optional logo resolution rejects', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult()
+    );
+    vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(
+      createDocumentData({})
+    );
+    vi.mocked(resolveReceiptLogoDataUri).mockRejectedValueOnce(
+      new Error('Logo resolution failed')
+    );
+    vi.mocked(generateReceiptBlob).mockResolvedValue(new Blob(['receipt']));
+
+    const response = await requestReceipt();
+
+    expect(response.status).toBe(200);
+    expect(generateReceiptBlob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ logoDataUri: null })
     );
   });
 

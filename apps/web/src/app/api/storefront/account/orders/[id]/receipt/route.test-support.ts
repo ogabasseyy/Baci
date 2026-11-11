@@ -101,6 +101,7 @@ export function requestReceipt(input?: {
 }
 
 export const receiptRouteMocks = {
+  resolveReceiptLogoDataUri,
   authenticateApiRequest,
   checkRateLimit,
   generateReceiptBlob,

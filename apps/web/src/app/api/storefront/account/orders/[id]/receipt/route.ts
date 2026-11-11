@@ -91,6 +91,16 @@ export async function GET(
       );
     }
 
+    let logoDataUri: string | null = null;
+    try {
+      logoDataUri = await resolveReceiptLogoDataUri(data.receiptMerchant);
+    } catch {
+      logger.warn({
+        message: 'Failed to resolve storefront receipt logo; using seller name',
+        orderId: parsedParams.data.id,
+      });
+    }
+
     // The eligibility gate above already established receipt kind: pass it
     // explicitly instead of letting the generator infer from the payment
     // flag, which stays non-paid on settled manual balances. Date the same
@@ -100,7 +110,7 @@ export async function GET(
       data.receiptMerchant,
       {
         documentKind: 'receipt',
-        logoDataUri: await resolveReceiptLogoDataUri(data.receiptMerchant),
+        logoDataUri,
         documentDate:
           (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
           data.receiptOrder.created_at,

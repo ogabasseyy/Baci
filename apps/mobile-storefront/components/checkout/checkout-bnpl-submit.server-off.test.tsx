@@ -21,8 +21,6 @@ const mockClearMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => void>();
 const mockCreateOrder =
   jest.fn<(request: unknown, options?: unknown) => Promise<OrderResponse>>();
-const mockGetKlumpDisabledReason =
-  jest.fn<(...params: unknown[]) => string | undefined>();
 const mockGetMobileCheckoutIdempotencyKey =
   jest.fn<(...params: unknown[]) => string>();
 const mockRouterPush = jest.fn();
@@ -47,11 +45,6 @@ jest.mock('@/lib/checkout-order-idempotency', () => ({
     mockClearMobileCheckoutIdempotencyKey(...params),
   getMobileCheckoutIdempotencyKey: (...params: unknown[]) =>
     mockGetMobileCheckoutIdempotencyKey(...params),
-}));
-
-jest.mock('@/lib/klump-checkout', () => ({
-  getKlumpDisabledReason: (...params: unknown[]) =>
-    mockGetKlumpDisabledReason(...params),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -125,8 +118,8 @@ function createParams() {
     getShippingProvider: () => 'topship',
     isOrderInFlight: { current: true },
     itemsSnapshot,
-    liveSavingsSelection: undefined,
-    liveWalletSelection: undefined,
+    liveSavingsSelection: { use: false, amount: 0, goalId: null },
+    liveWalletSelection: { use: false, amount: 0 },
     checkoutGeneration: 'gen-1',
     mobileCheckoutIdempotencyRef: { current: null },
     paymentMethodForOrder: 'credit_direct',
@@ -161,7 +154,6 @@ describe('submitBnplCheckout', () => {
     });
     mockBuildMobileCheckoutOrderFingerprint.mockReturnValue('fingerprint-1');
     mockGetMobileCheckoutIdempotencyKey.mockReturnValue('idempotency-key-1');
-    mockGetKlumpDisabledReason.mockReturnValue(undefined);
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 21500,
       order: {
@@ -180,19 +172,19 @@ describe('submitBnplCheckout', () => {
     global.fetch = jest.fn() as unknown as typeof fetch;
   });
 
-  it('stops Klump checkout and resets state when Klump is unavailable', async () => {
+  it('blocks a stale Klump selection with wallet and savings disabled', async () => {
     const params = {
       ...createParams(),
       selectedPayment: 'klump' as const,
+      paymentSettings: { klump_enabled: true },
       setIsProcessing: jest.fn(),
     };
-    mockGetKlumpDisabledReason.mockReturnValue('Amount is below Klump minimum');
 
     await submitBnplCheckout(params);
 
     expect(mockAlert).toHaveBeenCalledWith(
       'Klump unavailable',
-      'Amount is below Klump minimum',
+      'Klump is no longer available. Choose another payment method.',
       [{ text: 'OK' }]
     );
     expect(params.isOrderInFlight.current).toBe(false);

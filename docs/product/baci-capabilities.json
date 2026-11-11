@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T18:05:00+00:00",
-  "source_revision": "fc72484cc2f18b91ce001c074c49014c614384b6",
-  "evidence_digest": "d195a66b699bfd12b9e701bb2f10ebc644eeb5645b790586f3fa8063a23796ba",
-  "claims_digest": "ac4bd93c2509d0f8e4599bb57e8259d593a351f9006c0db0e556e99f4ff8fa97",
+  "reviewed_at": "2026-11-11T18:21:56+00:00",
+  "source_revision": "0592d97b0b2bb20ddd7076c8c3c2eefcc1736ba3",
+  "evidence_digest": "75963771c6a425014b46e9edf838804ea7a1977fd9ec7a10a20f1932b0b08857",
+  "claims_digest": "35b0aa5e30cb4d0b2705e5ba8e146e2927da710b3607c17c5d4808004f6c2144",
   "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
@@ -222,7 +222,7 @@
       "title": "Full-code storefront MCP foundations",
       "status": "code_evidenced",
       "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
-      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. The fixed-policy privileged helper and runner/HTTPS delivery remain unqualified; scoped verifier provisioning and authorized rollout are still required.",
       "source_refs": [
         "apps/web/builder-mcp-server/registry.ts",
         "apps/web/src/lib/experience/production-integration.ts",

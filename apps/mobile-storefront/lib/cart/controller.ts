@@ -38,6 +38,7 @@ export function createNativeCartController(
   };
   let snapshot: CartSnapshot | null = null;
   let terminal = false;
+  let confirmedEmpty = false;
   let terminalCartId: string | null = null;
   let incoming: CartSnapshot | null = null;
   let tail: Promise<unknown> = Promise.resolve();
@@ -116,7 +117,9 @@ export function createNativeCartController(
     options.status('ready');
   }
   async function refresh(): Promise<void> {
-    if (!snapshot) options.status('loading');
+    // A confirmed-empty cart re-checks silently; failures re-arm loading.
+    if (!snapshot && !confirmedEmpty) options.status('loading');
+    confirmedEmpty = false;
     const context = await options.client.context();
     assertCurrent();
     let pending = await receipts.read(options.merchantId);
@@ -179,6 +182,7 @@ export function createNativeCartController(
       }
       await accept(result.cart);
     } else options.status('ready');
+    confirmedEmpty = !snapshot && !pending;
   }
   async function ensureCart(): Promise<CartSnapshot> {
     if (incoming) throw new NativeCartError('legacy_choice_required');
@@ -192,6 +196,7 @@ export function createNativeCartController(
       assertCurrent();
       terminal = false;
     }
+    confirmedEmpty = false; // explicit writes keep their loading state
     await refresh();
     if (snapshot) return snapshot;
     // Only explicit writes reach here. Never create from a read error or over old intent.

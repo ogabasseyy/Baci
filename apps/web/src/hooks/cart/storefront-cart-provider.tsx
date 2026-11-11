@@ -1,6 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { createCommittedSnapshotStore } from '@/lib/committed-snapshot-store';
@@ -13,7 +12,11 @@ import {
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
 } from './cart-storage';
-import type { CartContextType, CartItem } from './cart-types';
+import type {
+  CartContextType,
+  CartItem,
+  StorefrontCartProviderProps,
+} from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
 import { delegatedCartValue } from './storefront-cart-delegated-value';
 import { useDeferredValidationActivation } from './use-deferred-validation-activation';
@@ -23,23 +26,6 @@ import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 import { useStorefrontCartLineHandlers } from './use-storefront-cart-line-handlers';
 import { useStorefrontCartNegotiationHandlers } from './use-storefront-cart-negotiation-handlers';
 import { useStorefrontCartSessionHandlers } from './use-storefront-cart-session-handlers';
-
-interface StorefrontCartProviderProps {
-  children: ReactNode;
-  enableSmartCartPro?: boolean;
-  merchantSlug?: string | null;
-  deferValidationUntilIdle?: boolean;
-  validationActivationTimeoutMs?: number;
-  /**
-   * Enrolled merchant identity for shared-cart delegation. The server frame
-   * evaluates enrollment; the provider delegates only while the active slug
-   * matches the enrolled merchant. Null/flag-missing means legacy local cart.
-   */
-  merchantId?: string | null;
-  sharedCartEnabled?: boolean;
-  sharedCartAccountsEnabled?: boolean;
-  sharedCartRealtimeEnabled?: boolean;
-}
 
 export function StorefrontCartProvider({
   children,

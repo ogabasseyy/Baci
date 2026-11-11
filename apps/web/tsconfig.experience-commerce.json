@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "allowImportingTsExtensions": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "src/lib/experience/**/*.ts",
+    "src/components/storefront/experience/**/*.ts",
+    "src/components/storefront/experience/**/*.tsx",
+    "src/hooks/cart/shared-cart-command-port*.ts",
+    "src/hooks/cart/shared-cart-operation-receipts*.ts",
+    "src/hooks/cart/shared-cart-experience-runtime.ts",
+    "src/hooks/cart/use-cart-send-queue*.ts",
+    "src/lib/api-attempt-policy.ts",
+    "src/lib/api-client-attempt.test.ts",
+    "src/lib/cart/experience-cart-continuity*.ts",
+    "src/app/api/storefront/experience/**/*.ts",
+    "src/app/api/storefront/cart/continuity/**/*.ts",
+    "src/**/*.d.ts",
+    "src/lib/consent-mode.ts",
+    "tests/experience-commerce/**/*.ts",
+    "src/lib/shipping/storefront-quote-attestation*.ts",
+    "src/schemas/storefront-shipping-quote.ts",
+    "src/app/api/shipping/quotes/route*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -8,8 +8,15 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eventPipelineGovernedPaths } from './event-pipeline-governed-paths';
+
+const fsReads = vi.hoisted(() => ({ readFileSync: vi.fn() }));
+vi.mock('node:fs', async (original) => {
+  const actual = await original<typeof import('node:fs')>();
+  fsReads.readFileSync.mockImplementation(actual.readFileSync);
+  return { ...actual, readFileSync: fsReads.readFileSync };
+});
 
 const directories: string[] = [];
 
@@ -34,6 +41,30 @@ describe('eventPipelineGovernedPaths', () => {
     );
     expect(governed.seedPaths).toContain('apps/web/src/app/checkout/page.tsx');
     expect(governed.missingProductionRoots).toEqual([]);
+  });
+
+  it('retains both authority paths when Git would detect a rename', () => {
+    const root = mkdtempSync(join(tmpdir(), 'event-rename-paths-'));
+    directories.push(root);
+    const git = (...args: string[]) =>
+      execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+    git('init', '--quiet');
+    git('config', 'user.email', 'tests@example.com');
+    git('config', 'user.name', 'Tests');
+    git('config', 'diff.renames', 'true');
+    const fixturePath =
+      'apps/web/tools/events/fixtures/event-pipeline-path-inventory.tsv';
+    mkdirSync(join(root, fixturePath, '..'), { recursive: true });
+    writeFileSync(join(root, fixturePath), 'seed\told.ts\n');
+    writeFileSync(join(root, 'old.ts'), 'export const authority = true;\n');
+    git('add', '.');
+    git('commit', '--quiet', '-m', 'baseline');
+    const base = git('rev-parse', 'HEAD').trim();
+    git('mv', 'old.ts', 'new.ts');
+    git('commit', '--quiet', '-m', 'rename');
+    expect(
+      eventPipelineGovernedPaths.collect(root, new Map(), base).changedPaths
+    ).toEqual(expect.arrayContaining(['old.ts', 'new.ts']));
   });
 
   it('pins the authority-byte baseline to a reachable landing ancestor', () => {
@@ -217,4 +248,68 @@ describe('eventPipelineGovernedPaths', () => {
     expect(governed.paths).toContain(governedTool);
     expect(governed.productionPaths).not.toContain(governedTool);
   });
+});
+
+it('discovers unreferenced changed paths without reading their source bytes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'event-demand-source-'));
+  directories.push(root);
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  git('init', '--quiet');
+  git('config', 'user.email', 'tests@example.com');
+  git('config', 'user.name', 'Tests');
+  const fixture =
+    'apps/web/tools/events/fixtures/event-pipeline-path-inventory.tsv';
+  mkdirSync(join(root, fixture, '..'), { recursive: true });
+  writeFileSync(
+    join(root, fixture),
+    readFileSync(join(eventPipelineGovernedPaths.repoRoot(), fixture), 'utf8')
+  );
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'baseline');
+  const base = git('rev-parse', 'HEAD').trim();
+  writeFileSync(
+    join(root, 'unreferenced.ts'),
+    'export const unrelated = true;'
+  );
+  fsReads.readFileSync.mockClear();
+  const inventory = eventPipelineGovernedPaths.collect(root, undefined, base);
+  expect(inventory.paths).toContain('unreferenced.ts');
+  expect(
+    fsReads.readFileSync.mock.calls.some(
+      ([path]) => String(path) === join(root, 'unreferenced.ts')
+    )
+  ).toBe(false);
+  expect(inventory.fixtureInventoryHashMatches).toBe(true);
+});
+
+it('keeps staged import bytes authoritative in the demand-loaded closure', () => {
+  const root = mkdtempSync(join(tmpdir(), 'event-demand-index-'));
+  directories.push(root);
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  git('init', '--quiet');
+  git('config', 'user.email', 'tests@example.com');
+  git('config', 'user.name', 'Tests');
+  const fixture =
+    'apps/web/tools/events/fixtures/event-pipeline-path-inventory.tsv';
+  mkdirSync(join(root, fixture, '..'), { recursive: true });
+  writeFileSync(
+    join(root, fixture),
+    readFileSync(join(eventPipelineGovernedPaths.repoRoot(), fixture), 'utf8')
+  );
+  const entry = 'apps/web/src/scripts/process-event-deliveries.ts';
+  const child = 'apps/web/src/scripts/staged-child.ts';
+  mkdirSync(join(root, entry, '..'), { recursive: true });
+  writeFileSync(join(root, entry), 'export {};');
+  writeFileSync(join(root, child), 'export {};');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'baseline');
+  const base = git('rev-parse', 'HEAD').trim();
+  writeFileSync(join(root, entry), "import './staged-child'; export {};");
+  git('add', entry);
+  writeFileSync(join(root, entry), 'export {};');
+  expect(
+    eventPipelineGovernedPaths.collect(root, undefined, base).productionPaths
+  ).toContain(child);
 });

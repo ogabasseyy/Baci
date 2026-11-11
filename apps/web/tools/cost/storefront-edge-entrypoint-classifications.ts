@@ -36,6 +36,9 @@ const RELEASE_ENTRYPOINTS = [
 ] as const;
 
 const DYNAMIC_ENTRYPOINTS = [
+  // Full-code profiles require the current trusted origin/runtime composition.
+  '(catalog)/(listing)/collections/[handle]/page.tsx',
+  '(content)/pages/[...experiencePath]/page.tsx',
   '(blog)/blog/[...catchAll]/route.ts',
   '(blog)/blog/news-sitemap.xml/route.ts',
   'sitemap/[id]/route.ts',

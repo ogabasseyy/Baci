@@ -1,0 +1,311 @@
+{
+  "scope": "production integration delta; original recovered implementation inventory remains separate",
+  "baseMain": "7a2f3cc9b1f610d33b5c6da49147166f814e2404",
+  "previousBaseMain": "930ecba11c54073caec652e2257e02be2ce80532",
+  "files": [
+    {
+      "path": "apps/web/package.json",
+      "bytes": 11538,
+      "sha256": "3aae642ac4b4ece7367e9aaeee9d4cda01ce60a9fc6df83e20fcc3a7f686b4f2"
+    },
+    {
+      "path": "apps/web/src/instrumentation-experience-boot.ts",
+      "bytes": 1832,
+      "sha256": "fdedea11109634995e8c82a0eb06f258d0cf591196641f451b331f4f482478b5"
+    },
+    {
+      "path": "apps/web/src/lib/experience/compose-runtime.test.ts",
+      "bytes": 6801,
+      "sha256": "9002b8127ad7e96459fe43dc061f5fd113c688f60aa33b131e02671a7172f95c"
+    },
+    {
+      "path": "apps/web/src/lib/experience/compose-runtime.ts",
+      "bytes": 3256,
+      "sha256": "a99a5f39795614a85d22c99ddff492e082e2eb4c09356c43e245f6bde94d63c8"
+    },
+    {
+      "path": "apps/web/src/lib/experience/execution-origin-runtime.ts",
+      "bytes": 803,
+      "sha256": "9d0280e0531a6f3e1b307e3bd810adc5ad33c46a1dad5c8716f4a90f59685f14"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor-types.ts",
+      "bytes": 1247,
+      "sha256": "02c229a0eda230ac876f109a1975088070db2eafb0a3d0f5d2c0e0b6fd196ec6"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.test.ts",
+      "bytes": 14090,
+      "sha256": "3a811efcda9506f02c66b8ca4882147508735a586b19bc747fe28f46a0c90623"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-build-supervisor.ts",
+      "bytes": 9418,
+      "sha256": "4f52ea2c8bc2e5baafda707218b3bd1b916cc0281ad941d692832c7d79998ded"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-owner-runtime.ts",
+      "bytes": 5489,
+      "sha256": "2733158cd6cd137106fb66865e8882ceb15f5352cbcb87ca9f7e54e4bbec53fe"
+    },
+    {
+      "path": "apps/web/src/lib/experience/local-prerender-pipeline.ts",
+      "bytes": 7894,
+      "sha256": "e78022123fadf3af83ef8019bf0b637568075e9213176f05dbe01c923d33a4cc"
+    },
+    {
+      "path": "apps/web/src/lib/experience/prerender-preview.ts",
+      "bytes": 2808,
+      "sha256": "2c1073c5611613fdea0b88236ab01dad59e68374e79fc3fea1a9b3c762445e79"
+    },
+    {
+      "path": "apps/web/src/lib/experience/preview-service.ts",
+      "bytes": 7676,
+      "sha256": "815f6d551bfebc2ea12c2d694e3989d56ed192eff910dce09b166a76268df5c0"
+    },
+    {
+      "path": "apps/web/src/lib/experience/private-capture-service.ts",
+      "bytes": 6501,
+      "sha256": "4048a734442d710d577e97f49eba3ee2cda25d496aa5fd42eb5c0d926cbc9be8"
+    },
+    {
+      "path": "apps/web/src/lib/experience/private-prerender-document.test.ts",
+      "bytes": 2909,
+      "sha256": "19a6c616346e1548a1dca5164550840b1ff8af5225117e766c16396cfb9516f3"
+    },
+    {
+      "path": "apps/web/src/lib/experience/private-prerender-document.ts",
+      "bytes": 4409,
+      "sha256": "2fba18cfeefda70cf4d583b35e47890289728f648cc5fae3743689a93ec0c703"
+    },
+    {
+      "path": "apps/web/src/lib/experience/production-integration.test.ts",
+      "bytes": 8149,
+      "sha256": "2a694115c8e4f53d1cc90ab40d12e8418c574704a35cffb4ff9bc52b8735ca8e"
+    },
+    {
+      "path": "apps/web/src/lib/experience/production-integration.ts",
+      "bytes": 8214,
+      "sha256": "69fe8a813004d15729ded0f65cfcb8b366611d7e257c1d035f60ffdfc2430948"
+    },
+    {
+      "path": "apps/web/src/lib/experience/production-origins.ts",
+      "bytes": 1285,
+      "sha256": "5e080b05d3a7fe242be291cc7e8d0b4a639eac16061bc4308e06b3ddf5faba12"
+    },
+    {
+      "path": "apps/web/src/lib/experience/production-storefront.test.ts",
+      "bytes": 3556,
+      "sha256": "c3785ef7555caf365f9b97294bdeaaf3b68e9ca2219344bd97b34cecf1fbb2e3"
+    },
+    {
+      "path": "apps/web/src/lib/experience/production-storefront.ts",
+      "bytes": 4307,
+      "sha256": "593417783509ebbc6a92dd82772d8ebf6c12f38c798973630f488bb3f33c75ff"
+    },
+    {
+      "path": "apps/web/src/lib/experience/profile-validation.ts",
+      "bytes": 1275,
+      "sha256": "04abe36417e9e2de877bba65bf83fb029b7d17cc6ff820764edaaf41bfc8975e"
+    },
+    {
+      "path": "apps/web/src/lib/experience/qualify-build-render.test.ts",
+      "bytes": 3158,
+      "sha256": "9af47fb71b60f3b565662722a691298913d3b7abb203dc4d0e575b7e30f44170"
+    },
+    {
+      "path": "apps/web/src/lib/experience/qualify-build-render.ts",
+      "bytes": 2332,
+      "sha256": "4cd78ad9504b74c26d11f1bc5ccdc6f341b713b3e334c4a966c4ea9f2924a258"
+    },
+    {
+      "path": "apps/web/src/lib/experience/recover-finalized-build.test.ts",
+      "bytes": 4261,
+      "sha256": "1363c81bb5d61a56798bb763054163e47b25e80423d19bce7f5f6d20be4dfedf"
+    },
+    {
+      "path": "apps/web/src/lib/experience/recover-finalized-build.ts",
+      "bytes": 5245,
+      "sha256": "5084eb94db020e12378c24ef88bf522b291ad38082932ffeba60a20e3c93304f"
+    },
+    {
+      "path": "apps/web/src/lib/proxy/csp.ts",
+      "bytes": 6296,
+      "sha256": "f7caa1280a7e70be4557281a943cd63f931e362d0edfd6c7228378636e163c25"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-job.ts",
+      "bytes": 425,
+      "sha256": "da941205896cb2dd68602c2aebdbc653a1afe83def3f9894d7e2dc97437b5c6c"
+    },
+    {
+      "path": "apps/web/src/schemas/experience-runner-transport.ts",
+      "bytes": 851,
+      "sha256": "3783c73c234bceb070c9f4ac540f130686473b67ec1637354fd5e09b6c9d115a"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/data-fixture.test-support.ts",
+      "bytes": 7889,
+      "sha256": "ac66417d7569c6d8890a55f1eb2bfff393c25942576148e9c36f0ed0e12abf75"
+    },
+    {
+      "path": "apps/web/tests/experience-authoring/production-runner.test.ts",
+      "bytes": 9406,
+      "sha256": "6374a70fa8cb7d6c2e044ed80f7e0daacd3c7a94b4ee72091c47d968f01cfacf"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/checkpoint-b-worker.ts",
+      "bytes": 11816,
+      "sha256": "99720e69f950a9391d252971ccaa477402ae27042253cd9e865cae006576296f"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/compile-worker.mjs",
+      "bytes": 658,
+      "sha256": "b37384454ec6dbb74dfc943d5e8424a92c7ec3b99eccf2363a731c92a0a989dc"
+    },
+    {
+      "path": "apps/web/tests/experience-browser/production-semantic-capture.test.ts",
+      "bytes": 3009,
+      "sha256": "a05b07db4976d77d14399ea8fa826f9464c8c10c85b7479c18ce64c2c5561835"
+    },
+    {
+      "path": "apps/web/tests/experience-lifecycle/sql.test-support.ts",
+      "bytes": 6143,
+      "sha256": "02f3abd88733d80ab1d6ef73c4561dd1e84cb58ad716c7a199be20d26fecbf0e"
+    },
+    {
+      "path": "apps/web/tools/db/expected-builder-pending-sources.test-support.ts",
+      "bytes": 7006,
+      "sha256": "f690efa043196f889398504607bdd4011697645f32f2583c27f8520d8013c480"
+    },
+    {
+      "path": "apps/web/tools/db/supabase-history-replay-builder-pending-sources.ts",
+      "bytes": 4397,
+      "sha256": "886df84ceb14676c5c1867b36ea07becb3a2946b27476ed325288caee1b5f1de"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/bundle-source.ts",
+      "bytes": 8790,
+      "sha256": "59db5960e3c1a9cc52b926b5c78e62d5c19f8a296158c12f7c50034c966e0678"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/capture-route.ts",
+      "bytes": 2167,
+      "sha256": "042110007882ca28a256a964800874f79019a32b5b8cf45e6344101d85080eb5"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/linux-runner.test.ts",
+      "bytes": 1666,
+      "sha256": "93edc52532b08d17523079bbe83fd07e9906a72df7f50c6132badac85955bb53"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/linux-runner.ts",
+      "bytes": 2985,
+      "sha256": "85a01b7cc8b16049aa4abd20db83d4547c6f2fc16e76a2abc871cfeb6f6258dc"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/prerender-build-worker.mjs",
+      "bytes": 737,
+      "sha256": "78d48c46d2f045659772a6ab48c631909e5ac9116ee0be764883ba41f6ca4524"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/prerender-runtime-entry.ts",
+      "bytes": 3048,
+      "sha256": "408de72f4ad78058ea5510ae799f21ac80b4be89ff77cc49bbf80f90b29f95eb"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/preview-delivery.test.ts",
+      "bytes": 3139,
+      "sha256": "f3827b438bbe1dbf7f86a2555f75f8152e49c121174acdf603a1707b14637a94"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/preview-delivery.ts",
+      "bytes": 2278,
+      "sha256": "0e41b0d5965252835f5f4838a240f51926f179b799a90179179fb1993dc69a9f"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/preview-gateway.ts",
+      "bytes": 2552,
+      "sha256": "37d390464542cecaca0ffc33f6e12370d4230b3bd699749c9b38526d42f6f257"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/private-build-payload.test.ts",
+      "bytes": 1712,
+      "sha256": "e203f52c791caf4613050a3aa21b22820371c83c8dbebe7ae4139d9fa7f63b1a"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/private-build-payload.ts",
+      "bytes": 3658,
+      "sha256": "1d4ac95486b1c386db9015e09f10f386c1dd739df44f2b5264e3d3bb54761560"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/published-delivery.test.ts",
+      "bytes": 4032,
+      "sha256": "044287dcecb6991df1bd867441fa783e87bf58d81f2a95e9500436609133a936"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/published-delivery.ts",
+      "bytes": 5176,
+      "sha256": "532f158c45a56d41fa763bde600a3b39d6e36e5f59c4fcf62d3d7d30c05b74fc"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/runner-transport.test.ts",
+      "bytes": 6816,
+      "sha256": "55412b84cbf90e78fad6cbb39f6537c3dfbad0055c91583704d642d2726ba260"
+    },
+    {
+      "path": "apps/web/tools/experience-runner/runner-transport.ts",
+      "bytes": 7517,
+      "sha256": "f3e68aa884eef941da2ff63089f1d6e1c5bc7491d971105dfdeefb971012a65c"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/draft-approval.node.test.ts",
+      "bytes": 10387,
+      "sha256": "30498e1734a4241d53e214ae65e5179c5547835bb0756004c9abbf8d66a9214d"
+    },
+    {
+      "path": "apps/web/tools/experience-sql/jobs.node.test.ts",
+      "bytes": 8721,
+      "sha256": "c57b6f6a9c7423e4f8cb29a2a556be8aaf95e817b74b7a27c215c2aab2c8cc9d"
+    },
+    {
+      "path": "apps/web/tsconfig.experience-runner.json",
+      "bytes": 604,
+      "sha256": "c0a6f11bc2262322b31787036b51d6964fe58f368450c60b4fbadb013c41c27e"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-11-03-experience-production-integration.md",
+      "bytes": 1743,
+      "sha256": "e79202c7033a4e2799c309e2708ab59bbf8ec33dc4dc807c6ea10c95eb0cf2a0"
+    },
+    {
+      "path": "packages/experience-sdk/src/channel.test.ts",
+      "bytes": 10583,
+      "sha256": "d6bfda9b176766ef6906791b012c989510643c3c151493dbe8d9b1e31a41b629"
+    },
+    {
+      "path": "packages/experience-sdk/src/channel.ts",
+      "bytes": 6854,
+      "sha256": "bdb7d0819f8ce7fd2fc71365896b46a18a39f96e56f940be5edf94634335708b"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "bytes": 1099975,
+      "sha256": "f256c01a3a57ec43d53cfcc2b46b6212b9cdd215d211b92924e7d37b7c9d4867"
+    },
+    {
+      "path": "supabase/migrations/20261103161500_experience_https_build_origins.sql",
+      "bytes": 1414,
+      "sha256": "30691366a9257b7eae761285e6efb6693259b8892206fda7764e2ffac46ba5b4"
+    },
+    {
+      "path": "turbo.json",
+      "bytes": 4557,
+      "sha256": "6c987b593737a45edebb5a35cfe3ab6f3f4ad344b54b70e1eda78697919dc176"
+    }
+  ],
+  "priorBases": [
+    "930ecba11c54073caec652e2257e02be2ce80532",
+    "932a38e053f7b123a5d137298a2e26c0dc87c156"
+  ]
+}

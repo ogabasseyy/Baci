@@ -77,7 +77,6 @@ export default function ProductDetailClient({
   const handleAddToCart = useProductCartSubmission({
     product,
     merchant,
-    currencyCode,
     currentVariantSelection,
     selectedOffer,
     selectedCondition,

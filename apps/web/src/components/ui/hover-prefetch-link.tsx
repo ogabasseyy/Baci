@@ -1,9 +1,16 @@
 'use client';
 
+import type { UrlObject } from 'node:url';
+import type { Route } from 'next';
+import type BaseLink from 'next/dist/client/link';
 import Link from 'next/link';
 import { type ComponentProps, useState } from 'react';
 
-type HoverPrefetchLinkProps = Omit<ComponentProps<typeof Link>, 'prefetch'>;
+// Extract stable DOM/Next props without inferring the generated route union.
+type HoverPrefetchLinkProps = Omit<
+  ComponentProps<typeof BaseLink>,
+  'href' | 'prefetch'
+> & { href: Route | UrlObject };
 
 /**
  * A Next.js `<Link>` that opts into prefetch only after the pointer enters it.
@@ -28,7 +35,7 @@ export function HoverPrefetchLink({
   const [prefetchEnabled, setPrefetchEnabled] = useState(false);
 
   return (
-    <Link
+    <Link<string>
       {...props}
       prefetch={prefetchEnabled ? null : false}
       onPointerEnter={(event) => {

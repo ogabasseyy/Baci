@@ -62,6 +62,40 @@ it('resumes queued reads and offers a safe retry for interrupted saved-booking r
   };
   expect(pendingReadRecovery(interrupted)).toBe('refresh_eligibility');
   expect(
+    pendingReadRecovery({
+      ...snapshot,
+      pending: {
+        action: 'approve_booking',
+        idempotencyKey: key,
+        status: 'queued',
+      },
+    })
+  ).toBe('refresh_eligibility');
+  expect(
+    pendingReadRecovery({
+      ...snapshot,
+      state: { ...snapshot.state, validated: false },
+    })
+  ).toBeNull();
+  expect(
+    pendingReadRecovery({
+      ...snapshot,
+      state: { ...snapshot.state, setupComplete: true },
+    })
+  ).toBeNull();
+  expect(
+    pendingReadRecovery({
+      ...snapshot,
+      state: {
+        ...snapshot.state,
+        eligibleAmount: 100000,
+        minimumAmount: 10000,
+        maxTenure: 3,
+        offers: [{ tenure: 3, loanAmount: 100000 }],
+      },
+    })
+  ).toBeNull();
+  expect(
     selectOxygenActionKey(
       'refresh_eligibility',
       interrupted,

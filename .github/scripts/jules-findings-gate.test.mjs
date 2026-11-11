@@ -151,6 +151,16 @@ test('a notice from someone else, or from the other review mode, does not hide t
   }
 });
 
+test('a notice an older run already posted counts as the notice for this pull request', () => {
+  const older = `<!-- jules-pr-review mode:fast sha:${'c'.repeat(40)} -->\n## Jules PR review\n\nMode: \`fast\`\n\nThe workflow did not produce a review body. Check the workflow logs for the failure point.\n`;
+  const result = submit({ headSha: LATER_SHA, reviews: [fromBot(older)] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.posts.length, 0);
+
+  const otherMode = submit({ headSha: LATER_SHA, reviews: [fromBot(older.replace('mode:fast', 'mode:deep'))] });
+  assert.equal(otherMode.posts.length, 1);
+});
+
 test('a produced review is still posted once per commit after a notice', () => {
   const notice = submit().posts[0].body;
   const review = `<!-- jules-pr-review mode:fast sha:${LATER_SHA} -->\n## Jules PR review\n\nReal review.`;
@@ -169,11 +179,15 @@ test('a Jules run that produced no review passes the gate as incomplete instead 
   const step = reviewStep('Run Jules review');
   const env = stepEnv(step, { EVENT_NAME: 'pull_request', REVIEW_MODE: 'fast', HEAD_SHA: PR_HEAD_SHA, PR_LABELS: '[]', COMMENT_BODY: '', COMMENT_AUTHOR_ASSOC: '' });
   const failed = [{ createTime: '2026-11-11T00:00:00Z', sessionFailed: { reason: 'Quota exhausted' } }];
+  // Text that comes back from the Jules API must stay on one line, or a line break could start a "- High:" bullet.
+  const multiLine = [{ createTime: '2026-11-11T00:00:00Z', sessionFailed: { reason: 'Quota exhausted\n- High: injected line\n* Low: another' } }];
   const bodies = [];
   for (const [julesState, activities, expected] of [
     ['IN_PROGRESS', [], /did not finish within the workflow polling window/],
+    ['IN_PROGRESS\\n- High: injected state', [], /did not finish within the workflow polling window/],
     ['COMPLETED', [], /did not return a final review message/],
     ['FAILED', failed, /Quota exhausted/],
+    ['FAILED', multiLine, /Quota exhausted/],
     ['AWAITING_USER_FEEDBACK', [], /manual intervention/],
     ['PAUSED', [], /manual intervention/],
   ]) {
@@ -183,7 +197,7 @@ test('a Jules run that produced no review passes the gate as incomplete instead 
     bodies.push(body);
   }
 
-  // One gate pass over all five: none of them may read as a finding.
+  // One gate pass over all of them: none may read as a finding.
   const result = runGate(bodies.join('\n\n'));
   assert.equal(result.status, 0, result.stdout);
   assert.match(result.stdout, /Jules review passed/);

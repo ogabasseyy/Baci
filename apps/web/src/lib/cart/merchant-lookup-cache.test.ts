@@ -151,6 +151,26 @@ describe('cart merchant lookup cache', () => {
     expect(failing.maybeSingle).toHaveBeenCalledTimes(2);
   });
 
+  it('hands out copies so a caller cannot change the remembered rows', async () => {
+    const { client } = fakeClient({});
+    const lookups = cachedCartMerchantLookups(client, () => 1_000);
+
+    await lookups.rpcClient.rpc('resolve_storefront_auth_merchant', ARGS);
+    const hit = await lookups.rpcClient.rpc(
+      'resolve_storefront_auth_merchant',
+      ARGS
+    );
+    (hit.data as Array<{ is_published: boolean }>)[0].is_published = false;
+    await expect(
+      lookups.rpcClient.rpc('resolve_storefront_auth_merchant', ARGS)
+    ).resolves.toEqual({ data: [MERCHANT_ROW], error: null });
+
+    await lookups.features('merchant-1');
+    const features = await lookups.features('merchant-1');
+    if (features) features.premium_features = [];
+    await expect(lookups.features('merchant-1')).resolves.toEqual(FEATURE_ROW);
+  });
+
   it('shares one round trip between concurrent identical reads', async () => {
     let release: (reply: Reply) => void = () => {};
     const pending = new Promise<Reply>((resolve) => {

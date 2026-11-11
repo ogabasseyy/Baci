@@ -30,7 +30,9 @@ function createTtlCache<T>() {
       const entry = entries.get(key);
       if (!entry) return undefined;
       if (now - entry.writtenAt < CART_MERCHANT_LOOKUP_TTL_MS) {
-        return entry.value;
+        // A copy: a caller that mutates its row must not change what
+        // every later request on this instance reads.
+        return structuredClone(entry.value);
       }
       entries.delete(key);
       return undefined;
@@ -43,7 +45,9 @@ function createTtlCache<T>() {
         const oldest = entries.keys().next().value;
         if (oldest !== undefined) entries.delete(oldest);
       }
-      entries.set(key, { value, writtenAt: now });
+      // Re-insert so the first key is always the least recently written.
+      entries.delete(key);
+      entries.set(key, { value: structuredClone(value), writtenAt: now });
     },
   };
 }
@@ -53,8 +57,8 @@ function createTtlCache<T>() {
 // process-wide cache is safe to share between requests.
 const merchantRows = createTtlCache<unknown>();
 const featureRows = createTtlCache<MerchantFeatureSource>();
-const merchantReads = new SingleFlight<RpcReply>();
-const featureReads = new SingleFlight<MerchantFeatureSource | null>();
+let merchantReads = new SingleFlight<RpcReply>();
+let featureReads = new SingleFlight<MerchantFeatureSource | null>();
 
 /** Only a published, well-formed merchant row is worth remembering. */
 function cacheableMerchantReply(reply: RpcReply): boolean {
@@ -89,7 +93,7 @@ export function cachedCartMerchantLookups(
     },
     rpcClient: {
       async rpc(functionName, args) {
-        const key = args.p_identifier;
+        const key = `${functionName}:${args.p_identifier}`;
         const cached = merchantRows.get(key, now());
         if (cached !== undefined) return { data: cached, error: null };
         const reply = await merchantReads.run(key, async () => {
@@ -113,4 +117,6 @@ export function __resetCartMerchantLookupCacheForTesting(): void {
   }
   merchantRows.clear();
   featureRows.clear();
+  merchantReads = new SingleFlight<RpcReply>();
+  featureReads = new SingleFlight<MerchantFeatureSource | null>();
 }

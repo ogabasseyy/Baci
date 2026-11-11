@@ -141,6 +141,9 @@
         "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
+    "typecheck:build": {
+      "cache": false
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -156,6 +159,10 @@
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
       ]
+    },
+    "qualify:experience:release": {
+      "cache": false,
+      "dependsOn": ["^qualify:experience:release"]
     }
   }
 }

@@ -7,14 +7,15 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build",
+    "build": "next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build",
     "build:ci": "BACI_STOREFRONT_BUILD_READS=offline NODE_ENV=production next build --experimental-build-mode=compile",
     "start": "next start",
     "lint": "biome check .",
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication",
+    "typecheck": "next typegen && node tools/prepare-typed-navigation.mjs && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication && pnpm typecheck:experience",
+    "typecheck:build": "next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && tsc --noEmit --incremental false -p tsconfig.build.json",
     "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",
@@ -55,7 +56,16 @@
     "mcp:builder": "tsx builder-mcp-server/serve.ts",
     "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json",
     "verify:builder-release": "vitest run tests/builder-chatgpt builder-mcp-server --maxWorkers=1",
-    "verify:builder-provider": "pnpm --dir tools/builder-auth test"
+    "verify:builder-provider": "pnpm --dir tools/builder-auth test",
+    "test:experience:runner": "node --test experience-runtime/local-prerequisites.test.mjs && vitest run --config vitest.experience-runner.config.ts",
+    "qualify:experience:sandbox": "pnpm test:experience:browser",
+    "test:experience:browser": "node experience-runtime/build.mjs && playwright test --config tests/experience-browser/playwright.config.ts",
+    "probe:experience:sandbox": "tsx tools/experience-runner/qualify-sandbox.ts",
+    "test:experience:sql": "node tools/experience-sql/run.mjs",
+    "qualify:experience:private": "node tools/experience-sql/qualify-private.mjs",
+    "typecheck:experience": "tsc --noEmit -p tsconfig.experience-runner.json && tsc --noEmit -p tsconfig.experience-authoring.json && tsc --noEmit -p tsconfig.experience-commerce.json && tsc --noEmit -p tsconfig.experience-durable.json && tsc --noEmit -p tsconfig.experience-performance.json",
+    "qualify:experience:release": "node tools/experience-runner/qualify-release.mjs",
+    "test:experience:lifecycle": "vitest run --config vitest.experience-lifecycle.config.ts"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",
@@ -173,6 +183,7 @@
     "sanitize-html": "^2.17.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "tldts": "7.4.13",
     "ts-pattern": "^5.9.0",
     "tsx": "4.22.4",
     "tus-js-client": "^4.3.1",
@@ -188,6 +199,7 @@
     "@modelcontextprotocol/server": "^2.3.1",
     "@modelcontextprotocol/node": "^2.1.1",
     "undici": "7.30.1",
+    "@baci/experience-sdk": "workspace:*",
     "qrcode": "1.5.4"
   },
   "devDependencies": {

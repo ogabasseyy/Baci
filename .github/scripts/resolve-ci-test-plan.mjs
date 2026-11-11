@@ -7,6 +7,7 @@ const FULL_AFFECTED_COMMAND =
   'pnpm turbo run test --concurrency=3 --log-order=stream';
 
 const ROOT_FULL_TEST_FILES = new Set([
+  '.github/scripts/experience-runner-ci.test.mjs',
   '.npmrc',
   '.github/scripts/resolve-ci-test-plan.mjs',
   '.github/scripts/resolve-ci-test-plan-config.mjs',
@@ -23,6 +24,7 @@ const ROOT_FULL_TEST_FILES = new Set([
 const ROOT_FULL_TEST_PREFIXES = [
   '.github/actions/',
   'packages/shared/',
+  'packages/experience-sdk/',
   'tsconfig',
 ];
 
@@ -38,6 +40,13 @@ const WEB_FULL_TEST_FILES = new Set([
   'apps/web/package.json',
   'apps/web/tsconfig.json',
   'apps/web/vitest.config.ts',
+  'apps/web/vitest.escape-glob.ts',
+  'apps/web/vitest.experience-runner.config.ts',
+  'apps/web/vitest.jsdom-holdouts.ts',
+  'apps/web/vitest.next-image-mock.ts',
+  'apps/web/vitest.node-folders.ts',
+  'apps/web/vitest.setup.node.ts',
+  'apps/web/vitest.setup.shared.ts',
   'apps/web/vitest.setup.ts',
 ]);
 
@@ -55,6 +64,8 @@ const WEB_TARGETED_PREFIXES = [
   'apps/web/mcp-server/',
   'apps/web/src/',
   'apps/web/tools/',
+  'apps/web/experience-runtime/',
+  'apps/web/tests/experience-browser/',
 ];
 
 const MOBILE_STOREFRONT_TARGETED_PREFIXES = [

@@ -3,6 +3,17 @@
 
 import { CSRF_HEADER_NAME, getClientCsrfToken } from '@/lib/csrf';
 
+import {
+  AttemptAdmissionDenied,
+  type AttemptPolicy,
+} from './api-attempt-policy';
+
+export {
+  type AttemptAdmission,
+  AttemptAdmissionDenied,
+  type AttemptPolicy,
+} from './api-attempt-policy';
+
 export async function initializeCsrfToken(
   signal?: AbortSignal
 ): Promise<string | null> {
@@ -50,9 +61,10 @@ async function isInvalidCsrfResponse(response: Response): Promise<boolean> {
  * Fetch with CSRF protection
  * Use this instead of fetch() for all state-changing API calls
  */
-export async function fetchWithCsrf(
+export async function fetchWithCsrf<Code extends string = never>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  policy?: AttemptPolicy<Code>
 ): Promise<Response> {
   // Add CSRF token to headers for state-changing methods
   const method = options.method?.toUpperCase() || 'GET';
@@ -97,7 +109,19 @@ export async function fetchWithCsrf(
     credentials: 'include', // Include cookies for authentication
   };
 
-  let response = await fetch(url, requestInit);
+  let attempted = false;
+  const attempt = (
+    init: RequestInit,
+    priorOutcome: 'none' | 'csrf-rejected'
+  ) => {
+    const admission = policy?.beforeAttempt();
+    if (admission && !admission.allowed)
+      throw new AttemptAdmissionDenied(admission.code, attempted, priorOutcome);
+    policy?.onAttemptStart();
+    attempted = true;
+    return fetch(url, init);
+  };
+  let response = await attempt(requestInit, 'none');
 
   if (needsCsrf && (await isInvalidCsrfResponse(response))) {
     const refreshedToken = await initializeCsrfToken(
@@ -107,10 +131,13 @@ export async function fetchWithCsrf(
     if (refreshedToken) {
       const retryHeaders = new Headers(headers);
       retryHeaders.set(CSRF_HEADER_NAME, refreshedToken);
-      response = await fetch(url, {
-        ...requestInit,
-        headers: retryHeaders,
-      });
+      response = await attempt(
+        {
+          ...requestInit,
+          headers: retryHeaders,
+        },
+        'csrf-rejected'
+      );
     }
   }
 

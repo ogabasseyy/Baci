@@ -88,9 +88,20 @@ export async function handlePaystackCancellationRefundFailure({
     isLastAttempt === true &&
     refundIds.length > 0 &&
     !progressResetFailed;
+  // Keep Paystack's own rejection text: without it operations cannot
+  // tell a bad reference from an insufficient balance or a reversed
+  // payment, and a retry would be blind.
+  const providerError = String(paystackRefund.error ?? '')
+    .trim()
+    .slice(0, 300);
+  const providerEvidence = {
+    provider_error: providerError || null,
+    provider_error_code: paystackRefund.code ?? null,
+  };
   if (refundIds.length > 0 && !isDefiniteTransientFailure) {
     await quarantineRefund({
       metadata: {
+        ...providerEvidence,
         accepted_refund_ids: refundIds,
         failed_payment_transaction_id: transaction.id,
         // An ambiguous later failure may still have created a provider
@@ -100,8 +111,9 @@ export async function handlePaystackCancellationRefundFailure({
         ambiguous_initiation: isAmbiguousFailure,
       },
       order,
-      reason:
-        'Some payment legs were accepted for refund, but a later leg failed',
+      reason: providerError
+        ? `Some payment legs were accepted for refund, but a later leg failed: ${providerError}`
+        : 'Some payment legs were accepted for refund, but a later leg failed',
       supabase,
       transactions: [transaction],
     });
@@ -114,6 +126,7 @@ export async function handlePaystackCancellationRefundFailure({
     // a review. File the leg for operations either way.
     await quarantineRefund({
       metadata: {
+        ...providerEvidence,
         failed_payment_transaction_id: transaction.id,
         // Explicit either way: a deterministic rejection must
         // auto-close on replacement coverage, not read as legacy
@@ -130,7 +143,9 @@ export async function handlePaystackCancellationRefundFailure({
       preflight: !isAmbiguousFailure,
       reason: isAmbiguousFailure
         ? 'Paystack refund initiation failed ambiguously and may already exist for this payment leg'
-        : 'Paystack refund initiation was rejected for this payment leg',
+        : providerError
+          ? `Paystack refund initiation was rejected for this payment leg: ${providerError}`
+          : 'Paystack refund initiation was rejected for this payment leg',
       supabase,
       transactions: [transaction],
     });
@@ -148,6 +163,7 @@ export async function handlePaystackCancellationRefundFailure({
     try {
       await quarantineRefund({
         metadata: {
+          ...providerEvidence,
           ...(refundIds.length > 0 ? { accepted_refund_ids: refundIds } : {}),
           failed_payment_transaction_id: transaction.id,
           // A 429, missing secret, or rejected credential is a definite

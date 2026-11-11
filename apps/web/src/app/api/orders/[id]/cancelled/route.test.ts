@@ -1,4 +1,3 @@
-import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -33,46 +32,7 @@ vi.mock('@/lib/csrf', () => ({
 }));
 
 import { POST } from './route';
-
-function request(body: unknown): NextRequest {
-  return { json: vi.fn().mockResolvedValue(body) } as unknown as NextRequest;
-}
-
-function createSupabase() {
-  const orderItemsEq = vi.fn().mockResolvedValue({
-    data: [{ product_id: 'product-1' }],
-    error: null,
-  });
-  const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
-  const productsIn = vi.fn().mockResolvedValue({
-    data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
-    error: null,
-  });
-  const supabase = {
-    from: vi.fn((table: string) => {
-      if (table === 'order_items') {
-        return { select: vi.fn(() => ({ eq: orderItemsEq })) };
-      }
-      if (table === 'products') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({ in: productsIn })),
-          })),
-        };
-      }
-      if (table === 'product_variants') {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({ in: variantsIn })),
-          })),
-        };
-      }
-      throw new Error(`Unexpected table ${table}`);
-    }),
-    rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
-  };
-  return { orderItemsEq, productsIn, supabase, variantsIn };
-}
+import { createSupabase, request } from './route.test-support';
 
 describe('POST /api/orders/[id]/cancelled', () => {
   it('keeps product invalidation after a committed restock and failed product read', async () => {
@@ -98,6 +58,26 @@ describe('POST /api/orders/[id]/cancelled', () => {
       productIds: ['product-1'],
       supabase,
     });
+  });
+  it('scopes both order_items reads to the resolved merchant', async () => {
+    const { orderItemsEq, orderItemsOrderEq, supabase } = createSupabase();
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    await POST(
+      request({ cancelled_by: 'merchant', confirm_cancellation: true }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+    // The pre-cancel snapshot and the post-cancel reread.
+    expect(orderItemsOrderEq).toHaveBeenCalledTimes(2);
+    expect(orderItemsOrderEq).toHaveBeenCalledWith('order_id', 'order-1');
+    expect(orderItemsEq).toHaveBeenCalledTimes(2);
+    expect(orderItemsEq).toHaveBeenCalledWith(
+      'orders.merchant_id',
+      'merchant-1'
+    );
   });
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,6 +127,7 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('cancel_order_as_merchant', {
       p_order_id: 'order-1',
       p_reason: 'Customer requested cancellation',
+      p_refund_mode: 'automatic',
     });
     expect(mocks.revalidateProducts).toHaveBeenCalledWith(
       'merchant-1',

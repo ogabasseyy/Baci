@@ -20,6 +20,13 @@ const {
   mockLoadProductsPageLinkModules: vi.fn(),
 }));
 
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);
 vi.mock('next/headers', () => ({ headers: () => mockHeaders() }));
 vi.mock('next/link', () => ({
   default: ({

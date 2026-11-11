@@ -1,0 +1,14 @@
+[
+  {
+    "profile": "desktop",
+    "harFiles": 1,
+    "externalHosts": [],
+    "forbiddenOrderPaymentRequests": []
+  },
+  {
+    "profile": "mobile",
+    "harFiles": 1,
+    "externalHosts": [],
+    "forbiddenOrderPaymentRequests": []
+  }
+]

@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
+import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
 import { ProductSemanticSections } from '@/components/storefront/ogabassey/seo/product-semantic-sections';
 import { PdpRepairDeviceLink } from '@/components/storefront/repairs/PdpRepairDeviceLink';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
@@ -11,6 +12,7 @@ import {
 import { generateStorefrontProductSchema } from '@/lib/generate-storefront-product-schema';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { isPaystackConfigured } from '@/lib/paystack';
+import { getProductUrl } from '@/lib/product-url';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   buildStorefrontAcceptedPaymentMethods,
@@ -102,29 +104,32 @@ export async function ProductPageRuntime({
       : null;
 
   return (
-    <>
-      <JsonLd data={productSchema} />
-      <JsonLd data={breadcrumbSchema} />
-      {faqSchema && <JsonLd data={faqSchema} />}
-      <ProductDetailClient product={product} faqs={productFaqs} />
-      {/* Optional SEO enrichment, live review structured data and the repairs
-          link stream BELOW the already-rendered product shell. fallback={null}
-          is safe: this content appends beneath the visible PDP/LCP shell, so it
-          never hides or shifts it (matches the canonical categorized PDP's
-          semantic-section boundary). */}
-      <Suspense fallback={null}>
-        <ProductPageBelowFold
-          baseUrl={baseUrl}
-          categoryName={categoryName}
-          categorySlug={categorySlug}
-          currency={currency}
-          merchant={merchant}
-          product={product}
-          productUrl={productUrl}
-          slug={slug}
-        />
-      </Suspense>
-    </>
+    <ExperienceServerBoundary
+      merchant={merchant}
+      path={getProductUrl(product)}
+      fallback={
+        <>
+          <JsonLd data={productSchema} />
+          <JsonLd data={breadcrumbSchema} />
+          {faqSchema && <JsonLd data={faqSchema} />}
+          <ProductDetailClient product={product} faqs={productFaqs} />
+          {/* Stream SEO enrichment and the repairs link below the visible PDP
+              shell so late content never hides or shifts it. */}
+          <Suspense fallback={null}>
+            <ProductPageBelowFold
+              baseUrl={baseUrl}
+              categoryName={categoryName}
+              categorySlug={categorySlug}
+              currency={currency}
+              merchant={merchant}
+              product={product}
+              productUrl={productUrl}
+              slug={slug}
+            />
+          </Suspense>
+        </>
+      }
+    />
   );
 }
 

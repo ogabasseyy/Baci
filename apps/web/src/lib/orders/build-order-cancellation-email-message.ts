@@ -5,6 +5,7 @@ import {
 
 interface CancellationEmailOrder {
   amount_paid: number | null;
+  cancellation_refund_mode?: string | null;
   currency: string | null;
   customer_email: string;
   customer_id: string | null;

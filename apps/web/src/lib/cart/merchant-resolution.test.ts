@@ -463,3 +463,31 @@ it('uses the validated merchant hint on the staging API hosts', async () => {
     );
   }
 });
+
+it.each([
+  ['http://localhost:43178', 'http://localhost:43178/ogabassey', true],
+  ['https://usebaci.com:8443', 'https://usebaci.com:8443/ogabassey', true],
+  ['http://localhost:43178', 'http://localhost:43179/ogabassey', false],
+  ['http://localhost:43178', 'http://evil.invalid:43178/ogabassey', false],
+  ['http://localhost:43178', 'http://localhost:43178/another-store', false],
+] as const)('preserves the exact host and port for production path hints: %s from %s', async (origin, referer, allowed) => {
+  vi.stubEnv('NODE_ENV', 'production');
+  try {
+    const url = new URL(origin);
+    const client = rpcClientReturning([merchantRow()]);
+    const result = await resolveCartMerchant(
+      new Request(`${origin}/api/storefront/cart?merchantSlug=ogabassey`, {
+        headers: { host: url.host, referer },
+      }),
+      {
+        rootDomain: url.hostname,
+        resolveAlias: async () => null,
+        rpcClient: client,
+      }
+    );
+    expect(result.ok).toBe(allowed);
+    expect(client.rpc).toHaveBeenCalledTimes(allowed ? 1 : 0);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

@@ -1,0 +1,16 @@
+{
+  "matched": true,
+  "workers": {
+    "browser-checks.mjs": "f7a10cd2765339538fb276a17d481553f7d30d8e678a26056045380c5a1b690d",
+    "capture-worker.mjs": "466b2a9674fa1b79db704353e2a205005277b5dc9c80dca3d1a5c6952e76ce33",
+    "performance-worker.mjs": "f16a518b42e242318763de63cbb2fc005ee69ae562d211dd88238922b9b24cae",
+    "bundle-source.mjs": "84334bc6015c46324bd3ebf9c5787594e012bcabce0cd524c8b7d8634cf02ff3",
+    "bundle-source-prerender.mjs": "84334bc6015c46324bd3ebf9c5787594e012bcabce0cd524c8b7d8634cf02ff3",
+    "compile-runtime.mjs": "b37384454ec6dbb74dfc943d5e8424a92c7ec3b99eccf2363a731c92a0a989dc",
+    "prerender-build-worker.mjs": "78d48c46d2f045659772a6ab48c631909e5ac9116ee0be764883ba41f6ca4524",
+    "prerender-worker.mjs": "8015c509d9cafe6e200f40315af057687982fd0c9314b78a61d931065e351a4e",
+    "bounded-input.mjs": "72ee477a231f3c677f4cabe4778af1e247d75944adb49aa933793296943c0644"
+  },
+  "openssl": "3.0.13",
+  "tlsWorkerIdenticalToSampledWorker": true
+}

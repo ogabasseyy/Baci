@@ -45,7 +45,10 @@
     "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
     "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts",
     "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts",
-    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts"
+    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts",
+    "./experience": "./src/experience/index.ts",
+    "./experience/limits": "./src/experience/limits.ts",
+    "./lib/is-product-variant-purchasable": "./src/lib/is-product-variant-purchasable.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

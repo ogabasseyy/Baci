@@ -1,0 +1,18 @@
+{
+  "digest": "9804a96fa9c6226647429389085d9a50cec967fb21dca0d31d4d2950ea93cd81",
+  "profile": {
+    "workers": {
+      "browser-checks.mjs": "5578a12eac95d44b515a66afdc86c14362c8830b1288b50b3c57d149d0729791",
+      "bundle-source.mjs": "a29df7c70d59e89c25ffbf0c1ae3474bd255d43b362e568d7c0dbb56a53cdf87",
+      "capture-worker.mjs": "bb306d775c65e01312f4ba56f29c9153cf5667978d9c5731c1777ffb8006e42f"
+    },
+    "hostShell": "75f74695692507e8194af0a7abfdcd303fbef8299993796f651e5ef4d8fef0ba",
+    "platformFiles": "acc3d5d634ad217c7959a32459a5ca51dd7126be148c18c856588809ae8214b4",
+    "policy": "ef7df42d7654cabe3e82d850f6ba415305b92b3048364db1b7195bbf232b618e",
+    "compilerNode": "24.21.0",
+    "captureNode": "24.20.0",
+    "playwright": "1.63.0",
+    "browserManifest": "sha256:a0f4498920a5dbac63196d9140ed738ef00470f27e2e74029abd8850b7bd5717",
+    "runsc": "release-20261019.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "installation": {
+    "toolchainDigest": "cd2c3ba6f25516f6d3dc13d5c9cbf64518d232d895b94a050416e2e42976f401",
+    "rootfs": {
+      "node24": {
+        "digest": "980ec874a38bac27f720d1614245dca42bc4f52b4ff0d1792cfe8ccc2b6cb90c",
+        "entries": 35380,
+        "bytes": 1163541361
+      },
+      "browser": {
+        "digest": "bd45c8505b951a74c1781506060bd1f3eac5d017c67fb7bc8cf1e81fa43481ce",
+        "entries": 37087,
+        "bytes": 2462318711
+      }
+    },
+    "runscDigest": "c771292129c7ff96e83c5074485e3d33cfc938652dc70682bb792a66842d4de2",
+    "versions": {
+      "compilerNode": "v24.21.0",
+      "captureNode": "v24.20.0",
+      "runsc": "runsc version release-20261019.0\nspec: 1.2.1"
+    }
+  },
+  "nativeLinuxRunner": true,
+  "jobId": "baci-experience-f0149c65-3895-4954-a179-96c7b75a4297",
+  "buildDigest": "29cdfccb02ca2405b80464dcb4064750cac76a632060d3823cf6d9698c415d91",
+  "hostOrigin": "https://shop.synthetic.test",
+  "network": "none",
+  "ordersCreated": 0,
+  "published": false
+}

@@ -1,0 +1,15 @@
+# Orbit rebuilt runtime validation
+
+Local-only on baseline main `de0e4a5f2fab01aa06964293d0c713fbea07ae6b`, in the isolated experience-cwv worktree. No publication, hosted changes, order submission, payment processing or paid AI calls.
+
+The production-mode Next build completed, including TypeScript. The shared checkout handoff used to render in document flow below the full-height custom frame. It now uses the existing accessible Baci dialog. The regression failed before the change and passed afterward; shell/frame/channel tests passed 13/13 and changed-file Biome passed.
+
+Desktop 1440×900 and mobile 390×844 completed the authored color interaction, product navigation, add-to-bag, naira currency and decoded image checks, trusted host handoff, native contact/address flow, merchant shipping quote selection and final payment-method review. Both displayed ₦250 + ₦1,500 = ₦1,750. Place Order was never clicked. No payment option/provider was invoked. Database order count after these journeys: zero. Successful HARs contain no external hosts or order/payment requests.
+
+Address testing uses the manual path. The local fixture has no external autocomplete configuration; its autocomplete endpoint returns 500, and checkout permits manual entry. Initial unauthenticated cart GET 401 is retained in the HAR before normal guest bootstrap.
+
+Repeated fresh test contexts exhausted the normal ten-cart-per-client-per-hour quota. It was not reset or disabled. Mobile reused the successful synthetic guest session and removed its existing line through the native cart UI before repeating the journey. The performance matrix uses that valid guest session with cold browser caches; it does not measure first-time anonymous bootstrap and must not be directly compared with previous fresh-guest runs as an architecture speedup.
+
+Earlier failed functional attempts are retained in the local scratch directory. They include the original handoff defect and driver assumptions about dialog labelling, phone prefix entry, price-label wrappers, opening animations, consent, scrolling and radio-button visibility. Successful journey proofs are separate from those failures.
+
+Free CodeRabbit review was retried without --use-credits. The allowance endpoint reported three remaining, but the review endpoint returned rate_limit and repository-plan eligibility guidance. No review ran, no credits were enabled, and no clean-review claim is made. The review gate remains pending. Benchmark matrix completed: 24/24 samples measured, zero readiness failures, no external hosts or order/payment requests in 24 HARs. Order count afterward remains zero. Median custom-frame LCP was 928–1239 ms across route/width cells; median conservative parent-inclusive presentation proxy was 1160–1436 ms. All 24 samples exceeded the host-load threshold. See [full benchmark](./orbit-rebuild-benchmark.md). Raw browser HARs and videos remain in the ignored local scratch directories. Do not copy synthetic session credential files into evidence or commits.

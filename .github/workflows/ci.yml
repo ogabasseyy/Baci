@@ -158,8 +158,9 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    # Cold hosted runs can exceed 15 minutes while installing and typechecking.
-    timeout-minutes: 30
+    # Cold hosted runs can exceed 15 minutes for install plus the normal typecheck; the production
+    # build typecheck adds a second pass (~7 min warm, capped at 15 by its own step timeout).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,6 +186,24 @@ jobs:
           else
             pnpm turbo typecheck
           fi
+      # `build:ci` skips type checking, so only this step exercises the type-check path of the
+      # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
+      # Pull requests skip it only when they touch nothing in the production program (tests, docs,
+      # mobile apps). Pushes to main always run it.
+      - name: Decide production build typecheck
+        id: production-typecheck-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/production-build-typecheck-scope.mjs
+      - name: Run production build typecheck
+        if: steps.production-typecheck-scope.outputs.run == 'true'
+        # A break here can end in a slow compiler abort; fail within the step instead of the job.
+        timeout-minutes: 15
+        env:
+          # Same soft GC budget as the deploy build. apps/web pins typescript ~7.0.2, the native Go
+          # compiler (only the repo root aliases `typescript` to TypeScript 6), so NODE_OPTIONS does not apply.
+          GOMEMLIMIT: 6GiB
+        run: pnpm turbo typecheck:build --filter=@baci/web
 
   quality-test:
     name: Quality Gate - Test
@@ -208,8 +227,11 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
+          node --test .github/scripts/experience-runner-ci.test.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Run portable experience runner units
+        if: steps.test-plan.outputs.mode != 'config-smoke'
+        run: pnpm --filter @baci/web test:experience:runner
       - name: Verify authenticated shipping recovery in PostgreSQL
         id: shipping-recovery
         env:
@@ -699,6 +721,8 @@ jobs:
         uses: ./.github/actions/storefront-release-tests
       - name: Run Knip Dead Code Check
         if: needs.changes.outputs.web == 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm knip
 
 
@@ -713,17 +737,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Fetch base branch history
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --filter=blob:none --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      # Full-history checkout already fetched the base repository. Use the
+      # exact event base SHA without keeping credentials for later steps.
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SILENT_REVERT_LOOKBACK: '80'
-        run: node ci_scripts/detect-silent-reverts.mjs
+        run: |
+          if ! git cat-file -e "$BASE_SHA^{commit}"; then
+            echo "Exact base commit is missing from checkout. Refresh the PR branch and retry." >&2
+            exit 1
+          fi
+          node ci_scripts/detect-silent-reverts.mjs
 
   quality:
     name: Quality Gate

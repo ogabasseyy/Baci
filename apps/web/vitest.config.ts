@@ -3,6 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { escapeGlob } from './vitest.escape-glob';
+import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
+import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,6 +39,10 @@ const reactDomTestUtilsPath = appRequire.resolve('react-dom/test-utils');
 const reactDomServerPath = appRequire.resolve('react-dom/server');
 const sharedPackagePath = path.resolve(__dirname, '../../packages/shared/src');
 const sharedAliases = [
+  {
+    find: /^@baci\/shared\/experience$/,
+    replacement: path.join(sharedPackagePath, 'experience/index.ts'),
+  },
   {
     find: /^@baci\/shared$/,
     replacement: path.join(sharedPackagePath, 'index.ts'),
@@ -82,6 +89,16 @@ const sharedAliases = [
   },
 ];
 
+// Test files of the folders listed in vitest.node-folders.ts. The `node`
+// project runs these except the files listed in vitest.jsdom-holdouts.ts; the
+// `jsdom` project excludes all of them; the `jsdom-holdouts` project runs the
+// holdouts. So every test file belongs to exactly one project. `.tsx` tests
+// are never matched by the node globs.
+const nodeProjectTestGlobs = NODE_PROJECT_FOLDERS.map(
+  (folder) => `${escapeGlob(folder)}/**/*.{test,spec}.?(c|m)[jt]s`
+);
+const jsdomHoldoutGlobs = JSDOM_HOLDOUT_FILES.map(escapeGlob);
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -109,13 +126,22 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       'tools/builder-auth/*.node.test.ts',
+      'experience-runtime/*.test.mjs',
+      'tools/experience-runner/**',
+      'tools/experience-sql/**',
+      'tests/experience-authoring/**',
+      'tests/experience-performance/**',
+      'tests/experience-durable/**',
+      'tests/experience-lifecycle/**',
+      'tests/experience-commerce/**/*.node.test.ts',
+      'tests/experience-commerce/**/*.integration.test.ts',
+      'tests/builder-chatgpt/experience-upload.test.ts',
+      'tests/experience-browser/**/*.test.ts',
       // These node:test suites run in the dedicated synthetic handoff workflow.
       'tools/chatwoot-handoff-ci/*.test.mjs',
     ],
-    environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,
-    setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
     // Cap worker parallelism when running locally (e.g. the pre-push hook) to
     // avoid OOM/SIGTERM under memory pressure — each jsdom worker is heavy and
     // the full suite spawns one per core. CI (process.env.CI) keeps full
@@ -132,5 +158,39 @@ export default defineConfig({
         inline: true,
       },
     },
+    // The projects share everything above (`extends: true`). Only what differs
+    // is set here. Vite merges arrays, so `setupFiles` must stay out of the
+    // shared config above or both setups would load in every project.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
+          exclude: nodeProjectTestGlobs,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          setupFiles: [path.join(__dirname, 'vitest.setup.node.ts')],
+          include: nodeProjectTestGlobs,
+          exclude: jsdomHoldoutGlobs,
+        },
+      },
+      {
+        // jsdom for tests that sit in a node folder but cannot take a docblock.
+        extends: true,
+        test: {
+          name: 'jsdom-holdouts',
+          environment: 'jsdom',
+          setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
+          include: jsdomHoldoutGlobs,
+        },
+      },
+    ],
   },
 });

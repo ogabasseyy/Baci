@@ -45,6 +45,27 @@ const state: OxygenProviderState = {
     },
   ],
 };
+it('offers explicit cancellation when refreshed eligibility is declined before approval', () => {
+  const cancel = vi.fn().mockResolvedValue(true);
+  render(
+    <OxygenBookedPlanReview
+      workflowId="workflow"
+      state={{ ...state, eligible: false }}
+      busy={false}
+      onAccept={vi.fn()}
+      cancelUnavailablePlan={cancel}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Choose another plan' }));
+  expect(cancel).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Cancel plan and continue' })
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole('button', { name: 'Accept payment plan' })
+  ).toBeDisabled();
+});
 it('shows confirmed figures before address verification and accepts only the selected reference', () => {
   const accept = vi.fn();
   render(

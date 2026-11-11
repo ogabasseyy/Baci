@@ -193,6 +193,7 @@ function OxygenProviderSession({
           workflowId={snapshot.workflowId}
           state={s}
           busy={disabled || acceptance.busy}
+          cancelUnavailablePlan={() => submit({ action: 'cancel_booking' })}
           refreshOffers={
             canRefreshSavedOxygenOffers(snapshot)
               ? () => submit({ action: 'refresh_eligibility' })

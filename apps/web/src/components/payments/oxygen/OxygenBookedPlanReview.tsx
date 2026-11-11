@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { OxygenProviderState } from '@/schemas/oxygen-runtime';
 import { OxygenComparisonSummary } from './OxygenComparisonSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
+import { OxygenUnavailablePlanRecovery } from './OxygenUnavailablePlanRecovery';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
 
 /** Reviewing a quote is local navigation, never provider approval. */
@@ -14,12 +15,14 @@ export function OxygenBookedPlanReview({
   busy,
   onAccept,
   refreshOffers,
+  cancelUnavailablePlan,
 }: {
   workflowId: string;
   state: OxygenProviderState;
   busy: boolean;
   onAccept: (reference: string) => void;
   refreshOffers?: () => Promise<boolean>;
+  cancelUnavailablePlan?: () => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing)
@@ -53,11 +56,18 @@ export function OxygenBookedPlanReview({
         </p>
       </header>
       <OxygenComparisonSummary state={state} loading={!ready} />
+      {state.eligible === false && cancelUnavailablePlan && (
+        <OxygenUnavailablePlanRecovery
+          busy={busy}
+          cancel={cancelUnavailablePlan}
+          offersMissing
+        />
+      )}
       <div className="grid gap-2 border-t border-gray-100 pt-4">
         <button
           type="button"
           className={oxygenButtonClass}
-          disabled={busy || !ready}
+          disabled={busy || !ready || state.eligible === false}
           onClick={() => {
             if (state.bookingReference) onAccept(state.bookingReference);
           }}

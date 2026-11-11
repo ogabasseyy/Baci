@@ -12,14 +12,13 @@ import { OxygenGuidedVerification } from './OxygenGuidedVerification';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenPaymentReady } from './OxygenPaymentReady';
 import { OxygenPaymentRecovery } from './OxygenPaymentRecovery';
-import { OxygenPlanForm } from './OxygenPlanForm';
+import { OxygenPlanRequired } from './OxygenPlanRequired';
 import {
   type OxygenCheckoutProduct,
   OxygenProductSummary,
 } from './OxygenProductSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenVerificationForms } from './OxygenVerificationForms';
-import { oxygenButtonClass } from './oxygen-checkout-styles';
 import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 import type { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
 import type { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
@@ -138,32 +137,11 @@ export function OxygenProviderStages({
         error={error}
         submit={submit}
       />
-      {snapshot.stage === 'plan_required' && !activeLoanError && !s?.offers && (
-        <div role="status">
-          <p>We need to update your payment options before you continue.</p>
-          <p>
-            If Oxygen can’t provide them, close this window and choose another
-            payment method.
-          </p>
-          <button
-            type="button"
-            className={oxygenButtonClass}
-            disabled={disabled}
-            onClick={() => void submit({ action: 'refresh_eligibility' })}
-          >
-            Update payment options
-          </button>
-        </div>
-      )}
-      {snapshot.stage === 'plan_required' && !activeLoanError && s?.offers && (
-        <OxygenPlanForm
-          key={`${productAmount}:${s?.eligibleAmount}:${s?.minimumAmount}:${s?.maxTenure}:${JSON.stringify(s?.offers)}`}
-          busy={disabled}
-          maxTenure={s?.maxTenure}
+      {snapshot.stage === 'plan_required' && !activeLoanError && (
+        <OxygenPlanRequired
+          state={s}
           productAmount={productAmount}
-          eligibleAmount={s?.eligibleAmount}
-          minimumAmount={s?.minimumAmount}
-          offers={s?.offers}
+          disabled={disabled}
           submit={submit}
         />
       )}

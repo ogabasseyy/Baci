@@ -125,6 +125,17 @@ it('shows recovery without offers and the plan form after offers arrive', () => 
   );
   expect(screen.getByText('Plan form')).toBeVisible();
 });
+it('shows offer recovery when an empty offer list reaches the view', () => {
+  render(
+    <OxygenProviderStages
+      {...props('plan_required', { eligible: true, offers: [] })}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: 'Update payment options' })
+  ).toBeVisible();
+  expect(screen.queryByText('Plan form')).not.toBeInTheDocument();
+});
 it('offers refresh during address review, but not while pending or after payment/setup', () => {
   const booking = oxygenBookedSnapshot.state.booking;
   const { rerender } = render(

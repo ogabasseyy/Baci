@@ -24,9 +24,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # TURBO_TOKEN/TURBO_TEAM are Vercel Remote Cache secrets. They are scoped to the
-# individual turbo steps that need them (lint/typecheck/test) rather than the
+# individual hosted turbo test steps that need them rather than the
 # workflow-level env, so they are not exposed to unrelated jobs/steps or the
-# third-party actions they run. TURBO_SCM_BASE is not a secret and stays global
+# third-party actions they run. Lint and typecheck omit these credentials on all
+# runners because either job can run on the persistent private runner.
+# TURBO_SCM_BASE is not a secret and stays global
 # so `turbo --affected` can resolve its base ref everywhere.
 env:
   TURBO_SCM_BASE: origin/main
@@ -44,6 +46,7 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
       piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
+      private_ci_trusted: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,9 +135,9 @@ jobs:
     # packages.
     if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     # Opt in only after the repository is private and its dedicated runner is
-    # registered. Fork PRs stay on hosted runners; no hosted fallback is
+    # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
-    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,9 +146,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
-        env:
-          TURBO_TOKEN: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TOKEN || '' }}
-          TURBO_TEAM: ${{ runner.environment == 'github-hosted' && secrets.TURBO_TEAM || '' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo lint --affected
@@ -157,8 +157,10 @@ jobs:
     name: Quality Gate - Typecheck
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    # Cold hosted runs can exceed 15 minutes for install plus the normal typecheck; the production
+    # build typecheck adds a second pass (~7 min warm, capped at 15 by its own step timeout).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,28 +171,50 @@ jobs:
       - name: Install isolated builder auth typecheck dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
       - name: Run isolated builder auth tests
-        run: pnpm --dir apps/web/tools/builder-auth test
+        id: builder-auth-tests
+        run: |
+          node --test .github/scripts/ci-builder-container-labels.test.mjs .github/scripts/cleanup-builder-ci-containers.test.mjs .github/scripts/ci-typecheck-runner-contract.test.mjs
+          pnpm --dir apps/web/tools/builder-auth test
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.builder-auth-tests.outcome == 'success' || steps.builder-auth-tests.outcome == 'failure' || steps.builder-auth-tests.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
       - name: Run Typecheck
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             pnpm turbo typecheck --affected
           else
             pnpm turbo typecheck
           fi
+      # `build:ci` skips type checking, so only this step exercises the type-check path of the
+      # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
+      # Pull requests skip it only when they touch nothing in the production program (tests, docs,
+      # mobile apps). Pushes to main always run it.
+      - name: Decide production build typecheck
+        id: production-typecheck-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/production-build-typecheck-scope.mjs
+      - name: Run production build typecheck
+        if: steps.production-typecheck-scope.outputs.run == 'true'
+        # A break here can end in a slow compiler abort; fail within the step instead of the job.
+        timeout-minutes: 15
+        env:
+          # Same soft GC budget as the deploy build. apps/web pins typescript ~7.0.2, the native Go
+          # compiler (only the repo root aliases `typescript` to TypeScript 6), so NODE_OPTIONS does not apply.
+          GOMEMLIMIT: 6GiB
+        run: pnpm turbo typecheck:build --filter=@baci/web
 
   quality-test:
     name: Quality Gate - Test
     needs: [changes]
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Full web/mobile test fan-out reached ~15 minutes warm, but cold runs
     # (Turbo remote cache unavailable) measure 31m+ on GitHub-hosted runners —
     # three consecutive 30m timeouts on cold caches. Keep headroom for Turbo
     # summary and Actions post-job cleanup.
-    timeout-minutes: 45
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && 60 || 45 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -203,9 +227,13 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
+          node --test .github/scripts/experience-runner-ci.test.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Run portable experience runner units
+        if: steps.test-plan.outputs.mode != 'config-smoke'
+        run: pnpm --filter @baci/web test:experience:runner
       - name: Verify authenticated shipping recovery in PostgreSQL
+        id: shipping-recovery
         env:
           BACI_SHIPPING_QUOTE_POSTGRES: '1'
         run: |
@@ -222,10 +250,13 @@ jobs:
             src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts \
             src/lib/shipping/gigl-external-waybill-link.postgres.test.ts \
             src/lib/shipping/gigl-price-round-100.postgres.test.ts
+      - name: Clean shipping PostgreSQL test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.shipping-recovery.outcome == 'success' || steps.shipping-recovery.outcome == 'failure' || steps.shipping-recovery.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-shipping-ci-containers.mjs
       - name: Run Tests
+        id: test-execution
         env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
           EVENT_NAME: ${{ github.event_name }}
           TEST_PLAN_MODE: ${{ steps.test-plan.outputs.mode }}
           TEST_PLAN_REASON: ${{ steps.test-plan.outputs.reason }}
@@ -261,6 +292,10 @@ jobs:
           fi
 
           node .github/scripts/run-ci-non-web-tests.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.test-execution.outcome == 'success' || steps.test-execution.outcome == 'failure' || steps.test-execution.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
   quality-test-web:
     name: Quality Gate - Test (web shard ${{ matrix.shard }})
@@ -268,8 +303,10 @@ jobs:
     # Only the full-affected plan runs the complete web suite; targeted plans
     # keep their narrow vitest invocations inside quality-test.
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
+    env:
+      BACI_FIXTURE_SCOPE: ${{ matrix.shard }}
     strategy:
       fail-fast: false
       matrix:
@@ -287,9 +324,14 @@ jobs:
       - name: Install isolated builder auth test dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
       - name: Run web vitest shard
+        id: web-shard
         env:
           VITEST_SHARD: ${{ matrix.shard }}
-        run: pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
+        run: bash .github/scripts/run-ci-web-shard.sh
+      - name: Clean builder auth test containers
+        if: ${{ always() && runner.environment == 'self-hosted' && (steps.web-shard.outcome == 'success' || steps.web-shard.outcome == 'failure' || steps.web-shard.outcome == 'cancelled') }}
+        timeout-minutes: 2
+        run: node .github/scripts/cleanup-builder-ci-containers.mjs
 
   quality-db-replay:
     name: Quality Gate - DB Replay
@@ -679,6 +721,8 @@ jobs:
         uses: ./.github/actions/storefront-release-tests
       - name: Run Knip Dead Code Check
         if: needs.changes.outputs.web == 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm knip
 
 
@@ -693,17 +737,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Fetch base branch history
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --filter=blob:none --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      # Full-history checkout already fetched the base repository. Use the
+      # exact event base SHA without keeping credentials for later steps.
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SILENT_REVERT_LOOKBACK: '80'
-        run: node ci_scripts/detect-silent-reverts.mjs
+        run: |
+          if ! git cat-file -e "$BASE_SHA^{commit}"; then
+            echo "Exact base commit is missing from checkout. Refresh the PR branch and retry." >&2
+            exit 1
+          fi
+          node ci_scripts/detect-silent-reverts.mjs
 
   quality:
     name: Quality Gate
@@ -804,11 +851,11 @@ jobs:
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.
     needs: [changes]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Bounded build-time storefront reads can extend page-data collection past
     # 30 minutes on a cold runner. Keep enough headroom for that safe pressure
     # control plus setup and post-job cache/checkout cleanup.
-    timeout-minutes: 45
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && 75 || 45 }}
     steps:
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -817,12 +864,8 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - name: Reclaim unused hosted-runner SDK space
-        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-        run: |
-          df -h .
-          # This web-only hosted job does not use .NET, Android, or Haskell.
-          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          df -h .
+        if: runner.environment == 'github-hosted' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: bash .github/scripts/reclaim-hosted-build-space.sh
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache
@@ -845,6 +888,7 @@ jobs:
           SUPABASE_JWT_SECRET: placeholder-jwt-secret
       - name: Save Next.js build cache (main branch only)
         if: >
+          runner.environment == 'github-hosted' &&
           needs.changes.outputs.web == 'true' &&
           needs.changes.outputs.test_plan_mode != 'config-smoke' &&
           github.ref == 'refs/heads/main' &&

@@ -1,0 +1,1 @@
+supabase/tests/gigl_retention_payment_method_allowlist.sql

@@ -1,0 +1,94 @@
+{
+  "diagnosticOnly": true,
+  "main": "de0e4a5f2fab01aa06964293d0c713fbea07ae6b",
+  "results": [
+    {
+      "name": "visible-shift",
+      "width": 390,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 390,
+          "buildDigest": "21e1f78b1aa4baabfaba52082664807832f80348f1bb927ccae12b6659e8d294",
+          "cache": "cold-context",
+          "hostLcpMs": 300,
+          "frameLcpMs": 502.5,
+          "hostCls": 0,
+          "frameCls": 0.36914944776852643,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 300,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0.36914944776852643,
+              "firstPaintMs": 300,
+              "rawLayoutShifts": [
+                {
+                  "startTime": 1095.6,
+                  "value": 0.36914944776852643,
+                  "hadRecentInput": false
+                }
+              ],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 8923,
+        "jobId": "baci-experience-287cd778-b699-4a00-ad63-5d9a0947499c"
+      }
+    },
+    {
+      "name": "reserved-section",
+      "width": 390,
+      "receipt": {
+        "output": {
+          "format": "baci.performance-sample/v1",
+          "policyId": "chromium-native-reference/v1",
+          "browser": "Chromium 153.0.8010.12",
+          "route": "/",
+          "width": 390,
+          "buildDigest": "4ec4e0f3fa83541a32b3230ad7ef83688424b48b5eeb08f247f0c045de950f1b",
+          "cache": "cold-context",
+          "hostLcpMs": 252,
+          "frameLcpMs": 504,
+          "hostCls": 0,
+          "frameCls": 0,
+          "diagnostics": {
+            "host": {
+              "rawCls": 0,
+              "firstPaintMs": 252,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            },
+            "frame": {
+              "rawCls": 0,
+              "firstPaintMs": 356,
+              "rawLayoutShifts": [],
+              "layoutShiftOverflow": false
+            }
+          },
+          "interactionDurationMs": null,
+          "contentVisible": true,
+          "imagesDecoded": true,
+          "consoleErrors": 0,
+          "contaminated": false,
+          "observationWindowMs": 2000
+        },
+        "wallMs": 8984,
+        "jobId": "baci-experience-f818a2a0-e49c-4daf-9f61-4c09b21aeb5d"
+      }
+    }
+  ]
+}

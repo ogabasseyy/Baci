@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 44,
   },
-  text: { fontSize: 15, fontWeight: '600' },
+  text: { fontSize: 14, fontWeight: '600' },
 });

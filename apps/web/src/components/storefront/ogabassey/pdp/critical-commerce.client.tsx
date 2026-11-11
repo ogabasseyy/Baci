@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import type { Route } from 'next';
 import { useState } from 'react';
+import { resolveVariantSelection } from '@baci/shared/lib';
+import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { Product as CartProduct } from '@/lib/products';
 import {
@@ -108,10 +110,31 @@ export function OgabasseyPdpCriticalCommerceSummary() {
     variantAxisOptions,
     variants,
   } = useOgabasseyPdpCriticalCommerce();
+  const selectedVariant =
+    (variants && variants.length > 0
+      ? resolveVariantSelection(
+          { ...productForCart, variants },
+          { attributes: selectedAttributes }
+        )?.variant ??
+        variants.find((variant) =>
+          Object.entries(selectedAttributes).every(
+            ([key, value]) => !value || variant.attributes?.[key] === value
+          )
+        )
+      : null);
+  const connectivityDisclosure = getVariantConnectivityDisclosure(
+    selectedVariant ?? {
+      id: '',
+      attributes: selectedAttributes,
+    }
+  );
 
   return (
     <>
       {routeOfferMissingActive ? <RouteOfferMissingNotice /> : null}
+      {connectivityDisclosure ? (
+        <p role="note">{connectivityDisclosure}</p>
+      ) : null}
       <div data-ogabassey-pdp-price>
         <span data-ogabassey-pdp-price-live>
           {formatCriticalPrice(productForCart.price, currency)}

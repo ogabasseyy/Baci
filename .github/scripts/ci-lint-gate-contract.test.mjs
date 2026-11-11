@@ -5,6 +5,7 @@ import { matchesGlob } from 'node:path';
 import test from 'node:test';
 
 import YAML from 'yaml';
+import { privateRunnerRoute, privateRunnerRouteWithTrust } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(
   await readFile('.github/workflows/ci.yml', 'utf8')
@@ -21,25 +22,7 @@ const NO_CHANGES = {
 };
 
 function lintRunner({ isPrivate, enabled, event, headRepository, repository }) {
-  const expression = workflow.jobs['quality-lint']['runs-on'];
-  assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
-  const values = {
-    'github.event.repository.private': isPrivate,
-    'vars.BACI_PRIVATE_CI_ENABLED': enabled,
-    'github.event_name': event,
-    'github.event.pull_request.head.repo.full_name': headRepository,
-    'github.repository': repository,
-  };
-  let source = expression.slice(3, -2);
-  for (const [key, value] of Object.entries(values)) {
-    const identifier = new RegExp(`${key.replaceAll('.', '\\.')}(?![\\w.])`, 'g');
-    source = source.replace(identifier, JSON.stringify(value));
-  }
-  source = source.replace(/fromJSON\('([^']+)'\)/g, (_match, json) =>
-    JSON.stringify(JSON.parse(json))
-  );
-  assert.match(source, /^[\s()'"\w=!&|,.[\]\/\-]+$/);
-  return Function(`"use strict"; return (${source});`)();
+  return privateRunnerRoute(workflow, 'quality-lint', { 'github.event.repository.private': isPrivate, 'vars.BACI_PRIVATE_CI_ENABLED': enabled, 'github.event_name': event, 'github.event.pull_request.head.repo.full_name': headRepository, 'github.repository': repository });
 }
 
 test('routes lint to the private runner only for an opted-in private repository and trusted PR head', () => {
@@ -58,29 +41,32 @@ test('routes lint to the private runner only for an opted-in private repository 
   assert.equal(lintRunner({ ...trusted, enabled: 'false' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: 'other/fork' }), 'ubuntu-24.04');
   assert.equal(lintRunner({ ...trusted, headRepository: '' }), 'ubuntu-24.04');
-  for (const event of ['push', 'merge_group', 'workflow_dispatch']) {
+  for (const event of ['merge_group', 'pull_request_target', 'issue_comment']) {
+    assert.equal(lintRunner({ ...trusted, event, headRepository: '' }), 'ubuntu-24.04');
+  }
+  for (const event of ['push', 'workflow_dispatch']) {
     assert.deepEqual(lintRunner({ ...trusted, event, headRepository: '' }), privateRunner);
   }
 });
 
-test('does not expose remote-cache credentials to the private runner', () => {
-  const lint = workflow.jobs['quality-lint'].steps.find(
-    (step) => step.name === 'Run Lint'
-  );
-  for (const name of ['TURBO_TOKEN', 'TURBO_TEAM']) {
-    const expression = lint.env[name];
-    assert.match(expression, /^\$\{\{[\s\S]+\}\}$/);
-    const evaluate = (environment) => {
-      const source = expression
-        .slice(3, -2)
-        .replaceAll('runner.environment', JSON.stringify(environment))
-        .replaceAll(`secrets.${name}`, JSON.stringify('test-value'));
-      assert.match(source, /^[\s()'"\w=!&|\-]+$/);
-      return Function(`"use strict"; return (${source});`)();
-    };
-    assert.equal(evaluate('self-hosted'), '');
-    assert.equal(evaluate(null), '');
-    assert.equal(evaluate('github-hosted'), 'test-value');
+test('lint job does not reference secrets', () => {
+  const noSecrets = (value) => assert.doesNotMatch(JSON.stringify(value), /\bsecrets\b/);
+  assert.throws(() => noSecrets('${{ toJSON(secrets) }}'));
+  assert.doesNotThrow(() => noSecrets('not_secrets'));
+  noSecrets(workflow.env);
+  noSecrets(workflow.jobs['quality-lint']);
+});
+
+test('missing or false shared trust output never selects Contabo', () => {
+  const values = {
+    'vars.BACI_PRIVATE_TYPECHECK_ENABLED': 'true',
+    'vars.BACI_PRIVATE_WEB_TEST_ENABLED': 'true',
+    'vars.BACI_PRIVATE_BUILD_ENABLED': 'true',
+  };
+  for (const job of ['quality-lint', 'quality-typecheck', 'quality-test-web', 'build']) {
+    for (const trusted of ['', 'false']) {
+      assert.equal(privateRunnerRouteWithTrust(workflow, job, values, trusted), 'ubuntu-24.04');
+    }
   }
 });
 

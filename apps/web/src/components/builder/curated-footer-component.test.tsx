@@ -39,3 +39,29 @@ it('renders deterministic merchant copy without empty social content or reduced 
     'opacity-80'
   );
 });
+
+it('renders valid external social links with native anchors and drops unsafe schemes', () => {
+  render(
+    <CuratedFooter
+      showQuickLinks={false}
+      quickLinks={[]}
+      socialLinks={{
+        instagram: 'https://instagram.com/northstar',
+        facebook: 'javascript:alert(1)',
+      }}
+    />
+  );
+
+  const instagramLink = screen.getByRole('link', {
+    name: 'Follow us on instagram',
+  });
+  expect(instagramLink).toHaveAttribute(
+    'href',
+    'https://instagram.com/northstar'
+  );
+  expect(instagramLink).toHaveAttribute('target', '_blank');
+  expect(instagramLink).toHaveAttribute('rel', 'noopener noreferrer');
+  expect(
+    screen.queryByRole('link', { name: 'Follow us on facebook' })
+  ).not.toBeInTheDocument();
+});

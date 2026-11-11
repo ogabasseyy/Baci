@@ -41,3 +41,13 @@ describe('STOREFRONT_EDGE_ENTRYPOINT_CLASSIFICATIONS', () => {
     );
   });
 });
+
+it.each([
+  '(catalog)/(listing)/collections/[handle]/page.tsx',
+  '(content)/pages/[...experiencePath]/page.tsx',
+])('keeps the custom experience route %s on the dynamic origin', (path) => {
+  expect(STOREFRONT_EDGE_ENTRYPOINT_CLASSIFICATIONS.get(path)).toEqual({
+    decision: 'origin_dynamic',
+    reason: 'request_state_or_origin_action_required',
+  });
+});

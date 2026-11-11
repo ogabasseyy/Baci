@@ -45,3 +45,7 @@
 **Learning:** Modal overlays and selected segmented controls should not carry local hardcoded color/shadow literals when the mobile admin theme already exposes `colors.backdrop` and semantic shadow tokens.
 **Action:** Move DateRangePicker overlay color to `colors.backdrop` and spread `shadows.sm` for selected mode buttons.
 **Source:** React Native Pressable/Modal docs and `apps/mobile-admin/constants/theme.ts`, verified 2026-07-01.
+## 2024-11-07 — Replaced hardcoded #FFFFFF with textOnPrimary token in mobile-admin
+**Learning:** Hardcoded `#FFFFFF` for text/icons on primary backgrounds in React Native ignores the theme system's `textOnPrimary` token which guarantees correct contrast in both modes.
+**Action:** Read `DARK_COLORS` and `LIGHT_COLORS` in `constants/theme.ts` to find the correct token (e.g. `textOnPrimary`) and apply it dynamically.
+**Source:** apps/mobile-admin/constants/theme.ts

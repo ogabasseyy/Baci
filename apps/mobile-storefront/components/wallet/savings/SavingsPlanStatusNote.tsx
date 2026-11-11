@@ -141,7 +141,7 @@ function StatusNoteView({
 
 const styles = StyleSheet.create({
   section: { gap: 6 },
-  body: { fontSize: 14, lineHeight: 21 },
-  action: { fontSize: 14, fontWeight: '500' },
+  body: { fontSize: 13, lineHeight: 21 },
+  action: { fontSize: 13, fontWeight: '500' },
   retry: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
 });

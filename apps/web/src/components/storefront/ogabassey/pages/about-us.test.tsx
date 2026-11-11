@@ -149,5 +149,14 @@ describe('OgabasseyV2AboutUs', () => {
         screen.getByRole('heading', { name: 'Why We Do What We Do' }),
       ).toBeInTheDocument();
     });
+
+    it('advertises the approved 14-day return policy and no conflicting 7-day copy', () => {
+      render(<OgabasseyV2AboutUs />);
+
+      expect(screen.getByText('14-Day Return Policy')).toBeInTheDocument();
+      expect(
+        screen.queryByText(/7-day return policy/i)
+      ).not.toBeInTheDocument();
+    });
   });
 });

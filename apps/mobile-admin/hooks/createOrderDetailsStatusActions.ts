@@ -1,6 +1,12 @@
+import { isPaidStatus } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
+import type {
+  CancellationRefundChoice,
+  OrderStatusUpdateResult,
+} from '@/hooks/orders/useOrderStatusUpdate';
 import type { ShippingStatus } from '@/hooks/useOrders';
+import { formatCurrency } from '@/lib/utils';
 
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
 
@@ -10,6 +16,8 @@ interface CreateOrderDetailsStatusActionsParams {
   setShowCreditModal: (value: boolean) => void;
   setShowPaymentOptionModal: (value: boolean) => void;
   setShowStatusModal: (value: boolean) => void;
+  /** Confirm-time recheck of open provider-refund evidence (true blocks). */
+  refundEvidenceBlocksChoice?: (orderId: string) => Promise<boolean>;
   setSuccessModal: (
     value:
       | {
@@ -41,20 +49,25 @@ interface CreateOrderDetailsStatusActionsParams {
   ) => void;
   updateStatus: (input: {
     orderId: string;
+    refund?: CancellationRefundChoice;
     status: ShippingStatus;
-  }) => Promise<unknown>;
+  }) => Promise<OrderStatusUpdateResult | undefined>;
 }
 
 export function createOrderDetailsStatusActions({
   openShipmentFlow,
   order,
+  refundEvidenceBlocksChoice,
   setShowCreditModal,
   setShowPaymentOptionModal,
   setShowStatusModal,
   setSuccessModal,
   updateStatus,
 }: CreateOrderDetailsStatusActionsParams) {
-  const performStatusUpdate = async (newStatus: ShippingStatus) => {
+  const performStatusUpdate = async (
+    newStatus: ShippingStatus,
+    refund?: CancellationRefundChoice
+  ) => {
     if (!order) {
       return;
     }
@@ -75,16 +88,40 @@ export function createOrderDetailsStatusActions({
     }
 
     try {
-      await updateStatus({ orderId: order.id, status: newStatus });
+      const result = await updateStatus({
+        orderId: order.id,
+        status: newStatus,
+        ...(refund && { refund }),
+      });
       setShowStatusModal(false);
+
+      const refundOutcome = result?.refund_outcome;
+      // Prefer what the server reports over the requested choice.
+      const refundIsManual = refundOutcome
+        ? refundOutcome === 'manual_required'
+        : refund === 'manual';
+
+      const refundDetails = result?.refund_details;
+      const manualCurrency =
+        refundDetails?.currency?.trim() || order.currency?.trim() || 'NGN';
+      const manualMessage =
+        refundDetails &&
+        (refundDetails.inFlightAmount ?? 0) > 0 &&
+        typeof refundDetails.remainingAmount === 'number'
+          ? `The customer notification has been queued. ${formatCurrency(refundDetails.inFlightAmount ?? 0, undefined, manualCurrency)} is already being refunded by the provider; you only need to refund ${formatCurrency(refundDetails.remainingAmount, undefined, manualCurrency)}. Record it on the order once you have paid the customer.`
+          : 'The customer notification has been queued. The refund is pending: record it on the order once you have paid the customer.';
 
       const subMessage =
         newStatus === 'delivered'
           ? 'The customer notification has been queued and will not block fulfillment.'
           : newStatus === 'cancelled'
-            ? order.payment_status === 'paid' || order.amount_paid > 0
-              ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
-              : 'The customer notification has been queued.'
+            ? refundOutcome === 'unknown'
+              ? "The customer notification has been queued. Check the order's refund status; do not refund the customer by hand until it shows what is owed."
+              : refundIsManual
+                ? manualMessage
+                : isPaidStatus(order.payment_status) || order.amount_paid > 0
+                  ? 'The customer notification has been queued. Check the refund status before telling the customer it is complete.'
+                  : 'The customer notification has been queued.'
             : '';
 
       setSuccessModal({
@@ -130,7 +167,8 @@ export function createOrderDetailsStatusActions({
       const cancellationShowsServerReason =
         newStatus === 'cancelled' &&
         (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||
-          errorCode === 'ORDER_NOT_CANCELLABLE');
+          errorCode === 'ORDER_NOT_CANCELLABLE' ||
+          errorCode === 'CANCEL_REFUND_FORBIDDEN');
       Alert.alert(
         'Error',
         cancellationShowsServerReason ? errorMessage : 'Failed to update status'
@@ -153,11 +191,91 @@ export function createOrderDetailsStatusActions({
       return;
     }
 
-    const isPaid = order.payment_status === 'paid' || order.amount_paid > 0;
+    // A plan showing outstanding money means the order is paid even when
+    // the cached status is stale (payment completed after the read).
+    const isPaid =
+      isPaidStatus(order.payment_status) ||
+      order.amount_paid > 0 ||
+      (order.cancel_refund_plan?.amount ?? 0) > 0;
+    // The plan (outstanding external legs, Paystack-only automatic refunds)
+    // is best effort. Without it we cannot say what is owed, so never offer
+    // a manual refund: cancel neutrally and point at the refund status.
+    const plan = order.cancel_refund_plan;
+    const showNeutralCancel = () =>
+      Alert.alert(
+        'Cancel order?',
+        "Refund details couldn't be loaded. Cancel now and check the order's refund status for what happens next; do not refund the customer by hand until it shows what is owed. This cannot be undone.",
+        [
+          { text: 'Keep Order', style: 'cancel' },
+          {
+            text: 'Cancel Order',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus);
+            },
+          },
+        ]
+      );
+    if (isPaid && (plan === undefined || !plan.ledgerKnown)) {
+      showNeutralCancel();
+      return;
+    }
+    const hasRefundChoice = isPaid && plan !== undefined && plan.amount > 0;
+    if (hasRefundChoice && plan) {
+      // The plan was read with the order and can be stale: recheck open
+      // provider-refund evidence now, and fall back to the neutral cancel
+      // (no cancel-only) when it is open or the check fails.
+      if (
+        refundEvidenceBlocksChoice &&
+        (await refundEvidenceBlocksChoice(order.id))
+      ) {
+        showNeutralCancel();
+        return;
+      }
+      const automaticSupported = plan.automaticSupported;
+      // The safe automatic path is listed first (Android positions buttons
+      // by order). Mobile has no staff permission data, so it always offers
+      // the automatic action; for legs the worker cannot refund itself that
+      // action sends the refund to owner review, and cancel-only needs refund
+      // permission, which the server enforces with a 403.
+      const noteCurrency = order.currency?.trim() || 'NGN';
+      const inFlightNote =
+        plan.inFlightAmount > 0
+          ? ` The provider is already refunding ${formatCurrency(plan.inFlightAmount, undefined, noteCurrency)} of this payment: only the remaining ${formatCurrency(plan.amount, undefined, noteCurrency)} is yours to refund, so do not refund the rest yourself.`
+          : '';
+      Alert.alert(
+        'Cancel paid order?',
+        `${
+          automaticSupported
+            ? 'Choose how the customer gets their money back. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+            : 'Baci cannot refund all of this payment automatically. You can cancel and send the refund to the store owner for review, or cancel and refund the customer yourself. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+        }${inFlightNote}`,
+        [
+          { text: 'Keep Order', style: 'cancel' },
+          {
+            text: automaticSupported
+              ? 'Cancel and refund to original payment method'
+              : 'Cancel and send the refund to review',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus, 'automatic');
+            },
+          },
+          {
+            text: 'Cancel only (I will refund them)',
+            style: 'destructive',
+            onPress: () => {
+              void performStatusUpdate(newStatus, 'manual');
+            },
+          },
+        ]
+      );
+      return;
+    }
     Alert.alert(
-      isPaid ? 'Cancel paid order?' : 'Cancel order?',
-      isPaid
-        ? 'Cancelling this paid order starts the customer refund process. Completion may take time or require review. Submit once; if the result is unclear, check the order status instead of cancelling again.'
+      'Cancel order?',
+      plan && plan.inFlightAmount > 0
+        ? 'A refund is already in progress with the provider. Cancelling will not send another one, so wait for it to finish instead of refunding the customer yourself. This cannot be undone.'
         : 'This records who cancelled the order and restores tracked inventory. This cannot be undone.',
       [
         { text: 'Keep Order', style: 'cancel' },

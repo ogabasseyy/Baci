@@ -1,3 +1,8 @@
+const publicVariants = vi.hoisted(() => vi.fn());
+vi.mock('./cached-data', () => ({
+  getPublicProductVariantsByProductIds: publicVariants,
+}));
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { rpc, read, suggestion } = vi.hoisted(() => ({
@@ -410,4 +415,98 @@ it('never renders a negative count when all matched rows disappear', async () =>
   });
   expect(result.count).toBe(0);
   expect(result.totalCount).toBe(0);
+});
+
+describe('refined restricted-phone offer policy', () => {
+  function seed() {
+    rpc
+      .mockResolvedValueOnce({
+        data: [
+          {
+            product_id: 'phone',
+            total_count: 1,
+            effective_price: 600000,
+            matched_variant_id: 'wifi',
+            matched_condition: 'used',
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
+    read.mockResolvedValue({
+      data: [
+        {
+          id: 'phone',
+          name: 'iPhone 16',
+          category: 'Smartphones',
+          has_variants: true,
+          price: 600000,
+        },
+      ],
+      error: null,
+    });
+    publicVariants.mockResolvedValue({
+      phone: [
+        {
+          id: 'wifi',
+          product_id: 'phone',
+          attributes: { sim_type: 'Wi-Fi Only', storage: '128GB' },
+          condition: 'used',
+          price_override: 600000,
+        },
+        {
+          id: 'cellular',
+          product_id: 'phone',
+          attributes: { sim_type: 'Physical + eSIM', storage: '128GB' },
+          condition: 'used',
+          price_override: 900000,
+        },
+      ],
+    });
+  }
+  it.each([
+    'iphone 16',
+    'iphone not Wi-Fi Only',
+    'iphone without Wi-Fi Only',
+    'iphone avoid Wi-Fi Only',
+  ])('does not advertise an implicitly restricted match for %s or substitute a SKU outside the budget', async (query) => {
+    vi.clearAllMocks();
+    seed();
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'merchant',
+      query,
+      limit: 20,
+      refinements: {
+        brands: ['Apple'],
+        sort: 'price_asc',
+        condition: 'used',
+        maxPrice: 700000,
+      },
+    });
+    expect(result.products).toEqual([]);
+    expect(result.totalCount).toBe(1);
+  });
+  it('preserves a positively requested Wi-Fi-only exact offer with an explicit title and disclosure', async () => {
+    vi.clearAllMocks();
+    seed();
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'merchant',
+      query: 'iphone 16 Wi-Fi Only',
+      limit: 20,
+      refinements: {
+        brands: ['Apple'],
+        sort: 'price_asc',
+        condition: 'used',
+        maxPrice: 700000,
+      },
+    });
+    expect(result.products[0]).toMatchObject({
+      price: 600000,
+      searchMatch: { variantId: 'wifi' },
+    });
+    expect(result.products[0].name).toContain('Wi-Fi Only');
+    expect(result.products[0].description).toContain(
+      'Do not assume cellular service support'
+    );
+  });
 });

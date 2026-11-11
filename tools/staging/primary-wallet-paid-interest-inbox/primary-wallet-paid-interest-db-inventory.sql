@@ -12,6 +12,14 @@ SELECT jsonb_build_object(
   'capability_restricted',NOT capability.rolcanlogin AND NOT capability.rolsuper AND NOT capability.rolbypassrls
     AND NOT capability.rolcreaterole AND NOT capability.rolcreatedb AND NOT capability.rolreplication,
   'capability_parent_memberships',(SELECT count(*) FROM pg_catalog.pg_auth_members WHERE member=capability.oid),
+  'readiness_reader_restricted',EXISTS (
+    SELECT 1 FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles reader ON reader.oid=membership.roleid
+    WHERE membership.member=capability.oid AND reader.rolname='piggyvest_primary_readiness_reader'
+      AND membership.inherit_option AND NOT membership.set_option AND NOT membership.admin_option
+      AND NOT reader.rolcanlogin AND NOT reader.rolsuper AND NOT reader.rolbypassrls
+      AND NOT reader.rolcreaterole AND NOT reader.rolcreatedb AND NOT reader.rolreplication
+      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members parent WHERE parent.member=reader.oid)),
   'schema_usage',has_schema_privilege(SESSION_USER,'piggyvest_primary','USAGE'),
   'effective_primary_rpcs',(SELECT coalesce(jsonb_agg(routine.proname||'('||pg_catalog.pg_get_function_identity_arguments(routine.oid)||')' ORDER BY routine.proname),'[]'::jsonb)
     FROM pg_catalog.pg_proc routine JOIN pg_catalog.pg_namespace namespace ON namespace.oid=routine.pronamespace

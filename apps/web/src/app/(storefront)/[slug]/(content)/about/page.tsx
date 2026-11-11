@@ -42,7 +42,7 @@ export async function generateMetadata({
   const seoDescription = generateMetaDescription(description);
 
   return {
-    title: `About Us | ${merchant.business_name}`,
+    title: 'About Us',
     description: seoDescription,
     openGraph: {
       title: `About ${merchant.business_name}`,

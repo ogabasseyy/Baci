@@ -12,7 +12,7 @@ export const startSavingsStyles = StyleSheet.create({
   ...startSavingsModalStyles,
   container: { flex: 1 },
   setupCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 20 },
-  amountInput: { fontSize: 30, fontWeight: '700', minHeight: 72 },
+  amountInput: { fontSize: 27, fontWeight: '700', minHeight: 62 },
   scrollContent: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
@@ -20,38 +20,38 @@ export const startSavingsStyles = StyleSheet.create({
     gap: SPACING.md,
   },
   heading: {
-    fontSize: TYPOGRAPHY.size['2xl'],
+    fontSize: 21,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   subheading: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     lineHeight: 20,
   },
   section: {
     gap: SPACING.sm,
   },
   sectionLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   input: {
     borderWidth: 1,
     borderRadius: 16,
-    minHeight: 52,
+    minHeight: 45,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 14,
-    fontSize: TYPOGRAPHY.size.base,
+    paddingVertical: 11,
+    fontSize: 13,
   },
   pickerField: {
     borderWidth: 1,
     borderRadius: 16,
-    minHeight: 52,
+    minHeight: 45,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 14,
+    paddingVertical: 11,
     justifyContent: 'center',
   },
   pickerFieldText: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
   },
   productSuggestions: {
     gap: SPACING.xs,
@@ -63,18 +63,18 @@ export const startSavingsStyles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   productSuggestionName: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   productSuggestionPrice: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     marginTop: 2,
   },
   emptyText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
   },
   productMetaText: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     lineHeight: 16,
     marginTop: 2,
   },
@@ -98,10 +98,10 @@ export const startSavingsStyles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 40,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   variantOptionText: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.bold,
   },
   selectedProductCard: {
@@ -111,15 +111,15 @@ export const startSavingsStyles = StyleSheet.create({
     gap: 6,
   },
   selectedProductLabel: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     textTransform: 'uppercase',
   },
   selectedProductName: {
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   selectedProductPrice: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   frequencyRow: {
@@ -129,14 +129,14 @@ export const startSavingsStyles = StyleSheet.create({
   frequencyOption: {
     flex: 1,
     borderRadius: 16,
-    minHeight: 48,
+    minHeight: 44,
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   frequencyOptionLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   row: {
@@ -184,16 +184,16 @@ export const startSavingsStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   sourceModeLabel: {
-    fontSize: TYPOGRAPHY.size.sm,
+    fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   sourceModeHint: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     lineHeight: 16,
     marginTop: SPACING.xs,
   },
   checkbox: {
-    paddingVertical: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: SPACING.xs,
@@ -209,15 +209,15 @@ export const startSavingsStyles = StyleSheet.create({
   },
   checkboxLabel: {
     flex: 1,
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     lineHeight: 18,
   },
   errorText: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     marginTop: -SPACING.xs,
   },
   primaryButton: {
-    minHeight: 56,
+    minHeight: 48,
     backgroundColor: BRAND.primary,
     borderRadius: RADIUS.full,
     alignItems: 'center',
@@ -226,7 +226,7 @@ export const startSavingsStyles = StyleSheet.create({
   },
   primaryButtonText: {
     color: palette.white,
-    fontSize: TYPOGRAPHY.size.base,
+    fontSize: 13,
     fontWeight: TYPOGRAPHY.weight.semibold,
   },
   buttonDisabled: {

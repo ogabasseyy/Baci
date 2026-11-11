@@ -17,6 +17,8 @@ export interface Order extends OrderFinancialFields {
    * synthetic default that would mislabel non-NGN merchants.
    */
   currency: string | null;
+  /** Recorded paid amount (orders.amount_paid); null when absent or unreadable. */
+  amountPaid?: number | null;
   shippingStatus: ShippingStatus;
   paymentStatus: PaymentStatus;
   paymentMethod: string | null;

@@ -489,6 +489,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - uses: ./.github/actions/pnpm-install-cached
+        with:
+          allow-self-hosted-cache-save: 'true'
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block
       # prebuilt deploys and pnpm dlx cache corruption cannot abort the job.

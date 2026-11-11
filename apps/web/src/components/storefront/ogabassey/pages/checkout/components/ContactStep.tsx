@@ -6,7 +6,6 @@ import {
   type ContactValues,
   getContactErrors,
 } from '../contact-validation';
-import { CheckoutAccountFields } from './CheckoutAccountFields';
 import { CheckoutStepSection } from './CheckoutStepSection';
 import { ContactFields } from './ContactFields';
 
@@ -29,14 +28,11 @@ export function ContactStep({
   completed,
   values,
   onChange,
-  account,
-  onAccountChange,
-  signedIn,
   onOpen,
   onComplete,
 }: ContactStepProps) {
   const [attempted, setAttempted] = useState(false);
-  const errors = getContactErrors(values, signedIn ? undefined : account);
+  const errors = getContactErrors(values);
   const summary = [
     [values.firstName, values.lastName].filter(Boolean).join(' '),
     values.customerPhone,
@@ -70,13 +66,6 @@ export function ContactStep({
         errors={attempted ? errors : {}}
         onChange={onChange}
       />
-      {!signedIn && (
-        <CheckoutAccountFields
-          account={account}
-          onChange={onAccountChange}
-          error={attempted ? errors.accountPassword : undefined}
-        />
-      )}
       <div className="pt-2">
         <button
           type="button"

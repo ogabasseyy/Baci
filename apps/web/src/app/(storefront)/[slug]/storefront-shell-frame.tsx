@@ -11,7 +11,9 @@ import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-v
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
 import { StorefrontMerchantProvider } from '@/hooks/merchant/storefront-merchant-provider';
+import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import { merchantHasFeature } from '@/lib/merchant-has-feature';
+import { ExperienceStorefrontLayout } from './experience-storefront-layout';
 import { StorefrontLayoutRenderer } from './storefront-layout-renderer';
 import type { getStorefrontShellSnapshot } from './storefront-shell-snapshot';
 
@@ -32,6 +34,9 @@ export function StorefrontShellFrame({
   const merchantSlug = merchant.slug || '';
   const analyticsSettings = buildMerchantAnalyticsSettings(merchant);
   const facebookPixelId = analyticsSettings?.facebook_pixel_id;
+  const Layout = getExperienceStorefrontRuntime()
+    ? ExperienceStorefrontLayout
+    : StorefrontLayoutRenderer;
 
   return (
     <StorefrontMerchantProvider
@@ -80,13 +85,13 @@ export function StorefrontShellFrame({
           - Keeps layout persistent across route changes (seamless navigation)
           - Prevents header flashing/re-rendering
         */}
-        <StorefrontLayoutRenderer
+        <Layout
           merchant={merchant}
           preloadHeroLcpImages={preloadHeroLcpImages}
           routingMode={routingMode}
         >
           {children}
-        </StorefrontLayoutRenderer>
+        </Layout>
       </StorefrontCartProvider>
     </StorefrontMerchantProvider>
   );

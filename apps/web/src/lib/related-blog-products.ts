@@ -6,6 +6,7 @@ export const RELATED_BLOG_PRODUCT_LINKS_SELECT =
 
 export interface RelatedBlogProductVariant {
   id?: string;
+  attributes?: Record<string, unknown> | null;
   inventory_tracking_policy?: string | null;
   price_override?: number | null;
   stock_quantity?: number | null;

@@ -25,7 +25,7 @@ export function SavingsAmountInput({
         { flexDirection: 'row', alignItems: 'center', gap: 8 },
       ]}
     >
-      <Text style={{ color: colors.text, fontSize: 26, fontWeight: '700' }}>
+      <Text style={{ color: colors.text, fontSize: 23, fontWeight: '700' }}>
         ₦
       </Text>
       <TextInput
@@ -43,7 +43,7 @@ export function SavingsAmountInput({
           minWidth: 0,
           paddingVertical: 6,
           color: colors.text,
-          fontSize: 26,
+          fontSize: 23,
           fontWeight: '700',
         }}
       />

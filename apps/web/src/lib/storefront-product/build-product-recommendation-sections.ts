@@ -1,9 +1,10 @@
 import { getProductSemanticSupport } from '@/config/product-semantic-support';
-import { formatCurrencyCompact } from '@/lib/currency';
 import { buildProductCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 import { buildCanonicalProductCompareSlug } from '@/lib/storefront-compare/compare-slugs';
 import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { buildProductCardDescription } from './build-product-card-description';
 import { buildProductHref } from './build-product-semantic-compare-support';
+import { buildSupplementalSameBrandCandidates } from './build-supplemental-same-brand-candidates';
 import type {
   BuildProductSemanticModelInput,
   ProductSemanticCandidate,
@@ -11,16 +12,10 @@ import type {
   ProductSemanticSection,
 } from './product-semantic-types';
 
-function toTitleCase(value: string) {
-  return value
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
-
 function isInStock(product: ProductSemanticCandidate) {
-  return product.stock == null || product.stock > 0;
+  return (
+    product.manage_stock === false || product.stock == null || product.stock > 0
+  );
 }
 
 function normalizeText(value?: string | null): string {
@@ -83,15 +78,6 @@ function buildDirectCompareCta(input: {
   };
 }
 
-function buildCardDescription(
-  product: ProductSemanticCandidate,
-  countryCode?: string | null
-) {
-  const details = product.condition ? [toTitleCase(product.condition)] : [];
-  details.push(formatCurrencyCompact(product.price, countryCode || 'NG'));
-  return details.join(' • ');
-}
-
 export const MAX_SEMANTIC_SECTION_CARDS = 6;
 
 function buildSectionCards(
@@ -103,7 +89,12 @@ function buildSectionCards(
     (product) =>
       ({
         title: product.name,
-        description: buildCardDescription(product, input.countryCode),
+        description: buildProductCardDescription({
+          candidate: product,
+          categorySlug: input.categorySlug,
+          currentProduct: input.currentProduct,
+          countryCode: input.countryCode,
+        }),
         href: buildProductHref(input.storeUrl, product),
         ...buildDirectCompareCta({
           approvedCompareSlugs,
@@ -222,10 +213,20 @@ export function buildRecommendationSections(
   const currentBrand = normalizedInput.currentProduct.brand?.trim();
   const normalizedCurrentBrand = normalizeText(currentBrand);
   const allAlternatives = buildAlternativesCandidates(normalizedInput);
-  const sameBrandPool = currentBrand
+  const inventorySameBrand = currentBrand
     ? allAlternatives.filter(
         (p) => normalizeText(p.brand) === normalizedCurrentBrand
       )
+    : [];
+  const sameBrandPool = currentBrand
+    ? [
+        ...inventorySameBrand,
+        ...buildSupplementalSameBrandCandidates(
+          normalizedInput,
+          normalizedCurrentBrand,
+          new Set(allAlternatives.map((p) => p.slug))
+        ),
+      ].sort(rankAlternatives(normalizedInput.currentProduct))
     : [];
   const nonSameBrandAlternatives = currentBrand
     ? allAlternatives.filter(
@@ -240,9 +241,9 @@ export function buildRecommendationSections(
       conditionBucketMatches(normalizedInput.currentProduct, p)
   );
   const reservedSpecialistSlugs = new Set<string>(
-    nonSameBrandAlternatives.length >= 1 && sameBrandPool.length >= 1
-      ? sameBrandPool
-          .slice(0, Math.min(2, sameBrandPool.length))
+    nonSameBrandAlternatives.length >= 1 && inventorySameBrand.length >= 1
+      ? inventorySameBrand
+          .slice(0, Math.min(2, inventorySameBrand.length))
           .map((p) => p.slug)
       : []
   );

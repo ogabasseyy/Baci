@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-07T14:26:34+00:00",
-  "source_revision": "7449a55cd9943bb367c152b035fd358ccad5fd8d",
-  "evidence_digest": "91afc4be19a72a536ab153dc7be74449304f64ada07bac9c1a37b786f19f4bc2",
-  "claims_digest": "5da2f8d13c79412ab2c82761b9741bdd5244c5644bfa24175657718b0a1d18a7",
-  "review_scope": "Source evidence only. OAuth: new consent enables a refresh-renewed 90-day idle connection; legacy grants and pending consents/codes keep their deadline. Carts retain a seven-day absolute lifetime and CAS-roll to a fresh empty handle after expiry. Revocation, replay detection, tenant isolation and capacity limits remain enforced. Focused OAuth/PostgreSQL tests pass; submission activation remains unverified. Payments: uncertain agentic DVA creation/persistence retains its reconciliation claim; stale claims without confirmed outcomes require manual review. Merchant protocol and checkout eligibility claims remain accurate after CredPal retirement. Oxygen is supported for local staging and an explicitly admitted production pilot; production runtime and provider configuration must be enabled separately. No capability is promoted to production_verified; deployment, carrier configuration, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-10T23:42:19+00:00",
+  "source_revision": "f43e6cff2387fb6b24f6c06183b875047a113df1",
+  "evidence_digest": "4fed12e5b3b8341d41b51f4059c8304a54064fb6077f9a8ce76506f371a1175e",
+  "claims_digest": "bfcd17d5afb08998699ee61f59961f67d225fe7790f105714420579c75d63891",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
@@ -73,14 +73,20 @@
       "title": "Staff-entered orders",
       "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
-      "limitations": "Network and permissions are required. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
+      "limitations": "Network and permissions are required. For a paid order with an outstanding external payment (planned from the ledger by one shared function; when the ledger cannot be read the prompt falls back to offering the choice and the server decides), the web order page and the mobile order-details screen let the merchant choose an automatic refund or a cancel-only path with a manual refund (owner or refund permission). The automatic option is hidden when an outstanding leg is not a Paystack leg with a reference, and the mobile list-screen status dropdown always uses the automatic default. The automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
       "source_refs": [
         "apps/web/src/app/dashboard/orders/create/page.tsx",
         "apps/mobile-admin/app/(admin)/order/new.tsx",
         "apps/mobile-admin/hooks/orders/useRecordPayment.ts",
         "apps/web/src/app/dashboard/orders/create/create-order-form.tsx",
         "apps/mobile-admin/hooks/useNewOrderController.ts",
-        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts"
+        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts",
+        "supabase/migrations/20261111090100_merchant_cancel_order_refund_mode.sql",
+        "packages/shared/src/lib/cancel-refund-plan.ts",
+        "apps/web/src/app/api/orders/[id]/cancelled/route.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/use-order-cancellation.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/cancel-order-dialog.tsx",
+        "apps/mobile-admin/hooks/createOrderDetailsStatusActions.ts"
       ]
     },
     {
@@ -209,6 +215,20 @@
         "apps/web/src/lib/agentic/checkout-totals.ts",
         "apps/web/src/lib/agentic/ucp-checkout-line-item-adapter.ts",
         "apps/web/src/lib/agentic/ucp-response-adapters.ts"
+      ]
+    },
+    {
+      "id": "custom-storefront-mcp",
+      "title": "Full-code storefront MCP foundations",
+      "status": "code_evidenced",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "source_refs": [
+        "apps/web/builder-mcp-server/registry.ts",
+        "apps/web/src/lib/experience/production-integration.ts",
+        "apps/web/tools/experience-runner/linux-runner.ts",
+        "apps/web/tools/experience-runner/preview-delivery.ts",
+        "docs/connectors/experience-runner-delivery-qualification.md"
       ]
     },
     {

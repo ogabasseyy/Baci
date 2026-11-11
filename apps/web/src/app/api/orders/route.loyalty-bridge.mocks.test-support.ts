@@ -53,6 +53,21 @@ vi.mock('@/lib/loyalty/server-resolver-client', () => ({
   createLoyaltyResolverServiceClient: mockCreateLoyaltyResolverServiceClient,
 }));
 
+// The one anon read on this path is the fixed-code currency preview, a
+// real `merchants` fetch to the mocked URL: it fails, postgrest-js retries
+// after 1s+2s+4s, and the preview then counts the code as current. That
+// cost 7s per test (10s timeouts in CI). Answer "current" directly, the
+// same outcome, with no network; the order wrapper's currency gate stays
+// covered by the error-mapping cases.
+// Exported so a test can override it to false and cover the stale-currency
+// preview branch; clearAllMocks keeps this default implementation.
+const mockIsLoyaltyCodeCurrencyCurrent = vi.hoisted(() =>
+  vi.fn(async () => true)
+);
+vi.mock('@/lib/checkout/is-loyalty-code-currency-current', () => ({
+  isLoyaltyCodeCurrencyCurrent: mockIsLoyaltyCodeCurrencyCurrent,
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -158,4 +173,5 @@ export {
   mockCreateAdminClient,
   mockCreateAnonClient,
   mockCreateLoyaltyResolverServiceClient,
+  mockIsLoyaltyCodeCurrencyCurrent,
 };

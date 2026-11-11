@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   FlatList,
   Modal,
@@ -13,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
 import SafeImage from '@/components/ui/SafeImage';
 import { getVirtualizedListProps } from '@/components/ui/virtualized-list-props';
+import { isRuntimePlatform } from '@/config/runtime-platform';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 import type { SelectableItem } from '@/lib/discount-items';
@@ -114,6 +116,12 @@ export function DiscountItemSelector({
     };
   }, [visible, merchant?.id, type]);
 
+  useEffect(() => {
+    if (_fetchError && isRuntimePlatform('ios')) {
+      AccessibilityInfo.announceForAccessibility(_fetchError);
+    }
+  }, [_fetchError]);
+
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) {
@@ -201,6 +209,8 @@ export function DiscountItemSelector({
 
             {_fetchError && !loading ? (
               <View
+                accessibilityLiveRegion="assertive"
+                accessibilityRole="alert"
                 style={[
                   styles.errorBanner,
                   { backgroundColor: colors.errorLight },

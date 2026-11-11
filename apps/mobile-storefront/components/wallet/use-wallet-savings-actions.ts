@@ -144,6 +144,7 @@ export function createWalletSavingsActions({
     }
     if (plan.kind === 'check-primary' && idempotencyKeyRef.current) {
       return checkPendingPrimarySavings({
+        goal,
         merchantId: activeMerchantId,
         operationId: idempotencyKeyRef.current,
         clearOperation: releaseOperation,

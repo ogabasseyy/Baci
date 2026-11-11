@@ -29,8 +29,8 @@ export function ShipmentFlowMethodStep({
 }: ShipmentFlowMethodStepProps) {
   const { colors } = useTheme();
   const providerDescription = providerLabel
-    ? `This will book the shipment with ${providerLabel} using the saved checkout quote for this order.`
-    : 'This will use the selected provider and saved checkout quote for this order.';
+    ? `This will book the shipment with ${providerLabel} using the saved shipping quote for this order.`
+    : 'This will use the selected provider and saved shipping quote for this order.';
   // A fact only: booking can still ask for a new price (stale sender or price).
   const paidNote = checkoutPaidShippingLabel
     ? ` Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout.`

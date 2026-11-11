@@ -14,8 +14,8 @@ import { versionAt } from './security-integrity-version-at';
 import { isAtLeast } from './security-integrity-version-floor';
 
 // GHSA-rj75-hqrm-r3gf and the follow-up flat-selector DoS advisory are
-// fixed upstream in 6.1.5. Guard all installed copies and retain the existing
-// parser behavior and linear-time Set membership tests after retiring the backport.
+// fixed upstream in 6.1.5. Guard all installed copies, parser behavior, and
+// the offset-scan regression after retiring the backport.
 
 const require = createRequire(import.meta.url);
 
@@ -40,9 +40,6 @@ interface Parser {
   processSync: (selector: string) => string;
 }
 
-const SMALL_FLAT_CLASSES = 100_000;
-const LARGE_FLAT_CLASSES = 200_000;
-
 describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
   it('finds at least one installed copy to guard', () => {
     expect(candidateRoots().length).toBeGreaterThan(0);
@@ -51,9 +48,7 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
   it.each(
     candidateRoots()
   )('resolves postcss-selector-parser at or above the 6.1.5 floor in %s', (root) => {
-    // A floor, like the katex suite: a future patched 6.0.x bump must
-    // not fail this gate. Fail-closed: an unpatched bump still fails
-    // the backport markers and the linear-time behavior case.
+    // A floor permits newer releases while rejecting versions before the fix.
     expect(
       isAtLeast(
         parseVersion(versionAt(root, 'postcss-selector-parser')),
@@ -64,7 +59,7 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
 
   it.each(
     candidateRoots()
-  )('keeps the linear-time membership backport applied in %s', (root) => {
+  )('keeps the fixed Set-based membership in %s', (root) => {
     // Manifest-anchored marker source: the parser build must live next
     // to the manifest-resolved entry, so a build-layout rename fails
     // closed here (readFileSync throws) instead of testing a stale
@@ -107,55 +102,57 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(ast.first?.nodes?.some((node) => node.type === 'id')).toBe(true);
   });
 
-  // 70s budget: the 60s child ceiling (not the 10s default vitest
-  // timeout) must be the backstop, so a vulnerable build fails via
-  // the documented ETIMEDOUT/ratio path. Patched runs finish in ~1s.
+  // Count offset-array scans directly in an isolated process. This checks the
+  // vulnerability mechanism without relying on shared-runner timing.
   it.each(
     candidateRoots()
-  )('scales linearly on large flat selectors in %s', (root) => {
+  )('avoids scanning class and ID offsets for each flat selector node in %s', (root) => {
     const entry = join(root, packageMain(root));
     const script = [
       `const parser = require(${JSON.stringify(entry)})`,
-      'const times = []',
-      `for (const n of [${SMALL_FLAT_CLASSES}, ${LARGE_FLAT_CLASSES}]) {`,
-      `  const flat = '.a' + '.b'.repeat(n) + '#c'`,
-      '  let best = Infinity',
-      '  for (let i = 0; i < 3; i++) {',
-      '    const start = performance.now()',
-      '    const out = parser().processSync(flat)',
-      '    if (out !== flat) process.exit(2)',
-      '    best = Math.min(best, performance.now() - start)',
+      'const count = 256',
+      "const flat = '.a'.repeat(count) + '#b'.repeat(count)",
+      "const methods = ['indexOf', 'includes', 'find', 'findIndex']",
+      'const originals = Object.fromEntries(methods.map(name => [name, Array.prototype[name]]))',
+      'const scans = { class: 0, id: 0 }',
+      'const kinds = new WeakMap()',
+      'function kindOf(array) {',
+      '  if (!Array.isArray(array)) return null',
+      '  if (kinds.has(array)) return kinds.get(array)',
+      '  if (array.length === count) {',
+      '    for (const [name, start] of [["class", 0], ["id", 2 * count]]) {',
+      '      if (array[0] !== start || array[count - 1] !== start + 2 * (count - 1)) continue',
+      '      let matches = true',
+      '      for (let i = 0; i < count; i++) if (array[i] !== start + 2 * i) { matches = false; break }',
+      '      if (matches) { kinds.set(array, name); return name }',
+      '    }',
       '  }',
-      '  times.push(best)',
+      '  return null',
       '}',
-      'console.log(JSON.stringify(times))',
+      'let out',
+      'try {',
+      '  for (const name of methods) Array.prototype[name] = function (...args) {',
+      '    const kind = kindOf(this)',
+      '    if (kind) scans[kind]++',
+      '    return Reflect.apply(originals[name], this, args)',
+      '  }',
+      '  Array.from({ length: count }, (_, i) => 2 * i).indexOf(-1)',
+      '  Array.from({ length: count }, (_, i) => 2 * (count + i)).indexOf(-1)',
+      '  if (scans.class !== 1 || scans.id !== 1) throw new Error("scan detector self-check failed")',
+      '  scans.class = 0; scans.id = 0',
+      '  out = parser().processSync(flat)',
+      '} finally { for (const name of methods) Array.prototype[name] = originals[name] }',
+      'if (out !== flat) process.exit(2)',
+      'console.log(JSON.stringify(scans))',
     ].join('\n');
-    // Scaling gate, not an absolute cutoff: doubling the input must
-    // roughly double the time (linear), not quadruple it (quadratic).
-    // Best-of-3 per size shrugs off GC pauses; the ratio is
-    // runner-speed independent, so slow CI cannot flake it. Measured:
-    // patched ~2.2x, pristine ~4x at these sizes. The 60s child ceiling
-    // is an anti-hang backstop only (patched finishes in ~1s).
     const result = spawnSync(process.execPath, ['-e', script], {
-      timeout: 60000,
+      timeout: 10000,
     });
     expect({
       error: result.error?.message,
       signal: result.signal,
       status: result.status,
     }).toEqual({ error: undefined, signal: null, status: 0 });
-    const [small, large] = JSON.parse(result.stdout.toString()) as [
-      number,
-      number,
-    ];
-    // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
-    // wall-clock adjustments); the 1µs floor is a div-by-zero guard
-    // only — real small runs are ms-scale, so it never binds. Raw
-    // timings ride on the failure message for loaded-runner triage.
-    const ratio = large / Math.max(small, 1e-3);
-    expect(
-      ratio,
-      `scaling ratio ${ratio} exceeds 3 (small=${small}ms large=${large}ms)`
-    ).toBeLessThan(3);
-  }, 70_000);
+    expect(JSON.parse(result.stdout.toString())).toEqual({ class: 0, id: 0 });
+  }, 20_000);
 });

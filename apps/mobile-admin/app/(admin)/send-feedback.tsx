@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -13,31 +12,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  FEEDBACK_CATEGORIES,
+  FeedbackCategoryChips,
+} from '@/components/feedback/FeedbackCategoryChips';
+import { FeedbackRatingSelector } from '@/components/feedback/FeedbackRatingSelector';
+import { FeedbackSubmitButton } from '@/components/feedback/FeedbackSubmitButton';
 import { getRuntimePlatform } from '@/config/runtime-platform';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 import { supabase } from '@/lib/supabase';
-
-const RATING_EMOJIS = ['😞', '😕', '😐', '🙂', '😍'];
-const RATING_LABELS = ['Very Poor', 'Poor', 'Okay', 'Good', 'Excellent'];
-
-const FEEDBACK_CATEGORIES = [
-  {
-    id: 'experience',
-    label: 'App Experience',
-    icon: 'phone-portrait-outline' as const,
-  },
-  { id: 'features', label: 'Features', icon: 'grid-outline' as const },
-  {
-    id: 'performance',
-    label: 'Performance',
-    icon: 'speedometer-outline' as const,
-  },
-  { id: 'design', label: 'Design', icon: 'color-palette-outline' as const },
-  { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline' as const },
-];
 
 interface FeedbackSubmission {
   categories: string[];
@@ -163,33 +149,10 @@ export default function SendFeedbackScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               How would you rate your experience?
             </Text>
-            <View style={styles.ratingContainer}>
-              {RATING_EMOJIS.map((emoji, index) => (
-                <Pressable
-                  key={emoji}
-                  style={[
-                    styles.ratingButton,
-                    {
-                      backgroundColor:
-                        rating === index + 1
-                          ? `${colors.primary}20`
-                          : colors.cardHover,
-                      borderColor:
-                        rating === index + 1 ? colors.primary : 'transparent',
-                      borderWidth: rating === index + 1 ? 2 : 0,
-                    },
-                  ]}
-                  onPress={() => setRating(index + 1)}
-                >
-                  <Text style={styles.ratingEmoji}>{emoji}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {rating !== null && (
-              <Text style={[styles.ratingLabel, { color: colors.primary }]}>
-                {RATING_LABELS[rating - 1]}
-              </Text>
-            )}
+            <FeedbackRatingSelector
+              rating={rating}
+              onSelectRating={setRating}
+            />
           </View>
 
           {/* Categories */}
@@ -204,39 +167,11 @@ export default function SendFeedbackScreen() {
             >
               Select all that apply
             </Text>
-            <View style={styles.categoriesGrid}>
-              {FEEDBACK_CATEGORIES.map((category) => {
-                const isSelected = selectedCategories.includes(category.id);
-                return (
-                  <Pressable
-                    key={category.id}
-                    style={[
-                      styles.categoryChip,
-                      {
-                        backgroundColor: isSelected
-                          ? colors.primary
-                          : colors.cardHover,
-                      },
-                    ]}
-                    onPress={() => toggleCategory(category.id)}
-                  >
-                    <Ionicons
-                      name={category.icon}
-                      size={16}
-                      color={isSelected ? '#FFFFFF' : colors.text}
-                    />
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        { color: isSelected ? '#FFFFFF' : colors.text },
-                      ]}
-                    >
-                      {category.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <FeedbackCategoryChips
+              categories={FEEDBACK_CATEGORIES}
+              selectedCategories={selectedCategories}
+              onToggleCategory={toggleCategory}
+            />
           </View>
 
           {/* Message Input */}
@@ -266,23 +201,7 @@ export default function SendFeedbackScreen() {
           </View>
 
           {/* Submit Button */}
-          <Pressable
-            style={[
-              styles.submitButton,
-              { backgroundColor: colors.primary, opacity: isSending ? 0.7 : 1 },
-            ]}
-            onPress={handleSubmit}
-            disabled={isSending}
-          >
-            {isSending ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="paper-plane" size={20} color="#FFFFFF" />
-                <Text style={styles.submitButtonText}>Submit Feedback</Text>
-              </>
-            )}
-          </Pressable>
+          <FeedbackSubmitButton isSending={isSending} onPress={handleSubmit} />
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -317,38 +236,6 @@ const styles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fontFamily.regular,
     marginBottom: SPACING.md,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: SPACING.sm,
-  },
-  ratingButton: {
-    flex: 1,
-    aspectRatio: 1,
-    borderRadius: RADIUS.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ratingEmoji: { fontSize: 28 },
-  ratingLabel: {
-    textAlign: 'center',
-    fontSize: TYPOGRAPHY.size.sm,
-    fontFamily: TYPOGRAPHY.fontFamily.bold,
-    marginTop: SPACING.md,
-  },
-  categoriesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    gap: SPACING.xs,
-  },
-  categoryChipText: {
-    fontSize: TYPOGRAPHY.size.sm,
-    fontFamily: TYPOGRAPHY.fontFamily.medium,
-  },
   textArea: {
     minHeight: 120,
     borderWidth: 1,
@@ -356,20 +243,6 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     fontSize: TYPOGRAPHY.size.md,
     fontFamily: TYPOGRAPHY.fontFamily.regular,
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.lg,
-    borderRadius: RADIUS.lg,
-    gap: SPACING.sm,
-    marginBottom: SPACING.lg,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: TYPOGRAPHY.size.md,
-    fontFamily: TYPOGRAPHY.fontFamily.bold,
   },
   footer: {
     flexDirection: 'row',

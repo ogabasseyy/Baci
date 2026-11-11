@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
-import { BRAND, SPACING, TYPOGRAPHY } from '@/constants/Colors';
+import { BRAND, SPACING } from '@/constants/Colors';
 import { formatSavingsDuration } from './format-savings-duration';
 import type { SavingsFrequency } from './start-savings.helpers';
 import type { StartSavingsColors } from './start-savings.types';
@@ -85,12 +85,12 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: {
-    fontSize: TYPOGRAPHY.size.xs,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
-  duration: { fontSize: TYPOGRAPHY.size['2xl'], fontWeight: '700' },
-  detail: { fontSize: TYPOGRAPHY.size.sm },
+  duration: { fontSize: 21, fontWeight: '700' },
+  detail: { fontSize: 11 },
   divider: { height: 1, marginVertical: SPACING.xs },
   dateRow: {
     flexDirection: 'row',
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     columnGap: SPACING.sm,
     rowGap: 4,
   },
-  dateLabel: { fontSize: TYPOGRAPHY.size.sm },
-  dateValue: { fontSize: TYPOGRAPHY.size.sm, fontWeight: '700' },
-  note: { fontSize: TYPOGRAPHY.size.xs, lineHeight: 18, marginTop: 2 },
+  dateLabel: { fontSize: 11 },
+  dateValue: { fontSize: 11, fontWeight: '700' },
+  note: { fontSize: 10, lineHeight: 18, marginTop: 2 },
 });

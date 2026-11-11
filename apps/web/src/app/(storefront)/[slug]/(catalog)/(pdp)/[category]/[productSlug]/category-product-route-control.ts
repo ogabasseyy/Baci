@@ -8,6 +8,7 @@ import {
   getRequestScopedMerchant,
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
+import { loadFreshExperienceProduct } from '@/lib/experience/fresh-product';
 import { generateSlug } from '@/lib/seo-utils';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { evaluateCategoryProductCanonicalRoute } from './category-product-canonicalization';
@@ -71,6 +72,23 @@ export const getProductRouteControl = cache(
       return null;
     }
 
+    const experience = await loadFreshExperienceProduct(merchant, productSlug);
+    if (experience.active) {
+      if (!experience.product) return null;
+      const product = experience.product;
+      const canonicalRoute = evaluateCategoryProductCanonicalRoute({
+        requestedCategorySlug: categorySlug,
+        requestedProductSlug: productSlug,
+        resolvedCategorySlug: product.category_slug ?? null,
+        resolvedProductSlug: product.slug,
+      });
+      const result = {
+        product,
+        merchant: experience.merchant,
+        ...canonicalRoute,
+      };
+      return { result, loadProductResult: async () => result };
+    }
     const cachedProduct = await getCachedProductLcpHint(
       merchant.id,
       productSlug,

@@ -1,0 +1,31 @@
+{
+  "host": {
+    "cls": 0.22724609375,
+    "events": [],
+    "lcp": 1880,
+    "timeOrigin": 1792973380441.3
+  },
+  "frame": {
+    "cls": 0,
+    "events": [],
+    "images": [
+      {
+        "complete": true,
+        "width": 240
+      },
+      {
+        "complete": true,
+        "width": 240
+      }
+    ],
+    "lcp": 5256,
+    "text": "A little less ordinary. A lot more possibility. Explore the collection ↗orbit®The collectionOur philosophyBag 0INDEPENDENT BY DESIGN / EST. 2026Life, witha litt",
+    "timeOrigin": 1792973381651.9,
+    "interaction": [
+      16,
+      48
+    ]
+  },
+  "cwvQualified": false,
+  "fieldINP": false
+}

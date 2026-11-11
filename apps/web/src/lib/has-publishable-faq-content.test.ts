@@ -12,14 +12,26 @@ describe('hasPublishableFaqContent', () => {
     ).toBe(false);
   });
 
-  it('treats Ogabassey template as publishable via built-in template FAQs', () => {
+  it('treats Ogabassey template as publishable for the ogabassey tenant via built-in template FAQs', () => {
     expect(
       hasPublishableFaqContent({
+        slug: 'ogabassey',
         template_id: 'ogabassey',
         faq_items: [],
         pages: { faq: null },
       })
     ).toBe(true);
+  });
+
+  it('treats Ogabassey template as unpublishable for other tenants when no custom FAQs exist', () => {
+    expect(
+      hasPublishableFaqContent({
+        slug: 'other-store',
+        template_id: 'ogabassey',
+        faq_items: [],
+        pages: { faq: null },
+      })
+    ).toBe(false);
   });
 
   it('returns true when valid structured faq_items exist', () => {

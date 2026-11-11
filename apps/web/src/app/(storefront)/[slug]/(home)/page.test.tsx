@@ -1,3 +1,14 @@
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({
+      fallback,
+    }: {
+      fallback: import('react').ReactNode;
+    }) => fallback,
+  })
+);
+
 import { render, screen } from '@testing-library/react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,10 +167,8 @@ describe('Storefront homepage structured data', () => {
       trust_profile: {
         founded_year: 2018,
         return_policy: {
-          summary: 'Returns accepted for 7 days.',
-          window_days: 7,
-          return_method: 'mail',
-          return_fees: 'free',
+          summary: 'Returns accepted for 14 days.',
+          window_days: 14,
         },
       },
     } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
@@ -203,9 +212,9 @@ describe('Storefront homepage structured data', () => {
         '@type': 'MerchantReturnPolicy',
         applicableCountry: 'NG',
         returnPolicyCountry: 'NG',
-        merchantReturnDays: 7,
-        returnMethod: 'https://schema.org/ReturnByMail',
-        returnFees: 'https://schema.org/FreeReturn',
+        returnPolicyCategory:
+          'https://schema.org/MerchantReturnFiniteReturnWindow',
+        merchantReturnDays: 14,
       },
     });
     expect(organization).toMatchObject({

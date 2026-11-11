@@ -11,6 +11,10 @@
       "path": "/api/cron/oxygen-callback-reconciliation?task=refresh-banks",
       "schedule": "0 4 * * 1"
     },
+    {
+      "path": "/api/cron/oxygen-callback-reconciliation?task=ensure-banks",
+      "schedule": "*/10 * * * *"
+    },
     { "path": "/api/cron/web-vitals-health", "schedule": "0 4 * * *" },
     {
       "path": "/api/cron/gigl-tracking-notifications",

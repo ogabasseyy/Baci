@@ -8,7 +8,7 @@ test('gives the bounded storefront build enough time to finish page-data collect
   const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 
   assert.equal(workflow.jobs.build.name, 'Build');
-  assert.equal(workflow.jobs.build['timeout-minutes'], 45);
+  assert.match(workflow.jobs.build['timeout-minutes'], /&& 75 \|\| 45/);
 });
 
 test('keeps pull-request builds offline from production Supabase', async () => {
@@ -36,7 +36,10 @@ test('reclaims hosted-runner disk before dependency and Next cache restoration',
   const cache = steps.findIndex((step) => step.id === 'next-cache');
   assert.ok(reclaim >= 0, 'build archives need disk preparation before extraction');
   assert.ok(reclaim < dependencies && reclaim < cache);
-  assert.equal(workflow.jobs.build['runs-on'], 'ubuntu-24.04');
-  assert.match(steps[reclaim].run, /sudo rm -rf -- \/usr\/share\/dotnet \/usr\/local\/lib\/android \/opt\/ghc/);
-  assert.doesNotMatch(steps[reclaim].run, /rm[^\n]*(?:node_modules|GITHUB_WORKSPACE|\.next)/);
+  assert.match(workflow.jobs.build['runs-on'], /'ubuntu-24\.04'/);
+  assert.match(steps[reclaim].if, /runner\.environment\s*==\s*'github-hosted'/);
+  assert.equal(steps[reclaim].run, 'bash .github/scripts/reclaim-hosted-build-space.sh');
+  const cleanup = await readFile('.github/scripts/reclaim-hosted-build-space.sh', 'utf8');
+  assert.match(cleanup, /sudo rm -rf -- \/usr\/share\/dotnet \/usr\/local\/lib\/android \/opt\/ghc/);
+  assert.doesNotMatch(cleanup, /rm[^\n]*(?:node_modules|GITHUB_WORKSPACE|\.next)/);
 });

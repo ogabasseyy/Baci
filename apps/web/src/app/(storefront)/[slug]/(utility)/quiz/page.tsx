@@ -48,7 +48,7 @@ export async function generateMetadata({
 
   return {
     description: QUIZ_DESCRIPTION,
-    title: 'Super Quiz | Ogabassey',
+    title: 'Super Quiz',
     alternates: { canonical: `${baseUrl}/quiz` },
   };
 }

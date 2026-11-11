@@ -244,12 +244,23 @@ describe('buildMerchantTrustProfile', () => {
   it('publishes derived faq link for ogabassey template or structured faq_items', () => {
     const ogabasseyResult = buildMerchantTrustProfile(
       {
+        slug: 'ogabassey',
         template_id: 'ogabassey',
         pages: { faq: null },
       },
       'https://ogabassey.com'
     );
     expect(ogabasseyResult.derivedLinks.faq).toBe('https://ogabassey.com/faq');
+
+    const otherTemplateResult = buildMerchantTrustProfile(
+      {
+        slug: 'other-merchant',
+        template_id: 'ogabassey',
+        pages: { faq: null },
+      },
+      'https://store.usebaci.com'
+    );
+    expect(otherTemplateResult.derivedLinks.faq).toBeUndefined();
 
     const faqItemsResult = buildMerchantTrustProfile(
       {

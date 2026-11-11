@@ -8843,6 +8843,7 @@ export type Database = {
           branch_id: string | null;
           buyer_reference: string | null;
           cancellation_reason: string | null;
+          cancellation_refund_mode: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
           checkout_idempotency_key: string | null;
@@ -8929,6 +8930,7 @@ export type Database = {
           branch_id?: string | null;
           buyer_reference?: string | null;
           cancellation_reason?: string | null;
+          cancellation_refund_mode?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
@@ -9015,6 +9017,7 @@ export type Database = {
           branch_id?: string | null;
           buyer_reference?: string | null;
           cancellation_reason?: string | null;
+          cancellation_refund_mode?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
@@ -16851,7 +16854,11 @@ export type Database = {
         Returns: boolean;
       };
       cancel_order_as_merchant: {
-        Args: { p_order_id: string; p_reason?: string };
+        Args: {
+          p_order_id: string;
+          p_reason?: string;
+          p_refund_mode?: string;
+        };
         Returns: boolean;
       };
       cancel_provider_shipment_order_and_release_inventory: {
@@ -21479,6 +21486,7 @@ export type Database = {
           branch_id: string | null;
           buyer_reference: string | null;
           cancellation_reason: string | null;
+          cancellation_refund_mode: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
           checkout_idempotency_key: string | null;

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
+import { denyNativeLegacyMutation } from '@/lib/experience/native-builder-guard';
 import { mutatePrivateBrowserDraft } from '@/lib/website-builder/browser-private-drafts';
 import type {
   BuilderConfigInput,
@@ -90,6 +91,8 @@ export async function saveBuilderDraft(
 ): Promise<MutationResult> {
   if (BUILDER_PRIVATE_STORAGE_ENABLED)
     return mutatePrivateBrowserDraft(supabase, merchantId, input);
+  const denied = await denyNativeLegacyMutation(supabase, merchantId);
+  if (denied) return { response: denied };
   const {
     slug,
     config,
@@ -201,6 +204,8 @@ export async function publishBuilderDraft(
 ): Promise<MutationResult> {
   if (BUILDER_PRIVATE_STORAGE_ENABLED)
     return mutatePrivateBrowserDraft(supabase, merchantId, input);
+  const denied = await denyNativeLegacyMutation(supabase, merchantId);
+  if (denied) return { response: denied };
   const { slug, expectedLastUpdated } = input;
   const publishedAt = new Date().toISOString();
 

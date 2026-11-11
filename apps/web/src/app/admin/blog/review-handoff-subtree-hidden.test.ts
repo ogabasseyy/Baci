@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { parseHandoffDom } from './review-handoff-dom';
 import { elementFrame } from './review-handoff-element-frame';

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T05:27:28+00:00",
-  "source_revision": "794b610331fc8bf53972d1c825c1b41ca8050109",
-  "evidence_digest": "a3800a72b42c20f88f39e93d3429b565d211bea0ac51463135d239288094d057",
-  "claims_digest": "3b06b3b872e99464cb0638b8d3dbda55b89a7a15b3a9eb49d381a152a12f04f2",
+  "reviewed_at": "2026-11-11T05:40:52+00:00",
+  "source_revision": "e78816a8a5e545639deafe36aef993d5e51fc5a5",
+  "evidence_digest": "b284e706d36e0d35081f4cd7b5ba57daab80a98914615955937084c4ec843d5d",
+  "claims_digest": "e80f589ef68fa57dc11f240ec1c999c4c2d5679f9231bfe62b2b52a402a342d1",
   "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Invoice previews and PDFs share the merchant template. Dispatch rechecks both displayed bank accounts and seller registration. Chromium archives have a Turbopack trace regression test.",
   "capabilities": [
     {

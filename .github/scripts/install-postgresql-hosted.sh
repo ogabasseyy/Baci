@@ -123,16 +123,29 @@ echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt n
 # Ubuntu mirror out of the way. List-Cleanup=0 leaves the Ubuntu lists as they are. If that refresh or the
 # install fails (a dependency has to come from Ubuntu's archive, or the refresh itself broke), switch to the
 # fallback mirror list once and refresh every list.
-if ! { apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update && install_pinned; }; then
-  echo "The PostgreSQL-only refresh or the install failed; switching to independent and canonical Ubuntu mirrors and refreshing every list once."
+failed_step=''
+if ! apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update; then
+  failed_step='PostgreSQL-only refresh'
+elif ! install_pinned; then
+  failed_step='install'
+fi
+
+if [ -n "$failed_step" ]; then
+  echo "The ${failed_step} failed (an Ubuntu mirror that does not answer is the usual cause); switching to independent and canonical Ubuntu mirrors and refreshing every list once."
   # Keep a record of the image's own list in the job log before it is replaced.
   if [ -f "$UBUNTU_MIRRORS" ]; then
     echo "Replacing the mirror list ${UBUNTU_MIRRORS}:"
-    sed 's/^/  /' "$UBUNTU_MIRRORS"
+    sed 's/^/  /' "$UBUNTU_MIRRORS" || true
   fi
-  # The rewrite only helps sources that read the mirror list; the log shows which ones do.
-  echo "Apt sources that read the mirror list:"
-  grep -rl 'mirror+file:' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | sed 's/^/  /' || true
+  # The rewrite only helps sources that read the mirror list, so the log says whether any do. It is harmless
+  # when none does: the refresh and install below are then simply one more try.
+  mirror_sources="$(grep -rl 'mirror+file:' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true)"
+  if [ -n "$mirror_sources" ]; then
+    echo "Apt sources that read the mirror list:"
+    printf '%s\n' "$mirror_sources" | sed 's/^/  /'
+  else
+    echo "No apt source reads the mirror list, so the rewrite changes nothing for apt; the refresh and install below are one more try."
+  fi
   # Every entry uses https; Azure's mirror answers over it too.
   priority=0
   for mirror in "${FALLBACK_MIRRORS[@]}"; do

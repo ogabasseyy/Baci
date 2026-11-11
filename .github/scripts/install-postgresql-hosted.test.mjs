@@ -253,8 +253,9 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
   test('switches to independent and canonical Ubuntu mirrors and refreshes everything when the first install fails', () => {
     const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /independent and canonical Ubuntu mirrors/);
-    assert.match(result.stdout, /Apt sources that read the mirror list/);
+    assert.match(result.stdout, /The install failed .* independent and canonical Ubuntu mirrors/);
+    // Whether the rewrite can help depends on the runner image, so the log always says so one way or the other.
+    assert.match(result.stdout, /mirror list/);
     assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
     // Azure is demoted, not deleted, so the list keeps a second path. Every entry, Azure included, uses https.
     assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
@@ -270,6 +271,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
   test('takes the same fallback when the PGDG-only refresh itself fails, without trying the install first', () => {
     const result = install({ FAKE_APT_UPDATE_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /The PostgreSQL-only refresh failed/);
     const afterFirstRefresh = result.commands.slice(result.commands.indexOf(`${SUDO_APT} ${APT_BOUNDS} ${PGDG_ONLY} update`) + 1);
     assert.deepEqual(afterFirstRefresh, FALLBACK);
   });

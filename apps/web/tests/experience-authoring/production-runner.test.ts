@@ -57,6 +57,7 @@ import { createVerifierCaptureWorker } from '../../tools/experience-verifier/cap
 import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-store';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { confirmSyntheticDraft } from './owner-approval-loopback.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
 import { sendVerifierTwice } from './verifier-loopback.test-support';
 
@@ -224,6 +225,15 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       )
     );
     await f.db.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261111231000_experience_approval_retry_proofs.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
+    await f.db.pool.query(
       'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
     );
     verifierPool = new Pool({
@@ -298,6 +308,19 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       [approval.approvalId]
     );
     expect(proof.rows).toEqual([{ effect_digest: approval.effectDigest }]);
+    web.client = f.owner.supabase;
+    try {
+      const applied = await confirmSyntheticDraft({
+        handler: verifierHandler,
+        key: verifierKey,
+        client: f.owner.supabase,
+        token: f.owner.accessToken,
+        approvalId: approval.approvalId,
+      });
+      expect(applied).toMatchObject({ buildId: build.buildId, version: 1 });
+    } finally {
+      web.client = undefined;
+    }
 
     const vault = createPreviewVault({
       origin: executionOrigin,

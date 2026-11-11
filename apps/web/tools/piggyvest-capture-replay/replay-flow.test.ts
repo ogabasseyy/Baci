@@ -53,6 +53,12 @@ let key: string;
 let captures: Map<string, StoredCapture>;
 let audit: { captureId: string; actor: string; reason: string }[];
 let ledger: Map<string, number>;
+// Whether both credit ledgers enforce pvb_reference uniqueness (PR #4199).
+let dedupeDeployed: boolean;
+const CREDIT_EVENTS = [
+  'bank-transfer.inflow.success',
+  'interest-payout.success',
+];
 let out: string[];
 let err: string[];
 
@@ -61,6 +67,12 @@ function requeueInMemory(captureId: string, reason: string, actor: string) {
   if (!capture) return { outcome: 'not_found' };
   if (capture.state !== 'needs_review')
     return { outcome: 'not_in_review', processingState: capture.state };
+  const eventType = capture.claimed.event_type;
+  if (
+    !dedupeDeployed &&
+    (eventType === null || CREDIT_EVENTS.includes(eventType))
+  )
+    return { outcome: 'credit_dedupe_missing', eventType };
   const replays = audit.filter((entry) => entry.captureId === captureId).length;
   if (replays >= 5)
     return {
@@ -190,6 +202,7 @@ beforeEach(() => {
   captures = new Map();
   audit = [];
   ledger = new Map();
+  dedupeDeployed = true;
   out = [];
   err = [];
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -260,6 +273,20 @@ describe('operator replay of a parked PiggyVest capture', () => {
     expect([...ledger.entries()]).toEqual([['fixture-pvb-reference', 10000]]);
     expect(audit).toHaveLength(1);
     expect(out.at(-1)).toContain('is processed, not parked for review');
+  });
+
+  it('refuses to replay a credit while the ledgers do not dedupe on pvb_reference', async () => {
+    dedupeDeployed = false;
+    const body = schemaValidInflow('evt-parked-5');
+    const id = park(body, sign(key, body));
+
+    expect(await cli(['requeue', id, ...reason], env)).toBe(1);
+    await drainPiggyvestWebhookCaptures(drainDeps());
+
+    expect(captures.get(id)?.state).toBe('needs_review');
+    expect(ledger.size).toBe(0);
+    expect(audit).toEqual([]);
+    expect(out.at(-1)).toContain('PR #4199');
   });
 
   it('never processes requeued bytes that no key vouches for', async () => {

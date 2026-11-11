@@ -246,9 +246,11 @@ requeueing a delivery that was in fact already credited credits nothing twice.
 **Before any live replay**, confirm the ledger that the event reaches dedupes
 on the provider's stable key. For bank inflows that key is `pvb_reference`
 (PiggyVest confirmed it on 2026-11-11); the fix that makes it the credit
-dedupe key is PR #4199. Do not replay inflow captures on a deployment
-without that fix: a delivery that was parked after a partial credit could
-otherwise be credited again.
+dedupe key is PR #4199. Without that fix, a delivery that was parked after a
+partial credit could otherwise be credited again, so the database enforces
+it: requeueing a bank inflow, an interest payout, or a capture with no
+readable event type returns `credit_dedupe_missing` and changes nothing until
+both ledgers carry the `*_pvb_reference_key` UNIQUE constraints from #4199.
 
 Each requeue gives the delivery a fresh attempt budget and writes an
 append-only audit row (who, from the database login; when; why). A delivery

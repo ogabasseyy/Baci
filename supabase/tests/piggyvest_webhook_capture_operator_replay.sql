@@ -86,7 +86,9 @@ BEGIN
 END
 $$;
 
-CREATE FUNCTION pg_temp.pv_operator_row(p_key text, p_state text, p_attempts integer)
+CREATE FUNCTION pg_temp.pv_operator_row(
+  p_key text, p_state text, p_attempts integer,
+  p_event_type text DEFAULT 'operator-test.non-credit')
 RETURNS uuid
 LANGUAGE plpgsql
 AS $$
@@ -95,10 +97,10 @@ DECLARE
 BEGIN
   INSERT INTO public.piggyvest_webhook_captures (
     event_key, body_digest, raw_body, signature, key_version,
-    key_families, signing_families, key_status
+    key_families, signing_families, key_status, event_type
   ) VALUES (
     p_key, repeat('c', 64), convert_to(p_key, 'UTF8'), repeat('d', 128),
-    'operator-test', ARRAY['bank'], 'bank', 'current'
+    'operator-test', ARRAY['bank'], 'bank', 'current', p_event_type
   ) RETURNING id INTO v_id;
   UPDATE public.piggyvest_webhook_captures
   SET processing_state = p_state, attempts = p_attempts,
@@ -268,6 +270,79 @@ BEGIN
   IF (SELECT count(*) FROM public.piggyvest_webhook_capture_replay_audit
       WHERE capture_id = v_limit AND previous_last_error = repeat('E', 200)) <> 4 THEN
     RAISE EXCEPTION 'audit truncated or lost the parked error';
+  END IF;
+END
+$$;
+
+-- 3. Credit events replay only once both ledgers dedupe on pvb_reference
+-- (PR #4199). Start from "not deployed" whatever this database has; every
+-- schema change here is rolled back.
+DO $$
+DECLARE
+  v_credit uuid := pg_temp.pv_operator_row(
+    'operator-credit-inflow', 'needs_review', 20, 'bank-transfer.inflow.success');
+  v_rows uuid[] := ARRAY[
+    v_credit,
+    pg_temp.pv_operator_row(
+      'operator-credit-payout', 'needs_review', 20, 'interest-payout.success'),
+    pg_temp.pv_operator_row('operator-credit-untyped', 'needs_review', 20, NULL)];
+  v_result jsonb;
+  v_id uuid;
+BEGIN
+  IF pg_catalog.to_regclass('public.piggyvest_inflow_credits') IS NOT NULL THEN
+    ALTER TABLE public.piggyvest_inflow_credits
+      DROP CONSTRAINT IF EXISTS piggyvest_inflow_credits_pvb_reference_key;
+  END IF;
+  IF pg_catalog.to_regclass('public.piggyvest_interest_payouts') IS NOT NULL THEN
+    ALTER TABLE public.piggyvest_interest_payouts
+      DROP CONSTRAINT IF EXISTS piggyvest_interest_payouts_pvb_reference_key;
+  END IF;
+
+  FOREACH v_id IN ARRAY v_rows
+  LOOP
+    SET LOCAL ROLE piggyvest_webhook_capture_operator;
+    v_result := piggyvest_capture_operator.requeue_review_capture(
+      v_id, 'credit replay before dedupe ships');
+    RESET ROLE;
+    IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
+      RAISE EXCEPTION 'credit capture % replayed without pvb_reference dedupe: %', v_id, v_result;
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM public.piggyvest_webhook_captures
+      WHERE id = ANY (v_rows) AND processing_state <> 'needs_review')
+    OR EXISTS (SELECT 1 FROM public.piggyvest_webhook_capture_replay_audit
+      WHERE capture_id = ANY (v_rows)) THEN
+    RAISE EXCEPTION 'refused credit replay changed a row or wrote an audit';
+  END IF;
+
+  -- With only one ledger protected, a credit still waits.
+  IF pg_catalog.to_regclass('public.piggyvest_inflow_credits') IS NULL THEN
+    CREATE TABLE public.piggyvest_inflow_credits (pvb_reference text);
+  END IF;
+  ALTER TABLE public.piggyvest_inflow_credits ADD COLUMN IF NOT EXISTS pvb_reference text;
+  ALTER TABLE public.piggyvest_inflow_credits
+    ADD CONSTRAINT piggyvest_inflow_credits_pvb_reference_key UNIQUE (pvb_reference);
+  SET LOCAL ROLE piggyvest_webhook_capture_operator;
+  v_result := piggyvest_capture_operator.requeue_review_capture(
+    v_credit, 'credit replay with one ledger protected');
+  RESET ROLE;
+  IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
+    RAISE EXCEPTION 'credit replayed with only one ledger protected: %', v_result;
+  END IF;
+
+  -- With both ledgers protected the credit replays.
+  IF pg_catalog.to_regclass('public.piggyvest_interest_payouts') IS NULL THEN
+    CREATE TABLE public.piggyvest_interest_payouts (pvb_reference text);
+  END IF;
+  ALTER TABLE public.piggyvest_interest_payouts ADD COLUMN IF NOT EXISTS pvb_reference text;
+  ALTER TABLE public.piggyvest_interest_payouts
+    ADD CONSTRAINT piggyvest_interest_payouts_pvb_reference_key UNIQUE (pvb_reference);
+  SET LOCAL ROLE piggyvest_webhook_capture_operator;
+  v_result := piggyvest_capture_operator.requeue_review_capture(
+    v_credit, 'credit replay after dedupe ships');
+  RESET ROLE;
+  IF v_result->>'outcome' IS DISTINCT FROM 'requeued' THEN
+    RAISE EXCEPTION 'credit was not requeued once both ledgers dedupe: %', v_result;
   END IF;
 END
 $$;

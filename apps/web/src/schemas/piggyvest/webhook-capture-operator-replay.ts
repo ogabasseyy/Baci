@@ -71,6 +71,10 @@ export const piggyvestCaptureRequeueResultSchema = z.discriminatedUnion(
         .refine((state) => state !== 'needs_review'),
     }),
     z.object({
+      outcome: z.literal('credit_dedupe_missing'),
+      eventType: z.string().nullable(),
+    }),
+    z.object({
       outcome: z.literal('replay_limit_reached'),
       operatorReplays: z.int().positive(),
       replayLimit: z.int().positive(),

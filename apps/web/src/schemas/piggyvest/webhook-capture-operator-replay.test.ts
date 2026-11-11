@@ -17,6 +17,7 @@ describe('operator replay wire schemas', () => {
         replayLimit: 5,
       },
       { outcome: 'not_found' },
+      { outcome: 'credit_dedupe_missing', eventType: null },
       { outcome: 'not_in_review', processingState: 'processed' },
       { outcome: 'replay_limit_reached', operatorReplays: 5, replayLimit: 5 },
     ])

@@ -134,6 +134,12 @@ describe('capture replay CLI', () => {
   });
 
   it('describes every requeue outcome', () => {
+    expect(
+      describeRequeue({
+        outcome: 'credit_dedupe_missing',
+        eventType: 'bank-transfer.inflow.success',
+      })
+    ).toContain('could credit twice');
     expect(describeRequeue({ outcome: 'not_found' })).toContain('No capture');
     expect(
       describeRequeue({

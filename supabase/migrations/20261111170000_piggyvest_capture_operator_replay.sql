@@ -174,6 +174,11 @@ $$;
 --                         what it is); nothing changed, so a second call for
 --                         the same row is a harmless no-op
 --   replay_limit_reached  the row was already requeued five times
+--   credit_dedupe_missing the row is a credit event (bank inflow or interest
+--                         payout, or has no readable event type) and the credit
+--                         ledgers do not yet dedupe on pvb_reference (the
+--                         *_pvb_reference_key UNIQUE constraints of PR #4199);
+--                         replaying it could credit a partial credit twice
 CREATE OR REPLACE FUNCTION piggyvest_capture_operator.requeue_review_capture(
   p_capture_id uuid,
   p_reason text
@@ -199,7 +204,7 @@ BEGIN
     RAISE EXCEPTION 'a reason of 10 to 500 characters is required' USING ERRCODE = '22023';
   END IF;
 
-  SELECT c.id, c.processing_state, c.attempts, c.last_error
+  SELECT c.id, c.processing_state, c.attempts, c.last_error, c.event_type
     INTO v_row
     FROM public.piggyvest_webhook_captures c
     WHERE c.id = p_capture_id
@@ -210,6 +215,24 @@ BEGIN
   IF v_row.processing_state <> 'needs_review' THEN
     RETURN pg_catalog.jsonb_build_object(
       'outcome', 'not_in_review', 'processingState', v_row.processing_state);
+  END IF;
+
+  -- Money safety is enforced here, not only in the runbook: a credit event
+  -- replays only once both ledgers enforce pvb_reference uniqueness.
+  IF (v_row.event_type IS NULL
+      OR v_row.event_type IN ('bank-transfer.inflow.success', 'interest-payout.success'))
+    AND NOT (
+      EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
+        WHERE k.conname = 'piggyvest_inflow_credits_pvb_reference_key'
+          AND k.contype = 'u'
+          AND k.conrelid = pg_catalog.to_regclass('public.piggyvest_inflow_credits'))
+      AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
+        WHERE k.conname = 'piggyvest_interest_payouts_pvb_reference_key'
+          AND k.contype = 'u'
+          AND k.conrelid = pg_catalog.to_regclass('public.piggyvest_interest_payouts')))
+  THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'outcome', 'credit_dedupe_missing', 'eventType', v_row.event_type);
   END IF;
 
   SELECT pg_catalog.count(*)::integer INTO v_replays

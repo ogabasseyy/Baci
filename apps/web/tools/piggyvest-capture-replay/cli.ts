@@ -55,6 +55,8 @@ export function describeRequeue(result: PiggyvestCaptureRequeueResult): string {
       return 'No capture has that id. Nothing changed.';
     case 'not_in_review':
       return `That capture is ${result.processingState}, not parked for review. Nothing changed.`;
+    case 'credit_dedupe_missing':
+      return `That capture is a credit event (${result.eventType ?? 'unknown type'}) and the credit ledgers do not yet dedupe on pvb_reference (PR #4199 is not deployed here). Replaying it could credit twice, so nothing changed.`;
     case 'replay_limit_reached':
       return `That capture was already requeued ${result.operatorReplays} times (the limit is ${result.replayLimit}). Nothing changed; it needs a code fix, not another replay.`;
   }

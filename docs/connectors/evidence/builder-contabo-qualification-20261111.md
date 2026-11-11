@@ -39,3 +39,16 @@ expected semantic heading and PNG evidence with sandbox networking disabled;
 reported job times were 31,790 ms and 32,156 ms. No orders or storefront
 publication occurred. This is an offline host qualification, not live OAuth,
 checkout, field performance, or independent production-image provenance.
+
+The bundled synthetic auth-service and listener tests also passed on Contabo
+as an unprivileged user with Node 24.21.0. These tests cover service lifecycle,
+private socket permissions, proxy-header sanitization and issuer discovery;
+they do not start a production broker or connect it to production credentials.
+A separate local PostgreSQL-backed authorization-code test confirmed the real
+provider returns the issuer and state on a successful callback; the upstream
+identity provider in that test was simulated.
+
+The public `mcp.usebaci.com` discovery endpoint still returned the Supabase
+issuer when checked, rather than the dedicated builder issuer. Production
+routing and the actual OpenAI authorization flow therefore remain unqualified;
+do not treat the domain verification as evidence of a working connection.

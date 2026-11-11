@@ -192,9 +192,12 @@ test('real broker redirects, path-scoped cookies, consent, token isolation and r
         result = await send(requireString(result.location));
       }
       assert(result.location?.startsWith(callback));
-      const code = new URL(requireString(result.location)).searchParams.get(
-        'code'
-      );
+      const callbackUrl = new URL(requireString(result.location));
+      // OpenAI's shared OAuth callback requires the issuer on success as well
+      // as on errors, to identify which authorization server issued the code.
+      assert.equal(callbackUrl.searchParams.get('iss'), issuer);
+      assert.equal(callbackUrl.searchParams.get('state'), 'outer-state');
+      const code = callbackUrl.searchParams.get('code');
       assert(code);
       const exchange = await send('/token', {
         client_id: 'new-builder-client',

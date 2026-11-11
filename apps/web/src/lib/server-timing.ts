@@ -23,11 +23,18 @@ export interface ServerTimerOptions {
 
 const STEP_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 const TOTAL_STEP = 'total';
+// RFC 9110 field-name token.
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export function createServerTimer({
   header = 'Server-Timing',
   now = () => performance.now(),
 }: ServerTimerOptions = {}): ServerTimer {
+  // Checked here so a misconfigured name fails loudly instead of being
+  // swallowed with the immutable-headers case in apply().
+  if (!HEADER_NAME.test(header)) {
+    throw new Error('Invalid timing header name');
+  }
   const started = now();
   const steps: Array<{ name: string; duration: number }> = [];
   return {

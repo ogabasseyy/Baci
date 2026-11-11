@@ -46,7 +46,7 @@ vi.mock('@/lib/rate-limit', () => ({
 }));
 
 const TIMING_HEADER = 'x-baci-proxy-timing';
-const ENTRY = '[a-z][a-z0-9-]*;dur=\\d+\\.\\d';
+const ENTRY = '[a-z][a-z0-9_-]*;dur=\\d+\\.\\d';
 const ENTRIES = new RegExp(`^(${ENTRY}, )*total;dur=\\d+\\.\\d$`);
 
 function stepNames(response: Response): string[] {

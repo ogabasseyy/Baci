@@ -55,6 +55,15 @@ describe('server timing', () => {
     );
   });
 
+  it('rejects a header name that is not a valid token', () => {
+    expect(() => createServerTimer({ header: 'bad header' })).toThrow(
+      'Invalid timing header name'
+    );
+    expect(() => createServerTimer({ header: '' })).toThrow(
+      'Invalid timing header name'
+    );
+  });
+
   it('returns a response with immutable headers unchanged instead of throwing', () => {
     const timer = createServerTimer({ now: clock(0, 3) });
     const frozen = Response.redirect('https://example.com/next', 308);

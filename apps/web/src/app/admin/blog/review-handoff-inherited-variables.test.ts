@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { inheritedCustomProperties } from './review-handoff-inherited-variables';
 

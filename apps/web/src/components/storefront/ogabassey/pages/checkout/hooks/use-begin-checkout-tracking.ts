@@ -72,8 +72,11 @@ export function useBeginCheckoutTracking({
     // and same-cart return visits in this session are not new starts, while
     // a different set of lines is a new basket and reports again. The
     // in-memory set holds a few short keys per page and needs no eviction.
+    // Logical line identity (product, variant, condition), not cartItemId:
+    // a shared-cart line swaps its temp: id for the server id on sync,
+    // which is the same basket.
     const cartKey = checkoutCart
-      .map((item) => item.cartItemId || item.id)
+      .map((item) => `${item.id}:${item.variantId ?? ''}:${item.condition ?? ''}`)
       .sort()
       .join('|');
     const reportKey = `${merchantId}:${attemptId}:${cartKey}`;

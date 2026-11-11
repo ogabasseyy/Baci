@@ -167,4 +167,21 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
       'NGN'
     );
   });
+
+  it('does not report again when a shared-cart line swaps its temp id on sync', async () => {
+    const shared = params({
+      checkoutCart: [cartLine({ cartItemId: 'temp:intent-1' })],
+    });
+    const { rerender } = renderHook(
+      (props) => useBeginCheckoutTracking(props),
+      { initialProps: shared }
+    );
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+
+    rerender({ ...shared, checkoutCart: [cartLine({ cartItemId: 'line-9' })] });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(beginCheckout).toHaveBeenCalledTimes(1);
+  });
 });

@@ -2,6 +2,7 @@
 
 import { analytics } from '@/lib/analytics';
 import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
+import { buildProductEvent } from '@/lib/analytics/build-product-event';
 import { sendTrackedEvent } from '@/lib/analytics/send-tracked-event';
 import type {
   PageViewEvent,
@@ -33,21 +34,16 @@ export const trackEvent = {
     currency: string = 'USD'
   ) => {
     const eventId = crypto.randomUUID();
-    // Use joined categories.name from category_id, fallback to legacy TEXT field
-    const categoryName =
-      product.categories?.name || product.category || undefined;
-
     // Store in Supabase for merchant dashboard
-    sendTrackedEvent({
-      event_id: eventId,
-      event_type: 'product_view',
-      merchant_id: merchantId,
-      product_id: product.id,
-      product_name: product.name,
-      product_category: categoryName,
-      product_price: product.price,
-      currency,
-    } satisfies ProductEvent);
+    sendTrackedEvent(
+      buildProductEvent({
+        currency,
+        eventId,
+        eventType: 'product_view',
+        merchantId,
+        product,
+      })
+    );
 
     // Also send to GA4/Facebook
     analytics.viewItem(product, currency, eventId);
@@ -63,21 +59,16 @@ export const trackEvent = {
     currency: string = 'USD'
   ) => {
     const eventId = crypto.randomUUID();
-    // Use joined categories.name from category_id, fallback to legacy TEXT field
-    const categoryName =
-      product.categories?.name || product.category || undefined;
-
-    sendTrackedEvent({
-      event_id: eventId,
-      event_type: 'add_to_cart',
-      merchant_id: merchantId,
-      product_id: product.id,
-      product_name: product.name,
-      product_category: categoryName,
-      product_price: product.price,
-      quantity,
-      currency,
-    } satisfies ProductEvent);
+    sendTrackedEvent(
+      buildProductEvent({
+        currency,
+        eventId,
+        eventType: 'add_to_cart',
+        merchantId,
+        product,
+        quantity,
+      })
+    );
 
     analytics.addToCart(product, quantity, currency, undefined, eventId);
   },

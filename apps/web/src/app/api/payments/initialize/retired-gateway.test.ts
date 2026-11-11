@@ -9,8 +9,12 @@ it('rejects CredPal without affecting supported gateways', async () => {
     expect(retiredGatewayResponse(gateway)).toBeNull();
 });
 
-it('rejects retired Klump before admission', async () => {
-  const retired = retiredGatewayResponse('klump');
+it.each([
+  'klump',
+  'Klump',
+  'KLUMP',
+])('rejects retired %s before admission', async (gateway) => {
+  const retired = retiredGatewayResponse(gateway);
   expect(retired?.status).toBe(410);
   expect(await retired?.json()).toEqual({
     error: 'Klump is unavailable',

@@ -31,9 +31,11 @@ Klump is absent from the web and mobile payment choices regardless of stale merc
 
 ## Cutover and legacy recovery
 
-Before enabling wallet-funded financing, replay the four migrations in timestamp order in staging. Run the wallet-credit projection, Oxygen funding and Credit Direct reservation harnesses there against disposable fixtures, then verify the migration replay and capability register in CI. The last migration permits the merchant cancellation flow to restore the original wallet debit after verified Credit Direct capture.
+Before enabling wallet-funded financing, replay the five migrations in timestamp order in staging. Run the wallet-credit projection, Oxygen funding and Credit Direct reservation harnesses there against disposable fixtures, then verify the migration replay and capability register in CI. The final two migrations allow merchant cancellation to restore the original wallet debit after verified Credit Direct capture and recognize both stored cancellation spellings.
 
 Inventory existing orders with wallet ledger activity before rollout. Review Credit Direct orders that still have a lender session but lack a durable reservation, and Oxygen workflows with wallet activity that lack an admitted funding snapshot. Check the original order, completed debit, lender session and merchant settlement evidence together. A signed lender session can survive a closed popup or expired token.
+
+Credit Direct signing and webhook delivery return HTTP 503 with `CREDIT_DIRECT_WALLET_RETRY_REQUIRED` when a wallet reservation lock is busy. Signing clients should retry the saved order. The webhook sender can redeliver the same event. HTTP 409 with `CREDIT_DIRECT_WALLET_REVIEW_REQUIRED` calls for reconciliation.
 
 For an unresolved order, keep its saved checkout and route it to operations. Use the lender's authoritative status and settlement evidence to distinguish an active session, a verified capture and a terminal no-capture outcome. Resume or reconcile the existing attempt through the supported recovery path. Hold rollout for affected orders that have no supported recovery path. The migration deliberately leaves ambiguous records without a reservation or snapshot. An amount, session age or client redirect alone cannot justify creating one.
 

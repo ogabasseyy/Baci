@@ -1468,10 +1468,12 @@ describe('POST /api/payments/initialize', () => {
   });
 
   it.each([
-    0, 20000,
-  ])('rejects retired Klump before payment reads or writes (wallet: %s)', async (wallet_amount_used) => {
+    ['klump', 0],
+    ['Klump', 20000],
+    ['KLUMP', 0],
+  ])('rejects retired %s before payment reads or writes (wallet: %s)', async (gateway, wallet_amount_used) => {
     orderPaymentResult = { data: { wallet_amount_used }, error: null };
-    const res = await POST(makeRequest({ ...validBody, gateway: 'klump' }));
+    const res = await POST(makeRequest({ ...validBody, gateway }));
     expect(res.status).toBe(410);
     expect((await res.json()).code).toBe('GATEWAY_RETIRED');
     expect(rpcCalls).toHaveLength(0);

@@ -30,7 +30,7 @@ describe('resolveCreditDirectRpcError', () => {
     ],
     [
       'credit_direct_wallet_retry_required',
-      409,
+      503,
       'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
     ],
     ['order_not_payable', 409, 'ORDER_NOT_PAYABLE'],

@@ -91,6 +91,11 @@ SELECT public.test_assert(NOT has_function_privilege('authenticated','public.rev
 SELECT set_config('test.role','authenticated',false);
 SELECT set_config('test.actor','00000000-0000-4000-8000-000000000005',false);
 SELECT public.test_reject($q$SELECT * FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Uncancelled order','00000000-0000-4000-8000-000000000002')$q$,'credit_direct_wallet_attempt_pending');
+-- Exercise the legacy spelling in isolation, then test the canonical spelling.
+BEGIN;
+UPDATE public.orders SET shipping_status='canceled',cancelled_at=now(),cancelled_by='merchant' WHERE id='00000000-0000-4000-8000-000000000010';
+SELECT public.test_assert((SELECT success AND reversed_amount=20000 AND new_balance=20000 FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Merchant canceled','00000000-0000-4000-8000-000000000002')),'legacy canceled spelling restores the original wallet debit');
+ROLLBACK;
 UPDATE public.orders SET shipping_status='cancelled',cancelled_at=now(),cancelled_by='merchant' WHERE id='00000000-0000-4000-8000-000000000010';
 SELECT set_config('test.actor','00000000-0000-4000-8000-000000000003',false);
 SELECT public.test_reject($q$SELECT * FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000010','Wrong actor','00000000-0000-4000-8000-000000000002')$q$,'credit_direct_wallet_attempt_pending');

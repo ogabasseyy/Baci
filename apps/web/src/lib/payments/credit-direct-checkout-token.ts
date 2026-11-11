@@ -47,10 +47,10 @@ const KNOWN_RPC_ERRORS: Record<string, CreditDirectRpcErrorMapping> = {
     },
   },
   credit_direct_wallet_retry_required: {
-    status: 409,
+    status: 503,
     body: {
       error:
-        'Your wallet payment is being updated. Check your order before continuing.',
+        'Your wallet payment is being updated. Please retry this saved order shortly.',
       code: 'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
     },
   },

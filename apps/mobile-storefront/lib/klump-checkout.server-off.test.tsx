@@ -29,6 +29,18 @@ describe('klump checkout helpers', () => {
     }
   });
 
+  it('keeps Klump unavailable with server-disabled wallet and savings selections', () => {
+    expect(
+      getKlumpDisabledReason(
+        settings,
+        120000,
+        { use: false, amount: 0 },
+        { use: false, amount: 0, goalId: null }
+      )
+    ).toBe('Klump is no longer available. Choose another payment method.');
+    expect(shouldHideKlumpPaymentMethod(settings, 120000)).toBe(true);
+  });
+
   it('builds the initialize payload without trusting a client amount', () => {
     expect(
       buildKlumpInitializePayload({

@@ -52,9 +52,11 @@ export function createGithubClient({ token, apiUrl = 'https://api.github.com', f
         const items = key ? body[key] : body;
         if (!Array.isArray(items)) throw new Error(`unexpected non-list response for ${path}`);
         all.push(...items);
-        if (items.length < PAGE_SIZE) break;
+        if (items.length < PAGE_SIZE) return all;
       }
-      return all;
+      // The last allowed page was still full: more entries may exist. Returning what we have would
+      // let an early clean verdict hide newer findings, so make the caller fail closed instead.
+      throw new Error(`too many entries for ${path} (more than ${MAX_PAGES * PAGE_SIZE})`);
     },
   };
 }

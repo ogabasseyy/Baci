@@ -63,6 +63,20 @@ describe('createGithubClient', () => {
     assert.match(fetchImpl.calls[0].url, /\/list\?event=pull_request&per_page=100&page=1$/);
   });
 
+  it('bugfix: refuses to return a truncated list when the page cap is reached', async () => {
+    // A review/comment history longer than the cap must not be read as if it were complete: a clean
+    // verdict on an early page could hide findings on a page that was never fetched.
+    const full = Array.from({ length: 100 }, (_, index) => index);
+    const fetchImpl = fakeFetch(() => ({ body: full }));
+    await assert.rejects(client(fetchImpl).paginate('/endless'), /more than 2000 entries|too many/i);
+    assert.equal(fetchImpl.calls.length, 20);
+  });
+
+  it('accepts a list that ends exactly on the last allowed page', async () => {
+    const fetchImpl = fakeFetch((url) => ({ body: url.endsWith('page=20') ? [] : Array.from({ length: 100 }, (_, index) => index) }));
+    assert.equal((await client(fetchImpl).paginate('/exact')).length, 1900);
+  });
+
   it('reads a wrapped list when asked for a key', async () => {
     const fetchImpl = fakeFetch(() => ({ body: { total_count: 1, workflow_runs: [{ id: 1 }] } }));
     assert.deepEqual(await client(fetchImpl).paginate('/runs', 'workflow_runs'), [{ id: 1 }]);

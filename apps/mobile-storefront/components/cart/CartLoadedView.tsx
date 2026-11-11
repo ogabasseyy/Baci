@@ -147,124 +147,137 @@ export default function CartLoadedView({
 
   return (
     <View style={styles.container}>
-      <PatternedBackground
-        backgroundColor={colors.background}
-        isDark={isDark}
-      />
-
       <View
         style={[
-          styles.header,
-          {
-            backgroundColor: colors.background,
-            borderBottomColor: colors.border,
-            paddingTop: insetsTop + SPACING.sm,
-          },
+          styles.container,
+          isIdentityModalOpen && { pointerEvents: 'none' },
         ]}
-      >
-        <View style={styles.headerLeft}>
-          <Pressable
-            onPress={handleReturnHome}
-            hitSlop={12}
-            style={[
-              styles.backButton,
-              { backgroundColor: surfaceInset, borderColor: colors.border },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to home"
-          >
-            <Ionicons name="arrow-back" size={18} color={colors.text} />
-          </Pressable>
-          <Ionicons name="cart" size={24} color={colors.primary} />
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Cart</Text>
-          <Text style={[styles.headerCount, { color: colors.textSecondary }]}>
-            ({itemCount})
-          </Text>
-        </View>
-        <Pressable
-          onPress={handleClearCart}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Clear cart"
-        >
-          <Text style={[styles.clearText, { color: colors.primary }]}>
-            Clear All
-          </Text>
-        </Pressable>
-      </View>
-
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        getItemLayout={getItemLayout}
-        removeClippedSubviews={removeClippedSubviews}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        initialNumToRender={5}
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 180 }]}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <CartItemCard
-            item={item}
-            handleQuantityChange={handleQuantityChange}
-            handleRemoveItem={handleRemoveItem}
-            toggleAssurance={toggleAssurance}
-            openItemNegotiation={
-              enableNegotiationModal ? onOpenItemNegotiation : undefined
-            }
-            updateQuantity={updateQuantity}
-            formatPrice={formatPrice}
-            colors={colors}
-            surfaceInset={surfaceInset}
-            disabledIconColor={disabledIconColor}
-            negotiateSurface={negotiateSurface}
-            negotiateBorder={negotiateBorder}
-          />
-        )}
-        ListFooterComponent={
-          <>
-            {/* Any modal covers this screen; unmount the slot while one is
-                visible so no obscured delivery is requested. */}
-            {isIdentityModalOpen ||
-            isPriceChangeModalOpen ||
-            isNegotiateWarningCovering ||
-            isNegotiationCovering ? null : (
-              <AdSlot placement="CART_MPU" />
-            )}
-            <View style={styles.secureBadgeInside}>
-              <Ionicons
-                name="shield-checkmark-outline"
-                size={14}
-                color={colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.secureBadgeText,
-                  { color: colors.textSecondary },
-                ]}
-              >
-                Secure Checkout
-              </Text>
-            </View>
-          </>
+        importantForAccessibility={
+          isIdentityModalOpen ? 'no-hide-descendants' : 'auto'
         }
-      />
+        accessibilityElementsHidden={isIdentityModalOpen}
+      >
+        <PatternedBackground
+          backgroundColor={colors.background}
+          isDark={isDark}
+        />
 
-      <CartCheckoutFooter
-        checkoutDotColor={checkoutDotColor}
-        colors={colors}
-        enableNegotiationModal={enableNegotiationModal}
-        formatPrice={formatPrice}
-        grandTotal={grandTotal}
-        hasAcceptedNegotiation={hasAcceptedNegotiation}
-        hasNonNegotiableItem={hasNonNegotiableCartItem}
-        isPreparingCheckout={isPreparingCheckout}
-        onCheckout={handleCheckout}
-        onCheckoutPressIn={onCheckoutPressIn}
-        onNegotiateTotal={onNegotiateTotal}
-        surfaceInset={surfaceInset}
-      />
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+              paddingTop: insetsTop + SPACING.sm,
+            },
+          ]}
+        >
+          <View style={styles.headerLeft}>
+            <Pressable
+              onPress={handleReturnHome}
+              hitSlop={12}
+              style={[
+                styles.backButton,
+                { backgroundColor: surfaceInset, borderColor: colors.border },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to home"
+            >
+              <Ionicons name="arrow-back" size={18} color={colors.text} />
+            </Pressable>
+            <Ionicons name="cart" size={24} color={colors.primary} />
+            <Text style={[styles.headerTitle, { color: colors.text }]}>
+              Cart
+            </Text>
+            <Text style={[styles.headerCount, { color: colors.textSecondary }]}>
+              ({itemCount})
+            </Text>
+          </View>
+          <Pressable
+            onPress={handleClearCart}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Clear cart"
+          >
+            <Text style={[styles.clearText, { color: colors.primary }]}>
+              Clear All
+            </Text>
+          </Pressable>
+        </View>
+
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          getItemLayout={getItemLayout}
+          removeClippedSubviews={removeClippedSubviews}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          initialNumToRender={5}
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 180 }]}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <CartItemCard
+              item={item}
+              handleQuantityChange={handleQuantityChange}
+              handleRemoveItem={handleRemoveItem}
+              toggleAssurance={toggleAssurance}
+              openItemNegotiation={
+                enableNegotiationModal ? onOpenItemNegotiation : undefined
+              }
+              updateQuantity={updateQuantity}
+              formatPrice={formatPrice}
+              colors={colors}
+              surfaceInset={surfaceInset}
+              disabledIconColor={disabledIconColor}
+              negotiateSurface={negotiateSurface}
+              negotiateBorder={negotiateBorder}
+            />
+          )}
+          ListFooterComponent={
+            <>
+              {/* Any modal covers this screen; unmount the slot while one is
+                visible so no obscured delivery is requested. */}
+              {isIdentityModalOpen ||
+              isPriceChangeModalOpen ||
+              isNegotiateWarningCovering ||
+              isNegotiationCovering ? null : (
+                <AdSlot placement="CART_MPU" />
+              )}
+              <View style={styles.secureBadgeInside}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.secureBadgeText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Secure Checkout
+                </Text>
+              </View>
+            </>
+          }
+        />
+
+        <CartCheckoutFooter
+          checkoutDotColor={checkoutDotColor}
+          colors={colors}
+          enableNegotiationModal={enableNegotiationModal}
+          formatPrice={formatPrice}
+          grandTotal={grandTotal}
+          hasAcceptedNegotiation={hasAcceptedNegotiation}
+          hasNonNegotiableItem={hasNonNegotiableCartItem}
+          isPreparingCheckout={isPreparingCheckout}
+          onCheckout={handleCheckout}
+          onCheckoutPressIn={onCheckoutPressIn}
+          onNegotiateTotal={onNegotiateTotal}
+          surfaceInset={surfaceInset}
+        />
+      </View>
 
       <CheckoutIdentityModal
         isOpen={isIdentityModalOpen}

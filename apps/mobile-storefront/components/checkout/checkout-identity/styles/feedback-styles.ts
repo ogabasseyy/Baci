@@ -14,9 +14,8 @@ export const feedbackStyles = {
   },
   dividerText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: 'Inter_400Regular',
     color: palette.gray[400],
-    textTransform: 'uppercase',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -31,7 +30,7 @@ export const feedbackStyles = {
   errorText: {
     flex: 1,
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: 'Inter_500Medium',
     color: BRAND.primary,
   },
 } as const;

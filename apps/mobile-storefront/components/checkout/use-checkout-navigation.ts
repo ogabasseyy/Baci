@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { useEffect, useEffectEvent } from 'react';
 import { Alert, BackHandler, Platform } from 'react-native';
@@ -17,6 +17,7 @@ export function useCheckoutNavigation({
   setStep,
   step,
 }: UseCheckoutNavigationParams) {
+  const navigation = useNavigation();
   const handleBack = () => {
     if (step === 'payment') {
       setStep('address');
@@ -28,6 +29,8 @@ export function useCheckoutNavigation({
   };
 
   const handleHardwareBackPress = useEffectEvent(() => {
+    // Prefetch mounts checkout before it is allowed to receive input.
+    if (!navigation.isFocused()) return false;
     if (isOrderInFlight.current) return true;
     if (step === 'address') {
       Alert.alert(

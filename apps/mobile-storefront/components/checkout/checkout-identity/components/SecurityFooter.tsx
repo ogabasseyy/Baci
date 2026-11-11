@@ -14,24 +14,24 @@ export function SecurityFooter({ bottomInset, theme }: SecurityFooterProps) {
       style={[
         styles.footer,
         {
-          backgroundColor: theme.footer,
+          backgroundColor: theme.sheet,
           borderTopColor: theme.border,
-          paddingBottom: Math.max(bottomInset, 12),
+          paddingBottom: Math.max(bottomInset, 8),
         },
       ]}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel="Security notice: Your security is our priority. All transactions are encrypted."
+      accessibilityLabel="Secure checkout"
     >
       <Ionicons
-        name="lock-closed"
-        size={12}
-        color={theme.footerText}
+        name="shield-checkmark-outline"
+        size={16}
+        color={theme.primary}
         accessibilityElementsHidden={true}
         importantForAccessibility="no"
       />
       <Text style={[styles.footerText, { color: theme.footerText }]}>
-        Your security is our priority. All transactions are encrypted.
+        Secure checkout
       </Text>
     </View>
   );

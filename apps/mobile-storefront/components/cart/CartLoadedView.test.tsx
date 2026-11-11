@@ -194,6 +194,17 @@ describe('CartLoadedView', () => {
     expect(onNegotiateTotal).not.toHaveBeenCalled();
   });
 
+  it('hides the cart controls from accessibility while the checkout sheet is open', () => {
+    const { rerender, props } = renderView();
+
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
+    rerender(<CartLoadedView {...props} isIdentityModalOpen />);
+    expect(screen.queryByRole('button', { name: 'Back to home' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear cart' })).toBeNull();
+    rerender(<CartLoadedView {...props} isIdentityModalOpen={false} />);
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
+  });
+
   it('renders the footer ad only when no modal covers the cart', () => {
     // Regression: an obscured CART_MPU must not load behind the identity,
     // price-change, or negotiation-warning modals.

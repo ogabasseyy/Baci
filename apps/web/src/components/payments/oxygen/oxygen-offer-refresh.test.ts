@@ -3,8 +3,38 @@ import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
 import { canRefreshSavedOxygenOffers } from './oxygen-offer-refresh';
 
 it('only allows refresh for an unapproved saved booking with no active command', () => {
-  const snapshot = oxygenBookedSnapshot;
+  const snapshot = {
+    ...oxygenBookedSnapshot,
+    state: {
+      ...oxygenBookedSnapshot.state,
+      applicationReference: '60000000-0000-4000-8000-000000000002',
+      validated: true,
+      kyc: {
+        phone_status: 'DONE' as const,
+        bvn_status: 'DONE' as const,
+        selfie_status: 'DONE' as const,
+        nin_status: 'NOT_DONE' as const,
+        bank_status: 'NOT_DONE' as const,
+        address_status: 'NOT_DONE' as const,
+      },
+    },
+  };
   expect(canRefreshSavedOxygenOffers(snapshot)).toBe(true);
+  expect(
+    canRefreshSavedOxygenOffers({
+      ...snapshot,
+      state: { ...snapshot.state, validated: false },
+    })
+  ).toBe(false);
+  expect(
+    canRefreshSavedOxygenOffers({
+      ...snapshot,
+      state: {
+        ...snapshot.state,
+        kyc: { ...snapshot.state.kyc, selfie_status: 'PROCESSING' },
+      },
+    })
+  ).toBe(false);
   expect(
     canRefreshSavedOxygenOffers({
       ...snapshot,

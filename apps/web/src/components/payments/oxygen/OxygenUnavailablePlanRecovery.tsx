@@ -6,14 +6,20 @@ import { useState } from 'react';
 export function OxygenUnavailablePlanRecovery({
   busy,
   cancel,
+  offersMissing = false,
 }: {
   busy: boolean;
   cancel: () => Promise<boolean>;
+  offersMissing?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   return (
     <div className="grid gap-2 text-sm" role="status">
-      <p>This plan is no longer available. Cancel it to choose a new one.</p>
+      <p>
+        {offersMissing
+          ? 'We could not check this plan. You can cancel it to choose another.'
+          : 'This plan is no longer available. Cancel it to choose a new one.'}
+      </p>
       {!confirming ? (
         <button
           type="button"

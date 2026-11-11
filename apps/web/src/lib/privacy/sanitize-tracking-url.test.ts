@@ -44,4 +44,25 @@ describe('sanitizeTrackingUrl', () => {
   it('returns an empty string unchanged', () => {
     expect(sanitizeTrackingUrl('')).toBe('');
   });
+
+  it('bugfix: drops redirect targets that embed a receipt claim token', () => {
+    expect(
+      sanitizeTrackingUrl(
+        '/account/login?redirect=%2Freceipts%2Fclaim%2Fsecret-token&a=1'
+      )
+    ).toBe('/account/login?a=1');
+    for (const name of [
+      'redirect',
+      'redirectTo',
+      'redirect_to',
+      'next',
+      'returnTo',
+      'return_to',
+      'callbackUrl',
+    ]) {
+      expect(sanitizeTrackingUrl(`/login?${name}=%2Fsecret&a=1`)).toBe(
+        '/login?a=1'
+      );
+    }
+  });
 });

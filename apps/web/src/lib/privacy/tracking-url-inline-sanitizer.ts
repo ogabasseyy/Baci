@@ -1,4 +1,7 @@
-import { SENSITIVE_URL_PARAM_NAMES } from './sensitive-url-params';
+import {
+  SENSITIVE_URL_PARAM_NAMES,
+  TRACKING_ONLY_DROPPED_PARAM_NAMES,
+} from './sensitive-url-params';
 
 /**
  * Self-contained browser-side twin of `sanitizeTrackingUrl`, for inline
@@ -10,7 +13,9 @@ export const TRACKING_URL_INLINE_SANITIZER = `
 function baciSanitizeUrl(u) {
   if (!u) return u;
   var sensitive = ${JSON.stringify(
-    SENSITIVE_URL_PARAM_NAMES.map((name) => name.toLowerCase())
+    [...SENSITIVE_URL_PARAM_NAMES, ...TRACKING_ONLY_DROPPED_PARAM_NAMES].map(
+      (name) => name.toLowerCase()
+    )
   )};
   var s = String(u).split('#')[0];
   var i = s.indexOf('?');

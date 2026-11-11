@@ -1,7 +1,7 @@
-import { partitionSensitiveSearch } from './sensitive-url-params';
+import { trackingSafeSearch } from './sensitive-url-params';
 
 /**
- * Removes sensitive query params and the fragment from a URL before it is sent
+ * Removes sensitive and redirect-style query params and the fragment from a URL before it is sent
  * to an ad/analytics vendor. Works on absolute URLs and bare paths and returns
  * the same shape it was given. Input that cannot be split cleanly is cut at the
  * first `?` or `#`.
@@ -13,10 +13,8 @@ export function sanitizeTrackingUrl(url: string): string {
 
   const base = withoutHash.slice(0, queryStart);
   try {
-    const { publicSearch } = partitionSensitiveSearch(
-      withoutHash.slice(queryStart + 1)
-    );
-    return publicSearch ? `${base}?${publicSearch}` : base;
+    const kept = trackingSafeSearch(withoutHash.slice(queryStart + 1));
+    return kept ? `${base}?${kept}` : base;
   } catch {
     return base;
   }

@@ -14,6 +14,9 @@ describe('TRACKING_URL_INLINE_SANITIZER', () => {
     'https://x.test/p',
     'https://x.test/p#frag',
     '/p?customerName=Ada&customerPhone=080',
+    '/account/login?redirect=%2Freceipts%2Fclaim%2Fsecret&a=1',
+    '/l?redirectTo=%2Fx&redirect_to=%2Fx&next=%2Fx&returnTo=%2Fx&return_to=%2Fx&callbackUrl=%2Fx&k=1',
+    '/p?customer_email=a%40b.c&customer_name=Ada&customer_phone=080&payer_name=Bo&payerName=Bo',
     'not a url?token=abc',
     '',
   ])('behaves like sanitizeTrackingUrl for %s', (url) => {

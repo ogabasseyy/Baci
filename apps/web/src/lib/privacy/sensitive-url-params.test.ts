@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalSearch,
+  isDroppedFromTrackingUrl,
   isSensitiveUrlParam,
   partitionSensitiveSearch,
+  trackingSafeSearch,
 } from './sensitive-url-params';
 
 describe('isSensitiveUrlParam', () => {
@@ -16,6 +18,16 @@ describe('isSensitiveUrlParam', () => {
     'customerPhone',
     'name',
     'customerName',
+    'customer_email',
+    'customer_name',
+    'customer_phone',
+    'customer-email',
+    'customer-name',
+    'customer-phone',
+    'tracking-token',
+    'payerName',
+    'payer_name',
+    'payer-name',
   ])('flags %s', (name) => {
     expect(isSensitiveUrlParam(name)).toBe(true);
   });
@@ -75,5 +87,66 @@ describe('canonicalSearch', () => {
 
   it('accepts URLSearchParams', () => {
     expect(canonicalSearch(new URLSearchParams('b=2&a=1'))).toBe('a=1&b=2');
+  });
+});
+
+describe('bugfix: snake_case shopper details from the crypto checkout stayed in the address bar', () => {
+  it('moves customer_email, customer_name and customer_phone out of the query', () => {
+    const result = partitionSensitiveSearch(
+      'orderId=1&customer_email=a%40b.c&customer_name=Ada&customer_phone=080'
+    );
+
+    expect(result.publicSearch).toBe('orderId=1');
+    expect(result.privateEntries.map(([name]) => name)).toEqual([
+      'customer_email',
+      'customer_name',
+      'customer_phone',
+    ]);
+  });
+});
+
+describe('payment-provider identifiers', () => {
+  it.each([
+    'reference',
+    'credpalRef',
+    'transaction_id',
+    'tx_ref',
+    'id',
+    'orderId',
+  ])('does not treat %s as sensitive, callbacks match on it', (name) => {
+    expect(isSensitiveUrlParam(name)).toBe(false);
+    expect(isDroppedFromTrackingUrl(name)).toBe(false);
+  });
+});
+
+describe('isDroppedFromTrackingUrl', () => {
+  it.each([
+    'redirect',
+    'redirectTo',
+    'redirect_to',
+    'next',
+    'returnTo',
+    'return_to',
+    'callbackUrl',
+    'Redirect',
+    'token',
+    'email',
+  ])('drops %s from tracking URLs', (name) => {
+    expect(isDroppedFromTrackingUrl(name)).toBe(true);
+  });
+
+  it('keeps redirect-style params out of the sensitive (address bar) list', () => {
+    expect(isSensitiveUrlParam('redirect')).toBe(false);
+    expect(isSensitiveUrlParam('next')).toBe(false);
+  });
+});
+
+describe('trackingSafeSearch', () => {
+  it('removes sensitive and redirect-style params and keeps the rest in order', () => {
+    expect(
+      trackingSafeSearch(
+        '?b=2&redirect=%2Freceipts%2Fclaim%2Fsecret&token=x&a=1&next=%2Fx'
+      )
+    ).toBe('b=2&a=1');
   });
 });

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { JSDOM_HOLDOUT_FILES } from './vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from './vitest.node-folders';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -94,11 +95,14 @@ function escapeGlob(value: string): string {
 }
 
 // Test files of the folders listed in vitest.node-folders.ts. The `node`
-// project runs exactly these; the `jsdom` project excludes exactly these, so
-// every test file belongs to one project. `.tsx` tests are never matched.
+// project runs these except the files listed in vitest.jsdom-holdouts.ts; the
+// `jsdom` project excludes all of them; the `jsdom-holdouts` project runs the
+// holdouts. So every test file belongs to exactly one project. `.tsx` tests
+// are never matched by the node globs.
 const nodeProjectTestGlobs = NODE_PROJECT_FOLDERS.map(
   (folder) => `${escapeGlob(folder)}/**/*.{test,spec}.?(c|m)[jt]s`
 );
+const jsdomHoldoutGlobs = JSDOM_HOLDOUT_FILES.map(escapeGlob);
 
 export default defineConfig({
   plugins: [react()],
@@ -159,9 +163,9 @@ export default defineConfig({
         inline: true,
       },
     },
-    // Two projects share everything above (`extends: true`). Only what differs
+    // The projects share everything above (`extends: true`). Only what differs
     // is set here. Vite merges arrays, so `setupFiles` must stay out of the
-    // shared config above or both setups would load in both projects.
+    // shared config above or both setups would load in every project.
     projects: [
       {
         extends: true,
@@ -179,6 +183,17 @@ export default defineConfig({
           environment: 'node',
           setupFiles: [path.join(__dirname, 'vitest.setup.node.ts')],
           include: nodeProjectTestGlobs,
+          exclude: jsdomHoldoutGlobs,
+        },
+      },
+      {
+        // jsdom for tests that sit in a node folder but cannot take a docblock.
+        extends: true,
+        test: {
+          name: 'jsdom-holdouts',
+          environment: 'jsdom',
+          setupFiles: [path.join(__dirname, 'vitest.setup.ts')],
+          include: jsdomHoldoutGlobs,
         },
       },
     ],

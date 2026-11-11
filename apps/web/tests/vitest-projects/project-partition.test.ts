@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { JSDOM_HOLDOUT_FILES } from '../../vitest.jsdom-holdouts';
 import { NODE_PROJECT_FOLDERS } from '../../vitest.node-folders';
 
 const WEB_ROOT = fileURLToPath(new URL('../..', import.meta.url));
@@ -48,11 +49,14 @@ function listSpecs(): Spec[] {
     });
 }
 
-function belongsToNodeProject(file: string): boolean {
-  return (
+function expectedProject(file: string): string {
+  if (JSDOM_HOLDOUT_FILES.includes(file)) return 'jsdom-holdouts';
+
+  const inNodeFolder =
     NODE_PROJECT_TEST_FILE.test(file) &&
-    NODE_PROJECT_FOLDERS.some((folder) => file.startsWith(`${folder}/`))
-  );
+    NODE_PROJECT_FOLDERS.some((folder) => file.startsWith(`${folder}/`));
+
+  return inNodeFolder ? 'node' : 'jsdom';
 }
 
 // The CI shards (`vitest run --shard=N/6`) split the combined list of both
@@ -65,9 +69,9 @@ describe('node/jsdom Vitest project partition', () => {
     specs = listSpecs();
   }, LIST_TIMEOUT_MS);
 
-  it('defines exactly the node and jsdom projects, both with tests', () => {
+  it('defines exactly the node, jsdom and jsdom-holdouts projects, all with tests', () => {
     expect(new Set(specs.map((spec) => spec.project))).toEqual(
-      new Set(['node', 'jsdom'])
+      new Set(['node', 'jsdom', 'jsdom-holdouts'])
     );
   });
 
@@ -77,14 +81,20 @@ describe('node/jsdom Vitest project partition', () => {
     expect(new Set(files).size).toBe(files.length);
   });
 
-  it('puts a file in the node project exactly when its folder is listed', () => {
+  it('puts every file in the project its folder and the holdout list call for', () => {
     const misplaced = specs
-      .filter(
-        (spec) => (spec.project === 'node') !== belongsToNodeProject(spec.file)
-      )
+      .filter((spec) => spec.project !== expectedProject(spec.file))
       .map((spec) => `[${spec.project}] ${spec.file}`);
 
     expect(misplaced).toEqual([]);
+  });
+
+  it.each(JSDOM_HOLDOUT_FILES)('runs holdout %s in jsdom-holdouts', (file) => {
+    expect(
+      specs.some(
+        (spec) => spec.project === 'jsdom-holdouts' && spec.file === file
+      )
+    ).toBe(true);
   });
 
   it.each(NODE_PROJECT_FOLDERS)('finds tests in node folder %s', (folder) => {

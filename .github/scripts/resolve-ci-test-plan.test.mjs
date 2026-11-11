@@ -88,6 +88,7 @@ test('keeps full affected tests when the web node/jsdom project split changes', 
   // targeted `vitest --changed` run cannot prove a change to them is safe.
   for (const file of [
     'apps/web/vitest.config.ts',
+    'apps/web/vitest.jsdom-holdouts.ts',
     'apps/web/vitest.next-image-mock.ts',
     'apps/web/vitest.node-folders.ts',
     'apps/web/vitest.setup.node.ts',

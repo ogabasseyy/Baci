@@ -18,6 +18,8 @@ function scriptText(step) {
 }
 const MOVED_BY_NEEDS = ['cwv-runner-contracts', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc', 'mobile-quality'];
 const MOVED_INLINE = ['silent-revert-guard', 'quality'];
+// Every job that can run on the general private runner (moved by this change or routed there before it).
+const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quality-typecheck', 'quality-test', 'quality-test-web', 'build'];
 
 function values({ privateRepo = true, enabled = 'true', event = 'pull_request', head = 'owner/repo' } = {}) {
   return {
@@ -79,9 +81,13 @@ test('the changes job holds the capability gate, so it stays a plain uncondition
 });
 
 test('no job on the general private runner references repository secrets', () => {
-  for (const job of ['changes', 'silent-revert-guard', 'quality', 'cwv-runner-contracts', 'mobile-quality', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc']) {
+  // These jobs execute branch code on a persistent host. The deploy-runner quiz job is the only job allowed to hold
+  // secrets (it has its own test below); a workflow-level env would reach every job, so it is checked too.
+  for (const job of ['changes', ...PRIVATE_JOBS]) {
+    assert.ok(workflow.jobs[job], `${job} must exist`);
     assert.doesNotMatch(JSON.stringify(workflow.jobs[job]), /\bsecrets\./, job);
   }
+  assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), /\bsecrets\./, 'workflow-level env');
 });
 
 test('the Supabase service-role step lives only in a main-push job on the deploy runner', () => {
@@ -97,7 +103,6 @@ test('the Supabase service-role step lives only in a main-push job on the deploy
   }
 });
 
-const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quality-typecheck', 'quality-test', 'quality-test-web', 'build'];
 const PRIVILEGED_COMMAND = /\b(sudo|apt-get)\b/;
 const HOSTED_GUARD = /^(\s*)if \[ "\$RUNNER_ENVIRONMENT" = 'github-hosted' \]; then\s*$/;
 

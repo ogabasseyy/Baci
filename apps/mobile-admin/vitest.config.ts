@@ -146,10 +146,10 @@ export default defineConfig({
     // The projects share everything above (`extends: true`); only the
     // environment and the files differ. Every test file belongs to exactly one
     // project, chosen by its extension:
-    //  - `jsdom`: `.tsx` tests (React components).
-    //  - `node`: plain `.ts` tests. Creating a jsdom environment took most of
-    //    this suite's worker time, so a `.ts` test only gets one when its first
-    //    line says `// @vitest-environment jsdom`. A new `.ts` test that touches
+    //  - `jsdom`: `.tsx` and `.jsx` tests (React components).
+    //  - `node`: plain `.ts` and `.js` tests. Creating a jsdom environment took
+    //    most of this suite's worker time, so such a test only gets one when its
+    //    first line says `// @vitest-environment jsdom`. A new one that touches
     //    `window` or `document` without that line fails with a ReferenceError.
     projects: [
       {

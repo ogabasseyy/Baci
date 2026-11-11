@@ -4,18 +4,23 @@
 #
 # Usage: quality-gate-session-worktrees.sh <transcript.jsonl> <project_dir>
 #
-# Evidence taken from the session transcript:
-#   - Bash commands containing `cd <abs path>` or `git -C <abs path>`
-#   - file_path / path / notebook_path inputs of tool calls (Edit, Write, Read, ...)
+# Evidence taken from the session transcript (see quality-gate-session-paths.jq):
+#   - Bash `cd`/`pushd` (chained in order, relative paths resolved), `git -C`,
+#     `tee`, and `>`/`>>` redirect targets
+#   - file paths of MUTATING tools (Edit/Write/NotebookEdit); Read does not count
 #   - the per-entry `cwd`, but only when it is a LINKED worktree (a session that
 #     merely started at the main checkout has not "touched" it)
+#   - if nothing else qualifies but the session changed files, its last cwd
+# Exit status 3 = transcript missing/unreadable/has no evidence at all; the
+# caller then fails closed to the starting worktree.
 # Each path is mapped to the longest matching entry of this repo's
 # `git worktree list`. Worktrees under ~/.codex/ or ~/Documents/Codex/ are never
 # returned (they belong to other agents). No evidence => prints nothing.
 
 transcript="${1:-}"
 project_dir="${2:-}"
-[ -n "$transcript" ] && [ -f "$transcript" ] && [ -d "$project_dir" ] || exit 0
+[ -d "$project_dir" ] || exit 0
+[ -n "$transcript" ] && [ -f "$transcript" ] || exit 3
 
 home="${HOME:-}"
 worktrees=()
@@ -26,10 +31,17 @@ while IFS= read -r line; do
 done < <(git -C "$project_dir" worktree list --porcelain 2>/dev/null)
 [ ${#worktrees[@]} -gt 0 ] || exit 0
 
+# Other agents' checkouts are never ours. Defaults cover Codex; extend with
+# QUALITY_GATE_FOREIGN_PREFIXES (colon-separated absolute prefixes).
 is_foreign_agent_path() {
+  local pre
   case "$1" in
     "$home"/.codex/*|"$home"/Documents/Codex/*) return 0 ;;
   esac
+  local IFS=:
+  for pre in ${QUALITY_GATE_FOREIGN_PREFIXES:-}; do
+    [ -n "$pre" ] && case "$1" in "$pre"|"$pre"/*) return 0 ;; esac
+  done
   return 1
 }
 
@@ -48,7 +60,7 @@ canon() {
 
 is_linked_worktree() { [ -f "$1/.git" ]; }
 
-# Map a path to the longest matching worktree of this repo ("" if none/foreign).
+# Map a path to the longest matching worktree of this repo ("" if none).
 worktree_of() {
   local cp cw wt best="" bestlen=0
   cp=$(canon "$1")
@@ -58,43 +70,61 @@ worktree_of() {
       "$cw"|"$cw"/*) if [ ${#cw} -gt "$bestlen" ]; then best="$wt"; bestlen=${#cw}; fi ;;
     esac
   done
-  [ -n "$best" ] || return 0
-  is_foreign_agent_path "$best" && return 0
-  [ -d "$best" ] && printf '%s' "$best"
+  [ -n "$best" ] && [ -d "$best" ] && printf '%s' "$best"
+  return 0
+}
+
+resolve_path() { # <base> <arg>
+  local base="$1" a="$2"
+  case "$a" in
+    "~") a="$home" ;;
+    "~"/*) a="$home/${a#\~/}" ;;
+  esac
+  case "$a" in
+    /*) printf '%s' "$a" ;;
+    *) [ -n "$base" ] && printf '%s/%s' "$base" "$a" ;;
+  esac
 }
 
 found=()
 mutated=0
+resolved=0
+seen=0
+cwd=""
+cur=""
 last_cwd=""
-while IFS=$'\t' read -r kind cwd p; do
+add_wt() { # <path>
+  local wt
+  [ -n "$1" ] || return 0
+  wt=$(worktree_of "$1")
+  [ -n "$wt" ] || return 0
+  resolved=1                       # evidence pointed at a real worktree
+  is_foreign_agent_path "$wt" || found+=("$wt")
+  return 0
+}
+while IFS=$'\t' read -r kind arg; do
   case "$kind" in
-    M) mutated=1; continue ;;
+    S) seen=1; cwd="$arg"; cur="$arg" ;;
+    M) mutated=1 ;;
     C)
-      last_cwd="$cwd"
-      wt=$(worktree_of "$cwd")
-      # A session that merely STARTED in the main checkout has not touched it;
-      # only linked worktrees count from cwd alone (main handled below).
-      [ -n "$wt" ] && is_linked_worktree "$wt" && found+=("$wt")
-      continue ;;
-    P) ;;
-    *) continue ;;
+      seen=1; last_cwd="$arg"
+      # Starting inside a linked worktree means the session owns it; starting
+      # at the main checkout does not (handled by the mutation fallback).
+      wt=$(worktree_of "$arg")
+      if [ -n "$wt" ] && is_linked_worktree "$wt" && ! is_foreign_agent_path "$wt"; then
+        found+=("$wt"); resolved=1
+      fi ;;
+    cd) cur=$(resolve_path "$cur" "$arg"); add_wt "$cur" ;;
+    p|F) add_wt "$(resolve_path "$([ "$kind" = F ] && echo "$cwd" || echo "$cur")" "$arg")" ;;
   esac
-  [ -n "$p" ] || continue
-  case "$p" in
-    "~") p="$home" ;;
-    "~"/*) p="$home/${p#\~/}" ;;
-  esac
-  # Relative targets resolve against the cwd the command ran in.
-  case "$p" in /*) ;; *) [ -n "$cwd" ] || continue; p="$cwd/$p" ;; esac
-  wt=$(worktree_of "$p")
-  [ -n "$wt" ] && found+=("$wt")
 done < <(extract_paths)
+
+[ "$seen" = 1 ] || exit 3
 
 # Work done from the main checkout itself (relative paths, no cd): if nothing
 # else identified a worktree but the session made changes, use its last cwd.
-if [ ${#found[@]} -eq 0 ] && [ "$mutated" = 1 ] && [ -n "$last_cwd" ]; then
-  wt=$(worktree_of "$last_cwd")
-  [ -n "$wt" ] && found+=("$wt")
+if [ "$resolved" = 0 ] && [ "$mutated" = 1 ] && [ -n "$last_cwd" ]; then
+  add_wt "$last_cwd"
 fi
 
 [ ${#found[@]} -gt 0 ] && printf '%s\n' "${found[@]}" | sort -u

@@ -29,7 +29,7 @@ run_gate() { # $1 = transcript lines file
   printf '{"transcript_path":"%s","cwd":"%s"}' "$1" "$R" | bash "$HOOK_DIR/quality-gate.sh" 2>/dev/null
 }
 # tool <input-json> [name] [cwd]: one transcript line (cwd defaults to the main checkout)
-tool() { jq -nc --argjson i "$1" --arg n "${2:-X}" --arg c "${3:-$R}" '{type:"assistant",cwd:$c,message:{content:[{type:"tool_use",name:$n,input:$i}]}}'; }
+tool() { jq -nc --argjson i "$1" --arg n "${2:-$(jq -r "if has(\"file_path\") then \"Edit\" else \"Bash\" end" <<<"$1")}" --arg c "${3:-$R}" '{type:"assistant",cwd:$c,message:{content:[{type:"tool_use",name:$n,input:$i}]}}'; }
 
 # 1. cd into worktree A -> only A checked
 { tool '{"command":"cd '"$T"'/wtA && pnpm turbo test"}'; } > "$T/t1"
@@ -103,5 +103,42 @@ jq -r -f "$HOOK_DIR/quality-gate-session-paths.jq" "$T/t10" | grep -q '^M' || fa
 # 11. `git -C` inside another word is not a directory target
 { tool '{"command":"echo digit -C /tmp/nope"}' Bash "$R"; } > "$T/t11"
 if jq -r -f "$HOOK_DIR/quality-gate-session-paths.jq" "$T/t11" | grep -q '/tmp/nope'; then fail "git -C inside a word must not match"; fi
+
+# 12. Read-only access does not count as touching a worktree
+{ tool '{"file_path":"'"$T"'/wtB/x"}' Read "$T/wtA"; } > "$T/t12"
+run_gate "$T/t12" >/dev/null
+grep -qx "$T/wtB" "$CHECK_LOG" && fail "Read of wtB must not gate wtB"
+grep -qx "$T/wtA" "$CHECK_LOG" || fail "session cwd in linked wtA still counts"
+
+# 13. Bash redirect write into another worktree counts
+{ tool '{"command":"echo hi > '"$T"'/wtB/x"}' Bash "$R"; } > "$T/t13"
+run_gate "$T/t13" >/dev/null
+grep -qx "$T/wtB" "$CHECK_LOG" || fail "redirect into wtB should check wtB"
+
+# 14. chained cd resolves in command order: cd <T> && cd wtB && write
+{ tool '{"command":"cd '"$T"' && cd wtB && printf a > f.ts"}' Bash "$R"; } > "$T/t14"
+run_gate "$T/t14" >/dev/null
+grep -qx "$T/wtB" "$CHECK_LOG" || fail "chained cd should land in wtB, got: $(cat "$CHECK_LOG")"
+
+# 15. `echo cd /path` is a mention, not a directory change
+{ tool '{"command":"echo cd '"$T"'/wtB"}' Bash "$R"; } > "$T/t15"
+run_gate "$T/t15" >/dev/null
+[ ! -s "$CHECK_LOG" ] || fail "echo cd must not count, got: $(cat "$CHECK_LOG")"
+
+# 16. empty / corrupt transcript fails closed to the starting worktree
+: > "$T/t16"
+: > "$CHECK_LOG"
+printf '{"transcript_path":"%s"}' "$T/t16" | CLAUDE_PROJECT_DIR="$T/wtA" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
+[ "$(cat "$CHECK_LOG")" = "$T/wtA" ] || fail "empty transcript should fall back to starting worktree"
+# ...but never to a foreign agent's worktree
+: > "$CHECK_LOG"
+printf '{"transcript_path":"%s"}' "$T/t16" | CLAUDE_PROJECT_DIR="$HOME/.codex/worktrees/codex1" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
+[ ! -s "$CHECK_LOG" ] || fail "foreign starting worktree must be ignored"
+
+# 17. extra foreign prefixes via QUALITY_GATE_FOREIGN_PREFIXES
+{ tool '{"file_path":"'"$T"'/wtB/x"}'; } > "$T/t17"
+: > "$CHECK_LOG"
+printf '{"transcript_path":"%s","cwd":"%s"}' "$T/t17" "$R" | QUALITY_GATE_FOREIGN_PREFIXES="$T/wtB" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
+[ ! -s "$CHECK_LOG" ] || fail "custom foreign prefix should be ignored"
 
 echo "quality-gate tests: all passed"

@@ -8,8 +8,8 @@
 # Checks only what changed: skipped entirely when the worktree has no
 # uncommitted changes and no commits beyond origin/main; turbo runs with
 # --affected against the merge-base so unrelated packages are not checked.
-# Order is tests -> lint -> typecheck, strictly sequential, so scratch files
-# created by tests can never be linted mid-run.
+# Order is tests -> lint -> typecheck, strictly sequential (never in parallel),
+# so lint never races a test run that is still creating scratch files.
 
 ACTIVE_DIR="${1:-}"
 [ -d "$ACTIVE_DIR" ] || exit 0
@@ -119,9 +119,10 @@ if ! TYPE_RESULT=$(run_turbo typecheck); then
 $(echo "$TYPE_RESULT" | tail -30)"
 fi
 
-# 4. CodeRabbit on uncommitted changes. Fail-open: if it crashes, allow stop.
-if [ -n "$DIRTY" ] && command -v coderabbit >/dev/null 2>&1; then
-  CR_RESULT=$(coderabbit review --agent -t uncommitted 2>&1) || true
+# 4. CodeRabbit on uncommitted + committed-ahead changes. Fail-open: if it crashes, allow stop.
+if { [ -n "$DIRTY" ] || [ "${AHEAD:-0}" != "0" ]; } && command -v coderabbit >/dev/null 2>&1; then
+  CR_TYPE=uncommitted; [ "${AHEAD:-0}" != "0" ] && CR_TYPE=all
+  CR_RESULT=$(coderabbit review --agent -t "$CR_TYPE" 2>&1) || true
   CR_FINDINGS=$(echo "$CR_RESULT" | jq -Rr 'fromjson? | select(.type == "complete") | .findings // empty' 2>/dev/null | tail -1)
   if [ "$CR_FINDINGS" -gt 0 ] 2>/dev/null; then
     TRIMMED=$(echo "$CR_RESULT" | grep '"type":"finding"' | tail -30)

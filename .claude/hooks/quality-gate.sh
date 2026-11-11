@@ -27,17 +27,23 @@ CHECKER="${QUALITY_GATE_CHECK_SCRIPT:-$HOOK_DIR/quality-gate-check-worktree.sh}"
 WORKTREES=()
 while IFS= read -r wt; do
   [ -n "$wt" ] && WORKTREES+=("$wt")
-done < <("$HOOK_DIR/quality-gate-session-worktrees.sh" "$TRANSCRIPT" "$PROJECT_DIR")
+done < <("$HOOK_DIR/quality-gate-session-worktrees.sh" "$TRANSCRIPT" "$PROJECT_DIR"; echo "rc=$?")
+RC=${WORKTREES[${#WORKTREES[@]}-1]:-rc=0}
+unset 'WORKTREES[${#WORKTREES[@]}-1]'
 
-# No readable transcript: we cannot tell what the session did, so fall back to
-# the worktree the hook was started in (never another agent's, never a guess
-# by mtime) instead of silently disabling every check.
-if [ ${#WORKTREES[@]} -eq 0 ] && { [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; } && [ -d "$PROJECT_DIR" ]; then
+# Transcript missing, unreadable, empty or unparsable (rc=3): we cannot tell what
+# the session did, so FAIL CLOSED to the worktree the hook started in — but only
+# if it belongs to this repo's worktree list and is not another agent's. (A
+# session that touched nothing can then be blocked by pre-existing dirt there;
+# that is the safer failure.)
+if [ "$RC" = "rc=3" ] && [ -d "$PROJECT_DIR" ]; then
   top=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)
-  case "$top" in
-    "$HOME"/.codex/*|"$HOME"/Documents/Codex/*|"") ;;
-    *) WORKTREES+=("$top") ;;
-  esac
+  if [ -n "$top" ] && git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null | grep -qxF "worktree $top"; then
+    case "$top" in
+      "$HOME"/.codex/*|"$HOME"/Documents/Codex/*) ;;
+      *) WORKTREES=("$top") ;;
+    esac
+  fi
 fi
 
 if [ ${#WORKTREES[@]} -eq 0 ]; then

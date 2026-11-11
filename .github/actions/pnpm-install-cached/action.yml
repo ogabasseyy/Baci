@@ -48,6 +48,10 @@ runs:
     # The persistent private CI runner keeps its pnpm store outside the workspace.
     # `git clean` at checkout deletes a workspace-relative store, which forced every
     # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
+    # Only the contabo-baci-ci runners qualify. Each runner process has its own tool cache
+    # directory, so two runners never share a store. The deploy runner shares the production
+    # server (tight disk) and runs these installs rarely, so it keeps the GitHub cache path.
+    # The cache save below never runs for a persistent store (it would archive the wrong path).
     - id: pnpm-store
       name: Select pnpm store directory
       shell: bash
@@ -165,6 +169,7 @@ runs:
     # Cache Save Engine: PR branches are strictly RESTORE-ONLY to prevent cache poisoning & save storage limit (10GB)
     - name: Save pnpm store cache (main branch only)
       if: >
+        steps.pnpm-store.outputs.persistent != 'true' &&
         (runner.environment == 'github-hosted' || inputs.allow-self-hosted-cache-save == 'true') &&
         github.ref == 'refs/heads/main' &&
         github.event_name == 'push' &&

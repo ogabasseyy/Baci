@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,12 @@ import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const PRIVATE = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
+
+// A step that only calls `bash .github/scripts/<name>.sh` keeps its logic in that script, so check the script.
+function scriptText(step) {
+  const call = /^bash (\.github\/scripts\/[\w.-]+\.sh)$/.exec(typeof step.run === 'string' ? step.run.trim() : '');
+  return call ? readFileSync(call[1], 'utf8') : step.run;
+}
 const MOVED_BY_NEEDS = ['cwv-runner-contracts', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc', 'mobile-quality'];
 const MOVED_INLINE = ['silent-revert-guard', 'quality'];
 
@@ -64,9 +71,11 @@ test('the Supabase service-role step lives only in a main-push job on the deploy
   const job = workflow.jobs['quality-quiz-approval'];
   assert.match(job.if, /github\.ref == 'refs\/heads\/main'/);
   assert.ok(workflow.jobs.quality.needs.includes('quality-quiz-approval'));
-  const base = { 'github.event_name': 'push' };
-  assert.deepEqual(privateRunnerRoute(workflow, 'quality-quiz-approval', { ...values(), ...base }), ['self-hosted', 'Linux', 'X64', 'baci-deploy']);
-  assert.equal(privateRunnerRoute(workflow, 'quality-quiz-approval', { ...values(), 'github.event_name': 'merge_group' }), 'ubuntu-24.04');
+  assert.deepEqual(route('quality-quiz-approval', { event: 'push', head: '' }), ['self-hosted', 'Linux', 'X64', 'baci-deploy']);
+  // The same kill switch as every private route: public repo, switch off, or any other event stays hosted.
+  for (const override of [{ event: 'push', privateRepo: false }, { event: 'push', privateRepo: null }, { event: 'push', enabled: '' }, { event: 'push', enabled: 'false' }, { event: 'merge_group' }, { event: 'pull_request' }, { event: 'workflow_dispatch' }]) {
+    assert.equal(route('quality-quiz-approval', override), 'ubuntu-24.04', JSON.stringify(override));
+  }
 });
 
 const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quality-typecheck', 'quality-test', 'quality-test-web', 'build'];
@@ -76,7 +85,7 @@ const HOSTED_GUARD = /^(\s*)if \[ "\$RUNNER_ENVIRONMENT" = 'github-hosted' \]; t
 function privilegedLinesOutsideHostedGuard(step) {
   if (typeof step.run !== 'string') return [];
   if (typeof step.if === 'string' && step.if.includes("runner.environment == 'github-hosted'")) return [];
-  const lines = step.run.split('\n');
+  const lines = scriptText(step).split('\n');
   const guarded = new Set();
   lines.forEach((line, index) => {
     const match = HOSTED_GUARD.exec(line);
@@ -99,7 +108,7 @@ test('privileged installs run only on GitHub-hosted runners; the self-hosted run
 });
 
 test('jobs that need PostgreSQL verify the pre-installed toolchain on the private runner', () => {
-  const scriptOf = (job, name) => workflow.jobs[job].steps.find((step) => step.name === name).run;
+  const scriptOf = (job, name) => scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
   const replay = scriptOf('quality-db-replay', 'Install Supabase replay toolchain');
   const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));
   assert.match(afterGuard, /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/);
@@ -111,12 +120,17 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
   }
 });
 
-test('the hosted PostgreSQL 18 pin and the psql version check name the same release', () => {
-  const script = workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain').run;
+test('every PostgreSQL 18 pin names the same release: hosted install, psql check, replay contract, service container', () => {
+  const script = scriptText(workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain'));
   const pinned = new Set([...script.matchAll(/postgresql(?:-client)?-18=18\.(\d+)-1\.pgdg24\.04\+\d+/g)].map((match) => match[1]));
   const checked = /PostgreSQL\\\) 18\\\.(\d+)\(/.exec(script)?.[1];
   assert.equal(pinned.size, 1, 'server and client packages must pin the same minor release');
   assert.equal([...pinned][0], checked, 'the psql version check must match the pinned release');
+  // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
+  const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
+  assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
+  const image = workflow.jobs['quality-disposable-sql'].services.postgres.image;
+  assert.match(image, new RegExp(`^postgres:18\\.${checked}@sha256:[0-9a-f]{64}$`), 'the Disposable SQL database container must use the same release, pinned by digest');
 });
 
 test('the private runner keeps a persistent pnpm store and skips the GitHub cache download', async () => {

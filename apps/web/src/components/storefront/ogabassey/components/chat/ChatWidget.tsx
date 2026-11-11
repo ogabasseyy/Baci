@@ -3,6 +3,7 @@ import '@/app/(storefront)/storefront-chat.css';
 import { Sparkles, X } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import type React from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
@@ -10,6 +11,7 @@ import { asRoute } from '@/lib/routes';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatInput } from './chat-input';
+import { EkaetteAskBar } from './EkaetteAskBar';
 import { ChatCartReview } from './chat-cart-review';
 import { ChatMessageBubble } from './chat-message';
 import { resolveSuggestionNavigationPath, SUGGESTIONS } from './types';
@@ -17,6 +19,7 @@ import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
 export interface ChatWidgetProps {
   openOnMount?: boolean;
+  initialMessage?: string;
 }
 const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
   'data-mobile-offset-cart': '6.75rem',
@@ -26,6 +29,7 @@ const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
 } as const;
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
   openOnMount = false,
+  initialMessage,
 }) => {
   const { isCartOpen } = useCart();
   const { theme } = useV2Theme();
@@ -80,6 +84,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
   const anchorClasses = [
     'ogabassey-chat-anchor',
+    !isSanta && 'ogabassey-chat-anchor--ask',
     isCartOpen && 'ogabassey-chat-anchor--hidden',
   ]
     .filter(Boolean)
@@ -93,6 +98,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     .join(' ');
 
   useChatOpenOnMount(openOnMount, setIsOpen);
+
+  // The deferred launcher hands a submitted draft across the lazy boundary.
+  // Guard with a ref so Strict Mode effect replay cannot submit it twice.
+  const initialMessageSent = useRef(false);
+  useEffect(() => {
+    const message = initialMessage?.trim();
+    if (!message || initialMessageSent.current) return;
+    initialMessageSent.current = true;
+    setIsOpen(true);
+    void handleSend(message);
+  }, [handleSend, initialMessage, setIsOpen]);
 
   return (
     <div
@@ -141,7 +157,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                       <span className="text-xs ml-1">{'\u{1F384}'}</span>
                     </>
                   ) : (
-                    'Ogabassey AI'
+                    'Ekaette'
                   )}
                 </h3>
                 <p
@@ -259,41 +275,41 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             </button>
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className={buttonClasses}
-          aria-label="Toggle chat"
-        >
-          {isOpen ? (
-            <X size={28} />
-          ) : (
-            <>
-              {isSanta ? (
-                <div className="relative w-full h-full">
-                  <Image
-                    src="/african-santa-head.svg"
-                    alt="Santa"
-                    fill
-                    sizes="64px"
-                    className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
-                  />
-                </div>
-              ) : (
-                <Sparkles
-                  size={28}
-                  className="md:w-8 md:h-8 drop-shadow-xs"
-                  fill="currentColor"
-                  fillOpacity={0.1}
+        {!isSanta && !isOpen && (
+          <EkaetteAskBar
+            isLoading={isLoading}
+            onChange={setInput}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!input.trim() || isLoading) return;
+              setIsOpen(true);
+              void handleSend(input);
+            }}
+            value={input}
+          />
+        )}
+        {isSanta && (
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={buttonClasses}
+            aria-label="Toggle chat"
+          >
+            {isOpen ? (
+              <X size={28} />
+            ) : (
+              <div className="relative w-full h-full">
+                <Image
+                  src="/african-santa-head.svg"
+                  alt="Santa"
+                  fill
+                  sizes="64px"
+                  className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
                 />
-              )}
-              <span className="ogabassey-chat-badge">
-                <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">AI</span>
-              </span>
-            </>
-          )}
-        </button>
+              </div>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

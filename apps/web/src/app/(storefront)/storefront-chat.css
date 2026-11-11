@@ -21,6 +21,83 @@
     display: none;
   }
 
+  .ogabassey-chat-anchor--ask {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+
+  .ogabassey-chat-ask {
+    align-items: center;
+    background: var(--ogabassey-surface);
+    border: 1px solid
+      color-mix(in srgb, var(--ogabassey-surface-text) 18%, transparent);
+    border-radius: 999px;
+    box-shadow: 0 12px 32px
+      color-mix(in srgb, var(--ogabassey-surface-text) 18%, transparent);
+    display: flex;
+    gap: 0.5rem;
+    min-height: 3.5rem;
+    padding: 0.35rem 0.4rem 0.35rem 1rem;
+    width: 100%;
+  }
+
+  .ogabassey-chat-ask-container {
+    max-width: calc(100vw - 2rem);
+    width: 22rem;
+  }
+
+  .ogabassey-chat-ask-error {
+    color: var(--ogabassey-surface-text);
+    font-size: 0.75rem;
+    margin: 0.5rem 0 0;
+    text-align: center;
+  }
+
+  .ogabassey-chat-ask input {
+    background: transparent;
+    border: 0;
+    color: var(--ogabassey-surface-text);
+    flex: 1;
+    font: inherit;
+    font-size: 0.9375rem;
+    min-width: 0;
+    outline: none;
+  }
+
+  .ogabassey-chat-ask input::placeholder {
+    color: color-mix(in srgb, var(--ogabassey-surface-text) 58%, transparent);
+    opacity: 1;
+  }
+
+  .ogabassey-chat-ask:focus-within {
+    outline: 2px solid var(--ogabassey-brand);
+    outline-offset: 2px;
+  }
+
+  .ogabassey-chat-ask button {
+    align-items: center;
+    background: var(--ogabassey-brand);
+    border: 0;
+    border-radius: 999px;
+    color: var(--ogabassey-surface);
+    cursor: pointer;
+    display: inline-flex;
+    flex: 0 0 2.75rem;
+    height: 2.75rem;
+    justify-content: center;
+  }
+
+  .ogabassey-chat-ask button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .ogabassey-chat-ask button:focus-visible {
+    outline: 2px solid var(--ogabassey-surface-text);
+    outline-offset: 2px;
+  }
+
   .ogabassey-chat-anchor[data-mobile-offset="default"] {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
@@ -145,6 +222,12 @@
     .ogabassey-chat-anchor[data-mobile-offset="product"] {
       bottom: 1rem;
       right: 1rem;
+    }
+
+    .ogabassey-chat-anchor.ogabassey-chat-anchor--ask {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
     }
 
     .ogabassey-chat-button {

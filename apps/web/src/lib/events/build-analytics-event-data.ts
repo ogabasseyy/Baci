@@ -1,6 +1,7 @@
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
 import type { AnalyticsEventRequest } from '@/schemas/analytics-event';
 import { clientMarketingTargets } from './client-marketing-targets';
+import { redactStoredPageUrl } from './redact-stored-page-url';
 
 function assignDefined(
   target: Record<string, unknown>,
@@ -8,6 +9,12 @@ function assignDefined(
   value: unknown
 ): void {
   if (value !== undefined) target[key] = value;
+}
+
+function redactCustomData<T extends { url?: string }>(customData: T): T {
+  return customData.url
+    ? { ...customData, url: redactStoredPageUrl(customData.url) }
+    : customData;
 }
 
 export function buildAnalyticsEventData(
@@ -22,8 +29,16 @@ export function buildAnalyticsEventData(
     });
   assignDefined(eventData, 'session_id', input.session_id);
   assignDefined(eventData, 'user_agent', input.user_agent);
-  assignDefined(eventData, 'referrer', input.referrer);
-  assignDefined(eventData, 'page_url', input.page_url);
+  assignDefined(
+    eventData,
+    'referrer',
+    input.referrer ? redactStoredPageUrl(input.referrer) : input.referrer
+  );
+  assignDefined(
+    eventData,
+    'page_url',
+    input.page_url ? redactStoredPageUrl(input.page_url) : input.page_url
+  );
 
   if (
     [
@@ -50,7 +65,8 @@ export function buildAnalyticsEventData(
     );
     assignDefined(eventData, 'items', contents);
     assignDefined(eventData, 'total', input.total ?? input.custom_data?.value);
-    if (input.custom_data) eventData.custom_data = input.custom_data;
+    if (input.custom_data)
+      eventData.custom_data = redactCustomData(input.custom_data);
     return eventData;
   }
 
@@ -72,7 +88,8 @@ export function buildAnalyticsEventData(
       input.item_count ?? contents?.length
     );
     assignDefined(eventData, 'items', contents);
-    if (input.custom_data) eventData.custom_data = input.custom_data;
+    if (input.custom_data)
+      eventData.custom_data = redactCustomData(input.custom_data);
     return eventData;
   }
 
@@ -82,6 +99,7 @@ export function buildAnalyticsEventData(
     return eventData;
   }
 
-  if (input.custom_data) eventData.custom_data = input.custom_data;
+  if (input.custom_data)
+    eventData.custom_data = redactCustomData(input.custom_data);
   return eventData;
 }

@@ -5,7 +5,7 @@ import type {
   PublicBootstrap,
 } from '@baci/shared/experience';
 import { NextRequest } from 'next/server';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -53,13 +53,15 @@ import { createTransientOutputStore } from '../../tools/experience-runner/transi
 import { createApprovalCapture } from '../../tools/experience-verifier/approval-capture';
 import { createVerifierApprovalRecorder } from '../../tools/experience-verifier/approval-recorder';
 import { createVerifierAttestationHandler } from '../../tools/experience-verifier/attestation-handler';
+import { createVerifierBuildRecorder } from '../../tools/experience-verifier/build-recorder';
+import { createIndependentBuildVerifier } from '../../tools/experience-verifier/build-verifier';
 import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-store';
-import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
 import { confirmSyntheticDraft } from './owner-approval-loopback.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
 import { sendVerifierTwice } from './verifier-loopback.test-support';
+import { setupVerifierPool } from './verifier-pool.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
@@ -155,6 +157,19 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       capabilities: manifest.capabilities,
     };
     let artifacts = createLocalPrerenderArtifacts();
+    verifierPool = await setupVerifierPool(f);
+    await f.db.pool.query('UPDATE merchants SET slug=$2 WHERE id=$1', [
+      f.merchantId,
+      'synthetic',
+    ]);
+    const verifyBuild = createIndependentBuildVerifier({
+      execute,
+      bootstrap: async () => bootstrap,
+      canonicalBase: async () => hostOrigin,
+      previewOrigin,
+      executionOrigin,
+      record: await createVerifierBuildRecorder(verifierPool),
+    });
     const dependencies: Parameters<typeof runExperienceBuild>[2] = {
       profile: 'production',
       previewOrigin,
@@ -165,25 +180,9 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       execute,
       prerenderArtifacts: artifacts,
       bootstrap: async () => bootstrap,
-      recordVerifiedEvidence: async (receipt) => {
-        const client = await f.db.pool.connect();
-        try {
-          await runVerifierTransaction(client, () =>
-            client.query(
-              'INSERT INTO experience_evidence(merchant_id,job_id,attempt_nonce,build_digest,receipt_digest,host_origin) VALUES($1,$2,$3,$4,$5,$6)',
-              [
-                receipt.merchantId,
-                receipt.jobId,
-                receipt.attemptNonce,
-                receipt.buildDigest,
-                receipt.receiptDigest,
-                receipt.hostOrigin,
-              ]
-            )
-          );
-        } finally {
-          client.release();
-        }
+      recordVerifiedEvidence: async ({ merchantId, ...receipt }) => {
+        if (merchantId !== f.merchantId) throw Error('INVALID_MERCHANT');
+        await verifyBuild(f.owner, receipt);
       },
     };
     const build = await runExperienceBuild(
@@ -214,34 +213,6 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     expect(committed.error).toBeNull();
     expect(committed.data).toHaveLength(1);
 
-    if (!f.db.localDatabase) throw Error('LOCAL_DATABASE_REQUIRED');
-    await f.db.pool.query(
-      readFileSync(
-        new URL(
-          '../../../../supabase/migrations/20261111232000_experience_verifier_nonces.sql',
-          import.meta.url
-        ),
-        'utf8'
-      )
-    );
-    await f.db.pool.query(
-      readFileSync(
-        new URL(
-          '../../../../supabase/migrations/20261111231000_experience_approval_retry_proofs.sql',
-          import.meta.url
-        ),
-        'utf8'
-      )
-    );
-    await f.db.pool.query(
-      'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
-    );
-    verifierPool = new Pool({
-      host: f.db.localDatabase.socketDirectory,
-      user: 'baci_experience_verifier_login',
-      database: 'postgres',
-      options: '-c role=baci_experience_verifier',
-    });
     const capture = await createVerifierCaptureWorker({
       pool: verifierPool,
       hostOrigin,

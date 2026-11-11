@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type {
   ExperienceManifest,
@@ -52,6 +52,7 @@ import {
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
 import { createApprovalCapture } from '../../tools/experience-verifier/approval-capture';
 import { createVerifierApprovalRecorder } from '../../tools/experience-verifier/approval-recorder';
+import { createVerifierAttestationHandler } from '../../tools/experience-verifier/attestation-handler';
 import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
@@ -257,7 +258,43 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         throw Error('NOT_AVAILABLE_IN_LOCAL_TEST');
       },
     });
-    await verifier.attest(f.owner.supabase, approval.approvalId, 'draft');
+    const verifierKey = randomBytes(32);
+    const usedNonces = new Set<string>();
+    const verifierHandler = createVerifierAttestationHandler({
+      key: verifierKey,
+      consumeNonce: async (nonce) => {
+        if (usedNonces.has(nonce)) return false;
+        usedNonces.add(nonce);
+        return true;
+      },
+      resolveUserClient: async (token) => {
+        if (token !== f.owner.accessToken) throw Error('INVALID_TOKEN');
+        return f.owner.supabase;
+      },
+      attest: verifier.attest,
+    });
+    const payload = JSON.stringify({
+      version: 1,
+      nonce: randomBytes(32).toString('hex'),
+      expiresAt: Date.now() + 60000,
+      accessToken: f.owner.accessToken,
+      approvalId: approval.approvalId,
+      kind: 'draft',
+    });
+    const signature = createHmac('sha256', verifierKey)
+      .update(`verifier-attest/v1\n${payload}`)
+      .digest('hex');
+    const attestationRequest = () =>
+      new Request('https://verifier.baci-internal.invalid/v1/attest', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-baci-verifier-signature': signature,
+        },
+        body: payload,
+      });
+    expect((await verifierHandler(attestationRequest())).status).toBe(204);
+    expect((await verifierHandler(attestationRequest())).status).toBe(409);
     const proof = await f.db.pool.query(
       'SELECT effect_digest FROM experience_authorization.approval_checks WHERE intent_id=$1',
       [approval.approvalId]

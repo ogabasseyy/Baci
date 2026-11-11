@@ -10,6 +10,8 @@ export {
 } from './pending-line-id';
 
 const noop = (): void => undefined;
+/** Pending ids a shopper can still be holding, e.g. in an open confirmation. */
+const MAX_REMEMBERED_ADDS = 50;
 
 export interface PendingEdit {
   action: SharedCartWrite;
@@ -118,6 +120,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       edits = [];
       running = null;
       landed.clear();
+      addedLines.clear();
     },
     /** Keeps a pending line's identity while an unpredicted tap (assurance, negotiation) waits on it. */
     pin(action: SharedCartWrite): () => void {
@@ -155,8 +158,10 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
       landed.delete(edit);
       if (running === edit) running = null;
       edits = edits.filter((entry) => entry !== edit);
-      // Keep an added line's identity only while an edit still needs it.
-      for (const id of [...addedLines.keys()])
+      // A confirmation dialog can hold a pending id after its add settles, so
+      // identities outlive their edit; only the oldest unused ones are dropped.
+      for (const id of [...addedLines.keys()]) {
+        if (addedLines.size <= MAX_REMEMBERED_ADDS) break;
         if (
           !pinned.has(id) &&
           !edits.some(
@@ -168,6 +173,7 @@ export function createPendingEdits(show: (items: CartItem[]) => void) {
           )
         )
           addedLines.delete(id);
+      }
       show(view());
     },
     /**

@@ -78,3 +78,25 @@ it('matches the confirmed line by server identity even when display-only fields 
     quantity: 3,
   });
 });
+
+it('still resolves a pending line held by a confirmation after its add settled', () => {
+  const edits = createPendingEdits(() => undefined);
+  edits.confirm([]);
+  const add = edits.begin({ type: 'add', item: bare });
+  const held = add.pendingId;
+  edits.confirm([line('real', 'a')]);
+  edits.settle(add);
+  expect(edits.resolve({ type: 'remove', id: held })).toEqual({
+    type: 'remove',
+    id: 'real',
+  });
+});
+
+it('forgets remembered pending lines when the cart is reset', () => {
+  const edits = createPendingEdits(() => undefined);
+  edits.confirm([]);
+  const add = edits.begin({ type: 'add', item: bare });
+  edits.settle(add);
+  edits.reset([line('real', 'a')]);
+  expect(edits.resolve({ type: 'remove', id: add.pendingId })).toBeNull();
+});

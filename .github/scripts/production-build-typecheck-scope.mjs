@@ -17,6 +17,7 @@ export const PRODUCTION_TYPECHECK_TRIGGERS = [
   /^package\.json$/,
   /^pnpm-lock\.yaml$/,
   /^pnpm-workspace\.yaml$/,
+  /^\.npmrc$/,
   /^turbo\.json$/,
   /^tsconfig[^/]*\.json$/,
   /^\.github\/workflows\/ci\.yml$/,

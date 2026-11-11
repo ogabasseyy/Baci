@@ -8,7 +8,7 @@ import { verifyCartSessionProof } from '@/lib/cart/session-proof';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 
-/** Merchant and proof resolution wiring shared by the cart root route. */
+/** Merchant and proof resolution wiring shared by the cart read and edit routes. */
 export function contextDeps(
   requireScope: CartRequestContextDeps['requireScope'],
   wrongScopeError: CartRequestContextDeps['wrongScopeError'],

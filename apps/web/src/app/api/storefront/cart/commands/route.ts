@@ -6,7 +6,6 @@ import {
 } from '@/lib/cart/grant-operations';
 import {
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -22,16 +21,14 @@ import { mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
   issueCartSessionProof,
-  verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import {
   commandVoucherLines,
   voucherAttachmentsValid,
 } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
-import { createAnonClient } from '@/lib/supabase/anon';
 import { sharedCartMutationRequestSchema } from '@/schemas/cart';
+import { contextDeps } from '../context-deps';
 
 /**
  * POST /api/storefront/cart/commands
@@ -52,26 +49,11 @@ export async function POST(request: NextRequest) {
 
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
-    const loadMerchantFeatures = createAnonMerchantFeatureLookup(
-      createAnonClient()
-    );
     const context = await timer.measure('auth', () =>
-      resolveCartRequestContext(request, {
-        merchant: {
-          resolveAlias: getCurrentSlugForAlias,
-          rpcClient: createAnonClient(),
-          // `features` is reported inside `auth`, which covers the whole
-          // merchant and proof resolution.
-          loadMerchantFeatures: (merchantId) =>
-            timer.measure('features', () => loadMerchantFeatures(merchantId)),
-        },
-        requireScope: 'session',
-        verify: (proof) =>
-          verifyCartSessionProof(proof, {
-            environment: getCartProofEnvironment(),
-          }),
-        wrongScopeError: 'not_found',
-      })
+      resolveCartRequestContext(
+        request,
+        contextDeps('session', 'not_found', timer)
+      )
     );
     if (!context.ok) {
       return cartErrorResponse(context.error);

@@ -30,6 +30,17 @@ separately configured HTTPS ingress must run with access to that socket and
 route only the intended broker endpoints. The listener is not started by
 importing or constructing the runtime and does not provision an ingress.
 
+`startProductionAuthBroker` accepts trusted operator configuration and opens a
+TLS-verified pool only for the dedicated auth-storage role. It rejects secret
+Supabase keys, mismatched upstream origins, unsafe callback/socket paths and
+reused key material, then starts the private socket only after runtime checks
+pass. It closes the listener and pool on shutdown. Configuration loading,
+credential provisioning, process supervision and HTTPS ingress remain separate
+deployment tasks. The direct broker disconnect endpoint is disabled; the normal
+owner dashboard/RLS disconnect path is separately gated and must be enabled and
+tested before merchant activation. Never pass configuration from an HTTP or MCP
+request, and do not log configuration or raw upstream/database errors.
+
 ## Authority and storage
 
 - `createBuilderAuthRuntime` requires the private `baci_builder_auth_storage`

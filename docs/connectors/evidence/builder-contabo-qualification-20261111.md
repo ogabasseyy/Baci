@@ -31,4 +31,11 @@ Linux runner with a v2 observed installation pin, gVisor networking disabled,
 Node 24.21.0 for compilation, Node 24.20.0 for browser work, and no orders or
 publication. The observed pin was generated on the same host and is qualification
 evidence only: it is not independent release provenance or permission to activate
-the runner for merchants. Desktop/mobile browser capture is a separate test.
+the runner for merchants.
+
+A second offline synthetic run reverified the v2 installation and exercised the
+signed runner's Chromium capture at widths 390 and 1440. Both returned the
+expected semantic heading and PNG evidence with sandbox networking disabled;
+reported job times were 31,790 ms and 32,156 ms. No orders or storefront
+publication occurred. This is an offline host qualification, not live OAuth,
+checkout, field performance, or independent production-image provenance.

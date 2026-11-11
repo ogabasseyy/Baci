@@ -218,6 +218,9 @@ test('the actual provider advertises the HTTPS issuer through the private listen
     assert.equal(result.status, 200);
     const metadata = JSON.parse(result.body);
     assert.equal(metadata.issuer, 'https://mcp.usebaci.com');
+    assert.equal(metadata.authorization_response_iss_parameter_supported, true);
+    assert(metadata.code_challenge_methods_supported.includes('S256'));
+    assert(metadata.token_endpoint_auth_methods_supported.includes('none'));
     assert.equal(
       new URL(metadata.authorization_endpoint).origin,
       'https://mcp.usebaci.com'

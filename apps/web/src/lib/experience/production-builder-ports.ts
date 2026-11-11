@@ -65,6 +65,7 @@ export function installProductionBuilderPorts(
   let closed = false;
   return {
     deliver: ports.deliver,
+    ownerPreviewLaunch: ports.composition.owner.createPreviewLaunch,
     close() {
       if (closed) return;
       closed = true;

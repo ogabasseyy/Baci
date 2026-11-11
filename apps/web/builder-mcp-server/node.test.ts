@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { once } from 'node:events';
+import { request } from 'node:http';
 import { expect, it, vi } from 'vitest';
 import { BUILDER_METADATA_PATH } from './metadata';
 import { createBuilderMcpNodeServer } from './node';
@@ -103,6 +104,74 @@ it('uses explicitly supplied trusted transport dependencies for a co-located gat
       { pageSize: 20 },
       expect.any(AbortSignal)
     );
+  } finally {
+    await runtime.close();
+  }
+});
+
+it('routes the internal owner preview only when explicitly installed', async () => {
+  const ownerPreview = vi.fn(async () => Response.json({ ok: true }));
+  const runtime = createBuilderMcpNodeServer({ ownerPreview });
+  runtime.server.listen(0, '127.0.0.1');
+  await once(runtime.server, 'listening');
+  const address = runtime.server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const response = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/internal/owner/preview',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+    expect(response).toBe(200);
+    expect(ownerPreview).toHaveBeenCalledOnce();
+  } finally {
+    await runtime.close();
+  }
+});
+
+it('does not expose the owner preview route by default', async () => {
+  const runtime = createBuilderMcpNodeServer();
+  runtime.server.listen(0, '127.0.0.1');
+  await once(runtime.server, 'listening');
+  const address = runtime.server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/internal/owner/preview',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+    expect(status).toBe(404);
   } finally {
     await runtime.close();
   }

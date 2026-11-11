@@ -31,6 +31,8 @@ export async function startProductionBuilderHost(settings: {
     return {
       deliver: installed.deliver,
       publicJwks: broker.publicBinding.jwks,
+      ownerSupabase: broker.publicBinding.supabase,
+      ownerPreviewLaunch: installed.ownerPreviewLaunch,
       close() {
         closing ??= (async () => {
           try {

@@ -6,6 +6,8 @@ const f = vi.hoisted(() => ({
   host: vi.fn(),
   listener: vi.fn(),
   delivery: vi.fn(),
+  bridge: vi.fn(),
+  userClient: vi.fn(),
 }));
 vi.mock('./production-builder-host', () => ({
   startProductionBuilderHost: f.host,
@@ -16,8 +18,96 @@ vi.mock('./production-builder-listener', () => ({
 vi.mock('./production-delivery-listener', () => ({
   createProductionDeliveryListener: f.delivery,
 }));
+vi.mock('./owner-preview-bridge', () => ({
+  createOwnerPreviewBridge: f.bridge,
+}));
+vi.mock('./owner-preview-user-client', () => ({
+  createOwnerPreviewUserClientResolver: f.userClient,
+}));
 
 import { startProductionBuilderStack } from './production-builder-stack';
+
+it('attaches the owner bridge only when a trusted key and durable nonce store are supplied', async () => {
+  const server = () => ({
+    listen: vi.fn((_port, _host, callback) => callback()),
+    once: vi.fn(),
+    off: vi.fn(),
+  });
+  const handler = vi.fn();
+  const resolveUserClient = vi.fn();
+  const launch = vi.fn();
+  const supabase = {
+    url: 'https://project.supabase.co',
+    anonKey: 'sb_publishable_synthetic',
+  };
+  f.host.mockResolvedValue({
+    publicJwks: { keys: [] },
+    ownerSupabase: supabase,
+    ownerPreviewLaunch: launch,
+    deliver: vi.fn(),
+    close: vi.fn(async () => {}),
+  });
+  f.listener.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  f.delivery.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  f.userClient.mockReturnValue(resolveUserClient);
+  f.bridge.mockReturnValue(handler);
+  const host = {
+    integration: {
+      hostOrigin: 'https://builder.synthetic.test',
+      executionOrigin: 'https://output.runtime.test',
+      runner: { key: new Uint8Array(32).fill(5) },
+      build: { key: new Uint8Array(32).fill(6) },
+    },
+  } as never;
+  const ownerBridge = {
+    key: new Uint8Array(32).fill(4),
+    consumeNonce: vi.fn(async () => true),
+  };
+  const stack = await startProductionBuilderStack({
+    host,
+    port: 8790,
+    deliveryPort: 8791,
+    ownerBridge,
+  });
+  try {
+    expect(f.userClient).toHaveBeenCalledWith(supabase);
+    expect(f.bridge).toHaveBeenCalledWith({
+      ...ownerBridge,
+      previewOrigin: 'https://builder.synthetic.test',
+      resolveUserClient,
+      launch,
+    });
+    expect(f.listener).toHaveBeenCalledWith({ keys: [] }, handler);
+  } finally {
+    await stack.close();
+  }
+});
+
+it('refuses an owner bridge key reused for the runner before starting the host', async () => {
+  f.host.mockClear();
+  const key = new Uint8Array(32).fill(4);
+  const host = {
+    integration: {
+      runner: { key },
+      build: { key: new Uint8Array(32).fill(6) },
+    },
+  } as never;
+  await expect(
+    startProductionBuilderStack({
+      host,
+      port: 8790,
+      deliveryPort: 8791,
+      ownerBridge: { key, consumeNonce: vi.fn() },
+    })
+  ).rejects.toThrow('INVALID_OWNER_BRIDGE_CONFIG');
+  expect(f.host).not.toHaveBeenCalled();
+});
 
 it('starts isolated output delivery alongside MCP and shuts down before the host', async () => {
   const calls: string[] = [];

@@ -1,5 +1,8 @@
 import 'server-only';
+import { timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
+import { createOwnerPreviewBridge } from './owner-preview-bridge';
+import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
 import { startProductionBuilderHost } from './production-builder-host';
 import { createProductionBuilderListener } from './production-builder-listener';
 import { createProductionDeliveryListener } from './production-delivery-listener';
@@ -20,6 +23,10 @@ export async function startProductionBuilderStack(settings: {
   host: Parameters<typeof startProductionBuilderHost>[0];
   port: number;
   deliveryPort: number;
+  ownerBridge?: {
+    key: Uint8Array;
+    consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
+  };
 }) {
   if (
     !Number.isInteger(settings.port) ||
@@ -31,12 +38,39 @@ export async function startProductionBuilderStack(settings: {
     settings.deliveryPort === settings.port
   )
     throw Error('INVALID_LISTENER_PORT');
+  if (settings.ownerBridge) {
+    const { key } = settings.ownerBridge;
+    const runnerKey = settings.host.integration.runner.key;
+    const buildKey = settings.host.integration.build.key;
+    if (
+      key.length !== 32 ||
+      runnerKey.length < 32 ||
+      buildKey.length < 32 ||
+      (runnerKey.length === key.length && timingSafeEqual(key, runnerKey)) ||
+      (buildKey.length === key.length && timingSafeEqual(key, buildKey))
+    )
+      throw Error('INVALID_OWNER_BRIDGE_CONFIG');
+  }
   let host: Awaited<ReturnType<typeof startProductionBuilderHost>> | undefined;
   let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
   let delivery: ReturnType<typeof createProductionDeliveryListener> | undefined;
   try {
     host = await startProductionBuilderHost(settings.host);
-    listener = createProductionBuilderListener(host.publicJwks);
+    const ownerPreview = settings.ownerBridge
+      ? createOwnerPreviewBridge({
+          ...settings.ownerBridge,
+          previewOrigin:
+            settings.host.integration.previewOrigin ??
+            settings.host.integration.hostOrigin,
+          resolveUserClient: createOwnerPreviewUserClientResolver(
+            host.ownerSupabase
+          ),
+          launch: host.ownerPreviewLaunch,
+        })
+      : undefined;
+    listener = ownerPreview
+      ? createProductionBuilderListener(host.publicJwks, ownerPreview)
+      : createProductionBuilderListener(host.publicJwks);
     await listen(listener.server, settings.port);
     delivery = createProductionDeliveryListener({
       executionOrigin: settings.host.integration.executionOrigin,

@@ -6,9 +6,13 @@ import { createBuilderTransportVerifier } from '../../../builder-mcp-server/toke
 import { createProductionBuilderLocalForward } from './production-builder-local-forward';
 
 /** Broker public keys and gateway are supplied only by the trusted host process. */
-export function createProductionBuilderListener(jwks: JSONWebKeySet) {
+export function createProductionBuilderListener(
+  jwks: JSONWebKeySet,
+  ownerPreview?: (request: Request) => Promise<Response>
+) {
   return createBuilderMcpNodeServer({
     experience: { enabled: true },
+    ownerPreview,
     verifyAccessToken: createBuilderTransportVerifier(createLocalJWKSet(jwks)),
     executeBuilderTool: createProductionBuilderLocalForward(
       getInstalledBuilderGateway

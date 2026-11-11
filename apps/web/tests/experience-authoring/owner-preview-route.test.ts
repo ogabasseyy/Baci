@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { readdirSync, readFileSync } from 'node:fs';
+import { request as nodeRequest } from 'node:http';
 import { NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
@@ -31,6 +33,7 @@ import { POST } from '@/app/api/builder-experience/preview/route';
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
+import { createProductionBuilderListener } from '@/lib/experience/production-builder-listener';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -38,6 +41,7 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
   const f = await experienceDataFixture();
   let pool: Pool | undefined;
   let uninstall: (() => void) | undefined;
+  let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
   try {
     const directory = new URL(
       '../../../../supabase/migrations/',
@@ -89,10 +93,49 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
         token === f.owner.accessToken ? f.owner.supabase : f.other.supabase,
       launch,
     });
+    listener = createProductionBuilderListener({ keys: [] }, bridge);
+    listener.server.listen(0, '127.0.0.1');
+    await once(listener.server, 'listening');
+    const address = listener.server.address();
+    if (!address || typeof address === 'string')
+      throw Error('LOCAL_LISTENER_MISSING');
     const client = createOwnerPreviewBridgeClient({
       key,
       executionOrigin: 'https://output.runtime.test',
-      fetch: (url, init) => bridge(new Request(url, init)),
+      fetch: (url, init) => {
+        if (
+          url !== 'https://mcp.usebaci.com/internal/owner/preview' ||
+          typeof init?.body !== 'string'
+        )
+          throw Error('INVALID_FIXTURE_REQUEST');
+        const headers = new Headers(init.headers);
+        headers.set('host', 'mcp.usebaci.com');
+        return new Promise<Response>((resolve, reject) => {
+          const req = nodeRequest(
+            {
+              host: '127.0.0.1',
+              port: address.port,
+              path: '/internal/owner/preview',
+              method: 'POST',
+              headers: Object.fromEntries(headers),
+            },
+            (res) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => chunks.push(chunk));
+              res.on('end', () =>
+                resolve(
+                  new Response(Buffer.concat(chunks), {
+                    status: res.statusCode,
+                    headers: { 'content-type': 'application/json' },
+                  })
+                )
+              );
+            }
+          );
+          req.on('error', reject);
+          req.end(init.body);
+        });
+      },
     });
     uninstall = installRemoteOwnerPreview(client);
     state.client = f.owner.supabase;
@@ -126,6 +169,7 @@ it('routes a normal owner web preview through the signed handoff and durable RLS
     state.csrf = true;
     state.client = undefined;
     uninstall?.();
+    await listener?.close();
     await pool?.end();
     await f.close();
   }

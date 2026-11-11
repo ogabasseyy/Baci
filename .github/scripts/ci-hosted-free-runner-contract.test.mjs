@@ -131,6 +131,11 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
   const replay = scriptOf('quality-db-replay', 'Install Supabase replay toolchain');
   const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));
   assert.match(afterGuard, /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/);
+  // The suites start their own servers, so the server programs must be present and on the pinned release too.
+  for (const program of ['pg_ctl', 'postgres', 'pg_isready']) {
+    assert.match(afterGuard, new RegExp(`test -x /usr/lib/postgresql/18/bin/${program}\\n`), program);
+  }
+  assert.match(afterGuard, /\/usr\/lib\/postgresql\/18\/bin\/postgres --version \| grep -Eq '\^postgres /);
   assert.match(afterGuard, /test -x \/usr\/local\/bin\/supabase-go/);
   assert.match(afterGuard, /supabase --version/);
   for (const [job, name] of [['quality-disposable-sql', 'Install PostgreSQL client and server binaries'], ['quality-misc', 'Run PiggyVest legacy runbook SQL against scratch PostgreSQL'], ['quality-misc', 'Test cart quota guard staging and signed PostgREST']]) {
@@ -142,9 +147,12 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
 test('every PostgreSQL 18 pin names the same release: hosted install, psql check, replay contract, service container', () => {
   const script = scriptText(workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain'));
   const pinned = new Set([...script.matchAll(/postgresql(?:-client)?-18=18\.(\d+)-1\.pgdg24\.04\+\d+/g)].map((match) => match[1]));
-  const checked = /PostgreSQL\\\) 18\\\.(\d+)\(/.exec(script)?.[1];
+  // Two checks name the release: `psql --version` and `postgres --version` (a runner can have a new client next to an old server).
+  const checkedAll = [...script.matchAll(/PostgreSQL\\\) 18\\\.(\d+)\(/g)].map((match) => match[1]);
+  const checked = checkedAll[0];
   assert.equal(pinned.size, 1, 'server and client packages must pin the same minor release');
-  assert.equal([...pinned][0], checked, 'the psql version check must match the pinned release');
+  assert.equal(checkedAll.length, 2, 'both the psql and the postgres version checks must exist');
+  assert.deepEqual([...new Set(checkedAll)], [...pinned], 'the psql and postgres version checks must match the pinned release');
   // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
   const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
   assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
@@ -165,7 +173,8 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.ok(steps.indexOf(select) < steps.indexOf(restore));
   const prune = steps.find((step) => step.name === 'Prune an oversized persistent pnpm store');
   assert.equal(prune.if, "steps.pnpm-store.outputs.persistent == 'true'");
-  assert.match(prune.run, /pnpm store prune/);
+  // The prune names the measured store explicitly and is housekeeping only: a failure warns instead of failing the job.
+  assert.match(prune.run, /pnpm store prune --store-dir "\$STORE_DIR" \|\| echo "::warning::/);
   assert.ok(steps.indexOf(configure) < steps.indexOf(prune) && steps.indexOf(prune) < steps.findIndex((step) => step.name === 'Install Dependencies'));
   const run = (persistent, storeDir) => {
     const out = spawnSync('bash', ['-c', `${select.run}\ncat "$GITHUB_OUTPUT"`], {

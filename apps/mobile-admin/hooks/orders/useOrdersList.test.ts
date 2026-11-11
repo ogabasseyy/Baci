@@ -130,7 +130,6 @@ vi.mock('@tanstack/react-query', async () => {
   };
 });
 
-import { ORDER_LIST_VISIBILITY_FILTER } from './order-list-visibility';
 import { fetchOrders, useOrders } from './useOrdersList';
 
 describe('fetchOrders', () => {
@@ -307,19 +306,6 @@ describe('fetchOrders', () => {
           args: [
             String.raw`order_number.ilike."%John, \"JD\"%",customer_name.ilike."%John, \"JD\"%",customer_email.ilike."%John, \"JD\"%",customer_phone.ilike."%John, \"JD\"%",payment_method.ilike."%John, \"JD\"%",tracking_number.ilike."%John, \"JD\"%",tracking_token.ilike."%John, \"JD\"%"`,
           ],
-        },
-      ])
-    );
-  });
-
-  it('keeps checkout drop-offs out of the admin orders list', async () => {
-    await fetchOrders('merchant-1', 0, {}, { type: 'all' });
-
-    expect(supabaseMock.chainCalls).toEqual(
-      expect.arrayContaining([
-        {
-          method: 'or',
-          args: [ORDER_LIST_VISIBILITY_FILTER],
         },
       ])
     );

@@ -9,7 +9,8 @@
 //
 // state: 'clean' | 'findings' | 'running' | 'none'
 
-const MIN_ABBREVIATION = 7;
+// Codex receipts use ten characters. Shorter prefixes require net-diff proof.
+const MIN_ABBREVIATION = 10;
 const DECISIVE = new Set(['clean', 'findings', 'running']);
 
 export function shaMatches(candidate, head) {
@@ -32,8 +33,15 @@ const EXACT_REASON = {
   running: (head) => `Codex is still reviewing ${short(head)}`,
 };
 
+// Short findings and running notices may block a clean verdict conservatively,
+// but a short clean receipt must still pass the independent net-diff proof.
+function blocksHead(entry, headSha) {
+  return entry.kind !== 'clean' && /^[0-9a-f]{7,9}$/i.test(entry.sha ?? '') &&
+    String(headSha).toLowerCase().startsWith(entry.sha.toLowerCase());
+}
+
 export async function evaluateVerdict({ evidence, headSha, resolveSha, carryOver }) {
-  const forHead = evidence.filter((entry) => DECISIVE.has(entry.kind) && (entry.sha == null ? entry.kind === 'running' : shaMatches(entry.sha, headSha)));
+  const forHead = evidence.filter((entry) => DECISIVE.has(entry.kind) && (entry.sha == null ? entry.kind === 'running' : (shaMatches(entry.sha, headSha) || blocksHead(entry, headSha))));
   const exact = newest(forHead);
   if (exact) {
     return { state: exact.kind, carried: false, sha: headSha, reason: EXACT_REASON[exact.kind](headSha), evidence: exact };

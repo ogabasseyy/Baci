@@ -26,8 +26,9 @@ describe('shaMatches', () => {
     assert.equal(shaMatches(OLD, HEAD), false);
   });
 
-  it('matches an abbreviation of at least 7 characters as a prefix of the head', () => {
-    assert.equal(shaMatches('d9df294', HEAD), true);
+  it('matches an abbreviation of at least 10 characters as a prefix of the head', () => {
+    assert.equal(shaMatches('d9df294247', HEAD), true);
+    assert.equal(shaMatches('d9df294', HEAD), false);
     assert.equal(shaMatches('d9df29', HEAD), false);
     assert.equal(shaMatches('d9df295', HEAD), false);
   });
@@ -157,3 +158,28 @@ describe('verdict for a different commit (stale verdicts)', () => {
     assert.equal(verdict.carried, false);
   });
 });
+
+it('requires net-diff proof for a matching seven-character receipt', async () => {
+  const evidence = [item('clean', HEAD.slice(0, 7))];
+  const rejected = await evaluate(evidence, { resolveSha: async () => OLD });
+  assert.equal(rejected.state, 'none');
+  let checked = false;
+  const proven = await evaluate(evidence, {
+    resolveSha: async () => OLD,
+    carryOver: async (from, to) => {
+      assert.equal(from, OLD);
+      assert.equal(to, HEAD);
+      checked = true;
+      return true;
+    },
+  });
+  assert.equal(checked, true);
+  assert.equal(proven.carried, true);
+});
+
+for (const kind of ['findings', 'running']) {
+  it(`a newer short ${kind} receipt blocks an older full-SHA clean verdict`, async () => {
+    const result = await evaluate([item('clean', HEAD), item(kind, HEAD.slice(0, 7))]);
+    assert.equal(result.state, kind);
+  });
+}

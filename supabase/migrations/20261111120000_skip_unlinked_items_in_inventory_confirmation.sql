@@ -255,8 +255,13 @@ BEGIN
 
   SELECT count(*), sum(quantity) INTO v_total_items, v_total_qty FROM public.order_items WHERE order_id = p_order_id;
   IF v_total_items = 1 AND v_total_qty = 1 THEN
-    SELECT fulfillment_data INTO v_fulfillment_data FROM public.order_items WHERE order_id = p_order_id LIMIT 1;
-    UPDATE public.orders SET fulfillment_details = v_fulfillment_data WHERE id = p_order_id;
+    -- A sole unlinked line was skipped above, so it has no confirmation
+    -- payload; keep any order-level details staff saved for it.
+    SELECT fulfillment_data INTO v_fulfillment_data FROM public.order_items
+    WHERE order_id = p_order_id AND product_id IS NOT NULL LIMIT 1;
+    IF FOUND THEN
+      UPDATE public.orders SET fulfillment_details = v_fulfillment_data WHERE id = p_order_id;
+    END IF;
   END IF;
 
   RETURN jsonb_build_object(

@@ -41,6 +41,10 @@ VALUES (
   'UNLINKED-ITEM-1', 9000.00, 9000.00, 'physical', 'pending', 'paid'
 );
 
+UPDATE public.orders
+SET fulfillment_details = '{"identifierType":"serial","identifierValue":"SN-TYPED-1"}'::jsonb
+WHERE id = '33333333-3333-4333-8333-333333333333';
+
 INSERT INTO public.order_items (
   order_id, name, price, quantity, product_match_status
 )
@@ -62,6 +66,14 @@ BEGIN
      OR (v_result ->> 'confirmedUnitCount')::integer IS DISTINCT FROM 0
      OR v_result -> 'exceptionCodes' IS DISTINCT FROM '[]'::jsonb THEN
     RAISE EXCEPTION 'unexpected confirmation result for unlinked item: %', v_result;
+  END IF;
+
+  IF (
+    SELECT fulfillment_details ->> 'identifierValue'
+    FROM public.orders
+    WHERE id = '33333333-3333-4333-8333-333333333333'
+  ) IS DISTINCT FROM 'SN-TYPED-1' THEN
+    RAISE EXCEPTION 'order fulfillment details for a sole unlinked line were overwritten';
   END IF;
 END;
 $check$;

@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { ConversionEventRequest } from '@/schemas/conversion-event';
 import { clientMarketingTargets } from './client-marketing-targets';
+import { shopperIp } from './shopper-ip';
 
 function toStoredEventData(input: ConversionEventRequest) {
   return {
@@ -28,10 +29,7 @@ function deliveryData(input: ConversionEventRequest, request: NextRequest) {
     external_id: input.user_data.external_id,
     fbc: input.user_data.fbc,
     fbp: input.user_data.fbp,
-    ip:
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      request.headers.get('x-real-ip') ??
-      undefined,
+    ip: shopperIp(request),
     phone: input.user_data.ph,
     sccid: input.user_data.sccid,
     ttclid: input.user_data.ttclid,

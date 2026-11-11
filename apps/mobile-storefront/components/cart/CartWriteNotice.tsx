@@ -12,7 +12,7 @@ export function CartWriteNotice() {
   if (!notice) return null;
   return (
     <View
-      pointerEvents="box-none"
+      pointerEvents="auto"
       style={[
         styles.panel,
         { backgroundColor: colors.background, paddingTop: insets.top + 12 },

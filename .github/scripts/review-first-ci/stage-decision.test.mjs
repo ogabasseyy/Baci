@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BREAK_GLASS_LABEL, DEFAULT_TIMEOUT_MINUTES, PILOT_LABEL, decideStage, parseTimeoutMinutes, sweepLookbackMs } from './stage-decision.mjs';
+import { BREAK_GLASS_LABEL, DEFAULT_TIMEOUT_MINUTES, PILOT_LABEL, decideStage, normalizeMode, parseTimeoutMinutes, sweepLookbackMs } from './stage-decision.mjs';
 
 const clean = { state: 'clean', carried: false, reason: 'Codex is clean for the head commit' };
 const none = { state: 'none', carried: false, reason: 'no Codex verdict yet' };
@@ -37,13 +37,20 @@ describe('events and modes that never defer', () => {
     assert.equal(stageOf({ sameRepo: false }).stage, 'full');
   });
 
-  for (const mode of [undefined, '', 'off', 'true', 'ON']) {
+  for (const mode of [undefined, '', 'off', 'true', 'yes']) {
     it(`runs full CI when the switch is ${JSON.stringify(mode)}`, () => {
       const result = stageOf({ mode });
       assert.equal(result.stage, 'full');
       assert.equal(result.code, 'mode-off');
     });
   }
+
+  it('reads the switch case-insensitively, like the workflow expressions do', () => {
+    assert.equal(stageOf({ mode: 'ON' }).stage, 'quick');
+    assert.equal(stageOf({ mode: ' Pilot ' }).code, 'pilot-not-selected');
+    assert.equal(normalizeMode(' ON '), 'on');
+    assert.equal(normalizeMode(undefined), '');
+  });
 
   it('pilot mode defers only pull requests that carry the pilot label', () => {
     assert.equal(stageOf({ mode: 'pilot' }).code, 'pilot-not-selected');

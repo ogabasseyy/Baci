@@ -149,6 +149,11 @@ describe('nudgePullRequest', () => {
     assert.deepEqual(client.calls, []);
   });
 
+  it('reads the switch case-insensitively', async () => {
+    const { result } = await nudge(routesFor(), { mode: 'ON' });
+    assert.equal(result.action, 'rerun');
+  });
+
   it('ignores fork, closed and non-main pull requests', async () => {
     assert.equal((await nudge(routesFor({ pr: pullRequest({ head: { sha: HEAD, repo: { full_name: 'x/fork' } } }) }))).result.reason, 'fork');
     assert.equal((await nudge(routesFor({ pr: pullRequest({ state: 'closed' }) }))).result.reason, 'closed');

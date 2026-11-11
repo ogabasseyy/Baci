@@ -5,6 +5,7 @@
 // again and decides for itself (resolve-stage.mjs), so a wrong or early nudge can
 // waste a re-run of the quick checks but can never start the heavy suite.
 import { evaluatePullRequestStage } from './evaluate-pr-stage.mjs';
+import { normalizeMode } from './stage-decision.mjs';
 
 export const STATUS_CONTEXT = 'Review-first CI';
 export const MAX_ATTEMPTS = 3;
@@ -50,7 +51,7 @@ async function setStatus({ client, repository, sha, state, description, url, dry
 }
 
 export async function nudgePullRequest({ client, repository, prNumber, mode, now = Date.now(), timeoutMinutes, dryRun = false, log = console.log }) {
-  if (mode !== 'on' && mode !== 'pilot') return skip('mode-off');
+  if (!['on', 'pilot'].includes(normalizeMode(mode))) return skip('mode-off');
 
   const pr = await client.get(`/repos/${repository}/pulls/${prNumber}`);
   if (pr.state !== 'open') return skip('closed');

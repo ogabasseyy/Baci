@@ -27,12 +27,16 @@ export function sweepLookbackMs(timeoutMinutes) {
   return Math.max(MIN_SWEEP_LOOKBACK_MINUTES, timeoutMinutes + SWEEP_MARGIN_MINUTES) * 60000;
 }
 
+// GitHub expressions compare strings case-insensitively, so the workflow treats `ON` like `on`;
+// this keeps the script in step with them.
+export const normalizeMode = (mode) => String(mode ?? '').trim().toLowerCase();
+
 const result = (stage, code, reason, warn = false) => ({ stage, code, reason, warn });
 
 export function decideStage(input) {
   const {
     eventName,
-    mode,
+    mode: rawMode,
     sameRepo,
     // undefined = the labels could not be read (not the same as "no labels")
     labels,
@@ -45,6 +49,7 @@ export function decideStage(input) {
     timeoutMinutes = DEFAULT_TIMEOUT_MINUTES,
     apiError = null,
   } = input;
+  const mode = normalizeMode(rawMode);
 
   if (eventName !== 'pull_request') return result('full', 'not-pull-request', `${eventName} events always run the full CI`);
   if (!sameRepo) return result('full', 'fork', 'pull requests from forks keep the full CI');

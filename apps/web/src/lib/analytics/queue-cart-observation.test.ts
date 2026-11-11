@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { conversionEventRequestSchema } from '@/schemas/conversion-event';

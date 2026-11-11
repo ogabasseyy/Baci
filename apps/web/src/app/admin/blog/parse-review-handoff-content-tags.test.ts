@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { expect, it } from 'vitest';
 import { sanitizeBlogPostData } from '@/lib/validations/blog';
 import { toApiPayload } from './blog-api-payload';

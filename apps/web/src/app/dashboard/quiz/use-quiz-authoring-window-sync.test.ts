@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { renderHook } from '@testing-library/react';
 import { useState } from 'react';

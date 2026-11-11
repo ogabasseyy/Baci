@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';

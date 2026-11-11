@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { savingsDraftFixture } from './customer-savings-draft.test-fixture';
 import { createCustomerSavingsDraftBrowser } from './customer-savings-draft-browser';

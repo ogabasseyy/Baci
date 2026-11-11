@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KudaServiceType, NetworkProvider } from './kuda'; // Enums are fine to import statically
 

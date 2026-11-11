@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { expect, it, vi } from 'vitest';
 import { parseReviewHandoff } from './parse-review-handoff';
 

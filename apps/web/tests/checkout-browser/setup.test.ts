@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import type { Page } from '@playwright/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cartItem, contact } from './fixtures';

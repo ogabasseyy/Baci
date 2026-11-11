@@ -242,3 +242,34 @@ test('skips the hostname purge when the token or hostnames are missing', async (
   assert.match(warnings[0], /CLOUDFLARE_API_TOKEN is not set/);
   assert.match(warnings[1], /no hostnames/);
 });
+
+test('the hostname purge primitive refuses cdn.* hosts and anything that is not a plain DNS hostname', async () => {
+  for (const bad of [
+    'cdn.ogabassey.com',
+    'https://ogabassey.com',
+    '*.ogabassey.com',
+    'ogabassey.com/blog',
+    '127.0.0.1',
+    'localhost',
+    '',
+  ]) {
+    assert.throws(() => buildHostPurgePayload([bad]), /DNS hostname|cdn\./, `rejects ${bad}`);
+  }
+
+  await assert.rejects(
+    purgeCloudflareHosts({
+      fetchJson: async () => assert.fail('must not call Cloudflare for a refused hostname'),
+      hosts: ['ogabassey.com', 'cdn.ogabassey.com'],
+      logger: { log: () => {}, warn: () => {} },
+      token: 'token',
+      zoneId: 'zone-123',
+    }),
+    /never target cdn\.\* hostnames/
+  );
+});
+
+test('the hostname purge payload lowercases and deduplicates hostnames', () => {
+  assert.deepEqual(buildHostPurgePayload(['OgaBassey.com', 'ogabassey.com', 'WWW.ogabassey.com']), {
+    hosts: ['ogabassey.com', 'www.ogabassey.com'],
+  });
+});

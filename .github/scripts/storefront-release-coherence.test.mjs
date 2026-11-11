@@ -139,10 +139,18 @@ test('fails after purge when a stale products response does not reach the config
         },
         requestId: 'request-marker-skew',
       }),
-    /browser https:\/\/ogabassey\.com\/products: expected release_123, received other_release/
+    (error) => {
+      assert.match(
+        error.message,
+        /browser https:\/\/ogabassey\.com\/products: expected release_123, received other_release/
+      );
+      // Here the origin itself serves the wrong release, so a Cloudflare purge cannot fix it.
+      assert.match(error.message, /origin itself serves other_release on \/products/);
+      return true;
+    }
   );
   assert.equal(purgeCalls, 1);
-  assert.equal(hostPurgeCalls, 1);
+  assert.equal(hostPurgeCalls, 0);
 });
 
 test('fails after bounded retries when a canonical response keeps an old marker', async () => {

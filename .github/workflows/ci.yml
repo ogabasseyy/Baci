@@ -632,6 +632,7 @@ jobs:
           .github/scripts/sync-cloudflare-vercel-production-env.test.mjs
           .github/scripts/storefront-release-coherence.test.mjs
           .github/scripts/storefront-release-coherence-escalation.test.mjs
+          .github/scripts/storefront-release-coherence-escalation-safety.test.mjs
           .github/scripts/storefront-release-coherence-host-purge.test.mjs
           .github/scripts/storefront-release-coherence-warming.test.mjs
           .github/scripts/storefront-sitemap-purge.test.mjs

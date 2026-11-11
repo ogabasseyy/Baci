@@ -21,12 +21,29 @@ export function buildPurgePayload(urls) {
   };
 }
 
+const DNS_HOSTNAME =
+  /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+
+function assertPurgeableHostname(value) {
+  const hostname = String(value).trim().toLowerCase();
+  if (!DNS_HOSTNAME.test(hostname) || /^\d+(?:\.\d+){3}$/.test(hostname)) {
+    throw new Error(
+      `Cloudflare hostname purge requires a DNS hostname, received ${hostname || '(empty)'}`
+    );
+  }
+  if (hostname.startsWith('cdn.')) {
+    throw new Error('Cloudflare hostname purge must never target cdn.* hostnames');
+  }
+  return hostname;
+}
+
 // Hostname purge payload. Only a `hosts` list is ever sent: never `files`, never
-// `purge_everything`, and the release check passes exact storefront hostnames
-// (never a cdn.* host) so static assets on other hostnames stay cached.
+// `purge_everything`. Every hostname is validated here, at the primitive, so no caller can
+// send a cdn.* host, an IP or a wildcard. NOTE: Cloudflare clears ALL cached content for each
+// hostname listed (HTML, same-host assets and API responses), not just pages.
 export function buildHostPurgePayload(hosts) {
   return {
-    hosts: [...new Set(hosts)],
+    hosts: [...new Set(hosts.map(assertPurgeableHostname))],
   };
 }
 

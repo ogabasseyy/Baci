@@ -4,18 +4,19 @@
 // it is targeted and never touches other hostnames. Since 2026-11-11 04:03 UTC Cloudflare has
 // accepted those purge calls (HTTP 200, right zone) but kept serving the previous release's
 // HTML from cache, so every deploy went red. A hostname purge (`{ hosts: [...] }`) still evicts
-// those copies. It is used ONLY when canaries still show an older release after the normal
-// retry window, and the check afterwards stays just as strict. It never sends
-// `purge_everything` and never targets a cdn.* hostname. Owner approved this fallback on
-// 2026-11-11 (previously the check was "single-file URL purge only", PR #3067).
-import { purgeCloudflareHosts } from './cloudflare-purge-cache.mjs';
+// those copies. NOTE: a hostname purge clears ALL cached content for those hostnames (HTML,
+// same-host assets and API responses, not just the canaries); it refills from the origin on
+// demand. It is used ONLY when every canary still failing shows an older release after the
+// normal retry window and the origin is proven healthy on the new release for each of those
+// pages; the check afterwards stays just as strict. It never sends `purge_everything` and never
+// targets a cdn.* hostname. Owner approved this fallback on 2026-11-11 (previously the check was
+// "single-file URL purge only", PR #3067).
+import { buildHostPurgePayload, purgeCloudflareHosts } from './cloudflare-purge-cache.mjs';
 import { isRetryablePurgeError, retryDelay } from './storefront-sitemap-purge.mjs';
 
 const DEFAULT_HOST_PURGE_ATTEMPTS = 4;
 const DEFAULT_HOST_PURGE_RETRY_DELAY_MS = 1_000;
 const DEFAULT_HOST_PURGE_MAX_RETRY_DELAY_MS = 30_000;
-const DNS_HOSTNAME =
-  /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
 
 /**
  * Compact Cloudflare/Vercel cache details for a canary response, e.g.
@@ -38,15 +39,9 @@ export function describeCacheHeaders(headers) {
 }
 
 export function releaseHostsFor(baseUrl) {
-  const hostname = new URL(baseUrl).hostname.toLowerCase();
-  if (!DNS_HOSTNAME.test(hostname) || /^\d+(?:\.\d+){3}$/.test(hostname)) {
-    throw new Error(`Release hostname purge requires a DNS hostname, received ${hostname}`);
-  }
-  if (hostname.startsWith('cdn.')) {
-    throw new Error('Release hostname purge must never target cdn.* hostnames');
-  }
-  const apex = hostname.replace(/^www\./, '');
-  return [apex, `www.${apex}`];
+  const apex = new URL(baseUrl).hostname.toLowerCase().replace(/^www\./, '');
+  // buildHostPurgePayload enforces the hostname rules (DNS name only, never cdn.*, no IPs).
+  return buildHostPurgePayload([apex, `www.${apex}`]).hosts;
 }
 
 export async function purgeReleaseHosts({
@@ -102,29 +97,32 @@ export async function verifyWithHostPurgeFallback({
   } catch (error) {
     if (!error?.stale) throw error;
 
-    // Purge only when the origin is proven healthy AND on the expected release. If the origin
-    // is erroring, Cloudflare may be serving stale pages as a fallback (stale-if-error) and a
-    // hostname purge would delete exactly those copies; if the origin serves another release, a
-    // purge cannot help.
-    let originMarker;
-    try {
-      originMarker = await probeOrigin();
-    } catch (probeError) {
-      throw new Error(
-        `${error.message}; origin probe failed (${probeError.message}), so no hostname purge was attempted`,
-        { cause: error }
-      );
-    }
-    if (originMarker !== config.expectedMarker) {
-      throw new Error(
-        `${error.message}; the origin itself serves ${originMarker}, so a Cloudflare purge cannot fix this`,
-        { cause: error }
-      );
+    // Purge only when the origin is proven healthy AND on the expected release for EVERY stale
+    // page. If the origin is erroring, Cloudflare may be serving stale pages as a fallback
+    // (stale-if-error) and a hostname purge would delete exactly those copies; if the origin
+    // serves another release, a purge cannot help.
+    for (const [index, canaryUrl] of (error.staleUrls ?? []).entries()) {
+      const { pathname } = new URL(canaryUrl);
+      let originMarker;
+      try {
+        originMarker = await probeOrigin(canaryUrl, index);
+      } catch (probeError) {
+        throw new Error(
+          `${error.message}; origin probe failed for ${pathname} (${probeError.message}), so no hostname purge was attempted`,
+          { cause: error }
+        );
+      }
+      if (originMarker !== config.expectedMarker) {
+        throw new Error(
+          `${error.message}; the origin itself serves ${originMarker} on ${pathname}, so a Cloudflare purge cannot fix this`,
+          { cause: error }
+        );
+      }
     }
 
     const hosts = releaseHostsFor(baseUrl);
     logger.warn(
-      `Page purge left older release HTML on the canaries; escalating to a Cloudflare hostname purge for ${hosts.join(', ')}. ${error.message}`
+      `Page purge left older release HTML on the canaries; escalating to a Cloudflare hostname purge for ${hosts.join(', ')}. The hostname purge clears ALL cached content for those hostnames (HTML, assets, API responses) and refills from the origin on demand. ${error.message}`
     );
     await hostPurgeImpl({
       cloudflareFetchJson,

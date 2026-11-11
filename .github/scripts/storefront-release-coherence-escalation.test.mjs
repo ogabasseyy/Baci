@@ -1,75 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RELEASE_USER_AGENTS, runReleaseCoherence } from './storefront-release-coherence.mjs';
-
-const MARKER = 'release_123';
-const OLD_MARKER = 'release_122';
-const PDP_PATH = '/smartphones/pixel-9-pro';
-const ENV = {
-  BACI_NEXT_DEPLOYMENT_ID_SOURCE: MARKER,
-  CLOUDFLARE_API_TOKEN: 'token',
-  CLOUDFLARE_ZONE_ID: 'zone-123',
-  STOREFRONT_RELEASE_ATTEMPTS: '2',
-  STOREFRONT_RELEASE_BASE_URL: 'https://ogabassey.com',
-  STOREFRONT_RELEASE_ESCALATION_ATTEMPTS: '3',
-  STOREFRONT_RELEASE_ESCALATION_RETRY_DELAY_MS: '7',
-  STOREFRONT_RELEASE_RETRY_DELAY_MS: '1',
-  STOREFRONT_RELEASE_TIMEOUT_MS: '1000',
-};
-const quietLogger = { log: () => {}, warn: () => {} };
-
-function html(marker, extra = '') {
-  return `<html data-dpl-id="${marker}"><link href="/a.css?dpl=${marker}">${extra}</html>`;
-}
-
-function response(body, { headers = {}, status = 200 } = {}) {
-  return {
-    headers: new Headers({ 'content-type': 'text/html; charset=utf-8', ...headers }),
-    ok: status >= 200 && status < 300,
-    status,
-    text: async () => body,
-  };
-}
-
-// A storefront whose canonical (no query) responses can stay on the previous release
-// until `state.hostPurged` flips, like Cloudflare keeping an old copy after a page purge.
-function makeStorefront({
-  isStale = () => false,
-  originMarker = MARKER,
-  originStatus = 200,
-  staleHeaders = {},
-} = {}) {
-  const state = { calls: [], hostPurged: false };
-  const fetchImpl = async (value, options) => {
-    const url = new URL(value);
-    state.calls.push({ options, url });
-    const extra = url.pathname === '/products' ? `<a href="${PDP_PATH}">Phone</a>` : '';
-    const canonical = !url.search;
-    if (!canonical) {
-      return originStatus === 200
-        ? response(html(originMarker, extra))
-        : response('unavailable', { status: originStatus });
-    }
-    if (!state.hostPurged && isStale(url, options, state)) {
-      return response(html(OLD_MARKER, extra), { headers: staleHeaders });
-    }
-    return response(html(MARKER, extra));
-  };
-  return { fetchImpl, state };
-}
-
-const productsOnly = (url) => url.pathname === '/products';
-
-function run(overrides) {
-  return runReleaseCoherence({
-    env: ENV,
-    logger: quietLogger,
-    releasePurgeImpl: async ({ canaryUrls }) => ({ skipped: false, urls: canaryUrls }),
-    requestId: 'request-escalation',
-    sleep: async () => {},
-    ...overrides,
-  });
-}
+import { RELEASE_USER_AGENTS } from './storefront-release-coherence.mjs';
+import {
+  MARKER,
+  makeStorefront,
+  productsOnly,
+  response,
+  run,
+} from './storefront-release-coherence.test-helpers.mjs';
 
 test('bugfix: falls back to a hostname purge when the page purge leaves /products on the previous release', async () => {
   const { fetchImpl, state } = makeStorefront({ isStale: productsOnly });
@@ -182,49 +120,6 @@ test('fails closed when the hostname purge itself is rejected by Cloudflare', as
     }),
     /Cloudflare API request failed for \/zones\/zone-123\/purge_cache: HTTP 403/
   );
-});
-
-test('skips the hostname purge when the origin itself does not serve the expected release', async () => {
-  const { fetchImpl } = makeStorefront({ isStale: productsOnly, originMarker: OLD_MARKER });
-  let hostPurges = 0;
-
-  await assert.rejects(
-    run({
-      fetchImpl,
-      hostPurgeImpl: async () => {
-        hostPurges += 1;
-        return { skipped: false };
-      },
-    }),
-    /origin itself serves release_122.*cannot fix/
-  );
-  assert.equal(hostPurges, 0);
-});
-
-test('never purges when the origin probe fails, so stale-if-error copies are not deleted during an outage', async () => {
-  const { fetchImpl, state } = makeStorefront({ isStale: productsOnly });
-  // The initial release probes must succeed; only the later origin probe (request id suffix) fails.
-  const flakyOrigin = async (value, options) => {
-    const url = new URL(value);
-    if (url.searchParams.get('__baci_release_probe')?.endsWith('-origin')) {
-      return response('unavailable', { status: 503 });
-    }
-    return fetchImpl(value, options);
-  };
-  let hostPurges = 0;
-
-  await assert.rejects(
-    run({
-      fetchImpl: flakyOrigin,
-      hostPurgeImpl: async () => {
-        hostPurges += 1;
-        state.hostPurged = true;
-        return { skipped: false };
-      },
-    }),
-    /origin probe failed \(cache-busted origin probe returned HTTP 503\), so no hostname purge was attempted/
-  );
-  assert.equal(hostPurges, 0);
 });
 
 test('adds Cloudflare cache diagnostics to stale canary errors', async () => {

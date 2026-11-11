@@ -41,7 +41,7 @@ export function extractDeploymentMarker(html, label = 'HTML response') {
   return markers.values().next().value;
 }
 
-async function fetchMarkedHtml({ fetchImpl, label, timeoutMs, url, userAgent }) {
+async function fetchMarkedHtml({ fetchImpl = fetch, label, timeoutMs, url, userAgent }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -153,7 +153,11 @@ export async function warmAndAssertCanaries({
     .map(({ error, target }) => `${target.variant} ${target.url}: ${error.message}`)
     .join('; ');
   const failure = new Error(`Storefront release coherence failed: ${details}`);
-  failure.stale = failures.some(({ error }) => error.stale === true);
+  // A hostname purge is only a candidate fix when EVERY remaining failure is an old-release copy:
+  // a 5xx, timeout or missing marker on another page means a partial outage, where Cloudflare may
+  // be serving stale-if-error copies that a purge would delete.
+  failure.stale = failures.length > 0 && failures.every(({ error }) => error.stale === true);
+  failure.staleUrls = [...new Set(failures.map(({ target }) => target.url))];
   throw failure;
 }
 
@@ -188,14 +192,18 @@ export async function runReleaseCoherence(options = {}) {
     config,
     hostPurgeImpl: options.hostPurgeImpl,
     logger,
-    // Cache-busted, so it reads the origin (Vercel) and never a Cloudflare copy.
-    probeOrigin: async () =>
+    // Cache-busted copy of the same page, so it reads the origin (Vercel), never a Cloudflare copy.
+    probeOrigin: async (canaryUrl, index) =>
       (
         await fetchMarkedHtml({
           fetchImpl: options.fetchImpl,
           label: 'cache-busted origin probe',
           timeoutMs: config.timeoutMs,
-          url: buildReleaseProbeUrl(config.baseUrl, '/', `${requestId}-origin`),
+          url: buildReleaseProbeUrl(
+            config.baseUrl,
+            new URL(canaryUrl).pathname,
+            `${requestId}-origin-${index}`
+          ),
           userAgent: RELEASE_USER_AGENTS.browser,
         })
       ).marker,

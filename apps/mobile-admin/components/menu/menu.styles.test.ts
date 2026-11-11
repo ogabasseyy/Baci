@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { styles } from './menu.styles';

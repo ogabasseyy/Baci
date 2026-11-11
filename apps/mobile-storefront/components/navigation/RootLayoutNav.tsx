@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';
+import { CartWriteNotice } from '@/components/cart/CartWriteNotice';
 import { NativeCartPairingPanel } from '@/components/cart/NativeCartPairingPanel';
 import { SharedCartBridge } from '@/components/cart/SharedCartBridge';
 import { ChatWidget } from '@/components/chat/ChatWidget';
@@ -125,6 +126,7 @@ export function RootLayoutNav({
                         {persistenceEnabled && <MobileUpdateController />}
                         <SharedCartBridge />
                         <NativeCartPairingPanel />
+                        <CartWriteNotice />
                         {/*
                          * No custom `header` function in screenOptions — that would
                          * make react-native-screens NativeStack reserve a header zone

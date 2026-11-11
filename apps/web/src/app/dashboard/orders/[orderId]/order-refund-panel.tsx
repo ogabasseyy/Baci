@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { orderRefundStatusLabels } from '@/config/order-refund';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-options';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import { OrderRefundManualForm } from './order-refund-manual-form';
+import { OrderRefundStatusLine } from './order-refund-status-line';
 import { OrderRefundTimeline } from './order-refund-timeline';
 import { useOrderRefundSubmit } from './use-order-refund-submit';
 import { useRefundPinAmountCap } from './use-refund-pin-amount-cap';
@@ -186,9 +186,7 @@ export function OrderRefundPanel({
           </p>
         ) : (
           <>
-            <p role="status" className="font-semibold">
-              {orderRefundStatusLabels[summary.status] ?? summary.status}
-            </p>
+            <OrderRefundStatusLine summary={summary} />
             <dl className="text-sm space-y-1">
               <div className="flex justify-between">
                 <dt>Amount paid</dt>

@@ -1,0 +1,29 @@
+/* The experience shell does not load the legacy storefront utility sheet.
+   Consent must stay out of document flow even before that sheet exists. */
+.banner {
+  position: fixed;
+  inset: auto 1rem 1rem;
+  z-index: 50;
+  width: calc(100% - 2rem);
+  max-width: 64rem;
+  margin-inline: auto;
+  font-family: system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.panel {
+  padding: 1rem;
+  color: var(--store-background-text, var(--foreground, #171717));
+  background: var(--store-background, var(--background, #fff));
+  border: 1px solid var(--border, #d4d4d4);
+  border-radius: 1rem;
+  box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 15%);
+}
+
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}

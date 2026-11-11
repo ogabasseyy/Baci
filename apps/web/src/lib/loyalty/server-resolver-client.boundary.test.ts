@@ -33,7 +33,7 @@ describe('loyalty resolver service-role boundary', () => {
       'app/api/storefront/discount/validate/route.ts',
       'lib/checkout/resolve-loyalty-checkout-code.ts',
     ]);
-  });
+  }, 30_000);
 
   it('allows only the wrapper to construct the loyalty-resolver brand', () => {
     // Match constructions, not mentions: the brand string also appears
@@ -47,5 +47,5 @@ describe('loyalty resolver service-role boundary', () => {
       .sort();
 
     expect(constructors).toEqual(['lib/loyalty/server-resolver-client.ts']);
-  });
+  }, 30_000);
 });

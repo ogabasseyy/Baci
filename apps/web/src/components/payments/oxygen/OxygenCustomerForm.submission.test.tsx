@@ -88,6 +88,19 @@ it('submits only after identity, account verification, income and explicit conse
     target: { value: 'Test employer' },
   });
   fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
+    target: { value: '300000.' },
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Enter an amount with up to two decimal places.'
+  );
+  expect(screen.getByLabelText('Monthly income (₦)')).toHaveAttribute(
+    'aria-errormessage',
+    screen.getByRole('alert').id
+  );
+  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
     target: { value: '300000' },
   });
   fireEvent.change(screen.getByLabelText('When are you paid?'), {

@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 export const savingsSuggestionStyles = StyleSheet.create({
   results: { gap: 10, marginTop: 6 },
   heading: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.2,
     marginBottom: 2,
@@ -26,6 +26,6 @@ export const savingsSuggestionStyles = StyleSheet.create({
   },
   image: { width: 52, height: 64 },
   details: { flex: 1, gap: 4 },
-  name: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  price: { fontSize: 16, lineHeight: 22, fontWeight: '800', marginTop: 3 },
+  name: { fontSize: 13, lineHeight: 20, fontWeight: '600' },
+  price: { fontSize: 14, lineHeight: 22, fontWeight: '800', marginTop: 3 },
 });

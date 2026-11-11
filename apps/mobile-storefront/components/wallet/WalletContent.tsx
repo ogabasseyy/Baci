@@ -201,6 +201,7 @@ export function WalletContent(props: WalletContentProps) {
           loyaltyTier={loyaltyTier}
           onOpenFundPanel={onOpenFundPanel}
           onOpenRedeemPanel={onOpenRedeemPanel}
+          onStartSavings={activeSavingsGoal ? undefined : onStartSavings}
           savingsBalance={savingsBalance}
           totalBalance={totalBalance}
           utilityAccentColor={colors.primary}
@@ -227,7 +228,8 @@ export function WalletContent(props: WalletContentProps) {
           onManageCards={onManageCards}
           onQuickSave={onQuickSave}
           onStartSavings={onStartSavings}
-          showPrimaryAction={!activeSavingsGoal}
+          // Start Savings now lives inside the wallet card.
+          showPrimaryAction={false}
           showQuickSave={false}
         />
         {showRedeemPanel ? (

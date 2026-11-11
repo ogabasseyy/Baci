@@ -50,20 +50,15 @@ it('explains when a read-only refresh still has no verified account', async () =
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-    ).toBeOnTheScreen()
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-  );
+  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
   await waitFor(() =>
-    expect(
-      screen.getByText(
-        'Your account is still being prepared. Check again shortly.'
-      )
-    ).toBeOnTheScreen()
+    expect(screen.getByText('Setting up your account number')).toBeOnTheScreen()
   );
+  // Pending proves only that setup is in progress, never that the BVN passed.
+  expect(screen.getByText('Details sent to PiggyVest')).toBeOnTheScreen();
+  expect(screen.queryByText(/BVN (accepted|verified)/)).toBeNull();
   expect(screen.queryByLabelText('BVN')).toBeNull();
 });
 
@@ -96,9 +91,7 @@ it('binds onboarding and refresh to the submitting account', async () => {
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-    ).toBeOnTheScreen()
+    expect(screen.getByRole('button', { name: 'Check now' })).toBeOnTheScreen()
   );
   // The client rejects a mismatched session before the BVN leaves the
   // device, so a mid-flight switch cannot onboard the new account.
@@ -106,9 +99,7 @@ it('binds onboarding and refresh to the submitting account', async () => {
     expect.objectContaining({ bvn: '12345678901' }),
     'user-a-id'
   );
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh PiggyVest account' })
-  );
+  fireEvent.press(screen.getByRole('button', { name: 'Check now' }));
   await waitFor(() =>
     expect(piggyvestPrimaryWalletApi.read).toHaveBeenCalledWith(
       '6b5cb8a4-5575-456c-b936-8cdfae30db74',
@@ -150,9 +141,7 @@ it('keeps the form actionable with input preserved when creation fails', async (
     ).toBeOnTheScreen()
   );
   expect(screen.getByLabelText('BVN')).toHaveProp('value', '12345678901');
-  expect(
-    screen.queryByRole('button', { name: 'Refresh PiggyVest account' })
-  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   expect(onRefresh).not.toHaveBeenCalled();
 });
 it('refreshes the wallet when creation returns an account', async () => {
@@ -279,8 +268,6 @@ it('ignores in-flight creation results from a previous account', async () => {
   // discarded (stale account) rather than refreshing or flipping pending.
   await act(async () => {});
   expect(onRefresh).not.toHaveBeenCalled();
-  expect(
-    screen.queryByRole('button', { name: 'Refresh PiggyVest account' })
-  ).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull();
   expect(screen.getByLabelText('BVN')).toHaveProp('value', '');
 });

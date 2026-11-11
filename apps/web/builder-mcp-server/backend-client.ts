@@ -1,9 +1,9 @@
 import { builderError } from '../src/lib/builder-connector/errors';
-import {
-  type ImplementedBuilderTool,
-  isImplementedBuilderTool,
-} from '../src/schemas/builder-implemented-tools';
+import { isImplementedBuilderTool } from '../src/schemas/builder-implemented-tools';
 import { BUILDER_REQUEST_BYTES } from '../src/schemas/builder-mcp-primitives';
+import type { ConnectorToolName } from '../src/schemas/connector-tool-names';
+import { experienceError } from '../src/schemas/experience-tool-results';
+import { isExperienceTool } from '../src/schemas/experience-tools';
 
 const MAX_RESPONSE = 131072;
 /** Fixed Baci origin/path only. Config supplies fetch plumbing, never an argument-selected URL. */
@@ -12,12 +12,12 @@ export function createBuilderBackendClient(
 ) {
   return async (
     token: string,
-    tool: ImplementedBuilderTool,
+    tool: ConnectorToolName,
     input: unknown,
     signal?: AbortSignal
   ): Promise<unknown> => {
     if (
-      !isImplementedBuilderTool(tool) ||
+      (!isImplementedBuilderTool(tool) && !isExperienceTool(tool)) ||
       !token ||
       token.length > 8192 ||
       !/^[A-Za-z0-9_.-]+$/.test(token)
@@ -39,7 +39,11 @@ export function createBuilderBackendClient(
         redirect: 'manual',
         cache: 'no-store',
         signal: AbortSignal.any([
-          AbortSignal.timeout(25000),
+          // Finalization includes compilation and multiple bounded browser samples.
+          // Other tools retain their short admission/read budget.
+          AbortSignal.timeout(
+            tool === 'finalize_experience_build' ? 300000 : 25000
+          ),
           ...(signal ? [signal] : []),
         ]),
       }
@@ -50,13 +54,15 @@ export function createBuilderBackendClient(
     }
     if (response.status === 401 || response.status === 403) {
       await response.body?.cancel();
-      return builderError(
+      return (isExperienceTool(tool) ? experienceError : builderError)(
         response.status === 401 ? 'CONNECTION_REVOKED' : 'INSUFFICIENT_SCOPE'
       );
     }
     if (response.status === 429) {
       await response.body?.cancel();
-      return builderError('RATE_LIMITED');
+      return isExperienceTool(tool)
+        ? experienceError('RATE_LIMITED')
+        : builderError('RATE_LIMITED');
     }
     if (
       !response.headers

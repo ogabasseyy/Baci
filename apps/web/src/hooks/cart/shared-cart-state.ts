@@ -117,6 +117,7 @@ export const initialSharedCartState: SharedCartState = {
 };
 
 export type SharedCartAction =
+  | { type: 'command/cancel'; generation: number; operationId: string }
   | {
       type: 'link/start';
       generation: number;

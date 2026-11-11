@@ -287,3 +287,11 @@ describe('ProductsPageContent', () => {
     );
   });
 });
+
+vi.mock(
+  '@/components/storefront/experience/experience-server-boundary',
+  () => ({
+    ExperienceServerBoundary: ({ fallback }: { fallback: React.ReactNode }) =>
+      fallback,
+  })
+);

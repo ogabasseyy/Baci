@@ -9,6 +9,8 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { loadPublishedExperience } from '@/lib/experience/published-manifest';
+import { selectTrustedExperienceCheckout } from '@/lib/experience/route-data-revision';
 import { isDomainIdentifier } from '@/lib/validation';
 import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 
@@ -56,8 +58,13 @@ export async function CheckoutContent({
     );
   }
 
-  // Check for new template
-  if (merchant.template_id === 'new-template') {
+  let experience: Awaited<ReturnType<typeof loadPublishedExperience>> = null;
+  try {
+    experience = await loadPublishedExperience(merchant);
+  } catch {
+    /* Native checkout remains available. */
+  }
+  if (selectTrustedExperienceCheckout(merchant, experience) === 'legacy-demo') {
     return (
       <CheckoutThemeProvider>
         <CheckoutCartCapacityGate

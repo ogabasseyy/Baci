@@ -29,6 +29,14 @@ beforeEach(() => {
       : Response.json({ accountName: 'TEST CUSTOMER' })
   );
 });
+it('hides the account name placeholder until verification starts', async () => {
+  render(<OxygenBankFields workflowId={id} busy={false} />);
+  await waitFor(() => expect(screen.getByLabelText('Bank')).toBeEnabled());
+  expect(screen.getByLabelText('Account name')).not.toBeVisible();
+  expect(
+    screen.queryByPlaceholderText('Waiting for your account details')
+  ).not.toBeInTheDocument();
+});
 it('selects bank code/name and resolves the account name without asking users to type them', async () => {
   render(<OxygenBankFields workflowId={id} busy={false} />);
   await waitFor(() => expect(screen.getByLabelText('Bank')).toBeEnabled());

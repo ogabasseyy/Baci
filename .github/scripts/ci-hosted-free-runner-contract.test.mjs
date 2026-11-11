@@ -158,6 +158,13 @@ test('every PostgreSQL 18 pin names the same release: hosted install, psql check
   assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
   const image = workflow.jobs['quality-disposable-sql'].services.postgres.image;
   assert.match(image, new RegExp(`^postgres:18\\.${checked}@sha256:[0-9a-f]{64}$`), 'the Disposable SQL database container must use the same release, pinned by digest');
+  // A stale or mistyped digest still matches that format, so the job also asks the running container which release it is.
+  const steps = workflow.jobs['quality-disposable-sql'].steps;
+  const assertion = steps.find((step) => step.name === 'Assert the database container runs the pinned PostgreSQL release');
+  assert.ok(assertion, 'the Disposable SQL job must check the release of the running database container');
+  assert.equal(assertion.env.EXPECTED_SERVER_VERSION_NUM, String(180000 + Number(checked)), 'the container check must expect the pinned release as server_version_num');
+  assert.match(assertion.run, /SHOW server_version_num/);
+  assert.equal(steps.indexOf(assertion), 1, 'the container check runs first, right after checkout');
 });
 
 test('the private runner keeps a persistent pnpm store and skips the GitHub cache download', async () => {

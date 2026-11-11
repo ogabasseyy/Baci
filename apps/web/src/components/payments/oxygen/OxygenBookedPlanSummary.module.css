@@ -1,0 +1,116 @@
+.summary {
+  color: var(--store-background-text, #111827);
+}
+.highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.highlights > div {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--store-border, #e5e7eb);
+  border-radius: 1rem;
+}
+.upfront {
+  background: color-mix(
+    in srgb,
+    var(--store-primary, #dc2626) 6%,
+    var(--store-background, #fff)
+  );
+}
+.monthly {
+  background: color-mix(
+    in srgb,
+    var(--store-accent, #19875c) 7%,
+    var(--store-background, #fff)
+  );
+}
+.highlights p {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+.highlights strong {
+  display: block;
+  margin: 0.4rem 0;
+  font-size: clamp(1.1rem, 4vw, 1.55rem);
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.highlights small {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  opacity: 0.75;
+}
+.schedule {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--store-border, #e5e7eb);
+  border-radius: 1rem;
+  background: color-mix(
+    in srgb,
+    var(--store-background-text, #111827) 3%,
+    var(--store-background, #fff)
+  );
+}
+.scheduleHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.scheduleHeading h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.scheduleHeading > span {
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  background: color-mix(
+    in srgb,
+    var(--store-accent, #19875c) 14%,
+    var(--store-background, #fff)
+  );
+  color: var(--store-background-text, #111827);
+}
+.schedule ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.schedule li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--store-border, #e5e7eb);
+  font-size: 0.8125rem;
+}
+.schedule li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.schedule li strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.schedule li small {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+  opacity: 0.75;
+}
+.schedule li small svg {
+  color: var(--store-primary, #dc2626);
+}
+.context {
+  margin: 0.9rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  line-height: 1.5;
+}

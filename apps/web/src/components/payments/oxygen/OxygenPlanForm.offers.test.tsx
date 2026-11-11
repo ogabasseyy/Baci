@@ -2,6 +2,24 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OxygenPlanForm } from './OxygenPlanForm';
 
+it('explains when no offers fit the maximum repayment period', () => {
+  render(
+    <OxygenPlanForm
+      busy={false}
+      productAmount={100000}
+      eligibleAmount={100000}
+      minimumAmount={10000}
+      maxTenure={3}
+      submit={vi.fn()}
+      offers={[{ tenure: 6, loanAmount: 100000 }]}
+    />
+  );
+  expect(screen.getByRole('status')).toHaveTextContent(
+    /couldn’t load your payment options/i
+  );
+  expect(screen.queryByRole('form')).not.toBeInTheDocument();
+});
+
 it('selects the same fallback tenure regardless of Oxygen offer ordering', () => {
   render(
     <OxygenPlanForm

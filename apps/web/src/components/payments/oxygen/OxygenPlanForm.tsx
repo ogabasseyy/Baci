@@ -87,12 +87,14 @@ export function OxygenPlanForm({
   if (
     limits.kind === 'unknown' ||
     !tenureAvailable ||
+    (availableOffers !== undefined && availableOffers.length === 0) ||
     productAmount === undefined ||
     maxTenure === undefined
   ) {
     return (
       <p role="status">
-        We couldn’t load your payment options. Please check for an update.
+        We couldn’t load your payment options. Please try again later or contact
+        support.
       </p>
     );
   }

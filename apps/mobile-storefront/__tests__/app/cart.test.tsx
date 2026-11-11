@@ -176,7 +176,7 @@ describe('CartScreen state', () => {
   });
 
   it('opens guest identity modal for guests and routes signed-in users straight to checkout', async () => {
-    const { rerender } = render(<CartScreen />);
+    const { unmount } = render(<CartScreen />);
 
     fireEvent.press(
       screen.getByRole('button', { name: /Proceed to checkout, total/i })
@@ -186,6 +186,10 @@ describe('CartScreen state', () => {
       expect(screen.getByText('Checkout Identity Modal')).toBeTruthy()
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: /Proceed to checkout, total/i })
+    ).toBeNull();
+    unmount();
 
     mockUseAuthStatus.mockReturnValue(
       buildAuthStatus({
@@ -195,7 +199,7 @@ describe('CartScreen state', () => {
       })
     );
 
-    rerender(<CartScreen />);
+    render(<CartScreen />);
     jest.clearAllMocks();
     const checkoutButton = screen.getByRole('button', {
       name: /Proceed to checkout, total/i,

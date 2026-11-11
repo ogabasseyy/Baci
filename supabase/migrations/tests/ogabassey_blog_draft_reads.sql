@@ -1,0 +1,43 @@
+-- Runs after chronological replay against the actual schema and RLS helpers.
+BEGIN;
+INSERT INTO auth.users (id, email)
+VALUES ('b3f20000-0000-4000-8000-000000000001', 'blog-privacy-owner@example.invalid');
+SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.merchants (id, email, user_id)
+VALUES ('6b5cb8a4-5575-456c-b936-8cdfae30db74', 'blog-privacy-owner@example.invalid',
+        'b3f20000-0000-4000-8000-000000000001');
+INSERT INTO public.blog_posts (merchant_id, title, slug, content, author_name, status, published_at)
+SELECT '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'Privacy fixture',
+       'privacy-fixture-' || state, 'Synthetic content', 'Fixture author', state,
+       CASE state
+         WHEN 'published' THEN now() - interval '1 hour'
+         WHEN 'scheduled' THEN now() + interval '1 hour'
+       END
+FROM unnest(ARRAY['draft', 'archived', 'scheduled', 'published']) AS state;
+
+SET LOCAL ROLE anon;
+SELECT set_config('request.jwt.claim.role', 'anon', true);
+DO $$ BEGIN
+  IF ARRAY(SELECT status FROM public.blog_posts WHERE slug LIKE 'privacy-fixture-%')
+     <> ARRAY['published'] THEN
+    RAISE EXCEPTION 'anon must only see the published fixture';
+  END IF;
+END $$;
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config('request.jwt.claim.sub', 'b3f20000-0000-4000-8000-000000000002', true);
+DO $$ BEGIN
+  IF ARRAY(SELECT status FROM public.blog_posts WHERE slug LIKE 'privacy-fixture-%')
+     <> ARRAY['published'] THEN
+    RAISE EXCEPTION 'unrelated authenticated reader must only see the published fixture';
+  END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub', 'b3f20000-0000-4000-8000-000000000001', true);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.blog_posts WHERE slug LIKE 'privacy-fixture-%') <> 4 THEN
+    RAISE EXCEPTION 'merchant owner must retain editorial visibility';
+  END IF;
+END $$;
+ROLLBACK;

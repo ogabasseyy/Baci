@@ -44,6 +44,12 @@ plus a narrowly authorized privileged preflight and tests of the actual OS
 permission boundary. The existing runner remains qualification-only until
 that boundary is implemented and verified.
 
+`privileged-helper.py` currently contains only fixed policy generation and a
+bundle-writing primitive used by tests. It is not an executable production
+helper: it has no authorized prepare/run/delete command path, trusted-parent
+verification, deployment packaging or sudo policy. Do not install it or grant
+it privileges in its current state.
+
 ## Baci boot and database boundaries
 
 Use `createProductionExperienceIntegration` with the established connector authenticator, normal user-client resolver, normal anonymous public client, trusted canonical merchant-domain resolver, owner bootstrap reader, scoped evidence verifier/recorder, retained artifact directory and normal owner-intent/approval callbacks. Do not supply a service-role client or accept merchant identity/approval/renderer bytes from MCP arguments.

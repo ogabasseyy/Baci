@@ -46,7 +46,7 @@ it('preserves the invoice and validates its wallet-funded portion', () => {
   expect(
     oxygenCheckoutOrderSchema.parse({ ...order, wallet_amount_used: '20.5' })
   ).toMatchObject({ total: 101.5, wallet_amount_used: 20.5 });
-  for (const wallet_amount_used of [-1, 102, 'invalid', 'Infinity'])
+  for (const wallet_amount_used of [-1, 101.5, 102, 'invalid', 'Infinity'])
     expect(
       oxygenCheckoutOrderSchema.safeParse({ ...order, wallet_amount_used })
         .success

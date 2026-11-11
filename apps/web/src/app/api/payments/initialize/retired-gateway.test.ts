@@ -13,6 +13,7 @@ it.each([
   'klump',
   'Klump',
   'KLUMP',
+  ' KlUmP ',
 ])('rejects retired %s before admission', async (gateway) => {
   const retired = retiredGatewayResponse(gateway);
   expect(retired?.status).toBe(410);

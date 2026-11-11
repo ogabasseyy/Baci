@@ -9,7 +9,15 @@ CREATE TABLE public.order_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),or
 CREATE TABLE public.order_tax_subtotals(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),order_id uuid REFERENCES public.orders(id),vat_category_code text,vat_rate numeric,taxable_amount numeric,tax_amount numeric);
 CREATE TABLE public.customer_wallet_transactions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),source_id uuid,source_type text,type text,status text DEFAULT 'completed',amount numeric,customer_id uuid,merchant_id uuid);
 CREATE TABLE public.customer_savings_redemptions(order_id uuid,amount numeric,customer_id uuid,merchant_id uuid,metadata jsonb DEFAULT '{}');
-CREATE TABLE public.transactions(order_id uuid,transaction_type text);
+CREATE TABLE public.transactions(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid, merchant_id uuid,
+ transaction_type text, gateway text, gateway_reference text, amount numeric,
+ currency text, description text, metadata jsonb
+);
+ALTER TABLE public.orders ADD COLUMN updated_at timestamptz;
+CREATE FUNCTION public.has_merchant_access(uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM public.merchants WHERE id=$1 AND user_id=auth.uid());
+$$;
 CREATE SCHEMA private;
 ALTER TABLE public.transactions ADD COLUMN status text;
 ALTER TABLE public.orders ADD COLUMN cancelled_by text;

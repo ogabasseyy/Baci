@@ -32,6 +32,12 @@ import {
   parseCreditDirectOrderNotes,
   readNoteString,
 } from './webhook-order-reference';
+import {
+  getWebhookProductsTotal,
+  getWebhookWalletProductsTotal,
+  matchesRecordedFinancedAmount,
+  readProductAmount,
+} from './webhook-payment-amount';
 
 function getPayloadKeys(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -39,35 +45,6 @@ function getPayloadKeys(value: unknown) {
   }
 
   return Object.keys(value).sort().slice(0, 20);
-}
-
-function readProductAmount(value: unknown) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    const amount = Number(value.trim());
-    return Number.isFinite(amount) ? amount : null;
-  }
-
-  return null;
-}
-
-function getWebhookProductsTotal(
-  products: CreditDirectWebhookPayload['products']
-) {
-  let total = 0;
-
-  for (const product of products) {
-    const amount = readProductAmount(product.productAmount);
-    if (amount === null) {
-      return null;
-    }
-    total += amount;
-  }
-
-  return total;
 }
 
 function formatCreditDirectProductAmount(value: unknown) {
@@ -296,6 +273,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const referenceMatch = findCreditDirectWebhookOrder(
+      orders ?? [],
+      payload.checkoutTransactionId,
+      payload.metaData ?? undefined
+    );
+    if (referenceMatch === null) {
+      logger.error({
+        message: 'Multiple orders have the active Credit Direct reference',
+        transactionId: payload.checkoutTransactionId,
+      });
+      return NextResponse.json(
+        {
+          error: 'Credit Direct reference requires payment review',
+          code: 'CREDIT_DIRECT_REFERENCE_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
+
     // Try to find by metaData (orderId) if notes search fails
     let order: {
       id: string;
@@ -310,12 +306,7 @@ export async function POST(request: NextRequest) {
       customer_name: string;
       order_number: string | null;
       notes: string | null;
-    } | null =
-      findCreditDirectWebhookOrder(
-        orders ?? [],
-        payload.checkoutTransactionId,
-        payload.metaData ?? undefined
-      ) ?? null;
+    } | null = referenceMatch ?? null;
 
     if (!order && payload.metaData) {
       const { data: orderById } = await supabase
@@ -440,7 +431,7 @@ export async function POST(request: NextRequest) {
           reference: payload.checkoutTransactionId,
           merchantCompleted:
             payload.eventType === 'Checkout_Merchant_Payment_Completed',
-          providerAmount: getWebhookProductsTotal(payload.products),
+          providerAmount: getWebhookWalletProductsTotal(payload.products),
         })
       : null;
     if (walletFunding === 'retry') {
@@ -1136,6 +1127,7 @@ async function healPaidCreditDirectOrderReplay({
     customer_name: string;
     total: number;
     amount_paid?: number | string | null;
+    wallet_amount_used?: number | string | null;
   };
   parsedNotes: Record<string, unknown>;
   payload: CreditDirectWebhookPayload;
@@ -1145,8 +1137,26 @@ async function healPaidCreditDirectOrderReplay({
   const healedMerchantAmount = readProductAmount(parsedNotes.merchantAmount);
   let healedTransactionRow = false;
   if (healedPlatformFee !== null && healedMerchantAmount !== null) {
+    const recordedAmount = healedMerchantAmount + healedPlatformFee;
+    if (
+      Number(order.wallet_amount_used) > 0 &&
+      !matchesRecordedFinancedAmount(payload.products, recordedAmount)
+    ) {
+      logger.warn({
+        message: 'Credit Direct paid wallet replay amount differs from capture',
+        orderId: order.id,
+        transactionId: payload.checkoutTransactionId,
+      });
+      return NextResponse.json(
+        {
+          error: 'Wallet financing requires payment review',
+          code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+        },
+        { status: 409 }
+      );
+    }
     const healResult = await recordCreditDirectTransaction({
-      amount: healedMerchantAmount + healedPlatformFee,
+      amount: recordedAmount,
       gatewayReference: payload.checkoutTransactionId,
       gatewayResponse: payload,
       merchantId: order.merchant_id,

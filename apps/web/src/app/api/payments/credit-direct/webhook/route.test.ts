@@ -475,6 +475,28 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
 
+    it('rejects an ambiguous active reference before metadata lookup or payment writes', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      const chain = supabase.from('orders');
+      chain.ilike.mockResolvedValue({
+        data: [mockOrder, { ...mockOrder, id: 'another-order' }],
+        error: null,
+      } as never);
+      supabase.from.mockClear();
+
+      const response = await POST(createMockRequest(merchantPaymentPayload));
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: 'CREDIT_DIRECT_REFERENCE_REVIEW_REQUIRED',
+      });
+      expect(supabase.from).toHaveBeenCalledTimes(1);
+      expect(chain.update).not.toHaveBeenCalled();
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
     it('escapes the reference search and finds the exact active match after a decoy', async () => {
       const reference = 'txn%_replay';
       const payload = {
@@ -1928,8 +1950,86 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
 
-    it('heals an exact paid wallet replay without reopening reservation verification', async () => {
+    it('sends exact currency precision to the wallet verification RPC', async () => {
+      const payload = {
+        ...customerPaymentPayload,
+        products: [3000.01, 2000.02].map((productAmount) => ({
+          ...customerPaymentPayload.products[0],
+          productAmount,
+        })),
+      };
+      vi.mocked(parseWebhookPayload).mockReturnValue(payload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      supabase.rpc.mockResolvedValue({
+        data: {
+          grossAmount: 25000.03,
+          walletAmount: 20000,
+          financedAmount: 5000.03,
+        },
+        error: null,
+      });
+      supabase.from('orders').ilike.mockResolvedValue({
+        data: [
+          {
+            ...mockOrder,
+            payment_status: 'bnpl_approved',
+            wallet_amount_used: 20000,
+          },
+        ],
+        error: null,
+      });
+
+      const response = await POST(createMockRequest(payload));
+
+      expect(response.status).toBe(200);
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'verify_credit_direct_wallet_event',
+        expect.objectContaining({ p_provider_amount: 5000.03 })
+      );
+    });
+
+    it('rejects an exact paid wallet replay with a different financed amount', async () => {
       vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      const chain = supabase.from('orders');
+      chain.ilike.mockResolvedValue({
+        data: [
+          {
+            ...mockOrder,
+            payment_status: 'paid',
+            wallet_amount_used: 20000,
+            notes: JSON.stringify({
+              creditDirectTransactionId:
+                merchantPaymentPayload.checkoutTransactionId,
+              merchantPaidAt: merchantPaymentPayload.timeStamp,
+              platformFee: 600,
+              merchantAmount: 29400,
+            }),
+          },
+        ],
+        error: null,
+      } as never);
+      supabase.from.mockClear();
+
+      const response = await POST(createMockRequest(merchantPaymentPayload));
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: 'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+      });
+      expect(supabase.from).toHaveBeenCalledTimes(1);
+    });
+
+    it('heals an exact paid wallet replay without reopening reservation verification', async () => {
+      const payload = {
+        ...merchantPaymentPayload,
+        products: [
+          { ...merchantPaymentPayload.products[0], productAmount: 30000 },
+        ],
+      };
+      vi.mocked(parseWebhookPayload).mockReturnValue(payload);
       const supabase = createMockSupabaseClient();
       vi.mocked(createServiceClient).mockReturnValue(supabase as never);
       supabase.rpc.mockResolvedValue({
@@ -1947,18 +2047,23 @@ describe('POST /api/payments/credit-direct/webhook', () => {
               creditDirectTransactionId:
                 merchantPaymentPayload.checkoutTransactionId,
               merchantPaidAt: merchantPaymentPayload.timeStamp,
+              platformFee: 600,
+              merchantAmount: 29400,
             }),
           },
         ],
         error: null,
       } as never);
 
-      const response = await POST(createMockRequest(merchantPaymentPayload));
+      const response = await POST(createMockRequest(payload));
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         received: true,
         message: 'Already processed',
       });
+      expect(chain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 30000, order_id: mockOrder.id })
+      );
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'verify_credit_direct_wallet_event',
         expect.anything()

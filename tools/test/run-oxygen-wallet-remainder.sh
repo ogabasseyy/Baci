@@ -9,6 +9,7 @@ pg_ctl -D "$fixture_dir" -l "$fixture_dir/server.log" -o "-k $fixture_dir -p 555
 export PGHOST="$fixture_dir" PGPORT=55598 PGDATABASE=postgres
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_wallet_remainder_fixture.sql
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20260427170000_deterministic_reverse_wallet_redemption_lookup.sql
+psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20260710213000_harden_manual_payment_idempotency.sql
 for migration in supabase/migrations/*oxygen*.sql; do
  # Abandoned-order housekeeping patches an unrelated non-Oxygen function.
  if [[ "${migration##*/}" > '20261107161000' || "$migration" == *20261103000100* ]]; then continue; fi
@@ -17,6 +18,7 @@ done
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107160000_record_order_store_credit.sql
 if [[ "${1:-}" != '--baseline' ]]; then
  psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql
+ psql -Xq -v ON_ERROR_STOP=1 -f supabase/migrations/20261111180000_preserve_oxygen_order_settlement_paths.sql
 fi
 psql -Xq -v ON_ERROR_STOP=1 -f supabase/tests/oxygen_wallet_remainder.sql
 # Match the live credit-writer lock without waiting or deadlocking admission.

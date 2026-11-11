@@ -32,7 +32,7 @@ export const oxygenCheckoutOrderSchema = z
       })
     ),
   })
-  .refine((order) => order.wallet_amount_used <= order.total, {
-    message: 'Wallet credit exceeds order total',
+  .refine((order) => order.wallet_amount_used < order.total, {
+    message: 'Oxygen checkout requires a positive balance after wallet credit',
     path: ['wallet_amount_used'],
   });

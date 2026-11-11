@@ -1470,6 +1470,7 @@ describe('POST /api/payments/initialize', () => {
   it.each([
     ['klump', 0],
     ['Klump', 20000],
+    [' KlUmP ', 20000],
     ['KLUMP', 0],
   ])('rejects retired %s before payment reads or writes (wallet: %s)', async (gateway, wallet_amount_used) => {
     orderPaymentResult = { data: { wallet_amount_used }, error: null };

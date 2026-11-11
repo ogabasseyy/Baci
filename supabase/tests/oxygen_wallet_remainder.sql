@@ -147,6 +147,31 @@ UPDATE public.orders SET payment_method='card' WHERE id='00000000-0000-4000-8000
 UPDATE public.orders SET amount_paid=50000,payment_status='paid' WHERE id='00000000-0000-4000-8000-000000000022';
 SELECT public.test_assert((SELECT payment_status='paid' FROM public.orders WHERE id='00000000-0000-4000-8000-000000000022'),'safe exit keeps later non-Oxygen settlement usable');
 
+-- An authenticated manual settlement on an existing Oxygen order preserves the
+-- original financing basis and keeps new Oxygen commands fenced.
+INSERT INTO public.orders(id,merchant_id,customer_id,total,currency,payment_method)
+ VALUES('00000000-0000-4000-8000-000000000026','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',50000,'NGN','oxygen');
+SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000026');
+SELECT public.test_reject($q$UPDATE public.orders SET amount_paid=1000 WHERE id='00000000-0000-4000-8000-000000000026'$q$,'oxygen_funding_snapshot_changed');
+UPDATE public.merchants SET user_id='00000000-0000-4000-8000-000000000005' WHERE id='00000000-0000-4000-8000-000000000002';
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000005',false);
+SET ROLE authenticated;
+SELECT public.record_manual_order_payment(
+ '00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000026',
+ 1000,'NGN',NULL,'Test manual deposit','{}','oxygen-manual-test'
+);
+SELECT public.record_manual_order_payment(
+ '00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000026',
+ 1000,'NGN',NULL,'Test manual deposit','{}','oxygen-manual-test'
+);
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
+SELECT public.test_assert((SELECT amount_paid=1000 AND payment_status='partially_paid' FROM public.orders WHERE id='00000000-0000-4000-8000-000000000026'),'manual deposit is applied exactly once');
+SELECT public.test_assert((SELECT count(*)=1 FROM public.transactions WHERE order_id='00000000-0000-4000-8000-000000000026'),'manual replay does not duplicate its ledger row');
+SELECT public.test_assert(oxygen_private.financed_amount('00000000-0000-4000-8000-000000000026')=50000,'manual recording preserves admitted basis');
+SELECT public.test_reject($q$SELECT oxygen_private.assert_no_recorded_gateway_payment('00000000-0000-4000-8000-000000000026')$q$,'oxygen_gateway_payment_in_use');
+SELECT public.test_reject($q$UPDATE public.orders SET amount_paid=2000 WHERE id='00000000-0000-4000-8000-000000000026'$q$,'oxygen_funding_snapshot_changed');
+
 -- The actual reversal RPC must preserve one admitted debit until a provably
 -- safe, authenticated cancellation; an application-only draft may exit.
 INSERT INTO public.customer_wallets(id,customer_id,merchant_id,available_balance,total_redeemed)
@@ -160,7 +185,11 @@ SELECT public.record_order_store_credit('00000000-0000-4000-8000-000000000024');
 SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000023');
 SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000024');
 SELECT public.test_reject($q$SELECT public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000023')$q$,'oxygen_local_credit_in_use');
-UPDATE public.orders SET payment_method='card',shipping_status='cancelled',cancelled_at=now() WHERE id IN ('00000000-0000-4000-8000-000000000023','00000000-0000-4000-8000-000000000024');
+UPDATE public.orders SET payment_method='card' WHERE id IN ('00000000-0000-4000-8000-000000000023','00000000-0000-4000-8000-000000000024');
+INSERT INTO public.transactions(order_id,merchant_id,transaction_type,gateway,status,amount,currency)
+ VALUES('00000000-0000-4000-8000-000000000023','00000000-0000-4000-8000-000000000002','payment','paystack','completed',30000,'NGN');
+UPDATE public.orders SET amount_paid=50000,payment_status='paid' WHERE id='00000000-0000-4000-8000-000000000023';
+UPDATE public.orders SET shipping_status='cancelled',cancelled_at=now() WHERE id IN ('00000000-0000-4000-8000-000000000023','00000000-0000-4000-8000-000000000024');
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000099',false);
 SELECT public.test_reject($q$SELECT public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000023')$q$,'oxygen_local_credit_in_use');
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
@@ -168,6 +197,11 @@ SELECT public.test_assert((SELECT success FROM public.reverse_wallet_redemption(
 SELECT public.test_assert((SELECT NOT success FROM public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000023')),'reversal retry cannot double credit');
 SELECT public.test_assert((SELECT available_balance=20000 FROM public.customer_wallets WHERE id='30000000-0000-4000-8000-000000000001'),'wallet restored exactly once');
 SELECT public.test_assert((SELECT gross_amount=50000 AND wallet_amount=20000 AND financed_amount=30000 FROM oxygen_private.funding_snapshots WHERE order_id='00000000-0000-4000-8000-000000000023'),'refund preserves historical invoice basis');
+-- Explicit Oxygen payment evidence remains blocking after a method switch.
+INSERT INTO public.transactions(order_id,merchant_id,transaction_type,gateway,status,amount,currency)
+ VALUES('00000000-0000-4000-8000-000000000024','00000000-0000-4000-8000-000000000002','payment','oxygen','completed',30000,'NGN');
+SELECT public.test_reject($q$SELECT public.reverse_wallet_redemption('00000000-0000-4000-8000-000000000024')$q$,'oxygen_local_credit_in_use');
+DELETE FROM public.transactions WHERE order_id='00000000-0000-4000-8000-000000000024';
 -- A legacy order_refund credit has the same safe terminal proof and debit binding.
 INSERT INTO public.customer_wallet_transactions(wallet_id,source_id,source_type,type,amount,balance_after,customer_id,merchant_id)
  VALUES('30000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000024','order_refund','refund',20000,40000,'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002');

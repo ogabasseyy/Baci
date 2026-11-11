@@ -36,6 +36,9 @@ export function findCreditDirectWebhookOrder<
       readNoteString(notes.creditDirectSessionId);
     return activeReference === reference;
   });
+  // A duplicate active reference is ambiguous even with provider metadata.
+  if (exactMatches.length > 1) return null;
+
   // Metadata can identify an unpersisted popup. The route still validates
   // the active reference or the signed unpersisted-popup case before writing.
   return exactMatches.length === 1

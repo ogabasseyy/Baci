@@ -1,6 +1,6 @@
 export function normalizeRetiredGateway(gateway: unknown): unknown {
   if (typeof gateway !== 'string') return gateway;
-  const normalized = gateway.toLowerCase();
+  const normalized = gateway.trim().toLowerCase();
   return normalized === 'klump' || normalized === 'credpal'
     ? normalized
     : gateway;

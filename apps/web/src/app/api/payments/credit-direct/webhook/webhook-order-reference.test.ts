@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { findCreditDirectWebhookOrder } from './webhook-order-reference';
 
-it('requires the signed order ID to disambiguate duplicate active references', () => {
+it('rejects duplicate active references even with a signed order ID', () => {
   const orders = ['first', 'second'].map((id) => ({
     id,
     payment_method: 'credit_direct',
@@ -9,10 +9,10 @@ it('requires the signed order ID to disambiguate duplicate active references', (
   }));
   expect(
     findCreditDirectWebhookOrder(orders, 'reference', undefined)
-  ).toBeUndefined();
-  expect(findCreditDirectWebhookOrder(orders, 'reference', 'second')).toBe(
-    orders[1]
-  );
+  ).toBeNull();
+  expect(
+    findCreditDirectWebhookOrder(orders, 'reference', 'second')
+  ).toBeNull();
 });
 
 it('ignores text-only hits and superseded signed sessions', () => {

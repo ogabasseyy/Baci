@@ -48,8 +48,9 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
-  // Expo Router synthesizes this exact URL for a launcher start with no link.
-  // All other URLs still pass through the pairing-link validation boundary.
+  // Expo Router falls back to Expo Linking's createURL('/') on a bare-app
+  // launcher start without a link. Match that exact storefront URL so
+  // decorated and later deliveries still go through pairing validation.
   if (initial && path === 'ogabassey:///') return '/';
 
   let apiHostname = '';

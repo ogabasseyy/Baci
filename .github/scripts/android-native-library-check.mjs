@@ -14,6 +14,8 @@ if (!['.aab', '.apk'].includes(extension) || (extension === '.apk' && !flag) || 
   console.error('Invalid artifact or ABI list; APK verification requires explicit --abis.');
   process.exit(2);
 }
+// This packaging check verifies library presence and ELF architecture headers.
+// Dynamic linking and symbol compatibility require separate runtime checks.
 const python = String.raw`
 import sys, zipfile
 artifact, prefix, *abis = sys.argv[1:]

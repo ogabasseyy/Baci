@@ -227,7 +227,7 @@ export function isRetryablePurgeError(error) {
   );
 }
 
-function retryDelay(error, attempt, baseDelayMs, maximumDelayMs) {
+export function retryDelay(error, attempt, baseDelayMs, maximumDelayMs) {
   const exponential = baseDelayMs * 2 ** (attempt - 1);
   const retryAfter = Number(error?.retryAfterMs) || 0;
   return Math.min(maximumDelayMs, Math.max(exponential, retryAfter));

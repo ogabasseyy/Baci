@@ -19,6 +19,9 @@ test('shared pnpm cache saves on self-hosted runners require explicit opt-in', a
   assert.ok(match, 'cache save step and condition must exist');
   const conditions = match[1].split('&&').map((part) => part.trim());
   assert.deepEqual(conditions, [
+    // A persistent store (the contabo-baci-ci runners) is never archived to the GitHub cache. This
+    // condition can only narrow when a save happens; the opt-in rules below are unchanged.
+    "steps.pnpm-store.outputs.persistent != 'true'",
     "(runner.environment == 'github-hosted' || inputs.allow-self-hosted-cache-save == 'true')",
     "github.ref == 'refs/heads/main'",
     "github.event_name == 'push'",

@@ -166,6 +166,20 @@ describe('resolveOrderReceiptLogo', () => {
     expect(result.svgXml).not.toContain('<script');
   });
 
+  it('accepts JPEG restart intervals and entropy restart markers', async () => {
+    const image = raster(JPEG);
+    const expanded = new Uint8Array(image.length + 8);
+    expanded.set(image.subarray(0, 2));
+    expanded.set([0xff, 0xdd, 0x00, 0x04, 0x00, 0x01], 2);
+    expanded.set(image.subarray(2, image.length - 2), 8);
+    expanded.set([0xff, 0xd0, 0xff, 0xd9], expanded.length - 4);
+    mockFetch.mockResolvedValue(new Response(expanded));
+    const result = await resolveOrderReceiptLogo(logoUrl);
+    expect(result.logoUrl).toBe(
+      `data:image/jpeg;base64,${Buffer.from(expanded).toString('base64')}`
+    );
+  });
+
   it('encodes a raster spanning multiple blocks without interior padding', async () => {
     const image = raster(PNG);
     const payloadSize = 25_000;

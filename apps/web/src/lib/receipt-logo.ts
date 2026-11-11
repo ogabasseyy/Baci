@@ -11,15 +11,6 @@ const SUPABASE_PUBLIC_LOGO_PREFIXES = [
 ];
 const MEDIA_CDN_PUBLIC_PREFIX = '/media/';
 
-function isSupportedLogoContentType(contentType: string) {
-  return (
-    contentType.startsWith('image/png') ||
-    contentType.startsWith('image/jpeg') ||
-    contentType.startsWith('image/jpg') ||
-    contentType.startsWith('image/webp')
-  );
-}
-
 function isTrustedLogoUrl(parsedUrl: URL) {
   if (
     parsedUrl.protocol !== 'https:' ||
@@ -156,9 +147,6 @@ export async function resolveReceiptLogoDataUri(merchant: ReceiptMerchant) {
     });
     if (!response.ok) return null;
 
-    const contentType = response.headers.get('content-type') || '';
-    if (!isSupportedLogoContentType(contentType)) return null;
-
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (contentLength > MAX_LOGO_BYTES) return null;
 
@@ -166,10 +154,18 @@ export async function resolveReceiptLogoDataUri(merchant: ReceiptMerchant) {
     if (!imageBytes) return null;
 
     const bytes = Buffer.from(imageBytes);
-    const contentMime = contentType.split(';')[0].trim().toLowerCase();
-    const mime = contentMime === 'image/jpg' ? 'image/jpeg' : contentMime;
-    return (await isSafeLogo(bytes, mime.slice(6)))
-      ? `data:${mime};base64,${bytes.toString('base64')}`
+    const format = bytes
+      .subarray(0, 8)
+      .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      ? 'png'
+      : bytes[0] === 0xff && bytes[1] === 0xd8
+        ? 'jpeg'
+        : bytes.toString('ascii', 0, 4) === 'RIFF' &&
+            bytes.toString('ascii', 8, 12) === 'WEBP'
+          ? 'webp'
+          : null;
+    return format && (await isSafeLogo(bytes, format))
+      ? `data:image/${format};base64,${bytes.toString('base64')}`
       : null;
   } catch {
     return null;

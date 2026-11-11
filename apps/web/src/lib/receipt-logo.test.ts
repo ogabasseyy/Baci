@@ -93,6 +93,28 @@ describe('receipt logo safety', () => {
     );
   });
 
+  it('accepts a verified raster when a trusted origin returns octet-stream', async () => {
+    const png = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: '#ffffff' },
+    })
+      .png()
+      .toBuffer();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(png, {
+          headers: { 'content-type': 'application/octet-stream' },
+        })
+      )
+    );
+    await expect(
+      resolveReceiptLogoDataUri({
+        ...baseMerchant,
+        logo_url: 'https://cdn.ogabassey.com/media/logo.png',
+      })
+    ).resolves.toBe(`data:image/png;base64,${png.toString('base64')}`);
+  });
+
   it('normalizes a fetched image/jpg logo to the standard JPEG MIME', async () => {
     const jpeg = await sharp({
       create: { width: 1, height: 1, channels: 3, background: '#ffffff' },

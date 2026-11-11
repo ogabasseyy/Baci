@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import ts from '@typescript/typescript6';
 import YAML from 'yaml';
+import { decide, needsProductionTypecheck } from './production-build-typecheck-scope.mjs';
 
 const web = fileURLToPath(new URL('../../apps/web/', import.meta.url));
 function parse(name) {
@@ -67,20 +68,62 @@ test('CI runs the production build type-check path after the normal typecheck', 
   // Same three steps as `build` before `next build`; build:ci skips type checking, so CI needs this.
   assert.equal(
     manifest.scripts['typecheck:build'],
-    'next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && tsc --noEmit -p tsconfig.build.json'
+    'next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && tsc --noEmit --incremental false -p tsconfig.build.json'
   );
-  assert.ok(manifest.scripts.build.startsWith(manifest.scripts['typecheck:build'].replace(' && tsc --noEmit -p tsconfig.build.json', '')));
+  // `--incremental false`: with a stale tsconfig.build.tsbuildinfo the compiler accepted an unprepared
+  // declaration in under two seconds; the gate must re-check everything on every run.
+  const prefix = ' && tsc --noEmit --incremental false -p tsconfig.build.json';
+  assert.ok(manifest.scripts['typecheck:build'].endsWith(prefix));
+  assert.ok(manifest.scripts.build.startsWith(`${manifest.scripts['typecheck:build'].slice(0, -prefix.length)} && `));
   const workflow = YAML.parse(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'));
   const steps = workflow.jobs['quality-typecheck'].steps;
   const normal = steps.findIndex(step => step.name === 'Run Typecheck');
+  const scope = steps.findIndex(step => step.name === 'Decide production build typecheck');
   const prod = steps.findIndex(step => step.name === 'Run production build typecheck');
-  assert.ok(normal >= 0 && prod > normal, 'production build typecheck must follow the normal typecheck');
-  assert.equal(steps[prod].run, 'pnpm run typecheck:build');
-  assert.equal(steps[prod]['working-directory'], 'apps/web');
+  assert.ok(normal >= 0 && scope > normal && prod > scope, 'production build typecheck must follow the normal typecheck');
+  assert.equal(steps[scope].id, 'production-typecheck-scope');
+  assert.equal(steps[scope].run, 'node .github/scripts/production-build-typecheck-scope.mjs');
+  assert.equal(steps[scope].env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');
+  assert.equal(steps[prod].if, "steps.production-typecheck-scope.outputs.run == 'true'");
+  assert.equal(steps[prod].run, 'pnpm turbo typecheck:build --filter=@baci/web');
   assert.equal(steps[prod].env.GOMEMLIMIT, '6GiB', 'match the deploy build compiler memory budget');
-  assert.equal(steps[prod]['timeout-minutes'], 15, 'a slow OOM abort must fail within the step, not the shared job budget');
+  assert.equal(steps[prod]['timeout-minutes'], 15, 'a slow compiler abort must fail within the step, not the shared job budget');
   assert.equal(steps[prod]['continue-on-error'], undefined);
-  assert.equal(steps[prod].if, undefined);
+  assert.equal(steps[scope]['continue-on-error'], undefined);
+  const turbo = JSON.parse(readFileSync(new URL('../../turbo.json', import.meta.url), 'utf8'));
+  assert.deepEqual(turbo.tasks['typecheck:build'], turbo.tasks.typecheck);
+  // GOMEMLIMIT only budgets the native compiler: the web app must stay on TypeScript 7.
+  assert.match(manifest.devDependencies.typescript, /^~7\./);
+});
+
+test('pull requests skip the production build typecheck only when no build toolchain file changed', () => {
+  const list = files => () => files;
+  const run = (files, baseSha = 'base') => decide({ baseSha, listChangedFiles: list(files) }).run;
+  for (const file of [
+    'apps/web/package.json',
+    'apps/web/tsconfig.build.json',
+    'apps/web/tsconfig.json',
+    'apps/web/next.config.ts',
+    'apps/web/tools/prepare-typed-navigation.mjs',
+    'apps/web/src/config/build-typecheck.ts',
+    'pnpm-lock.yaml',
+    'package.json',
+    'turbo.json',
+    'tsconfig.base.json',
+    'patches/next@16.4.1.patch',
+    '.github/workflows/ci.yml',
+    '.github/actions/pnpm-install-cached/action.yml',
+    '.github/scripts/production-build-typecheck-scope.mjs',
+    '.github/scripts/production-typecheck-scope.test.mjs',
+  ]) {
+    assert.equal(needsProductionTypecheck([file]), true, file);
+    assert.equal(run(['apps/web/src/app/page.tsx', file]), true, file);
+  }
+  assert.equal(run(['apps/web/src/components/storefront/blocks/footer.tsx', 'docs/x.md']), false);
+  // Fail closed: pushes, an unreadable diff, and an empty diff all run the check.
+  assert.equal(run(['apps/web/src/app/page.tsx'], ''), true);
+  assert.equal(run([]), true);
+  assert.equal(decide({ baseSha: 'base', listChangedFiles: () => { throw new Error('git failed'); } }).run, true);
 });
 
 test('production budgets the native Go compiler without changing the full CI typecheck', () => {

@@ -188,14 +188,22 @@ jobs:
           fi
       # `build:ci` skips type checking, so only this step exercises the type-check path of the
       # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
+      # Pull requests run it only when the build toolchain or configuration changed; source-only
+      # changes are covered by the typecheck above. Pushes to main always run it.
+      - name: Decide production build typecheck
+        id: production-typecheck-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/production-build-typecheck-scope.mjs
       - name: Run production build typecheck
-        working-directory: apps/web
-        # A drifted route union OOM-aborts after ~20 min; fail within the step instead of the job.
+        if: steps.production-typecheck-scope.outputs.run == 'true'
+        # A break here can end in a slow compiler abort; fail within the step instead of the job.
         timeout-minutes: 15
         env:
-          # Same soft GC budget as the deploy build; the TypeScript 7 compiler is a Go binary.
+          # Same soft GC budget as the deploy build. apps/web pins typescript ~7.0.2, the native Go
+          # compiler (only the repo root aliases `typescript` to TypeScript 6), so NODE_OPTIONS does not apply.
           GOMEMLIMIT: 6GiB
-        run: pnpm run typecheck:build
+        run: pnpm turbo typecheck:build --filter=@baci/web
 
   quality-test:
     name: Quality Gate - Test

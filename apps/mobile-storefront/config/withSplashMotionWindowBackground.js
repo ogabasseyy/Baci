@@ -1,7 +1,23 @@
-const { withAndroidStyles } = require('@expo/config-plugins');
+const { withAndroidStyles, withMainActivity } = require('@expo/config-plugins');
+const {
+  removeGeneratedContents,
+} = require('@expo/config-plugins/build/utils/generateCode');
 
 module.exports = function withSplashMotionWindowBackground(config) {
-  return withAndroidStyles(config, (innerConfig) => {
+  const splashMotionConfig = withMainActivity(config, (innerConfig) => {
+    // SplashMotion installs in onActivityPreCreated on Android 10+. Expo's
+    // later registration replaces its exit listener and stalls playback.
+    const source = innerConfig.modResults.contents;
+    innerConfig.modResults.contents = (
+      removeGeneratedContents(source, 'expo-splashscreen') ?? source
+    ).replace(
+      /^import expo\.modules\.splashscreen\.SplashScreenManager;?\r?\n/m,
+      ''
+    );
+    return innerConfig;
+  });
+
+  return withAndroidStyles(splashMotionConfig, (innerConfig) => {
     const styles = innerConfig.modResults.resources.style ?? [];
     const appTheme = styles.find((style) => style.$.name === 'AppTheme');
     if (appTheme) {

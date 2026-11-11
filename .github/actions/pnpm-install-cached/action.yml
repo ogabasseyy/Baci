@@ -45,8 +45,31 @@ runs:
         dest: ${{ runner.temp }}/setup-pnpm-install-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
 
     # Strict split caching for pnpm content-addressable store
+    # The persistent private CI runner keeps its pnpm store outside the workspace.
+    # `git clean` at checkout deletes a workspace-relative store, which forced every
+    # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
+    - id: pnpm-store
+      name: Select pnpm store directory
+      shell: bash
+      env:
+        STORE_DIR: ${{ inputs.store-dir }}
+        PERSISTENT_RUNNER: ${{ runner.environment == 'self-hosted' && startsWith(runner.name, 'contabo-baci-ci') }}
+        TOOL_CACHE: ${{ runner.tool_cache }}
+      run: |
+        set -euo pipefail
+        persistent=false
+        dir="$STORE_DIR"
+        if [ "$PERSISTENT_RUNNER" = 'true' ] && [ "$STORE_DIR" = '.pnpm-store' ]; then
+          persistent=true
+          dir="$TOOL_CACHE/pnpm-store"
+          mkdir -p "$dir"
+        fi
+        echo "persistent=$persistent" >> "$GITHUB_OUTPUT"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
     - id: pnpm-store-cache
       name: Restore pnpm store cache
+      if: steps.pnpm-store.outputs.persistent != 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
         path: ${{ inputs.store-dir }}
@@ -58,7 +81,7 @@ runs:
       shell: bash
       env:
         PNPM_BIN_DIR: ${{ steps.setup_pnpm.outputs.bin_dest }}
-        STORE_DIR: ${{ inputs.store-dir }}
+        STORE_DIR: ${{ steps.pnpm-store.outputs.dir }}
       run: |
         set -euo pipefail
 

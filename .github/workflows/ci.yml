@@ -35,7 +35,9 @@ env:
 
 jobs:
   changes:
-    runs-on: ubuntu-24.04
+    # Same trust rule as private_ci_trusted below, evaluated from event data so it
+    # needs no upstream job: forks and untrusted events stay on GitHub-hosted runners.
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     outputs:
       mobile_admin: ${{ steps.gate.outputs.mobile_admin }}
       mobile_storefront: ${{ steps.gate.outputs.mobile_storefront }}
@@ -111,7 +113,7 @@ jobs:
     name: CWV Runner Contracts
     needs: [changes]
     if: needs.changes.outputs.cwv_runner == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -138,7 +140,8 @@ jobs:
     # registered. Fork PRs and unverified merge groups stay on hosted runners; no hosted fallback is
     # silently substituted when the private runner is offline.
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
+    # Cold cache restores can take over ten minutes on the private runner.
+    timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && 30 || 15 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -318,7 +321,7 @@ jobs:
     name: Quality Gate - DB Replay
     needs: [changes]
     if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
       BACI_REPLAY_COMMAND_TIMEOUT_MS: 1800000
@@ -335,25 +338,31 @@ jobs:
           SUPABASE_CLI_VERSION: 2.111.0
         run: |
           set -euo pipefail
-          sudo install -d /usr/share/postgresql-common/pgdg
-          curl --fail --silent --show-error --location \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y postgresql-18=18.3-1.pgdg24.04+1 postgresql-client-18=18.3-1.pgdg24.04+1
-          SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
-          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
-            "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
-            --output "${SUPABASE_ARCHIVE}"
-          echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
-          sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go
-          sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go
+          # GitHub-hosted runners start empty and may use sudo. The self-hosted CI server
+          # (Ubuntu 26.04, runner user without sudo) has the same pinned toolchain
+          # pre-installed (PostgreSQL 18.3 and Supabase CLI), so only the checks run there.
+          if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
+            sudo install -d /usr/share/postgresql-common/pgdg
+            curl --fail --silent --show-error --location \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+              | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            sudo apt-get update
+            sudo apt-get install -y postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2
+            SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
+            curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+              "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
+              --output "${SUPABASE_ARCHIVE}"
+            echo "${SUPABASE_CLI_SHA256}  ${SUPABASE_ARCHIVE}" | sha256sum --check
+            sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go
+            sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go
+          fi
+          test -x /usr/lib/postgresql/18/bin/initdb
           test -x /usr/local/bin/supabase-go
           test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
           PSQL_BIN="$(command -v psql)"
-          "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
+          "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
@@ -425,7 +434,7 @@ jobs:
     name: Quality Gate - Disposable SQL Suites
     needs: [changes]
     if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     services:
       postgres:
@@ -448,8 +457,12 @@ jobs:
       - name: Install PostgreSQL client and server binaries
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client postgresql-16
+          # Pre-installed on the self-hosted CI server, whose runner user has no sudo.
+          if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client postgresql-16
+          fi
+          test -x /usr/lib/postgresql/16/bin/initdb
       - name: Test storefront order explicit delegation
         env:
           PG_BIN: /usr/lib/postgresql/16/bin
@@ -510,7 +523,7 @@ jobs:
     name: Quality Gate - Misc
     needs: [changes]
     if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -553,16 +566,25 @@ jobs:
           REQUIRE_PG_TESTS: '1'
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y postgresql-16
+          # Pre-installed on the self-hosted CI server, whose runner user has no sudo.
+          if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-16
+          fi
+          test -x /usr/lib/postgresql/16/bin/initdb
           pnpm --filter @baci/web exec vitest run tools/db/piggyvest-legacy
       - name: Test cart quota guard staging and signed PostgREST
         if: needs.changes.outputs.deploy_scripts == 'true'
         env:
           PG_BIN: /usr/lib/postgresql/16/bin
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-16
+          set -euo pipefail
+          # Pre-installed on the self-hosted CI server, whose runner user has no sudo.
+          if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-16
+          fi
+          test -x /usr/lib/postgresql/16/bin/initdb
           curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 120 \
             -o "$RUNNER_TEMP/postgrest.tar.xz" \
             https://github.com/PostgREST/postgrest/releases/download/v16.4/postgrest-v16.4-linux-static-x86-64.tar.xz
@@ -659,30 +681,6 @@ jobs:
           src/app/api/orders
           src/app/api/merchant/quiz
           src/app/dashboard/quiz
-      # Quiz runtime gate: enforced for either supported quiz phase. Phase 1a
-      # still signs negotiated-checkout proofs, so validate the runtime secret
-      # against the live database there too; production additionally validates
-      # prize approval evidence. Run only on trusted main pushes and merge
-      # queue integration commits so pull requests stay secret-free.
-      - name: Verify Quiz Production Approval
-        if: >-
-          (
-            (
-              github.event_name == 'push' &&
-              github.ref == 'refs/heads/main'
-            ) ||
-            github.event_name == 'merge_group'
-          ) &&
-          (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') &&
-          (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production')
-        env:
-          QUIZ_PHASE: ${{ vars.QUIZ_PHASE }}
-          QUIZ_PRODUCTION_APPROVED: ${{ vars.QUIZ_PRODUCTION_APPROVED }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
-        run: pnpm --filter @baci/web check:quiz-approval
       - name: Run Storefront Guardrail Unit Tests
         if: needs.changes.outputs.mobile_storefront == 'true'
         run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts scripts/validate-fastfile-submit-version-guard.test.ts scripts/validate-fastfile-submit-version-guard-settle.test.ts --runInBand && ruby apps/mobile-storefront/scripts/asc_version_slot_load_test.rb && ruby apps/mobile-storefront/scripts/asc_version_slot_settle_test.rb
@@ -702,15 +700,45 @@ jobs:
         uses: ./.github/actions/storefront-release-tests
       - name: Run Knip Dead Code Check
         if: needs.changes.outputs.web == 'true'
+        # The repository-wide analysis exceeds Node's default ~2 GiB heap.
+        # Scope the larger limit to Knip so other steps retain their defaults.
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm knip
 
 
+  # The only CI step holding the Supabase service-role key. It must never run on
+  # the general private runner, which executes branch code. Trusted main pushes
+  # run it on the deploy runner; merge_group (not in use) falls back to hosted.
+  quality-quiz-approval:
+    name: Quality Gate - Quiz Approval
+    needs: [changes]
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'merge_group') &&
+      (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') &&
+      (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production')
+    runs-on: ${{ github.event_name == 'push' && fromJSON('["self-hosted","Linux","X64","baci-deploy"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm-install-cached
+      - name: Verify Quiz Production Approval
+        env:
+          QUIZ_PHASE: ${{ vars.QUIZ_PHASE }}
+          QUIZ_PRODUCTION_APPROVED: ${{ vars.QUIZ_PRODUCTION_APPROVED }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
+        run: pnpm --filter @baci/web check:quiz-approval
+
   silent-revert-guard:
     name: Silent Revert Guard
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -718,8 +746,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      # Full-history checkout already fetched the base repository. Use the
-      # exact event base SHA without keeping credentials for later steps.
+      - name: Verify checked-out commit history
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid commit SHA' >&2; exit 1; }
+            git cat-file -e "${sha}^{commit}"
+          done
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
@@ -735,9 +771,10 @@ jobs:
 
   quality:
     name: Quality Gate
-    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, mobile-quality, silent-revert-guard]
+    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, quality-quiz-approval, mobile-quality, silent-revert-guard]
     if: ${{ always() }}
-    runs-on: ubuntu-24.04
+    # Aggregate must not depend on `changes` outputs: if `changes` fails it still has to report.
+    runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 5
     steps:
       - name: Verify split quality gate results
@@ -753,6 +790,7 @@ jobs:
           WEB_TEST_RESULT: ${{ needs['quality-test-web'].result }}
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
+          QUIZ_APPROVAL_RESULT: ${{ needs['quality-quiz-approval'].result }}
           QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
           WEB_CHANGED: ${{ needs.changes.outputs.web }}
           MOBILE_ADMIN_CHANGED: ${{ needs.changes.outputs.mobile_admin }}
@@ -786,7 +824,7 @@ jobs:
             exit 1
           fi
 
-          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
+          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT" "$QUIZ_APPROVAL_RESULT"; do
             case "$result" in
               success|skipped)
                 ;;
@@ -802,7 +840,7 @@ jobs:
   mobile-quality:
     name: Mobile Admin Guardrails
     needs: [changes]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
@@ -851,7 +889,10 @@ jobs:
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache
         name: Restore Next.js build cache
-        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        # Avoid hashing the full installed workspace and restoring a shared
+        # cache on the persistent private runner. An existing on-disk cache
+        # may still be reused; this does not guarantee a cold build.
+        if: runner.environment == 'github-hosted' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/apps/web/.next/cache

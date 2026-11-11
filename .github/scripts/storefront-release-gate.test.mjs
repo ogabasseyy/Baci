@@ -199,7 +199,7 @@ test('CI must run every gate test, unconditionally, in its changes job', () => {
   assert.deepEqual(collectGateFailures(withFiles({ [CI]: ci.replace(`${step}\n`, '') })), [
     `${CI} must run the "Test storefront release gate" step in its changes job`,
   ]);
-  const jobSkipped = ci.replace('  changes:\n    runs-on: ubuntu-24.04\n', "  changes:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-24.04\n");
+  const jobSkipped = ci.replace('  changes:\n', "  changes:\n    if: github.event_name == 'push'\n");
   assert.notEqual(jobSkipped, ci, 'fixture must add a job condition');
   assert.deepEqual(collectGateFailures(withFiles({ [CI]: jobSkipped })), [`${CI} changes job must run unconditionally`]);
 });

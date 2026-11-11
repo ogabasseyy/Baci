@@ -40,6 +40,13 @@ describe('parseOperatorArgs', () => {
     });
   });
 
+  it('accepts any id PostgreSQL prints as a uuid, not only RFC-versioned ones', () => {
+    const nonRfc = 'ffffffff-ffff-0fff-cfff-ffffffffffff';
+    expect(
+      parseOperatorArgs(['requeue', nonRfc, '--reason', 'fix #4199 deployed'])
+    ).toMatchObject({ captureId: nonRfc });
+  });
+
   it('defaults to a preview without --yes', () => {
     expect(
       parseOperatorArgs(['requeue', CAPTURE, '--reason', 'fix #4199 deployed'])

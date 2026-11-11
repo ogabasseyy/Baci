@@ -122,8 +122,8 @@ export function sessionFailures(
   return failures;
 }
 
-const POOLER_PORT = '6543';
-const POOLER_HOST_SUFFIX = '.pooler.supabase.com';
+const DIRECT_HOST = /^db\.[a-z0-9]{20}\.supabase\.co$/;
+const DIRECT_PORTS = new Set(['', '5432']);
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
@@ -157,13 +157,12 @@ export function readOperatorConnection(connectionString: string): {
       'the connection string must name its host directly'
     );
   const loopback = LOOPBACK_HOSTS.has(url.hostname);
-  // Supabase's pooler listens on 6543. Behind it, the server-side transport
-  // check would see the pooler's link, not the operator's, so require the
-  // direct connection.
+  // Allowlist, not a pooler blocklist: behind any pooler or proxy the
+  // server-side transport check would see that hop, not the operator's, so
+  // only Supabase's direct database host on 5432 (or loopback) is accepted.
   if (
-    url.port === POOLER_PORT ||
-    url.hostname.endsWith(POOLER_HOST_SUFFIX) ||
-    /pooler|pgbouncer/i.test(url.hostname)
+    !loopback &&
+    !(DIRECT_HOST.test(url.hostname) && DIRECT_PORTS.has(url.port))
   )
     throw new OperatorRefusal(
       'use the direct database connection (db.<ref>.supabase.co:5432), not the pooler'

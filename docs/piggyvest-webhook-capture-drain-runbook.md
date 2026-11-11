@@ -289,7 +289,8 @@ From `apps/web`, with your own login's connection string (TLS) in
 `PIGGYVEST_CAPTURE_OPERATOR_DATABASE_URL`. It must be the **direct** database
 connection (`db.<project-ref>.supabase.co`, port 5432), never the pooler on
 port 6543: the tool's encryption check sees only the last hop into PostgreSQL,
-which through a pooler is the pooler's own link. The tool refuses port 6543.
+which through a pooler is the pooler's own link. The tool accepts only that
+direct host on port 5432 (or a loopback database for local testing).
 
 1. `pnpm piggyvest:capture-replay list` shows parked deliveries (metadata
    only: id, event type, transaction id, attempts, last error).

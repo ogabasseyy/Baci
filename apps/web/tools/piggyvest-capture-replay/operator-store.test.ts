@@ -88,7 +88,8 @@ describe('createOperatorStore', () => {
     };
     const fake = fakeClient(goodSession, { result });
     const store = createOperatorStore({
-      connectionString: 'postgres://ops@db.example.test/postgres',
+      connectionString:
+        'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres',
       createClient: fake.createClient,
     });
 
@@ -124,7 +125,8 @@ describe('createOperatorStore', () => {
       undefined
     );
     const store = createOperatorStore({
-      connectionString: 'postgres://anon@db.example.test/postgres',
+      connectionString:
+        'postgres://anon@db.abcdefghijklmnopqrst.supabase.co/postgres',
       createClient: fake.createClient,
     });
 
@@ -139,7 +141,8 @@ describe('createOperatorStore', () => {
     const fake = fakeClient(undefined, undefined);
     await expect(
       createOperatorStore({
-        connectionString: 'postgres://x@db.example.test/postgres',
+        connectionString:
+          'postgres://x@db.abcdefghijklmnopqrst.supabase.co/postgres',
         createClient: fake.createClient,
       }).list(5)
     ).rejects.toThrow('session could not be verified');
@@ -149,7 +152,8 @@ describe('createOperatorStore', () => {
     const fake = fakeClient(goodSession, { captures: [{ captureId: 'nope' }] });
     await expect(
       createOperatorStore({
-        connectionString: 'postgres://ops@db.example.test/postgres',
+        connectionString:
+          'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres',
         createClient: fake.createClient,
       }).list(5)
     ).rejects.toThrow();
@@ -159,11 +163,13 @@ describe('createOperatorStore', () => {
 describe('readOperatorConnection', () => {
   it('accepts a remote host with no sslmode or verify-full, and a loopback host', () => {
     expect(
-      readOperatorConnection('postgres://ops@db.example.test/postgres')
+      readOperatorConnection(
+        'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres'
+      )
     ).toEqual({ loopback: false });
     expect(
       readOperatorConnection(
-        'postgresql://ops@db.example.test/postgres?sslmode=verify-full'
+        'postgresql://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=verify-full'
       )
     ).toEqual({ loopback: false });
     expect(
@@ -175,24 +181,36 @@ describe('readOperatorConnection', () => {
 
   it.each([
     [
-      'postgres://ops@db.example.test/postgres?sslmode=no-verify',
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=no-verify',
       'verify-full',
     ],
-    ['postgres://ops@db.example.test/postgres?sslmode=require', 'verify-full'],
-    ['postgres://ops@db.example.test/postgres?sslmode=disable', 'verify-full'],
     [
-      'postgres://ops@db.example.test/postgres?sslrootcert=/tmp/x',
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=require',
+      'verify-full',
+    ],
+    [
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=disable',
+      'verify-full',
+    ],
+    [
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslrootcert=/tmp/x',
       'sslrootcert',
     ],
-    ['postgres:///postgres?host=db.example.test', 'host directly'],
-    ['postgres://ops@localhost/postgres?host=db.example.test', 'host directly'],
+    [
+      'postgres:///postgres?host=db.abcdefghijklmnopqrst.supabase.co',
+      'host directly',
+    ],
+    [
+      'postgres://ops@localhost/postgres?host=db.abcdefghijklmnopqrst.supabase.co',
+      'host directly',
+    ],
     // node-postgres uses the LAST repeated value, so these must not connect.
     [
-      'postgres://ops@db.example.test/postgres?sslmode=verify-full&sslmode=no-verify',
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=verify-full&sslmode=no-verify',
       'repeats sslmode',
     ],
     [
-      'postgres://ops@db.example.test/postgres?sslmode=verify-full&sslmode=disable',
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=verify-full&sslmode=disable',
       'repeats sslmode',
     ],
     // Through the pooler the server-side TLS check would attest the wrong hop.
@@ -201,12 +219,18 @@ describe('readOperatorConnection', () => {
       'not the pooler',
     ],
     ['postgres://ops@my-pgbouncer.internal:5432/postgres', 'not the pooler'],
+    // Allowlist: any other host or port is refused, pooler-looking or not.
+    ['postgres://ops@db-proxy.corp.internal:5432/postgres', 'not the pooler'],
+    [
+      'postgres://ops@db.abcdefghijklmnopqrst.supabase.co:6543/postgres',
+      'not the pooler',
+    ],
     // A pooler host on another port is refused too.
     [
       'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',
       'not the pooler',
     ],
-    ['mysql://ops@db.example.test/x', 'postgres URL'],
+    ['mysql://ops@db.abcdefghijklmnopqrst.supabase.co/x', 'postgres URL'],
     ['not a url', 'valid URL'],
   ])('refuses %s before connecting', (url, message) => {
     const createClient = vi.fn();

@@ -312,6 +312,7 @@ BEGIN
       attempts = 0,
       config_deferrals = 0,
       next_attempt_at = NULL,
+      processed_at = NULL,
       last_error = 'OPERATOR_REPLAY_REQUESTED',
       claim_token = NULL,
       lease_until = NULL,

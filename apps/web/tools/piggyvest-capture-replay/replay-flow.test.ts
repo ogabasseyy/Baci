@@ -47,7 +47,8 @@ interface StoredCapture {
 }
 
 const freshKey = deterministicKeySource('capture-operator-replay');
-const CONNECTION = 'postgres://ops.alice@db.example.test:5432/postgres';
+const CONNECTION =
+  'postgres://ops.alice@db.abcdefghijklmnopqrst.supabase.co:5432/postgres';
 
 let key: string;
 let captures: Map<string, StoredCapture>;

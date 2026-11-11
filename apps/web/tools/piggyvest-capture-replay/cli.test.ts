@@ -4,7 +4,8 @@ import { OperatorRefusal, type OperatorStore } from './operator-store';
 
 const CAPTURE = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 const env = {
-  [OPERATOR_DATABASE_URL_ENV]: 'postgres://ops@db.example.test/postgres',
+  [OPERATOR_DATABASE_URL_ENV]:
+    'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/postgres',
 };
 const parked = {
   captureId: CAPTURE,
@@ -117,7 +118,7 @@ describe('capture replay CLI', () => {
       ['list'],
       {
         [OPERATOR_DATABASE_URL_ENV]:
-          'postgres://ops@db.example.test/x?sslmode=no-verify',
+          'postgres://ops@db.abcdefghijklmnopqrst.supabase.co/x?sslmode=no-verify',
       },
       { out: (t) => out.push(t), err: (t) => err.push(t) }
     );

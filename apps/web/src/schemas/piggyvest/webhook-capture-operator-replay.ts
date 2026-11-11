@@ -31,7 +31,9 @@ export const PIGGYVEST_CAPTURE_PIPELINE_ROLES: readonly string[] = [
 ];
 
 export const piggyvestReviewCaptureSchema = z.object({
-  captureId: z.uuid(),
+  // Any 8-4-4-4-12 hex id, as PostgreSQL's uuid type prints it; not only
+  // RFC-versioned ones.
+  captureId: z.guid(),
   eventType: z.string().nullable(),
   providerTransactionId: z.string().nullable(),
   keyVersion: z.string(),

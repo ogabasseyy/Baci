@@ -43,7 +43,7 @@ export function parseOperatorArgs(argv: readonly string[]): OperatorCommand {
 
   if (command === 'requeue') {
     const [captureId, ...options] = rest;
-    if (captureId === undefined || !z.uuid().safeParse(captureId).success)
+    if (captureId === undefined || !z.guid().safeParse(captureId).success)
       throw new UsageError('requeue needs a capture id (a UUID from `list`)');
     let reason: string | undefined;
     let confirmed = false;

@@ -18,11 +18,12 @@ type Spec = { project: string; file: string };
 
 function listSpecs(): Spec[] {
   // A fresh Vitest must not believe it is nested inside this test's worker.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(
-      ([key]) => !key.startsWith('VITEST') && key !== 'TEST'
-    )
-  );
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('VITEST') || key === 'TEST') {
+      Reflect.deleteProperty(env, key);
+    }
+  }
   const result = spawnSync(
     process.execPath,
     [VITEST_BIN, 'list', '--filesOnly'],

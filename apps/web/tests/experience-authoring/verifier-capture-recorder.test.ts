@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
 import { digestBytes } from '@/lib/experience/manifest-digest';
@@ -14,6 +15,15 @@ it('writes a verified capture only through the restricted verifier role', async 
   let pool: Pool | undefined;
   try {
     if (!f.db.localDatabase) throw Error('LOCAL_DATABASE_REQUIRED');
+    await f.db.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261111231000_experience_approval_retry_proofs.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
     await f.db.pool.query(
       'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
     );
@@ -135,14 +145,35 @@ it('writes a verified capture only through the restricted verifier role', async 
       markerDigest: 'd'.repeat(64),
       expiresAt: draft.rows[0].expires_at.toISOString(),
     });
+    await recordApproval({
+      approvalId: draftIntent,
+      kind: 'draft',
+      effectDigest: digest,
+      markerDigest: 'e'.repeat(64),
+      expiresAt: draft.rows[0].expires_at.toISOString(),
+    });
     const draftProof = await f.db.pool.query(
       'SELECT effect_digest,expires_at FROM experience_authorization.approval_checks WHERE intent_id=$1',
       [draftIntent]
     );
     expect(draftProof.rows[0].effect_digest).toBe(digest);
+    expect(draftProof.rows).toHaveLength(2);
     expect(draftProof.rows[0].expires_at.getTime()).toBeLessThanOrEqual(
       draft.rows[0].expires_at.getTime()
     );
+    await f.db.pool.query(
+      "UPDATE experience_authorization.approval_checks SET verified_at=statement_timestamp()-interval '2 minutes', expires_at=statement_timestamp()-interval '1 minute' WHERE intent_id=$1 AND evidence_digest=$2",
+      [draftIntent, 'd'.repeat(64)]
+    );
+    const fresh = await f.db.pool.query(
+      `SELECT EXISTS(SELECT 1 FROM experience_authorization.approval_checks c
+        JOIN experience_authorization.apply_intents i ON i.id=c.intent_id
+        WHERE i.id=$1 AND c.effect_digest=i.effect_digest
+          AND c.verified_at>=i.issued_at AND c.verified_at<=clock_timestamp()
+          AND c.expires_at>clock_timestamp() AND c.expires_at<=i.expires_at) AS valid`,
+      [draftIntent]
+    );
+    expect(fresh.rows[0].valid).toBe(true);
     await expect(
       pool.query('SELECT * FROM experience_authorization.lifecycle_checks')
     ).rejects.toThrow();

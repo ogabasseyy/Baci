@@ -53,13 +53,27 @@ export function createIndependentApprovalVerifier(
         (buildId && evidence.buildId !== buildId)
       )
         throw Error('APPROVAL_MISMATCH');
+      if (buildId) {
+        if (typeof approval.merchantId !== 'string' || !evidence.buildDigest)
+          throw Error('APPROVAL_MISMATCH');
+        const build = await client
+          .from('experience_builds')
+          .select('build_digest')
+          .eq('merchant_id', approval.merchantId)
+          .eq('id', buildId)
+          .maybeSingle();
+        if (build.error || build.data?.build_digest !== evidence.buildDigest)
+          throw Error('APPROVAL_MISMATCH');
+      }
       const current =
         kind === 'draft'
           ? await loadDraftApproval(client, approvalId)
           : await loadLifecycleApproval(client, approvalId);
       if (
         current.status !== 'confirmation-required' ||
-        current.effectDigest !== effectDigest
+        current.effectDigest !== effectDigest ||
+        current.merchantId !== approval.merchantId ||
+        (buildId && current.buildId !== buildId)
       )
         throw Error('APPROVAL_MISMATCH');
       await deps.record({

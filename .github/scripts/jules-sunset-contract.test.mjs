@@ -109,3 +109,8 @@ test('a Jules review that completes is returned straight away', () => {
   assert.equal(result.secondsWaited, 0);
   assert.match(result.runnerFile('jules-review.md'), /State: `COMPLETED`[\s\S]*Looks fine\./);
 });
+
+test('ready transitions cannot cancel an active draft review', () => {
+  assert.ok(!workflow.on.pull_request.types.includes('ready_for_review'));
+  assert.ok(workflow.on.pull_request.types.includes('converted_to_draft'));
+});

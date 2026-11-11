@@ -211,11 +211,22 @@ describe('bugfix: files Gemini could not check must not produce a green review',
       assert.equal(t.reviews().length, 1, 'the review itself is still posted');
     }));
 
-  test('but a real finding is still a failure', () =>
+  test('but a real finding on a file the pull request is known to change is still a failure', () =>
     scenario({ response: okResponse([finding('high')]), env: { UNREVIEWABLE_FILES: '1' } }, (t, result) => {
       assert.equal(t.status().state, 'failure');
       assert.equal(result.exitCode, 1);
     }));
+
+  test('a HIGH finding on a path that is not in the list (it may be the unlisted file itself) cannot be verified: no vote, but the review is posted for a person to read', () =>
+    scenario(
+      { response: okResponse([{ ...finding('high'), path: 'elsewhere/x.ts' }]), changed: 'apps/web/src/a.ts\n', env: { UNREVIEWABLE_FILES: '1' } },
+      (t, result) => {
+        assert.equal(t.status().state, 'error');
+        assert.equal(result.exitCode, 0);
+        assert.match(t.reviews()[0].body.body, /unverified/);
+        assert.match(t.reviews()[0].body.body, /control characters/);
+      },
+    ));
 });
 
 test('an unverified HIGH finding on a file the pull request does not change cannot block', () =>

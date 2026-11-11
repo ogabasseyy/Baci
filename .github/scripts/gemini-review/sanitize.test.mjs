@@ -162,18 +162,57 @@ describe('bugfix: text that only LOOKS like code to a naive parser is not exempt
     assert.doesNotMatch(outsideCode(sanitizeText('visit www.attacker.example/login now')), active);
   });
 
-  test('property: whatever fragments the model writes, nothing outside real code is active markup', () => {
-    const parts = ['<', '>', 'img', ' src="', '"', 'x', '![', '](', ')', '[', ']', 'http://e.x/p', 'https://e.x', 'www.e.x', '`', '``', '```', '\n', '\n\n', ' ', '<!--', '-->', '&#104;', '\\', '<im', 'g', '@a', '<a href="', '</a>', 'script', '<scr', 'ipt>', '[l]: http://e.x'];
-    let seed = 12345;
+  const FRAGMENTS = ['<', '>', 'img', ' src="', '"', 'x', '![', '](', ')', '[', ']', 'http://e.x/p', 'https://e.x', 'www.e.x', '`', '``', '```', '\n', '\n\n', ' ', '<!--', '-->', '&#104;', '\\', '<im', 'g', '@a', '<a href="', '</a>', 'script', '<scr', 'ipt>', '[l]: http://e.x'];
+  const randomFragments = (seed, maxFragments) => {
+    let state = seed;
     const next = (n) => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed % n;
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return state % n;
     };
+    return { next, input: () => Array.from({ length: 3 + next(maxFragments) }, () => FRAGMENTS[next(FRAGMENTS.length)]).join('') };
+  };
+
+  test('property: whatever fragments the model writes, nothing outside real code is active markup', () => {
+    const random = randomFragments(12345, 12);
     for (let round = 0; round < 4000; round += 1) {
-      const input = Array.from({ length: 3 + next(12) }, () => parts[next(parts.length)]).join('');
+      const input = random.input();
       const out = sanitizeText(input, { max: 5000 });
       assert.doesNotMatch(outsideCode(out), active, `input ${JSON.stringify(input)} -> ${JSON.stringify(out)}`);
     }
+  });
+
+  describe('bugfix: truncating must not cut a code span or fence in half (the closing backtick is lost and the link inside it becomes clickable)', () => {
+    const url = 'https://attacker.example/login';
+
+    test('a cut inside a code span or fence drops the whole span', () => {
+      const inputs = [`\`${url} ${'x'.repeat(900)}\``, `Intro \`${url} ${'x'.repeat(900)}\` tail`, `Intro\n\n\`\`\`\n${url}\n${'x'.repeat(900)}\n\`\`\`\n`];
+      for (const max of [300, 800]) {
+        for (const input of inputs) {
+          const out = sanitizeText(input, { max });
+          assert.ok(out.length <= max, `length ${out.length} > ${max}`);
+          assert.ok(out.endsWith('…'), JSON.stringify(out));
+          assert.doesNotMatch(outsideCode(out), active, JSON.stringify(out));
+        }
+      }
+      assert.equal(sanitizeText(inputs[1], { max: 300 }), 'Intro …');
+    });
+
+    test('code that ends before the cut is kept exactly as written', () => {
+      const out = sanitizeText(`Use \`https://ok.example/x\` then ${'y'.repeat(500)}`, { max: 100 });
+      assert.ok(out.startsWith('Use `https://ok.example/x` then y'));
+      assert.ok(out.length <= 100);
+    });
+
+    test('property: with any limit, nothing outside real code is active markup after truncation either', () => {
+      const random = randomFragments(987654, 14);
+      for (let round = 0; round < 4000; round += 1) {
+        const input = random.input();
+        const max = 4 + random.next(40);
+        const out = sanitizeText(input, { max });
+        assert.ok(out.length <= max, `length ${out.length} > ${max} for ${JSON.stringify(input)}`);
+        assert.doesNotMatch(outsideCode(out), active, `input ${JSON.stringify(input)} max ${max} -> ${JSON.stringify(out)}`);
+      }
+    });
   });
 });
 

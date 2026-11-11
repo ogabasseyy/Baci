@@ -75,6 +75,23 @@ function inertOutsideCode(text) {
     .join('');
 }
 
+// Cutting the text to its limit must not cut a code span or fence in half. Text inside one was exempted
+// from the link and tag scrub above because it is code; once its closing backticks are gone GitHub
+// renders what is left as ordinary text, and a link in it becomes clickable. A cut that would land
+// inside a code span or fence therefore drops the whole span.
+function truncate(text, max) {
+  if (text.length <= max) return text;
+  let cut = Math.max(0, max - 1);
+  for (const match of text.matchAll(CODE)) {
+    if (match.index >= cut) break;
+    if (match.index + match[0].length > cut) {
+      cut = match.index;
+      break;
+    }
+  }
+  return `${text.slice(0, cut)}…`;
+}
+
 export function sanitizeText(input, { max = 2000 } = {}) {
   let text = input === undefined || input === null ? '' : String(input);
   text = text.replaceAll('\r\n', '\n');
@@ -100,8 +117,5 @@ export function sanitizeText(input, { max = 2000 } = {}) {
   text = text.replace(/(^|[^A-Za-z0-9_@])@(?=[A-Za-z0-9_])/g, `$1@${ZERO_WIDTH_SPACE}`);
   text = inertOutsideCode(text);
 
-  if (text.length > max) {
-    return `${text.slice(0, Math.max(0, max - 1))}…`;
-  }
-  return text;
+  return truncate(text, max);
 }

@@ -50,9 +50,11 @@ const key = (path) => path.replaceAll('/', '__');
 /**
  * Review posted by the Muse workflow for `sha` (format taken from .github/scripts/muse-review/post.sh).
  * findings: a severity string, or { severity, unverified, body } (bodies are indented two spaces,
- * as post.sh prints them for summary-only findings).
+ * as post.sh prints them for summary-only findings). appendix: text after the next steps (post.sh
+ * appends the finding explanations there when the API rejects the inline threads). lineEnding: "\r\n"
+ * for a body that was saved with Windows line endings.
  */
-export function museReview({ sha = SHA, findings = [], fallback = false, verdict = 'Reviewed.', nextSteps = [], submitted = '2026-11-11T10:00:00Z' } = {}) {
+export function museReview({ sha = SHA, findings = [], fallback = false, verdict = 'Reviewed.', nextSteps = [], submitted = '2026-11-11T10:00:00Z', appendix = '', lineEnding = '\n' } = {}) {
   const bullets = findings.flatMap((entry) => {
     const { severity, unverified = false, body = '', suffix: customSuffix } = typeof entry === 'string' ? { severity: entry } : entry;
     const suffix = customSuffix ?? (unverified ? ' (path not in changed files — unverified)' : body ? '' : ' (see inline)');
@@ -77,7 +79,7 @@ export function museReview({ sha = SHA, findings = [], fallback = false, verdict
       '## Suggested next steps',
       '',
       ...nextSteps.map((step) => `- ${step}`),
-    ].join('\n'),
+    ].join(lineEnding) + appendix,
   };
 }
 

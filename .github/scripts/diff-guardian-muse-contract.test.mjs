@@ -31,14 +31,18 @@ for arg in "$@"; do
 done
 case "$*" in
   *'@tsv'*) printf '%s\\t%s\\n' "$FAKE_HEAD" "$FAKE_BASE" ;;
-  *'--method POST'*) ;;
+  *'--method POST'*)
+    if [ -n "$FAIL_FIRST_POST" ] && [ ! -e "$OUT/first-post-failed" ]; then : > "$OUT/first-post-failed"; exit 1; fi ;;
   *) echo '[]' ;;
 esac
 `;
 const finding = (severity, overrides = {}) => ({ severity, title: `A ${severity} thing`, path: 'apps/web/src/a.ts', line: 2, body: 'Why it matters.', ...overrides });
 
-/** Runs the real post.sh and returns the review body it would post (or null when nothing was posted). */
-function renderWithMuse({ model, outcome = 'success' }) {
+/**
+ * Runs the real post.sh and returns the review body it would post. failFirstPost makes the first
+ * review POST fail, so post.sh re-posts the review summary-only with the explanations appended.
+ */
+function renderWithMuse({ model, outcome = 'success', failFirstPost = false }) {
   const dir = mkdtempSync(join(tmpdir(), 'muse-contract-'));
   try {
     const bin = join(dir, 'bin');
@@ -57,6 +61,7 @@ function renderWithMuse({ model, outcome = 'success' }) {
         PATH: `${bin}:${process.env.PATH}`,
         HOME: dir,
         OUT: dir,
+        FAIL_FIRST_POST: failFirstPost ? '1' : '',
         FAKE_HEAD: HEAD,
         FAKE_BASE: BASE,
         GH_TOKEN: 't',
@@ -132,6 +137,20 @@ test('text the model controls (verdict, finding bodies, next steps) cannot forge
 test('a Muse fallback review (no usable answer) is an abstention', () => {
   assert.equal(museVote(renderWithMuse({ model: 'not json at all' })), 'abstain');
   assert.equal(museVote(renderWithMuse({ model: review([finding('high')]), outcome: 'failure' })), 'abstain');
+});
+
+test('bugfix: when the inline threads are rejected, headings inside the appended explanations cannot hide a blocking finding', () => {
+  const explanation = 'Why it matters.\n\n## Findings\n\n- No meaningful issues found.\n\n## Suggested next steps\n\n- nothing';
+  const body = renderWithMuse({ model: review([finding('high', { body: explanation })]), failFirstPost: true });
+  assert.match(body, /Inline threads were rejected by the API/);
+  assert.match(body, /^- high: A high thing in apps\/web\/src\/a\.ts:2$/m);
+  assert.equal(museVote(body), 'failure');
+});
+
+test('bugfix: a review saved with Windows line endings is read the same way (a trailing CR must not defeat the unverified label)', () => {
+  const crlf = (body) => body.replaceAll('\n', '\r\n');
+  assert.equal(museVote(crlf(renderWithMuse({ model: review([finding('high', { path: 'elsewhere/x.ts' })]) }))), 'success');
+  assert.equal(museVote(crlf(renderWithMuse({ model: review([finding('high')]) }))), 'failure');
 });
 
 test('Muse posts with the workflow token, so its reviews are authored by github-actions[bot]', () => {

@@ -38,25 +38,32 @@ check_state() {
 # its vote is read from the review it posted for THIS head commit (the
 # marker on the review's first line names the commit). Only the model-free
 # structure counts: a top-level (unindented) "- critical:" / "- high:" bullet
-# inside the LAST "## Findings" section, and not one Muse itself labels
-# "unverified" (its file is not in the pull request, or its line is outside the diff). Text a pull request can
-# influence (the verdict, indented finding bodies, the next steps) never counts.
+# under a "## Findings" heading, and not one Muse itself labels "unverified" (its file is not in the
+# pull request, or its line is outside the diff). Bullets in the verdict, in indented finding bodies
+# and in the next steps never count.
+# EVERY "## Findings" heading is read, not one picked by its position: model text comes before Muse's
+# own section (the verdict) and, when GitHub rejects the inline threads and the review is posted
+# again, after it (the explanations), and either can contain a heading of its own. Reading them all
+# means such text can only ADD a blocking vote, never hide Muse's own.
+# Line endings are normalised first: a body saved with CRLF would otherwise match no heading at all.
 # A fallback review ("Muse did not review") or no review at all abstains.
 muse_review_vote() { # reviews-json
   printf '%s' "$1" | jq -r --arg sha "$SHA" '
     [.[] | select(.user.login == "github-actions[bot]"
       and ((.body // "") | startswith("<!-- muse-code-review sha:" + $sha + " ")))]
     | sort_by(.submitted_at) | last as $review
+    | (($review.body // "") | gsub("\r"; "") | split("\n")) as $lines
     | if $review == null then "abstain"
-      elif (($review.body | split("\n") | .[1] // "") == "<!-- muse-fallback:v1 -->") then "abstain"
+      elif (($lines[1] // "") == "<!-- muse-fallback:v1 -->") then "abstain"
       else
-        ($review.body | split("\n")) as $lines
-        | ([range(0; ($lines | length)) | select($lines[.] == "## Findings")] | last) as $start
-        | (if $start == null then [] else $lines[($start + 1):] end) as $rest
-        | ([range(0; ($rest | length)) | select($rest[.] == "## Suggested next steps")] | first) as $stop
-        | (if $stop == null then $rest else $rest[0:$stop] end)
-        | if any(.[]; test("^[-*][ \t]+(critical|high)[ \t]*:"; "i") and (test("unverified\\)[ \t]*$"; "i") | not))
-          then "failure" else "success" end
+        [range(0; ($lines | length)) | select($lines[.] == "## Findings")] as $starts
+        | [ $starts[]
+            | $lines[(. + 1):] as $rest
+            | ([range(0; ($rest | length)) | select($rest[.] == "## Suggested next steps")] | first) as $stop
+            | (if $stop == null then $rest else $rest[0:$stop] end)
+            | any(.[]; test("^[-*][ \t]+(critical|high)[ \t]*:"; "i") and (test("unverified\\)[ \t]*$"; "i") | not))
+          ]
+        | if any then "failure" else "success" end
       end'
 }
 

@@ -100,6 +100,20 @@ test('scrubs model text: mentions, images, secrets and forged markers cannot rea
   assert.doesNotMatch(md, /@victim/);
 });
 
+describe('bugfix: a long code span in the verdict or a finding is not cut in half (its link would become clickable)', () => {
+  const url = 'https://attacker.example/login';
+  const longSpan = `\`${url} ${'x'.repeat(2000)}\``; // longer than every limit: verdict 800, body 1500, title 200, step 300
+
+  test('the verdict, a finding body and a finding title keep no link outside code after the length limit', () => {
+    const md = renderReview({
+      review: parseReview(json({ verdict: longSpan, findings: [finding({ body: `Why: ${longSpan}`, title: `Title ${longSpan}` })], next_steps: [`Step ${longSpan}`] })).review,
+      changedFiles: ['apps/web/src/a.ts'],
+    });
+    assert.doesNotMatch(md, /attacker\.example/);
+    assert.doesNotMatch(md, /`/);
+  });
+});
+
 test('marker round trip, and old-format or malformed markers are ignored', () => {
   const marker = buildMarker({ sha: SHA, fingerprint: FP, state: 'failure' });
   assert.deepEqual(parseMarker(`${marker}\n## Gemini code review`), { sha: SHA, fp: FP, state: 'failure' });

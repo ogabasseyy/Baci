@@ -17,8 +17,11 @@ tallies. Muse, Codex and CodeRabbit are separate reviewers and are not affected.
 
 `error` also covers cases where a clean answer would prove nothing: the pull request diff could not
 be read (GitHub refuses very large diffs; no paid call is made), the changed-file list is empty or
-unreadable, or a changed file has control characters in its name (the model is never shown such
-files). A real finding is still `failure` in the last case.
+unreadable, or a changed file has control characters in its name (such a file cannot be listed or
+shown in full, so a clean answer proves nothing). In that last case a critical or high finding on a
+file the pull request is known to change is still `failure`. A finding on a path that is not in the
+list (it may be the unlisted file itself) cannot be verified, so it is no vote either way: the
+review is still posted, with a note, for a person to read.
 
 `error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
 state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then

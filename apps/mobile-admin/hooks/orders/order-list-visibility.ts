@@ -32,6 +32,7 @@ const CUSTOMER_CHECKOUT_SOURCE_VALUES = [
   'online_store',
   'mobile_app',
   'storefront',
+  'web',
   'agentic_ai',
 ] as const;
 

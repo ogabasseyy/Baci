@@ -82,6 +82,10 @@ describe('applyOrderListVisibilityFilter', () => {
       ).toBe(true);
     });
 
+    it('shows an unpaid staff order recorded against a checkout channel', () => {
+      expect(isVisible({ ...staffInvoice, source: 'online_store' })).toBe(true);
+    });
+
     it.each([
       'whatsapp',
       'instagram',

@@ -101,7 +101,7 @@ describe('useFailedOrders', () => {
         {
           method: 'or',
           args: [
-            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,agentic_ai)),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,agentic_ai))`,
+            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,web,agentic_ai)),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,web,agentic_ai))`,
           ],
         },
       ])
@@ -270,6 +270,24 @@ describe('useFailedOrders', () => {
             payment_status: paymentStatus,
             recorded_by_user_id: 'staff-user-1',
             source: 'physical',
+          },
+          filter
+        )
+      ).toBe(false);
+    });
+
+    it.each([
+      'pending',
+      'unpaid',
+    ])('keeps a stale %s staff order from a checkout channel out of follow-up', async (paymentStatus) => {
+      const filter = await followUpFilter();
+
+      expect(
+        matchesOrFilter(
+          {
+            ...staleCheckout,
+            payment_status: paymentStatus,
+            recorded_by_user_id: 'staff-user-1',
           },
           filter
         )

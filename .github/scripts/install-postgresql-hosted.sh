@@ -72,8 +72,9 @@ apt_get() {
 # postgresql-18 recommends postgresql-18-jit (the JIT library; PostgreSQL turns JIT off for the session when
 # it is absent) and sysstat, postgresql-client-18 recommends nothing, and the contrib modules ship inside
 # postgresql-18 (it provides postgresql-contrib-18). The suites need none of the extras, and they would come
-# from Ubuntu. Re-check this list whenever PG_BUILD changes: the installer test fails until the build named
-# here matches PG_BUILD.
+# from Ubuntu. The metadata itself is kept in install-postgresql-hosted.package-metadata.txt. Re-check this list
+# whenever PG_BUILD changes: ci-hosted-postgresql-contract.test.mjs fails until that file and the build named
+# here match PG_BUILD, so the next audit is a diff.
 install_pinned() {
   apt_get install -y --no-install-recommends "postgresql-18=${PG_BUILD}" "postgresql-client-18=${PG_BUILD}"
 }
@@ -152,6 +153,8 @@ if [ -n "$failed_step" ]; then
     priority=$((priority + 1))
     printf '%s\tpriority:%d\n' "$mirror" "$priority"
   done | sudo tee "$UBUNTU_MIRRORS" >/dev/null
+  # A command stopped by the ceiling can leave dpkg half-way through a package; finish that work before the retry.
+  sudo timeout --kill-after=10 "$APT_LIMIT_SECONDS" dpkg --configure -a || true
   { apt_get update && install_pinned; } || {
     echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the independent and canonical Ubuntu mirrors." >&2
     exit 1

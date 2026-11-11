@@ -19,6 +19,12 @@ An explicitly requested local listener can use `pnpm --filter @baci/web mcp:buil
 origin are constants, not tool arguments. No listener starts merely by importing
 `server.ts` or `node.ts`.
 
+The builder authorization server's issuer is `https://mcp.usebaci.com`; its
+OAuth discovery, authorization, token, JWKS, interaction and callback paths
+must be routed to the separately deployed builder auth service. The MCP path
+and protected-resource metadata route go to the MCP listener. The existing
+`auth.usebaci.com` service remains the upstream Supabase identity provider.
+
 Pass `--experience` after the port to advertise the full-code experience tools.
 The default listener keeps those tools disabled. Discovery does not install the
 web gateway or the isolated runner.

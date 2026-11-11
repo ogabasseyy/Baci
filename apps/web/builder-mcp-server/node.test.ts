@@ -15,7 +15,10 @@ it('serves discovery on a real loopback listener and shuts down cleanly', async 
       `http://127.0.0.1:${address.port}${BUILDER_METADATA_PATH}`
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toBeTruthy();
+    const metadata = (await response.json()) as {
+      authorization_servers: string[];
+    };
+    expect(metadata.authorization_servers).toEqual(['https://mcp.usebaci.com']);
     expect(runtime.server.requestTimeout).toBe(30000);
     expect(runtime.server.headersTimeout).toBe(10000);
   } finally {

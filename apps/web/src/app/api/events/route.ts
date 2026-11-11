@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (
-    (input.source ?? 'web') === 'web' &&
+    input.source !== 'server' &&
     isBotUserAgent(request.headers.get('user-agent'))
   ) {
     // Acknowledge but do not record crawler traffic.

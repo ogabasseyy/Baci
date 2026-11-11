@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (
-    input.event_source === 'web' &&
+    input.event_source !== 'server' &&
     isBotUserAgent(request.headers.get('user-agent'))
   ) {
     return NextResponse.json({

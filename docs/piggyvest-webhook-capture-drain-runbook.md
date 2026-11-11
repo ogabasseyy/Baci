@@ -250,7 +250,8 @@ dedupe key is PR #4199. Without that fix, a delivery that was parked after a
 partial credit could otherwise be credited again, so the database enforces
 it: requeueing a bank inflow, an interest payout, or a capture with no
 readable event type returns `credit_dedupe_missing` and changes nothing until
-both ledgers carry the `*_pvb_reference_key` UNIQUE constraints from #4199.
+both ledgers enforce uniqueness on `pvb_reference` alone (#4199's UNIQUE
+constraints, or any full unique index on that column).
 
 Each requeue gives the delivery a fresh attempt budget and writes an
 append-only audit row (who, from the database login; when; why). A delivery

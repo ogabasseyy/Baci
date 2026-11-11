@@ -42,6 +42,11 @@ export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_n
   EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
     WHERE r.rolname NOT IN (SESSION_USER, $1::text)
       AND pg_catalog.pg_has_role(SESSION_USER, r.oid, 'MEMBER')) AS extra_membership,
+  EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+      CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) g
+      JOIN pg_catalog.pg_roles r ON r.oid = g.grantee
+    WHERE r.rolname = ANY ($2::text[]) AND g.privilege_type = 'EXECUTE'
+      AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE')) AS pipeline_function_access,
   (pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_captures',
       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     OR pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_capture_replay_audit',
@@ -104,6 +109,10 @@ export function sessionFailures(
     failures.push(
       `login must be a member of ${PIGGYVEST_CAPTURE_OPERATOR_ROLE} only`
     );
+  if (session.pipeline_function_access)
+    failures.push(
+      'login can run capture pipeline functions directly; revoke those grants'
+    );
   if (session.direct_table_access)
     failures.push(
       'login can reach the capture or audit tables directly; revoke those grants'
@@ -151,7 +160,11 @@ export function readOperatorConnection(connectionString: string): {
   // Supabase's pooler listens on 6543. Behind it, the server-side transport
   // check would see the pooler's link, not the operator's, so require the
   // direct connection.
-  if (url.port === POOLER_PORT || url.hostname.endsWith(POOLER_HOST_SUFFIX))
+  if (
+    url.port === POOLER_PORT ||
+    url.hostname.endsWith(POOLER_HOST_SUFFIX) ||
+    /pooler|pgbouncer/i.test(url.hostname)
+  )
     throw new OperatorRefusal(
       'use the direct database connection (db.<ref>.supabase.co:5432), not the pooler'
     );

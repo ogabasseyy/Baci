@@ -86,6 +86,27 @@ BEGIN
 END
 $$;
 
+-- Separation of duties, the other way round: the operator group cannot run
+-- any function the drain worker or the intake role was granted.
+DO $$
+DECLARE
+  v_fn text;
+BEGIN
+  SELECT p.oid::regprocedure::text INTO v_fn
+  FROM pg_catalog.pg_proc p
+  CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) g
+  JOIN pg_catalog.pg_roles r ON r.oid = g.grantee
+  WHERE r.rolname IN ('piggyvest_webhook_capture_worker', 'piggyvest_webhook_intake')
+    AND g.privilege_type = 'EXECUTE'
+    AND pg_catalog.has_function_privilege(
+      'piggyvest_webhook_capture_operator', p.oid, 'EXECUTE')
+  LIMIT 1;
+  IF v_fn IS NOT NULL THEN
+    RAISE EXCEPTION 'operator role can execute pipeline function %', v_fn;
+  END IF;
+END
+$$;
+
 CREATE FUNCTION pg_temp.pv_operator_row(
   p_key text, p_state text, p_attempts integer,
   p_event_type text DEFAULT 'operator-test.non-credit')
@@ -330,13 +351,28 @@ BEGIN
     RAISE EXCEPTION 'credit replayed with only one ledger protected: %', v_result;
   END IF;
 
-  -- With both ledgers protected the credit replays.
+  -- A partial unique index does not dedupe every credit: still refused.
   IF pg_catalog.to_regclass('public.piggyvest_interest_payouts') IS NULL THEN
     CREATE TABLE public.piggyvest_interest_payouts (pvb_reference text);
   END IF;
   ALTER TABLE public.piggyvest_interest_payouts ADD COLUMN IF NOT EXISTS pvb_reference text;
   ALTER TABLE public.piggyvest_interest_payouts
-    ADD CONSTRAINT piggyvest_interest_payouts_pvb_reference_key UNIQUE (pvb_reference);
+    DROP CONSTRAINT IF EXISTS piggyvest_interest_payouts_pvb_reference_key;
+  CREATE UNIQUE INDEX pv_operator_partial_probe
+    ON public.piggyvest_interest_payouts (pvb_reference) WHERE pvb_reference <> '';
+  SET LOCAL ROLE piggyvest_webhook_capture_operator;
+  v_result := piggyvest_capture_operator.requeue_review_capture(
+    v_credit, 'credit replay with a partial index only');
+  RESET ROLE;
+  IF v_result->>'outcome' IS DISTINCT FROM 'credit_dedupe_missing' THEN
+    RAISE EXCEPTION 'a partial unique index opened the credit gate: %', v_result;
+  END IF;
+  DROP INDEX public.pv_operator_partial_probe;
+
+  -- With both ledgers protected the credit replays: one by a UNIQUE
+  -- constraint, the other by a plain CREATE UNIQUE INDEX.
+  CREATE UNIQUE INDEX pv_operator_unique_probe
+    ON public.piggyvest_interest_payouts (pvb_reference);
   SET LOCAL ROLE piggyvest_webhook_capture_operator;
   v_result := piggyvest_capture_operator.requeue_review_capture(
     v_credit, 'credit replay after dedupe ships');

@@ -99,6 +99,7 @@ export const piggyvestCaptureOperatorSessionSchema = z.object({
   operator_member: z.boolean(),
   pipeline_member: z.boolean(),
   extra_membership: z.boolean(),
+  pipeline_function_access: z.boolean(),
   direct_table_access: z.boolean(),
   grants_usable: z.boolean(),
   secure_transport: z.boolean(),

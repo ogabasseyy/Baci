@@ -176,8 +176,9 @@ $$;
 --   replay_limit_reached  the row was already requeued five times
 --   credit_dedupe_missing the row is a credit event (bank inflow or interest
 --                         payout, or has no readable event type) and the credit
---                         ledgers do not yet dedupe on pvb_reference (the
---                         *_pvb_reference_key UNIQUE constraints of PR #4199);
+--                         ledgers do not yet dedupe on pvb_reference (a full,
+--                         valid unique index on that column alone, as the
+--                         UNIQUE constraints of PR #4199 create);
 --                         replaying it could credit a partial credit twice
 CREATE OR REPLACE FUNCTION piggyvest_capture_operator.requeue_review_capture(
   p_capture_id uuid,
@@ -222,14 +223,20 @@ BEGIN
   IF (v_row.event_type IS NULL
       OR v_row.event_type IN ('bank-transfer.inflow.success', 'interest-payout.success'))
     AND NOT (
-      EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
-        WHERE k.conname = 'piggyvest_inflow_credits_pvb_reference_key'
-          AND k.contype = 'u'
-          AND k.conrelid = pg_catalog.to_regclass('public.piggyvest_inflow_credits'))
-      AND EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
-        WHERE k.conname = 'piggyvest_interest_payouts_pvb_reference_key'
-          AND k.contype = 'u'
-          AND k.conrelid = pg_catalog.to_regclass('public.piggyvest_interest_payouts')))
+      EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_attribute a
+          ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+        WHERE i.indrelid = pg_catalog.to_regclass('public.piggyvest_inflow_credits')
+          AND i.indisunique AND i.indisvalid AND i.indnkeyatts = 1
+          AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND a.attname = 'pvb_reference')
+      AND EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+        JOIN pg_catalog.pg_attribute a
+          ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+        WHERE i.indrelid = pg_catalog.to_regclass('public.piggyvest_interest_payouts')
+          AND i.indisunique AND i.indisvalid AND i.indnkeyatts = 1
+          AND i.indpred IS NULL AND i.indexprs IS NULL
+          AND a.attname = 'pvb_reference'))
   THEN
     RETURN pg_catalog.jsonb_build_object(
       'outcome', 'credit_dedupe_missing', 'eventType', v_row.event_type);

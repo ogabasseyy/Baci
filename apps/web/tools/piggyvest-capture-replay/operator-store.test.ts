@@ -17,6 +17,7 @@ const goodSession = {
   operator_member: true,
   pipeline_member: false,
   extra_membership: false,
+  pipeline_function_access: false,
   direct_table_access: false,
   grants_usable: true,
   secure_transport: true,
@@ -60,6 +61,7 @@ describe('sessionFailures', () => {
     [{ operator_member: false }, 'not a member'],
     [{ pipeline_member: true }, 'capture pipeline'],
     [{ extra_membership: true }, 'only'],
+    [{ pipeline_function_access: true }, 'pipeline functions'],
     [{ direct_table_access: true }, 'directly'],
     [
       { login_name: 'baci_piggyvest_webhook_capture_drain' },
@@ -198,6 +200,7 @@ describe('readOperatorConnection', () => {
       'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
       'not the pooler',
     ],
+    ['postgres://ops@my-pgbouncer.internal:5432/postgres', 'not the pooler'],
     // A pooler host on another port is refused too.
     [
       'postgres://ops@aws-0-eu-west-1.pooler.supabase.com:5432/postgres',

@@ -44,11 +44,12 @@ plus a narrowly authorized privileged preflight and tests of the actual OS
 permission boundary. The existing runner remains qualification-only until
 that boundary is implemented and verified.
 
-`privileged-helper.py` currently contains only fixed policy generation and a
-bundle-writing primitive used by tests. It is not an executable production
-helper: it has no authorized prepare/run/delete command path, trusted-parent
-verification, deployment packaging or sudo policy. Do not install it or grant
-it privileges in its current state.
+`privileged-helper.py` now reconstructs the policy and limits its command path
+to prepare/run/delete with validated job IDs and root-owned parent directories.
+Its operations have only been tested with local synthetic fixtures and mocked
+`runsc`. It has no qualified deployment packaging, sudo policy, privileged
+preflight or real Linux OS-boundary test yet. Do not install it or grant it
+privileges in its current state.
 
 ## Baci boot and database boundaries
 

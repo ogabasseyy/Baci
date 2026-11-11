@@ -4,6 +4,8 @@
 import json
 import os
 import re
+import stat
+import subprocess
 import sys
 
 ROOT = "/var/tmp/baci-experience-checkpoint-a"
@@ -59,11 +61,46 @@ def policy(kind):
     }
 
 
-def prepare_job(jobs_fd, kind, name):
-    if kind not in JOBS or not re.fullmatch(
+def open_trusted_child(parent_fd, name, owner, allow_sticky=False):
+    if not name or name in (".", "..") or "/" in name:
+        raise ValueError("invalid path component")
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        metadata = os.fstat(fd)
+        sticky = allow_sticky and bool(metadata.st_mode & stat.S_ISVTX)
+        if metadata.st_uid != owner or (metadata.st_mode & 0o022 and not sticky):
+            raise ValueError("untrusted directory")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def open_jobs():
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        root = os.fstat(fd)
+        if root.st_uid != 0 or root.st_mode & 0o022:
+            raise ValueError("untrusted root")
+        for name in ("var", "tmp", "baci-experience-checkpoint-a", "jobs"):
+            child = open_trusted_child(fd, name, 0, allow_sticky=(name == "tmp"))
+            os.close(fd)
+            fd = child
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def valid_name(name):
+    return bool(re.fullmatch(
         r"baci-experience-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
         name,
-    ):
+    ))
+
+
+def prepare_job(jobs_fd, kind, name):
+    if kind not in JOBS or not valid_name(name):
         raise ValueError("invalid job")
     spec = policy(kind)
     spec["linux"]["cgroupsPath"] = "/baci-experience-checkpoint-a/" + name
@@ -87,7 +124,95 @@ def prepare_job(jobs_fd, kind, name):
             os.close(job_fd)
 
 
+def verify_job(jobs_fd, name, owner):
+    if not valid_name(name):
+        raise ValueError("invalid job")
+    job_fd = open_trusted_child(jobs_fd, name, owner)
+    try:
+        config_fd = os.open("config.json", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=job_fd)
+        try:
+            metadata = os.fstat(config_fd)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != owner or metadata.st_mode & 0o077 or metadata.st_nlink != 1 or metadata.st_size > 65536:
+                raise ValueError("untrusted job configuration")
+            with os.fdopen(config_fd, "rb", closefd=False) as config:
+                raw = config.read(65537)
+            if len(raw) > 65536:
+                raise ValueError("oversized job configuration")
+            def unique(pairs):
+                out = {}
+                for key, value in pairs:
+                    if key in out:
+                        raise ValueError("duplicate key")
+                    out[key] = value
+                return out
+            actual = json.loads(raw, object_pairs_hook=unique)
+            normalized = json.dumps(actual, sort_keys=True, separators=(",", ":"))
+            for kind in JOBS:
+                expected = policy(kind)
+                expected["linux"]["cgroupsPath"] = "/baci-experience-checkpoint-a/" + name
+                if normalized == json.dumps(expected, sort_keys=True, separators=(",", ":")):
+                    return
+            raise ValueError("invalid job policy")
+        finally:
+            os.close(config_fd)
+    finally:
+        os.close(job_fd)
+
+
+def execute_job(jobs_fd, name, owner):
+    verify_job(jobs_fd, name, owner)
+    program = "/usr/local/bin/runsc"
+    os.execve(program, [
+        program,
+        "--root=" + ROOT + "/state",
+        "--network=none",
+        "run",
+        "--bundle=" + ROOT + "/jobs/" + name,
+        name,
+    ], {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"})
+
+
+def delete_job(jobs_fd, name, owner):
+    verify_job(jobs_fd, name, owner)
+    subprocess.run([
+        "/usr/local/bin/runsc", "--root=" + ROOT + "/state",
+        "delete", "--force", name,
+    ], check=True, timeout=10, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+       stderr=subprocess.DEVNULL, env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"})
+    job_fd = open_trusted_child(jobs_fd, name, owner)
+    try:
+        os.unlink("config.json", dir_fd=job_fd)
+    finally:
+        os.close(job_fd)
+    os.rmdir(name, dir_fd=jobs_fd)
+
+
+def main(args):
+    if os.geteuid() != 0:
+        raise ValueError("invalid service identity")
+    prepare = len(args) == 3 and args[0] == "prepare" and args[1] in JOBS and valid_name(args[2])
+    run = len(args) == 2 and args[0] == "run" and valid_name(args[1])
+    delete = len(args) == 2 and args[0] == "delete" and valid_name(args[1])
+    if not (prepare or run or delete):
+        raise ValueError("invalid operation")
+    jobs_fd = open_jobs()
+    try:
+        if prepare:
+            prepare_job(jobs_fd, args[1], args[2])
+        elif run:
+            execute_job(jobs_fd, args[1], 0)
+        else:
+            delete_job(jobs_fd, args[1], 0)
+    finally:
+        os.close(jobs_fd)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3 or sys.argv[1] != "policy" or sys.argv[2] not in JOBS:
-        sys.exit(2)
-    print(json.dumps(policy(sys.argv[2])))
+    try:
+        if len(sys.argv) == 3 and sys.argv[1] == "policy" and sys.argv[2] in JOBS:
+            print(json.dumps(policy(sys.argv[2])))
+        else:
+            main(sys.argv[1:])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        sys.stderr.write("Runner helper failed.\n")
+        sys.exit(1)

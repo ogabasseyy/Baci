@@ -14,6 +14,21 @@ BEGIN
   END;
  END LOOP;
 END $$;
+RESET ROLE;
+BEGIN;
+INSERT INTO public.transactions(order_id,transaction_type,status)
+VALUES ('00000000-0000-4000-8000-000000000010','payment','pending');
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+ BEGIN
+  PERFORM public.record_order_store_credit('00000000-0000-4000-8000-000000000010');
+  RAISE EXCEPTION 'credit replay admitted after gateway initialization';
+ EXCEPTION WHEN check_violation THEN
+  IF SQLERRM <> 'Store credit reconciliation required' THEN RAISE; END IF;
+ END;
+END $$;
+ROLLBACK;
+SET ROLE authenticated;
 SELECT set_config('test.actor','00000000-0000-4000-8000-000000000009',false);
 DO $$ BEGIN
  BEGIN

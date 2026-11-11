@@ -51,5 +51,5 @@ export async function verifyCreditDirectWalletEvent({
     message: 'Credit Direct wallet verification returned an invalid response',
     orderId,
   });
-  return 'retry' as const;
+  return null;
 }

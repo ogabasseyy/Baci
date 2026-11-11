@@ -47,11 +47,11 @@ describe('verified Credit Direct wallet funding', () => {
   it.each([
     null,
     { grossAmount: 50000, walletAmount: 20000, financedAmount: 50000 },
-  ])('retries a malformed RPC response without accepting funding evidence', async (data) => {
+  ])('requires review for malformed RPC funding evidence', async (data) => {
     const { supabase } = client(data);
-    expect(await verifyCreditDirectWalletEvent({ ...args, supabase })).toBe(
-      'retry'
-    );
+    expect(
+      await verifyCreditDirectWalletEvent({ ...args, supabase })
+    ).toBeNull();
   });
   it('distinguishes a retryable reservation conflict from invalid funding evidence', async () => {
     const { supabase } = client(null, { code: '40001' });

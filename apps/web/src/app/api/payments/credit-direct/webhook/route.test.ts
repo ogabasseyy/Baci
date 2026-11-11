@@ -2881,7 +2881,6 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       error: { code: '40001', message: 'credit_direct_wallet_retry_required' },
     },
     { data: null, error: { code: '08006', message: 'connection failed' } },
-    { data: { invalid: true }, error: null },
   ])('returns a retryable response when the wallet verification service is unavailable (%j)', async (verification) => {
     vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
     const supabase = createMockSupabaseClient();
@@ -2902,16 +2901,32 @@ describe('POST /api/payments/credit-direct/webhook', () => {
   });
 
   it.each([
-    customerPaymentPayload,
-    merchantPaymentPayload,
-  ])('holds an unreserved wallet event for review: $eventType', async (payload) => {
+    {
+      payload: customerPaymentPayload,
+      verification: {
+        data: null,
+        error: { message: 'credit_direct_wallet_reconciliation_required' },
+      },
+    },
+    {
+      payload: merchantPaymentPayload,
+      verification: {
+        data: null,
+        error: { message: 'credit_direct_wallet_reconciliation_required' },
+      },
+    },
+    {
+      payload: merchantPaymentPayload,
+      verification: { data: { invalid: true }, error: null },
+    },
+  ])('holds wallet events without valid funding evidence for review (%j)', async ({
+    payload,
+    verification,
+  }) => {
     vi.mocked(parseWebhookPayload).mockReturnValue(payload);
     const supabaseMock = createMockSupabaseClient();
     vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
-    supabaseMock.rpc.mockResolvedValue({
-      data: null,
-      error: { message: 'credit_direct_wallet_reconciliation_required' },
-    } as never);
+    supabaseMock.rpc.mockResolvedValue(verification as never);
     const chain = supabaseMock.from('orders');
     chain.ilike.mockResolvedValue({
       data: [{ ...mockOrder, wallet_amount_used: 20000, amount_paid: 20000 }],

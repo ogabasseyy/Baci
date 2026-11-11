@@ -164,6 +164,7 @@ jobs:
           REPO_PRIVATE: ${{ github.event.repository.private }}
           PAID_TIER_CONFIRMED: ${{ vars.GEMINI_PAID_TIER_CONFIRMED }}
           EVENT_NAME: ${{ github.event_name }}
+          DIFF_AVAILABLE: ${{ steps.diff.outputs.diff_available }}
         run: node "${SCRIPT_DIR}/decide.mjs"
 
       - name: Review with Gemini

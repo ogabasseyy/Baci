@@ -52,6 +52,10 @@ fi
 # pull request changes, so a push that only merges main in keeps it and skips the paid review.
 diff_file="${RUNNER_TEMP}/gemini.diff"
 gh pr diff "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" > "${diff_file}" || true
+# An empty diff means the API refused it (a very large pull request, an outage): a review that saw
+# no changes proves nothing, so the decide step abstains instead of paying for one.
+if [[ -s "${diff_file}" ]]; then diff_available=true; else diff_available=false; fi
+echo "diff_available=${diff_available}" >> "${GITHUB_OUTPUT}"
 fingerprint="$(node "${SCRIPT_DIR}/fingerprint.mjs" < "${diff_file}")"
 echo "fingerprint=${fingerprint}" >> "${GITHUB_OUTPUT}"
 

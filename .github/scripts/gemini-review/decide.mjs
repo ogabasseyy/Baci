@@ -1,13 +1,14 @@
 // Decides what to do for this push BEFORE any model call is paid for:
 //   bypass          the bypass-ai-gate label is present
 //   blocked_private the repository is private and the Gemini key is not confirmed as a paid one
+//   no_diff         the pull request diff could not be read, so there is nothing to review
 //   duplicate       this exact commit was already reviewed
 //   unchanged       a MERGE commit (main merged in) whose pull request changes equal the last review's
 //   review          call the model
 // A manual `@gemini-cli /review` comment skips the duplicate/unchanged shortcuts (someone asked for
 // a fresh answer); the bypass label and the private-repository guard still apply to it.
 // Env in: GH_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, HEAD_SHA, FINGERPRINT, PR_LABELS (json),
-//   REPO_PRIVATE, PAID_TIER_CONFIRMED, EVENT_NAME, GITHUB_OUTPUT.
+//   REPO_PRIVATE, PAID_TIER_CONFIRMED, EVENT_NAME, DIFF_AVAILABLE, GITHUB_OUTPUT.
 import { isMain, parseJson, setOutputs } from './cli.mjs';
 import { githubClient } from './github.mjs';
 import { parseMarker } from './review.mjs';
@@ -20,6 +21,7 @@ export async function decide({ env, github }) {
   if (Array.isArray(labels) && labels.some((label) => label?.name === 'bypass-ai-gate')) return outcome('bypass');
   // Free-tier Gemini content is used to improve Google products: never send private code there.
   if (env.REPO_PRIVATE === 'true' && env.PAID_TIER_CONFIRMED !== 'true') return outcome('blocked_private');
+  if (env.DIFF_AVAILABLE === 'false') return outcome('no_diff');
   if (env.EVENT_NAME === 'issue_comment') return outcome('review');
 
   let reviews;

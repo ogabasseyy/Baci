@@ -128,8 +128,13 @@ test('handles removed, empty, binary and unreadable files without failing', () =
   assert.ok(run.prompt.includes('<file path="missing.ts">(content could not be read)</file>'));
 });
 
-test('an unavailable diff gives an empty fingerprint, so the push is always reviewed', () => {
+test('a readable diff is reported as available', () => {
+  assert.equal(collect({ files: [file('src/a.ts')], diff: DIFF, contents: { 'src/a.ts': 'x' } }).outputs.diff_available, 'true');
+});
+
+test('an unavailable diff (the API refused it) is reported, with an empty fingerprint', () => {
   const run = collect({ files: [file('src/a.ts')], diff: '', contents: { 'src/a.ts': 'x' } });
+  assert.equal(run.outputs.diff_available, 'false');
   assert.equal(run.outputs.fingerprint, '');
   assert.match(run.prompt, /No textual diff was returned/);
 });

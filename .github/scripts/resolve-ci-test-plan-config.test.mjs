@@ -17,6 +17,7 @@ import './dependency-review-availability.test.mjs';
 import './codeql-private-availability.test.mjs';
 import './jules-sunset-contract.test.mjs';
 import './jules-findings-gate.test.mjs';
+import './diff-guardian-ci-filter.test.mjs';
 import './diff-guardian-inputs.test.mjs';
 import './diff-guardian-muse-contract.test.mjs';
 import './diff-guardian-voters.test.mjs';

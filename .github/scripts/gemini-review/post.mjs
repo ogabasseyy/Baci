@@ -82,6 +82,8 @@ function evaluate(env, readFile) {
   switch (env.ACTION) {
     case 'bypass':
       return { state: 'success', description: 'Bypassed via bypass-ai-gate label' };
+    case 'no_diff':
+      return abstain('Pull request diff could not be read: not counted', 'the diff was empty or refused by the API');
     case 'blocked_private':
       return abstain('Not sent to Gemini: private repo without GEMINI_PAID_TIER_CONFIRMED', 'private repository, key tier not confirmed');
     case 'duplicate':

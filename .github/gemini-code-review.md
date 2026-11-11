@@ -15,9 +15,10 @@ tallies. Muse, Codex and CodeRabbit are separate reviewers and are not affected.
 | `failure` | Reviewed. A critical or high finding on a changed file. Fix it, or add the `bypass-ai-gate` label. | red |
 | `error` | Gemini could not review (quota, outage, bad key, unknown model, private repo). Not a vote either way. | green, with a warning |
 
-`error` also covers two cases where a clean answer would prove nothing: the changed-file list is
-empty or unreadable, or a changed file has control characters in its name (the model is never shown
-such files). A real finding is still `failure` in the second case.
+`error` also covers cases where a clean answer would prove nothing: the pull request diff could not
+be read (GitHub refuses very large diffs; no paid call is made), the changed-file list is empty or
+unreadable, or a changed file has control characters in its name (the model is never shown such
+files). A real finding is still `failure` in the last case.
 
 `error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
 state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then

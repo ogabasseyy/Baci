@@ -119,6 +119,14 @@ describe('actions decided before the model call', () => {
       assert.equal(result.exitCode, 0);
     }));
 
+  test('an unreadable pull request diff reports error and sends nothing', () =>
+    scenario({ env: { ACTION: 'no_diff' } }, (t, result) => {
+      assert.equal(t.status().state, 'error');
+      assert.match(t.status().description, /diff/i);
+      assert.equal(t.reviews().length, 0);
+      assert.equal(result.exitCode, 0);
+    }));
+
   test('a private repository without a confirmed paid key reports error and sends nothing', () =>
     scenario({ env: { ACTION: 'blocked_private' } }, (t) => {
       assert.equal(t.status().state, 'error');

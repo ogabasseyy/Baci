@@ -38,6 +38,20 @@ test('skips the model call and passes when the bypass-ai-gate label is present',
   assert.equal(result.action, 'bypass');
 });
 
+describe('bugfix: a pull request whose diff could not be read is never reviewed, so it cannot be counted as a pass', () => {
+  test('is decided before any paid call, on every kind of run', async () => {
+    assert.equal((await run([], { DIFF_AVAILABLE: 'false' })).action, 'no_diff');
+    assert.equal((await run([], { DIFF_AVAILABLE: 'false', EVENT_NAME: 'issue_comment' })).action, 'no_diff');
+    assert.equal((await run([review(HEAD, '', 'success')], { DIFF_AVAILABLE: 'false', FINGERPRINT: '' })).action, 'no_diff');
+  });
+
+  test('but the bypass label and the private-repository guard still come first, and a readable diff is reviewed', async () => {
+    assert.equal((await run([], { DIFF_AVAILABLE: 'false', PR_LABELS: JSON.stringify([{ name: 'bypass-ai-gate' }]) })).action, 'bypass');
+    assert.equal((await run([], { DIFF_AVAILABLE: 'false', REPO_PRIVATE: 'true' })).action, 'blocked_private');
+    assert.equal((await run([], { DIFF_AVAILABLE: 'true' })).action, 'review');
+  });
+});
+
 test('never sends a private repository to Gemini unless the key is confirmed as paid', async () => {
   assert.equal((await run([], { REPO_PRIVATE: 'true' })).action, 'blocked_private');
   assert.equal((await run([], { REPO_PRIVATE: 'true', PAID_TIER_CONFIRMED: 'false' })).action, 'blocked_private');

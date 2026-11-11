@@ -36,7 +36,10 @@ export async function decide({ env, github }) {
     .filter(Boolean)
     .sort((a, b) => a.at.localeCompare(b.at));
 
-  const sameCommit = markers.filter((marker) => marker.sha === env.HEAD_SHA).at(-1);
+  // The same head is only a duplicate when the pull request diff is the same too: a pull request
+  // retargeted to another base and reopened keeps its head commit but not its changes.
+  const fingerprint = env.FINGERPRINT ?? '';
+  const sameCommit = markers.filter((marker) => marker.sha === env.HEAD_SHA && marker.fp === fingerprint).at(-1);
   if (sameCommit) return outcome('duplicate', sameCommit);
   const latest = markers.at(-1);
   // Equal added/removed lines alone do not prove "nothing changed": the same lines moved into

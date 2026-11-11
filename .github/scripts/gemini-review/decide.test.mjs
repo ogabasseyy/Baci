@@ -45,8 +45,25 @@ test('never sends a private repository to Gemini unless the key is confirmed as 
 });
 
 test('does not review the same commit twice and carries the earlier state forward', async () => {
-  const result = await run([review(HEAD, OTHER_FP, 'failure')]);
+  const result = await run([review(HEAD, FP, 'failure')]);
   assert.deepEqual(result, { action: 'duplicate', carryState: 'failure', carrySha: HEAD });
+});
+
+describe('bugfix: the same head is only a duplicate when the pull request diff is the same', () => {
+  test('a pull request retargeted to another base and reopened at the same head is reviewed again', async () => {
+    const result = await run([review(HEAD, OTHER_FP, 'success')]);
+    assert.equal(result.action, 'review');
+  });
+
+  test('two runs that both could not read a diff (empty fingerprint) are still duplicates', async () => {
+    const result = await run([review(HEAD, '', 'success')], { FINGERPRINT: '' });
+    assert.equal(result.action, 'duplicate');
+  });
+
+  test('an old review without a diff fingerprint does not stand in for a run that has one', async () => {
+    const result = await run([review(HEAD, '', 'success')]);
+    assert.equal(result.action, 'review');
+  });
 });
 
 test('a manual @gemini-cli /review comment always reviews, but still honours bypass and the private-repo guard', async () => {

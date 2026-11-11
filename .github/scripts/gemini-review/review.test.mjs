@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import { estimateCostUsd } from './pricing.mjs';
 import { buildMarker, parseMarker, parseReview, renderReview, reviewState } from './review.mjs';
 
@@ -26,11 +26,30 @@ test('rejects non-json, a missing verdict, a non-array findings and wholly malfo
   assert.deepEqual({ ok: malformed.ok, reason: malformed.reason }, { ok: false, reason: 'malformed_findings' });
 });
 
-test('keeps well-formed findings when only some are malformed, most severe first, at most 20', () => {
+test('keeps every well-formed finding (only malformed ones are dropped), most severe first', () => {
   const many = Array.from({ length: 25 }, (_, i) => finding({ severity: 'low', title: `low ${i}` }));
   const parsed = parseReview(json({ findings: [...many, finding({ severity: 'critical', title: 'crit' }), { nope: 1 }] }));
-  assert.equal(parsed.review.findings.length, 20);
+  assert.equal(parsed.review.findings.length, 26);
   assert.equal(parsed.review.findings[0].title, 'crit');
+});
+
+describe('bugfix: the display limit must never hide the finding that blocks', () => {
+  const files = ['apps/web/src/a.ts'];
+  const flood = Array.from({ length: 25 }, (_, i) => finding({ severity: 'critical', title: `ghost ${i}`, path: `ghost/${i}.ts` }));
+  const real = finding({ severity: 'high', title: 'the real one' });
+
+  test('the status is computed from all findings, not the first 20', () => {
+    const { review } = parseReview(json({ findings: [...flood, real] }));
+    assert.equal(reviewState(review, files), 'failure');
+  });
+
+  test('the posted review lists the blocking finding first and says how many were left out', () => {
+    const { review } = parseReview(json({ findings: [...flood, real] }));
+    const md = renderReview({ review, changedFiles: files });
+    assert.ok(md.indexOf('the real one') > 0 && md.indexOf('the real one') < md.indexOf('ghost 0'), 'blocking finding comes first');
+    assert.match(md, /6 more findings are not shown/);
+    assert.equal(md.match(/^- (critical|high|medium|low):/gm).length, 20);
+  });
 });
 
 test('the status is failure only for a critical or high finding on a file the pull request changes', () => {

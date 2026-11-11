@@ -3,7 +3,8 @@ import { estimateCostUsd } from './pricing.mjs';
 import { sanitizeText } from './sanitize.mjs';
 import { BLOCKING_SEVERITIES, SEVERITIES } from './schema.mjs';
 
-const MAX_FINDINGS = 20;
+// Display limits only: the status is computed from every finding, never from what is shown.
+const MAX_SHOWN_FINDINGS = 20;
 const MAX_NEXT_STEPS = 10;
 const UNVERIFIED = '(path not in changed files — unverified)';
 
@@ -51,7 +52,7 @@ export function parseReview(text) {
   const nextSteps = (Array.isArray(data.next_steps) ? data.next_steps : []).filter((step) => typeof step === 'string' && step.trim());
   return {
     ok: true,
-    review: { verdict: data.verdict.trim(), findings: findings.slice(0, MAX_FINDINGS), next_steps: nextSteps.slice(0, MAX_NEXT_STEPS) },
+    review: { verdict: data.verdict.trim(), findings, next_steps: nextSteps.slice(0, MAX_NEXT_STEPS) },
   };
 }
 
@@ -71,12 +72,16 @@ export function renderReview({ review, changedFiles = [] }) {
   const files = changedFiles.map(normalizePath);
   const lines = ['## Verdict', '', sanitizeText(review.verdict, { max: 800 }), '', '## Findings', ''];
   if (review.findings.length === 0) lines.push('- No meaningful issues found.');
-  for (const finding of review.findings) {
+  // Findings that decide the status come first, so the display limit can never hide them.
+  const isBlocking = (finding) => BLOCKING_SEVERITIES.includes(finding.severity) && touches(finding, files);
+  const ordered = [...review.findings].sort((a, b) => Number(isBlocking(b)) - Number(isBlocking(a)));
+  for (const finding of ordered.slice(0, MAX_SHOWN_FINDINGS)) {
     const where = `${oneLine(finding.path, 300)}${touches(finding, files) ? `:${finding.line}` : ''}`;
     lines.push(`- ${finding.severity}: ${oneLine(finding.title, 200)} in ${where}${touches(finding, files) ? '' : ` ${UNVERIFIED}`}`);
     const body = sanitizeText(finding.body, { max: 1500 });
     if (body) lines.push(...body.split('\n').map((line) => `  ${line}`));
   }
+  if (ordered.length > MAX_SHOWN_FINDINGS) lines.push('', `*${ordered.length - MAX_SHOWN_FINDINGS} more findings are not shown.*`);
   lines.push('', '## Suggested next steps', '');
   if (review.next_steps.length === 0) lines.push('- None.');
   for (const step of review.next_steps) lines.push(`- ${oneLine(step, 300)}`);

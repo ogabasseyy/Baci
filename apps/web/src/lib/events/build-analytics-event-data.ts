@@ -11,6 +11,12 @@ function assignDefined(
   if (value !== undefined) target[key] = value;
 }
 
+function redactCustomData<T extends { url?: string }>(customData: T): T {
+  return customData.url
+    ? { ...customData, url: redactStoredPageUrl(customData.url) }
+    : customData;
+}
+
 export function buildAnalyticsEventData(
   input: AnalyticsEventRequest,
   eventType: string
@@ -59,7 +65,8 @@ export function buildAnalyticsEventData(
     );
     assignDefined(eventData, 'items', contents);
     assignDefined(eventData, 'total', input.total ?? input.custom_data?.value);
-    if (input.custom_data) eventData.custom_data = input.custom_data;
+    if (input.custom_data)
+      eventData.custom_data = redactCustomData(input.custom_data);
     return eventData;
   }
 
@@ -81,7 +88,8 @@ export function buildAnalyticsEventData(
       input.item_count ?? contents?.length
     );
     assignDefined(eventData, 'items', contents);
-    if (input.custom_data) eventData.custom_data = input.custom_data;
+    if (input.custom_data)
+      eventData.custom_data = redactCustomData(input.custom_data);
     return eventData;
   }
 
@@ -91,6 +99,7 @@ export function buildAnalyticsEventData(
     return eventData;
   }
 
-  if (input.custom_data) eventData.custom_data = input.custom_data;
+  if (input.custom_data)
+    eventData.custom_data = redactCustomData(input.custom_data);
   return eventData;
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { conversionEventPayload } from './conversion-event-payload';
 
 describe('conversionEventPayload', () => {
@@ -53,6 +53,34 @@ describe('conversionEventPayload', () => {
       search_string: undefined,
       targets: ['facebook'],
       total: 200,
+    });
+  });
+
+  describe('bugfix: ad platforms received the Cloudflare egress address', () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('forwards the verified visitor address, not the Cloudflare peer', () => {
+      vi.stubEnv('VERCEL', '1');
+      const request = new NextRequest('https://usebaci.com/api/events', {
+        headers: {
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-forwarded-for': '172.68.1.20',
+          'x-real-ip': '172.68.1.20',
+        },
+      });
+      const payload = conversionEventPayload.deliveryData(
+        {
+          custom_data: { value: 100 },
+          event_name: 'PURCHASE',
+          event_source: 'web',
+          event_time: 1_784_937_600,
+          user_data: {},
+        },
+        request
+      );
+
+      expect(payload.ip).toBe('203.0.113.9');
     });
   });
 });

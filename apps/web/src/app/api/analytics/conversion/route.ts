@@ -13,6 +13,7 @@ import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-regis
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
+import { redactStoredPageUrl } from '@/lib/events/redact-stored-page-url';
 import { generateEventId } from '@/lib/facebook-capi';
 import { logger } from '@/lib/logger';
 import { createClient as createServerClient } from '@/lib/supabase/server';
@@ -191,7 +192,12 @@ export async function POST(request: NextRequest) {
             createServiceClient('event-pipeline'),
             verifiedMerchantId,
             {
-              custom_data: input.custom_data,
+              custom_data: {
+                ...input.custom_data,
+                ...(input.custom_data.url
+                  ? { url: redactStoredPageUrl(input.custom_data.url) }
+                  : {}),
+              },
               event_id: eventId,
               event_type: eventType,
               merchant_id: verifiedMerchantId,

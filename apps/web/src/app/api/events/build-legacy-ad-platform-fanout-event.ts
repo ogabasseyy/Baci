@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { ConversionEvent } from '@/lib/analytics/send-to-ad-platforms';
 import { clientMarketingTargets } from '@/lib/events/client-marketing-targets';
+import { redactStoredPageUrl } from '@/lib/events/redact-stored-page-url';
 import { shopperIp } from '@/lib/events/shopper-ip';
 import type { AnalyticsEventRequest } from '@/schemas/analytics-event';
 
@@ -19,6 +20,10 @@ function conversionContents(input: AnalyticsEventRequest) {
         ]
       : [];
   });
+}
+
+function redactOptionalUrl(value: string | undefined): string | undefined {
+  return value ? redactStoredPageUrl(value) : value;
 }
 
 export function buildLegacyAdPlatformFanoutEvent(input: {
@@ -53,7 +58,9 @@ export function buildLegacyAdPlatformFanoutEvent(input: {
       price: input.input.product_price ?? input.input.custom_data?.price,
       search_string:
         input.input.search_term ?? input.input.custom_data?.search_string,
-      url: input.input.page_url ?? input.input.custom_data?.url,
+      url: redactOptionalUrl(
+        input.input.page_url ?? input.input.custom_data?.url
+      ),
       value:
         input.input.total ??
         input.input.custom_data?.value ??

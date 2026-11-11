@@ -17,3 +17,9 @@ describe('isBotUserAgent', () => {
     expect(isBotUserAgent(undefined)).toBe(false);
   });
 });
+
+describe('bugfix: ordinary agents mentioning preview or monitor', () => {
+  it('does not drop in-app browsers with those words', () => {
+    expect(isBotUserAgent('Mozilla/5.0 MyApp/1.0 Monitor Preview')).toBe(false);
+  });
+});

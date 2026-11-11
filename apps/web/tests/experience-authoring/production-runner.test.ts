@@ -5,6 +5,7 @@ import type {
   PublicBootstrap,
 } from '@baci/shared/experience';
 import { NextRequest } from 'next/server';
+import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -47,12 +48,14 @@ import {
   createRunnerHandler,
 } from '../../tools/experience-runner/runner-transport';
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
+import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
+  let verifierPool: Pool | undefined;
   try {
     const hostOrigin = 'https://shop.synthetic.test';
     const previewOrigin = 'https://builder.synthetic-baci.test';
@@ -203,6 +206,41 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     expect(committed.error).toBeNull();
     expect(committed.data).toHaveLength(1);
 
+    if (!f.db.localDatabase) throw Error('LOCAL_DATABASE_REQUIRED');
+    await f.db.pool.query(
+      'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
+    );
+    verifierPool = new Pool({
+      host: f.db.localDatabase.socketDirectory,
+      user: 'baci_experience_verifier_login',
+      database: 'postgres',
+      options: '-c role=baci_experience_verifier',
+    });
+    const capture = await createVerifierCaptureWorker({
+      pool: verifierPool,
+      hostOrigin,
+      previewOrigin,
+      bootstrap: async () => bootstrap,
+      runner: {
+        endpoint: 'https://runner.baci-offline.invalid/v1/execute',
+        key,
+        toolchainDigest,
+        fetch: (url, init) => handler(new Request(url, init)),
+      },
+    });
+    const captured = await capture(f.owner, {
+      buildId: build.buildId,
+      routeId: 'home',
+      idempotencyKey: randomUUID(),
+    });
+    const snapshot = await f.owner.supabase
+      .from('experience_snapshots')
+      .select('id,build_id')
+      .eq('id', captured.evidenceId)
+      .maybeSingle();
+    expect(snapshot.error).toBeNull();
+    expect(snapshot.data?.build_id).toBe(build.buildId);
+
     const vault = createPreviewVault({
       origin: executionOrigin,
       now: Date.now,
@@ -286,6 +324,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         .rows[0].count
     ).toBe('0');
   } finally {
+    await verifierPool?.end();
     await f.close();
   }
 }, 180000);

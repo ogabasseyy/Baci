@@ -78,4 +78,20 @@ describe('sendTrackedEvent', () => {
     await expect(sendTrackedEvent(addToCart)).resolves.toBeUndefined();
     warn.mockRestore();
   });
+
+  it('still sends the event when session storage is blocked', async () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, 'getItem')
+      .mockImplementation(() => {
+        throw new DOMException('denied', 'SecurityError');
+      });
+    try {
+      await sendTrackedEvent(addToCart);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(sentInit().body)).session_id).toBe('');
+    } finally {
+      getItem.mockRestore();
+    }
+  });
 });

@@ -8,13 +8,18 @@ import type { TrackedEvent } from './tracked-event-types';
 function getSessionId(): string {
   if (typeof window === 'undefined') return '';
 
-  let sessionId = sessionStorage.getItem('baci_session_id');
-  if (!sessionId) {
-    // Use crypto.randomUUID() for cryptographically secure session IDs
-    sessionId = `sess_${crypto.randomUUID()}`;
-    sessionStorage.setItem('baci_session_id', sessionId);
+  try {
+    let sessionId = sessionStorage.getItem('baci_session_id');
+    if (!sessionId) {
+      // Use crypto.randomUUID() for cryptographically secure session IDs
+      sessionId = `sess_${crypto.randomUUID()}`;
+      sessionStorage.setItem('baci_session_id', sessionId);
+    }
+    return sessionId;
+  } catch {
+    // Blocked storage (strict privacy modes) must not drop the event.
+    return '';
   }
-  return sessionId;
 }
 
 // Get common event metadata

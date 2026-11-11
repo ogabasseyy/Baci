@@ -1,17 +1,24 @@
 import type { CartItem } from './cart-types';
 
-function totalUnits(cart: readonly CartItem[]): number {
-  return cart.reduce((sum, item) => sum + item.quantity, 0);
+function productUnits(cart: readonly CartItem[], productId: string): number {
+  return cart.reduce(
+    (sum, item) => (item.id === productId ? sum + item.quantity : sum),
+    0
+  );
 }
 
 /**
- * Units an applied add actually put in the cart. Stock and per-line caps
- * can accept fewer units than requested, and funnel analytics must report
- * what landed, not what was asked for.
+ * Units an applied add actually put in the cart for the added product.
+ * Stock and per-line caps can accept fewer units than requested, and only
+ * that product's lines are compared so no other cart change skews it.
  */
 export function countAddedUnits(
   previousCart: readonly CartItem[],
-  nextCart: readonly CartItem[]
+  nextCart: readonly CartItem[],
+  productId: string
 ): number {
-  return Math.max(0, totalUnits(nextCart) - totalUnits(previousCart));
+  return Math.max(
+    0,
+    productUnits(nextCart, productId) - productUnits(previousCart, productId)
+  );
 }

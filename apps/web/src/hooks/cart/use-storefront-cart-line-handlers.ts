@@ -201,7 +201,7 @@ export function useStorefrontCartLineHandlers({
       // Caps can accept fewer units than requested: report what landed.
       noteAddedProduct(
         productForCart,
-        countAddedUnits(previousCartForProbe, probeResult),
+        countAddedUnits(previousCartForProbe, probeResult, productForCart.id),
         normalizedOptions
       );
     }

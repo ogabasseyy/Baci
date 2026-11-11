@@ -17,7 +17,7 @@ test('extracts the current claim and confirmation functions as complete SQL stat
   );
   assert.match(
     sql,
-    /private\.confirm_order_inventory_reservations[\s\S]*?ORDER BY oi\.product_id, oi\.id[\s\S]*?FOR UPDATE/i
+    /private\.confirm_order_inventory_reservations[\s\S]*?ORDER BY oi\.product_id, oi\.variant_id, oi\.id[\s\S]*?FOR UPDATE/i
   );
   assert.match(
     sql,

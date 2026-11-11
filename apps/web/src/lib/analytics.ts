@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product } from '@/lib/products';
+import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
 import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
 import { trackCartView } from './analytics/track-cart-view';
 import { trackSocialFunnel } from './analytics/track-social-funnel';
@@ -47,7 +47,7 @@ export { isAnalyticsAllowed } from './analytics-consent';
 
 // Convert product to ecommerce item format
 function productToItem(
-  product: Product,
+  product: AnalyticsProduct,
   quantity: number = 1,
   variant?: string
 ): EcommerceItem {
@@ -105,7 +105,7 @@ export const analytics = {
 
   // View product details
   viewItem: (
-    product: Product,
+    product: AnalyticsProduct,
     currency: string = 'USD',
     eventId: string = crypto.randomUUID()
   ) => {
@@ -162,7 +162,7 @@ export const analytics = {
 
   // Add to cart
   addToCart: (
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD',
     variant?: string,
@@ -211,7 +211,7 @@ export const analytics = {
 
   // Remove from cart
   removeFromCart: (
-    product: Product,
+    product: AnalyticsProduct,
     quantity: number = 1,
     currency: string = 'USD'
   ) => {
@@ -226,7 +226,7 @@ export const analytics = {
 
   // View cart / Begin checkout
   beginCheckout: (
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     currency: string = 'USD',
     eventId: string = crypto.randomUUID()
   ) => {
@@ -303,7 +303,7 @@ export const analytics = {
   // Purchase complete
   purchase: (
     orderId: string,
-    products: Array<{ product: Product; quantity: number }>,
+    products: Array<{ product: AnalyticsProduct; quantity: number }>,
     total: number,
     currency: string = 'USD',
     tax?: number,
@@ -348,7 +348,7 @@ export const analytics = {
   viewItemList: (
     listId: string,
     listName: string,
-    products: Product[],
+    products: AnalyticsProduct[],
     _currency: string = 'USD'
   ) => {
     const items = products.map((product, index) => ({
@@ -374,7 +374,7 @@ export const analytics = {
 
   // Click on product in list
   selectItem: (
-    product: Product,
+    product: AnalyticsProduct,
     listId?: string,
     listName?: string,
     index?: number
@@ -392,7 +392,7 @@ export const analytics = {
   },
 
   // Add to wishlist
-  addToWishlist: (product: Product, currency: string = 'USD') => {
+  addToWishlist: (product: AnalyticsProduct, currency: string = 'USD') => {
     sendGA4Event('add_to_wishlist', {
       currency,
       value: product.price,

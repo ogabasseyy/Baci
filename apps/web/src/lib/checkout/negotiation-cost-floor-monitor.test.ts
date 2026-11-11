@@ -133,6 +133,22 @@ describe('monitorNegotiationCostFloor', () => {
     });
   });
 
+  it('logs the variant lookup error code in the unreadable-variant warning', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
+      product_variants: { data: null, error: { code: '42501' } },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98, 'v1')],
+    });
+    expect(warn.mock.calls[0][0]).toMatchObject({
+      unreadableVariantLines: 1,
+      variantLookupErrorCode: '42501',
+    });
+  });
+
   it('skips a variant that belongs to another product', async () => {
     const { client } = clientReturning({
       products: { data: [{ id: 'p1', cost_price: 60 }], error: null },

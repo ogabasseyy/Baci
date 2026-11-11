@@ -90,6 +90,7 @@ export async function monitorNegotiationCostFloor({
 
     // A variant's own cost wins over the parent's (same precedence as the
     // purchase analytics); a missing variant cost falls back to the parent.
+    let variantLookupErrorCode: string | null = null;
     const variantCost = new Map<string, number | null>();
     const variantProduct = new Map<string, string>();
     if (variantIds.length > 0) {
@@ -99,6 +100,10 @@ export async function monitorNegotiationCostFloor({
         .eq('merchant_id', merchantId)
         .in('id', variantIds)
         .overrideTypes<VariantCostRow[], { merge: false }>();
+      if (variantError) {
+        variantLookupErrorCode =
+          (variantError as { code?: string }).code ?? 'unknown';
+      }
       if (!variantError && variants) {
         for (const row of variants) {
           variantCost.set(row.id, positiveCost(row.cost_price));
@@ -161,6 +166,7 @@ export async function monitorNegotiationCostFloor({
         message: 'Negotiation cost-floor monitor could not read variant cost',
         merchantId,
         unreadableVariantLines,
+        variantLookupErrorCode,
       });
     }
     if (truncatedLines > 0 || unreadableProductLines > 0) {

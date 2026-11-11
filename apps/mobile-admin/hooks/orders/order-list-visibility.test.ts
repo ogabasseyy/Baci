@@ -4,6 +4,7 @@ import { type FilterRow, matchesOrFilter } from '../../test/postgrest-filter';
 import {
   applyOrderListVisibilityFilter,
   ORDER_LIST_VISIBILITY_FILTER,
+  STAFF_ORDER_EXTRA_SOURCE_VALUES,
   STAFF_ORDER_SOURCE_VALUES,
 } from './order-list-visibility';
 
@@ -77,11 +78,12 @@ describe('applyOrderListVisibilityFilter', () => {
     ).toBe(false);
   });
 
-  it('treats every staff new-order channel as staff-entered', () => {
-    const staffSources: readonly string[] = STAFF_ORDER_SOURCE_VALUES;
-    for (const channel of CHANNELS) {
-      expect(staffSources).toContain(channel.id);
-    }
+  it('lists exactly the staff new-order channels plus the documented extras', () => {
+    const expected = [
+      ...CHANNELS.map((channel) => channel.id),
+      ...STAFF_ORDER_EXTRA_SOURCE_VALUES,
+    ];
+    expect([...STAFF_ORDER_SOURCE_VALUES].sort()).toEqual(expected.sort());
   });
 
   describe('bugfix: staff invoices hidden from the orders list', () => {

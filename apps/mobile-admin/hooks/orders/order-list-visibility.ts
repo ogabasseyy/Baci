@@ -29,7 +29,17 @@ export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHO
 // orders and is cleared if the staff account is deleted. Any other source,
 // including a blank or unknown one, is treated as a customer checkout, which
 // keeps the drop-off rules' long-standing behaviour for those orders.
-// Keep in step with CHANNELS in components/orders/new-order.shared.ts.
+// The new-order CHANNELS (components/orders/new-order.shared.ts) plus
+// sources only written by manual entry and the Bumpa import, which maps a
+// Twitter origin to 'twitter' and unknown origins to their own key (prod
+// has a 'bumpa' row). A test keeps this list equal to CHANNELS + extras.
+export const STAFF_ORDER_EXTRA_SOURCE_VALUES = [
+  'twitter',
+  'manual',
+  'staff_entry',
+  'bumpa',
+] as const;
+
 export const STAFF_ORDER_SOURCE_VALUES = [
   'physical',
   'instagram',
@@ -39,10 +49,7 @@ export const STAFF_ORDER_SOURCE_VALUES = [
   'jumia',
   'jiji',
   'konga',
-  'twitter',
-  'manual',
-  'staff_entry',
-  'bumpa',
+  ...STAFF_ORDER_EXTRA_SOURCE_VALUES,
 ] as const;
 
 const STAFF_ORDER_SOURCES = `(${STAFF_ORDER_SOURCE_VALUES.join(',')})`;

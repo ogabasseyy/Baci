@@ -56,12 +56,15 @@ FALLBACK_MIRRORS=(
   https://archive.ubuntu.com/ubuntu/
   https://azure.archive.ubuntu.com/ubuntu/
 )
-# No single apt command may wait longer than this, whatever the mirrors do. A healthy install
-# takes well under a minute.
-APT_LIMIT_SECONDS=180
-# A few seconds per connection, three tries per file, and up to a minute for a dpkg lock that a background
-# apt job on a fresh runner, or a command stopped by the ceiling above, may still hold.
-APT_BOUNDS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
+# No single apt command may wait longer than this, whatever the mirrors do. A healthy install takes well
+# under a minute. The environment may lower it, which is how the tests make a stalled apt end in a second.
+APT_LIMIT_SECONDS="${APT_LIMIT_SECONDS:-180}"
+# Fifteen seconds per connection and one try per file, the values the x64 runner image itself configures
+# (images/ubuntu/scripts/build/configure-apt.sh): apt spends every retry on the same URI before it moves on
+# to the next mirror in the list, so a higher count delays the failover this script exists for. Plus up to a
+# minute for a dpkg lock that a background apt job on a fresh runner, or a command stopped by the ceiling
+# above, may still hold.
+APT_BOUNDS=(-o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
 
 # timeout runs under sudo, so its signal, and the kill after ten seconds, goes to apt-get itself. Wrapped around
 # sudo it could stop only sudo and leave apt-get running with the dpkg lock held.

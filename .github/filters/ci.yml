@@ -357,6 +357,8 @@ web:
   - '.github/scripts/ci-step-script-text.mjs'
   - '.github/scripts/install-postgresql-hosted.sh'
   - '.github/scripts/install-postgresql-hosted.test.mjs'
+  - '.github/scripts/install-postgresql-hosted-stalled-apt.test.mjs'
+  - '.github/scripts/install-postgresql-hosted-harness.mjs'
   - '.github/scripts/install-postgresql-hosted.package-metadata.txt'
   - '.github/scripts/dependency-review-availability.test.mjs'
   - '.github/scripts/codeql-private-availability.test.mjs'

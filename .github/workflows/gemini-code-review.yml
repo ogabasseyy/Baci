@@ -5,8 +5,8 @@
 #   1. collect.sh   pull request diff + full changed files + the Baci review contract -> a prompt FILE
 #   2. decide.mjs   skip the paid call when: the bypass-ai-gate label is set, the repository is
 #                   private and the key is not confirmed as a paid one, this commit was already
-#                   reviewed, or the pull request's own changes equal the last review's (a merge
-#                   from main)
+#                   reviewed, or this is a merge commit (main merged in) and the pull request's own
+#                   changes equal the last review's
 #   3. call.mjs     the single model request (holds the Gemini key, no GitHub token)
 #   4. post.mjs     posts the review and sets the `Gemini review` commit status (holds the GitHub
 #                   token, no Gemini key)
@@ -28,8 +28,9 @@
 #     products.
 #   - Optional repository variables: GEMINI_MODEL (default below), GEMINI_PAID_TIER_CONFIRMED=true
 #     (required before a PRIVATE repository is sent to Gemini).
-#   - To make the gate block merges, add the `Gemini review` status to the required checks for
-#     `main` (it is deliberately not required today; Diff Guardian tallies it).
+#   - Do NOT add `Gemini review` to the required checks: GitHub treats the `error` state like a
+#     failure, so a Gemini outage would then block every merge. Diff Guardian tallies it instead
+#     and treats `error` as an abstention.
 name: Gemini Code Review
 
 on:

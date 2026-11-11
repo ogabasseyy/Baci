@@ -20,6 +20,7 @@ export function githubClient({ token, repo, apiUrl = 'https://api.github.com', f
   }
 
   return {
+    get: (path) => request('GET', path),
     post: (path, body) => request('POST', path, body),
     async paginate(path, { maxPages = 10 } = {}) {
       const items = [];

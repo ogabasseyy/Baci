@@ -64,6 +64,11 @@ test('a medium or low Muse finding is not a blocking vote', () => {
   assert.equal(only(result).state, 'success');
 });
 
+test('only critical and high bullets block: Muse never emits "major", so it is not a vote', () => {
+  const result = runTally({ statuses: [GEMINI_FAIL], checks: [MUSE_DONE], reviews: [museReview({ findings: ['major'] })] });
+  assert.equal(only(result).state, 'success');
+});
+
 describe('bugfix: voters that cannot report must not decide the gate', () => {
   test('a Gemini outage (status error plus a red check run) abstains instead of casting a blocking vote', () => {
     const result = runTally({

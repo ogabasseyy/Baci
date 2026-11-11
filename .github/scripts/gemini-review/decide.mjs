@@ -2,7 +2,7 @@
 //   bypass          the bypass-ai-gate label is present
 //   blocked_private the repository is private and the Gemini key is not confirmed as a paid one
 //   duplicate       this exact commit was already reviewed
-//   unchanged       the pull request's own changes are identical to the last review (a merge from main)
+//   unchanged       a MERGE commit (main merged in) whose pull request changes equal the last review's
 //   review          call the model
 // A manual `@gemini-cli /review` comment always reviews: someone asked for a fresh answer.
 // Env in: GH_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, HEAD_SHA, FINGERPRINT, PR_LABELS (json),
@@ -39,8 +39,22 @@ export async function decide({ env, github }) {
   const sameCommit = markers.filter((marker) => marker.sha === env.HEAD_SHA).at(-1);
   if (sameCommit) return outcome('duplicate', sameCommit);
   const latest = markers.at(-1);
-  if (latest && latest.fp && env.FINGERPRINT && latest.fp === env.FINGERPRINT) return outcome('unchanged', latest);
+  // Equal added/removed lines alone do not prove "nothing changed": the same lines moved into
+  // another function would match. So only a merge commit may reuse the earlier review; any normal
+  // commit is reviewed.
+  if (latest && latest.fp && env.FINGERPRINT && latest.fp === env.FINGERPRINT && (await isMergeCommit(github, env))) {
+    return outcome('unchanged', latest);
+  }
   return outcome('review');
+}
+
+async function isMergeCommit(github, env) {
+  try {
+    const commit = await github.get(`commits/${env.HEAD_SHA}`);
+    return Array.isArray(commit?.parents) && commit.parents.length > 1;
+  } catch {
+    return false;
+  }
 }
 
 if (isMain(import.meta.url)) {

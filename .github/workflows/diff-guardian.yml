@@ -231,7 +231,7 @@ jobs:
               | sort_by(.submitted_at) | last as $review
               | if $review == null then "abstain"
                 elif (($review.body | split("\n") | .[1] // "") == "<!-- muse-fallback:v1 -->") then "abstain"
-                elif ($review.body | test("(^|\n)[ \t]*[-*][ \t]+(critical|high|major)[ \t]*:"; "i")) then "failure"
+                elif ($review.body | test("(^|\n)[ \t]*[-*][ \t]+(critical|high)[ \t]*:"; "i")) then "failure"
                 else "success"
                 end'
           }

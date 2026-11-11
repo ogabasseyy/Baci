@@ -31,12 +31,14 @@ files_file="${RUNNER_TEMP}/gemini-files.json"
 gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
   | jq -s 'add' > "${files_file}"
 
+# File names are untrusted. One with a control character (newline, tab...) could add lines to the
+# prompt or to this list, so such names are left out of the list and shown with "?" in the summary.
 changed_files_file="${RUNNER_TEMP}/gemini-changed-files.txt"
-jq -r '.[].filename' "${files_file}" > "${changed_files_file}"
+jq -r '.[] | select(.filename | explode | any(. < 32 or . == 127) | not) | .filename' "${files_file}" > "${changed_files_file}"
 echo "changed_files_file=${changed_files_file}" >> "${GITHUB_OUTPUT}"
 
 files_summary="$(
-  jq -r '.[] | "- \(.filename) [\(.status)] +\(.additions) / -\(.deletions)"' "${files_file}"
+  jq -r '.[] | "- \(.filename | explode | map(if . < 32 or . == 127 then 63 else . end) | implode) [\(.status)] +\(.additions) / -\(.deletions)"' "${files_file}"
 )"
 if [[ -z "${files_summary}" ]]; then
   files_summary="- No file-level diff metadata was returned by the GitHub API."
@@ -69,8 +71,13 @@ full_files_file="${RUNNER_TEMP}/gemini-full-files.md"
 files_budget=45000
 per_file_budget=25000
 content_file="${RUNNER_TEMP}/gemini-file-content"
-while IFS=$'\t' read -r path file_status; do
+checkout_root="$(pwd -P)"
+while IFS= read -r -d '' path && IFS= read -r -d '' file_status; do
   if [[ "${file_status}" == "removed" ]]; then
+    continue
+  fi
+  if [[ "${path}" == *[[:cntrl:]]* ]]; then
+    printf '\n<file path="(unprintable name)">(content omitted: file name has control characters)</file>\n' >> "${full_files_file}"
     continue
   fi
   # HTML-escape the path before placing it in the <file path="..."> attribute so a crafted
@@ -81,7 +88,18 @@ while IFS=$'\t' read -r path file_status; do
     continue
   fi
   # Read the file from the checked-out PR head, no per-file API call.
-  if ! cp -- "${path}" "${content_file}" 2>/dev/null; then
+  if [[ ! -e "${path}" && ! -L "${path}" ]]; then
+    printf '\n<file path="%s">(content could not be read)</file>\n' "${display_path}" >> "${full_files_file}"
+    continue
+  fi
+  # A pull request can contain symlinks. Never follow one out of the checkout: it could point at
+  # runner files (the step's own environment, for example) whose content would go to the model.
+  real_path="$(realpath -- "${path}" 2>/dev/null || true)"
+  if [[ -z "${real_path}" || "${real_path}" != "${checkout_root}/"* || ! -f "${real_path}" ]]; then
+    printf '\n<file path="%s">(content omitted: not a regular file inside the checkout)</file>\n' "${display_path}" >> "${full_files_file}"
+    continue
+  fi
+  if ! cp -- "${real_path}" "${content_file}" 2>/dev/null; then
     printf '\n<file path="%s">(content could not be read)</file>\n' "${display_path}" >> "${full_files_file}"
     continue
   fi
@@ -120,7 +138,7 @@ while IFS=$'\t' read -r path file_status; do
       | perl -pe 's{<\s*/\s*(file|diff)}{<\\/$1}gi' || true
     printf '\n</file>\n'
   } >> "${full_files_file}"
-done < <(jq -r '.[] | [.filename, .status] | @tsv' "${files_file}")
+done < <(jq -j '.[] | .filename, "\u0000", .status, "\u0000"' "${files_file}")
 if [[ ! -s "${full_files_file}" ]]; then
   printf '(No changed-file contents were available.)\n' > "${full_files_file}"
 fi

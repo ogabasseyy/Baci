@@ -32,7 +32,13 @@ export function sanitizeText(input, { max = 2000 } = {}) {
   text = text
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<!--[\s\S]*$/, '')
+    // Inline, reference (full and collapsed) and shortcut images, then every link definition (an
+    // image reference needs one to load), then any "![" left over so nothing can render an image.
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_match, alt) => alt || 'image removed')
+    .replace(/!\[([^\]]*)\]\[[^\]]*\]/g, (_match, alt) => alt || 'image removed')
+    .replace(/!\[([^\]]*)\](?![([:])/g, (_match, alt) => alt || 'image removed')
+    .replace(/^ {0,3}\[[^\]\n]+\]:[ \t]*\S.*$/gm, '')
+    .replaceAll('![', `!${ZERO_WIDTH_SPACE}[`)
     .replace(RISKY_TAG, '')
     .replace(/(^|[^A-Za-z0-9_@])@(?=[A-Za-z0-9_])/g, `$1@${ZERO_WIDTH_SPACE}`);
 

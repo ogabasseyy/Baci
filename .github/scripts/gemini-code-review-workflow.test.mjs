@@ -1,7 +1,7 @@
 // Contract test for .github/workflows/gemini-code-review.yml: who may trigger it, where its code
 // comes from, which step sees which secret, and that a Gemini outage can never read as a finding.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test, { describe } from 'node:test';
 import YAML from 'yaml';
 import { DEFAULT_MODEL } from './gemini-review/api.mjs';
@@ -106,4 +106,8 @@ test('contract: the report step receives everything post.mjs reads, and every sc
 test('contract: the prompt travels as a file, never through step outputs or environment variables', () => {
   assert.ok(!text.includes('steps.diff.outputs.prompt }}') && !text.includes('GEMINI_PROMPT_EOF'));
   assert.equal(stepEnv('Review with Gemini').PROMPT_FILE, '${{ steps.diff.outputs.prompt_file }}');
+});
+
+test('bugfix: the temporary dry-run copy of this workflow is never merged (it would pay for every review twice)', () => {
+  assert.equal(existsSync('.github/workflows/gemini-code-review-dryrun.yml'), false);
 });

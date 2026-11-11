@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import { decide } from './decide.mjs';
 import { githubClient } from './github.mjs';
 import { buildMarker } from './review.mjs';
@@ -14,10 +14,19 @@ const review = (sha, fp, state, submitted = '2026-11-11T10:00:00Z', login = 'git
   submitted_at: submitted,
   body: `${buildMarker({ sha, fingerprint: fp, state })}\n## Gemini code review`,
 });
-const run = (reviews, env = {}) =>
+const MAIN = 'f'.repeat(40);
+const MERGE_FROM_MAIN = { parents: [{ sha: OLD }, { sha: MAIN }] };
+const NORMAL_COMMIT = { parents: [{ sha: OLD }] };
+const run = (reviews, env = {}, commit = MERGE_FROM_MAIN) =>
   decide({
     env: { HEAD_SHA: HEAD, FINGERPRINT: FP, PR_LABELS: '[]', REPO_PRIVATE: 'false', PAID_TIER_CONFIRMED: '', ...env },
-    github: { paginate: async () => reviews },
+    github: {
+      paginate: async () => reviews,
+      get: async () => {
+        if (commit instanceof Error) throw commit;
+        return commit;
+      },
+    },
   });
 
 test('reviews a pull request that has never been reviewed', async () => {
@@ -48,9 +57,21 @@ test('a manual @gemini-cli /review comment always reviews, but still honours byp
   assert.equal((await run(reviews, { EVENT_NAME: 'issue_comment', PR_LABELS: JSON.stringify([{ name: 'bypass-ai-gate' }]) })).action, 'bypass');
 });
 
-test('skips a push whose changes are identical to the last review (a merge from main)', async () => {
+test('skips a merge commit whose pull request changes are identical to the last review (a merge from main)', async () => {
   const result = await run([review(OLD, FP, 'success')]);
   assert.deepEqual(result, { action: 'unchanged', carryState: 'success', carrySha: OLD });
+});
+
+describe('bugfix: matching added/removed lines are not proof that nothing changed', () => {
+  test('a normal commit is always reviewed, even when its changed lines match the last review (lines moved elsewhere)', async () => {
+    const result = await run([review(OLD, FP, 'success')], {}, NORMAL_COMMIT);
+    assert.equal(result.action, 'review');
+  });
+
+  test('an unreadable commit is reviewed rather than trusted', async () => {
+    assert.equal((await run([review(OLD, FP, 'success')], {}, new Error('GitHub API 502'))).action, 'review');
+    assert.equal((await run([review(OLD, FP, 'success')], {}, {})).action, 'review');
+  });
 });
 
 test('reviews again when the changes differ, comparing against the newest review only', async () => {
@@ -69,7 +90,7 @@ test('ignores reviews by other authors, old-format markers and an empty fingerpr
 test('reviews anyway when the review list cannot be read', async () => {
   const result = await decide({
     env: { HEAD_SHA: HEAD, FINGERPRINT: FP, PR_LABELS: '[]', REPO_PRIVATE: 'false' },
-    github: { paginate: async () => { throw new Error('GitHub API 502'); } },
+    github: { paginate: async () => { throw new Error('GitHub API 502'); }, get: async () => MERGE_FROM_MAIN },
   });
   assert.equal(result.action, 'review');
 });

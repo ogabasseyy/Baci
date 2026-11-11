@@ -70,7 +70,7 @@ function evaluate(env, readFile) {
     case 'duplicate':
       return { state: carriedState(env), description: 'This commit was already reviewed by Gemini', carried: true };
     case 'unchanged':
-      return { state: carriedState(env), description: `Unchanged since ${String(env.CARRY_SHA).slice(0, 7)}: earlier review applies`, carried: true };
+      return { state: carriedState(env), description: `Merge only, same changes as ${String(env.CARRY_SHA).slice(0, 7)}: earlier review applies`, carried: true };
     case 'review':
       return evaluateReview(env, readFile);
     default:

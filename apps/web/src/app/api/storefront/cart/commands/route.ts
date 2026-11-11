@@ -6,6 +6,7 @@ import {
 } from '@/lib/cart/grant-operations';
 import {
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -24,14 +25,16 @@ import { mutateCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
   issueCartSessionProof,
+  verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import {
   commandVoucherLines,
   voucherAttachmentsValid,
 } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { sharedCartMutationRequestSchema } from '@/schemas/cart';
-import { contextDeps } from '../context-deps';
 
 /**
  * POST /api/storefront/cart/commands
@@ -60,11 +63,23 @@ async function applyCommand(
 
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
+    const loadFeatures = createAnonMerchantFeatureLookup(createAnonClient());
     const context = await timer.measure('auth', () =>
-      resolveCartRequestContext(
-        request,
-        contextDeps('session', 'not_found', timer)
-      )
+      resolveCartRequestContext(request, {
+        merchant: {
+          resolveAlias: getCurrentSlugForAlias,
+          rpcClient: createAnonClient(),
+          // `auth-features` runs inside `auth`: the two overlap, never sum them.
+          loadMerchantFeatures: (id) =>
+            timer.measure('auth-features', () => loadFeatures(id)),
+        },
+        requireScope: 'session',
+        verify: (proof) =>
+          verifyCartSessionProof(proof, {
+            environment: getCartProofEnvironment(),
+          }),
+        wrongScopeError: 'not_found',
+      })
     );
     if (!context.ok) {
       return cartErrorResponse(context.error);

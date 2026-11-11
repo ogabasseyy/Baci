@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { decide } from './decide.mjs';
+import { githubClient } from './github.mjs';
+import { buildMarker } from './review.mjs';
+
+const HEAD = 'a'.repeat(40);
+const OLD = 'b'.repeat(40);
+const FP = 'c'.repeat(64);
+const OTHER_FP = 'd'.repeat(64);
+
+const review = (sha, fp, state, submitted = '2026-11-11T10:00:00Z', login = 'github-actions[bot]') => ({
+  user: { login },
+  submitted_at: submitted,
+  body: `${buildMarker({ sha, fingerprint: fp, state })}\n## Gemini code review`,
+});
+const run = (reviews, env = {}) =>
+  decide({
+    env: { HEAD_SHA: HEAD, FINGERPRINT: FP, PR_LABELS: '[]', REPO_PRIVATE: 'false', PAID_TIER_CONFIRMED: '', ...env },
+    github: { paginate: async () => reviews },
+  });
+
+test('reviews a pull request that has never been reviewed', async () => {
+  assert.deepEqual(await run([]), { action: 'review', carryState: '', carrySha: '' });
+});
+
+test('skips the model call and passes when the bypass-ai-gate label is present', async () => {
+  const result = await run([], { PR_LABELS: JSON.stringify([{ name: 'bypass-ai-gate' }]) });
+  assert.equal(result.action, 'bypass');
+});
+
+test('never sends a private repository to Gemini unless the key is confirmed as paid', async () => {
+  assert.equal((await run([], { REPO_PRIVATE: 'true' })).action, 'blocked_private');
+  assert.equal((await run([], { REPO_PRIVATE: 'true', PAID_TIER_CONFIRMED: 'false' })).action, 'blocked_private');
+  assert.equal((await run([], { REPO_PRIVATE: 'true', PAID_TIER_CONFIRMED: 'true' })).action, 'review');
+});
+
+test('does not review the same commit twice and carries the earlier state forward', async () => {
+  const result = await run([review(HEAD, OTHER_FP, 'failure')]);
+  assert.deepEqual(result, { action: 'duplicate', carryState: 'failure', carrySha: HEAD });
+});
+
+test('a manual @gemini-cli /review comment always reviews, but still honours bypass and the private-repo guard', async () => {
+  const reviews = [review(HEAD, FP, 'success')];
+  assert.equal((await run(reviews, { EVENT_NAME: 'issue_comment' })).action, 'review');
+  assert.equal((await run(reviews, { EVENT_NAME: 'pull_request' })).action, 'duplicate');
+  assert.equal((await run(reviews, { EVENT_NAME: 'issue_comment', REPO_PRIVATE: 'true' })).action, 'blocked_private');
+  assert.equal((await run(reviews, { EVENT_NAME: 'issue_comment', PR_LABELS: JSON.stringify([{ name: 'bypass-ai-gate' }]) })).action, 'bypass');
+});
+
+test('skips a push whose changes are identical to the last review (a merge from main)', async () => {
+  const result = await run([review(OLD, FP, 'success')]);
+  assert.deepEqual(result, { action: 'unchanged', carryState: 'success', carrySha: OLD });
+});
+
+test('reviews again when the changes differ, comparing against the newest review only', async () => {
+  assert.equal((await run([review(OLD, OTHER_FP, 'success')])).action, 'review');
+  const reviews = [review(OLD, FP, 'success', '2026-11-11T09:00:00Z'), review(OLD.replace(/b/g, 'e'), OTHER_FP, 'success', '2026-11-11T10:00:00Z')];
+  assert.equal((await run(reviews)).action, 'review');
+});
+
+test('ignores reviews by other authors, old-format markers and an empty fingerprint', async () => {
+  assert.equal((await run([review(HEAD, FP, 'failure', undefined, 'someone')])).action, 'review');
+  const oldFormat = { user: { login: 'github-actions[bot]' }, submitted_at: '2026-09-04T00:00:00Z', body: `<!-- gemini-code-review sha:${HEAD} -->\nold` };
+  assert.equal((await run([oldFormat])).action, 'review');
+  assert.equal((await run([review(OLD, '', 'success')], { FINGERPRINT: '' })).action, 'review');
+});
+
+test('reviews anyway when the review list cannot be read', async () => {
+  const result = await decide({
+    env: { HEAD_SHA: HEAD, FINGERPRINT: FP, PR_LABELS: '[]', REPO_PRIVATE: 'false' },
+    github: { paginate: async () => { throw new Error('GitHub API 502'); } },
+  });
+  assert.equal(result.action, 'review');
+});
+
+test('github client pages through results and never puts the token in an error', async () => {
+  const pages = [Array.from({ length: 100 }, (_, i) => i), [100, 101]];
+  const urls = [];
+  const client = githubClient({
+    token: 'SECRET-TOKEN',
+    repo: 'o/r',
+    apiUrl: 'https://api.test',
+    fetchImpl: async (url, init) => {
+      urls.push(String(url));
+      assert.equal(init.headers.authorization, 'Bearer SECRET-TOKEN');
+      return { status: 200, json: async () => pages.shift() };
+    },
+  });
+  assert.equal((await client.paginate('pulls/1/reviews')).length, 102);
+  assert.match(urls[1], /page=2/);
+  const failing = githubClient({ token: 'SECRET-TOKEN', repo: 'o/r', fetchImpl: async () => ({ status: 403, json: async () => ({}) }) });
+  await assert.rejects(failing.post('statuses/x', {}), (error) => !error.message.includes('SECRET-TOKEN') && /403/.test(error.message));
+});

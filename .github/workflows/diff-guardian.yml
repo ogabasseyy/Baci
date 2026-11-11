@@ -1,10 +1,11 @@
 # Diff Guardian — a QUORUM gate over the AI code reviewers.
 #
 # WHY THIS EXISTS
-# The repo already runs several AI reviewers (Gemini, Jules, Claude, CodeRabbit,
-# Codex). Each is good but each, alone, occasionally (a) raises a false-positive
-# you can't easily refute, or (b) crashes/times out. If any single reviewer is a
-# *required* merge gate, one bad call or one outage blocks every merge.
+# The repo already runs several AI reviewers (Gemini, Muse, Claude, CodeRabbit,
+# Codex; Jules until Google retires it on 2026-12-31). Each is good but each,
+# alone, occasionally (a) raises a false-positive you can't easily refute, or
+# (b) crashes/times out. If any single reviewer is a *required* merge gate, one
+# bad call or one outage blocks every merge.
 #
 # Diff Guardian fixes that by VOTING: it watches the other reviewers' pass/fail
 # results on the PR and reports ONE status — and it only BLOCKS the merge when a
@@ -14,7 +15,18 @@
 #   - two+ reviewers flag a problem  -> BLOCKS (real signal, worth a human look)
 #
 # It re-implements no model calls; it only tallies the existing reviewers'
-# statuses, so it's cheap and can't itself hallucinate.
+# results, so it's cheap and can't itself hallucinate.
+#
+# THE VOTERS
+#   Gemini review  commit status from gemini-code-review.yml: success, failure
+#                  (HIGH/CRITICAL finding) or error (could not review: quota,
+#                  outage). `error` is an abstention, never a blocking vote.
+#   Muse review    muse-code-review.yml is advisory and posts no status, so its
+#                  vote is read from the review it posted for this exact head
+#                  commit: a `- high:` / `- critical:` finding bullet blocks, a
+#                  fallback review, a missing review or a failed job abstains.
+#   A voter whose workflow is disabled or deleted can never report, so it
+#   abstains too (otherwise one real finding would leave the gate pending forever).
 #
 # HOW TO ADOPT (branch protection, main):
 #   1. Let this run on a few PRs first and confirm the `Diff Guardian / quorum`
@@ -26,11 +38,11 @@
 #   3. Escape hatch: add the `bypass-ai-gate` label to a PR to force this green
 #      (same label the individual reviewers already honor).
 #
-# TUNING: edit VOTERS (the reviewers to tally) and BLOCK_QUORUM (how many must
-# agree to block) in the env block below. With 2 voters, BLOCK_QUORUM=2 means
-# "both must agree to block" (lenient — favors not-blocking). Add `Claude review`
-# as a 3rd voter (once it auto-runs + sets a status) and set BLOCK_QUORUM=2 for a
-# true majority.
+# TUNING: edit VOTERS (the reviewers to tally; a new voter also needs a case in
+# workflow_for below) and BLOCK_QUORUM (how many must agree to block) in the env
+# block. With 2 voters, BLOCK_QUORUM=2 means "both must agree to block" (lenient —
+# favors not-blocking). Add `Claude review` as a 3rd voter (once it auto-runs +
+# sets a status) and keep BLOCK_QUORUM=2 for a true majority.
 #
 # NOTE (merge queue): the voter reviewers run on `pull_request`, not
 # `merge_group`. If/when you enable the merge queue, add `merge_group` triggers
@@ -50,10 +62,12 @@ on:
   # the default branch), so this gate deliberately does NOT listen to comments —
   # it always reflects the latest automatic voter results for the current head.
   workflow_run:
-    workflows: [Gemini Code Review, Jules PR Review]
+    workflows: [Gemini Code Review, Muse Code Review]
     types: [completed]
 
 permissions:
+  # actions: read lets the tally ask whether a voter's workflow is still enabled.
+  actions: read
   contents: read
   statuses: write
   checks: read
@@ -85,7 +99,7 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL: ${{ github.event.label.name }}
           # The reviewers to tally (commit-status context or check-run names), pipe-separated.
-          VOTERS: 'Gemini review|Jules review'
+          VOTERS: 'Gemini review|Muse review'
           # How many voters must report a FAILURE for Diff Guardian to BLOCK.
           BLOCK_QUORUM: '2'
         run: |
@@ -179,9 +193,9 @@ jobs:
           echo "Voters ($voter_count): $(printf '%s' "$VOTERS")  |  block quorum: $BLOCK_QUORUM"
 
           # A voter can report either as a commit status (external services) or
-          # as a check run (GitHub Actions). Gemini currently reports both; Jules
-          # currently reports only a check run. Read both current GitHub API
-          # surfaces so a check-only voter cannot be mistaken as missing.
+          # as a check run (GitHub Actions). Gemini reports both; Muse reports
+          # only a check run (always green, it is advisory). Read both current
+          # GitHub API surfaces so a check-only voter cannot be mistaken as missing.
           status_state() {
             printf '%s' "$1" | jq -r --arg c "$2" \
               '([.statuses[] | select(.context==$c)] | sort_by(.updated_at) | last | .state) // "missing"'
@@ -205,11 +219,29 @@ jobs:
             '
           }
 
-          # Combine the two surfaces into one vote. A real success/failure on
-          # either wins; otherwise pending (still running) outranks abstain (done,
-          # no verdict) outranks missing (never appeared). A commit-status "error"
-          # is treated as an abstention (infra failure), not a blocking vote.
-          voter_state() {
+          # Muse is advisory: its job is always green and it posts no status, so
+          # its vote is read from the review it posted for THIS head commit (the
+          # marker on the review's first line names the commit). A HIGH/CRITICAL
+          # finding bullet blocks; a fallback review ("Muse did not review") or no
+          # review at all is an abstention.
+          muse_review_vote() { # reviews-json
+            printf '%s' "$1" | jq -r --arg sha "$SHA" '
+              [.[] | select(.user.login == "github-actions[bot]"
+                and ((.body // "") | startswith("<!-- muse-code-review sha:" + $sha + " ")))]
+              | sort_by(.submitted_at) | last as $review
+              | if $review == null then "abstain"
+                elif (($review.body | split("\n") | .[1] // "") == "<!-- muse-fallback:v1 -->") then "abstain"
+                elif ($review.body | test("(^|\n)[ \t]*[-*][ \t]+(critical|high|major)[ \t]*:"; "i")) then "failure"
+                else "success"
+                end'
+          }
+
+          # Combine the surfaces into one vote. A real success/failure wins;
+          # otherwise pending (still running) outranks abstain (done, no verdict)
+          # outranks missing (never appeared). A commit-status "error" means the
+          # reviewer could not review (quota, outage): an abstention that also
+          # overrides a red check run, never a blocking vote.
+          voter_state() { # statuses-json checks-json context reviews-json
             local cs cr
             cs="$(status_state "$1" "$3")"
             cr="$(check_state "$2" "$3")"
@@ -218,7 +250,24 @@ jobs:
                 printf '%s' "$cs"
                 return
                 ;;
+              error)
+                printf 'abstain'
+                return
+                ;;
             esac
+            if [ "$3" = "Muse review" ]; then
+              case "$cr" in
+                success)
+                  muse_review_vote "$4"
+                  return
+                  ;;
+                failure)
+                  # Muse only fails closed on an infrastructure error; never a verdict.
+                  printf 'abstain'
+                  return
+                  ;;
+              esac
+            fi
             case "$cr" in
               success|failure)
                 printf '%s' "$cr"
@@ -226,17 +275,46 @@ jobs:
                 ;;
             esac
             if [ "$cs" = "pending" ] || [ "$cr" = "pending" ]; then printf 'pending' ; return ; fi
-            if [ "$cs" = "error" ] || [ "$cr" = "abstain" ]; then printf 'abstain' ; return ; fi
+            if [ "$cr" = "abstain" ]; then printf 'abstain' ; return ; fi
             printf 'missing'
+          }
+
+          workflow_for() {
+            case "$1" in
+              'Gemini review') printf 'gemini-code-review.yml' ;;
+              'Muse review') printf 'muse-code-review.yml' ;;
+            esac
+          }
+
+          # Can the voter's workflow still run? A disabled or deleted workflow can
+          # never report, so its voter abstains instead of holding the gate
+          # pending forever. A failed lookup is "unknown", not "disabled".
+          workflow_runnable() { # context -> exit 0 runnable/unknown, 1 disabled or gone
+            local file out
+            file="$(workflow_for "$1")"
+            [ -n "$file" ] || return 0
+            if out="$(gh api "repos/$REPO/actions/workflows/$file" --jq '.state' 2>&1)"; then
+              [ "$out" = "active" ]
+            else
+              case "$out" in
+                *'HTTP 404'*) return 1 ;;
+                *) return 0 ;;
+              esac
+            fi
           }
 
           combined="$(gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null || echo '{"statuses":[]}')"
           checks="$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs?per_page=100" 2>/dev/null | jq -s '{"check_runs":[.[].check_runs[]?]}' 2>/dev/null || echo '{"check_runs":[]}')"
+          reviews_raw="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null)" || reviews_raw='[]'
+          reviews="$(printf '%s' "$reviews_raw" | jq -s 'add // []' 2>/dev/null)" || reviews='[]'
 
           reported=0 ; blocking=0 ; active_pending=0 ; abstained=0 ; missing=0 ; summary=""
           while IFS= read -r ctx; do
             [ -z "$ctx" ] && continue
-            st="$(voter_state "$combined" "$checks" "$ctx")"
+            st="$(voter_state "$combined" "$checks" "$ctx" "$reviews")"
+            if [ "$st" = "missing" ] && ! workflow_runnable "$ctx"; then
+              st="abstain"
+            fi
             summary="${summary}${ctx}=${st}; "
             case "$st" in
               failure) reported=$((reported+1)); blocking=$((blocking+1)) ;;

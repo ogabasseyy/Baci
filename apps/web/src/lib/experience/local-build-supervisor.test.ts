@@ -47,6 +47,12 @@ vi.mock('./repository', () => ({
 vi.mock('./asset-service', () => ({
   loadOfflineAssets: vi.fn(async () => f.assets),
 }));
+vi.mock('./catalog-adapter', () => ({
+  loadOwnerPreviewCatalog: vi.fn(async () => ({
+    catalog: { products: [], revision: 'r' },
+    currency: 'NGN',
+  })),
+}));
 vi.mock('../../../tools/experience-runner/output-receiver', () => ({
   acceptJobOutput: f.accept,
   signJobTicket: vi.fn(() => 'ticket'),
@@ -64,8 +70,11 @@ vi.mock('./finalize-build', async (importOriginal) => {
 
 import { createLocalPrerenderArtifacts } from '../../../tools/experience-runner/prerender-artifacts';
 import { createTransientOutputStore } from '../../../tools/experience-runner/transient-output-store';
+import { measureCandidatePerformance } from './candidate-performance-measurement';
 import { runExperienceBuild } from './local-build-supervisor';
+import { selectInitialExperienceView } from './local-prerender-pipeline';
 import { digestBytes } from './manifest-digest';
+import { loadOwnerPreviewBootstrap } from './owner-preview-bootstrap';
 
 const hostOrigin = 'http://127.0.0.1:4100';
 const validCandidate = (javascript = 'export default 1;', css = '') => ({
@@ -284,6 +293,66 @@ it('accepts a small compiled candidate and reaches independent capture and final
   expect(f.accept).toHaveBeenCalledOnce();
   expect(f.finalize).toHaveBeenCalledOnce();
   expect(result.buildDigest).toBe(candidate.digest);
+});
+
+it('finishes a build for a new empty store while reporting performance as not measured', async () => {
+  const manifest = f.manifest as ExperienceManifest;
+  const oldRoutes = manifest.routes;
+  manifest.routes = [
+    { path: '/products/[handle]', view: 'product' },
+    { path: '/', view: 'home' },
+  ];
+  f.job.source_digest = sourceDigest(manifest);
+  const candidate = validCandidate();
+  const execute = vi.fn(async (kind: string) => ({
+    jobId: `${kind}-job`,
+    output:
+      kind === 'capture'
+        ? {
+            status: 'passed',
+            buildDigest: candidate.digest,
+            screenshot: Buffer.from('89504e470d0a1a0a', 'hex').toString(
+              'base64'
+            ),
+          }
+        : candidate,
+  }));
+  const input = {
+    ...deps(execute),
+    bootstrap: (ctx: typeof context, source: ExperienceManifest) =>
+      loadOwnerPreviewBootstrap(
+        ctx,
+        source,
+        selectInitialExperienceView(source.routes)
+      ),
+    performanceMeasurement: (
+      measurement: Parameters<typeof measureCandidatePerformance>[0]
+    ) =>
+      measureCandidatePerformance({
+        ...measurement,
+        execute: execute as never,
+        bootstrap: (view) => loadOwnerPreviewBootstrap(context, manifest, view),
+        hostContaminated: () => false,
+      }),
+  };
+  try {
+    const result = await runExperienceBuild(
+      context,
+      { jobId: 'j', idempotencyKey: 'i' },
+      input as never
+    );
+    expect(f.finalize).toHaveBeenCalledOnce();
+    expect(result.performance).toMatchObject({
+      status: 'not-measured',
+      cwvQualified: false,
+      releaseQualified: false,
+    });
+    expect(execute.mock.calls.some(([kind]) => kind === 'performance')).toBe(
+      false
+    );
+  } finally {
+    manifest.routes = oldRoutes;
+  }
 });
 
 it('records measured qualification evidence before accepting and retains it after finalization', async () => {

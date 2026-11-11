@@ -42,3 +42,30 @@ test('runs the quiz runtime parity gate for phase 1a and production', async () =
     'the secret-bearing step must not stay in the shared quality-misc job'
   );
 });
+
+test('bugfix: a merge-queue run checks out the trusted base commit, never pull request code, while holding the secrets', async () => {
+  const workflow = YAML.parse(
+    await readFile('.github/workflows/ci.yml', 'utf8')
+  );
+  const job = workflow.jobs['quality-quiz-approval'];
+  const checkouts = job.steps.filter(({ uses }) =>
+    uses?.startsWith('actions/checkout@')
+  );
+
+  // A merge_group commit contains pull request code. The check reads live database state, not the diff, so the
+  // queue run uses the base commit the queue builds on; a push to main has no merge_group payload and falls
+  // through to the pushed commit.
+  assert.equal(checkouts.length, 1);
+  assert.equal(
+    checkouts[0].with.ref,
+    '${{ github.event.merge_group.base_sha || github.sha }}'
+  );
+  assert.equal(checkouts[0].with['persist-credentials'], false);
+  // Everything that runs repository code (install scripts, the check itself) comes after the pinned checkout.
+  const firstCheckout = job.steps.indexOf(checkouts[0]);
+  assert.equal(firstCheckout, 0);
+  assert.ok(
+    job.steps.findIndex(({ name }) => name === 'Verify Quiz Production Approval') >
+      firstCheckout
+  );
+});

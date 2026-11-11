@@ -722,10 +722,10 @@ jobs:
 
   # The only CI step holding the Supabase service-role key. It must never run on
   # the general private runner, which executes branch code. Trusted main pushes
-  # run it on the deploy runner; merge_group (not in use) falls back to hosted.
-  # OPEN OWNER DECISION before any merge-queue pilot: a merge_group commit contains pull request code, so
-  # that arm would run PR code with the key on a hosted runner (as the old Misc step did). Either drop
-  # merge_group from the condition below, or check out the base ref for that event.
+  # run it on the deploy runner; merge_group (not in use) falls back to hosted. A merge_group commit
+  # contains pull request code, so that event checks out the base commit the queue builds on (see the
+  # checkout below): the key only ever meets trusted code. The check reads live database state, not the
+  # diff, and its own logic keeps secret-free unit tests that run on the pull request code.
   quality-quiz-approval:
     name: Quality Gate - Quiz Approval
     needs: [changes]
@@ -743,6 +743,8 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+          # merge_group: the queue's base commit (trusted). push: no merge_group payload, so the pushed commit.
+          ref: ${{ github.event.merge_group.base_sha || github.sha }}
       - uses: ./.github/actions/pnpm-install-cached
       - name: Verify Quiz Production Approval
         env:

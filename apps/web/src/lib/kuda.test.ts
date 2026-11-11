@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KudaServiceType, NetworkProvider } from './kuda'; // Enums are fine to import statically
 
@@ -48,6 +46,32 @@ describe('Kuda API Client', () => {
           data,
         }),
     } as Response);
+  };
+
+  // Stubs fetch so GetToken succeeds and the purchase request never answers:
+  // it rejects only when the request's AbortSignal fires (the 15s timeout).
+  // By default it rejects with `signal.reason`, as real fetch does. That is a
+  // DOMException, which is an Error in Node, so the outcome does not depend on
+  // which DOMException class the test environment installs (jsdom's is not an
+  // Error in Node's realm).
+  const stubStalledPurchase = (
+    abortReason: (signal: AbortSignal) => unknown = (signal) => signal.reason
+  ) => {
+    globalThis.fetch = vi.fn().mockImplementation((url, options) => {
+      if (url.toString().includes('GetToken')) {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve('token'),
+        } as Response);
+      }
+
+      const signal = options?.signal as AbortSignal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(abortReason(signal)), {
+          once: true,
+        });
+      });
+    });
   };
 
   describe('Authentication', () => {
@@ -188,24 +212,7 @@ describe('Kuda API Client', () => {
     it('returns a timeout error when the purchase request stalls', async () => {
       const { purchaseAirtime } = await import('./kuda');
       vi.useFakeTimers();
-
-      globalThis.fetch = vi.fn().mockImplementation((url, options) => {
-        if (url.toString().includes('GetToken')) {
-          return Promise.resolve({
-            ok: true,
-            text: () => Promise.resolve('token'),
-          } as Response);
-        }
-
-        const signal = options?.signal as AbortSignal;
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener(
-            'abort',
-            () => reject(new DOMException('Aborted', 'AbortError')),
-            { once: true }
-          );
-        });
-      });
+      stubStalledPurchase();
 
       const purchasePromise = purchaseAirtime(
         '08030000000',
@@ -218,11 +225,36 @@ describe('Kuda API Client', () => {
       const result = await purchasePromise;
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe('Purchase failed');
+      // kudaRequest turns the abort into a timeout Error and
+      // purchaseAirtime surfaces its message.
+      expect(result.message).toBe('Kuda ADMIN_PURCHASE_BILL request timed out');
       // Codex R102 P1: a timeout after Kuda accepts still lands the
       // vend — pending routes to BILL_TSQ reconciliation instead of
       // refunding on top of delivered value.
       expect(result.status).toBe('pending');
+    });
+
+    it('resolves a stalled purchase as pending when the abort rejection is not an Error', async () => {
+      // An AbortError that is not an Error instance (for example one from
+      // another realm) skips kudaRequest's timeout conversion. The vend may
+      // still have landed, so it must stay pending for BILL_TSQ
+      // reconciliation, never failed and refunded.
+      const { purchaseAirtime } = await import('./kuda');
+      vi.useFakeTimers();
+      stubStalledPurchase(() => ({ name: 'AbortError', message: 'Aborted' }));
+
+      const purchasePromise = purchaseAirtime(
+        '08030000000',
+        500,
+        NetworkProvider.MTN
+      );
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await expect(purchasePromise).resolves.toMatchObject({
+        success: false,
+        status: 'pending',
+      });
     });
 
     it('fails outright when the GetToken request stalls (pre-dispatch)', async () => {
@@ -392,6 +424,29 @@ describe('Kuda API Client', () => {
   });
 
   describe('purchaseData', () => {
+    it('returns a timeout error when the data purchase request stalls', async () => {
+      const { purchaseData } = await import('./kuda');
+      vi.useFakeTimers();
+      stubStalledPurchase();
+
+      const purchasePromise = purchaseData(
+        '08030000000',
+        'MTN-1GB-MONTHLY',
+        1000,
+        NetworkProvider.MTN
+      );
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      // Same Codex R102 P1 rule as airtime: the timeout may follow Kuda's
+      // acceptance, so the row stays pending for BILL_TSQ reconciliation.
+      await expect(purchasePromise).resolves.toMatchObject({
+        success: false,
+        message: 'Kuda ADMIN_PURCHASE_BILL request timed out',
+        status: 'pending',
+      });
+    });
+
     it('sends correct payload for Data purchase', async () => {
       const { purchaseData } = await import('./kuda');
 

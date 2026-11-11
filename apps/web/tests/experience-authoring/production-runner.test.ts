@@ -28,6 +28,7 @@ import {
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
@@ -207,13 +208,14 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         prerender
       )
     ).rejects.toThrow('NOT_FOUND');
-    const launch = await createPreviewLaunch(
-      f.owner,
-      { buildId: build.buildId, routeId: 'home' },
+    const launch = await launchThroughOwnerBridge({
+      fixture: f,
       vault,
       hostOrigin,
-      prerender
-    );
+      previewOrigin,
+      buildId: build.buildId,
+      prerender,
+    });
     const delivery = createProductionPreviewDelivery({
       vault,
       executionOrigin,

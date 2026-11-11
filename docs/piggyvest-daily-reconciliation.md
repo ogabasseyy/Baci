@@ -70,7 +70,8 @@ anything is wrong. It resends, settles and releases nothing.
    - A `partial` credit that neither ledger recorded is a review line only
      (`partial_credit`): check at PiggyVest how much moved. `pending` and
      `failed` credits moved no money and are ignored.
-   - An inflow we recorded that PiggyVest does not list **pages**
+   - An inflow we recorded that PiggyVest does not list as settled (missing,
+     pending or failed) **pages**
      (`not_on_provider`); check it at PiggyVest before acting.
    - An interest payout we recorded that the list does not show is a review
      line only: whether the list includes interest rows is not yet confirmed.

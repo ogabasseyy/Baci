@@ -20,7 +20,7 @@ import type {
  *   are our own savings transfers, tracked by the transfer reconciliation, so
  *   they are counted and skipped here.
  * - `not_on_provider` (pages): an inflow we recorded that PiggyVest's list
- *   for that wallet does not show.
+ *   for that wallet does not show as settled (missing, pending or failed).
  * - `interest_not_listed` (review only): the same for an interest payout.
  *   Whether the transaction list shows interest rows is not yet confirmed
  *   (contract evidence 2026-10-31: none observed at 0% sandbox rates), so
@@ -108,13 +108,15 @@ export function compareWalletCredits(
   const recorded = new Set(
     [...wallet.inflow, ...wallet.interest].map((row) => row.reference)
   );
-  const listed = new Set(credits.map((credit) => credit.id));
+  const isSettled = (credit: ProviderCredit) =>
+    credit.status === 'successful' || credit.status === 'partial';
+  // Only settled rows prove PiggyVest shows the money: a recorded inflow
+  // whose row is pending or failed is still `not_on_provider`.
+  const listed = new Set(credits.filter(isSettled).map((credit) => credit.id));
   const findings: CreditGapFinding[] = [];
   let internalSkipped = 0;
   for (const credit of credits) {
-    const settled =
-      credit.status === 'successful' || credit.status === 'partial';
-    if (!settled || recorded.has(credit.id)) continue;
+    if (!isSettled(credit) || recorded.has(credit.id)) continue;
     if (credit.category === 'p2p') {
       internalSkipped += 1;
       continue;

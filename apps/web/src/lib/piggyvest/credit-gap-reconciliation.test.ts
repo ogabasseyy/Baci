@@ -183,6 +183,30 @@ describe('credit-gap check', () => {
     ]);
   });
 
+  it.each([
+    'failed',
+    'pending',
+  ] as const)('pages for a recorded inflow PiggyVest lists as %s', (status) => {
+    const result = compareWalletCredits(
+      wallet({
+        inflow: [
+          {
+            reference: 'PVB01RECORDEDFAILED00000001',
+            at: '2026-11-10T12:00:00.000Z',
+          },
+        ],
+      }),
+      [credit('PVB01RECORDEDFAILED00000001', { status })],
+      window
+    );
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        kind: 'not_on_provider',
+        reference: 'PVB01RECORDEDFAILED00000001',
+      }),
+    ]);
+  });
+
   it('lists an unlisted interest payout for review without paging', async () => {
     const report = await runCreditGapCheck(
       ports(

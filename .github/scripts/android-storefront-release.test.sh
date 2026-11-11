@@ -154,9 +154,14 @@ python3 - "$fixture_root/gradle/app/build/outputs/bundle/release/app-release.aab
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1], 'w') as archive:
     for abi, machine, elf_class in [('armeabi-v7a', 40, 1), ('arm64-v8a', 183, 2), ('x86', 3, 1), ('x86_64', 62, 2)]:
-        for library in ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libsplashmotion.so'):
-            header = bytearray(20)
-            header[:6] = b'\x7fELF' + bytes((elf_class, 1))
+        for library in ('libreactnative.so', 'libc++_shared.so', 'libhermesvm.so', 'libhermestooling.so', 'libsplashmotion.so'):
+            header_size = 64 if elf_class == 2 else 52
+            header_size_offset = 52 if elf_class == 2 else 40
+            header = bytearray(header_size)
+            header[:7] = b'\x7fELF' + bytes((elf_class, 1, 1))
+            header[16:18] = (3).to_bytes(2, 'little')
+            header[20:24] = (1).to_bytes(4, 'little')
+            header[header_size_offset:header_size_offset + 2] = header_size.to_bytes(2, 'little')
             header[18:20] = machine.to_bytes(2, 'little')
             archive.writestr(f'base/lib/{abi}/{library}', header)
 PYTHON

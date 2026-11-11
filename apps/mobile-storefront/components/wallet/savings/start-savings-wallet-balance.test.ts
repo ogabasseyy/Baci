@@ -46,6 +46,14 @@ describe('readFreshPrimaryBalanceKobo', () => {
     expect(await readFreshPrimaryBalanceKobo('m')).toBeNull();
   });
 
+  it('returns null when a different account is signed in once the read answers', async () => {
+    read.mockImplementationOnce(async () => {
+      mockSignedIn = false;
+      return { account, balanceKobo: 1_000 } as never;
+    });
+    expect(await readFreshPrimaryBalanceKobo('m')).toBeNull();
+  });
+
   it('returns null when the read fails', async () => {
     read.mockRejectedValueOnce(new Error('timeout'));
     expect(await readFreshPrimaryBalanceKobo('m')).toBeNull();

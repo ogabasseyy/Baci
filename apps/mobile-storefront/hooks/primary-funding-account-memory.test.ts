@@ -273,4 +273,14 @@ describe('remembered primary funding account', () => {
       balanceKobo: 900,
     });
   });
+
+  it('keeps a remembered balance when a later read has the account but no balance', () => {
+    rememberNow({ status: 'ready', account, balanceKobo: 500 });
+    expect(rememberNow({ status: 'ready', account, balanceKobo: null })).toBe(
+      false
+    );
+    expect(recallPrimaryFundingAccount('m', 'u')).toMatchObject({
+      balanceKobo: 500,
+    });
+  });
 });

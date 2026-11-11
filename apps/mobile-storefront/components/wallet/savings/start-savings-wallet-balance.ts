@@ -70,7 +70,8 @@ export async function readFreshPrimaryBalanceKobo(
     // explicit no-op handler just makes that visible.
     read.catch(() => undefined);
     const snapshot = await Promise.race([read, timeout]);
-    if (!snapshot) return null;
+    // Bound to the account that asked: a switch mid-read voids the answer.
+    if (!snapshot || useAuthStore.getState().user?.id !== userId) return null;
     const { account, balanceKobo } = snapshot;
     if (
       !account ||

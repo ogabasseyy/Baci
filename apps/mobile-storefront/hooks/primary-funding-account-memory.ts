@@ -46,18 +46,30 @@ export function beginPrimaryRead(merchantId: string, userId: string): number {
  * Applies a read's answer unless a read started after it has already
  * answered, so a slow older read never overwrites a newer balance or brings
  * back an account a newer answer cleared. A confirmed account (ready, with an
- * account number) becomes the remembered read; an authoritative "not ready"
+ * account number and a whole-kobo balance) becomes the remembered read; an authoritative "not ready"
  * or "no account yet" clears it; an unknown answer changes nothing. Returns
  * whether a confirmed account was stored. `sequence` comes from
  * `beginPrimaryRead`, called when the read started.
  */
+function isWholeKobo(kobo: number | null): boolean {
+  return typeof kobo === 'number' && Number.isSafeInteger(kobo) && kobo >= 0;
+}
+
 export function rememberPrimaryFundingAccount(
   merchantId: string,
   userId: string,
   value: SettledPrimaryFundingAccount,
   sequence: number
 ): boolean {
-  if (value.status === 'unavailable') return false;
+  // A ready answer without a usable balance can't stand in for the money, so
+  // it counts as unknown and never replaces a remembered full read.
+  if (
+    value.status === 'unavailable' ||
+    (value.status === 'ready' &&
+      value.account &&
+      !isWholeKobo(value.balanceKobo))
+  )
+    return false;
   const state = stateOf(merchantId, userId);
   if (sequence <= state.applied) return false;
   state.applied = sequence;

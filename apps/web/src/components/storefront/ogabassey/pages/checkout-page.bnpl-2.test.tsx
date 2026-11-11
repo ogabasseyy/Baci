@@ -6,7 +6,6 @@ import {
 import {
   act,
   expect,
-  fireEvent,
   it,
   mockCaptureClientEvent,
   openCreditDirectCheckout,
@@ -21,7 +20,7 @@ import {
   waitFor,
 } from './checkout-page-test-support';
 
-it('hides Klump when wallet credit is auto-applied', async () => {
+it('hides installments when retired Klump is the only configured option', async () => {
   vi.mocked(useAuthSafe).mockReturnValue({
     user: {
       id: 'customer-1',
@@ -95,8 +94,6 @@ it('hides Klump when wallet credit is auto-applied', async () => {
   try {
     renderCheckoutWithStoreRates();
 
-    fireEvent.click(screen.getByRole('button', { name: /pay small small/i }));
-
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.some(([url]) =>
@@ -105,6 +102,9 @@ it('hides Klump when wallet credit is auto-applied', async () => {
       ).toBe(true);
     });
     await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: /pay small small/i })
+      ).not.toBeInTheDocument();
       expect(screen.queryByText('Klump')).not.toBeInTheDocument();
     });
   } finally {

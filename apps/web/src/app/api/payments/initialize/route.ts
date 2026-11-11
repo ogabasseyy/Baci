@@ -64,7 +64,10 @@ import {
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
-import { retiredGatewayResponse } from './retired-gateway';
+import {
+  normalizeRetiredGateway,
+  retiredGatewayResponse,
+} from './retired-gateway';
 
 // Types & Constants
 
@@ -145,7 +148,10 @@ const PaymentInitRequestSchema = z.object({
   customer_email: z.email(),
   customer_name: z.string().min(1),
   customer_phone: z.string().min(1, 'Phone number is required'),
-  gateway: z.enum(PAYMENT_GATEWAYS).optional(),
+  gateway: z.preprocess(
+    normalizeRetiredGateway,
+    z.enum(PAYMENT_GATEWAYS).optional()
+  ),
   billing_address: BillingAddressSchema,
   items: z.array(OrderItemSchema).optional(),
   channels: z.array(z.string()).optional(),

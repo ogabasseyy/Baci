@@ -1,5 +1,4 @@
 import { Banknote, CalendarDays, FileText, Truck } from 'lucide-react';
-import Image from 'next/image';
 import creditDirectLogo from '@/../public/partners/credit-direct-filled.png';
 import oxygenLogo from '@/../public/partners/oxygen-x-filled.png';
 import { useEffect } from 'react';
@@ -33,7 +32,7 @@ export function PaymentOptionsPanel({
   korapayCheckoutAvailable,
   bankTransferCheckoutAvailable,
   featureSettings,
-  klumpEligible,
+  creditDirectEligible,
   oxygenEligible = false,
   hasInstallmentOptions,
   currency,
@@ -60,8 +59,7 @@ export function PaymentOptionsPanel({
   };
   // Juicyway, CredPal, and Credit Direct can only ever charge NGN (see
   // resolveChargeCurrency), so their feature flags alone must not surface
-  // them on a non-NGN checkout. Klump is already currency-gated upstream
-  // via `klumpEligible` (isKlumpEligible).
+  // them on a non-NGN checkout.
   const ngnOnlyRailsAvailable = isNgnChargeCurrency(currency);
 
   return (
@@ -156,27 +154,16 @@ export function PaymentOptionsPanel({
             {oxygenEligible && (
               <FinanceProviderOption provider="oxygen" selected={paymentMethod === 'oxygen'} onSelect={setPaymentMethod} logo={oxygenLogo} />
             )}
-            {featureSettings?.credit_direct_enabled === true && ngnOnlyRailsAvailable && (
-              <FinanceProviderOption provider="credit_direct" selected={paymentMethod === 'credit_direct'} onSelect={setPaymentMethod} logo={creditDirectLogo} />
-            )}
-            {klumpEligible && (
-              <PaymentOptionCard
-                method="klump"
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                title="Klump"
-                description="Split payment at checkout"
-                badge={{
-                  label: 'Split payments',
-                  className: 'bg-store-primary/10 text-store-primary',
-                }}
-                icon={
-                  <div className="size-8 bg-store-primary/5 rounded-lg flex items-center justify-center text-xs font-black text-store-primary">
-                    K
-                  </div>
-                }
-              />
-            )}
+            {creditDirectEligible &&
+              featureSettings?.credit_direct_enabled === true &&
+              ngnOnlyRailsAvailable && (
+                <FinanceProviderOption
+                  provider="credit_direct"
+                  selected={paymentMethod === 'credit_direct'}
+                  onSelect={setPaymentMethod}
+                  logo={creditDirectLogo}
+                />
+              )}
           </div>
 
           {paymentMethod !== 'credit_direct' && <PaymentInstallmentDetails paymentMethod={paymentMethod} />}

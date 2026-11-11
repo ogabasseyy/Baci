@@ -8,6 +8,31 @@ describe('resolveCreditDirectRpcError', () => {
   it.each([
     ['order_not_found', 404, undefined],
     ['credit_direct_disabled', 403, undefined],
+    [
+      'credit_direct_wallet_attempt_pending',
+      409,
+      'CREDIT_DIRECT_WALLET_PENDING',
+    ],
+    [
+      'credit_direct_wallet_shipping_unsupported',
+      409,
+      'CREDIT_DIRECT_WALLET_SHIPPING_UNSUPPORTED',
+    ],
+    [
+      'credit_direct_wallet_reconciliation_required',
+      409,
+      'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+    ],
+    [
+      'credit_direct_wallet_origin_unverified',
+      409,
+      'CREDIT_DIRECT_WALLET_REVIEW_REQUIRED',
+    ],
+    [
+      'credit_direct_wallet_retry_required',
+      503,
+      'CREDIT_DIRECT_WALLET_RETRY_REQUIRED',
+    ],
     ['order_not_payable', 409, 'ORDER_NOT_PAYABLE'],
     ['order_amount_changed', 409, 'ORDER_AMOUNT_CHANGED'],
     ['invalid_order_amount', 400, undefined],

@@ -14,14 +14,5 @@ export function PaymentInstallmentDetails({
       />
     );
   }
-  if (paymentMethod === 'klump') {
-    return (
-      <InstallmentInfo
-        title="How Klump works"
-        tone="primary"
-        items={['Choose Klump at checkout', 'Complete approval securely', 'Split payment over time', 'Get your items immediately']}
-      />
-    );
-  }
   return null;
 }

@@ -8,35 +8,23 @@ import type {
   ShippingQuote,
 } from '@/components/checkout/types';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
-import {
-  buildKlumpBnplRouteParams,
-  buildKlumpInitializePayload,
-  getKlumpDisabledReason,
-} from '@/lib/klump-checkout';
+import { getKlumpDisabledReason } from '@/lib/klump-checkout';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
 import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
-import { createOrder, OrderError } from '@/services/orders';
+import { createOrder } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
   buildCheckoutOrderRequest,
   type CheckoutSnapshot,
 } from './checkout-order-builders';
 import {
-  CHECKOUT_API_BASE_URL,
   CHECKOUT_MERCHANT_DOMAIN,
-  CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
-import {
-  type PaymentInitializeData,
-  toPaymentInitializeData,
-} from './payment-initialize-data';
-
-const BNPL_PAYMENT_INIT_TIMEOUT_MS = 10_000;
 
 interface SubmitBnplCheckoutParams {
   address: ShippingAddressInput;
@@ -52,9 +40,7 @@ interface SubmitBnplCheckoutParams {
   liveWalletSelection: WalletSelection | undefined;
   checkoutGeneration: string;
   mobileCheckoutIdempotencyRef: MutableRefObject<MobileCheckoutIdempotencyState | null>;
-  /** Called with the committed order id right after createOrder, so the
-   * outer submit can thread it into failure handling when a nested
-   * provider init (e.g. Klump) throws after the order exists. */
+  /** Exposes the committed order ID to outer checkout failure handling. */
   onOrderCreated?: (orderId: string) => void;
   paymentMethodForOrder: string;
   paymentSettings: Parameters<typeof getKlumpDisabledReason>[0];
@@ -87,17 +73,13 @@ export async function submitBnplCheckout({
   snapshot,
   sharedCartBinding,
 }: SubmitBnplCheckoutParams) {
-  const klumpSubmitDisabledReason =
-    selectedPayment === 'klump'
-      ? getKlumpDisabledReason(
-          paymentSettings,
-          snapshot.total,
-          liveWalletSelection,
-          liveSavingsSelection
-        )
-      : undefined;
-
-  if (klumpSubmitDisabledReason) {
+  if (selectedPayment === 'klump') {
+    const klumpSubmitDisabledReason = getKlumpDisabledReason(
+      paymentSettings,
+      snapshot.total,
+      liveWalletSelection,
+      liveSavingsSelection
+    );
     Alert.alert('Klump unavailable', klumpSubmitDisabledReason, [
       { text: 'OK' },
     ]);
@@ -128,29 +110,10 @@ export async function submitBnplCheckout({
   });
   onOrderCreated?.(orderResponse.order.id);
 
-  if (selectedPayment === 'klump') {
-    await initializeKlumpAndRoute({
-      customerEmail,
-      customerName,
-      customerPhone,
-      orderId: orderResponse.order.id,
-      orderTotal: Number(orderResponse.order.total),
-      setIsProcessing,
-      trackingToken: orderResponse.order.tracking_token,
-    });
-    // No start here: initialize only provides the Klump launcher URL — the
-    // provider UI has not opened. The launcher bridges Klump's onOpen over
-    // the WebView bridge and the checkout controller records the start
-    // then, like the other BNPL providers.
-    isOrderInFlight.current = false;
-    return;
-  }
-
   // No start here: the provider is initialized later inside the BNPL
   // checkout launcher, where lookup, SDK loading, or popup creation can
   // still fail. The launcher confirms the opened flow back over the
-  // WebView bridge and the checkout controller records the start then
-  // (the Klump branch above follows the same bridge via onOpen).
+  // WebView bridge and the checkout controller records the start then.
 
   isOrderInFlight.current = false;
   setIsProcessing(false);
@@ -182,102 +145,5 @@ export async function submitBnplCheckout({
       shipping: toMoneyRouteParam(snapshot.deliveryFee),
       tax: toMoneyRouteParam(snapshot.taxAmount),
     },
-  });
-}
-
-async function initializeKlumpAndRoute({
-  customerEmail,
-  customerName,
-  customerPhone,
-  orderId,
-  orderTotal,
-  setIsProcessing,
-  trackingToken,
-}: {
-  customerEmail: string;
-  customerName: string;
-  customerPhone: string;
-  orderId: string;
-  orderTotal: number;
-  setIsProcessing: (value: boolean) => void;
-  trackingToken?: string | null;
-}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    BNPL_PAYMENT_INIT_TIMEOUT_MS
-  );
-  let initResponse: Response;
-  try {
-    initResponse = await fetch(
-      `${CHECKOUT_API_BASE_URL}/api/payments/initialize`,
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': `payment-init-${orderId}-klump`,
-        },
-        body: JSON.stringify(
-          buildKlumpInitializePayload({
-            customerEmail,
-            customerName,
-            customerPhone,
-            merchantId: CHECKOUT_MERCHANT_ID,
-            orderId,
-          })
-        ),
-      }
-    );
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new OrderError(
-        'Payment initialization timed out',
-        'PAYMENT_INIT_TIMEOUT'
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  let initData: PaymentInitializeData;
-  try {
-    initData = toPaymentInitializeData(await initResponse.json());
-  } catch {
-    throw new OrderError(
-      'Failed to initialize Klump payment',
-      'PAYMENT_INIT_ERROR'
-    );
-  }
-  if (
-    !initResponse.ok ||
-    !initData.success ||
-    typeof initData.authorization_url !== 'string' ||
-    typeof initData.reference !== 'string'
-  ) {
-    throw new OrderError(
-      initData.error || 'Failed to initialize Klump payment',
-      'PAYMENT_INIT_ERROR'
-    );
-  }
-
-  setIsProcessing(false);
-  router.push({
-    pathname: '/bnpl-checkout',
-    params: buildKlumpBnplRouteParams({
-      amount: orderTotal,
-      authorizationUrl: initData.authorization_url,
-      customerEmail,
-      customerName,
-      customerPhone,
-      orderId,
-      reference: initData.reference,
-      merchantSlug: CHECKOUT_MERCHANT_SLUG,
-      ...(CHECKOUT_MERCHANT_DOMAIN && {
-        merchantDomain: CHECKOUT_MERCHANT_DOMAIN,
-      }),
-      trackingToken,
-    }),
   });
 }

@@ -7,61 +7,9 @@ import {
 } from './payment-step-availability';
 
 describe('payment-step availability helpers', () => {
-  it('requires enabled NGN Klump payments with matching payable amount', () => {
-    expect(
-      isKlumpEligible({
-        featureSettings: { klump_enabled: true },
-        currency: 'NGN',
-        orderAmount: 50_000,
-        payableAmount: 50_000,
-      }),
-    ).toBe(true);
-    expect(
-      isKlumpEligible({
-        featureSettings: { klump_enabled: true },
-        currency: null,
-        orderAmount: 50_000,
-        payableAmount: 50_000,
-      }),
-    ).toBe(false);
-    expect(
-      isKlumpEligible({
-        featureSettings: { klump_enabled: true },
-        currency: 'NGN',
-        orderAmount: 50_000,
-        payableAmount: 45_000,
-      }),
-    ).toBe(false);
-  });
-
-  it('falls back empty Klump limits to the default eligibility bounds', () => {
-    expect(
-      isKlumpEligible({
-        featureSettings: {
-          klump_enabled: true,
-          klump_min_amount: '',
-          klump_max_amount: '   ',
-        },
-        currency: 'ngn',
-        orderAmount: 1_000_000,
-        payableAmount: 1_000_000,
-      }),
-    ).toBe(true);
-  });
-
-  it('hides Klump above the default one million naira limit', () => {
-    expect(
-      isKlumpEligible({
-        featureSettings: {
-          klump_enabled: true,
-          klump_min_amount: '',
-          klump_max_amount: null,
-        },
-        currency: 'NGN',
-        orderAmount: 1_000_001,
-        payableAmount: 1_000_001,
-      }),
-    ).toBe(false);
+  it('keeps Klump retired even when merchant settings enable it', () => {
+    expect(isKlumpEligible({ featureSettings: { klump_enabled: true }, currency: 'NGN', orderAmount: 50000, payableAmount: 50000 })).toBe(false);
+    expect(hasAnyInstallmentOption({ featureSettings: { klump_enabled: true }, currency: 'NGN', orderAmount: 50000, payableAmount: 50000 })).toBe(false);
   });
 
   it('checks selected payment method and installment availability', () => {
@@ -81,7 +29,7 @@ describe('payment-step availability helpers', () => {
         orderAmount: 50_000,
         payableAmount: 50_000,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       hasAnyInstallmentOption({
         featureSettings,
@@ -167,7 +115,7 @@ describe('payment-step availability helpers', () => {
         payableAmount: 300_000,
       }),
     ).toBe(false);
-    // Payable differs from order total (e.g. partial wallet payment) — BNPL needs full order.
+    // Credit Direct signs the server-derived residual after wallet credit.
     expect(
       isCreditDirectEligible({
         featureSettings: { credit_direct_enabled: true },
@@ -175,7 +123,7 @@ describe('payment-step availability helpers', () => {
         orderAmount: 300_000,
         payableAmount: 250_000,
       }),
-    ).toBe(false);
+    ).toBe(true);
     // Above the default ₦5,000,000 cap.
     expect(
       isCreditDirectEligible({
@@ -301,4 +249,10 @@ describe('payment-step availability helpers', () => {
       }),
     ).toBe(false);
   });
+});
+
+it.each(['oxygen', 'credit_direct'] as const)('offers %s for a valid residual and rejects invalid balances', (paymentMethod) => {
+ const base = { paymentMethod, oxygenAllowed: true, featureSettings: { klump_enabled: true, credit_direct_enabled: true }, currency: 'NGN', orderAmount: 50000, paystackCheckoutAvailable: false, korapayCheckoutAvailable: false, bankTransferCheckoutAvailable: false };
+ expect(isPaymentMethodAvailable({ ...base, payableAmount: 30000 })).toBe(true);
+ for (const payableAmount of [0, -1, 50001, Number.NaN, Number.POSITIVE_INFINITY]) expect(isPaymentMethodAvailable({ ...base, payableAmount })).toBe(false);
 });

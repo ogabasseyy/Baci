@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import {
+  mockAlert,
   mockCreateOrder,
   mockPaymentSettings,
   mockUseMerchantPaymentSettings,
@@ -51,7 +52,7 @@ describe('checkout retry identity', () => {
     teardownCheckoutTest();
   });
 
-  it('delegates BNPL retry identity to the order service when switching providers', async () => {
+  it('blocks retired Klump after a Credit Direct attempt', async () => {
     enableBnplPaymentSettings();
     renderCheckoutScreen();
     fillAddressAndContinueToPayment();
@@ -87,10 +88,12 @@ describe('checkout retry identity', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Continue to review' }));
     fireEvent.press(screen.getByRole('button', { name: /Place order for/i }));
     await waitFor(() => {
-      expect(mockCreateOrder).toHaveBeenCalledTimes(2);
+      expect(mockAlert).toHaveBeenCalledWith(
+        'Klump unavailable',
+        expect.any(String),
+        expect.any(Array)
+      );
+      expect(mockCreateOrder).toHaveBeenCalledTimes(1);
     });
-    expect(mockCreateOrder.mock.calls[1]?.[0]).not.toHaveProperty(
-      'idempotency_key'
-    );
   }, 30_000);
 });

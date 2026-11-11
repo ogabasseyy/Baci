@@ -235,23 +235,7 @@ export function isGatewayAmountDifferentFromOrderTotal(
 }
 
 export const KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST = {
-  title: 'Klump unavailable with wallet credit',
-  description:
-    'Klump requires the full order total. Remove wallet credit or choose another payment method.',
+  title: 'Klump is no longer available',
+  description: 'Please choose another payment method.',
   variant: 'destructive' as const,
 };
-
-export function isKlumpUnavailableForGatewayAmount({
-  paymentMethod,
-  payableAmount,
-  orderAmount,
-}: {
-  paymentMethod: string;
-  payableAmount: number;
-  orderAmount: number;
-}): boolean {
-  return (
-    paymentMethod === 'klump' &&
-    isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)
-  );
-}

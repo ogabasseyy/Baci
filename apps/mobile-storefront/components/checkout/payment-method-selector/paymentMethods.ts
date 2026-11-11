@@ -49,13 +49,6 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     logoUrl: creditDirectLogoSource,
   },
   {
-    id: 'klump',
-    label: 'Klump',
-    description: 'Buy now, pay in installments',
-    icon: 'wallet-outline',
-    tab: 'installments',
-  },
-  {
     id: 'invoice',
     label: 'Get a Proforma Invoice',
     description: 'Send it to your company',

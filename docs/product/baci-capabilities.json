@@ -1,26 +1,38 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T23:42:19+00:00",
-  "source_revision": "f43e6cff2387fb6b24f6c06183b875047a113df1",
-  "evidence_digest": "4fed12e5b3b8341d41b51f4059c8304a54064fb6077f9a8ce76506f371a1175e",
-  "claims_digest": "bfcd17d5afb08998699ee61f59961f67d225fe7790f105714420579c75d63891",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-11T05:39:29+00:00",
+  "source_revision": "32a27c6fd62f7fda7f22080382e51bd30a8cdeea",
+  "evidence_digest": "d3ef6719f5b404a33fe1069de7c23260d07d6a3a5bd7fe906e3ad88cac53a257",
+  "claims_digest": "4857b203a9287796cce8402ecacf3d5c3153710d068c73b7ccdc4b91d61b4504",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision. Reviewed order-bound wallet recovery and the distinction between store-credit retry and reconciliation. Wallet recovery uses the confirmed debit and recognizes the original request while the display refreshes. Credit Direct retries RPC outages. Store-credit replay stops at an existing gateway payment.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Ambiguous Credit Direct references require reconciliation. Oxygen retains its admitted funding basis when the merchant records an authorized manual payment. Order recovery retains wallet evidence only for the same order. Store-credit projection distinguishes lock retry from reconciliation.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
-        "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
-        "apps/mobile-admin/app/(admin)/payment-methods.tsx",
+        "apps/web/src/components/storefront/ogabassey/pages/checkout/checkout-fingerprints-match.ts",
+        "apps/web/src/lib/payments/record-pre-gateway-redemption.ts",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
         "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
-        "apps/web/src/config/oxygen-storefront-staging.ts",
+        "apps/web/src/lib/payments/credit-direct-wallet-event.ts",
         "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts",
-        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql"
+        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql",
+        "apps/mobile-admin/components/payment-methods/payment-methods.ts",
+        "apps/web/src/app/api/payments/initialize/retired-gateway.ts",
+        "apps/web/src/app/api/payments/credit-direct/webhook/route.ts",
+        "supabase/migrations/20261111200000_fence_store_credit_replay_after_gateway.sql",
+        "apps/web/src/components/storefront/ogabassey/pages/checkout/pending-checkout-oxygen-fence.ts",
+        "supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql",
+        "supabase/migrations/20261107165000_credit_direct_wallet_attempt_reservation.sql",
+        "supabase/migrations/20261111190000_distinguish_store_credit_reconciliation.sql",
+        "supabase/migrations/20261111170000_accept_legacy_credit_direct_cancellation_spelling.sql",
+        "apps/web/src/app/api/payments/credit-direct/webhook/webhook-payment-amount.ts",
+        "apps/web/src/schemas/oxygen-checkout-order.ts",
+        "supabase/migrations/20261111180000_preserve_oxygen_order_settlement_paths.sql"
       ]
     },
     {

@@ -10,7 +10,6 @@ import {
   getStationPickupQuotes,
   inferAddressLocationFromInput,
   isGatewayAmountDifferentFromOrderTotal,
-  isKlumpUnavailableForGatewayAmount,
 } from './utils';
 import type { ShippingQuote } from './types';
 
@@ -222,25 +221,6 @@ describe('isGatewayAmountDifferentFromOrderTotal', () => {
         Number.POSITIVE_INFINITY,
       ),
     ).toBe(true);
-  });
-});
-
-describe('isKlumpUnavailableForGatewayAmount', () => {
-  it('returns true only for Klump gateway amount mismatches', () => {
-    expect(
-      isKlumpUnavailableForGatewayAmount({
-        paymentMethod: 'klump',
-        payableAmount: 45_000,
-        orderAmount: 50_000,
-      }),
-    ).toBe(true);
-    expect(
-      isKlumpUnavailableForGatewayAmount({
-        paymentMethod: 'paystack',
-        payableAmount: 45_000,
-        orderAmount: 50_000,
-      }),
-    ).toBe(false);
   });
 });
 

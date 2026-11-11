@@ -13,7 +13,7 @@ describe('PaymentMethodsScreen merchant-switch toggle lifecycle', () => {
     render(<PaymentMethodsScreen />);
 
     await mocks.mutationConfig?.mutationFn?.({
-      field: 'klump_enabled',
+      field: 'paystack_enabled',
       merchantId: 'merchant-a',
       settingsId: 'settings-a',
       value: false,
@@ -39,7 +39,7 @@ describe('PaymentMethodsScreen merchant-switch toggle lifecycle', () => {
     const { rerender } = render(<PaymentMethodsScreen />);
     const originMutation = mocks.mutationConfig;
     await originMutation?.onMutate?.({
-      field: 'klump_enabled',
+      field: 'paystack_enabled',
       merchantId: 'merchant-a',
       settingsId: 'settings-a',
       value: false,
@@ -47,7 +47,7 @@ describe('PaymentMethodsScreen merchant-switch toggle lifecycle', () => {
     activeMerchantId = 'merchant-b';
     rerender(<PaymentMethodsScreen />);
 
-    expect(screen.getByLabelText('Toggle Klump')).not.toBeDisabled();
+    expect(screen.getByLabelText('Toggle Paystack')).not.toBeDisabled();
   });
 
   it('does not alert merchant B when merchant A toggle fails after switching', async () => {
@@ -65,7 +65,7 @@ describe('PaymentMethodsScreen merchant-switch toggle lifecycle', () => {
     const { rerender } = render(<PaymentMethodsScreen />);
     const originMutation = mocks.mutationConfig;
     const context = await originMutation?.onMutate?.({
-      field: 'klump_enabled',
+      field: 'paystack_enabled',
       merchantId: 'merchant-a',
       settingsId: 'settings-a',
       value: false,
@@ -75,7 +75,7 @@ describe('PaymentMethodsScreen merchant-switch toggle lifecycle', () => {
     rerender(<PaymentMethodsScreen />);
     originMutation?.onError?.(
       new Error('Failed to update payment method'),
-      { field: 'klump_enabled', value: false },
+      { field: 'paystack_enabled', value: false },
       context
     );
 

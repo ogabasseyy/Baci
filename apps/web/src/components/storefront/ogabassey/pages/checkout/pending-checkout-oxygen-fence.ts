@@ -42,7 +42,10 @@ export async function resolveOxygenCheckoutFence({
       customerEmail.trim().toLowerCase() &&
     checkoutFingerprintsMatch(
       pendingOrder.checkoutFingerprint,
-      checkoutFingerprint
+      checkoutFingerprint,
+      pendingOrder.paymentMethod === 'oxygen'
+        ? pendingOrder.walletAmountUsed
+        : undefined
     );
   const mayReuseOxygenOrder =
     pendingOrder.paymentMethod === 'oxygen' && sameIdentity;

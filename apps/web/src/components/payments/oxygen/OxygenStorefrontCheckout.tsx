@@ -2,6 +2,7 @@ import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
 import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
+import { roundMoney } from '@/lib/order-wallet-funding-utils';
 import { readOxygenCustomerPrefill } from '@/lib/payments/oxygen/customer-prefill';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { createClient } from '@/lib/supabase/server';
@@ -57,7 +58,7 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -83,6 +84,7 @@ export async function OxygenStorefrontCheckout({
     ...(order.customer_email ? { email: order.customer_email } : {}),
   });
   const contact = checkoutContact.success ? checkoutContact.data : prefill;
+  const amountToFinance = roundMoney(order.total - order.wallet_amount_used);
   return (
     <CheckoutPage
       verifiedOxygenOrderId={order.id}
@@ -101,19 +103,23 @@ export async function OxygenStorefrontCheckout({
             summary="Delivery selection saved with this order"
           />
           <CheckoutStepCard number={3} title="Payment Method" active>
-            <OxygenApplicationDialog
-              orderId={orderId}
-              merchantSlug={merchantSlug}
-              selfieOrigins={selfieOrigins}
-              hostedOrigins={hostedOrigins}
-              prefill={contact}
-              productAmount={order.total}
-              products={order.order_items.map((item) => ({
-                ...item,
-                imageUrl: oxygenOrderItemImage(item),
-              }))}
-              currency={order.currency}
-            />
+            {amountToFinance > 0 ? (
+              <OxygenApplicationDialog
+                orderId={orderId}
+                merchantSlug={merchantSlug}
+                selfieOrigins={selfieOrigins}
+                hostedOrigins={hostedOrigins}
+                prefill={contact}
+                productAmount={amountToFinance}
+                products={order.order_items.map((item) => ({
+                  ...item,
+                  imageUrl: oxygenOrderItemImage(item),
+                }))}
+                currency={order.currency}
+              />
+            ) : (
+              <p>No balance remains to finance.</p>
+            )}
           </CheckoutStepCard>
         </>
       }

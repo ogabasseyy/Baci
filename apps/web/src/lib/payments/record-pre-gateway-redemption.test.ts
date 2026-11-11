@@ -1,153 +1,124 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  createAdminClient: vi.fn(),
-  update: vi.fn(),
-  eq: vi.fn(),
-  inFilter: vi.fn(),
-  result: vi.fn<() => { error: { message: string } | null }>(() => ({
-    error: null,
-  })),
-  loggerError: vi.fn(),
-}));
-
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: (...args: unknown[]) => mocks.createAdminClient(...args),
-}));
-
-vi.mock('@/lib/logger', () => ({
-  logger: {
-    error: (...args: unknown[]) => mocks.loggerError(...args),
-    warn: vi.fn(),
-    info: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), createClient: vi.fn() }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
 
 import { recordPreGatewayRedemption } from './record-pre-gateway-redemption';
-
-function createOrdersChain() {
-  const chain: Record<string, unknown> = {};
-  chain.from = vi.fn().mockReturnValue(chain);
-  chain.update = mocks.update.mockReturnValue(chain);
-  chain.eq = mocks.eq.mockReturnValue(chain);
-  chain.in = mocks.inFilter.mockReturnValue(chain);
-  // Supabase query builders are thenable; resolve with the configured
-  // outcome no matter which filter method is awaited last.
-  // biome-ignore lint/suspicious/noThenProperty: intentionally thenable to mirror the Supabase builder
-  chain.then = (resolve: (value: unknown) => void) => resolve(mocks.result());
-  return chain;
-}
 
 describe('recordPreGatewayRedemption', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.createAdminClient.mockImplementation(() => createOrdersChain());
-    mocks.result.mockReturnValue({ error: null });
-  });
-
-  it('writes amount_paid and wallet_amount_used for a wallet redemption', async () => {
-    await recordPreGatewayRedemption('order-1', 50000, 0, 20000);
-
-    expect(mocks.update).toHaveBeenCalledWith({
-      amount_paid: 20000,
-      wallet_amount_used: 20000,
-    });
-    expect(mocks.eq).toHaveBeenCalledWith('id', 'order-1');
-  });
-
-  it('only applies while the order is unpaid with no recorded payment', async () => {
-    await recordPreGatewayRedemption('order-1', 50000, 0, 20000);
-
-    expect(mocks.inFilter).toHaveBeenCalledWith('payment_status', [
-      'unpaid',
-      'pending',
-    ]);
-    expect(mocks.eq).toHaveBeenCalledWith('amount_paid', 0);
-  });
-
-  it('sums savings and wallet into amount_paid', async () => {
-    await recordPreGatewayRedemption('order-1', 50000, 5000, 20000);
-
-    expect(mocks.update).toHaveBeenCalledWith({
-      amount_paid: 25000,
-      wallet_amount_used: 20000,
+    mocks.createClient.mockRejectedValue(
+      new Error('Cookie authentication unavailable for bearer request')
+    );
+    mocks.rpc.mockResolvedValue({
+      data: { wallet: 20000, savings: 0 },
+      error: null,
     });
   });
 
-  it('records savings-only redemptions without touching wallet_amount_used', async () => {
-    await recordPreGatewayRedemption('order-1', 50000, 5000, 0);
-
-    expect(mocks.update).toHaveBeenCalledWith({ amount_paid: 5000 });
-  });
-
-  it('clamps redemption amounts to the order total', async () => {
-    await recordPreGatewayRedemption('order-1', 10000, 5000, 20000);
-
-    expect(mocks.update).toHaveBeenCalledWith({
-      amount_paid: 10000,
-      wallet_amount_used: 10000,
+  it('uses the authenticated ledger-derived RPC without sending caller-selected amounts', async () => {
+    await recordPreGatewayRedemption('order-1', 50000, 0, 20000, {
+      rpc: mocks.rpc,
     });
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(
+      'record_order_store_credit',
+      { p_order_id: 'order-1' }
+    );
   });
 
   it('does nothing when no redemption occurred', async () => {
-    await recordPreGatewayRedemption('order-1', 50000, 0, 0);
-
-    expect(mocks.update).not.toHaveBeenCalled();
-  });
-
-  it('logs but does not throw when the order update fails', async () => {
-    mocks.result.mockReturnValue({ error: { message: 'db down' } });
-
-    await expect(
-      recordPreGatewayRedemption('order-1', 50000, 0, 20000)
-    ).resolves.toBeUndefined();
-
-    expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Failed to record pre-gateway redemption on order',
-        orderId: 'order-1',
-      })
-    );
-  });
-
-  it('logs but does not throw when the admin client cannot be created', async () => {
-    mocks.createAdminClient.mockImplementation(() => {
-      throw new Error('admin unavailable');
+    await recordPreGatewayRedemption('order-1', 50000, 0, 0, {
+      rpc: mocks.rpc,
     });
-
-    await expect(
-      recordPreGatewayRedemption('order-1', 50000, 0, 20000)
-    ).resolves.toBeUndefined();
-
-    expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Failed to record pre-gateway redemption on order',
-        orderId: 'order-1',
-        error: expect.any(Error),
-      })
-    );
+    expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
-  it('logs but does not throw when the order update throws', async () => {
-    mocks.createAdminClient.mockImplementation(() => {
-      const chain = createOrdersChain();
-      chain.update = vi.fn(() => {
-        throw new Error('update unavailable');
-      });
-      return chain;
+  it('returns review for an unexpected database error without exposing its details', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'private database detail' },
     });
-
     await expect(
-      recordPreGatewayRedemption('order-1', 50000, 0, 20000)
-    ).resolves.toBeUndefined();
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toEqual({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+      message: 'Store credit requires payment review.',
+    });
+  });
 
-    expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Failed to record pre-gateway redemption on order',
-        orderId: 'order-1',
-        error: expect.any(Error),
+  it('returns review when the projection request rejects with an unknown outcome', async () => {
+    mocks.rpc.mockRejectedValue(new Error('connection dropped'));
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
+  });
+
+  it.each([
+    { data: null, error: null },
+    { data: { wallet: 0, savings: 0 }, error: null },
+    { data: { wallet: 20000, savings: 5000 }, error: null },
+  ])('stops provider handoff when credit is not confirmed: %j', async (result) => {
+    mocks.rpc.mockResolvedValue(result);
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
+  });
+
+  it.each([
+    [
+      '40001',
+      'Store credit retry required',
+      503,
+      'STORE_CREDIT_RETRY_REQUIRED',
+    ],
+    [
+      '40001',
+      'Store credit reconciliation required',
+      409,
+      'STORE_CREDIT_REVIEW_REQUIRED',
+    ],
+    [
+      '23514',
+      'Store credit reconciliation required',
+      409,
+      'STORE_CREDIT_REVIEW_REQUIRED',
+    ],
+  ])('maps store credit error %s (%s) to %s', async (code, message, status, responseCode) => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code, message } });
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toMatchObject({ status, code: responseCode });
+  });
+
+  it('accepts a confirmed combined savings and wallet debit', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { wallet: 20000, savings: 5000 },
+      error: null,
+    });
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 5000, 20000, {
+        rpc: mocks.rpc,
       })
-    );
+    ).resolves.toBeUndefined();
+  });
+
+  it('routes invalid combined amounts to review before querying the ledger', async () => {
+    await expect(
+      recordPreGatewayRedemption('order-1', 10000, 6000, 5000, {
+        rpc: mocks.rpc,
+      })
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

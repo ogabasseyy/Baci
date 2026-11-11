@@ -13,7 +13,9 @@ vi.mock('@/components/storefront/cdn-format-image', () => ({
 
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
 
-it('uses the native expandable checkout summary with saved order amounts', () => {
+it.each([
+  0, 20000,
+])('uses saved order amounts with %s wallet credit', (wallet_amount_used) => {
   const id = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
   render(
     <OxygenMobileOrderSummary
@@ -26,13 +28,16 @@ it('uses the native expandable checkout summary with saved order amounts', () =>
         shipping_fee: 0,
         tax_amount: 0,
         total: 400000,
+        wallet_amount_used,
         order_items: [{ id, name: 'Saved phone', price: 400000, quantity: 1 }],
       }}
     />
   );
   const toggle = screen.getByRole('button', { name: /show order summary/i });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  expect(toggle).toHaveTextContent('₦400,000');
+  expect(toggle).toHaveTextContent(
+    wallet_amount_used > 0 ? '₦380,000' : '₦400,000'
+  );
   expect(
     screen.getByText('Saved phone').closest('[aria-hidden]')
   ).toHaveAttribute('aria-hidden', 'true');

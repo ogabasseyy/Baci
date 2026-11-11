@@ -10,7 +10,6 @@ import { prepareCheckoutDelivery } from './handlers/prepare-checkout-delivery';
 import type { PreparedCheckoutDelivery } from './handlers/prepare-checkout-delivery';
 import { prepareCheckoutOrderIdentity } from './prepare-checkout-order-identity';
 import { isAirportDeliveryReady } from './is-airport-delivery-ready';
-import { isKlumpUnavailableForGatewayAmount } from './utils';
 
 export interface PrepareCheckoutOrderSubmissionOptions {
   payment: {
@@ -115,13 +114,7 @@ export function prepareCheckoutOrderSubmission({
   if (payment.method === 'uba_redvault' && !payment.redvaultAvailable) {
     return { kind: 'issue', issue: 'redvault-unavailable' };
   }
-  if (
-    isKlumpUnavailableForGatewayAmount({
-      paymentMethod: payment.method,
-      payableAmount: payment.remainingAmount,
-      orderAmount: payment.total,
-    })
-  ) {
+  if (payment.method === 'klump') {
     return { kind: 'issue', issue: 'klump-unavailable' };
   }
 

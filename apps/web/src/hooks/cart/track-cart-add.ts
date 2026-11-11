@@ -42,6 +42,7 @@ export function trackCartAdd({
   options,
   loadTracker = loadEventTracking,
 }: TrackCartAddInput): void {
+  if (quantity <= 0) return;
   if (options?.quizAwardId || options?.quizVoucherToken) return;
   // Require the full merchant (not a bare id) so the reported currency is
   // always the merchant's own; storefronts always provide it.

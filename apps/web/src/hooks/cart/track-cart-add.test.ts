@@ -80,4 +80,17 @@ describe('trackCartAdd', () => {
     ).not.toThrow();
     await vi.waitFor(() => expect(loadTracker).toHaveBeenCalledTimes(1));
   });
+
+  it('sends nothing when no units were added', () => {
+    const { loadTracker } = setupTracker();
+
+    trackCartAdd({
+      merchant: { id: 'merchant-1' },
+      product,
+      quantity: 0,
+      loadTracker,
+    });
+
+    expect(loadTracker).not.toHaveBeenCalled();
+  });
 });

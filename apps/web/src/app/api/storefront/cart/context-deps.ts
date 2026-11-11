@@ -21,11 +21,14 @@ export function contextDeps(
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
       rpcClient: createAnonClient(),
-      // `features` is reported inside `auth`, which covers the whole
-      // merchant and proof resolution.
+      // Named `auth-features` because it runs inside the `auth` step,
+      // which covers the whole merchant and proof resolution: the two
+      // durations overlap and must not be summed.
       loadMerchantFeatures: timer
         ? (merchantId) =>
-            timer.measure('features', () => loadMerchantFeatures(merchantId))
+            timer.measure('auth-features', () =>
+              loadMerchantFeatures(merchantId)
+            )
         : loadMerchantFeatures,
     },
     requireScope,

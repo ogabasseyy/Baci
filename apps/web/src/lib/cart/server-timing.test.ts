@@ -54,5 +54,9 @@ describe('cart server timing', () => {
     await expect(timer.measure('bad name;x=1', () => null)).rejects.toThrow(
       'Invalid cart timing step name'
     );
+    // Reserved for the entry apply() adds, so a header never has two totals.
+    await expect(timer.measure('total', () => null)).rejects.toThrow(
+      'Invalid cart timing step name'
+    );
   });
 });

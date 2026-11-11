@@ -74,7 +74,7 @@ describe('cart route context wiring', () => {
     expect(lookup).toHaveBeenCalledWith('m-1');
     expect(
       timer.apply(new Response(null)).headers.get('Server-Timing')
-    ).toMatch(/^features;dur=[\d.]+, total;dur=[\d.]+$/);
+    ).toMatch(/^auth-features;dur=[\d.]+, total;dur=[\d.]+$/);
   });
 
   it('still reports the step, and rethrows, when the lookup fails', async () => {
@@ -87,7 +87,7 @@ describe('cart route context wiring', () => {
     );
     expect(
       timer.apply(new Response(null)).headers.get('Server-Timing')
-    ).toMatch(/^features;dur=[\d.]+, total;dur=[\d.]+$/);
+    ).toMatch(/^auth-features;dur=[\d.]+, total;dur=[\d.]+$/);
   });
 
   it('verifies proofs against the runtime proof environment', () => {

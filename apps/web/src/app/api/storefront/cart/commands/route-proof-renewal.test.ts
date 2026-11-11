@@ -217,7 +217,7 @@ describe('POST cart command proof renewal', () => {
     });
     expect(response.status).toBe(200);
     expect(response.headers.get('Server-Timing')).toMatch(
-      /^csrf;dur=[\d.]+, features;dur=[\d.]+, auth;dur=[\d.]+, quota;dur=[\d.]+, grant;dur=[\d.]+, cart;dur=[\d.]+, renew;dur=[\d.]+, total;dur=[\d.]+$/
+      /^csrf;dur=[\d.]+, auth-features;dur=[\d.]+, auth;dur=[\d.]+, quota;dur=[\d.]+, grant;dur=[\d.]+, cart;dur=[\d.]+, renew;dur=[\d.]+, total;dur=[\d.]+$/
     );
     const setCookie = response.headers.get('set-cookie') ?? '';
     const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';

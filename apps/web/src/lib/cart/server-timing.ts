@@ -15,6 +15,7 @@ export interface CartServerTimer {
 }
 
 const STEP_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+const TOTAL_STEP = 'total';
 
 export function createCartServerTimer(
   now: () => number = () => performance.now()
@@ -23,7 +24,8 @@ export function createCartServerTimer(
   const steps: Array<{ name: string; duration: number }> = [];
   return {
     async measure(name, step) {
-      if (!STEP_NAME.test(name)) {
+      // `total` is reserved for the entry apply() adds itself.
+      if (!STEP_NAME.test(name) || name === TOTAL_STEP) {
         throw new Error('Invalid cart timing step name');
       }
       const stepStarted = now();
@@ -36,7 +38,7 @@ export function createCartServerTimer(
     apply(response) {
       const entries = [
         ...steps,
-        { name: 'total', duration: now() - started },
+        { name: TOTAL_STEP, duration: now() - started },
       ].map(
         ({ name, duration }) =>
           `${name};dur=${Math.max(0, duration).toFixed(1)}`

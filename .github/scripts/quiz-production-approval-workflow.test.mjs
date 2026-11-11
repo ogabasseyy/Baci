@@ -19,6 +19,8 @@ test('runs the quiz runtime parity gate for phase 1a and production', async () =
   assert.match(job.if, /github\.event_name == 'merge_group'/);
   assert.match(job.if, /vars\.QUIZ_PHASE == '1a'/);
   assert.match(job.if, /vars\.QUIZ_PHASE == 'production'/);
+  // The step used to live in quality-misc, which skips in config-smoke mode like every other quiz_db-gated job.
+  assert.match(job.if, /needs\.changes\.outputs\.test_plan_mode != 'config-smoke'/);
 
   const step = job.steps.find(
     ({ name }) => name === 'Verify Quiz Production Approval'

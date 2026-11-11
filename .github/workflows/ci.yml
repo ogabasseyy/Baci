@@ -732,6 +732,7 @@ jobs:
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'merge_group') &&
       (needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true') &&
+      needs.changes.outputs.test_plan_mode != 'config-smoke' &&
       (vars.QUIZ_PHASE == '1a' || vars.QUIZ_PHASE == 'production')
     # Same kill switch as every private route (private repo + BACI_PRIVATE_CI_ENABLED, via
     # private_ci_trusted). While the repo is public, or with the switch off, this stays on a

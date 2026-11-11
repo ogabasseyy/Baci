@@ -40,3 +40,11 @@ describe('suffixed crawler names', () => {
     );
   });
 });
+
+describe('Google ad crawlers', () => {
+  it('flags AdsBot-Google', () => {
+    expect(
+      isBotUserAgent('AdsBot-Google (+http://www.google.com/adsbot.html)')
+    ).toBe(true);
+  });
+});

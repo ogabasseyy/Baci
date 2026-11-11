@@ -11,6 +11,10 @@ const KEPT_PARAMS = [
   'wbraid',
   'ttclid',
   'msclkid',
+  'dclid',
+  'wclid',
+  'yclid',
+  'gclsrc',
   'ScCid',
 ];
 

@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
     isBotUserAgent(request.headers.get('user-agent'))
   ) {
     // Acknowledge but do not record crawler traffic.
+    logger.debug({ message: 'Skipped crawler analytics event' });
     return NextResponse.json({ success: true, event_id: input.event_id });
   }
   const rawEventType = input.event_type ?? input.event_name ?? '';

@@ -49,3 +49,8 @@
 **Learning:** Hardcoded `#FFFFFF` for text/icons on primary backgrounds in React Native ignores the theme system's `textOnPrimary` token which guarantees correct contrast in both modes.
 **Action:** Read `DARK_COLORS` and `LIGHT_COLORS` in `constants/theme.ts` to find the correct token (e.g. `textOnPrimary`) and apply it dynamically.
 **Source:** apps/mobile-admin/constants/theme.ts
+
+## 2024-05-24 — [Replace Hardcoded White with textOnPrimary]
+**Learning:** Hardcoded `#FFFFFF` on primary backgrounds may lack explicit semantic meaning or adaptability compared to standard tokens.
+**Action:** Always use `colors.textOnPrimary` for text/icons on primary colored buttons to ensure consistency and readability in both themes.
+**Source:** `apps/mobile-admin/constants/theme.ts`

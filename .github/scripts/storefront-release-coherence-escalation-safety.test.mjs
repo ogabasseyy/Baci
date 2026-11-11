@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { verifyWithHostPurgeFallback } from './storefront-release-coherence-escalation.mjs';
 import {
   isOriginProbe,
   makeStorefront,
@@ -130,4 +131,39 @@ test('says plainly that the hostname purge clears all cached content for the hos
     warnings.join('\n'),
     /hostname purge for ogabassey\.com, www\.ogabassey\.com.*clears ALL cached content for those hostnames/s
   );
+});
+
+test('fails closed when a stale failure arrives without stale page URLs (no origin proof possible)', async () => {
+  // verifyWithHostPurgeFallback is exported and `verify` is injectable: a stale-flagged error with
+  // no (or empty) staleUrls must never reach the hostname purge without the per-page origin gate.
+  for (const staleUrls of [undefined, [], 'https://ogabassey.com/products']) {
+    const failure = Object.assign(new Error('Storefront release coherence failed: stale'), {
+      stale: true,
+      ...(staleUrls === undefined ? {} : { staleUrls }),
+    });
+    let hostPurges = 0;
+    let probes = 0;
+
+    await assert.rejects(
+      verifyWithHostPurgeFallback({
+        baseUrl: 'https://ogabassey.com',
+        config: { attempts: 1, escalationAttempts: 1, expectedMarker: 'release_123', retryDelayMs: 1 },
+        hostPurgeImpl: async () => {
+          hostPurges += 1;
+          return { skipped: false };
+        },
+        logger: { log: () => {}, warn: () => {} },
+        probeOrigin: async () => {
+          probes += 1;
+          return 'release_123';
+        },
+        verify: async () => {
+          throw failure;
+        },
+      }),
+      (error) => error === failure
+    );
+    assert.equal(hostPurges, 0, `no hostname purge for staleUrls=${JSON.stringify(staleUrls)}`);
+    assert.equal(probes, 0);
+  }
 });

@@ -14,6 +14,8 @@ test('derives the apex and www hostnames to purge from the release origin', () =
     'www.ogabassey.com',
   ]);
   assert.throws(() => releaseHostsFor('https://cdn.ogabassey.com'), /cdn\./);
+  // The www. prefix must not hide a cdn.* apex: the derived apex is what gets validated.
+  assert.throws(() => releaseHostsFor('https://www.cdn.ogabassey.com'), /cdn\./);
   assert.throws(() => releaseHostsFor('https://127.0.0.1'), /DNS hostname/);
   assert.throws(() => releaseHostsFor('https://localhost'), /DNS hostname/);
 });

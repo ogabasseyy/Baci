@@ -273,3 +273,22 @@ test('the hostname purge payload lowercases and deduplicates hostnames', () => {
     hosts: ['ogabassey.com', 'www.ogabassey.com'],
   });
 });
+
+test('logs and returns the normalized hostnames that are actually sent to Cloudflare', async () => {
+  const messages = [];
+  const sent = [];
+  const result = await purgeCloudflareHosts({
+    fetchJson: async (path, options) => {
+      sent.push(options.body);
+      return { result: { id: 'purge-123' }, success: true };
+    },
+    hosts: ['OgaBassey.com', 'ogabassey.com', 'WWW.ogabassey.com'],
+    logger: { log: (message) => messages.push(message), warn: () => {} },
+    token: 'token',
+    zoneId: 'zone-123',
+  });
+
+  assert.deepEqual(sent, [{ hosts: ['ogabassey.com', 'www.ogabassey.com'] }]);
+  assert.deepEqual(result.hosts, ['ogabassey.com', 'www.ogabassey.com']);
+  assert.match(messages.join('\n'), /Purged 2 Cloudflare hostname\(s\) \(ogabassey\.com, www\.ogabassey\.com\)/);
+});

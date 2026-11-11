@@ -160,7 +160,9 @@ export async function purgeCloudflareHosts({
   zoneId,
   zoneName,
 }) {
-  const uniqueHosts = [...new Set(hosts ?? [])];
+  // Validate and normalize once: the log line, the return value and the request body all
+  // describe the same (lowercased, deduplicated) hostnames.
+  const { hosts: uniqueHosts } = buildHostPurgePayload(hosts ?? []);
 
   if (!token) {
     logger.warn('Skipping Cloudflare hostname purge: CLOUDFLARE_API_TOKEN is not set.');
@@ -175,7 +177,7 @@ export async function purgeCloudflareHosts({
   const resolvedZoneId =
     zoneId || (await discoverZoneId({ fetchJson, token, zoneName }));
   await fetchJson(`/zones/${resolvedZoneId}/purge_cache`, {
-    body: buildHostPurgePayload(uniqueHosts),
+    body: { hosts: uniqueHosts },
     method: 'POST',
     token,
   });

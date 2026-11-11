@@ -101,7 +101,11 @@ export async function verifyWithHostPurgeFallback({
     // page. If the origin is erroring, Cloudflare may be serving stale pages as a fallback
     // (stale-if-error) and a hostname purge would delete exactly those copies; if the origin
     // serves another release, a purge cannot help.
-    for (const [index, canaryUrl] of (error.staleUrls ?? []).entries()) {
+    // Fail closed: with no stale page URLs there is nothing to prove the origin healthy for, and
+    // this function is exported with an injectable `verify`, so never purge without that gate.
+    const staleUrls = Array.isArray(error.staleUrls) ? error.staleUrls : [];
+    if (staleUrls.length === 0) throw error;
+    for (const [index, canaryUrl] of staleUrls.entries()) {
       const { pathname } = new URL(canaryUrl);
       let originMarker;
       try {

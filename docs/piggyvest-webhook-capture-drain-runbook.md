@@ -263,9 +263,18 @@ login to `piggyvest_webhook_capture_worker` or `piggyvest_webhook_intake`: the
 tool refuses those logins by name and refuses any login that also holds a
 pipeline role, so one person cannot both requeue and drain.
 
+Generate the password in the password manager and, as with the drain login,
+never put it in any SQL text. Create the login without a password:
+
 ```sql
-CREATE ROLE ops_<name> LOGIN PASSWORD '<generated, kept in your password manager>'
-  IN ROLE piggyvest_webhook_capture_operator;
+CREATE ROLE ops_<name> LOGIN IN ROLE piggyvest_webhook_capture_operator;
+```
+
+Then set the password from `psql`, which prompts for it and sends only a
+hashed verifier:
+
+```sql
+\password ops_<name>
 ```
 
 ### Each replay

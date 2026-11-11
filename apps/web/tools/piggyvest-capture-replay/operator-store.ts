@@ -28,8 +28,10 @@ export const OPERATOR_STATEMENTS = {
     'SELECT piggyvest_capture_operator.requeue_review_capture($1::uuid, $2::text) AS result',
 } as const;
 
-// One row about the session. secure_transport accepts TLS, or a unix socket
-// or loopback connection (local disposable databases only).
+// One row about the session. secure_transport is true for TLS or a loopback
+// address (local disposable databases only). The server-side check would also
+// pass a Unix socket, but readOperatorConnection already refuses socket URLs
+// (no hostname, or ?host=), so this tool never connects that way.
 export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_name,
   (login.rolcanlogin AND NOT login.rolsuper AND NOT login.rolbypassrls
     AND NOT login.rolcreaterole AND NOT login.rolcreatedb AND NOT login.rolreplication) AS login_safe,

@@ -21,6 +21,15 @@ export function buildPurgePayload(urls) {
   };
 }
 
+// Hostname purge payload. Only a `hosts` list is ever sent: never `files`, never
+// `purge_everything`, and the release check passes exact storefront hostnames
+// (never a cdn.* host) so static assets on other hostnames stay cached.
+export function buildHostPurgePayload(hosts) {
+  return {
+    hosts: [...new Set(hosts)],
+  };
+}
+
 export function chunkPurgeUrls(urls, size = CLOUDFLARE_SINGLE_FILE_PURGE_MAX_OPERATIONS) {
   if (!Number.isInteger(size) || size <= 0) {
     throw new Error('Cloudflare purge chunk size must be a positive integer');
@@ -124,6 +133,40 @@ export async function purgeCloudflareCache({
     `Purged ${uniqueUrls.length} Cloudflare URL(s) from zone ${resolvedZoneId} in ${batches.length} request(s).`
   );
   return { purgedUrls: uniqueUrls, skipped: false, zoneId: resolvedZoneId };
+}
+
+export async function purgeCloudflareHosts({
+  fetchJson = fetchCloudflareJson,
+  hosts,
+  logger = console,
+  token,
+  zoneId,
+  zoneName,
+}) {
+  const uniqueHosts = [...new Set(hosts ?? [])];
+
+  if (!token) {
+    logger.warn('Skipping Cloudflare hostname purge: CLOUDFLARE_API_TOKEN is not set.');
+    return { skipped: true, reason: 'missing-token' };
+  }
+
+  if (uniqueHosts.length === 0) {
+    logger.warn('Skipping Cloudflare hostname purge: no hostnames were provided.');
+    return { skipped: true, reason: 'missing-hosts' };
+  }
+
+  const resolvedZoneId =
+    zoneId || (await discoverZoneId({ fetchJson, token, zoneName }));
+  await fetchJson(`/zones/${resolvedZoneId}/purge_cache`, {
+    body: buildHostPurgePayload(uniqueHosts),
+    method: 'POST',
+    token,
+  });
+
+  logger.log(
+    `Purged ${uniqueHosts.length} Cloudflare hostname(s) (${uniqueHosts.join(', ')}) from zone ${resolvedZoneId}.`
+  );
+  return { hosts: uniqueHosts, skipped: false, zoneId: resolvedZoneId };
 }
 
 async function main() {

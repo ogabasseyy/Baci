@@ -125,6 +125,7 @@ test('retries a stale warm response within the configured bound', async () => {
 test('stops after the configured warm retry bound when stale responses persist', async () => {
   let warmBrowserCalls = 0;
   let sleepCalls = 0;
+  let hostPurgeCalls = 0;
   const { fetchImpl } = makeSuccessfulFetch({
     fetchImpl: async (url, options) => {
       const parsed = new URL(url);
@@ -142,8 +143,13 @@ test('stops after the configured warm retry bound when stale responses persist',
 
   await assert.rejects(
     runReleaseCoherence({
-      env: ENV,
+      // One verification attempt after the hostname-purge fallback keeps the arithmetic simple.
+      env: { ...ENV, STOREFRONT_RELEASE_ESCALATION_ATTEMPTS: '1' },
       fetchImpl,
+      hostPurgeImpl: async () => {
+        hostPurgeCalls += 1;
+        return { skipped: false };
+      },
       logger: { log: () => {}, warn: () => {} },
       releasePurgeImpl: successfulReleasePurge,
       requestId: 'request-retry-exhaustion',
@@ -151,9 +157,12 @@ test('stops after the configured warm retry bound when stale responses persist',
         sleepCalls += 1;
       },
     }),
-    /Storefront release coherence failed/,
+    /Storefront release coherence failed after the Cloudflare hostname purge/,
   );
 
-  assert.equal(warmBrowserCalls, 10);
+  // 5 canaries x (2 normal attempts + 1 attempt after the hostname purge); one wait between
+  // the two normal attempts, none after the last attempt of either window.
+  assert.equal(warmBrowserCalls, 15);
   assert.equal(sleepCalls, 1);
+  assert.equal(hostPurgeCalls, 1);
 });

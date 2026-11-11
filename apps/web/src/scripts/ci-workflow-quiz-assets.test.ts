@@ -134,6 +134,40 @@ describe('CI workflow quiz asset coverage', () => {
     );
   });
 
+  it('deploys and tests every transitive import of the release-coherence script', () => {
+    const deployWebFilter = getDeployWebFilter();
+    const scriptsDirectory = resolve(
+      currentDirectory,
+      '../../../../.github/scripts'
+    );
+    const pending = ['storefront-release-coherence.mjs'];
+    const reached = new Set<string>();
+    for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+      if (reached.has(name)) continue;
+      reached.add(name);
+      const source = readFileSync(resolve(scriptsDirectory, name), 'utf8');
+      for (const match of source.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)) {
+        const dependency = match[1];
+        if (dependency) pending.push(dependency);
+      }
+    }
+
+    // A dependency missing from the deploy filter would let a change to it skip the production deploy.
+    expect(reached).toContain('storefront-release-coherence-escalation.mjs');
+    expect(reached).toContain('storefront-release-coherence-canary-urls.mjs');
+    for (const name of reached) {
+      expect(deployWebFilter).toContain(`- '.github/scripts/${name}'`);
+    }
+    for (const testFile of [
+      'storefront-release-coherence-escalation.test.mjs',
+      'storefront-release-coherence-host-purge.test.mjs',
+      'storefront-sitemap-purge.test.mjs',
+      'cloudflare-purge-cache.test.mjs',
+    ]) {
+      expect(workflow).toContain(`.github/scripts/${testFile}`);
+    }
+  });
+
   it('deploys and validates prebuilt runner dependencies', () => {
     const deployWebFilter = getDeployWebFilter();
 

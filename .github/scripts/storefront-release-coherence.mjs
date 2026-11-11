@@ -1,36 +1,19 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import {
+  buildCanaryUrls,
+  discoverPdpPath,
+  normalizePdpPath,
+} from './storefront-release-coherence-canary-urls.mjs';
+import {
+  describeCacheHeaders,
+  verifyWithHostPurgeFallback,
+} from './storefront-release-coherence-escalation.mjs';
 import { readReleaseConfig } from './storefront-release-config.mjs';
 import { buildReleaseProbeUrl, purgeSitemapBackedHtml } from './storefront-sitemap-purge.mjs';
 
-const RESERVED_ROUTE_ROOTS = new Set([
-  '_next',
-  'about',
-  'account',
-  'api',
-  'blog',
-  'cart',
-  'checkout',
-  'contact',
-  'faq',
-  'image',
-  'images',
-  'imei-check',
-  'media',
-  'privacy',
-  'product',
-  'products',
-  'repairs',
-  'returns',
-  'search',
-  'shipping',
-  'static',
-  'terms',
-  'track-order',
-  'wallet',
-  'wishlist',
-]);
+export { buildCanaryUrls, discoverPdpPath };
 
 export const RELEASE_USER_AGENTS = Object.freeze({
   browser:
@@ -58,53 +41,6 @@ export function extractDeploymentMarker(html, label = 'HTML response') {
   return markers.values().next().value;
 }
 
-function normalizePdpPath(value, baseUrl) {
-  if (!value.startsWith('/')) throw new Error('Storefront PDP path must start with /');
-  const url = new URL(value, baseUrl);
-  if (url.origin !== new URL(baseUrl).origin || url.search || url.hash) {
-    throw new Error('Storefront PDP path must be a same-origin path without query or hash');
-  }
-  const segments = url.pathname.split('/').filter(Boolean);
-  if (segments.length < 2 || RESERVED_ROUTE_ROOTS.has(segments[0])) {
-    throw new Error(`Storefront PDP path is not a product route: ${url.pathname}`);
-  }
-  return url.pathname;
-}
-
-export function discoverPdpPath(html, baseUrl) {
-  for (const match of String(html).matchAll(/href=(?:"([^"]+)"|'([^']+)')/g)) {
-    const href = (match[1] || match[2]).replaceAll('&amp;', '&');
-    let candidate;
-    try {
-      candidate = new URL(href, baseUrl);
-    } catch {
-      continue;
-    }
-    if (candidate.origin !== new URL(baseUrl).origin || candidate.search || candidate.hash) continue;
-    const segments = candidate.pathname.split('/').filter(Boolean);
-    if (
-      segments.length === 2 &&
-      !RESERVED_ROUTE_ROOTS.has(segments[0]) &&
-      segments[1] !== 'compare'
-    ) {
-      return candidate.pathname;
-    }
-  }
-  throw new Error('Could not discover a stable PDP path from the products page');
-}
-
-export function buildCanaryUrls(baseUrl, pdpPath) {
-  const origin = new URL(baseUrl).origin;
-  const normalizedPdpPath = normalizePdpPath(pdpPath, origin);
-  const urls = ['/', '/products', '/smartphones', normalizedPdpPath, '/blog'].map(
-    (path) => new URL(path, origin).href
-  );
-  if (new Set(urls).size !== 5 || urls.some((url) => new URL(url).hostname.startsWith('cdn.'))) {
-    throw new Error('Release coherence requires exactly five origin HTML canaries');
-  }
-  return urls;
-}
-
 async function fetchMarkedHtml({ fetchImpl, label, timeoutMs, url, userAgent }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -124,7 +60,11 @@ async function fetchMarkedHtml({ fetchImpl, label, timeoutMs, url, userAgent }) 
       throw new Error(`${label} returned non-HTML content: ${contentType || 'missing content-type'}`);
     }
     const html = await response.text();
-    return { html, marker: extractDeploymentMarker(html, label) };
+    return {
+      cache: describeCacheHeaders(response.headers),
+      html,
+      marker: extractDeploymentMarker(html, label),
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -183,7 +123,12 @@ export async function warmAndAssertCanaries({
             userAgent: target.userAgent,
           });
           if (response.marker !== expectedMarker) {
-            throw new Error(`expected ${expectedMarker}, received ${response.marker}`);
+            const mismatch = new Error(
+              `expected ${expectedMarker}, received ${response.marker}${response.cache}`
+            );
+            // A page purge can fix a stale copy; it cannot fix a 5xx, timeout or missing marker.
+            mismatch.stale = true;
+            throw mismatch;
           }
           return { ok: true, target };
         } catch (error) {
@@ -207,7 +152,9 @@ export async function warmAndAssertCanaries({
   const details = failures
     .map(({ error, target }) => `${target.variant} ${target.url}: ${error.message}`)
     .join('; ');
-  throw new Error(`Storefront release coherence failed: ${details}`);
+  const failure = new Error(`Storefront release coherence failed: ${details}`);
+  failure.stale = failures.some(({ error }) => error.stale === true);
+  throw failure;
 }
 
 export async function runReleaseCoherence(options = {}) {
@@ -235,14 +182,37 @@ export async function runReleaseCoherence(options = {}) {
     zoneId: config.zoneId,
   });
   if (purge.skipped) throw new Error(`Storefront HTML purge was skipped: ${purge.reason}`);
-  await warmAndAssertCanaries({
-    ...config,
-    ...options,
-    expectedMarker: config.expectedMarker,
+  const { escalated } = await verifyWithHostPurgeFallback({
+    baseUrl: config.baseUrl,
+    cloudflareFetchJson: options.cloudflareFetchJson,
+    config,
+    hostPurgeImpl: options.hostPurgeImpl,
     logger,
-    urls,
+    // Cache-busted, so it reads the origin (Vercel) and never a Cloudflare copy.
+    probeOrigin: async () =>
+      (
+        await fetchMarkedHtml({
+          fetchImpl: options.fetchImpl,
+          label: 'cache-busted origin probe',
+          timeoutMs: config.timeoutMs,
+          url: buildReleaseProbeUrl(config.baseUrl, '/', `${requestId}-origin`),
+          userAgent: RELEASE_USER_AGENTS.browser,
+        })
+      ).marker,
+    sleep: options.sleep,
+    verify: ({ attempts, retryDelayMs }) =>
+      warmAndAssertCanaries({
+        ...config,
+        ...options,
+        attempts,
+        expectedMarker: config.expectedMarker,
+        logger,
+        retryDelayMs,
+        urls,
+      }),
   });
   return {
+    escalated,
     marker: config.expectedMarker,
     pdpPath: probe.pdpPath,
     purgedUrls: purge.urls,

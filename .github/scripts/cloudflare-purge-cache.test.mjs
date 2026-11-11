@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildHostPurgePayload,
   buildPurgePayload,
   chunkPurgeUrls,
   discoverZoneId,
   fetchCloudflareJson,
   parsePurgeUrls,
   purgeCloudflareCache,
+  purgeCloudflareHosts,
 } from './cloudflare-purge-cache.mjs';
 
 test('preserves Cloudflare status and Retry-After metadata on failures', async () => {
@@ -187,4 +189,56 @@ test('sends multiple purge requests when URL list exceeds one Cloudflare batch',
   assert.equal(purgeCalls.length, 2);
   assert.equal(purgeCalls[0].options.body.files.length, 100);
   assert.equal(purgeCalls[1].options.body.files.length, 1);
+});
+
+test('builds a hosts-only purge payload without duplicates', () => {
+  assert.deepEqual(
+    buildHostPurgePayload(['ogabassey.com', 'www.ogabassey.com', 'ogabassey.com']),
+    { hosts: ['ogabassey.com', 'www.ogabassey.com'] }
+  );
+});
+
+test('purges hostnames after zone discovery and never sends files or purge_everything', async () => {
+  const calls = [];
+  const logger = { log: () => {}, warn: () => {} };
+  const fetchJson = async (path, options) => {
+    calls.push({ path, options });
+    if (path.startsWith('/zones?')) {
+      return { result: [{ id: 'zone-123' }], success: true };
+    }
+    return { result: { id: 'purge-123' }, success: true };
+  };
+
+  const result = await purgeCloudflareHosts({
+    fetchJson,
+    hosts: ['ogabassey.com', 'www.ogabassey.com'],
+    logger,
+    token: 'token',
+    zoneName: 'ogabassey.com',
+  });
+
+  assert.equal(result.skipped, false);
+  assert.deepEqual(result.hosts, ['ogabassey.com', 'www.ogabassey.com']);
+  assert.equal(calls[1].path, '/zones/zone-123/purge_cache');
+  assert.equal(calls[1].options.method, 'POST');
+  assert.deepEqual(calls[1].options.body, { hosts: ['ogabassey.com', 'www.ogabassey.com'] });
+  assert.equal('files' in calls[1].options.body, false);
+  assert.equal('purge_everything' in calls[1].options.body, false);
+});
+
+test('skips the hostname purge when the token or hostnames are missing', async () => {
+  const warnings = [];
+  const logger = { log: () => {}, warn: (message) => warnings.push(message) };
+  const fetchJson = async () => assert.fail('must not call Cloudflare');
+
+  assert.deepEqual(
+    await purgeCloudflareHosts({ fetchJson, hosts: ['ogabassey.com'], logger, zoneId: 'zone-123' }),
+    { skipped: true, reason: 'missing-token' }
+  );
+  assert.deepEqual(
+    await purgeCloudflareHosts({ fetchJson, hosts: [], logger, token: 'token', zoneId: 'zone-123' }),
+    { skipped: true, reason: 'missing-hosts' }
+  );
+  assert.match(warnings[0], /CLOUDFLARE_API_TOKEN is not set/);
+  assert.match(warnings[1], /no hostnames/);
 });

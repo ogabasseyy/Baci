@@ -114,6 +114,7 @@ test('delegates whole-site purge then verifies browser and Googlebot canaries', 
 
 test('fails after purge when a stale products response does not reach the configured marker', async () => {
   let purgeCalls = 0;
+  let hostPurgeCalls = 0;
   const { fetchImpl } = makeSuccessfulFetch({
     fetchImpl: async (url) => {
       const parsed = new URL(url);
@@ -127,6 +128,10 @@ test('fails after purge when a stale products response does not reach the config
       runReleaseCoherence({
         env: ENV,
         fetchImpl,
+        hostPurgeImpl: async () => {
+          hostPurgeCalls += 1;
+          return { skipped: false };
+        },
         logger: { log: () => {}, warn: () => {} },
         releasePurgeImpl: async () => {
           purgeCalls += 1;
@@ -137,6 +142,7 @@ test('fails after purge when a stale products response does not reach the config
     /browser https:\/\/ogabassey\.com\/products: expected release_123, received other_release/
   );
   assert.equal(purgeCalls, 1);
+  assert.equal(hostPurgeCalls, 1);
 });
 
 test('fails after bounded retries when a canonical response keeps an old marker', async () => {
@@ -161,8 +167,10 @@ test('fails after bounded retries when a canonical response keeps an old marker'
   await assert.rejects(
     () =>
       runReleaseCoherence({
-        env: ENV,
+        // One verification attempt after the hostname-purge fallback keeps the arithmetic simple.
+        env: { ...ENV, STOREFRONT_RELEASE_ESCALATION_ATTEMPTS: '1' },
         fetchImpl,
+        hostPurgeImpl: async () => ({ skipped: false }),
         logger: { log: () => {}, warn: () => {} },
         releasePurgeImpl: successfulReleasePurge,
         requestId: 'request-old-canonical',
@@ -172,7 +180,8 @@ test('fails after bounded retries when a canonical response keeps an old marker'
       }),
     /browser https:\/\/ogabassey\.com\/products: expected release_123, received old_release/
   );
-  assert.equal(staleCalls, 2);
+  // 2 normal attempts + 1 attempt after the hostname purge; one wait between the normal attempts.
+  assert.equal(staleCalls, 3);
   assert.equal(sleepCalls, 1);
 });
 

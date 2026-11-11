@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FakeOrderRow } from '../test/mocks/supabase-order-query-fake';
+import { matchesOrFilter } from '../test/postgrest-filter';
 
 const DEFAULT_ROW: FakeOrderRow = {
   created_at: '2026-06-02T01:00:00.000Z',
@@ -239,5 +240,53 @@ describe('useFailedOrders', () => {
     fake().setError({ message: 'supabase failure' });
 
     await expect(runQuery()).rejects.toEqual({ message: 'supabase failure' });
+  });
+
+  describe('bugfix: staff invoices treated as abandoned checkouts', () => {
+    async function followUpFilter(): Promise<string> {
+      await runQuery();
+      const orCall = fake().calls.find((call) => call.method === 'or');
+      if (!orCall) throw new Error('follow-up query applied no or() filter');
+      return String(orCall.args[0]);
+    }
+
+    const staleCheckout = {
+      created_at: daysBefore(1),
+      payment_method: 'bank_transfer',
+      payment_status: 'pending',
+      recorded_by_user_id: null,
+    };
+
+    it('keeps a stale unpaid staff invoice out of follow-up', async () => {
+      const filter = await followUpFilter();
+
+      expect(
+        matchesOrFilter(
+          { ...staleCheckout, recorded_by_user_id: 'staff-user-1' },
+          filter
+        )
+      ).toBe(false);
+    });
+
+    it('still follows up a stale unpaid customer checkout', async () => {
+      const filter = await followUpFilter();
+
+      expect(matchesOrFilter(staleCheckout, filter)).toBe(true);
+    });
+
+    it('still follows up a staff invoice whose payment failed', async () => {
+      const filter = await followUpFilter();
+
+      expect(
+        matchesOrFilter(
+          {
+            ...staleCheckout,
+            payment_status: 'failed',
+            recorded_by_user_id: 'staff-user-1',
+          },
+          filter
+        )
+      ).toBe(true);
+    });
   });
 });

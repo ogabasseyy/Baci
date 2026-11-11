@@ -130,10 +130,7 @@ vi.mock('@tanstack/react-query', async () => {
   };
 });
 
-import {
-  HIDDEN_CHECKOUT_PAYMENT_STATUSES,
-  VISIBLE_PENDING_ORDER_FILTER,
-} from './order-list-visibility';
+import { ORDER_LIST_VISIBILITY_FILTER } from './order-list-visibility';
 import { fetchOrders, useOrders } from './useOrdersList';
 
 describe('fetchOrders', () => {
@@ -321,12 +318,8 @@ describe('fetchOrders', () => {
     expect(supabaseMock.chainCalls).toEqual(
       expect.arrayContaining([
         {
-          method: 'not',
-          args: ['payment_status', 'in', HIDDEN_CHECKOUT_PAYMENT_STATUSES],
-        },
-        {
           method: 'or',
-          args: [VISIBLE_PENDING_ORDER_FILTER],
+          args: [ORDER_LIST_VISIBILITY_FILTER],
         },
       ])
     );

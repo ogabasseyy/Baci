@@ -211,6 +211,10 @@ export function createProviderJourney() {
           ...context.state,
           validated: true,
           eligible: true,
+          eligibleAmount: 400000,
+          minimumAmount: 10000,
+          maxTenure: 3,
+          offers: [{ tenure: 3, loanAmount: 400000 }],
           bookingReference: loanId,
           booking,
           kyc: {

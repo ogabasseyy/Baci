@@ -69,6 +69,30 @@ it('backs off after repeated failures and resets after a successful join', async
   t.handle.stop();
 });
 
+it('returns to the short retry after a failure that follows a successful join', async () => {
+  const load = jest
+    .fn()
+    .mockRejectedValueOnce(new Error('x'))
+    .mockRejectedValueOnce(new Error('x'))
+    .mockResolvedValueOnce(grant(300000))
+    .mockRejectedValue(new Error('x'));
+  const t = setup(load);
+  await flush();
+  jest.advanceTimersByTime(15000);
+  await flush();
+  jest.advanceTimersByTime(30000);
+  await flush();
+  expect(t.connect).toHaveBeenCalledTimes(1);
+  // Renewal fails: the failure count was reset by the join, so retry is 15s.
+  jest.advanceTimersByTime(300000);
+  await flush();
+  const calls = load.mock.calls.length;
+  jest.advanceTimersByTime(15000);
+  await flush();
+  expect(load.mock.calls.length).toBe(calls + 1);
+  t.handle.stop();
+});
+
 it('uses a grant a few seconds longer than the server cap, clamped', async () => {
   const t = setup(jest.fn().mockResolvedValue(grant(303000)));
   await flush();

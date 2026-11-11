@@ -189,6 +189,8 @@ jobs:
       # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
       - name: Run production build typecheck
         working-directory: apps/web
+        # A drifted route union OOM-aborts after ~20 min; fail within the step instead of the job.
+        timeout-minutes: 15
         run: pnpm run typecheck:build
 
   quality-test:

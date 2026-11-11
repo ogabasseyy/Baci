@@ -77,6 +77,7 @@ test('CI runs the production build type-check path after the normal typecheck', 
   assert.ok(normal >= 0 && prod > normal, 'production build typecheck must follow the normal typecheck');
   assert.equal(steps[prod].run, 'pnpm run typecheck:build');
   assert.equal(steps[prod]['working-directory'], 'apps/web');
+  assert.equal(steps[prod]['timeout-minutes'], 15, 'a slow OOM abort must fail within the step, not the shared job budget');
   assert.equal(steps[prod]['continue-on-error'], undefined);
   assert.equal(steps[prod].if, undefined);
 });

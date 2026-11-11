@@ -43,7 +43,10 @@ test('the status is failure only for a critical or high finding on a file the pu
   // A HIGH finding on a file the PR does not touch is unverified: shown, but it cannot block.
   assert.equal(reviewState(review(finding({ path: 'somewhere/else.ts' })), files), 'success');
   assert.equal(reviewState(review(finding({ path: './apps/web/src/a.ts' })), files), 'failure');
-  assert.equal(reviewState(review(finding({ path: 'b/apps/web/src/a.ts' })), files), 'failure');
+  // Paths are compared exactly: stripping a diff "b/" prefix would let `a/b` and `b` collide.
+  assert.equal(reviewState(review(finding({ path: 'b/apps/web/src/a.ts' })), files), 'success');
+  assert.equal(reviewState(review(finding({ path: 'b' })), ['a/b']), 'success');
+  assert.equal(reviewState(review(finding({ path: 'a/b' })), ['b']), 'success');
   // With no changed-file list nothing can be verified, so nothing blocks (post.mjs abstains instead).
   assert.equal(reviewState(review(finding({ path: 'somewhere/else.ts' })), []), 'success');
   assert.equal(reviewState(review(finding({ path: 'apps/web/src/a.ts' })), []), 'success');

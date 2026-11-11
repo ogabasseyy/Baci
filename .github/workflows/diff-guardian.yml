@@ -39,7 +39,7 @@
 #      (same label the individual reviewers already honor).
 #
 # TUNING: edit VOTERS (the reviewers to tally; a new voter also needs a case in
-# workflow_for below) and BLOCK_QUORUM (how many must agree to block) in the env
+# workflow_for in .github/scripts/diff-guardian/votes.sh) and BLOCK_QUORUM (how many must agree to block) in the env
 # block. With 2 voters, BLOCK_QUORUM=2 means "both must agree to block" (lenient —
 # favors not-blocking). Add `Claude review` as a 3rd voter (once it auto-runs +
 # sets a status) and keep BLOCK_QUORUM=2 for a true majority.
@@ -90,6 +90,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Trusted code only: the DEFAULT branch, never the pull request under review.
+      - name: Checkout trusted tally scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/diff-guardian
+
       - name: Tally AI reviewers and gate by quorum
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,271 +108,9 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_LABEL: ${{ github.event.label.name }}
           # The reviewers to tally (commit-status context or check-run names), pipe-separated.
+          # A new voter also needs a case in workflow_for (votes.sh).
           VOTERS: 'Gemini review|Muse review'
           # How many voters must report a FAILURE for Diff Guardian to BLOCK.
           BLOCK_QUORUM: '2'
-        run: |
-          set -euo pipefail
-
-          set_status() { # state, description
-            gh api -X POST "repos/$REPO/statuses/$SHA" \
-              -f state="$1" \
-              -f context='Diff Guardian / quorum' \
-              -f description="$2" \
-              -f target_url="https://github.com/$REPO/actions/runs/${GITHUB_RUN_ID}" >/dev/null
-          }
-
-          resolve_pr_from_commit() {
-            [ -n "${SHA:-}" ] || return 0
-            gh api \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/$REPO/commits/$SHA/pulls" \
-              --jq '.[0].number // empty' 2>/dev/null || true
-          }
-
-          if [ -z "${PR:-}" ]; then
-            PR="$(resolve_pr_from_commit)"
-          fi
-
-          if [ -z "${PR:-}" ]; then
-            echo "::notice::Diff Guardian trigger has no associated PR; nothing to tally."
-            exit 0
-          fi
-
-          pr_json="$(gh api "repos/$REPO/pulls/$PR")"
-          current_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha')"
-          if [ -z "${SHA:-}" ]; then
-            SHA="$current_sha"
-          fi
-          if [ "$SHA" != "$current_sha" ]; then
-            echo "::notice::Ignoring stale Diff Guardian trigger for $SHA; PR #$PR now points at $current_sha."
-            exit 0
-          fi
-
-          head_repo="$(printf '%s' "$pr_json" | jq -r '.head.repo.full_name')"
-          has_bypass="$(printf '%s' "$pr_json" | jq -r '[.labels[].name] | index("bypass-ai-gate") != null')"
-          is_fork_pr="false"
-          if [ "$head_repo" != "$REPO" ]; then
-            is_fork_pr="true"
-          fi
-
-          if [ "$has_bypass" = "true" ]; then
-            # Security: on a FORK PR, an external contributor can push new commits
-            # after a maintainer applied the bypass. Do not honor a stale bypass
-            # across a fork head change — require the maintainer to re-review and
-            # re-apply the label (re-adding fires a fresh `labeled` event).
-            if [ "$is_fork_pr" = "true" ] && [ "$EVENT_ACTION" = "synchronize" ]; then
-              echo "::error::Fork PR changed after 'bypass-ai-gate' was applied. Re-review the new commits and re-apply the label."
-              set_status failure "Fork PR changed; re-review and re-apply bypass-ai-gate"
-              exit 1
-            fi
-            echo "::notice::'bypass-ai-gate' label present — Diff Guardian passing without tallying."
-            set_status success "Bypassed via bypass-ai-gate label"
-            exit 0
-          fi
-          # Removing the bypass label does not re-run the individual voters.
-          # Fail closed until a new commit re-runs them, otherwise stale
-          # bypass-success votes can be misread as real review passes.
-          if [ "$EVENT_ACTION" = "unlabeled" ] && [ "$EVENT_LABEL" = "bypass-ai-gate" ]; then
-            echo "::error::'bypass-ai-gate' label was removed. Push a new commit to re-run AI reviewers before Diff Guardian can tally them."
-            set_status failure "Push a new commit after removing bypass-ai-gate"
-            exit 1
-          fi
-
-          # Fork PRs get no automatic same-repo voter runs, and GitHub does not
-          # reliably carry the PR head SHA to comment-triggered voter
-          # `workflow_run` completions, so a manual fork review cannot be
-          # re-tallied against this head. Fail closed: a maintainer reviews the
-          # fork PR and adds 'bypass-ai-gate' to merge (bypass is honored above).
-          if [ "$is_fork_pr" = "true" ]; then
-            echo "::error::Diff Guardian: fork PR requires maintainer review + the 'bypass-ai-gate' label to merge."
-            set_status failure "Fork PR: add 'bypass-ai-gate' after maintainer review"
-            exit 1
-          fi
-
-          # Every event (pull_request_target incl. label changes, and reviewer
-          # workflow_run completions) flows into the single tally below. The tally
-          # is idempotent: with no voter results yet it posts `pending`; a
-          # label-only change therefore never clobbers an already-decided status,
-          # and a reviewer completion always re-tallies.
-
-          # Pipe-separated -> newline list of voter contexts.
-          voters="$(printf '%s\n' "$VOTERS" | tr '|' '\n' | sed '/^$/d')"
-          voter_count="$(printf '%s\n' "$voters" | grep -c . || true)"
-          echo "Voters ($voter_count): $(printf '%s' "$VOTERS")  |  block quorum: $BLOCK_QUORUM"
-
-          # A voter can report either as a commit status (external services) or
-          # as a check run (GitHub Actions). Gemini reports both; Muse reports
-          # only a check run (always green, it is advisory). Read both current
-          # GitHub API surfaces so a check-only voter cannot be mistaken as missing.
-          status_state() {
-            printf '%s' "$1" | jq -r --arg c "$2" \
-              '([.statuses[] | select(.context==$c)] | sort_by(.updated_at) | last | .state) // "missing"'
-          }
-
-          # A completed check that did not clearly pass or fail (timed_out,
-          # cancelled, action_required, skipped, stale, startup_failure, …) is an
-          # ABSTENTION, not a blocking vote — a reviewer outage must never block.
-          # A skipped run says nothing about the reviewer (a PR title/body edit starts one that
-          # is skipped at once), so it is ignored whenever a real run for the commit exists.
-          check_state() {
-            printf '%s' "$1" | jq -r --arg c "$2" '
-              [.check_runs[] | select(.name==$c)] as $all
-              | ([$all[] | select((.conclusion // "") != "skipped")]) as $real
-              | ((if ($real | length) > 0 then $real else $all end)
-                | sort_by(.completed_at // .started_at // .created_at // "")
-                | last) as $run
-              | if $run == null then "missing"
-                elif $run.status != "completed" then "pending"
-                elif ($run.conclusion // "") == "success" then "success"
-                elif ($run.conclusion // "") == "neutral" then "success"
-                elif ($run.conclusion // "") == "failure" then "failure"
-                else "abstain"
-                end
-            '
-          }
-
-          # Muse is advisory: its job is always green and it posts no status, so
-          # its vote is read from the review it posted for THIS head commit (the
-          # marker on the review's first line names the commit). Only the model-free
-          # structure counts: a top-level (unindented) "- critical:" / "- high:" bullet
-          # inside the LAST "## Findings" section, and not one Muse itself labels
-          # "unverified" (its path is not in the changed files). Text a pull request can
-          # influence (the verdict, indented finding bodies, the next steps) never counts.
-          # A fallback review ("Muse did not review") or no review at all abstains.
-          muse_review_vote() { # reviews-json
-            printf '%s' "$1" | jq -r --arg sha "$SHA" '
-              [.[] | select(.user.login == "github-actions[bot]"
-                and ((.body // "") | startswith("<!-- muse-code-review sha:" + $sha + " ")))]
-              | sort_by(.submitted_at) | last as $review
-              | if $review == null then "abstain"
-                elif (($review.body | split("\n") | .[1] // "") == "<!-- muse-fallback:v1 -->") then "abstain"
-                else
-                  ($review.body | split("\n")) as $lines
-                  | ([range(0; ($lines | length)) | select($lines[.] == "## Findings")] | last) as $start
-                  | (if $start == null then [] else $lines[($start + 1):] end) as $rest
-                  | ([range(0; ($rest | length)) | select($rest[.] == "## Suggested next steps")] | first) as $stop
-                  | (if $stop == null then $rest else $rest[0:$stop] end)
-                  | if any(.[]; test("^[-*][ \t]+(critical|high)[ \t]*:"; "i") and (test("unverified\\)$") | not))
-                    then "failure" else "success" end
-                end'
-          }
-
-          # Combine the surfaces into one vote. A real success/failure wins;
-          # otherwise pending (still running) outranks abstain (done, no verdict)
-          # outranks missing (never appeared). A commit-status "error" means the
-          # reviewer could not review (quota, outage): an abstention that also
-          # overrides a red check run, never a blocking vote.
-          voter_state() { # statuses-json checks-json context reviews-json
-            local cs cr
-            cs="$(status_state "$1" "$3")"
-            cr="$(check_state "$2" "$3")"
-            case "$cs" in
-              success|failure)
-                printf '%s' "$cs"
-                return
-                ;;
-              error)
-                printf 'abstain'
-                return
-                ;;
-            esac
-            if [ "$3" = "Muse review" ]; then
-              case "$cr" in
-                success)
-                  muse_review_vote "$4"
-                  return
-                  ;;
-                failure)
-                  # Muse only fails closed on an infrastructure error; never a verdict.
-                  printf 'abstain'
-                  return
-                  ;;
-              esac
-            fi
-            case "$cr" in
-              success|failure)
-                printf '%s' "$cr"
-                return
-                ;;
-            esac
-            if [ "$cs" = "pending" ] || [ "$cr" = "pending" ]; then printf 'pending' ; return ; fi
-            if [ "$cr" = "abstain" ]; then printf 'abstain' ; return ; fi
-            printf 'missing'
-          }
-
-          workflow_for() {
-            case "$1" in
-              'Gemini review') printf 'gemini-code-review.yml' ;;
-              'Muse review') printf 'muse-code-review.yml' ;;
-            esac
-          }
-
-          # Can the voter's workflow still run? A disabled or deleted workflow can
-          # never report, so its voter abstains instead of holding the gate
-          # pending forever. A failed lookup is "unknown", not "disabled".
-          workflow_runnable() { # context -> exit 0 runnable/unknown, 1 disabled or gone
-            local file out
-            file="$(workflow_for "$1")"
-            [ -n "$file" ] || return 0
-            if out="$(gh api "repos/$REPO/actions/workflows/$file" --jq '.state' 2>&1)"; then
-              [ "$out" = "active" ]
-            else
-              case "$out" in
-                *'HTTP 404'*) return 1 ;;
-                *) return 0 ;;
-              esac
-            fi
-          }
-
-          combined="$(gh api "repos/$REPO/commits/$SHA/status" 2>/dev/null || echo '{"statuses":[]}')"
-          checks="$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs?per_page=100" 2>/dev/null | jq -s '{"check_runs":[.[].check_runs[]?]}' 2>/dev/null || echo '{"check_runs":[]}')"
-          reviews_raw="$(gh api --paginate "repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null)" || reviews_raw='[]'
-          reviews="$(printf '%s' "$reviews_raw" | jq -s 'add // []' 2>/dev/null)" || reviews='[]'
-
-          reported=0 ; blocking=0 ; active_pending=0 ; abstained=0 ; missing=0 ; summary=""
-          while IFS= read -r ctx; do
-            [ -z "$ctx" ] && continue
-            st="$(voter_state "$combined" "$checks" "$ctx" "$reviews")"
-            if [ "$st" = "missing" ] && ! workflow_runnable "$ctx"; then
-              st="abstain"
-            fi
-            summary="${summary}${ctx}=${st}; "
-            case "$st" in
-              failure) reported=$((reported+1)); blocking=$((blocking+1)) ;;
-              success) reported=$((reported+1)) ;;
-              pending) active_pending=$((active_pending+1)) ;;
-              abstain) abstained=$((abstained+1)) ;;
-              *)       missing=$((missing+1)) ;;
-            esac
-          done <<< "$voters"
-
-          # "Outstanding" = voters that have NOT reported a verdict yet but still
-          # could (running, or no check created yet). Abstentions (done, no
-          # verdict — timeout/outage) are final and excluded, so an outage can
-          # never keep the gate pending nor count toward the block quorum.
-          unknown=$((active_pending + missing))
-          echo "${summary}| reported=$reported blocking=$blocking pending=$active_pending abstained=$abstained missing=$missing outstanding=$unknown quorum=$BLOCK_QUORUM"
-
-          # BLOCK: a quorum of voters reported real, blocking failures.
-          if [ "$blocking" -ge "$BLOCK_QUORUM" ]; then
-            echo "::error::Diff Guardian: $blocking reviewers flagged blocking issues (quorum $BLOCK_QUORUM). Fix the findings, or add 'bypass-ai-gate'."
-            set_status failure "$blocking reviewers flagged blocking issues (quorum $BLOCK_QUORUM)"
-            exit 1
-          fi
-
-          # PASS: even if every still-outstanding voter were to fail, the block
-          # quorum is unreachable. Covers all-success, success+lone-failure, and
-          # one-real-failure+one-abstention (an outage never blocks).
-          if [ $((blocking + unknown)) -lt "$BLOCK_QUORUM" ]; then
-            echo "Diff Guardian: block quorum unreachable ($blocking blocking + $unknown outstanding < $BLOCK_QUORUM) — passing."
-            set_status success "No reviewer quorum on blocking issues ($blocking/$BLOCK_QUORUM)"
-            exit 0
-          fi
-
-          # Otherwise an outstanding voter could still reach the block quorum. Stay
-          # pending; a reviewer workflow_run completion re-tallies. There is no
-          # fixed poll window, so a slow voter (Jules can run for hours) is always
-          # awaited rather than declared green prematurely.
-          echo "Diff Guardian: outstanding voters could still reach block quorum; awaiting completion."
-          set_status pending "Waiting for AI reviewer completion"
+          SCRIPT_DIR: ${{ github.workspace }}/.github/scripts/diff-guardian
+        run: bash "${SCRIPT_DIR}/tally.sh"

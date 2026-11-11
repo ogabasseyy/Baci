@@ -141,6 +141,14 @@ describe('actions decided before the model call', () => {
   });
 });
 
+test('bugfix: an unknown head commit (collect failed on a manual comment) only warns; the job stays green', () =>
+  scenario({ env: { HEAD_SHA: '', COLLECT_OUTCOME: 'failure' } }, (t, result) => {
+    assert.deepEqual(t.calls, []);
+    assert.equal(result.exitCode, 0);
+    assert.ok(t.logs.some((line) => line.startsWith('::warning::')));
+    assert.ok(!t.logs.some((line) => line.startsWith('::error::')));
+  }));
+
 test('a pull request that is no longer open is left alone', () =>
   scenario({ response: okResponse([]), env: { SHOULD_REVIEW: 'false' } }, (t, result) => {
     assert.deepEqual(t.calls, []);

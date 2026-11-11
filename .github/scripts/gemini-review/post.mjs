@@ -137,8 +137,10 @@ export async function post({ env, github, log = console.log, now = () => new Dat
     return { state: null, exitCode: 0 };
   }
   if (!env.HEAD_SHA) {
-    log('::error::No head commit is known, so no Gemini review status can be set.');
-    return { state: null, exitCode: 1 };
+    // Only a manual comment run can get here (collect failed before it learned the head commit).
+    // There is no commit to put a status on, and an outage must not turn the job red.
+    log('::warning::No head commit is known (the pull request could not be read), so no Gemini review status can be set. Nothing is counted.');
+    return { state: null, exitCode: 0 };
   }
 
   const outcome = evaluate(env, readFile);

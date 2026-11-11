@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import YAML from 'yaml';
 
 export const REPO = 'o/r';
@@ -12,6 +12,7 @@ export const SHA = 'a'.repeat(40);
 export const OLD_SHA = 'b'.repeat(40);
 export const PR = 7;
 
+export const SCRIPT_DIR = resolve('.github/scripts/diff-guardian');
 export const workflow = YAML.parse(readFileSync('.github/workflows/diff-guardian.yml', 'utf8'));
 const step = workflow.jobs.guardian.steps.find((candidate) => String(candidate.name).startsWith('Tally AI reviewers'));
 export const tallyStep = step;
@@ -118,7 +119,7 @@ export function runTally(options = {}) {
     mkdirSync(bin);
     writeFileSync(join(bin, 'gh'), FAKE_GH);
     chmodSync(join(bin, 'gh'), 0o755);
-    const result = spawnSync('bash', ['-c', step.run], {
+    const result = spawnSync('bash', [join(SCRIPT_DIR, 'tally.sh')], {
       encoding: 'utf8',
       env: {
         PATH: `${bin}:${process.env.PATH}`,
@@ -132,6 +133,7 @@ export function runTally(options = {}) {
         EVENT_LABEL: options.label ?? '',
         VOTERS: step.env.VOTERS,
         BLOCK_QUORUM: step.env.BLOCK_QUORUM,
+        SCRIPT_DIR,
       },
     });
     const log = join(dir, 'posted.log');

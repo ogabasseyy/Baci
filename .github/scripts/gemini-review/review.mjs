@@ -7,11 +7,12 @@ const MAX_FINDINGS = 20;
 const MAX_NEXT_STEPS = 10;
 const UNVERIFIED = '(path not in changed files — unverified)';
 
+// Exact comparison apart from a leading "./": stripping a diff-style "a/" or "b/" prefix would make
+// distinct repository paths such as `a/b` and `b` collide.
 export function normalizePath(path) {
   return String(path ?? '')
     .trim()
-    .replace(/^\.\//, '')
-    .replace(/^[ab]\//, '');
+    .replace(/^\.\//, '');
 }
 
 function cleanFinding(raw) {

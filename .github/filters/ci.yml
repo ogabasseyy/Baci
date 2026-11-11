@@ -363,6 +363,7 @@ web:
   - '.github/scripts/jules-sunset-contract.test.mjs'
   - '.github/workflows/diff-guardian.yml'
   - '.github/workflows/gemini-code-review.yml'
+  - '.github/scripts/diff-guardian/**'
   - '.github/scripts/diff-guardian-harness.mjs'
   - '.github/scripts/diff-guardian-voters.test.mjs'
   - '.github/scripts/gemini-code-review-workflow.test.mjs'

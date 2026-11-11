@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
     input.event_source !== 'server' &&
     isBotUserAgent(request.headers.get('user-agent'))
   ) {
+    logger.debug({ message: 'Skipped crawler conversion event' });
     return NextResponse.json({
       event_id: input.event_id,
       results: {},

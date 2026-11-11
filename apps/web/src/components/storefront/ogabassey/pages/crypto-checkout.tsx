@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import {
   ShieldCheck,
   AlertCircle,
@@ -122,7 +123,7 @@ async function initializeCryptoPayment(
 
 export function CryptoCheckoutPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const { merchant, loading } = useMerchant();
 
   const orderId = searchParams.get('orderId');

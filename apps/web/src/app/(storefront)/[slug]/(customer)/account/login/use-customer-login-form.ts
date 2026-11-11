@@ -1,9 +1,10 @@
 'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useOtpResendCooldown } from '@/components/ui/otp-verification/use-otp-resend-cooldown';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
 import {
   CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS,
@@ -15,7 +16,7 @@ import { asRoute } from '@/lib/routes';
 
 export function useCustomerLoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const redirectTo = sanitizeRedirect(searchParams.get('redirect'));
   const prefillEmail = sanitizeCustomerLoginEmailPrefill(
     searchParams.get('email')

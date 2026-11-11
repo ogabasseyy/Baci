@@ -9,6 +9,7 @@ const mockUseCustomerAuth = vi.fn();
 const mockUseMerchant = vi.fn();
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/account/login',
   useRouter: () => ({ push: mockPush }),
   useSearchParams: () => mockSearchParams,
 }));

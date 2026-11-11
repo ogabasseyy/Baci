@@ -33,6 +33,7 @@ interface TestReactNativeWebViewWindow extends Window {
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => mockRouter),
+  usePathname: vi.fn(() => '/checkout/bnpl'),
   useSearchParams: vi.fn(() => mockSearchParams()),
 }));
 

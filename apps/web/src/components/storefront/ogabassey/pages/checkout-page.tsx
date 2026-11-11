@@ -1,9 +1,10 @@
 'use client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { checkoutHref } from './checkout/checkout-href';
@@ -56,7 +57,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const basePath = merchantContext?.basePath;
   const router = useRouter();
   const getHref = (path: string) => checkoutHref(basePath, path);
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const user = useCheckoutUser();
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {

@@ -10,7 +10,8 @@
  * - Full accessibility support
  */
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { usePrivateSearchParams } from '@/hooks/use-private-search-params';
 import { Suspense, useEffect } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -50,7 +51,7 @@ export function OgabasseyLoginPage() {
 
 function OgabasseyLoginPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = usePrivateSearchParams();
   const redirectTo = sanitizeRedirect(searchParams.get('redirect'));
   const initialEmail = sanitizeCustomerLoginEmailPrefill(
     searchParams.get('email')

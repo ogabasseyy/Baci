@@ -23,6 +23,7 @@ const mockVerifyBnplSettlementProof = vi.hoisted(() =>
 );
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/order-success',
   useSearchParams: () => mockSearchParams(),
 }));
 

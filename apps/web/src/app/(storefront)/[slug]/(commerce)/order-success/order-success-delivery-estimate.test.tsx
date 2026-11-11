@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({ fetchOrder: vi.fn(), reviews: vi.fn() }));
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/order-success',
   useSearchParams: () => new URLSearchParams({ orderId: 'order-1' }),
 }));
 vi.mock('next/link', () => ({

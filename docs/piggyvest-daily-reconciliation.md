@@ -48,6 +48,32 @@ anything is wrong. It resends, settles and releases nothing.
    (any stuck transfer pages). Indexes on the savings, cancel and complete operation tables keep
    both reads inside the 2.5 second statement timeout.
 
+6. **Missing credits.** PiggyVest has no webhook resend, so a credit whose
+   webhook retries ran out is never recorded, and the balance check above
+   cannot see it (a surplus never pages). For each mapped plan wallet (ready or
+   restricted, 100 per run, rotating daily) the job lists the wallet's
+   transactions at PiggyVest (`GET /api/v1/transaction?wallet_id=…`, newest
+   first, at most 10 pages of 100) back to the window start, and compares each
+   credit's id (the PVB credit id, `PVB01…`) with the `pvb_reference` values
+   both credit ledgers recorded for that wallet
+   (`piggyvest_primary.read_credit_gap_ledger`, evidence login only). The
+   window covers every wallet's whole rotation plus two days, so visits
+   overlap.
+   - A successful credit older than 6 hours that neither ledger recorded
+     **pages** (`unrecorded_credit`). Resolve it by replaying the stored
+     webhook capture, or by hand. Wallet-to-wallet (`p2p`) credits are our own
+     savings transfers (checked in 1.) and are only counted.
+   - An inflow we recorded that PiggyVest does not list **pages**
+     (`not_on_provider`); check it at PiggyVest before acting.
+   - An interest payout we recorded that the list does not show is a review
+     line only: whether the list includes interest rows is not yet confirmed.
+   - A wallet whose list cannot be read, is not newest first, runs past 10
+     pages, or has more than 1,000 recorded credits in the window is reported
+     NOT checked and pages. Rows recorded before `pvb_reference` existed have
+     no key; they are counted and never matched.
+
+   It never writes a credit or moves money.
+
 The page is the existing `piggyvest_money_alert` event with code
 `PIGGYVEST_RECONCILIATION_MISMATCH` (see `piggyvest-money-alerts.md`). It also
 pages if the report email cannot be sent.

@@ -335,13 +335,21 @@ replays the event. What exists on ours:
 - **Missing:** (1) a replay of `needs_review` captures after a fix (the
   drain's park messages now say to replay the capture, not to request a
   resend);
-  (2) a reconciler that lists PVB credits by `pvb_reference` and finds
-  credits we never recorded. The daily reconciliation
-  (`docs/piggyvest-daily-reconciliation.md`) only reads; a missed credit shows as a wallet holding
-  MORE than recorded, which is listed `above_expected` and never pages.
+  (2) ~~a reconciler that lists PVB credits by `pvb_reference` and finds
+  credits we never recorded~~ — now part of the daily reconciliation
+  (`docs/piggyvest-daily-reconciliation.md`, check 6, "Missing credits"): it
+  lists each mapped plan wallet's credits via `GET /api/v1/transaction` (row
+  `id` = the canonical transaction id that `GET /api/v1/transaction/:id`
+  answers for the envelope `pvb_reference`) and pages on a PVB credit id
+  neither ledger recorded. It only reads; a person replays the capture or
+  repairs by hand. Balance surplus alone (`above_expected`) still never
+  pages.
 
 Follow-ups (not in this change): operator replay for `needs_review`
-captures; a credit-gap reconciler keyed on `pvb_reference`; confirm the
+captures; on the first live credit, confirm that the transaction-list row
+`id` equals the webhook `pvb_reference` and whether interest payouts appear
+in the list (the credit-gap check keeps unlisted interest review-only until
+then); confirm the
 drain runner is scheduled before live inflows; on the first live payout,
 confirm whether `destination_wallet` is stable, and if not stop pinning it
 in the paid-interest crosswalk (or alert when `prerequisite` recurs for an

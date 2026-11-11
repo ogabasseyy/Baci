@@ -1,0 +1,249 @@
+import {
+  type CreditGapLedgerWallet,
+  piggyvestCreditGapSchemas as schemas,
+} from '@/schemas/piggyvest-credit-gap';
+import type {
+  ProviderCredit,
+  ProviderCreditListing,
+} from './credit-gap-provider-reader';
+
+/**
+ * The credit-gap check. It only reads: for each mapped plan wallet it lists
+ * the credits PiggyVest made and compares their PVB credit ids with the
+ * `pvb_reference` values our two credit ledgers recorded. It never writes a
+ * credit or moves money; a person resolves each finding (replay the stored
+ * webhook capture, or repair by hand).
+ *
+ * Findings:
+ * - `unrecorded_credit` (pages): a successful PiggyVest credit, older than
+ *   SETTLE_MS, that neither ledger recorded. Wallet-to-wallet (`p2p`) credits
+ *   are our own savings transfers, tracked by the transfer reconciliation, so
+ *   they are counted and skipped here.
+ * - `not_on_provider` (pages): an inflow we recorded that PiggyVest's list
+ *   for that wallet does not show.
+ * - `interest_not_listed` (review only): the same for an interest payout.
+ *   Whether the transaction list shows interest rows is not yet confirmed
+ *   (contract evidence 2026-10-31: none observed at 0% sandbox rates), so
+ *   this never pages until a live payout proves it does.
+ *
+ * Interest surplus alone (a wallet holding more than recorded principal) is
+ * the balance check's `above_expected` and stays non-paging; this check only
+ * pages on a specific PVB credit id.
+ */
+export const SETTLE_MS = 6 * 3_600_000;
+export const EDGE_MS = 3_600_000;
+
+export type CreditGapKind =
+  | 'unrecorded_credit'
+  | 'not_on_provider'
+  | 'interest_not_listed';
+
+export interface CreditGapFinding {
+  walletId: string;
+  reference: string;
+  kind: CreditGapKind;
+  amountKobo: number | null;
+  category: string | null;
+  at: string;
+}
+
+export type CreditGapUncheckedReason =
+  | 'list_unreadable'
+  | 'list_incomplete'
+  | 'ledger_truncated'
+  | 'deadline';
+
+export interface CreditGapUnchecked {
+  walletId: string;
+  reason: CreditGapUncheckedReason;
+}
+
+export type CreditGapReport =
+  | { status: 'failed'; reason: 'snapshot_unavailable' | 'snapshot_invalid' }
+  | {
+      status: 'checked';
+      windowStart: string;
+      walletsTotal: number;
+      walletsChecked: number;
+      walletsDeferred: number;
+      findings: CreditGapFinding[];
+      unchecked: CreditGapUnchecked[];
+      internalSkipped: number;
+      unkeyed: number;
+    };
+
+export interface CreditGapPorts {
+  loadLedger: () => Promise<unknown>;
+  listWalletCredits: (
+    walletId: string,
+    sinceMs: number
+  ) => Promise<ProviderCreditListing>;
+  /** True once no new provider read may start. */
+  expired: () => boolean;
+}
+
+const MAX_CONCURRENT_READS = 5;
+
+export interface WalletComparison {
+  findings: CreditGapFinding[];
+  internalSkipped: number;
+}
+
+/** Pure: one wallet's ledger rows against its PiggyVest credits. */
+export function compareWalletCredits(
+  wallet: CreditGapLedgerWallet,
+  credits: readonly ProviderCredit[],
+  window: { startMs: number; generatedMs: number }
+): WalletComparison {
+  const recorded = new Set(
+    [...wallet.inflow, ...wallet.interest].map((row) => row.reference)
+  );
+  const listed = new Set(credits.map((credit) => credit.id));
+  const findings: CreditGapFinding[] = [];
+  let internalSkipped = 0;
+  for (const credit of credits) {
+    if (credit.status !== 'successful' || recorded.has(credit.id)) continue;
+    if (credit.category === 'p2p') {
+      internalSkipped += 1;
+      continue;
+    }
+    // A young credit's webhook may still be in PiggyVest's retries.
+    if (Date.parse(credit.createdAt) > window.generatedMs - SETTLE_MS) continue;
+    findings.push({
+      walletId: wallet.walletId,
+      reference: credit.id,
+      kind: 'unrecorded_credit',
+      amountKobo: credit.amountKobo,
+      category: credit.category,
+      at: credit.createdAt,
+    });
+  }
+  // Only rows well inside the listed window, so clock skew at either edge
+  // cannot make a listed credit look missing.
+  const inWindow = (at: string) => {
+    const atMs = Date.parse(at);
+    return (
+      atMs >= window.startMs + EDGE_MS && atMs <= window.generatedMs - EDGE_MS
+    );
+  };
+  const reverse = (
+    rows: CreditGapLedgerWallet['inflow'],
+    kind: CreditGapKind
+  ) => {
+    for (const row of rows)
+      if (inWindow(row.at) && !listed.has(row.reference))
+        findings.push({
+          walletId: wallet.walletId,
+          reference: row.reference,
+          kind,
+          amountKobo: null,
+          category: null,
+          at: row.at,
+        });
+  };
+  reverse(wallet.inflow, 'not_on_provider');
+  reverse(wallet.interest, 'interest_not_listed');
+  return { findings, internalSkipped };
+}
+
+type WalletResult =
+  | { checked: true; comparison: WalletComparison }
+  | { checked: false; unchecked: CreditGapUnchecked };
+
+async function checkWallet(
+  ports: CreditGapPorts,
+  wallet: CreditGapLedgerWallet,
+  window: { startMs: number; generatedMs: number }
+): Promise<WalletResult> {
+  const unchecked = (reason: CreditGapUncheckedReason): WalletResult => ({
+    checked: false,
+    unchecked: { walletId: wallet.walletId, reason },
+  });
+  if (wallet.inflowTruncated || wallet.interestTruncated)
+    return unchecked('ledger_truncated');
+  let listing: ProviderCreditListing;
+  try {
+    listing = await ports.listWalletCredits(wallet.walletId, window.startMs);
+  } catch {
+    return unchecked('list_unreadable');
+  }
+  if (listing.outcome === 'unreadable') return unchecked('list_unreadable');
+  if (listing.outcome === 'incomplete') return unchecked('list_incomplete');
+  return {
+    checked: true,
+    comparison: compareWalletCredits(wallet, listing.credits, window),
+  };
+}
+
+export async function runCreditGapCheck(
+  ports: CreditGapPorts
+): Promise<CreditGapReport> {
+  let loaded: unknown;
+  try {
+    loaded = await ports.loadLedger();
+  } catch {
+    return { status: 'failed', reason: 'snapshot_unavailable' };
+  }
+  const parsed = schemas.ledgerSnapshot.safeParse(loaded);
+  if (!parsed.success) return { status: 'failed', reason: 'snapshot_invalid' };
+  const snapshot = parsed.data;
+  const window = {
+    startMs: Date.parse(snapshot.windowStart),
+    generatedMs: Date.parse(snapshot.generatedAt),
+  };
+  const results: WalletResult[] = [];
+  for (
+    let start = 0;
+    start < snapshot.wallets.length;
+    start += MAX_CONCURRENT_READS
+  ) {
+    const batch = snapshot.wallets.slice(start, start + MAX_CONCURRENT_READS);
+    if (ports.expired()) {
+      results.push(
+        ...batch.map(
+          (wallet): WalletResult => ({
+            checked: false,
+            unchecked: { walletId: wallet.walletId, reason: 'deadline' },
+          })
+        )
+      );
+      continue;
+    }
+    results.push(
+      ...(await Promise.all(
+        batch.map((wallet) => checkWallet(ports, wallet, window))
+      ))
+    );
+  }
+  const findings: CreditGapFinding[] = [];
+  const unchecked: CreditGapUnchecked[] = [];
+  let internalSkipped = 0;
+  for (const result of results) {
+    if (!result.checked) {
+      unchecked.push(result.unchecked);
+      continue;
+    }
+    findings.push(...result.comparison.findings);
+    internalSkipped += result.comparison.internalSkipped;
+  }
+  return {
+    status: 'checked',
+    windowStart: snapshot.windowStart,
+    walletsTotal: snapshot.walletsTotal,
+    walletsChecked: results.length - unchecked.length,
+    walletsDeferred: snapshot.walletsDeferred,
+    findings,
+    unchecked,
+    internalSkipped,
+    unkeyed: snapshot.wallets.reduce((sum, wallet) => sum + wallet.unkeyed, 0),
+  };
+}
+
+/** Whether this section needs a page: a missing credit or an unchecked wallet. */
+export function creditGapPages(report: CreditGapReport): boolean {
+  if (report.status === 'failed') return true;
+  return (
+    report.unchecked.length > 0 ||
+    report.findings.some((finding) => finding.kind !== 'interest_not_listed')
+  );
+}

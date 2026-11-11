@@ -12,7 +12,7 @@ const product = {
 function setup(overrides: Record<string, unknown> = {}) {
   const setCart = vi.fn();
   const delegatedActions = {
-    addToCart: vi.fn(() => true),
+    addToCart: vi.fn(() => 1),
     removeFromCart: vi.fn(),
     updateQuantity: vi.fn(),
   };

@@ -19,6 +19,10 @@ import {
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import {
+  type CartServerTimer,
+  createCartServerTimer,
+} from '@/lib/cart/server-timing';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
@@ -33,19 +37,21 @@ import { createCartRequestSchema } from '@/schemas/cart';
 
 function contextDeps(
   requireScope: CartRequestContextDeps['requireScope'],
-  wrongScopeError: CartRequestContextDeps['wrongScopeError']
+  wrongScopeError: CartRequestContextDeps['wrongScopeError'],
+  timer?: CartServerTimer
 ): CartRequestContextDeps {
+  const loadFeatures = createAnonMerchantFeatureLookup(createAnonClient());
   return {
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
       rpcClient: createAnonClient(),
-      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
+      loadMerchantFeatures: timer
+        ? (id) => timer.measure('auth-features', () => loadFeatures(id))
+        : loadFeatures,
     },
     requireScope,
     verify: (proof) =>
-      verifyCartSessionProof(proof, {
-        environment: getCartProofEnvironment(),
-      }),
+      verifyCartSessionProof(proof, { environment: getCartProofEnvironment() }),
     wrongScopeError,
   };
 }
@@ -53,43 +59,47 @@ function contextDeps(
 /**
  * GET /api/storefront/cart
  *
- * Returns the authorized snapshot for a session proof. Preview-safe:
- * creates no cart and mints no session. A bootstrap proof (no cart
- * yet) reads as not-found. A legacy session proof that predates the
- * operations claim is upgraded here: the live grant's verified
- * operations are loaded and the proof is re-issued with them (cookie,
- * plus body for device callers), so older carts stay editable.
+ * Returns the authorized snapshot for a session proof. Preview-safe: creates
+ * no cart and mints no session. A bootstrap proof (no cart yet) reads as
+ * not-found. A legacy session proof that predates the operations claim is
+ * upgraded here: the live grant's verified operations are loaded and the proof
+ * is re-issued (cookie, plus body for device callers), so older carts stay editable.
  */
 export async function GET(request: NextRequest) {
+  // Every outcome reports its step timings; `auth-features` runs inside `auth`.
+  const timer = createCartServerTimer();
+  return timer.apply(await readCart(request, timer));
+}
+
+async function readCart(request: NextRequest, timer: CartServerTimer) {
   try {
-    const context = await resolveCartRequestContext(
-      request,
-      contextDeps('session', 'not_found')
+    const deps = contextDeps('session', 'not_found', timer);
+    const context = await timer.measure('auth', () =>
+      resolveCartRequestContext(request, deps)
     );
     if (!context.ok) {
-      if (
+      const probe =
         context.error === 'missing_proof' &&
-        request.headers.get('x-baci-cart-probe') === '1'
-      ) {
-        return emptyCartProbeResponse();
-      }
-      return cartErrorResponse(context.error);
+        request.headers.get('x-baci-cart-probe') === '1';
+      return probe
+        ? emptyCartProbeResponse()
+        : cartErrorResponse(context.error);
     }
-
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'snapshot',
-      subject: context.principal.principalId,
-    });
+    const quota = await timer.measure('quota', () =>
+      checkCartQuota({
+        merchantId: context.merchant.id,
+        operation: 'snapshot',
+        subject: context.principal.principalId,
+      })
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
 
     const client = createCartScopedClient(context.principal);
-    const result = await getCart({
-      client,
-      principal: context.principal,
-    });
+    const result = await timer.measure('cart', () =>
+      getCart({ client, principal: context.principal })
+    );
     if (!result.ok) {
       return cartErrorResponse(
         result.code,
@@ -97,9 +107,8 @@ export async function GET(request: NextRequest) {
       );
     }
     let proof: string | null = null;
-    const upgraded = await upgradeLegacySessionPrincipal(
-      client,
-      context.principal
+    const upgraded = await timer.measure('grant', () =>
+      upgradeLegacySessionPrincipal(client, context.principal)
     );
     if (upgraded && upgraded !== context.principal) {
       try {
@@ -154,11 +163,10 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/storefront/cart
  *
- * Lazily creates one guest cart for a bootstrap proof and returns the
- * upgraded session proof (body plus merchant-namespaced cookie). The
- * creation key makes response-loss retries converge instead of
- * duplicating the cart. Client JSON never overrides the resolved
- * merchant.
+ * Lazily creates one guest cart for a bootstrap proof and returns the upgraded
+ * session proof (body plus merchant-namespaced cookie). The creation key makes
+ * response-loss retries converge instead of duplicating the cart. Client JSON
+ * never overrides the resolved merchant.
  */
 export async function POST(request: NextRequest) {
   try {

@@ -2,15 +2,72 @@
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-const f = vi.hoisted(() => ({ host: vi.fn(), listener: vi.fn() }));
+const f = vi.hoisted(() => ({
+  host: vi.fn(),
+  listener: vi.fn(),
+  delivery: vi.fn(),
+}));
 vi.mock('./production-builder-host', () => ({
   startProductionBuilderHost: f.host,
 }));
 vi.mock('./production-builder-listener', () => ({
   createProductionBuilderListener: f.listener,
 }));
+vi.mock('./production-delivery-listener', () => ({
+  createProductionDeliveryListener: f.delivery,
+}));
 
 import { startProductionBuilderStack } from './production-builder-stack';
+
+it('starts isolated output delivery alongside MCP and shuts down before the host', async () => {
+  const calls: string[] = [];
+  const server = () => ({
+    listen: vi.fn((_port, _host, callback) => callback()),
+    once: vi.fn(),
+    off: vi.fn(),
+  });
+  const mcp = {
+    server: server(),
+    close: vi.fn(async () => {
+      calls.push('mcp');
+    }),
+  };
+  const output = {
+    server: server(),
+    close: vi.fn(async () => {
+      calls.push('output');
+    }),
+  };
+  const deliver = vi.fn();
+  f.host.mockResolvedValue({
+    publicJwks: { keys: [] },
+    deliver,
+    close: vi.fn(async () => {
+      calls.push('host');
+    }),
+  });
+  f.listener.mockReturnValue(mcp);
+  f.delivery.mockReturnValue(output);
+  const host = {
+    integration: { executionOrigin: 'https://output.runtime.test' },
+  } as never;
+  const stack = await startProductionBuilderStack({
+    host,
+    port: 8790,
+    deliveryPort: 8791,
+  });
+  expect(f.delivery).toHaveBeenCalledWith({
+    executionOrigin: 'https://output.runtime.test',
+    deliver,
+  });
+  expect(output.server.listen).toHaveBeenCalledWith(
+    8791,
+    '127.0.0.1',
+    expect.any(Function)
+  );
+  await stack.close();
+  expect(calls).toEqual(['output', 'mcp', 'host']);
+});
 
 it('starts the listener on loopback after the host, then closes listener before host', async () => {
   const calls: string[] = [];
@@ -32,9 +89,13 @@ it('starts the listener on loopback after the host, then closes listener before 
     close: closeHost,
   });
   f.listener.mockReturnValue({ server, close: closeListener });
+  f.delivery.mockReturnValue({ server, close: vi.fn(async () => {}) });
   const stack = await startProductionBuilderStack({
-    host: {} as never,
+    host: {
+      integration: { executionOrigin: 'https://output.runtime.test' },
+    } as never,
     port: 8790,
+    deliveryPort: 8791,
   });
   expect(f.listener).toHaveBeenCalledWith(jwks);
   expect(server.listen).toHaveBeenCalledWith(
@@ -53,12 +114,20 @@ it('closes the host if listener construction fails and rejects invalid ports bef
     throw Error('private detail');
   });
   await expect(
-    startProductionBuilderStack({ host: {} as never, port: 8790 })
+    startProductionBuilderStack({
+      host: {} as never,
+      port: 8790,
+      deliveryPort: 8791,
+    })
   ).rejects.toThrow('BUILDER_STACK_STARTUP_FAILED');
   expect(close).toHaveBeenCalledOnce();
   f.host.mockClear();
   await expect(
-    startProductionBuilderStack({ host: {} as never, port: 0 })
+    startProductionBuilderStack({
+      host: {} as never,
+      port: 0,
+      deliveryPort: 8791,
+    })
   ).rejects.toThrow('INVALID_LISTENER_PORT');
   expect(f.host).not.toHaveBeenCalled();
 });
@@ -79,8 +148,52 @@ it('closes both components if the loopback listener cannot bind', async () => {
   f.host.mockResolvedValue({ publicJwks: { keys: [] }, close: closeHost });
   f.listener.mockReturnValue({ server, close: closeListener });
   await expect(
-    startProductionBuilderStack({ host: {} as never, port: 8790 })
+    startProductionBuilderStack({
+      host: {} as never,
+      port: 8790,
+      deliveryPort: 8791,
+    })
   ).rejects.toThrow('BUILDER_STACK_STARTUP_FAILED');
   expect(closeListener).toHaveBeenCalledOnce();
   expect(closeHost).toHaveBeenCalledOnce();
+});
+
+it('closes delivery, MCP and host if the delivery listener cannot bind', async () => {
+  const calls: string[] = [];
+  const close = (name: string) =>
+    vi.fn(async () => {
+      calls.push(name);
+    });
+  const mcpServer = {
+    once: vi.fn(),
+    off: vi.fn(),
+    listen: vi.fn((_port, _host, callback) => callback()),
+  };
+  let fail: ((error: Error) => void) | undefined;
+  const deliveryServer = {
+    once: vi.fn((_event, callback) => {
+      fail = callback;
+    }),
+    off: vi.fn(),
+    listen: vi.fn(() => {
+      fail?.(Error('in use'));
+    }),
+  };
+  f.host.mockResolvedValue({
+    publicJwks: { keys: [] },
+    deliver: vi.fn(),
+    close: close('host'),
+  });
+  f.listener.mockReturnValue({ server: mcpServer, close: close('mcp') });
+  f.delivery.mockReturnValue({
+    server: deliveryServer,
+    close: close('delivery'),
+  });
+  const host = {
+    integration: { executionOrigin: 'https://output.runtime.test' },
+  } as never;
+  await expect(
+    startProductionBuilderStack({ host, port: 8790, deliveryPort: 8791 })
+  ).rejects.toThrow('BUILDER_STACK_STARTUP_FAILED');
+  expect(calls).toEqual(['delivery', 'mcp', 'host']);
 });

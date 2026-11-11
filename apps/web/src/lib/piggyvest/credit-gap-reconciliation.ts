@@ -29,7 +29,7 @@ import type {
  *   neither ledger recorded. Some money may have moved, so a person looks;
  *   `pending` and `failed` credits moved none and are ignored.
  * - `unverified_reference` (review only): the list id does not have the
- *   PVB credit-id shape (`PVB…`), so the list may use another id namespace
+ *   PVB credit-id shape (`PVB01…`), so the list may use another id namespace
  *   than our `pvb_reference` and a mismatch proves nothing. When a wallet's
  *   settled list rows carry no PVB-shaped id at all, its recorded inflows
  *   missing from the list are downgraded to this kind too, instead of
@@ -42,7 +42,7 @@ import type {
  */
 export const SETTLE_MS = 6 * 3_600_000;
 /** PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11). */
-const PVB_CREDIT_ID = /^PVB/i;
+const PVB_CREDIT_ID = /^PVB01/;
 /**
  * Wallet-to-wallet categories (our own savings transfers), compared trimmed
  * and lower-cased. Only `p2p` has been observed; an unknown category still

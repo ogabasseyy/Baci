@@ -73,7 +73,7 @@ anything is wrong. It resends, settles and releases nothing.
    - An inflow we recorded that PiggyVest does not list as settled (missing,
      pending or failed) **pages**
      (`not_on_provider`); check it at PiggyVest before acting.
-   - A list id without the PVB credit-id shape (`PVB…`) is a review line
+   - A list id without the PVB credit-id shape (`PVB01…`) is a review line
      only (`unverified_reference`): the list may use another id namespace than
      our `pvb_reference`. If none of a wallet's settled list ids is PVB-shaped,
      its recorded inflows missing from the list are review lines too, not

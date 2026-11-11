@@ -28,6 +28,18 @@ function credit(id: string, category = 'bank-inflow') {
 }
 
 describe('credit-gap guards against an unproven list id namespace', () => {
+  it('treats a PVB-prefixed id outside the PVB01 credit namespace as unverified', () => {
+    const { findings } = compareWalletCredits(
+      wallet(),
+      [credit('PVB99INTERNAL0000000000001')],
+      window
+    );
+
+    expect(findings).toEqual([
+      expect.objectContaining({ kind: 'unverified_reference' }),
+    ]);
+  });
+
   it('lists a non-PVB-shaped list id for review instead of paging', () => {
     const { findings } = compareWalletCredits(
       wallet(),

@@ -54,6 +54,7 @@ import { createApprovalCapture } from '../../tools/experience-verifier/approval-
 import { createVerifierApprovalRecorder } from '../../tools/experience-verifier/approval-recorder';
 import { createVerifierAttestationHandler } from '../../tools/experience-verifier/attestation-handler';
 import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
+import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-store';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
@@ -213,6 +214,15 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
 
     if (!f.db.localDatabase) throw Error('LOCAL_DATABASE_REQUIRED');
     await f.db.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261111232000_experience_verifier_nonces.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
+    await f.db.pool.query(
       'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
     );
     verifierPool = new Pool({
@@ -259,14 +269,9 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       },
     });
     const verifierKey = randomBytes(32);
-    const usedNonces = new Set<string>();
     const verifierHandler = createVerifierAttestationHandler({
       key: verifierKey,
-      consumeNonce: async (nonce) => {
-        if (usedNonces.has(nonce)) return false;
-        usedNonces.add(nonce);
-        return true;
-      },
+      consumeNonce: await createVerifierNonceStore(verifierPool),
       resolveUserClient: async (token) => {
         if (token !== f.owner.accessToken) throw Error('INVALID_TOKEN');
         return f.owner.supabase;

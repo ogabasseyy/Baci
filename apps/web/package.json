@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build",
+    "build": "next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && BACI_STOREFRONT_BUILD_READS=bounded NODE_ENV=production next build",
     "build:ci": "BACI_STOREFRONT_BUILD_READS=offline NODE_ENV=production next build --experimental-build-mode=compile",
     "start": "next start",
     "lint": "biome check .",

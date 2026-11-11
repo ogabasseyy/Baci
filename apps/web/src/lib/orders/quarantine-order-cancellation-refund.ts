@@ -114,6 +114,11 @@ export async function quarantineRefund({
         : transactions[0]?.id;
     if (typeof legTransactionId === 'string' && legTransactionId.length > 0) {
       const acceptedRefundIds = metadata?.accepted_refund_ids;
+      // Keep Paystack's rejection text on the merged leg entry too, so a
+      // duplicate-review path does not lose it. The RPC keeps the latest
+      // non-null value.
+      const providerError = metadata?.provider_error;
+      const providerErrorCode = metadata?.provider_error_code;
       const { data: legMerged, error: legMergeError } = await supabase.rpc(
         'merge_paystack_cancellation_refund_leg_evidence_v1',
         {
@@ -126,6 +131,15 @@ export async function quarantineRefund({
             : null,
           p_candidates: toReviewCandidates(order, transactions),
           p_ambiguous: metadata?.ambiguous_initiation === true,
+          p_provider_error:
+            typeof providerError === 'string' && providerError.length > 0
+              ? providerError
+              : null,
+          p_provider_error_code:
+            typeof providerErrorCode === 'string' ||
+            typeof providerErrorCode === 'number'
+              ? String(providerErrorCode)
+              : null,
         }
       );
       if (legMergeError || legMerged !== true) {

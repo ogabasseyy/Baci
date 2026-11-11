@@ -48,8 +48,9 @@ runs:
     # The persistent private CI runner keeps its pnpm store outside the workspace.
     # `git clean` at checkout deletes a workspace-relative store, which forced every
     # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
-    # Only the contabo-baci-ci runners qualify (runner labels are not available inside a composite
-    # action, so the admin-controlled runner name is used, together with self-hosted). Each runner process has its own tool cache
+    # Only the two named contabo-baci-ci runners qualify: an exact allowlist, because runner labels are
+    # not available inside a composite action (register a new CI runner here too, or it just uses the
+    # slower GitHub cache path). Each runner process has its own tool cache
     # directory, so two runners never share a store. The deploy runner shares the production
     # server (tight disk) and runs these installs rarely, so it keeps the GitHub cache path.
     # The cache save below never runs for a persistent store (it would archive the wrong path).
@@ -58,7 +59,7 @@ runs:
       shell: bash
       env:
         STORE_DIR: ${{ inputs.store-dir }}
-        PERSISTENT_RUNNER: ${{ runner.environment == 'self-hosted' && startsWith(runner.name, 'contabo-baci-ci') }}
+        PERSISTENT_RUNNER: ${{ runner.environment == 'self-hosted' && contains(fromJSON('["contabo-baci-ci","contabo-baci-ci-2"]'), runner.name) }}
         TOOL_CACHE: ${{ runner.tool_cache }}
       run: |
         set -euo pipefail
@@ -67,6 +68,15 @@ runs:
         if [ "$PERSISTENT_RUNNER" = 'true' ] && [ "$STORE_DIR" = '.pnpm-store' ]; then
           persistent=true
           dir="$TOOL_CACHE/pnpm-store"
+          # A store inside the checkout would be wiped by `git clean`, which is the problem this avoids.
+          if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+            case "$dir" in
+              "$GITHUB_WORKSPACE"|"$GITHUB_WORKSPACE"/*)
+                echo "::error::the persistent pnpm store must live outside the workspace (got $dir)"
+                exit 1
+                ;;
+            esac
+          fi
           mkdir -p "$dir"
         fi
         echo "persistent=$persistent" >> "$GITHUB_OUTPUT"

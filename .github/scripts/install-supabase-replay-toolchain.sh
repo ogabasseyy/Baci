@@ -23,6 +23,9 @@ if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
   sudo tar -xz -f "${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go
   sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go
 fi
+# On a self-hosted server the toolchain is provisioned outside this repository; say what is there so a
+# drifted server (for example stale 18.3 binaries) is obvious from the log instead of an opaque failure.
+echo "Replay toolchain on ${RUNNER_NAME:-this runner}: PostgreSQL 18 -> $(/usr/lib/postgresql/18/bin/postgres --version 2>&1 || echo missing); Supabase CLI -> $(supabase --version 2>&1 || echo missing) (expected 18.6 and ${SUPABASE_CLI_VERSION})"
 test -x /usr/lib/postgresql/18/bin/initdb
 test -x /usr/local/bin/supabase-go
 test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"

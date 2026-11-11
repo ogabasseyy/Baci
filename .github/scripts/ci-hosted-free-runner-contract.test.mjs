@@ -204,7 +204,7 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   const select = steps.find((step) => step.id === 'pnpm-store');
   const restore = steps.find((step) => step.id === 'pnpm-store-cache');
   const configure = steps.find((step) => step.name === 'Configure pnpm store directory');
-  assert.match(select.env.PERSISTENT_RUNNER, /runner\.environment == 'self-hosted' && startsWith\(runner\.name, 'contabo-baci-ci'\)/);
+  assert.match(select.env.PERSISTENT_RUNNER, /runner\.environment == 'self-hosted' && contains\(fromJSON\('\["contabo-baci-ci","contabo-baci-ci-2"\]'\), runner\.name\)/);
   assert.equal(select.env.TOOL_CACHE, '${{ runner.tool_cache }}');
   assert.equal(restore.if, "steps.pnpm-store.outputs.persistent != 'true'");
   assert.equal(configure.env.STORE_DIR, '${{ steps.pnpm-store.outputs.dir }}');
@@ -223,4 +223,11 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.equal(run('true', '.pnpm-store'), `persistent=true\ndir=${tmpdir()}/pnpm-store\n`);
   assert.equal(run('false', '.pnpm-store'), 'persistent=false\ndir=.pnpm-store\n');
   assert.equal(run('true', '/custom/store'), 'persistent=false\ndir=/custom/store\n');
+  // A persistent store inside the checkout would be wiped by `git clean`; the step must refuse it.
+  const inside = spawnSync('bash', ['-c', select.run], {
+    encoding: 'utf8',
+    env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', GITHUB_WORKSPACE: join(tmpdir(), 'ws'), TOOL_CACHE: join(tmpdir(), 'ws', 'tool'), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-inside`) },
+  });
+  assert.notEqual(inside.status, 0);
+  assert.match(inside.stdout + inside.stderr, /outside the workspace/);
 });

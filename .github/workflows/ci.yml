@@ -430,9 +430,11 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        # Pinned to the same PostgreSQL release as the DB Replay toolchain (18.6). Needs Docker on the
-        # runner (checked on the Contabo CI server). Docker picks the host port (the steps read it from
-        # job.services.postgres.ports), so two Disposable SQL jobs on one server never collide on 5432.
+        # Pinned to the same PostgreSQL release as the DB Replay toolchain (18.6). The digest is the
+        # multi-architecture manifest list of postgres:18.6 (Docker Hub, verified 2026-11-11; its
+        # linux/amd64 image is sha256:e923a22a...). Needs Docker on the runner (checked on the Contabo CI
+        # server). Docker picks the host port (the steps read it from job.services.postgres.ports), so
+        # two Disposable SQL jobs on one server never collide on 5432.
         image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
         env:
           POSTGRES_PASSWORD: postgres

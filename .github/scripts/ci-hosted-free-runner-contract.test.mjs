@@ -7,15 +7,11 @@ import { join } from 'node:path';
 import test, { describe } from 'node:test';
 import YAML from 'yaml';
 import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
+import { scriptText } from './ci-step-script-text.mjs';
 
 const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 const PRIVATE = ['self-hosted', 'Linux', 'X64', 'baci-private-ci'];
 
-// A step that only calls `bash .github/scripts/<name>.sh` keeps its logic in that script, so check the script.
-function scriptText(step) {
-  const call = /^bash (\.github\/scripts\/[\w.-]+\.sh)$/.exec(typeof step.run === 'string' ? step.run.trim() : '');
-  return call ? readFileSync(call[1], 'utf8') : step.run;
-}
 const MOVED_BY_NEEDS = ['cwv-runner-contracts', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc', 'mobile-quality'];
 const MOVED_INLINE = ['silent-revert-guard', 'quality'];
 // Every job that can run on the general private runner (moved by this change or routed there before it).
@@ -103,7 +99,8 @@ test('the Supabase service-role step lives only in a main-push job on the deploy
   }
 });
 
-const PRIVILEGED_COMMAND = /\b(sudo|apt-get)\b/;
+// The shared PostgreSQL installer runs sudo and apt-get itself, so calling it counts as privileged too.
+const PRIVILEGED_COMMAND = /\b(sudo|apt-get)\b|install-postgresql-hosted\.sh/;
 const HOSTED_GUARD = /^(\s*)if \[ "\$RUNNER_ENVIRONMENT" = 'github-hosted' \]; then\s*$/;
 
 function privilegedLinesOutsideHostedGuard(step) {
@@ -131,48 +128,13 @@ test('privileged installs run only on GitHub-hosted runners; the self-hosted run
   assert.deepEqual(offenders, []);
 });
 
-test('jobs that need PostgreSQL verify the pre-installed toolchain on the private runner', () => {
-  const scriptOf = (job, name) => scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
-  const replay = scriptOf('quality-db-replay', 'Install Supabase replay toolchain');
-  const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));
-  assert.match(afterGuard, /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/);
-  // The suites start their own servers, so the server programs must be present and on the pinned release too.
-  for (const program of ['pg_ctl', 'postgres', 'pg_isready']) {
-    assert.match(afterGuard, new RegExp(`test -x /usr/lib/postgresql/18/bin/${program}\\n`), program);
+test('every job that calls the shared PostgreSQL installer is covered by the hosted-guard test', () => {
+  // Which steps may call it is pinned in ci-hosted-postgresql-contract.test.mjs; a caller outside PRIVATE_JOBS would escape the check above.
+  // A step may call it in its own command or through the script it runs (DB Replay).
+  const callsInstaller = (step) => typeof step.run === 'string' && (step.run.includes('install-postgresql-hosted.sh') || scriptText(step).includes('install-postgresql-hosted.sh'));
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    if ((job.steps ?? []).some(callsInstaller)) assert.ok(PRIVATE_JOBS.includes(name), `${name} calls the PostgreSQL installer, so it must be covered by the hosted-guard test`);
   }
-  assert.match(afterGuard, /\/usr\/lib\/postgresql\/18\/bin\/postgres --version \| grep -Eq '\^postgres /);
-  // CLI 3.x is one executable in a versioned folder that the script also puts on PATH for the later steps.
-  assert.doesNotMatch(replay, /supabase-go/);
-  assert.match(afterGuard, /test -x "\$\{SUPABASE_CLI_DIR\}\/supabase"/);
-  assert.match(afterGuard, /echo "\$\{SUPABASE_CLI_DIR\}" >> "\$GITHUB_PATH"/);
-  assert.match(afterGuard, /supabase --version/);
-  for (const [job, name] of [['quality-disposable-sql', 'Install PostgreSQL client and server binaries'], ['quality-misc', 'Run PiggyVest legacy runbook SQL against scratch PostgreSQL'], ['quality-misc', 'Test cart quota guard staging and signed PostgREST']]) {
-    const script = scriptOf(job, name);
-    assert.match(script.slice(script.lastIndexOf('\nfi\n')), /test -x \/usr\/lib\/postgresql\/16\/bin\/initdb/, `${job} / ${name}`);
-  }
-});
-
-test('every PostgreSQL 18 pin names the same release: hosted install, psql check, replay contract, service container', () => {
-  const script = scriptText(workflow.jobs['quality-db-replay'].steps.find((step) => step.name === 'Install Supabase replay toolchain'));
-  const pinned = new Set([...script.matchAll(/postgresql(?:-client)?-18=18\.(\d+)-1\.pgdg24\.04\+\d+/g)].map((match) => match[1]));
-  // Two checks name the release: `psql --version` and `postgres --version` (a runner can have a new client next to an old server).
-  const checkedAll = [...script.matchAll(/PostgreSQL\\\) 18\\\.(\d+)\(/g)].map((match) => match[1]);
-  const checked = checkedAll[0];
-  assert.equal(pinned.size, 1, 'server and client packages must pin the same minor release');
-  assert.equal(checkedAll.length, 2, 'both the psql and the postgres version checks must exist');
-  assert.deepEqual([...new Set(checkedAll)], [...pinned], 'the psql and postgres version checks must match the pinned release');
-  // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
-  const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
-  assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
-  const image = workflow.jobs['quality-disposable-sql'].services.postgres.image;
-  assert.match(image, new RegExp(`^postgres:18\\.${checked}@sha256:[0-9a-f]{64}$`), 'the Disposable SQL database container must use the same release, pinned by digest');
-  // A stale or mistyped digest still matches that format, so the job also asks the running container which release it is.
-  const steps = workflow.jobs['quality-disposable-sql'].steps;
-  const assertion = steps.find((step) => step.name === 'Assert the database container runs the pinned PostgreSQL release');
-  assert.ok(assertion, 'the Disposable SQL job must check the release of the running database container');
-  assert.equal(assertion.env.EXPECTED_SERVER_VERSION_NUM, String(180000 + Number(checked)), 'the container check must expect the pinned release as server_version_num');
-  assert.match(assertion.run, /SHOW server_version_num/);
-  assert.equal(steps.indexOf(assertion), 1, 'the container check runs first, right after checkout');
 });
 
 test('the private runner keeps a persistent pnpm store and skips the GitHub cache download', async () => {

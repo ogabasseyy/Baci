@@ -14,6 +14,7 @@ import {
   redactMerchantFeatureSettingsResponse,
 } from '@/lib/merchant-feature-settings-redaction';
 import { merchantFeatureSettingsPatchSchema } from '@/schemas/merchant-features';
+import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import type { MerchantFeatureCacheRevalidator } from './feature-settings-handler-utils';
 import { hasNonEmptyGrowthIntegrationSetting } from './feature-settings-handler-utils';
 import { jsonNoStore, withNoStore } from './feature-settings-response';
@@ -101,9 +102,7 @@ export function createPutFeatureSettings(
       const { data: existingSettings, error: existingSettingsError } =
         await auth.supabase
           .from('merchant_feature_settings')
-          .select(
-            'custom_settings, facebook_capi_token, tiktok_access_token, snapchat_capi_token, ga4_api_secret'
-          )
+          .select('custom_settings')
           .eq('merchant_id', access.merchantId)
           .maybeSingle();
       if (existingSettingsError) {
@@ -123,17 +122,17 @@ export function createPutFeatureSettings(
         );
       const completeSettings = {
         ...defaultMerchantFeatureSettings,
-        ...Object.fromEntries(
-          INTEGRATION_SECRET_FIELDS.map((key) => [
-            key,
-            existingSettings?.[key] ?? null,
-          ])
-        ),
         ...sanitizedSettings,
         merchant_id: access.merchantId,
         updated_at: new Date().toISOString(),
       };
       completeSettings.rewards_page_enabled = completeSettings.loyalty_enabled;
+      // The session cannot read the stored secrets (audit R2), so a replace must
+      // not write them back: leaving a secret out of the upsert keeps the
+      // stored value, and sending one (or null) still sets or clears it.
+      for (const key of INTEGRATION_SECRET_FIELDS) {
+        if (!(key in sanitizedSettings)) delete completeSettings[key];
+      }
       const { data: settings, error } = await auth.supabase
         .from('merchant_feature_settings')
         .upsert(completeSettings, { onConflict: 'merchant_id' })
@@ -147,7 +146,18 @@ export function createPutFeatureSettings(
         );
       }
       revalidateMerchantFeatureCaches(access.merchantId, sanitizedSettings);
-      return jsonNoStore(redactMerchantFeatureSettingsResponse(settings));
+      const withPresence = await attachIntegrationSecretPresence(
+        auth.supabase,
+        access.merchantId,
+        settings
+      );
+      if (!withPresence) {
+        return jsonNoStore(
+          { error: 'Failed to save settings' },
+          { status: 500 }
+        );
+      }
+      return jsonNoStore(redactMerchantFeatureSettingsResponse(withPresence));
     } catch (error) {
       console.error('Feature settings PUT error:', error);
       return jsonNoStore({ error: 'Internal server error' }, { status: 500 });

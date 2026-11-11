@@ -11,6 +11,7 @@ import {
   redactMerchantFeatureSettingsResponse,
 } from '@/lib/merchant-feature-settings-redaction';
 import { merchantFeatureSettingsPatchSchema } from '@/schemas/merchant-features';
+import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import type { MerchantFeatureCacheRevalidator } from './feature-settings-handler-utils';
 import {
   hasNonEmptyGrowthIntegrationSetting,
@@ -165,7 +166,18 @@ export function createPatchFeatureSettings(
         );
       }
       revalidateMerchantFeatureCaches(access.merchantId, sanitizedUpdates);
-      return jsonNoStore(redactMerchantFeatureSettingsResponse(settings));
+      const withPresence = await attachIntegrationSecretPresence(
+        auth.supabase,
+        access.merchantId,
+        settings
+      );
+      if (!withPresence) {
+        return jsonNoStore(
+          { error: 'Failed to update settings' },
+          { status: 500 }
+        );
+      }
+      return jsonNoStore(redactMerchantFeatureSettingsResponse(withPresence));
     } catch (error) {
       console.error('Feature settings PATCH error:', error);
       return jsonNoStore({ error: 'Internal server error' }, { status: 500 });

@@ -1,0 +1,105 @@
+-- Audit R2: keep ad-platform secrets in merchant_feature_settings out of reach
+-- of signed-in store users (owners and staff) through the public data API.
+--
+-- Before: `authenticated` held a table-wide SELECT, and the RLS policy "Unified
+-- view access for feature settings" admits the owner AND every active staff
+-- member. Any staff member could therefore run
+--   GET /merchant_feature_settings?select=facebook_capi_token,ga4_api_secret,...
+-- and read the store's Meta, TikTok, Snapchat and GA4 server credentials.
+--
+-- After: the table-wide SELECT is replaced by a column list that omits the four
+-- secrets (same pattern as merchants, 20260722150000). Server-side fan-out keeps
+-- reading them through its existing service-role/event-pipeline path, which is
+-- not affected by `authenticated` grants. INSERT/UPDATE/DELETE grants are left
+-- alone, so owners can still save a new token; they just cannot read it back.
+--
+-- The dashboard shows "configured / not configured". That needs presence
+-- without value, so `get_merchant_integration_secret_presence` returns four
+-- booleans to the owner or an active staff member of that exact merchant.
+--
+-- Not changed here (see PR description): `custom_settings` (holds Zoho
+-- Campaigns tokens) stays readable, and any column added to this table later
+-- needs its own column GRANT. The replay test fails if one is forgotten.
+
+REVOKE SELECT ON TABLE public.merchant_feature_settings
+  FROM PUBLIC, anon, authenticated;
+
+DO $grant$
+DECLARE
+  v_columns text;
+BEGIN
+  SELECT pg_catalog.string_agg(pg_catalog.quote_ident(a.attname), ', ' ORDER BY a.attnum)
+    INTO v_columns
+  FROM pg_catalog.pg_attribute AS a
+  WHERE a.attrelid = 'public.merchant_feature_settings'::pg_catalog.regclass
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+    AND a.attname <> ALL (ARRAY[
+      'facebook_capi_token',
+      'tiktok_access_token',
+      'snapchat_capi_token',
+      'ga4_api_secret'
+    ]);
+
+  EXECUTE pg_catalog.format(
+    'GRANT SELECT (%s) ON TABLE public.merchant_feature_settings TO authenticated',
+    v_columns
+  );
+END
+$grant$;
+
+CREATE OR REPLACE FUNCTION public.get_merchant_integration_secret_presence(
+  p_merchant_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') <> 'authenticated'
+    OR (SELECT auth.uid()) IS NULL
+    OR p_merchant_id IS NULL
+    OR public.has_merchant_access(p_merchant_id) IS NOT TRUE THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT pg_catalog.jsonb_build_object(
+    'facebook_capi_token',
+      pg_catalog.btrim(COALESCE(fs.facebook_capi_token, '')) <> '',
+    'tiktok_access_token',
+      pg_catalog.btrim(COALESCE(fs.tiktok_access_token, '')) <> '',
+    'snapchat_capi_token',
+      pg_catalog.btrim(COALESCE(fs.snapchat_capi_token, '')) <> '',
+    'ga4_api_secret',
+      pg_catalog.btrim(COALESCE(fs.ga4_api_secret, '')) <> ''
+  )
+    INTO v_result
+  FROM public.merchant_feature_settings AS fs
+  WHERE fs.merchant_id = p_merchant_id;
+
+  RETURN COALESCE(
+    v_result,
+    pg_catalog.jsonb_build_object(
+      'facebook_capi_token', false,
+      'tiktok_access_token', false,
+      'snapchat_capi_token', false,
+      'ga4_api_secret', false
+    )
+  );
+END;
+$$;
+
+ALTER FUNCTION public.get_merchant_integration_secret_presence(uuid)
+  OWNER TO postgres;
+
+COMMENT ON FUNCTION public.get_merchant_integration_secret_presence(uuid) IS
+  'Returns only whether each ad-platform secret is set (booleans) for the owner or an active staff member of the merchant; never the values.';
+
+REVOKE ALL ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_merchant_integration_secret_presence(uuid)
+  TO authenticated;

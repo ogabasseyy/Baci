@@ -18730,6 +18730,10 @@ export type Database = {
         Args: { p_merchant_id: string };
         Returns: Json;
       };
+      get_merchant_integration_secret_presence: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
       get_google_ads_connection_secret: {
         Args: { p_merchant_id: string };
         Returns: {

@@ -101,7 +101,7 @@ describe('useFailedOrders', () => {
         {
           method: 'or',
           args: [
-            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null)`,
+            `payment_status.in.(bnpl_pending,failed,expired),and(payment_status.eq.pending,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,agentic_ai)),and(payment_status.eq.unpaid,created_at.lt.2026-06-02T01:30:00.000Z,payment_method.in.${ONLINE_CHECKOUT_PAYMENT_METHODS},recorded_by_user_id.is.null,source.in.(online_store,mobile_app,storefront,agentic_ai))`,
           ],
         },
       ])
@@ -253,25 +253,59 @@ describe('useFailedOrders', () => {
     const staleCheckout = {
       created_at: daysBefore(1),
       payment_method: 'bank_transfer',
-      payment_status: 'pending',
       recorded_by_user_id: null,
+      source: 'online_store',
     };
 
-    it('keeps a stale unpaid staff invoice out of follow-up', async () => {
+    it.each([
+      'pending',
+      'unpaid',
+    ])('keeps a stale %s staff invoice out of follow-up', async (paymentStatus) => {
       const filter = await followUpFilter();
 
       expect(
         matchesOrFilter(
-          { ...staleCheckout, recorded_by_user_id: 'staff-user-1' },
+          {
+            ...staleCheckout,
+            payment_status: paymentStatus,
+            recorded_by_user_id: 'staff-user-1',
+            source: 'physical',
+          },
           filter
         )
       ).toBe(false);
     });
 
-    it('still follows up a stale unpaid customer checkout', async () => {
+    it.each([
+      'pending',
+      'unpaid',
+    ])('keeps a stale %s WhatsApp order with a cleared creator out of follow-up', async (paymentStatus) => {
       const filter = await followUpFilter();
 
-      expect(matchesOrFilter(staleCheckout, filter)).toBe(true);
+      expect(
+        matchesOrFilter(
+          {
+            ...staleCheckout,
+            payment_status: paymentStatus,
+            source: 'whatsapp',
+          },
+          filter
+        )
+      ).toBe(false);
+    });
+
+    it.each([
+      'pending',
+      'unpaid',
+    ])('still follows up a stale %s customer checkout', async (paymentStatus) => {
+      const filter = await followUpFilter();
+
+      expect(
+        matchesOrFilter(
+          { ...staleCheckout, payment_status: paymentStatus },
+          filter
+        )
+      ).toBe(true);
     });
 
     it('still follows up a staff invoice whose payment failed', async () => {
@@ -283,6 +317,7 @@ describe('useFailedOrders', () => {
             ...staleCheckout,
             payment_status: 'failed',
             recorded_by_user_id: 'staff-user-1',
+            source: 'physical',
           },
           filter
         )

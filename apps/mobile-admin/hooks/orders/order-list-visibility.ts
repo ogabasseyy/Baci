@@ -21,13 +21,34 @@ const ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES = [
 export const HIDDEN_CHECKOUT_PAYMENT_STATUSES = `(${HIDDEN_CHECKOUT_PAYMENT_STATUS_VALUES.join(',')})`;
 export const ONLINE_CHECKOUT_PAYMENT_METHODS = `(${ONLINE_CHECKOUT_PAYMENT_METHOD_VALUES.join(',')})`;
 
-// Orders staff create (in-store invoices, WhatsApp/Instagram sales) record
-// the staff member. They are never abandoned checkouts, so they always stay
-// in the orders list, whatever their payment status or method. A NULL
-// recorded_by_user_id means a customer checkout (storefront or customer
-// app), which is what the checkout drop-off rules below target.
-export const STAFF_CREATED_ORDER_FILTER = 'recorded_by_user_id.not.is.null';
-export const CUSTOMER_CHECKOUT_ORDER_FILTER = 'recorded_by_user_id.is.null';
+// Customer checkouts (storefront, customer app, AI-agent checkout) never
+// record a staff creator. Everything else (in-store invoices, WhatsApp,
+// Instagram and other staff-entered or imported orders) is never an
+// abandoned checkout, so it always stays in the orders list whatever its
+// payment status. Source is checked as well as the creator because the
+// creator is NULL on older staff orders and is cleared if the staff account
+// is deleted.
+const CUSTOMER_CHECKOUT_SOURCE_VALUES = [
+  'online_store',
+  'mobile_app',
+  'storefront',
+  'agentic_ai',
+] as const;
+
+const CUSTOMER_CHECKOUT_SOURCES = `(${CUSTOMER_CHECKOUT_SOURCE_VALUES.join(',')})`;
+
+/** Conditions for use inside and(): the order is a customer checkout. */
+export const CUSTOMER_CHECKOUT_ORDER_FILTER = [
+  'recorded_by_user_id.is.null',
+  `source.in.${CUSTOMER_CHECKOUT_SOURCES}`,
+].join(',');
+
+/** Conditions for use inside or(): the order was entered by staff. */
+export const STAFF_CREATED_ORDER_FILTER = [
+  'recorded_by_user_id.not.is.null',
+  'source.is.null',
+  `source.not.in.${CUSTOMER_CHECKOUT_SOURCES}`,
+].join(',');
 
 // Customer checkouts are shown unless they are a drop-off: an unpaid
 // online-method checkout, or one that failed, expired or awaits BNPL.

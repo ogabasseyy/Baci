@@ -13,6 +13,7 @@ const customerCheckout: FilterRow = {
   payment_method: 'paystack',
   payment_status: 'paid',
   recorded_by_user_id: null,
+  source: 'online_store',
 };
 
 describe('applyOrderListVisibilityFilter', () => {
@@ -64,6 +65,7 @@ describe('applyOrderListVisibilityFilter', () => {
       payment_method: 'bank_transfer',
       payment_status: 'pending',
       recorded_by_user_id: 'staff-user-1',
+      source: 'physical',
     };
 
     it('shows an unpaid staff invoice whose payment method is bank transfer', () => {
@@ -77,6 +79,21 @@ describe('applyOrderListVisibilityFilter', () => {
     ])('shows a staff invoice whose payment is %s', (paymentStatus) => {
       expect(
         isVisible({ ...staffInvoice, payment_status: paymentStatus })
+      ).toBe(true);
+    });
+
+    it.each([
+      'whatsapp',
+      'instagram',
+      'physical',
+    ])('shows a %s order whose staff creator was cleared', (source) => {
+      expect(
+        isVisible({
+          ...staffInvoice,
+          payment_status: 'bnpl_pending',
+          recorded_by_user_id: null,
+          source,
+        })
       ).toBe(true);
     });
   });

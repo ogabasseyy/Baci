@@ -288,11 +288,12 @@ describe('useSharedCart polling', () => {
       // Returning to the tab fires both events before the first read
       // settles; a second read would hold the cart request lock and delay
       // the shopper's next edit by a full round trip.
-      let settle: (value: unknown) => void = () => {};
+      type FetchResult = Awaited<ReturnType<typeof fetchSharedCartSnapshot>>;
+      let settle: (value: FetchResult) => void = () => {};
       vi.mocked(fetchSharedCartSnapshot).mockReturnValueOnce(
-        new Promise((resolve) => {
+        new Promise<FetchResult>((resolve) => {
           settle = resolve;
-        }) as ReturnType<typeof fetchSharedCartSnapshot>
+        })
       );
       await act(async () => {
         document.dispatchEvent(new Event('visibilitychange'));

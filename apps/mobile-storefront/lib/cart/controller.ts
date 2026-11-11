@@ -1,12 +1,13 @@
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
-import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
+import { wireEditQueue } from './controller-edit-wiring';
 import type {
   NativeCartControllerOptions,
   NativeCartStatus,
   NativeSharedCartRef,
 } from './controller-options';
 import { createNativeCartWrite } from './controller-write';
+import { trackTransmission } from './track-transmission';
 
 export type {
   NativeCartControllerOptions,
@@ -22,13 +23,18 @@ import {
 import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
+import { createPendingEdits, withoutPendingLines } from './pending-edits';
 import { pendingCartRequest } from './pending-request';
 import { NativeCartError } from './shared-cart-client';
 
 const TERMINAL_STATES = new Set(['completed', 'expired', 'canceled']);
 export function createNativeCartController(
-  options: NativeCartControllerOptions
+  rawOptions: NativeCartControllerOptions
 ) {
+  const options = {
+    ...rawOptions,
+    getLegacy: withoutPendingLines(rawOptions.getLegacy),
+  };
   let snapshot: CartSnapshot | null = null;
   let terminal = false;
   let confirmedEmpty = false;
@@ -36,6 +42,9 @@ export function createNativeCartController(
   let incoming: CartSnapshot | null = null;
   let tail: Promise<unknown> = Promise.resolve();
   const receipts = options.receipts ?? pendingCartRequest;
+  const edits = createPendingEdits((items) => {
+    if (options.isCurrent()) options.showItems?.(items);
+  });
   function assertCurrent(): void {
     if (!options.isCurrent()) throw new NativeCartError('session_changed');
   }
@@ -71,7 +80,10 @@ export function createNativeCartController(
       /* Publish only after tenant-scoped display hydration below. */
     },
   });
-  async function accept(next: CartSnapshot): Promise<void> {
+  async function accept(
+    next: CartSnapshot,
+    acknowledges = false
+  ): Promise<void> {
     assertCurrent();
     if (next.merchantId.toLowerCase() !== options.merchantId.toLowerCase())
       throw new NativeCartError('merchant_mismatch');
@@ -81,6 +93,7 @@ export function createNativeCartController(
       snapshot = null;
       terminal = true;
       terminalCartId = next.cartId;
+      edits.reset();
       options.publish(next, { items: [], metadataReady: true });
       options.status('ready');
       return;
@@ -96,7 +109,10 @@ export function createNativeCartController(
     );
     assertCurrent();
     snapshot = next;
-    options.publish(next, display);
+    options.publish(next, {
+      ...display,
+      items: edits.confirm(display.items, acknowledges),
+    });
     options.status('ready');
   }
   async function refresh(): Promise<void> {
@@ -119,6 +135,7 @@ export function createNativeCartController(
       pending = null;
       snapshot = null;
       terminal = false;
+      edits.reset();
     }
     assertCurrent();
     if (pending) {
@@ -214,9 +231,10 @@ export function createNativeCartController(
     options,
     serial,
   });
+  const transmission = trackTransmission(coordinator);
   const operations = createNativeCartWrite({
-    accept,
-    coordinator,
+    accept: (next) => accept(next, true),
+    coordinator: transmission.coordinator,
     ensureCart,
     getTerminal: () => terminal,
     getIncoming: () => incoming,
@@ -229,43 +247,24 @@ export function createNativeCartController(
     refresh,
     status: options.status,
   });
+  const enqueueEdit = wireEditQueue({
+    edits,
+    options,
+    receipts,
+    serial,
+    refresh,
+    transmission,
+    write: (action) => operations.write(action),
+    state: () => ({ snapshot, terminal, incoming }),
+  });
   return {
     refresh: () => serial(refresh),
     prepare: () =>
       serial(async () => {
         await ensureCart();
       }),
-    write: (action: SharedCartWrite) =>
-      serial(async () => {
-        const legacy = options.getLegacy();
-        if (
-          !terminal &&
-          !snapshot &&
-          !incoming &&
-          legacy.items.length > 0 &&
-          !legacy.sharedCartRef &&
-          options.repairLegacy &&
-          (action.type === 'clear' ||
-            action.type === 'remove' ||
-            action.type === 'quantity') &&
-          !(await options.client.context())?.cartId &&
-          !(await receipts.read(options.merchantId))
-        ) {
-          const items =
-            action.type === 'clear'
-              ? []
-              : legacy.items.flatMap((item) => {
-                  if (item.id !== action.id) return [item];
-                  return action.type === 'remove' || action.quantity <= 0
-                    ? []
-                    : [{ ...item, quantity: action.quantity }];
-                });
-          options.repairLegacy(items);
-          options.status('ready');
-          return;
-        }
-        await operations.write(action);
-      }),
+    write: enqueueEdit,
+    revertPending: edits.revert,
     pair: (
       link: CartPairingLink,
       choice: 'connect' | 'merge' | 'keep_existing',

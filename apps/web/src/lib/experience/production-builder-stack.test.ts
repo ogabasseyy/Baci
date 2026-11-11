@@ -27,6 +27,53 @@ vi.mock('./owner-preview-user-client', () => ({
 
 import { startProductionBuilderStack } from './production-builder-stack';
 
+it('installs a fixed verifier relay only when a distinct trusted port is configured', async () => {
+  const server = () => ({
+    listen: vi.fn((_port, _host, callback) => callback()),
+    once: vi.fn(),
+    off: vi.fn(),
+  });
+  f.host.mockResolvedValue({
+    publicJwks: { keys: [] },
+    deliver: vi.fn(),
+    close: vi.fn(async () => {}),
+  });
+  f.listener.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  f.delivery.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  const host = {
+    integration: { executionOrigin: 'https://output.runtime.test' },
+  } as never;
+  const stack = await startProductionBuilderStack({
+    host,
+    port: 8790,
+    deliveryPort: 8791,
+    verifierPort: 8792,
+  });
+  try {
+    expect(f.listener).toHaveBeenLastCalledWith(
+      { keys: [] },
+      undefined,
+      expect.any(Function)
+    );
+  } finally {
+    await stack.close();
+  }
+  await expect(
+    startProductionBuilderStack({
+      host,
+      port: 8790,
+      deliveryPort: 8791,
+      verifierPort: 8790,
+    })
+  ).rejects.toThrow('INVALID_LISTENER_PORT');
+});
+
 it('attaches the owner bridge only when a trusted key and durable nonce store are supplied', async () => {
   const server = () => ({
     listen: vi.fn((_port, _host, callback) => callback()),

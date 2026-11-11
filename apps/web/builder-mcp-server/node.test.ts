@@ -144,6 +144,48 @@ it('routes the internal owner preview only when explicitly installed', async () 
   }
 });
 
+it('routes signed attestation only when explicitly installed', async () => {
+  const ownerAttestation = vi.fn(async (req: Request) => {
+    expect(req.url).toBe('https://verifier.baci-internal.invalid/v1/attest');
+    expect(req.headers.get('x-baci-verifier-signature')).toBe('synthetic');
+    expect(req.headers.get('cookie')).toBeNull();
+    return new Response(null, { status: 204 });
+  });
+  const runtime = createBuilderMcpNodeServer({ ownerAttestation });
+  runtime.server.listen(0, '127.0.0.1');
+  await once(runtime.server, 'listening');
+  const address = runtime.server.address();
+  if (!address || typeof address === 'string') throw Error('fixture');
+  try {
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/internal/owner/attest',
+          method: 'POST',
+          headers: {
+            host: 'mcp.usebaci.com',
+            'content-type': 'application/json',
+            'x-baci-verifier-signature': 'synthetic',
+            cookie: 'secret=never-forward',
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+    expect(status).toBe(204);
+    expect(ownerAttestation).toHaveBeenCalledOnce();
+  } finally {
+    await runtime.close();
+  }
+});
+
 it('does not expose the owner preview route by default', async () => {
   const runtime = createBuilderMcpNodeServer();
   runtime.server.listen(0, '127.0.0.1');

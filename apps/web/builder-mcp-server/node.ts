@@ -3,7 +3,10 @@ import { createRemoteJWKSet } from 'jose';
 import { createBuilderBackendClient } from './backend-client';
 import { createBuilderMcpHttpHandler } from './http';
 import { BUILDER_ISSUER } from './metadata';
-import { createOwnerPreviewHttpHandler } from './owner-preview-http';
+import {
+  createOwnerAttestationHttpHandler,
+  createOwnerPreviewHttpHandler,
+} from './owner-preview-http';
 import type { BuilderMcpDependencies } from './registry';
 import { createBuilderTransportVerifier } from './token-verifier';
 /** Public JWKS + outer-token HTTPS forwarder only. No vault, database, cookies or admin client. */
@@ -13,6 +16,7 @@ export function createBuilderMcpNodeServer(
     executeBuilderTool?: BuilderMcpDependencies['executeBuilderTool'];
     verifyAccessToken?: (token: string) => Promise<void>;
     ownerPreview?: (request: Request) => Promise<Response>;
+    ownerAttestation?: (request: Request) => Promise<Response>;
   } = {}
 ) {
   const handler = createBuilderMcpHttpHandler({
@@ -30,9 +34,16 @@ export function createBuilderMcpNodeServer(
   const owner = options.ownerPreview
     ? createOwnerPreviewHttpHandler(options.ownerPreview)
     : undefined;
+  const attestation = options.ownerAttestation
+    ? createOwnerAttestationHttpHandler(options.ownerAttestation)
+    : undefined;
   const server = createServer((req, res) => {
     const selected =
-      owner && req.url === '/internal/owner/preview' ? owner : handler;
+      owner && req.url === '/internal/owner/preview'
+        ? owner
+        : attestation && req.url === '/internal/owner/attest'
+          ? attestation
+          : handler;
     void selected.handle(req, res).catch(() => {
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' });

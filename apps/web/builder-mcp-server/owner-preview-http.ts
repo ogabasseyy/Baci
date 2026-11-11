@@ -4,6 +4,28 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 export function createOwnerPreviewHttpHandler(
   bridge: (request: Request) => Promise<Response>
 ) {
+  return createOwnerHttpHandler(bridge, {
+    path: '/internal/owner/preview',
+    target: 'https://mcp.usebaci.com/internal/owner/preview',
+    signature: 'x-baci-owner-signature',
+  });
+}
+
+/** The fixed verifier target is reachable only through the trusted relay. */
+export function createOwnerAttestationHttpHandler(
+  bridge: (request: Request) => Promise<Response>
+) {
+  return createOwnerHttpHandler(bridge, {
+    path: '/internal/owner/attest',
+    target: 'https://verifier.baci-internal.invalid/v1/attest',
+    signature: 'x-baci-verifier-signature',
+  });
+}
+
+function createOwnerHttpHandler(
+  bridge: (request: Request) => Promise<Response>,
+  binding: { path: string; target: string; signature: string }
+) {
   let readers = 0;
   let active = 0;
   const respond = (res: ServerResponse, status: number) => {
@@ -18,7 +40,7 @@ export function createOwnerPreviewHttpHandler(
   async function dispatch(req: IncomingMessage, res: ServerResponse) {
     if (
       req.method !== 'POST' ||
-      req.url !== '/internal/owner/preview' ||
+      req.url !== binding.path ||
       req.headers.host !== 'mcp.usebaci.com' ||
       req.rawHeaders.filter(
         (_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host'
@@ -85,12 +107,12 @@ export function createOwnerPreviewHttpHandler(
       readers--;
     }
     try {
-      const signature = req.headers['x-baci-owner-signature'];
+      const signature = req.headers[binding.signature];
       const headers = new Headers({ 'content-type': 'application/json' });
       if (typeof signature === 'string')
-        headers.set('x-baci-owner-signature', signature);
+        headers.set(binding.signature, signature);
       const result = await bridge(
-        new Request('https://mcp.usebaci.com/internal/owner/preview', {
+        new Request(binding.target, {
           method: 'POST',
           headers,
           body: new Uint8Array(bytes),

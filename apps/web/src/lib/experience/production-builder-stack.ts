@@ -1,6 +1,7 @@
 import 'server-only';
 import { timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
+import { createVerifierLoopbackForwarder } from '../../../tools/experience-verifier/loopback-forwarder';
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
 import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
 import { startProductionBuilderHost } from './production-builder-host';
@@ -23,6 +24,7 @@ export async function startProductionBuilderStack(settings: {
   host: Parameters<typeof startProductionBuilderHost>[0];
   port: number;
   deliveryPort: number;
+  verifierPort?: number;
   ownerBridge?: {
     key: Uint8Array;
     consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
@@ -35,7 +37,13 @@ export async function startProductionBuilderStack(settings: {
     !Number.isInteger(settings.deliveryPort) ||
     settings.deliveryPort < 1 ||
     settings.deliveryPort > 65535 ||
-    settings.deliveryPort === settings.port
+    settings.deliveryPort === settings.port ||
+    (settings.verifierPort !== undefined &&
+      (!Number.isInteger(settings.verifierPort) ||
+        settings.verifierPort < 1 ||
+        settings.verifierPort > 65535 ||
+        settings.verifierPort === settings.port ||
+        settings.verifierPort === settings.deliveryPort))
   )
     throw Error('INVALID_LISTENER_PORT');
   if (settings.ownerBridge) {
@@ -68,9 +76,15 @@ export async function startProductionBuilderStack(settings: {
           launch: host.ownerPreviewLaunch,
         })
       : undefined;
-    listener = ownerPreview
-      ? createProductionBuilderListener(host.publicJwks, ownerPreview)
-      : createProductionBuilderListener(host.publicJwks);
+    listener = settings.verifierPort
+      ? createProductionBuilderListener(
+          host.publicJwks,
+          ownerPreview,
+          createVerifierLoopbackForwarder(settings.verifierPort)
+        )
+      : ownerPreview
+        ? createProductionBuilderListener(host.publicJwks, ownerPreview)
+        : createProductionBuilderListener(host.publicJwks);
     await listen(listener.server, settings.port);
     delivery = createProductionDeliveryListener({
       executionOrigin: settings.host.integration.executionOrigin,

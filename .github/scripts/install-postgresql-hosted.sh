@@ -23,10 +23,10 @@
 # Ubuntu mirror outages: hosted runners read Ubuntu packages through /etc/apt/apt-mirrors.txt, Azure's
 # mirror first. On 2026-11-11 that mirror stopped answering, and the full `apt-get update` this script used
 # to run waited on it for minutes and then failed, which took down every job that installs PostgreSQL while
-# the PostgreSQL repository itself answered at once. On the hosted image the server and client packages are
-# expected to need nothing from Ubuntu's archive, so the first refresh reads the PGDG source only and
-# recommended extras are skipped. Every apt command is bounded in time. Only if the install still fails does
-# the script point apt at Ubuntu's own servers, refresh every list once and try one more time.
+# the PostgreSQL repository itself answered at once. The server and client packages need almost nothing from
+# Ubuntu's archive (on the hosted image only liburing2), so the first refresh reads the PGDG source only and
+# recommended extras are skipped. Every apt command is bounded in time. Only if that fails does the script
+# put independent Ubuntu mirrors ahead of Canonical's own, refresh every list once and try one more time.
 set -euo pipefail
 
 if [ "${RUNNER_ENVIRONMENT:-}" != "github-hosted" ]; then
@@ -42,6 +42,17 @@ PGDG_KEYRING='/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc'
 PGDG_SOURCE='/etc/apt/sources.list.d/pgdg.list'
 # Where the hosted image lists its Ubuntu mirrors (see the comment at the top).
 UBUNTU_MIRRORS='/etc/apt/apt-mirrors.txt'
+# The fallback list, best first. Two independent full mirrors lead: on 2026-11-11 Canonical's own servers
+# (archive.ubuntu.com, security.ubuntu.com) did not answer either, and liburing2, the one package the
+# PostgreSQL 18 build needs from Ubuntu, could not be fetched. apt checks the archive signatures on every
+# mirror, so an independent mirror is as trustworthy as Canonical's. Azure's mirror stays as the last choice.
+FALLBACK_MIRRORS=(
+  https://mirrors.edge.kernel.org/ubuntu/
+  https://ubuntu.osuosl.org/ubuntu/
+  https://archive.ubuntu.com/ubuntu/
+  https://security.ubuntu.com/ubuntu/
+  https://azure.archive.ubuntu.com/ubuntu/
+)
 # No single apt command may wait longer than this, whatever the mirrors do. A healthy install
 # takes well under a minute.
 APT_LIMIT_SECONDS=180
@@ -106,20 +117,23 @@ echo "deb [signed-by=${PGDG_KEYRING}] https://apt.postgresql.org/pub/repos/apt n
 
 # Refresh only the PGDG index first: it is all the two packages should need, and it keeps an unreachable
 # Ubuntu mirror out of the way. List-Cleanup=0 leaves the Ubuntu lists as they are. If that refresh or the
-# install fails (a dependency has to come from Ubuntu's archive, or the refresh itself broke), switch to
-# Ubuntu's own servers once and refresh every list. Azure stays on the list as the last choice.
+# install fails (a dependency has to come from Ubuntu's archive, or the refresh itself broke), switch to the
+# fallback mirror list once and refresh every list.
 if ! { apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 update && install_pinned; }; then
-  echo "The PostgreSQL-only refresh or the install failed; switching to the canonical Ubuntu mirrors and refreshing every list once."
+  echo "The PostgreSQL-only refresh or the install failed; switching to independent and canonical Ubuntu mirrors and refreshing every list once."
   # Keep a record of the image's own list in the job log before it is replaced.
   if [ -f "$UBUNTU_MIRRORS" ]; then
     echo "Replacing the mirror list ${UBUNTU_MIRRORS}:"
     sed 's/^/  /' "$UBUNTU_MIRRORS"
   fi
-  # All three entries use https; Azure's mirror answers over it too.
-  printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\nhttps://azure.archive.ubuntu.com/ubuntu/\tpriority:3\n' |
-    sudo tee "$UBUNTU_MIRRORS" >/dev/null
+  # Every entry uses https; Azure's mirror answers over it too.
+  priority=0
+  for mirror in "${FALLBACK_MIRRORS[@]}"; do
+    priority=$((priority + 1))
+    printf '%s\tpriority:%d\n' "$mirror" "$priority"
+  done | sudo tee "$UBUNTU_MIRRORS" >/dev/null
   { apt_get update && install_pinned; } || {
-    echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the canonical Ubuntu mirrors." >&2
+    echo "Could not install PostgreSQL 18 ${PG_BUILD}, not even from the independent and canonical Ubuntu mirrors." >&2
     exit 1
   }
 fi

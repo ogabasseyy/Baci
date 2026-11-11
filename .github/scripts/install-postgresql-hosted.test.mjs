@@ -243,23 +243,25 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     assert.match(script, /timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" sudo apt-get/);
   });
 
-  // What the script does after a failed first attempt: Ubuntu's own servers first, Azure demoted to last, one full
-  // refresh, one more install.
+  // What the script does after a failed first attempt: independent full mirrors ahead of Canonical's own servers
+  // (both were unreachable in the 2026-11-11 outage), Azure demoted to last, one full refresh, one more install.
   const FALLBACK = [
     'sudo tee /etc/apt/apt-mirrors.txt',
-    '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:1',
-    '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:2',
-    '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:3',
+    '  stdin: https://mirrors.edge.kernel.org/ubuntu/\tpriority:1',
+    '  stdin: https://ubuntu.osuosl.org/ubuntu/\tpriority:2',
+    '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:3',
+    '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:4',
+    '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:5',
     `timeout ${APT_LIMIT_SECONDS}`,
     `sudo apt-get ${APT_BOUNDS} update`,
     `timeout ${APT_LIMIT_SECONDS}`,
     INSTALL,
   ];
 
-  test('switches to the canonical Ubuntu mirrors and refreshes everything when the first install fails', () => {
+  test('switches to independent and canonical Ubuntu mirrors and refreshes everything when the first install fails', () => {
     const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /canonical Ubuntu mirrors/);
+    assert.match(result.stdout, /independent and canonical Ubuntu mirrors/);
     assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
     // Azure is demoted, not deleted, so the list keeps a second path. Every entry, Azure included, uses https.
     assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);

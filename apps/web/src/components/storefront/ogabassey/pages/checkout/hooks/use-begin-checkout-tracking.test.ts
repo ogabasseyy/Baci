@@ -184,4 +184,34 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
 
     expect(beginCheckout).toHaveBeenCalledTimes(1);
   });
+
+  it('reports the numeric rawPrice and a string id for a template grid line', async () => {
+    // Regression: grid-added lines carry '₦5,985,000' in price, which the
+    // checkout price helper turned into a zero-value begin_checkout.
+    renderHook(() =>
+      useBeginCheckoutTracking(
+        params({
+          checkoutCart: [
+            cartLine({
+              id: 7 as never,
+              price: '₦5,985,000' as never,
+              rawPrice: 5_985_000,
+            } as never),
+          ],
+        })
+      )
+    );
+
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+    expect(beginCheckout).toHaveBeenCalledWith(
+      'merchant-1',
+      [
+        {
+          product: expect.objectContaining({ id: '7', price: 5_985_000 }),
+          quantity: 1,
+        },
+      ],
+      'NGN'
+    );
+  });
 });

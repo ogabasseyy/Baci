@@ -15,6 +15,18 @@ function loadEventTracking(): Promise<EventTrackingModule> {
 const reportedKeys = new Set<string>();
 
 /**
+ * Template grid lines can carry a formatted display string in `price` and
+ * the amount in `rawPrice`; give the checkout price helper the number.
+ */
+function withNumericPrice(item: CartItem): CartItem {
+  if (typeof item.price === 'number') return item;
+  const rawPrice = (item as unknown as { rawPrice?: unknown }).rawPrice;
+  return typeof rawPrice === 'number' && Number.isFinite(rawPrice)
+    ? { ...item, price: rawPrice }
+    : item;
+}
+
+/**
  * Claims a begin_checkout report once per browser session and checkout
  * attempt, matching the PostHog `checkout_started` dedupe, so refreshes and
  * re-renders do not inflate ad-platform checkout counts.
@@ -91,11 +103,11 @@ export function useBeginCheckoutTracking({
           // basket as presented, not as scheduled.
           const items = checkoutCart.map((item) => ({
             product: {
-              id: item.id,
+              id: String(item.id),
               name: item.name,
               // Same unit price checkout charges: unaccepted price proposals
               // stay at catalog and quiz vouchers are free.
-              price: getCartItemCheckoutUnitPrice(item),
+              price: getCartItemCheckoutUnitPrice(withNumericPrice(item)),
               category: item.category,
               categories: item.categories,
             },

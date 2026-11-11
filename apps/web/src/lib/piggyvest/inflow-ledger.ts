@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BankTransferInflowSuccessEvent } from '@/schemas/piggyvest/events';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
+import { alertCreditAuditDrift } from './credit-audit-drift';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
 import { readStoredPvbCredit } from './stored-pvb-credit';
 
@@ -225,6 +226,21 @@ export async function recordInflowCredit(
       }
     );
   }
+  // Same credit: page (never conflict) if its audit-only internals drifted.
+  alertCreditAuditDrift({
+    eventType: 'bank-transfer.inflow.success',
+    pvbReference: event.pvb_reference,
+    driftedFields: [
+      stored.provider_transaction_id !== detail.transaction_id &&
+        'provider_transaction_id',
+      stored.event_data_id !== detail.id && 'event_data_id',
+      stored.reference !== detail.reference && 'reference',
+      (stored.session_id ?? null) !== (detail.session_id ?? null) &&
+        'session_id',
+      new Date(stored.credited_at).getTime() !==
+        new Date(detail.timestamp).getTime() && 'credited_at',
+    ].filter((field): field is string => typeof field === 'string'),
+  });
   // Redeliveries retry the projection: the first delivery may have
   // credited-then-thrown on ambiguity, and only a later delivery can
   // project once the goal set resolves to one candidate. Project under the

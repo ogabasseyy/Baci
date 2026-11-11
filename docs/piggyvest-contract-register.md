@@ -270,7 +270,9 @@ not unique keys either.
   `pvb_reference`, a redelivery under a NEW internal id could otherwise
   credit twice, so while a NULL row exists for a customer the intake insert
   functions refuse THAT customer's new credits with a retryable `55000`
-  (503 / drain retry); other customers are unaffected. An operator must set
+  (503 / drain retry); other customers are unaffected, and a redelivery
+  whose internal id is already stored (the legacy credit itself) is exempt
+  and dedupes normally. An operator must set
   those rows' `pvb_reference` from verified evidence. The migration does
   not abort on them, so deploys are not blocked. Runbook check before live
   traffic (read-only):
@@ -282,6 +284,9 @@ not unique keys either.
   `reference`, `session_id`, `batch_id`, `timestamp`, `transaction_id`)
   are audit-only, because PiggyVest guarantees only `pvb_reference` and,
   with no resend endpoint, a false conflict would strand the delivery.
+  Drift in those internals on a deduped credit still pages
+  (`PIGGYVEST_CREDIT_AUDIT_DRIFT`, field names only), so a reused
+  `pvb_reference` or provider bug is seen rather than silently acked.
 - Plan-transfer projection key NOT changed: it stays
   `plan-transfer:{provider_transaction_id}` of the stored (first-writer)
   row. Changing it to `pvb_reference` would project already-credited rows a

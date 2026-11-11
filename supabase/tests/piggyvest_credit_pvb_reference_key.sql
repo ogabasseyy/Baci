@@ -121,6 +121,22 @@ BEGIN
     RAISE EXCEPTION 'interest insert must fail closed while a legacy NULL row exists';
   EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
   END;
+  -- The legacy credit's own redelivery (same internal ids) is exempt: it
+  -- reports [] for the app's duplicate path instead of raising.
+  IF piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01PVBREF11', 'provider_transaction_id', 'pvbref-legacy-txn',
+      'event_data_id', 'd', 'event_id', 'pvbref-evt-11', 'customer_id', 'c', 'wallet_id', 'w',
+      'amount_kobo', 1000, 'fee_kobo', 0, 'reference', 'r',
+      'credited_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'legacy inflow redelivery must dedupe, not raise';
+  END IF;
+  IF piggyvest_webhook_intake.interest_payout_insert(jsonb_build_object(
+      'pvb_reference', 'PVB01PVBREF12', 'provider_payout_id', 'pvbref-legacy-payout',
+      'event_id', 'pvbref-evt-12', 'customer_id', 'c', 'wallet_id', 'w', 'amount_kobo', 90,
+      'gross_kobo', 100, 'withholding_tax_kobo', 10, 'net_kobo', 90, 'reference', 'r',
+      'batch_id', 'b', 'paid_at', '2026-11-11T10:00:00.000Z')) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'legacy interest redelivery must dedupe, not raise';
+  END IF;
   -- The gate is per customer: another customer's credit still lands.
   IF jsonb_array_length(piggyvest_webhook_intake.inflow_credit_insert(jsonb_build_object(
       'pvb_reference', 'PVB01PVBREF10', 'provider_transaction_id', 'pvbref-other-txn',

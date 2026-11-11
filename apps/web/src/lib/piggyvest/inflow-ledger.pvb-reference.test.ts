@@ -113,6 +113,7 @@ function fakeLedger(seed: Row[] = []) {
 describe('bugfix: inflow credits deduped on internal transaction_id', () => {
   it('credits once when two deliveries share pvb_reference but differ in transaction_id', async () => {
     // Arrange
+    const alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { client, rows, rpc } = fakeLedger();
     const first = delivery();
     const retry = delivery({
@@ -134,6 +135,13 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
       pvb_reference: 'PVB01SYNTHETIC001',
       provider_transaction_id: 'internal-txn-synthetic-001',
     });
+    // The drifted internal id is paged by name, never silently acked.
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"same pvb_reference, audit fields differ: provider_transaction_id"'
+      )
+    );
+    alerts.mockRestore();
     expect(rpc).toHaveBeenCalledTimes(2);
     for (const [, args] of rpc.mock.calls as unknown as [string, Row][]) {
       expect(args).toMatchObject({

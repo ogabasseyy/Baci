@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import z from 'zod';
 import type { InterestPayoutSuccessEvent } from '@/schemas/piggyvest/events';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
+import { alertCreditAuditDrift } from './credit-audit-drift';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
 import { readStoredPvbCredit } from './stored-pvb-credit';
 
@@ -206,6 +207,18 @@ export async function recordInterestPayout(
       }
     );
   }
+  // Same payout: page (never conflict) if its audit-only internals drifted.
+  alertCreditAuditDrift({
+    eventType: 'interest-payout.success',
+    pvbReference: event.pvb_reference,
+    driftedFields: [
+      stored.provider_payout_id !== detail.id && 'provider_payout_id',
+      stored.reference !== detail.reference && 'reference',
+      stored.batch_id !== detail.batch_id && 'batch_id',
+      new Date(stored.paid_at).getTime() !==
+        new Date(detail.timestamp).getTime() && 'paid_at',
+    ].filter((field): field is string => typeof field === 'string'),
+  });
   return 'duplicate';
 }
 

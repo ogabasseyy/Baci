@@ -26,7 +26,9 @@
 --   that customer's new credits with a retryable 55000 (the receiver
 --   answers 503 / the capture drain retries) until an operator sets the
 --   legacy row's pvb_reference from verified evidence. Other customers are
---   unaffected.
+--   unaffected, and a redelivery carrying an internal id that is already
+--   stored (the legacy credit itself) is exempt: it reaches ON CONFLICT and
+--   the app's duplicate path instead of 503-looping.
 --   This deliberately does not abort the migration: a deploy-blocking
 --   migration would hold every other release hostage to a data repair.
 -- * Insert functions use a target-less ON CONFLICT DO NOTHING so a collision
@@ -50,8 +52,9 @@ SET wallet_id = event_details->>'pvb_wallet'
 WHERE event_type = 'interest-payout.success'
   AND jsonb_typeof(event_details->'pvb_wallet') = 'string'
   AND length(btrim(event_details->>'pvb_wallet')) > 0
-  AND wallet_id IS NOT DISTINCT FROM event_details->>'destination_wallet'
-  AND wallet_id IS DISTINCT FROM event_details->>'pvb_wallet';
+  AND wallet_id IS NOT NULL
+  AND wallet_id = event_details->>'destination_wallet'
+  AND wallet_id <> event_details->>'pvb_wallet';
 
 ALTER TABLE public.piggyvest_inflow_credits
   ADD COLUMN IF NOT EXISTS pvb_reference text;
@@ -127,8 +130,12 @@ BEGIN
     OR length(btrim(p->>'pvb_reference')) = 0 THEN
     RAISE EXCEPTION 'Invalid inflow request' USING ERRCODE = '22023';
   END IF;
+  -- Exempt the legacy credit's own redelivery (same internal id): it falls
+  -- through to ON CONFLICT and dedupes in the app instead of 503-looping.
   IF EXISTS (SELECT 1 FROM public.piggyvest_inflow_credits
-      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id') THEN
+      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id')
+    AND NOT EXISTS (SELECT 1 FROM public.piggyvest_inflow_credits
+      WHERE provider_transaction_id = p->>'provider_transaction_id') THEN
     RAISE EXCEPTION 'Inflow ledger has legacy rows without pvb_reference for this customer'
       USING ERRCODE = '55000';
   END IF;
@@ -179,8 +186,11 @@ BEGIN
     OR length(btrim(p->>'pvb_reference')) = 0 THEN
     RAISE EXCEPTION 'Invalid interest request' USING ERRCODE = '22023';
   END IF;
+  -- Exempt the legacy payout's own redelivery (same internal id).
   IF EXISTS (SELECT 1 FROM public.piggyvest_interest_payouts
-      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id') THEN
+      WHERE pvb_reference IS NULL AND customer_id = p->>'customer_id')
+    AND NOT EXISTS (SELECT 1 FROM public.piggyvest_interest_payouts
+      WHERE provider_payout_id = p->>'provider_payout_id') THEN
     RAISE EXCEPTION 'Interest ledger has legacy rows without pvb_reference for this customer'
       USING ERRCODE = '55000';
   END IF;

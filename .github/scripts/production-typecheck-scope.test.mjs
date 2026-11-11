@@ -165,6 +165,9 @@ test('pull requests skip the production build typecheck only when nothing in the
   for (const entry of packages.filter(entry => entry.isDirectory())) {
     assert.ok(webFilter.includes(`packages/${entry.name}/**`), `web filter must include packages/${entry.name}/**`);
   }
+  const scopeScript = readFileSync(new URL('./production-build-typecheck-scope.mjs', import.meta.url), 'utf8');
+  assert.match(scopeScript, /'--name-only', '-z'/, 'paths must be read unquoted');
+  assert.match(scopeScript, /\.split\('\\0'\)/);
   // Fail closed: pushes, an unreadable diff, and an empty diff all run the check.
   assert.equal(run(['docs/x.md'], ''), true);
   assert.equal(run([]), true);

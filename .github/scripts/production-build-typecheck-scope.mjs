@@ -63,8 +63,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const decision = decide({
     baseSha: process.env.BASE_SHA ?? '',
     listChangedFiles: base =>
-      execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], { encoding: 'utf8' })
-        .split('\n')
+      // -z: git otherwise quotes paths with special characters, which would hide them from the patterns.
+      execFileSync('git', ['diff', '--name-only', '-z', `${base}...HEAD`], { encoding: 'utf8' })
+        .split('\0')
         .filter(Boolean),
   });
   console.log(`production build typecheck: ${decision.run ? 'run' : 'skip'} (${decision.reason})`);

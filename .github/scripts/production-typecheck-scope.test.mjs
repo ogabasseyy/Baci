@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import ts from '@typescript/typescript6';
@@ -110,6 +110,9 @@ test('pull requests skip the production build typecheck only when nothing in the
     'apps/web/tools/prepare-typed-navigation.mjs',
     'apps/web/src/config/build-typecheck.ts',
     'packages/shared/src/index.ts',
+    // tsconfig.build.json inherits `tests/typecheck/**` and only excludes test-pattern names.
+    'apps/web/tests/typecheck/routes.tsx',
+    'apps/web/tests/checkout-browser/contact.pw.ts',
     'pnpm-lock.yaml',
     'package.json',
     'turbo.json',
@@ -126,7 +129,6 @@ test('pull requests skip the production build typecheck only when nothing in the
     'apps/web/src/app/page.test.tsx',
     'apps/web/src/lib/__tests__/helper.ts',
     'apps/web/src/lib/__mocks__/supabase.ts',
-    'apps/web/tests/checkout-browser/contact.pw.ts',
     'apps/web/README.md',
     'apps/mobile-admin/app/index.tsx',
     'docs/production-release-coordination.md',
@@ -156,6 +158,11 @@ test('pull requests skip the production build typecheck only when nothing in the
     assert.ok(webFilter.includes(pattern), `web filter must include ${pattern}`);
   }
   assert.equal(needsProductionTypecheck(['.github/actions/unlisted/action.yml']), false);
+  // The scope treats every workspace package as production code; the job filter must see each one.
+  const packages = readdirSync(new URL('../../packages/', import.meta.url), { withFileTypes: true });
+  for (const entry of packages.filter(entry => entry.isDirectory())) {
+    assert.ok(webFilter.includes(`packages/${entry.name}/**`), `web filter must include packages/${entry.name}/**`);
+  }
   // Fail closed: pushes, an unreadable diff, and an empty diff all run the check.
   assert.equal(run(['docs/x.md'], ''), true);
   assert.equal(run([]), true);

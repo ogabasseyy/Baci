@@ -27,7 +27,7 @@ export const PRODUCTION_TYPECHECK_TRIGGERS = [
 const PRODUCTION_PROGRAM_ROOTS = /^(?:apps\/web|packages)\//;
 // Mirrors the test roots tsconfig.build.json excludes, plus prose.
 const OUTSIDE_PRODUCTION_PROGRAM =
-  /\.(?:test|spec)\.[cm]?[jt]sx?$|\/(?:__tests__|__mocks__)\/|\.(?:md|mdx)$|^apps\/web\/tests\//;
+  /\.(?:test|spec)\.[cm]?[jt]sx?$|\/(?:__tests__|__mocks__)\/|\.(?:md|mdx)$/;
 
 /**
  * The production program can report errors the normal typecheck does not (it is a

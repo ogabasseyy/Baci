@@ -150,7 +150,7 @@ fi
 
 # Otherwise an outstanding voter could still reach the block quorum. Stay
 # pending; a reviewer workflow_run completion re-tallies. There is no
-# fixed poll window, so a slow voter (Jules can run for hours) is always
-# awaited rather than declared green prematurely.
+# fixed poll window, so a slow voter (a reviewer run can take many minutes)
+# is always awaited rather than declared green prematurely.
 echo "Diff Guardian: outstanding voters could still reach block quorum; awaiting completion."
 set_status pending "Waiting for AI reviewer completion"

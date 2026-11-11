@@ -28,7 +28,7 @@ BEGIN
   END IF;
 
   FOREACH v_fn IN ARRAY ARRAY[
-    'piggyvest_capture_operator.list_review_captures(integer)'::regprocedure,
+    'piggyvest_capture_operator.list_review_captures(integer,integer)'::regprocedure,
     'piggyvest_capture_operator.requeue_review_capture(uuid,text)'::regprocedure
   ] LOOP
     IF NOT EXISTS (
@@ -174,6 +174,16 @@ BEGIN
        OR e ? 'raw_body' OR e ? 'rawBody' OR e ? 'signature' OR e ? 'requestHeaders'
   ) THEN
     RAISE EXCEPTION 'review listing is wrong or exposes evidence: %', v_list;
+  END IF;
+  -- Paging reaches past the first page: with one row per page, the two
+  -- parked rows land on different pages and every page is distinct.
+  IF pg_catalog.jsonb_array_length(piggyvest_capture_operator.review_captures(1, 0)) <> 1
+    OR piggyvest_capture_operator.review_captures(1, 0)->0->>'captureId'
+       = piggyvest_capture_operator.review_captures(1, 1)->0->>'captureId'
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_catalog.generate_series(0, 50) g
+      WHERE piggyvest_capture_operator.review_captures(1, g)->0->>'captureId' = v_limit::text) THEN
+    RAISE EXCEPTION 'review listing does not page';
   END IF;
 
   -- A parked capture is requeued once, with an audit row.
@@ -436,7 +446,7 @@ BEGIN
   -- The internal functions are callable only by their owner, and are not
   -- SECURITY DEFINER.
   FOREACH v_fn IN ARRAY ARRAY[
-    'piggyvest_capture_operator.review_captures(integer)'::regprocedure,
+    'piggyvest_capture_operator.review_captures(integer,integer)'::regprocedure,
     'piggyvest_capture_operator.requeue_capture(text,uuid,text)'::regprocedure,
     'piggyvest_capture_operator.session_refusal(text)'::regprocedure
   ] LOOP

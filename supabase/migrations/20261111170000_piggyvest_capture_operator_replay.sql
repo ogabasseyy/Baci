@@ -96,11 +96,15 @@ CREATE POLICY piggyvest_webhook_capture_replay_audit_deny_all
   WITH CHECK (false);
 
 REVOKE ALL ON TABLE public.piggyvest_webhook_capture_replay_audit
-  FROM PUBLIC, anon, authenticated, service_role;
+  FROM PUBLIC, anon, authenticated, service_role,
+    piggyvest_webhook_capture_worker, piggyvest_webhook_intake,
+    piggyvest_webhook_capture_operator;
 -- Default privileges in public would otherwise hand the identity sequence
 -- to the API roles.
 REVOKE ALL ON SEQUENCE public.piggyvest_webhook_capture_replay_audit_id_seq
-  FROM PUBLIC, anon, authenticated, service_role;
+  FROM PUBLIC, anon, authenticated, service_role,
+    piggyvest_webhook_capture_worker, piggyvest_webhook_intake,
+    piggyvest_webhook_capture_operator;
 
 COMMENT ON TABLE public.piggyvest_webhook_capture_replay_audit IS
   'Append-only record of operator requeues of needs_review PiggyVest webhook captures. Reachable only through piggyvest_capture_operator functions.';
@@ -142,8 +146,15 @@ GRANT USAGE ON SCHEMA piggyvest_capture_operator TO piggyvest_webhook_capture_op
 -- which the public functions below run as) can call them. The public
 -- functions first prove the calling session, then pass SESSION_USER on.
 
--- Review metadata, newest first. Never bodies, signatures or headers.
-CREATE OR REPLACE FUNCTION piggyvest_capture_operator.review_captures(p_limit integer)
+-- Review metadata, newest first, one page at a time (p_offset skips that many
+-- rows) so every parked capture stays reachable. Never bodies, signatures or
+-- headers.
+DROP FUNCTION IF EXISTS piggyvest_capture_operator.list_review_captures(integer);
+DROP FUNCTION IF EXISTS piggyvest_capture_operator.review_captures(integer);
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.review_captures(
+  p_limit integer,
+  p_offset integer DEFAULT 0
+)
 RETURNS jsonb
 LANGUAGE sql
 STABLE
@@ -168,6 +179,7 @@ AS $$
     WHERE c.processing_state = 'needs_review'
     ORDER BY c.received_at DESC, c.id
     LIMIT least(greatest(COALESCE(p_limit, 50), 1), 200)
+    OFFSET greatest(COALESCE(p_offset, 0), 0)
   ) AS r
 $$;
 
@@ -344,7 +356,10 @@ AS $$
     WHERE login.rolname = p_login), 'the session login is unknown')
 $$;
 
-CREATE OR REPLACE FUNCTION piggyvest_capture_operator.list_review_captures(p_limit integer)
+CREATE OR REPLACE FUNCTION piggyvest_capture_operator.list_review_captures(
+  p_limit integer,
+  p_offset integer DEFAULT 0
+)
 RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
@@ -357,7 +372,7 @@ BEGIN
   IF v_refusal <> '' THEN
     RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
   END IF;
-  RETURN piggyvest_capture_operator.review_captures(p_limit);
+  RETURN piggyvest_capture_operator.review_captures(p_limit, p_offset);
 END
 $$;
 
@@ -381,17 +396,17 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON FUNCTION piggyvest_capture_operator.review_captures(integer)
+REVOKE ALL ON FUNCTION piggyvest_capture_operator.review_captures(integer, integer)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_capture_operator.requeue_capture(text, uuid, text)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_capture_operator.session_refusal(text)
   FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION piggyvest_capture_operator.list_review_captures(integer)
+REVOKE ALL ON FUNCTION piggyvest_capture_operator.list_review_captures(integer, integer)
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_capture_operator.requeue_review_capture(uuid, text)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION piggyvest_capture_operator.list_review_captures(integer)
+GRANT EXECUTE ON FUNCTION piggyvest_capture_operator.list_review_captures(integer, integer)
   TO piggyvest_webhook_capture_operator;
 GRANT EXECUTE ON FUNCTION piggyvest_capture_operator.requeue_review_capture(uuid, text)
   TO piggyvest_webhook_capture_operator;

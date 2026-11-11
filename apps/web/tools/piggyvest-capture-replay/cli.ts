@@ -1,5 +1,8 @@
 import { pathToFileURL } from 'node:url';
-import type { PiggyvestCaptureRequeueResult } from '@/schemas/piggyvest/webhook-capture-operator-replay';
+import type {
+  PiggyvestCaptureRequeueResult,
+  PiggyvestReviewCapture,
+} from '@/schemas/piggyvest/webhook-capture-operator-replay';
 import {
   createOperatorStore,
   OperatorRefusal,
@@ -28,7 +31,8 @@ export const OPERATOR_DATABASE_URL_ENV =
 export const USAGE = `PiggyVest capture replay (operator)
 
 Commands:
-  list [--limit N]                               parked captures (metadata only), newest first
+  list [--limit N] [--offset M]                  parked captures (metadata only), newest first;
+                                                 --offset skips M rows to page further
   requeue <capture-id> --reason "<why>" [--yes]  put one parked capture back in the drain queue;
                                                  without --yes it only shows what would happen
 
@@ -59,6 +63,20 @@ export function describeRequeue(result: PiggyvestCaptureRequeueResult): string {
       return `That capture is a credit event (${result.eventType ?? 'unknown type'}) and the credit ledgers do not yet dedupe on pvb_reference (PR #4199 is not deployed here). Replaying it could credit twice, so nothing changed.`;
     case 'replay_limit_reached':
       return `That capture was already requeued ${result.operatorReplays} times (the limit is ${result.replayLimit}). Nothing changed; it needs a code fix, not another replay.`;
+  }
+}
+
+const PREVIEW_PAGE = 200;
+
+/** Every parked capture, a page at a time, until the id is found. */
+async function findParked(
+  store: OperatorStore,
+  captureId: string
+): Promise<PiggyvestReviewCapture | undefined> {
+  for (let offset = 0; ; offset += PREVIEW_PAGE) {
+    const page = await store.list(PREVIEW_PAGE, offset);
+    const match = page.find((capture) => capture.captureId === captureId);
+    if (match || page.length < PREVIEW_PAGE) return match;
   }
 }
 
@@ -93,7 +111,7 @@ export async function main(
   try {
     const store = createStore(connectionString);
     if (command.kind === 'list') {
-      const captures = await store.list(command.limit);
+      const captures = await store.list(command.limit, command.offset);
       if (captures.length === 0) io.out('No captures are parked for review.');
       for (const capture of captures)
         io.out(
@@ -111,13 +129,11 @@ export async function main(
     }
 
     if (!command.confirmed) {
-      const match = (await store.list(200)).find(
-        (capture) => capture.captureId === command.captureId
-      );
+      const match = await findParked(store, command.captureId);
       io.out(
         match
           ? `Would requeue ${match.captureId} (${match.eventType ?? 'unknown event'}, ${match.lastError ?? 'no error'}) with reason "${command.reason}". Re-run with --yes to do it.`
-          : `${command.captureId} is not among the 200 newest parked captures. Check the id with \`list\` before requeueing. Nothing changed.`
+          : `${command.captureId} is not parked for review. Check the id with \`list\` before requeueing. Nothing changed.`
       );
       return match ? 0 : 1;
     }

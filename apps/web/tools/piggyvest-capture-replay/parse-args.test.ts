@@ -10,11 +10,25 @@ describe('parseOperatorArgs', () => {
   });
 
   it('lists 50 by default and accepts a bounded limit', () => {
-    expect(parseOperatorArgs(['list'])).toEqual({ kind: 'list', limit: 50 });
+    expect(parseOperatorArgs(['list'])).toEqual({
+      kind: 'list',
+      limit: 50,
+      offset: 0,
+    });
     expect(parseOperatorArgs(['list', '--limit', '7'])).toEqual({
       kind: 'list',
       limit: 7,
+      offset: 0,
     });
+  });
+
+  it('pages past the first 200 with --offset', () => {
+    expect(
+      parseOperatorArgs(['list', '--limit', '200', '--offset', '400'])
+    ).toEqual({ kind: 'list', limit: 200, offset: 400 });
+    expect(() => parseOperatorArgs(['list', '--offset', '-1'])).toThrow(
+      UsageError
+    );
   });
 
   it.each([['0'], ['201'], ['abc']])('refuses limit %s', (limit) => {

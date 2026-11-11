@@ -295,7 +295,9 @@ which through a pooler is the pooler's own link. The tool accepts only that
 direct host on port 5432 (or a loopback database for local testing).
 
 1. `pnpm piggyvest:capture-replay list` shows parked deliveries (metadata
-   only: id, event type, transaction id, attempts, last error).
+   only: id, event type, transaction id, attempts, last error). It shows up
+   to 200 at a time, newest first; add `--offset 200`, `--offset 400`, and so
+   on to page further. The preview of a requeue searches every page.
 2. `pnpm piggyvest:capture-replay requeue <id> --reason "<what was fixed>"`
    previews the change; add `--yes` to do it.
 3. The drain picks the delivery up on its next run (within a few minutes).

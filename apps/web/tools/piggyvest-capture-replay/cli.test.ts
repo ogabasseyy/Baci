@@ -84,6 +84,23 @@ describe('capture replay CLI', () => {
     expect(store.requeue).not.toHaveBeenCalled();
   });
 
+  it('finds a parked capture beyond the first 200 for the preview', async () => {
+    const older = {
+      ...parked,
+      captureId: '22222222-3333-4444-8555-666666666666',
+    };
+    const fullPage = Array.from({ length: 200 }, () => parked);
+    store.list.mockImplementation(async (_limit: number, offset = 0) =>
+      offset === 0 ? fullPage : [older]
+    );
+    expect(
+      await run(['requeue', older.captureId, '--reason', 'fix #4199 deployed'])
+    ).toBe(0);
+    expect(out[0]).toContain(`Would requeue ${older.captureId}`);
+    expect(store.list).toHaveBeenNthCalledWith(2, 200, 200);
+    expect(store.requeue).not.toHaveBeenCalled();
+  });
+
   it('requeues with --yes', async () => {
     store.requeue.mockResolvedValue({
       outcome: 'requeued',

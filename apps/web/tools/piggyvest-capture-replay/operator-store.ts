@@ -23,7 +23,7 @@ import {
  */
 
 export const OPERATOR_STATEMENTS = {
-  list: 'SELECT piggyvest_capture_operator.list_review_captures($1::integer) AS captures',
+  list: 'SELECT piggyvest_capture_operator.list_review_captures($1::integer, $2::integer) AS captures',
   requeue:
     'SELECT piggyvest_capture_operator.requeue_review_capture($1::uuid, $2::text) AS result',
 } as const;
@@ -58,7 +58,7 @@ export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_n
       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) AS direct_table_access,
   (pg_catalog.has_schema_privilege(SESSION_USER, 'piggyvest_capture_operator', 'USAGE')
     AND pg_catalog.has_function_privilege(SESSION_USER,
-      'piggyvest_capture_operator.list_review_captures(integer)', 'EXECUTE')
+      'piggyvest_capture_operator.list_review_captures(integer,integer)', 'EXECUTE')
     AND pg_catalog.has_function_privilege(SESSION_USER,
       'piggyvest_capture_operator.requeue_review_capture(uuid,text)', 'EXECUTE')) AS grants_usable,
   (COALESCE((SELECT s.ssl FROM pg_catalog.pg_stat_ssl s WHERE s.pid = pg_catalog.pg_backend_pid()), false)
@@ -86,7 +86,7 @@ export interface OperatorStoreOptions {
 }
 
 export interface OperatorStore {
-  list(limit: number): Promise<PiggyvestReviewCapture[]>;
+  list(limit: number, offset?: number): Promise<PiggyvestReviewCapture[]>;
   requeue(
     captureId: string,
     reason: string
@@ -240,8 +240,8 @@ export function createOperatorStore(
   }
 
   return {
-    list: (limit) =>
-      run(OPERATOR_STATEMENTS.list, [limit], (row) =>
+    list: (limit, offset = 0) =>
+      run(OPERATOR_STATEMENTS.list, [limit, offset], (row) =>
         piggyvestReviewCapturesSchema.parse(row.captures)
       ),
     requeue: (captureId, reason) =>

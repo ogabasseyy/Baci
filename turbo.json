@@ -142,11 +142,7 @@
       ]
     },
     "typecheck:build": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "next.config*.ts",
-        "$TURBO_ROOT$/tsconfig*.json"
-      ]
+      "cache": false
     },
     "test": {
       "inputs": [

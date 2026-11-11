@@ -91,7 +91,8 @@ test('CI runs the production build type-check path after the normal typecheck', 
   assert.equal(steps[prod]['continue-on-error'], undefined);
   assert.equal(steps[scope]['continue-on-error'], undefined);
   const turbo = JSON.parse(readFileSync(new URL('../../turbo.json', import.meta.url), 'utf8'));
-  assert.deepEqual(turbo.tasks['typecheck:build'], turbo.tasks.typecheck);
+  // Never replay a cached pass: the task's inputs cannot see workspace packages the web program imports.
+  assert.deepEqual(turbo.tasks['typecheck:build'], { cache: false });
   // GOMEMLIMIT only budgets the native compiler: the web app must stay on TypeScript 7.
   assert.match(manifest.devDependencies.typescript, /^~7\./);
 });

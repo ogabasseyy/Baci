@@ -2,6 +2,7 @@
 
 import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
+import type { TrackedEvent } from './tracked-event-types';
 
 // Get or create session ID
 function getSessionId(): string {
@@ -32,9 +33,7 @@ function getEventMetadata(): Record<string, string | undefined> {
 const KEEPALIVE_BODY_LIMIT = 60_000;
 
 // Send event to our API (stores in Supabase)
-export async function sendTrackedEvent(event: {
-  event_type: string;
-}): Promise<void> {
+export async function sendTrackedEvent(event: TrackedEvent): Promise<void> {
   try {
     const body = JSON.stringify({
       ...event,

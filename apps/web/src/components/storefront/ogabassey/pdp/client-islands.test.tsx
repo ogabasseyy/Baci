@@ -82,4 +82,15 @@ describe('OgaBassey PDP client islands', () => {
       category: 'Laptops',
     });
   });
+
+  it('skips the product view when the product has no numeric price', () => {
+    mockProductViewTracker.mockClear();
+    const unpriced = { ...product, rawPrice: undefined } as unknown as Product;
+
+    render(
+      <OgabasseyPdpBelowFoldIsland product={unpriced} storeSlug="ogabassey" />
+    );
+
+    expect(mockProductViewTracker).not.toHaveBeenCalled();
+  });
 });

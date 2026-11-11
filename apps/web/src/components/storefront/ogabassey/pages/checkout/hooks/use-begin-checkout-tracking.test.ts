@@ -114,4 +114,33 @@ describe('bugfix: storefront checkout never reported begin_checkout', () => {
 
     expect(loadTracker).not.toHaveBeenCalled();
   });
+
+  it('does not report again when the shopper edits a quantity at checkout', async () => {
+    const shared = params();
+    const { rerender } = renderHook(
+      (props) => useBeginCheckoutTracking(props),
+      { initialProps: shared }
+    );
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+
+    rerender({ ...shared, checkoutCart: [cartLine({ quantity: 3 })] });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(beginCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports on a later render when the tracker failed to load the first time', async () => {
+    loadTracker.mockRejectedValueOnce(new Error('chunk failed'));
+    const shared = params();
+    const { rerender } = renderHook(
+      (props) => useBeginCheckoutTracking(props),
+      { initialProps: shared }
+    );
+    await vi.waitFor(() => expect(loadTracker).toHaveBeenCalledTimes(1));
+
+    rerender({ ...shared, checkoutCart: [cartLine()] });
+
+    await vi.waitFor(() => expect(beginCheckout).toHaveBeenCalledTimes(1));
+  });
 });

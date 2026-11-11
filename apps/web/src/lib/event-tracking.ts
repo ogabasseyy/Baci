@@ -3,6 +3,14 @@
 import { analytics } from '@/lib/analytics';
 import type { AnalyticsProduct } from '@/lib/analytics/analytics-product';
 import { sendTrackedEvent } from '@/lib/analytics/send-tracked-event';
+import type {
+  BaseEvent,
+  ProductEvent,
+  PurchaseEvent,
+  SearchEvent,
+} from '@/lib/analytics/tracked-event-types';
+
+export type { EventType } from '@/lib/analytics/tracked-event-types';
 
 /**
  * Event Tracking System for Baci
@@ -11,58 +19,6 @@ import { sendTrackedEvent } from '@/lib/analytics/send-tracked-event';
  * Also forwards events to GA4 and Facebook Pixel for external analytics.
  * For purchase events, also sends server-side events via Facebook Conversions API.
  */
-
-// Event types for the database
-export type EventType =
-  | 'page_view'
-  | 'product_view'
-  | 'add_to_cart'
-  | 'remove_from_cart'
-  | 'begin_checkout'
-  | 'purchase'
-  | 'search'
-  | 'add_to_wishlist'
-  | 'share';
-
-interface BaseEvent {
-  event_type: EventType;
-  event_id?: string;
-  merchant_id: string;
-  session_id?: string;
-  user_agent?: string;
-  referrer?: string;
-  page_url?: string;
-}
-
-interface ProductEvent extends BaseEvent {
-  product_id: string;
-  product_name: string;
-  product_category?: string;
-  product_price: number;
-  quantity?: number;
-  currency: string;
-}
-
-interface PurchaseEvent extends BaseEvent {
-  order_id: string;
-  total: number;
-  subtotal: number;
-  shipping?: number;
-  tax?: number;
-  currency: string;
-  item_count: number;
-  items: Array<{
-    product_id: string;
-    product_name: string;
-    price: number;
-    quantity: number;
-  }>;
-}
-
-interface SearchEvent extends BaseEvent {
-  search_term: string;
-  results_count?: number;
-}
 
 /**
  * Track events - stores in Supabase AND sends to GA4/Facebook
@@ -91,7 +47,7 @@ export const trackEvent = {
       product_category: categoryName,
       product_price: product.price,
       currency,
-    } as ProductEvent);
+    } satisfies ProductEvent);
 
     // Also send to GA4/Facebook
     analytics.viewItem(product, currency, eventId);
@@ -121,7 +77,7 @@ export const trackEvent = {
       product_price: product.price,
       quantity,
       currency,
-    } as ProductEvent);
+    } satisfies ProductEvent);
 
     analytics.addToCart(product, quantity, currency, undefined, eventId);
   },
@@ -148,7 +104,7 @@ export const trackEvent = {
       product_price: product.price,
       quantity,
       currency,
-    } as ProductEvent);
+    } satisfies ProductEvent);
 
     analytics.removeFromCart(product, quantity, currency);
   },
@@ -182,7 +138,7 @@ export const trackEvent = {
         price: product.price,
         quantity,
       })),
-    } as PurchaseEvent);
+    } satisfies PurchaseEvent);
 
     analytics.beginCheckout(products, currency, eventId);
   },
@@ -220,7 +176,7 @@ export const trackEvent = {
         price: product.price,
         quantity,
       })),
-    } as PurchaseEvent);
+    } satisfies PurchaseEvent);
 
     analytics.purchase(orderId, products, total, currency, tax, shipping);
   },
@@ -234,7 +190,7 @@ export const trackEvent = {
       merchant_id: merchantId,
       search_term: searchTerm,
       results_count: resultsCount,
-    } as SearchEvent);
+    } satisfies SearchEvent);
 
     analytics.search(searchTerm);
   },
@@ -259,7 +215,7 @@ export const trackEvent = {
       product_category: categoryName,
       product_price: product.price,
       currency,
-    } as ProductEvent);
+    } satisfies ProductEvent);
 
     analytics.addToWishlist(product, currency);
   },
@@ -272,7 +228,7 @@ export const trackEvent = {
       event_type: 'page_view',
       merchant_id: merchantId,
       page_url: pageUrl,
-    } as BaseEvent);
+    } satisfies BaseEvent);
 
     analytics.pageView(pageUrl, pageTitle);
   },

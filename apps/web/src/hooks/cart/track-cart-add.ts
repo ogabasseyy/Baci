@@ -23,8 +23,6 @@ export interface TrackCartAddInput {
       }
     | null
     | undefined;
-  /** Shell-provided merchant id, used when the merchant context is absent. */
-  fallbackMerchantId: string | null | undefined;
   product: AnalyticsProduct;
   quantity: number;
   options?: AddToCartOptions;
@@ -39,14 +37,15 @@ export interface TrackCartAddInput {
  */
 export function trackCartAdd({
   merchant,
-  fallbackMerchantId,
   product,
   quantity,
   options,
   loadTracker = loadEventTracking,
 }: TrackCartAddInput): void {
   if (options?.quizAwardId || options?.quizVoucherToken) return;
-  const merchantId = merchant?.id || fallbackMerchantId;
+  // Require the full merchant (not a bare id) so the reported currency is
+  // always the merchant's own; storefronts always provide it.
+  const merchantId = merchant?.id;
   if (!merchantId) return;
   const currency = resolveTrackingCurrency(merchant);
   void loadTracker()

@@ -15,6 +15,7 @@ import type {
   AddToCartOutcome,
   CartItem,
 } from './cart-types';
+import { countAddedUnits } from './count-added-units';
 import { gateAddToCart } from './gate-add-to-cart';
 import { trackCartAdd } from './track-cart-add';
 import type { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
@@ -31,7 +32,6 @@ export function useStorefrontCartLineHandlers({
   delegatedActions,
   enableSmartCartPro,
   merchantContext,
-  merchantId,
   merchantSlugRef,
   setCart,
   setCartWideNegotiationActive,
@@ -45,7 +45,6 @@ export function useStorefrontCartLineHandlers({
   delegatedActions: DelegatedActions;
   enableSmartCartPro: boolean;
   merchantContext: MerchantContextType | null;
-  merchantId: string | null;
   merchantSlugRef: RefObject<string | null>;
   setCart: Dispatch<SetStateAction<CartItem[]>>;
   setCartWideNegotiationActive: (active: boolean) => void;
@@ -63,7 +62,6 @@ export function useStorefrontCartLineHandlers({
   ) => {
     trackCartAdd({
       merchant: merchantContext?.merchant,
-      fallbackMerchantId: merchantId,
       product: added,
       quantity,
       options,
@@ -88,15 +86,15 @@ export function useStorefrontCartLineHandlers({
     const normalizedOptions = gated.options;
 
     if (delegated) {
-      const accepted = delegatedActions.addToCart(
+      const sentQuantity = delegatedActions.addToCart(
         productForCart,
         quantity,
         normalizedOptions
       );
-      if (accepted) {
-        noteAddedProduct(productForCart, quantity, normalizedOptions);
+      if (sentQuantity > 0) {
+        noteAddedProduct(productForCart, sentQuantity, normalizedOptions);
       }
-      return accepted ? 'applied' : 'rejected';
+      return sentQuantity > 0 ? 'applied' : 'rejected';
     }
 
     const isQuizPrizeVoucherLine = Boolean(
@@ -150,12 +148,13 @@ export function useStorefrontCartLineHandlers({
     // the group flag set after the updater stripped the lines — the
     // money paths key off per-line negotiatedPrice so no charged total
     // changes, and the next validation drift self-heals the flag.
+    const previousCartForProbe = cartRef.current;
     const probeResult = applyStorefrontCartLineAdd({
-      previousCart: cartRef.current,
+      previousCart: previousCartForProbe,
       ...lineAddInput,
     });
     const outcome: AddToCartOutcome =
-      probeResult === cartRef.current ? 'rejected' : 'applied';
+      probeResult === previousCartForProbe ? 'rejected' : 'applied';
     if (outcome === 'applied') {
       cartRef.current = probeResult;
     }
@@ -195,7 +194,12 @@ export function useStorefrontCartLineHandlers({
     }
 
     if (outcome === 'applied') {
-      noteAddedProduct(productForCart, quantity, normalizedOptions);
+      // Caps can accept fewer units than requested: report what landed.
+      noteAddedProduct(
+        productForCart,
+        countAddedUnits(previousCartForProbe, probeResult),
+        normalizedOptions
+      );
     }
     return outcome;
   };

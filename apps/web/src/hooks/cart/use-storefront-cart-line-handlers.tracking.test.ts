@@ -13,7 +13,7 @@ const merchant = { id: 'merchant-1', slug: 'ogabassey', country: 'NG' };
 
 function setup(overrides: Record<string, unknown> = {}) {
   const delegatedActions = {
-    addToCart: vi.fn(() => true),
+    addToCart: vi.fn(() => 1),
     removeFromCart: vi.fn(),
     updateQuantity: vi.fn(),
   };
@@ -25,7 +25,6 @@ function setup(overrides: Record<string, unknown> = {}) {
       delegatedActions,
       enableSmartCartPro: false,
       merchantContext: { merchant },
-      merchantId: 'merchant-shell',
       merchantSlugRef: { current: 'ogabassey' },
       setCart: vi.fn(),
       setCartWideNegotiationActive: vi.fn(),
@@ -53,7 +52,6 @@ describe('bugfix: storefront add-to-cart was only tracked on the default PDP', (
     expect(mockTrackCartAdd).toHaveBeenCalledWith(
       expect.objectContaining({
         merchant,
-        fallbackMerchantId: 'merchant-shell',
         product: expect.objectContaining({ id: 'prod-1' }),
         quantity: 2,
       })
@@ -70,7 +68,7 @@ describe('bugfix: storefront add-to-cart was only tracked on the default PDP', (
 
   it('does not track an add the shared cart rejects', () => {
     const delegatedActions = {
-      addToCart: vi.fn(() => false),
+      addToCart: vi.fn(() => 0),
       removeFromCart: vi.fn(),
       updateQuantity: vi.fn(),
     };
@@ -92,5 +90,41 @@ describe('bugfix: storefront add-to-cart was only tracked on the default PDP', (
 
     expect(result.current.addToCart(soldOut, 1)).toBe('rejected');
     expect(mockTrackCartAdd).not.toHaveBeenCalled();
+  });
+
+  it('tracks the clamped quantity a shared cart actually sent', () => {
+    const delegatedActions = {
+      addToCart: vi.fn(() => 2),
+      removeFromCart: vi.fn(),
+      updateQuantity: vi.fn(),
+    };
+    const { result } = setup({ delegated: true, delegatedActions });
+
+    result.current.addToCart(product, 5);
+
+    expect(mockTrackCartAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 2 })
+    );
+  });
+
+  it('tracks the units an offer stock cap actually let into the legacy cart', () => {
+    const { result } = setup();
+    const limited = {
+      id: 'prod-3',
+      name: 'Limited',
+      price: 100,
+      manage_stock: true,
+      stock: 2,
+    } as never;
+
+    expect(
+      result.current.addToCart(limited, 5, {
+        condition: 'used',
+        offerId: 'offer-1',
+      })
+    ).toBe('applied');
+    expect(mockTrackCartAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ quantity: 2 })
+    );
   });
 });

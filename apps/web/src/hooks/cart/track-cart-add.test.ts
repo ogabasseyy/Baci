@@ -17,7 +17,6 @@ describe('trackCartAdd', () => {
 
     trackCartAdd({
       merchant: { id: 'merchant-1', country: 'NG', payout_currency: null },
-      fallbackMerchantId: null,
       product,
       quantity: 2,
       loadTracker,
@@ -27,27 +26,11 @@ describe('trackCartAdd', () => {
     expect(addToCart).toHaveBeenCalledWith('merchant-1', product, 2, 'NGN');
   });
 
-  it('falls back to the shell merchant id when the merchant context is missing', async () => {
-    const { addToCart, loadTracker } = setupTracker();
-
-    trackCartAdd({
-      merchant: null,
-      fallbackMerchantId: 'merchant-shell',
-      product,
-      quantity: 1,
-      loadTracker,
-    });
-
-    await vi.waitFor(() => expect(addToCart).toHaveBeenCalledTimes(1));
-    expect(addToCart).toHaveBeenCalledWith('merchant-shell', product, 1, 'NGN');
-  });
-
   it('uses the payout currency when the merchant has one', async () => {
     const { addToCart, loadTracker } = setupTracker();
 
     trackCartAdd({
       merchant: { id: 'merchant-1', country: 'NG', payout_currency: 'usd' },
-      fallbackMerchantId: null,
       product,
       quantity: 1,
       loadTracker,
@@ -62,7 +45,6 @@ describe('trackCartAdd', () => {
 
     trackCartAdd({
       merchant: { id: 'merchant-1' },
-      fallbackMerchantId: null,
       product,
       quantity: 1,
       options: { quizAwardId: 'award-1', quizVoucherToken: 'token' },
@@ -77,7 +59,6 @@ describe('trackCartAdd', () => {
 
     trackCartAdd({
       merchant: null,
-      fallbackMerchantId: null,
       product,
       quantity: 1,
       loadTracker,
@@ -92,7 +73,6 @@ describe('trackCartAdd', () => {
     expect(() =>
       trackCartAdd({
         merchant: { id: 'merchant-1' },
-        fallbackMerchantId: null,
         product,
         quantity: 1,
         loadTracker,

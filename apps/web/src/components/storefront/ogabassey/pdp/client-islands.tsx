@@ -18,12 +18,15 @@ export function OgabasseyPdpBelowFoldIsland({
 }: OgabasseyPdpBelowFoldIslandProps) {
   return (
     <>
-      <OgabasseyPdpProductViewTracker
-        productId={String(product.id)}
-        name={product.name}
-        price={product.rawPrice ?? 0}
-        category={product.categories?.name || product.category || undefined}
-      />
+      {/* A missing numeric price would report a zero-value view; skip it. */}
+      {typeof product.rawPrice === 'number' ? (
+        <OgabasseyPdpProductViewTracker
+          productId={String(product.id)}
+          name={product.name}
+          price={product.rawPrice}
+          category={product.categories?.name || product.category || undefined}
+        />
+      ) : null}
       <OgabasseyPdpDeferredDetailIsland
         product={product}
         semanticSections={semanticSections}

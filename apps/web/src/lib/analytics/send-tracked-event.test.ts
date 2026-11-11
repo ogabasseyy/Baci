@@ -33,24 +33,30 @@ describe('sendTrackedEvent', () => {
   });
 
   it('sends with keepalive so an add right before navigation is not cancelled', async () => {
-    await sendTrackedEvent({ event_type: 'add_to_cart' });
+    await sendTrackedEvent({
+      event_type: 'add_to_cart',
+      merchant_id: 'merchant-1',
+    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/events', expect.anything());
     expect(sentInit().keepalive).toBe(true);
   });
 
   it('drops keepalive for bodies over the browser keepalive budget', async () => {
-    const oversized = {
-      event_type: 'begin_checkout',
-      padding: 'x'.repeat(70_000),
-    };
-    await sendTrackedEvent(oversized);
+    await sendTrackedEvent({
+      event_type: 'search',
+      merchant_id: 'merchant-1',
+      search_term: 'x'.repeat(70_000),
+    });
 
     expect(sentInit().keepalive).toBe(false);
   });
 
   it('keeps passing the current consent flags unchanged', async () => {
-    await sendTrackedEvent({ event_type: 'product_view' });
+    await sendTrackedEvent({
+      event_type: 'product_view',
+      merchant_id: 'merchant-1',
+    });
 
     const body = JSON.parse(String(sentInit().body));
     expect(body).toMatchObject({
@@ -66,7 +72,7 @@ describe('sendTrackedEvent', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      sendTrackedEvent({ event_type: 'add_to_cart' })
+      sendTrackedEvent({ event_type: 'add_to_cart', merchant_id: 'merchant-1' })
     ).resolves.toBeUndefined();
     warn.mockRestore();
   });

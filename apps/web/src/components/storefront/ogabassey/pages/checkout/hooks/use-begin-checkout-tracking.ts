@@ -18,13 +18,24 @@ const reportedKeys = new Set<string>();
  * attempt, matching the PostHog `checkout_started` dedupe, so refreshes and
  * re-renders do not inflate ad-platform checkout counts.
  */
+function storageKeyFor(key: string): string {
+  return `baci:begin_checkout:${key}`;
+}
+
+function isBeginCheckoutReported(key: string): boolean {
+  if (reportedKeys.has(key)) return true;
+  try {
+    return window.sessionStorage.getItem(storageKeyFor(key)) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function claimBeginCheckoutReport(key: string): boolean {
-  if (reportedKeys.has(key)) return false;
+  if (isBeginCheckoutReported(key)) return false;
   reportedKeys.add(key);
   try {
-    const storageKey = `baci:begin_checkout:${key}`;
-    if (window.sessionStorage.getItem(storageKey)) return false;
-    window.sessionStorage.setItem(storageKey, '1');
+    window.sessionStorage.setItem(storageKeyFor(key), '1');
   } catch {
     // Storage can be blocked; the in-memory claim still dedupes this page.
   }
@@ -55,9 +66,13 @@ export function useBeginCheckoutTracking({
 }: UseBeginCheckoutTrackingParams): void {
   useEffect(() => {
     if (!isHydrated || !merchantId || checkoutCart.length === 0) return;
+    // Key on which lines are in the cart, not their quantities: editing a
+    // quantity on the checkout page is not a new checkout start.
     const cartKey = checkoutCart
-      .map((item) => `${item.cartItemId || item.id}:${item.quantity}`)
+      .map((item) => item.cartItemId || item.id)
+      .sort()
       .join('|');
+    const reportKey = `${merchantId}:${attemptId}:${cartKey}`;
     const items = checkoutCart.map((item) => ({
       product: {
         id: item.id,
@@ -69,11 +84,12 @@ export function useBeginCheckoutTracking({
       quantity: item.quantity,
     }));
     return runWhenPageActivated(() => {
-      if (!claimBeginCheckoutReport(`${merchantId}:${attemptId}:${cartKey}`)) {
-        return;
-      }
+      if (isBeginCheckoutReported(reportKey)) return;
       void loadTracker()
         .then(({ trackEvent }) => {
+          // Claim only once the tracker loaded, so a failed chunk load
+          // leaves this attempt free to report on the next render.
+          if (!claimBeginCheckoutReport(reportKey)) return;
           trackEvent.beginCheckout(merchantId, items, currency);
         })
         .catch(() => {

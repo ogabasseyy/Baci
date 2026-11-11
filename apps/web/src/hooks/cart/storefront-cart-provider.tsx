@@ -196,7 +196,6 @@ export function StorefrontCartProvider({
       delegatedActions,
       enableSmartCartPro,
       merchantContext,
-      merchantId,
       merchantSlugRef,
       setCart,
       setCartWideNegotiationActive,

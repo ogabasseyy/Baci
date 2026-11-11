@@ -110,6 +110,14 @@ describe('bugfix: only Muse\'s own, verified finding bullets are a blocking vote
     assert.equal(vote(museReview({ findings: [{ severity: 'high', unverified: true }, 'critical'] })), 'failure');
   });
 
+  test('the unverified label is recognised in any case and with trailing spaces', () => {
+    for (const suffix of [' (path not in changed files — Unverified)', ' (path not in changed files — UNVERIFIED)  ', ' (unverified)\t']) {
+      assert.equal(vote(museReview({ findings: [{ severity: 'high', suffix }] })), 'success', JSON.stringify(suffix));
+    }
+    // ...but a finding that merely mentions the word in its title is still a real finding.
+    assert.equal(vote(museReview({ findings: [{ severity: 'high', suffix: ' (see inline) unverified claim' }] })), 'failure');
+  });
+
   test('a real top-level finding still counts, with or without an indented body', () => {
     assert.equal(vote(museReview({ findings: ['high'] })), 'failure');
     assert.equal(vote(museReview({ findings: [{ severity: 'critical', body: 'Why it matters.' }] })), 'failure');
@@ -188,6 +196,22 @@ describe('bugfix: a skipped duplicate check run (a PR title/body edit starts one
     const skipped = { ...check('Gemini review', 'completed', 'skipped'), completed_at: '2026-11-11T11:00:00Z' };
     const result = runTally({ checks: [red, skipped, MUSE_DONE], reviews: [museReview({ findings: ['high'] })] });
     assert.equal(only(result).state, 'failure');
+  });
+});
+
+describe('multi-page gh --paginate output (one JSON document per page) is merged before voting', () => {
+  test('a Muse check run and review that are not on the first page are still found', () => {
+    const result = runTally({
+      statuses: [GEMINI_FAIL],
+      checkPages: [{ check_runs: [check('CI', 'completed', 'success')] }, { check_runs: [] }, { check_runs: [MUSE_DONE] }],
+      reviewPages: [[museReview({ sha: OLD_SHA })], [], [museReview({ findings: ['high'] })]],
+    });
+    assert.equal(only(result).state, 'failure');
+  });
+
+  test('pages that are empty or hold only other reviewers change nothing', () => {
+    const result = runTally({ statuses: [GEMINI_FAIL], checkPages: [{ check_runs: [] }, { check_runs: [MUSE_DONE] }], reviewPages: [[], [museReview()]] });
+    assert.equal(only(result).state, 'success');
   });
 });
 

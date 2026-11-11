@@ -39,7 +39,7 @@ check_state() {
 # marker on the review's first line names the commit). Only the model-free
 # structure counts: a top-level (unindented) "- critical:" / "- high:" bullet
 # inside the LAST "## Findings" section, and not one Muse itself labels
-# "unverified" (its path is not in the changed files). Text a pull request can
+# "unverified" (its file is not in the pull request, or its line is outside the diff). Text a pull request can
 # influence (the verdict, indented finding bodies, the next steps) never counts.
 # A fallback review ("Muse did not review") or no review at all abstains.
 muse_review_vote() { # reviews-json
@@ -55,7 +55,7 @@ muse_review_vote() { # reviews-json
         | (if $start == null then [] else $lines[($start + 1):] end) as $rest
         | ([range(0; ($rest | length)) | select($rest[.] == "## Suggested next steps")] | first) as $stop
         | (if $stop == null then $rest else $rest[0:$stop] end)
-        | if any(.[]; test("^[-*][ \t]+(critical|high)[ \t]*:"; "i") and (test("unverified\\)$") | not))
+        | if any(.[]; test("^[-*][ \t]+(critical|high)[ \t]*:"; "i") and (test("unverified\\)[ \t]*$"; "i") | not))
           then "failure" else "success" end
       end'
 }

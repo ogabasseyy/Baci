@@ -365,6 +365,10 @@ web:
   - '.github/workflows/gemini-code-review.yml'
   - '.github/scripts/diff-guardian/**'
   - '.github/scripts/diff-guardian-harness.mjs'
+  - '.github/scripts/diff-guardian-muse-contract.test.mjs'
+  # Muse's review renderer: Diff Guardian reads its output, so a change here must re-run the contract test.
+  - '.github/scripts/muse-review/post.sh'
+  - '.github/scripts/muse-review/validate.jq'
   - '.github/scripts/diff-guardian-voters.test.mjs'
   - '.github/scripts/gemini-code-review-workflow.test.mjs'
   - '.github/scripts/gemini-review/**'

@@ -53,8 +53,8 @@ const key = (path) => path.replaceAll('/', '__');
  */
 export function museReview({ sha = SHA, findings = [], fallback = false, verdict = 'Reviewed.', nextSteps = [], submitted = '2026-11-11T10:00:00Z' } = {}) {
   const bullets = findings.flatMap((entry) => {
-    const { severity, unverified = false, body = '' } = typeof entry === 'string' ? { severity: entry } : entry;
-    const suffix = unverified ? ' (path not in changed files — unverified)' : body ? '' : ' (see inline)';
+    const { severity, unverified = false, body = '', suffix: customSuffix } = typeof entry === 'string' ? { severity: entry } : entry;
+    const suffix = customSuffix ?? (unverified ? ' (path not in changed files — unverified)' : body ? '' : ' (see inline)');
     return [`- ${severity}: Something in apps/web/src/a.ts:1${suffix}`, ...(body ? [`  ${body}`] : [])];
   });
   return {
@@ -105,8 +105,13 @@ export function runTally(options = {}) {
       labels: (options.labels ?? []).map((name) => ({ name })),
     });
     put(`repos/${REPO}/commits/${sha}/status`, { statuses: options.statuses ?? [] });
-    put(`repos/${REPO}/commits/${sha}/check-runs`, { check_runs: options.checks ?? [] });
-    put(`repos/${REPO}/pulls/${PR}/reviews`, options.reviews ?? []);
+    // `gh api --paginate` prints one JSON document per page, back to back.
+    const putPages = (path, pages) => writeFileSync(join(dir, `${key(path)}.json`), pages.map((page) => JSON.stringify(page)).join('\n'));
+    putPages(
+      `repos/${REPO}/commits/${sha}/check-runs`,
+      options.checkPages ?? [{ check_runs: options.checks ?? [] }],
+    );
+    putPages(`repos/${REPO}/pulls/${PR}/reviews`, options.reviewPages ?? [options.reviews ?? []]);
     for (const [file, value] of Object.entries(options.workflows ?? {})) {
       const path = `repos/${REPO}/actions/workflows/${file}`;
       if (typeof value === 'object') {

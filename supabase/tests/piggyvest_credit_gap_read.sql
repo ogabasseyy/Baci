@@ -9,14 +9,20 @@ UPDATE piggyvest_primary.integrations SET executor_login = 'retired-' || id::tex
   WHERE executor_login = SESSION_USER;
 UPDATE piggyvest_primary.inflow_authorities SET executor_login = 'retired-' || integration_id::text
   WHERE executor_login = SESSION_USER;
+-- merchants.user_id is unique (merchants_user_id_key), so each merchant gets
+-- its own auth user, inserted under that user's own claims.
 INSERT INTO auth.users (id, email) VALUES
-  ('f3830000-0000-4000-8000-000000000001', 'piggyvest-credit-gap@example.test');
+  ('f3830000-0000-4000-8000-000000000001', 'piggyvest-credit-gap@example.test'),
+  ('f3830000-0000-4000-8000-000000000011', 'piggyvest-credit-gap-other@example.test');
 SELECT set_config('request.jwt.claims', jsonb_build_object(
   'sub', 'f3830000-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
 INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
   ('f3830000-0000-4000-8000-000000000002', 'f3830000-0000-4000-8000-000000000001',
-   'piggyvest-credit-gap@example.test', 'PiggyVest Credit Gap Fixture', 'piggyvest-credit-gap-fixture'),
-  ('f3830000-0000-4000-8000-000000000012', 'f3830000-0000-4000-8000-000000000001',
+   'piggyvest-credit-gap@example.test', 'PiggyVest Credit Gap Fixture', 'piggyvest-credit-gap-fixture');
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', 'f3830000-0000-4000-8000-000000000011', 'role', 'authenticated')::text, true);
+INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
+  ('f3830000-0000-4000-8000-000000000012', 'f3830000-0000-4000-8000-000000000011',
    'piggyvest-credit-gap-other@example.test', 'PiggyVest Credit Gap Other', 'piggyvest-credit-gap-other');
 SELECT set_config('request.jwt.claims', '{}', true);
 INSERT INTO piggyvest_primary.integrations

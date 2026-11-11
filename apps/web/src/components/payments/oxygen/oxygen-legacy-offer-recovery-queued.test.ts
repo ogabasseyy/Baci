@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { oxygenBookedSnapshot } from './oxygen-booked-snapshot.test-support';
-import { isLegacyApprovalQueued } from './oxygen-legacy-approval-queued';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
 
 it('only identifies a queued legacy approval with verified prerequisites', () => {
   const snapshot = {
@@ -25,15 +25,27 @@ it('only identifies a queued legacy approval with verified prerequisites', () =>
       idempotencyKey: oxygenBookedSnapshot.workflowId,
     },
   };
-  expect(isLegacyApprovalQueued(snapshot)).toBe(true);
+  expect(isLegacyOfferRecoveryQueued(snapshot)).toBe(true);
   expect(
-    isLegacyApprovalQueued({
+    isLegacyOfferRecoveryQueued({
+      ...snapshot,
+      stage: 'plan_required',
+      state: {
+        ...snapshot.state,
+        booking: undefined,
+        bookingReference: undefined,
+      },
+      pending: { ...snapshot.pending, action: 'book' },
+    })
+  ).toBe(true);
+  expect(
+    isLegacyOfferRecoveryQueued({
       ...snapshot,
       pending: { ...snapshot.pending, status: 'executing' },
     })
   ).toBe(false);
   expect(
-    isLegacyApprovalQueued({
+    isLegacyOfferRecoveryQueued({
       ...snapshot,
       state: { ...snapshot.state, offers: [{ tenure: 3, loanAmount: 100000 }] },
     })

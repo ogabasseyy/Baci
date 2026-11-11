@@ -1,5 +1,5 @@
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
-import { isLegacyApprovalQueued } from './oxygen-legacy-approval-queued';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
 
 export function oxygenPendingActionBlocked(
   snapshot: OxygenRuntimeSnapshot,
@@ -9,9 +9,9 @@ export function oxygenPendingActionBlocked(
   if (!pending) return false;
   if (
     action === 'refresh_eligibility' &&
-    ['approve_booking', 'trigger_approval_otp'].includes(pending.action)
+    ['approve_booking', 'trigger_approval_otp', 'book'].includes(pending.action)
   )
-    return !isLegacyApprovalQueued(snapshot);
+    return !isLegacyOfferRecoveryQueued(snapshot);
   return (
     pending.status === 'queued' &&
     pending.action !== action &&

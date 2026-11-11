@@ -1,7 +1,7 @@
 import { bookedPlanIsOffered } from '@/lib/payments/oxygen/booked-plan-offer';
 import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
-import { isLegacyApprovalQueued } from './oxygen-legacy-approval-queued';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
 
 /** Identify pending commands safe for an explicit customer action. */
 export function pendingReadRecovery(
@@ -23,7 +23,7 @@ export function pendingReadRecovery(
     (pending?.status !== 'queued' && pending?.status !== 'executing')
   )
     return null;
-  if (isLegacyApprovalQueued(snapshot)) return 'refresh_eligibility';
+  if (isLegacyOfferRecoveryQueued(snapshot)) return 'refresh_eligibility';
   // A queued address upload needs a new proof and a separate retirement step.
   if (
     pending.action === 'submit_address' &&

@@ -14,7 +14,7 @@ import {
   selectOxygenActionKey,
 } from './oxygen-address-recovery';
 import { mayRetryFailedSelfie } from './oxygen-failed-selfie-retry';
-import { isLegacyApprovalQueued } from './oxygen-legacy-approval-queued';
+import { isLegacyOfferRecoveryQueued } from './oxygen-legacy-offer-recovery-queued';
 import { oxygenPendingActionBlocked } from './oxygen-pending-action-blocked';
 import { retireQueuedPhoneVerification } from './oxygen-phone-recovery';
 import {
@@ -132,7 +132,7 @@ export function useOxygenProvider(orderId: string) {
     const pending = snapshot.pending;
     const key =
       command.action === 'refresh_eligibility' &&
-      isLegacyApprovalQueued(snapshot)
+      isLegacyOfferRecoveryQueued(snapshot)
         ? crypto.randomUUID()
         : selectOxygenActionKey(
             command.action,
@@ -149,7 +149,7 @@ export function useOxygenProvider(orderId: string) {
       if (
         command.action === 'refresh_eligibility' &&
         pending &&
-        isLegacyApprovalQueued(snapshot)
+        isLegacyOfferRecoveryQueued(snapshot)
       )
         await retireLegacyQueuedApproval(snapshot);
       if (command.action === 'submit_address' && pending)

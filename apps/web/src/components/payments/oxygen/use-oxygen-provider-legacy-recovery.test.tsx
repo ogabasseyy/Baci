@@ -70,6 +70,36 @@ it('does not send a new eligibility read if retirement is unconfirmed', async ()
   expect(m.fetch).toHaveBeenCalledTimes(1);
 });
 
+it('retires a queued legacy booking before refreshing offers', async () => {
+  const booking = {
+    ...snapshot,
+    stage: 'plan_required' as const,
+    state: {
+      ...snapshot.state,
+      booking: undefined,
+      bookingReference: undefined,
+    },
+    pending: { ...snapshot.pending, action: 'book' },
+  };
+  m.read.mockResolvedValue(booking);
+  m.fetch
+    .mockResolvedValueOnce(Response.json({ retired: true }))
+    .mockResolvedValueOnce(
+      Response.json({ ...booking, version: booking.version + 1, pending: null })
+    );
+  const { result } = renderHook(() => useOxygenProvider(snapshot.workflowId));
+  await waitFor(() => expect(result.current.snapshot).toBeTruthy());
+  let completed = false;
+  await act(async () => {
+    completed = await result.current.submit({ action: 'refresh_eligibility' });
+  });
+  expect(completed).toBe(true);
+  expect(m.fetch.mock.calls[0][0]).toContain('/legacy-approval-recovery');
+  expect(JSON.parse(String(m.fetch.mock.calls[1][1].body)).command).toEqual({
+    action: 'refresh_eligibility',
+  });
+});
+
 it.each([
   'executing',
   'indeterminate',

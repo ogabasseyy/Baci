@@ -13,6 +13,12 @@
 // an extra test is cheap, a missed one is not. Nothing is scanned when the
 // diff holds no fs-reader file, so ordinary code changes behave as before.
 //
+// What it cannot find: a test that builds the path without writing it as a
+// literal, a non-test module that reads files without importing fs or a glob
+// library, and readers written in shell, Python or SQL (those are not Vitest
+// tests; their own CI jobs run them). Test files too large to search are
+// assumed to be readers.
+//
 // Wired in apps/web/vitest.config.ts as `test.experimental.vcsProvider`.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -30,6 +36,8 @@ const SOURCE_FILE_GLOBS = [
   '*.cjs',
 ];
 const MAX_SOURCE_BYTES = 1_500_000;
+// `readText` returns this for a file too large to search.
+export const TOO_LARGE = null;
 
 // Tests often hand a path to a helper that does the reading, so a test or test
 // support file counts as a reader as soon as it mentions the path. Any other
@@ -38,7 +46,7 @@ const MAX_SOURCE_BYTES = 1_500_000;
 const TEST_FILE =
   /(?:\.(?:test|spec)\b|[.-](?:support|fixtures?|helpers?|utils)\b|(?:^|\/)(?:__tests__|__mocks__|tests?|test-utils|test-support)\/)/;
 const FILE_ACCESS =
-  /(?:node:)?fs(?:\/promises)?['"]|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|readFile|readdir)\b/;
+  /(?:node:)?fs(?:\/promises)?['"]|fs-extra|graceful-fs|fast-glob|globby|tinyglobby|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|lstatSync|accessSync|globSync)\b|\b(?:readFile|readdir|opendir|createReadStream|stat|lstat|access|realpath|glob)\s*\(/;
 
 function git(args, cwd) {
   return execFileSync('git', args, {
@@ -93,7 +101,7 @@ export function listCandidateSources(top) {
 function readSource(path) {
   try {
     const text = readFileSync(path, 'utf8');
-    return text.length > MAX_SOURCE_BYTES ? undefined : text;
+    return text.length > MAX_SOURCE_BYTES ? TOO_LARGE : text;
   } catch {
     return undefined;
   }
@@ -113,10 +121,17 @@ export function findFsReaders({ changedFiles, listCandidates, readText }) {
   const readers = [];
   for (const candidate of listCandidates()) {
     const text = readText(candidate);
-    if (
-      text === undefined ||
-      (!TEST_FILE.test(candidate) && !FILE_ACCESS.test(text))
-    ) {
+    if (text === undefined) {
+      continue;
+    }
+    if (text === TOO_LARGE) {
+      // Cannot be searched: a test might read the file, so assume it does.
+      if (TEST_FILE.test(candidate)) {
+        readers.push(candidate);
+      }
+      continue;
+    }
+    if (!TEST_FILE.test(candidate) && !FILE_ACCESS.test(text)) {
       continue;
     }
     const normalized = normalizeForNeedles(text);

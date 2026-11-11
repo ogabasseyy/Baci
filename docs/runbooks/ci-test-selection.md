@@ -21,6 +21,17 @@ Never add a mode without adding its branch to the `Run Tests` step first: an
 unknown mode falls through to the non-web path and web tests would not run at
 all. A contract test (`resolve-ci-test-plan-contract.test.mjs`) fails if you do.
 
+## When the plan matters
+
+The planner only chooses between test plans. Whether `quality-test` runs at all
+is decided earlier by the `web` path filter in `.github/filters/ci.yml`
+(`apps/web/**`, `vercel.json`, shared packages, a few CI files). A pull request
+that touches only docs, `.jules` or migrations, with no file in that filter,
+runs no web tests before or after this change; the database replay jobs cover
+migrations through the `quiz_db` filter. The usual migration pull request also
+adds a replay-registry entry under `apps/web/`, which opens the web gate, and
+then the migration readers run.
+
 ## Which files keep the full suite
 
 The full triggers are listed in `.github/scripts/resolve-ci-test-plan.mjs`; the
@@ -29,8 +40,12 @@ other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
 - **Full suite:** CI wiring (`ci.yml`, `.github/actions`, the planner and the
   Vitest provider), shared packages, `package.json`, lockfile, `tsconfig`,
   test setup files, mobile admin, any unknown path, and every non-PR event.
-- **Targeted:** `apps/web` source, tools, tests and root test files; mobile
-  storefront source, `__tests__`, `__mocks__` and `config`.
+- **Targeted:** `apps/web` source, tools and root `*.test.*` / `*.spec.*` files;
+  code files under `apps/web/tests`; mobile storefront source and the code
+  files in `__tests__` and `__mocks__`. Fixtures there (text, JSON, HTML,
+  snapshots) keep the full suite because import-following cannot see them.
+  Storefront `config/` also keeps it: its `*.test.mjs` suites only run through
+  the package `test` script (`node --test`), which Jest skips.
 - **Files that tests read through fs** (migrations, SQL tests, the replay
   registry, docs, workflows other than `ci.yml`, `vps-workers`, markdown,
   `.jules`, `.ruler`, `vercel.json`, Playwright specs): targeted too, with the
@@ -49,8 +64,22 @@ folder. The check is deliberately generous: an extra test is cheap, a missed
 one is not. If the config cannot find the provider file (sparse checkout),
 Vitest falls back to its own git provider.
 
-Limits: a test that builds a path without ever writing it as a literal is not
-found. Write the path as a literal, or keep it in a helper that does.
+Limits (what it cannot find):
+
+- a test that builds the path without ever writing it as a literal; write the
+  path as a literal, or keep it in a helper that does;
+- a non-test module that reads files without importing `fs` or a glob library;
+- readers written in shell, Python or SQL runners: they are not Vitest tests, so
+  their own CI jobs (selected by the `quiz_db`, `deploy_scripts` and similar
+  filters) run them.
+
+Test files too large to search (over 1.5 MB) are assumed to be readers.
+
+Playwright specs belong to a family only because Vitest never runs them. Those
+under `tests/checkout-browser`, `tests/oxygen-policy-browser` and
+`tests/oxygen-cookie-harness` run in `checkout-browser.yml` on every pull
+request (a contract test pins that). `tests/experience-browser` has no pull
+request workflow; it was already targeted-only before this change.
 
 ## Deleted files
 

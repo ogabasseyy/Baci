@@ -30,6 +30,7 @@ test('apps/web root test files next to web source no longer force the full suite
   for (const file of [
     'apps/web/next.config.routing.test.ts',
     'apps/web/graphql-tools-integrity.test.ts',
+    'apps/web/root-flow.spec.ts',
   ]) {
     assert.deepEqual(plan([WEB_SOURCE, file]), {
       mode: 'targeted-web-vitest',
@@ -144,7 +145,6 @@ test('a migration PR that also touches the mobile storefront runs both targeted 
 for (const file of [
   'apps/mobile-storefront/__tests__/checkout/contact.test.tsx',
   'apps/mobile-storefront/__mocks__/expo-secure-store.ts',
-  'apps/mobile-storefront/config/storefront-config.json',
 ]) {
   test(`${file} runs the targeted storefront Jest command`, () => {
     assert.deepEqual(plan([file]), {
@@ -155,6 +155,60 @@ for (const file of [
     });
   });
 }
+
+// The storefront package `test` script also runs `node --test config/*.test.mjs`,
+// which Jest's default patterns skip: only the full path runs those suites.
+test('storefront config suites and files keep the full suite', () => {
+  for (const file of [
+    'apps/mobile-storefront/config/android-release-config-loading.test.mjs',
+    'apps/mobile-storefront/config/hosted-staging-push-app-config.json',
+  ]) {
+    assert.deepEqual(plan([file]), {
+      mode: 'full-affected',
+      reason: OUTSIDE_SCOPE_REASON,
+      command: FULL_COMMAND,
+    });
+    assert.equal(plan([WEB_SOURCE, file]).mode, 'full-affected', file);
+  }
+});
+
+// `vitest --changed` and Jest follow imports only: a fixture a test reads
+// through fs (a text file, JSON, a snapshot) is invisible to them, so in the
+// folders this planner newly targets only code files skip the full suite.
+test('fixtures that tests read through fs keep the full suite in the newly targeted test folders', () => {
+  for (const fixture of [
+    'apps/web/tests/experience-commerce/polished-storefront.tsx.txt',
+    'apps/web/tests/checkout-browser/fixtures/cart.json',
+    'apps/web/tests/builder-chatgpt/page.html',
+    'apps/mobile-storefront/__tests__/__snapshots__/checkout.test.tsx.snap',
+    'apps/mobile-storefront/__mocks__/catalog.json',
+  ]) {
+    assert.deepEqual(
+      plan([WEB_SOURCE, fixture]),
+      {
+        mode: 'full-affected',
+        reason: OUTSIDE_SCOPE_REASON,
+        command: FULL_COMMAND,
+      },
+      fixture
+    );
+  }
+});
+
+test('code files in the newly targeted test folders skip the full suite', () => {
+  for (const file of [
+    'apps/web/tests/checkout-browser/support/cart-page.ts',
+    'apps/web/tests/builder-chatgpt/widget.test.tsx',
+    'apps/web/tests/experience-browser/qualification.pw.ts',
+  ]) {
+    assert.equal(plan([file]).mode, 'targeted-web-vitest', file);
+  }
+  // The experience-browser folder was already targeted for every file type.
+  assert.equal(
+    plan(['apps/web/tests/experience-browser/fixture.txt']).mode,
+    'targeted-web-vitest'
+  );
+});
 
 test('mixed diff with one unknown file still gets the full suite', () => {
   for (const unknown of [

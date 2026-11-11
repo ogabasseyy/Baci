@@ -8,6 +8,7 @@ import provider, {
   findFsReaders,
   listCandidateSources,
   normalizeForNeedles,
+  TOO_LARGE,
 } from './vitest-changed-files-provider.mjs';
 
 function readersOf(changedFiles, sources) {
@@ -108,6 +109,32 @@ test('unreadable and oversized sources are skipped', () => {
   });
 
   assert.deepEqual(readers, ['apps/web/src/routing.test.ts']);
+});
+
+test('a non-test module counts when it reads files with streams, stat or a glob library', () => {
+  const { readers } = readersOf(['docs/guides/a.md'], {
+    'apps/web/tools/docs/stream-reader.ts':
+      "import { createReadStream } from 'node:fs';\ncreateReadStream('docs/guides/a.md');",
+    'apps/web/tools/docs/glob-reader.ts':
+      "import { globby } from 'globby';\nawait globby('docs/guides/*.md');",
+    'apps/web/tools/docs/stat-reader.ts': "await stat('docs/guides/a.md');",
+    'apps/web/tools/docs/label.ts': "export const label = 'docs/guides/a.md';",
+  });
+
+  assert.deepEqual(readers.sort(), [
+    'apps/web/tools/docs/glob-reader.ts',
+    'apps/web/tools/docs/stat-reader.ts',
+    'apps/web/tools/docs/stream-reader.ts',
+  ]);
+});
+
+test('a test file too large to search is assumed to be a reader, a large module is not', () => {
+  const { readers } = readersOf(['supabase/migrations/20261111090000_x.sql'], {
+    'apps/web/src/lib/huge-generated.test.ts': TOO_LARGE,
+    'apps/web/src/types/huge-generated-types.ts': TOO_LARGE,
+  });
+
+  assert.deepEqual(readers, ['apps/web/src/lib/huge-generated.test.ts']);
 });
 
 test('readers of several changed files are combined once', () => {

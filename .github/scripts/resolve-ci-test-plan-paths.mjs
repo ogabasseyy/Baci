@@ -25,12 +25,21 @@ export const WEB_TARGETED_PREFIXES = [
   'apps/web/src/',
   'apps/web/tools/',
   'apps/web/experience-runtime/',
-  'apps/web/tests/',
+  'apps/web/tests/experience-browser/',
 ];
+
+// `vitest --changed` and `jest --changedSince` follow imports, so they can only
+// select tests for code files. A fixture that a test reads through fs (a .txt,
+// .json, .html or snapshot) is invisible to them, so in the folders added to
+// the targeted classes by this planner only code files count; any other file
+// there keeps the full suite.
+const MODULE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const WEB_TESTS_PREFIX = 'apps/web/tests/';
 
 // Test files that sit directly in apps/web (for example
 // `next.config.routing.test.ts`). Vitest runs them when they change.
-const WEB_ROOT_TEST_FILE = /^apps\/web\/[^/]+\.test\.(?:[cm]?[jt]s|[jt]sx)$/;
+const WEB_ROOT_TEST_FILE =
+  /^apps\/web\/[^/]+\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/;
 
 // Playwright specs are executed by their own browser workflows, never by Vitest.
 const PLAYWRIGHT_SPEC = /^apps\/web\/.*\.pw\.[jt]sx?$/;
@@ -42,17 +51,23 @@ const WORKSPACE_PACKAGE_PATH =
   /^(?:apps\/mobile-admin|apps\/mobile-storefront|packages)\//;
 
 export const MOBILE_STOREFRONT_TARGETED_PREFIXES = [
-  'apps/mobile-storefront/__mocks__/',
-  'apps/mobile-storefront/__tests__/',
   'apps/mobile-storefront/app/',
   'apps/mobile-storefront/components/',
-  'apps/mobile-storefront/config/',
   'apps/mobile-storefront/constants/',
   'apps/mobile-storefront/hooks/',
   'apps/mobile-storefront/lib/',
   'apps/mobile-storefront/schemas/',
   'apps/mobile-storefront/services/',
   'apps/mobile-storefront/stores/',
+];
+
+// Jest test folders. Only code files: snapshots and fixtures keep the full
+// suite. `config/` is deliberately NOT here: its `*.test.mjs` suites run through
+// the storefront package's `test` script (node --test), which Jest's default
+// patterns skip, so only the full path runs them.
+const MOBILE_STOREFRONT_MODULE_PREFIXES = [
+  'apps/mobile-storefront/__mocks__/',
+  'apps/mobile-storefront/__tests__/',
 ];
 
 // Data files that tests read through fs. `floor` is the shallowest ancestor
@@ -129,13 +144,20 @@ export const FS_READER_FAMILIES = [
 export function isTargetableWebFile(file) {
   return (
     WEB_TARGETED_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
-    WEB_ROOT_TEST_FILE.test(file)
+    WEB_ROOT_TEST_FILE.test(file) ||
+    (file.startsWith(WEB_TESTS_PREFIX) && MODULE_FILE.test(file))
   );
 }
 
 export function isTargetableMobileStorefrontFile(file) {
-  return MOBILE_STOREFRONT_TARGETED_PREFIXES.some((prefix) =>
-    file.startsWith(prefix)
+  return (
+    MOBILE_STOREFRONT_TARGETED_PREFIXES.some((prefix) =>
+      file.startsWith(prefix)
+    ) ||
+    (MOBILE_STOREFRONT_MODULE_PREFIXES.some((prefix) =>
+      file.startsWith(prefix)
+    ) &&
+      MODULE_FILE.test(file))
   );
 }
 

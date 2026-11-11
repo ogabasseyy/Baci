@@ -11,8 +11,18 @@ const DECIDED_WITHOUT_CODEX = new Set(['not-pull-request', 'fork', 'mode-off', '
 // Decisions that need no API call at all (legacy paths stay untouched and offline).
 const DECIDED_OFFLINE = new Set(['not-pull-request', 'fork', 'mode-off']);
 
-export async function evaluatePullRequestStage({ client, repository, prNumber, headSha, eventName, mode, ageMinutes, timeoutMinutes, sameRepo = true }) {
-  const facts = { eventName, mode, sameRepo, headSha, ageMinutes, timeoutMinutes };
+// When the pull request last went from draft to ready. A draft can sit for hours without a
+// Codex review; the no-verdict timeout must count from the moment it is ready, not from the push.
+async function lastReadyForReview(client, repository, prNumber) {
+  const events = await client.paginate(`/repos/${repository}/issues/${prNumber}/events`);
+  const times = events.filter((event) => event.event === 'ready_for_review').map((event) => Date.parse(event.created_at)).filter(Number.isFinite);
+  return times.length > 0 ? Math.max(...times) : null;
+}
+
+// ageMinutes: minutes since the push (or the run). marginMinutes is subtracted from every wait
+// so the nudge, which asks a little later than the run itself, never disagrees with it.
+export async function evaluatePullRequestStage({ client, repository, prNumber, headSha, eventName, mode, ageMinutes, timeoutMinutes, sameRepo = true, now = Date.now(), marginMinutes = 0 }) {
+  const facts = { eventName, mode, sameRepo, headSha, timeoutMinutes };
 
   const offline = decideStage({ ...facts, verdict: { state: 'none', reason: '' }, ageMinutes: 0 });
   if (DECIDED_OFFLINE.has(offline.code)) return { decision: offline, verdict: null };
@@ -21,11 +31,23 @@ export async function evaluatePullRequestStage({ client, repository, prNumber, h
   try {
     pr = await client.get(`/repos/${repository}/pulls/${prNumber}`);
   } catch (error) {
-    return { decision: decideStage({ ...facts, apiError: error.message }), verdict: null };
+    // Without the pull request we cannot tell a draft from a ready one: no timeout either.
+    return { decision: decideStage({ ...facts, ageMinutes: 0, apiError: error.message }), verdict: null };
+  }
+
+  let age = ageMinutes - marginMinutes;
+  if (!pr.draft && age >= timeoutMinutes) {
+    try {
+      const readyAt = await lastReadyForReview(client, repository, prNumber);
+      if (readyAt !== null) age = Math.min(age, (now - readyAt) / 60000 - marginMinutes);
+    } catch {
+      age = 0;
+    }
   }
 
   const live = {
     ...facts,
+    ageMinutes: age,
     labels: (pr.labels ?? []).map((label) => label.name),
     draft: Boolean(pr.draft),
     open: pr.state === 'open',

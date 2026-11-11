@@ -53,9 +53,15 @@ describe('sameNetDiff', () => {
     assert.equal(sameNetDiff([], []), false);
   });
 
-  it('refuses to prove anything for a truncated file list', () => {
-    const many = Array.from({ length: 300 }, (_, index) => file(`f${index}.ts`, String(index)));
-    assert.equal(sameNetDiff(many, many), false);
+  it('refuses to prove anything for a possibly truncated file list (100 or more files)', () => {
+    // The compare endpoint caps files at 300 and ignores per_page for them (observed 2026-11-11); we
+    // refuse from 100 so a future change in paging can never make us compare a partial list.
+    for (const count of [100, 299, 300]) {
+      const many = Array.from({ length: count }, (_, index) => file(`f${index}.ts`, String(index)));
+      assert.equal(sameNetDiff(many, many), false, `${count} files`);
+    }
+    const fine = Array.from({ length: 99 }, (_, index) => file(`f${index}.ts`, String(index)));
+    assert.equal(sameNetDiff(fine, fine), true);
   });
 });
 

@@ -39,6 +39,9 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot') }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history on purpose: the stage step runs the BASE commit's copy of the scripts
+          # (git archive), which needs that commit's objects; only the scripts are checked out.
+          fetch-depth: 0
           sparse-checkout: .github/scripts/review-first-ci
           persist-credentials: false
       - name: Resolve CI stage (quick checks now, full CI after Codex review)
@@ -47,14 +50,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BACI_REVIEW_FIRST_CI: ${{ vars.BACI_REVIEW_FIRST_CI }}
           BACI_CODEX_WAIT_TIMEOUT_MINUTES: ${{ vars.BACI_CODEX_WAIT_TIMEOUT_MINUTES }}
         run: |
+          entry=.github/scripts/review-first-ci/resolve-stage.mjs
+          fail_closed() {
+            echo "::error title=Review-first CI::$1; failing closed: quick checks only"
+            printf 'stage=quick\ncode=resolver-failed\nreason=%s\n' "$1" >> "$GITHUB_OUTPUT"
+          }
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            fail_closed "the base commit is not in this checkout"
+            exit 0
+          fi
+          # The gate decides whether this pull request may start the expensive CI, so the pull
+          # request must not be able to edit it: run the base branch's copy as soon as the base
+          # has one. Only the pull request that introduces the scripts runs its own copy.
+          if git cat-file -e "${BASE_SHA}:${entry}" 2>/dev/null; then
+            base_dir="${RUNNER_TEMP}/review-first-ci-base"
+            mkdir -p "$base_dir"
+            git archive "$BASE_SHA" .github/scripts/review-first-ci | tar -x -C "$base_dir"
+            entry="${base_dir}/${entry}"
+          else
+            echo "::warning title=Review-first CI::the base branch has no review-first scripts yet; using this pull request's copy"
+          fi
           status=0
-          node .github/scripts/review-first-ci/resolve-stage.mjs || status=$?
+          node "$entry" || status=$?
           if [ "$status" -ne 0 ] || ! grep -q '^stage=' "$GITHUB_OUTPUT"; then
-            echo "::error title=Review-first CI::the stage resolver failed (exit $status); failing closed: quick checks only"
-            printf 'stage=quick\ncode=resolver-failed\nreason=the stage resolver failed\n' >> "$GITHUB_OUTPUT"
+            fail_closed "the stage resolver failed (exit $status)"
           fi
 
   checkout-browser:

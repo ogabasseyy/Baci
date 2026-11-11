@@ -71,14 +71,31 @@ run):
 ## When the heavy stage starts anyway
 
 * **Break-glass:** add the label `ci-now` to the pull request (or comment `/ci-now` as a maintainer). The next
-  evaluation starts the full suite immediately. Agents may use it when Codex is down, rate limited, or when the
+  evaluation starts the full suite immediately. GitHub only lets people with triage or write access label a pull
+  request, and `/ci-now` is honoured only from the owner, members and collaborators. The label **stays until it is
+  removed**: every later push of that pull request then runs the full CI at once (a warning shows on the `changes`
+  job each time), so remove it when Codex is back. Agents may use it when Codex is down, rate limited, or when the
   author has answered a finding and wants CI to prove the fix. Without the helper workflow, re-run the latest run
   by hand: `gh run rerun <run-id>` after adding the label.
 * **Timeout:** if there is no Codex verdict at all (nothing, "running", or a usage-limit message) 60 minutes after
-  the push, the full suite starts and the job summary says why. A pull request with Codex findings never times out
-  (someone must fix or override). Draft pull requests never time out.
+  the push, the full suite starts and the job summary says why. The minutes can be changed with the repository
+  variable `BACI_CODEX_WAIT_TIMEOUT_MINUTES` (whole minutes, at most 1440). A pull request with Codex findings never
+  times out (someone must fix or override). Draft pull requests never time out, and a draft that is marked ready
+  starts its 60 minutes at that moment, not at the push. **This is a deliberate bypass:** after the timeout the
+  required checks can go green without a Codex verdict, so the rule "no merge before Codex is clean on the final
+  head" stays a rule for agents and the owner, as it is today.
 * **Kill switch:** delete the variable `BACI_REVIEW_FIRST_CI` (or set it to anything but `on` / `pilot`). The next
   run of every pull request is a normal full run, no code change needed.
+
+## Who can change the gate
+
+The decision code (`.github/scripts/review-first-ci/`) is **base-owned**: the `changes` job and the browser regression
+run the copy that is on the base branch (`git archive` of the base commit), not the copy in the pull request. A pull
+request that edits the scripts cannot change its own gate until the edit has been merged; only the pull request that
+introduces the scripts runs its own copy (with a warning). Editing `ci.yml` itself is still possible in any pull
+request, as for every other CI rule, and shows up as a workflow change for human review (trusted-change tripwire,
+code owners). The `Review-first CI nudge` workflow is base-owned too. `changes` keeps its read-only permissions
+and the capability-gate contract is untouched.
 
 ## Switching it on
 

@@ -154,11 +154,24 @@ describe('the changes job (pinned by the capability-gate contract)', () => {
 
   it('runs the resolver only through the fail-closed wrapper', () => {
     const run = byId('stage_review').run;
-    assert.match(run, /node \.github\/scripts\/review-first-ci\/resolve-stage\.mjs/);
+    assert.match(run, /node "\$entry"/);
     assert.match(run, /stage=quick/);
     assert.equal(byId('stage_review').env.GITHUB_TOKEN, '${{ github.token }}');
     assert.match(byId('stage_full').run, /stage=full/);
     assert.doesNotMatch(byId('stage_full').run, /\bnode\b/);
+  });
+
+  it('runs the BASE branch copy of the gate scripts, so a pull request cannot edit its own gate', () => {
+    const step = byId('stage_review');
+    assert.equal(step.env.BASE_SHA, '${{ github.event.pull_request.base.sha }}');
+    // the base commit must be there, then the scripts are taken from it (git archive), not from the checkout
+    assert.match(step.run, /git cat-file -e "\$\{BASE_SHA\}\^\{commit\}"/);
+    assert.match(step.run, /git archive "\$BASE_SHA" \.github\/scripts\/review-first-ci/);
+    // only the pull request that introduces the scripts falls back to its own copy, with a warning
+    assert.match(step.run, /the base branch has no review-first scripts yet/);
+    assert.doesNotMatch(step.run, /node \.github\/scripts/);
+    // a missing base commit fails closed instead of falling back
+    assert.match(step.run, /the base commit is not in this checkout/);
   });
 
   it('runs the stage step after the capability gate (no PR-controlled script before it)', () => {
@@ -184,6 +197,16 @@ describe('checkout browser regression follows the same stage', () => {
     assert.deepEqual(job.permissions, { contents: 'read', issues: 'read', 'pull-requests': 'read' });
     assert.deepEqual(job.steps.map((step) => step.id).filter(Boolean), ['stage_full', 'stage_review']);
     assert.match(job.steps.find((step) => step.id === 'stage_review').run, /resolve-stage\.mjs/);
+  });
+
+  it('decides the stage with exactly the same base-owned script step as ci.yml', () => {
+    const fromCi = ci.jobs.changes.steps.find((step) => step.id === 'stage_review');
+    const fromBrowser = browser.jobs.stage.steps.find((step) => step.id === 'stage_review');
+    assert.equal(fromBrowser.run, fromCi.run);
+    assert.deepEqual(fromBrowser.env, fromCi.env);
+    assert.equal(fromBrowser.if, fromCi.if);
+    const checkout = browser.jobs.stage.steps.find((step) => String(step.uses).startsWith('actions/checkout@'));
+    assert.equal(checkout.with['fetch-depth'], 0, 'the base commit must be in the checkout for git archive');
   });
 
   it('only runs the browser job in the full stage', () => {

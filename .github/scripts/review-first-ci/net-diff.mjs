@@ -8,9 +8,12 @@
 // the PR's version, the final blob is unchanged although the reviewed change A->C
 // became B->C. Hunk line numbers are ignored (a sync can shift them), their content is
 // not. A file whose patch is unavailable (binary or oversized), an unreadable
-// comparison or a truncated list (300 files) cannot be proven.
+// comparison or a possibly truncated list (100 files or more) cannot be proven.
 
-const COMPARE_FILE_CAP = 300;
+// The compare endpoint returns at most 300 files and ignores per_page for them (observed
+// 2026-11-11). We refuse from 100 so a future change in paging cannot make us compare a
+// partial list.
+const COMPARE_FILE_CAP = 100;
 const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$/gm;
 
 function fileSignature(file) {

@@ -112,6 +112,40 @@ describe('evaluatePullRequestStage', () => {
     assert.equal(decision.warn, true);
   });
 
+  describe('bugfix: the no-verdict timeout restarts when a draft is marked ready', () => {
+    const eventsPath = `GET /repos/${REPO}/issues/7/events`;
+    const now = Date.parse('2026-11-11T14:00:00Z');
+    const at = (minutesAgo) => new Date(now - minutesAgo * 60000).toISOString();
+    const stale = { ageMinutes: 600, now, marginMinutes: 0 };
+
+    it('does not time out right after the draft became ready', async () => {
+      const client = fakeGithub({ ...codexRoutes(), [eventsPath]: [{ event: 'labeled', created_at: at(500) }, { event: 'ready_for_review', created_at: at(5) }] });
+      const { decision } = await evaluate(client, stale);
+      assert.equal(decision.stage, 'quick');
+      assert.equal(decision.code, 'waiting');
+    });
+
+    it('times out once the wait since the ready transition is long enough', async () => {
+      const client = fakeGithub({ ...codexRoutes(), [eventsPath]: [{ event: 'ready_for_review', created_at: at(61) }] });
+      assert.equal((await evaluate(client, stale)).decision.code, 'timeout');
+    });
+
+    it('uses the push time when the pull request was never a draft', async () => {
+      const client = fakeGithub({ ...codexRoutes(), [eventsPath]: [{ event: 'labeled', created_at: at(500) }] });
+      assert.equal((await evaluate(client, stale)).decision.code, 'timeout');
+    });
+
+    it('fails closed (no timeout) when the events cannot be read', async () => {
+      const client = fakeGithub({ ...codexRoutes(), [eventsPath]: new Error('HTTP 502') });
+      assert.equal((await evaluate(client, stale)).decision.stage, 'quick');
+    });
+
+    it('keeps the nudge margin when it measures from the ready transition', async () => {
+      const client = fakeGithub({ ...codexRoutes(), [eventsPath]: [{ event: 'ready_for_review', created_at: at(61) }] });
+      assert.equal((await evaluate(client, { ...stale, marginMinutes: 2 })).decision.code, 'waiting');
+    });
+  });
+
   it('never starts for a closed pull request', async () => {
     const { decision } = await evaluate(fakeGithub(codexRoutes({ pr: pullRequest({ state: 'closed' }), issueComments: [summaryClean] })));
     assert.equal(decision.code, 'closed');

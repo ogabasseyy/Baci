@@ -53,4 +53,5 @@ export const codexRoutes = ({ issueComments = [], reviews = [], reviewComments =
   [`GET /repos/${REPO}/issues/${number}/comments`]: issueComments,
   [`GET /repos/${REPO}/pulls/${number}/reviews`]: reviews,
   [`GET /repos/${REPO}/pulls/${number}/comments`]: reviewComments,
+  [`GET /repos/${REPO}/issues/${number}/events`]: [],
 });

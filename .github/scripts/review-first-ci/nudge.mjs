@@ -74,8 +74,8 @@ export async function nudgePullRequest({ client, repository, prNumber, mode, now
     return skip('attempt-cap');
   }
 
-  const ageMinutes = (now - Date.parse(ci.run.created_at)) / 60000 - TIMEOUT_MARGIN_MINUTES;
-  const { decision } = await evaluatePullRequestStage({ client, repository, prNumber, headSha: sha, eventName: 'pull_request', mode, ageMinutes, timeoutMinutes });
+  const ageMinutes = (now - Date.parse(ci.run.created_at)) / 60000;
+  const { decision } = await evaluatePullRequestStage({ client, repository, prNumber, headSha: sha, eventName: 'pull_request', mode, ageMinutes, timeoutMinutes, now, marginMinutes: TIMEOUT_MARGIN_MINUTES });
 
   if (decision.stage !== 'full') {
     await setStatus({ ...status, state: 'pending', description: `Quick checks passed. ${decision.reason}` });

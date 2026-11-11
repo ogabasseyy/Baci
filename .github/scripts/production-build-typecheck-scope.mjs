@@ -6,7 +6,12 @@ import { pathToFileURL } from 'node:url';
 /**
  * Toolchain and configuration that decide how the production build type checks:
  * scripts, tsconfig files, the typed-route preparation, the Next config and
- * version, and the workflows that run or mirror the check.
+ * version, and the workflow that runs the check.
+ *
+ * The typecheck job only starts when the `web` filter in .github/filters/ci.yml
+ * matches, so every path here must also be matched there (pinned in the contract
+ * test). Patches reach this list through pnpm-lock.yaml, and the deploy workflow's
+ * compiler budget is pinned statically against this step instead of by a trigger.
  */
 export const PRODUCTION_TYPECHECK_TRIGGERS = [
   /^package\.json$/,
@@ -14,10 +19,8 @@ export const PRODUCTION_TYPECHECK_TRIGGERS = [
   /^pnpm-workspace\.yaml$/,
   /^turbo\.json$/,
   /^tsconfig[^/]*\.json$/,
-  /^patches\//,
-  /^\.github\/workflows\/(?:ci|deploy)\.yml$/,
-  /^\.github\/actions\//,
-  /^\.github\/scripts\/run-pinned-vercel\.sh$/,
+  /^\.github\/workflows\/ci\.yml$/,
+  /^\.github\/actions\/(?:pnpm-install-cached|setup-pnpm-store)\//,
   /^\.github\/scripts\/production-(?:build-)?typecheck-scope[^/]*$/,
 ];
 

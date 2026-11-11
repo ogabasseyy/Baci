@@ -114,10 +114,7 @@ test('pull requests skip the production build typecheck only when nothing in the
     'package.json',
     'turbo.json',
     'tsconfig.base.json',
-    'patches/next@16.4.1.patch',
     '.github/workflows/ci.yml',
-    '.github/workflows/deploy.yml',
-    '.github/scripts/run-pinned-vercel.sh',
     '.github/actions/pnpm-install-cached/action.yml',
     '.github/scripts/production-build-typecheck-scope.mjs',
     '.github/scripts/production-typecheck-scope.test.mjs',
@@ -137,6 +134,28 @@ test('pull requests skip the production build typecheck only when nothing in the
   ]) {
     assert.equal(run([file]), false, file);
   }
+  // The job itself only starts when the outer `web` filter matches, so a trigger that filter
+  // cannot see would never take effect.
+  const webFilter = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8')).web.flat(Infinity);
+  for (const pattern of [
+    'apps/web/**',
+    'packages/shared/**',
+    'packages/experience-sdk/**',
+    'packages/tiktok-business/**',
+    'package.json',
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'turbo.json',
+    'tsconfig*.json',
+    '.github/workflows/ci.yml',
+    '.github/actions/pnpm-install-cached/**',
+    '.github/actions/setup-pnpm-store/**',
+    '.github/scripts/production-build-typecheck-scope.mjs',
+    '.github/scripts/production-typecheck-scope.test.mjs',
+  ]) {
+    assert.ok(webFilter.includes(pattern), `web filter must include ${pattern}`);
+  }
+  assert.equal(needsProductionTypecheck(['.github/actions/unlisted/action.yml']), false);
   // Fail closed: pushes, an unreadable diff, and an empty diff all run the check.
   assert.equal(run(['docs/x.md'], ''), true);
   assert.equal(run([]), true);

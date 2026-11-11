@@ -13,6 +13,7 @@ const f = vi.hoisted(() => ({
   buildRecord: vi.fn(),
   buildHandler: vi.fn(),
   buildVerifier: vi.fn(),
+  captureHandler: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('../../tools/experience-verifier/nonce-store', () => ({
@@ -54,6 +55,9 @@ vi.mock('../../tools/experience-verifier/build-handler', () => ({
 vi.mock('../../tools/experience-verifier/build-verifier', () => ({
   createIndependentBuildVerifier: f.buildVerifier,
 }));
+vi.mock('../../tools/experience-verifier/capture-handler', () => ({
+  createVerifierCaptureHandler: f.captureHandler,
+}));
 
 import { startVerifierService } from '../../tools/experience-verifier/service';
 
@@ -69,6 +73,7 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   f.verifier.mockReturnValueOnce({ attest: vi.fn() });
   f.handler.mockReturnValueOnce(handler);
   f.buildHandler.mockReturnValueOnce(vi.fn());
+  f.captureHandler.mockReturnValueOnce(vi.fn());
   f.listen.mockResolvedValueOnce({ close });
   const config = {
     pool: {},
@@ -91,7 +96,12 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   expect(f.handler).toHaveBeenCalledWith(
     expect.objectContaining({ key: config.key, consumeNonce: nonce })
   );
-  expect(f.listen).toHaveBeenCalledWith(handler, 8891, expect.any(Function));
+  expect(f.listen).toHaveBeenCalledWith(
+    handler,
+    8891,
+    expect.any(Function),
+    expect.any(Function)
+  );
   const capture = f.verifier.mock.calls.at(-1)?.[0].capture;
   const id = '11111111-1111-4111-8111-111111111111';
   const binding = {
@@ -109,6 +119,8 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   });
   let host = 'https://evil.example';
   const client = {
+    auth: { getUser: async () => ({ data: { user: { id } }, error: null }) },
+    rpc: async () => ({ data: true, error: null }),
     from: (table: string) => {
       const q = {
         select: () => q,

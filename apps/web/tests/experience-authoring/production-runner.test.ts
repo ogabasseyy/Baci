@@ -175,11 +175,25 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       record: await createVerifierBuildRecorder(verifierPool),
     });
     const verifierKey = randomBytes(32);
+    const capture = await createVerifierCaptureWorker({
+      pool: verifierPool,
+      hostOrigin,
+      previewOrigin,
+      bootstrap: async () => bootstrap,
+      runner: {
+        endpoint: 'https://runner.baci-offline.invalid/v1/execute',
+        key,
+        toolchainDigest,
+        fetch: (url, init) => handler(new Request(url, init)),
+      },
+    });
     buildVerification = await setupBuildVerification({
       f,
       pool: verifierPool,
       key: verifierKey,
       verify: verifyBuild,
+      capture,
+      previewOrigin,
     });
     const dependencies: Parameters<typeof runExperienceBuild>[2] = {
       profile: 'production',
@@ -221,19 +235,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     expect(committed.error).toBeNull();
     expect(committed.data).toHaveLength(1);
 
-    const capture = await createVerifierCaptureWorker({
-      pool: verifierPool,
-      hostOrigin,
-      previewOrigin,
-      bootstrap: async () => bootstrap,
-      runner: {
-        endpoint: 'https://runner.baci-offline.invalid/v1/execute',
-        key,
-        toolchainDigest,
-        fetch: (url, init) => handler(new Request(url, init)),
-      },
-    });
-    const captured = await capture(f.owner, {
+    const captured = await buildVerification.capture(buildVerification.ctx, {
       buildId: build.buildId,
       routeId: 'home',
       idempotencyKey: randomUUID(),

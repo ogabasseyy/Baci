@@ -37,7 +37,8 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
 export async function startVerifierListener(
   handler: (request: Request) => Promise<Response>,
   port: number,
-  buildHandler?: (request: Request) => Promise<Response>
+  buildHandler?: (request: Request) => Promise<Response>,
+  captureHandler?: (request: Request) => Promise<Response>
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw Error('INVALID_VERIFIER_PORT');
@@ -53,7 +54,8 @@ export async function startVerifierListener(
     if (
       req.method !== 'POST' ||
       (req.url !== '/v1/attest' &&
-        !(req.url === '/v1/build' && buildHandler)) ||
+        !(req.url === '/v1/build' && buildHandler) &&
+        !(req.url === '/v1/capture' && captureHandler)) ||
       req.headers.host !== 'verifier.baci-internal.invalid' ||
       req.rawHeaders.filter(
         (_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host'
@@ -79,7 +81,12 @@ export async function startVerifierListener(
           'x-baci-verifier-signature',
           req.headers['x-baci-verifier-signature']
         );
-      const selected = req.url === '/v1/build' ? buildHandler : handler;
+      const selected =
+        req.url === '/v1/build'
+          ? buildHandler
+          : req.url === '/v1/capture'
+            ? captureHandler
+            : handler;
       if (!selected) throw Error('VERIFIER_UNAVAILABLE');
       const result = await selected(
         new Request(`https://verifier.baci-internal.invalid${req.url}`, {
@@ -88,8 +95,35 @@ export async function startVerifierListener(
           body: new Uint8Array(bytes),
         })
       );
-      await result.body?.cancel();
-      reply(result.status);
+      if (req.url === '/v1/capture' && result.status === 200 && result.body) {
+        const reader = result.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          for (;;) {
+            const part = await reader.read();
+            if (part.done) break;
+            size += part.value.byteLength;
+            if (size > 4096) {
+              await reader.cancel();
+              throw Error('OUTPUT_BUDGET');
+            }
+            chunks.push(part.value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        if (!res.destroyed) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          });
+          res.end(Buffer.concat(chunks));
+        }
+      } else {
+        await result.body?.cancel();
+        reply(result.status);
+      }
     } catch (error) {
       reply(
         error instanceof Error && error.message === 'BODY_BUDGET' ? 413 : 403

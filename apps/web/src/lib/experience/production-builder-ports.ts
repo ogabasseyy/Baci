@@ -7,6 +7,7 @@ import {
   BUILDER_RESOURCE,
 } from '../../../builder-mcp-server/metadata';
 import { createVerifierBuildClient } from '../../../tools/experience-verifier/build-client';
+import { createVerifierCaptureClient } from '../../../tools/experience-verifier/capture-client';
 import { composeExperienceRuntime } from './compose-runtime';
 import { createProductionExperienceIntegration } from './production-integration';
 
@@ -56,6 +57,17 @@ export function createProductionBuilderPorts(settings: {
   return createProductionExperienceIntegration({
     ...settings.integration,
     build: { ...settings.integration.build, recordVerifiedEvidence },
+    ...(settings.buildVerifier
+      ? {
+          remoteCapture: createVerifierCaptureClient({
+            ...settings.buildVerifier,
+            previewOrigin:
+              settings.integration.previewOrigin ??
+              settings.integration.hostOrigin,
+            resolveLinkedAccessToken: settings.broker.resolveLinkedAccessToken,
+          }),
+        }
+      : {}),
     authenticate,
     resolveUserClient: createBuilderUserClientResolver(linked),
     legacyGateway: createBuilderGatewayRuntime({ auth, linked }),

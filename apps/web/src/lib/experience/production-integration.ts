@@ -50,7 +50,8 @@ export function createProductionExperienceIntegration(settings: {
     manifest: ExperienceManifest,
     routeId: string
   ): Promise<PublicBootstrap>;
-  recordCapture(capture: RecordedPrivateCapture): Promise<void>;
+  recordCapture?(capture: RecordedPrivateCapture): Promise<void>;
+  remoteCapture?: ReturnType<typeof createPrivateExperienceCapture>;
 }) {
   const previewOrigin = settings.previewOrigin ?? settings.hostOrigin;
   const bootstrap = settings.bootstrap ?? loadOwnerPreviewBootstrap;
@@ -60,6 +61,8 @@ export function createProductionExperienceIntegration(settings: {
   });
   if (settings.build.toolchainDigest !== settings.runner.toolchainDigest)
     throw Error('TOOLCHAIN_MISMATCH');
+  if (!settings.remoteCapture && !settings.recordCapture)
+    throw Error('VERIFIER_NOT_CONFIGURED');
   let active = true;
   const guarded =
     (
@@ -136,14 +139,18 @@ export function createProductionExperienceIntegration(settings: {
         },
         bootstrap,
       });
-      const capture = createPrivateExperienceCapture({
-        profile: 'production',
-        hostOrigin: canonicalOrigin,
-        previewOrigin,
-        bootstrap,
-        record: settings.recordCapture,
-        capture: (input) => captureExperience(input, execute),
-      });
+      const capture =
+        settings.remoteCapture ??
+        createPrivateExperienceCapture({
+          profile: 'production',
+          hostOrigin: canonicalOrigin,
+          previewOrigin,
+          bootstrap,
+          record:
+            settings.recordCapture ??
+            (() => Promise.reject(Error('VERIFIER_NOT_CONFIGURED'))),
+          capture: (input) => captureExperience(input, execute),
+        });
       if (pipelines.size >= 32) {
         const oldest = pipelines.keys().next().value;
         if (oldest) pipelines.delete(oldest);

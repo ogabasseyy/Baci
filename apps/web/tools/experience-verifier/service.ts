@@ -14,9 +14,10 @@ import { createVerifierAttestationHandler } from './attestation-handler';
 import { createVerifierBuildHandler } from './build-handler';
 import { createVerifierBuildRecorder } from './build-recorder';
 import { createIndependentBuildVerifier } from './build-verifier';
-import { createVerifierCaptureWorker } from './capture-worker';
+import { createVerifierCaptureHandler } from './capture-handler';
 import { startVerifierListener } from './listener';
 import { createVerifierNonceStore } from './nonce-store';
+import { createVerifierWorkerResolver } from './worker-resolver';
 
 /** Trusted process startup. The caller owns the restricted pool and shutdown. */
 export async function startVerifierService(settings: {
@@ -49,10 +50,7 @@ export async function startVerifierService(settings: {
   const resolveUserClient = createOwnerPreviewUserClientResolver(
     settings.supabase
   );
-  const workers = new Map<
-    string,
-    Awaited<ReturnType<typeof createVerifierCaptureWorker>>
-  >();
+  const workers = createVerifierWorkerResolver(settings);
   const verifier = createIndependentApprovalVerifier({
     record,
     verifyPublic: () => Promise.reject(Error('PUBLIC_VERIFIER_NOT_INSTALLED')),
@@ -70,56 +68,10 @@ export async function startVerifierService(settings: {
         approval.buildId !== binding.buildId
       )
         throw Error('APPROVAL_MISMATCH');
-      const merchant = await client
-        .from('merchants')
-        .select('slug')
-        .eq('id', approval.merchantId)
-        .maybeSingle();
-      const build = await client
-        .from('experience_builds')
-        .select('host_origin')
-        .eq('merchant_id', approval.merchantId)
-        .eq('id', approval.buildId)
-        .maybeSingle();
-      const slug = merchant.data?.slug;
-      if (
-        merchant.error ||
-        build.error ||
-        typeof slug !== 'string' ||
-        !/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug) ||
-        !build.data
-      )
-        throw Error('APPROVAL_MISMATCH');
-      const canonical = new URL(await settings.canonicalBase(slug, client));
-      if (
-        canonical.username ||
-        canonical.password ||
-        canonical.search ||
-        canonical.hash
-      )
-        throw Error('INVALID_VERIFIER_CONFIG');
-      productionDeliveryOrigins({
-        executionOrigin: settings.executionOrigin,
-        hostOrigins: [canonical.origin, settings.previewOrigin],
-      });
-      if (build.data.host_origin !== canonical.origin)
-        throw Error('APPROVAL_MISMATCH');
-      const cacheKey = JSON.stringify([approval.merchantId, canonical.origin]);
-      let worker = workers.get(cacheKey);
-      if (!worker) {
-        worker = await createVerifierCaptureWorker({
-          pool: settings.pool,
-          hostOrigin: canonical.origin,
-          previewOrigin: settings.previewOrigin,
-          bootstrap: loadOwnerPreviewBootstrap,
-          runner: settings.runner,
-        });
-        if (workers.size >= 32) {
-          const oldest = workers.keys().next().value;
-          if (oldest) workers.delete(oldest);
-        }
-        workers.set(cacheKey, worker);
-      }
+      const worker = await workers.resolve(
+        { supabase: client, merchantId: approval.merchantId },
+        approval.buildId
+      );
       return createApprovalCapture(worker)(client, binding);
     },
   });
@@ -142,10 +94,17 @@ export async function startVerifierService(settings: {
       record: recordBuild,
     }),
   });
+  const captureHandler = createVerifierCaptureHandler({
+    key: settings.key,
+    consumeNonce,
+    resolveUserClient,
+    resolveWorker: workers.resolve,
+  });
   const listener = await startVerifierListener(
     handler,
     settings.port,
-    buildHandler
+    buildHandler,
+    captureHandler
   );
   return {
     async close() {

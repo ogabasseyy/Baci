@@ -83,6 +83,30 @@ test('keeps full affected tests when web test setup changes', () => {
   );
 });
 
+test('keeps full affected tests when the web node/jsdom project split changes', () => {
+  // These files decide which environment and setup every web test gets, so a
+  // targeted `vitest --changed` run cannot prove a change to them is safe.
+  for (const file of [
+    'apps/web/vitest.config.ts',
+    'apps/web/vitest.escape-glob.ts',
+    'apps/web/vitest.jsdom-holdouts.ts',
+    'apps/web/vitest.next-image-mock.ts',
+    'apps/web/vitest.node-folders.ts',
+    'apps/web/vitest.setup.node.ts',
+    'apps/web/vitest.setup.shared.ts',
+  ]) {
+    const plan = resolveCiTestPlan({
+      baseRef: 'origin/main',
+      changedFiles: [file],
+      eventName: 'pull_request',
+    });
+    assert.equal(plan.mode, 'full-affected', file);
+    // The explicit trigger reason, not the "outside the targeted scope"
+    // fall-through that any unknown path would also hit.
+    assert.match(plan.reason, /test setup changes/, file);
+  }
+});
+
 test('keeps full affected tests when replay registry lists change', () => {
   // Registry lists are read through fs, so `vitest --changed` cannot see
   // which tests consume them; a targeted run would skip their validation.

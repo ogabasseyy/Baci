@@ -81,7 +81,7 @@ test('silent revert guard verifies exact commit objects without persisting or re
   assert.equal(verify.env.HEAD_SHA, '${{ github.event.pull_request.head.sha }}');
   assert.equal(detect.env.BASE_SHA, verify.env.BASE_SHA);
   assert.equal(detect.env.HEAD_SHA, verify.env.HEAD_SHA);
-  assert.doesNotMatch(JSON.stringify(job.steps), /git fetch|secrets\./);
+  assert.doesNotMatch(JSON.stringify(job), /git fetch|secrets\./);
   for (const [base, head, failGit, success] of [
     ['a'.repeat(40), 'b'.repeat(40), '', true],
     ['', 'b'.repeat(40), '', false],

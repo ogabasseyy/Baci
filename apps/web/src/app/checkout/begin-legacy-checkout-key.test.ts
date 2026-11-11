@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { beginLegacyCheckoutKey } from './begin-legacy-checkout-key';
 import { resolveLegacyCheckoutIdempotencyKey } from './resolve-legacy-checkout-idempotency-key';

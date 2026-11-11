@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { describe } from 'node:test';
 import YAML from 'yaml';
 import { privateRunnerRoute } from './ci-private-runner-contract-utils.mjs';
 
@@ -141,6 +141,12 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
   const scriptOf = (job, name) => scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
   const replay = scriptOf(...REPLAY_STEP);
   const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));
+  assert.match(afterGuard, /test -x \/usr\/lib\/postgresql\/18\/bin\/initdb/);
+  // The suites start their own servers, so the server programs must be present and on the pinned release too.
+  for (const program of ['pg_ctl', 'postgres', 'pg_isready']) {
+    assert.match(afterGuard, new RegExp(`test -x /usr/lib/postgresql/18/bin/${program}\\n`), program);
+  }
+  assert.match(afterGuard, /\/usr\/lib\/postgresql\/18\/bin\/postgres --version \| grep -Eq '\^postgres /);
   assert.match(afterGuard, /test -x \/usr\/local\/bin\/supabase-go/);
   assert.match(afterGuard, /supabase --version/);
   for (const [job, name] of INSTALLER_CALLERS) {
@@ -180,13 +186,23 @@ test('every PostgreSQL 18 pin names the same release: hosted install, psql check
   assert.ok(build, 'the installer must define PG_BUILD as an exact PostgreSQL 18 build');
   assert.match(installer, /"postgresql-18=\$\{PG_BUILD\}" "postgresql-client-18=\$\{PG_BUILD\}"/, 'server and client must both use PG_BUILD');
   assert.doesNotMatch(script, /postgresql(?:-client)?-18=/, 'the replay toolchain script must install PostgreSQL through the shared installer, not pin its own copy');
-  const checked = /PostgreSQL\\\) 18\\\.(\d+)\(/.exec(script)?.[1];
-  assert.equal(build[1], checked, 'the psql version check must match the pinned release');
+  // Two checks name the release: `psql --version` and `postgres --version` (a runner can have a new client next to an old server).
+  const checkedAll = [...script.matchAll(/PostgreSQL\\\) 18\\\.(\d+)\(/g)].map((match) => match[1]);
+  const checked = checkedAll[0];
+  assert.equal(checkedAll.length, 2, 'both the psql and the postgres version checks must exist');
+  assert.deepEqual([...new Set(checkedAll)], [build[1]], 'the psql and postgres version checks must match the pinned release');
   // The replay tool asserts the psql version again before any replay; a stale value there fails every replay.
   const contract = readFileSync('apps/web/tools/db/supabase-replay-contract.ts', 'utf8');
   assert.equal(/PostgreSQL\\\) 18\\\.(\d+)\(/.exec(contract)?.[1], checked, 'apps/web/tools/db/supabase-replay-contract.ts must accept the same psql release');
   const image = workflow.jobs['quality-disposable-sql'].services.postgres.image;
   assert.match(image, new RegExp(`^postgres:18\\.${checked}@sha256:[0-9a-f]{64}$`), 'the Disposable SQL database container must use the same release, pinned by digest');
+  // A stale or mistyped digest still matches that format, so the job also asks the running container which release it is.
+  const steps = workflow.jobs['quality-disposable-sql'].steps;
+  const assertion = steps.find((step) => step.name === 'Assert the database container runs the pinned PostgreSQL release');
+  assert.ok(assertion, 'the Disposable SQL job must check the release of the running database container');
+  assert.equal(assertion.env.EXPECTED_SERVER_VERSION_NUM, String(180000 + Number(checked)), 'the container check must expect the pinned release as server_version_num');
+  assert.match(assertion.run, /SHOW server_version_num/);
+  assert.equal(steps.indexOf(assertion), 1, 'the container check runs first, right after checkout');
 });
 
 test('the shared PostgreSQL installer refuses to run before any privileged command outside a hosted runner', async () => {
@@ -211,7 +227,8 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.ok(steps.indexOf(select) < steps.indexOf(restore));
   const prune = steps.find((step) => step.name === 'Prune an oversized persistent pnpm store');
   assert.equal(prune.if, "steps.pnpm-store.outputs.persistent == 'true'");
-  assert.match(prune.run, /pnpm store prune/);
+  // The prune names the measured store explicitly and is housekeeping only: a failure warns instead of failing the job.
+  assert.match(prune.run, /pnpm store prune --store-dir "\$STORE_DIR" \|\| echo "::warning::/);
   assert.ok(steps.indexOf(configure) < steps.indexOf(prune) && steps.indexOf(prune) < steps.findIndex((step) => step.name === 'Install Dependencies'));
   const run = (persistent, storeDir) => {
     const out = spawnSync('bash', ['-c', `${select.run}\ncat "$GITHUB_OUTPUT"`], {
@@ -230,4 +247,36 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   });
   assert.notEqual(inside.status, 0);
   assert.match(inside.stdout + inside.stderr, /outside the workspace/);
+});
+
+describe('bugfix: shared-host SQL tests must not share fixed /tmp files', () => {
+  const script = readFileSync('supabase/tests/run-order-refund-claim-manual-concurrency-test.sh', 'utf8');
+
+  test('the refund concurrency test has no fixed /tmp marker or log names', () => {
+    // Two runner processes on one host can run this script at the same moment. With fixed names, one run deletes the
+    // other run's lock-ready marker or truncates the log that its statement-timeout assertion reads.
+    assert.doesNotMatch(script, /\/tmp\/order-refund-claim-race/);
+  });
+
+  test('every run gets its own scratch directory for the marker and the logs, and removes it on exit', () => {
+    const setup = script.split('\n').filter((line) => /^(scratch_dir|HOLD_MARKER|SESSION_A_LOG|CLAIM_LOG)=/.test(line));
+    assert.equal(setup.length, 4, 'scratch_dir, HOLD_MARKER, SESSION_A_LOG and CLAIM_LOG must each be one assignment line');
+    const probe = `set -euo pipefail\n${setup.join('\n')}\nprintf '%s\\n%s\\n%s\\n%s\\n' "$scratch_dir" "$HOLD_MARKER" "$SESSION_A_LOG" "$CLAIM_LOG"`;
+    const runs = [1, 2].map(() => {
+      const result = spawnSync('bash', ['-c', probe], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim().split('\n');
+    });
+    try {
+      assert.notEqual(runs[0][0], runs[1][0], 'two runs must not share a scratch directory');
+      for (const [dir, ...files] of runs) {
+        assert.ok(existsSync(dir), `${dir} must exist after setup`);
+        for (const file of files) assert.ok(file.startsWith(`${dir}/`), `${file} must live inside ${dir}`);
+      }
+    } finally {
+      for (const [dir] of runs) rmSync(dir, { recursive: true, force: true });
+    }
+    // The cleanup function also runs mid-script in full mode, so only the exit trap may remove the directory.
+    assert.match(script, /^trap 'cleanup; rm -rf "\$scratch_dir"' EXIT$/m);
+  });
 });

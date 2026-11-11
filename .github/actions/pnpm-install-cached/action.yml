@@ -150,7 +150,9 @@ runs:
         size_kb="$(du -sk "$STORE_DIR" | cut -f1)"
         if [ "$size_kb" -gt "$MAX_STORE_KB" ]; then
           echo "pnpm store is ${size_kb} KB (limit ${MAX_STORE_KB} KB); pruning unreferenced packages"
-          pnpm store prune
+          # Name the store explicitly so the prune hits the directory measured above, and never fail the job
+          # over housekeeping: the next install still works, and the warning shows up in the run summary.
+          pnpm store prune --store-dir "$STORE_DIR" || echo "::warning::pnpm store prune failed; continuing without pruning"
         fi
 
     - name: Install Dependencies

@@ -8,6 +8,9 @@
 # runs, on that same release.
 set -euo pipefail
 
+# RUNNER_ENVIRONMENT is a default variable the runner sets for every job ("github-hosted" or "self-hosted", see
+# GitHub's "Default environment variables" reference), so the step needs no `env:` entry for it, and `env:` could not
+# override it anyway. The version and checksum come from the step's `env:`.
 : "${SUPABASE_CLI_VERSION:?}" "${SUPABASE_CLI_SHA256:?}" "${RUNNER_ENVIRONMENT:?}" "${RUNNER_TEMP:?}" "${GITHUB_ENV:?}"
 
 # GitHub-hosted runners start empty and may use administrator rights. The self-hosted CI server
@@ -25,8 +28,16 @@ if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
 fi
 # On a self-hosted server the toolchain is provisioned outside this repository; say what is there so a
 # drifted server (for example stale 18.3 binaries) is obvious from the log instead of an opaque failure.
-echo "Replay toolchain on ${RUNNER_NAME:-this runner}: PostgreSQL 18 -> $(/usr/lib/postgresql/18/bin/postgres --version 2>&1 || echo missing); Supabase CLI -> $(supabase --version 2>&1 || echo missing) (expected 18.6 and ${SUPABASE_CLI_VERSION})"
+found_server="$(/usr/lib/postgresql/18/bin/postgres --version 2>&1 | head -n 1 | cut -c1-160 || true)"
+found_cli="$(supabase --version 2>&1 | head -n 1 | cut -c1-160 || true)"
+echo "Replay toolchain on ${RUNNER_NAME:-this runner}: PostgreSQL 18 -> ${found_server:-missing}; Supabase CLI -> ${found_cli:-missing} (expected 18.6 and ${SUPABASE_CLI_VERSION})"
+# The replay and SQL suites start their own servers, so the server programs must exist and be the pinned
+# release too: a runner can have a current psql next to an older server.
 test -x /usr/lib/postgresql/18/bin/initdb
+test -x /usr/lib/postgresql/18/bin/pg_ctl
+test -x /usr/lib/postgresql/18/bin/postgres
+test -x /usr/lib/postgresql/18/bin/pg_isready
+/usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
 test -x /usr/local/bin/supabase-go
 test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
 # Pin the lookup to the PostgreSQL 18 tree: with PostgreSQL 16 installed as well, the default

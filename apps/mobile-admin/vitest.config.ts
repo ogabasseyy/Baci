@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { NODE_PROJECT_TEST_GLOB } from './vitest.node-project-tests';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,10 +57,6 @@ const reactNativeVectorIconMockPath = path.resolve(
   __dirname,
   'test/mocks/react-native-vector-icon.tsx'
 );
-
-// The test files the `node` project runs: every plain `.ts` test (no `x`).
-// `.tsx` tests render React components and always run in the `jsdom` project.
-const NODE_PROJECT_TEST_GLOB = '**/*.{test,spec}.?(c|m)[jt]s';
 
 export default defineConfig({
   define: {

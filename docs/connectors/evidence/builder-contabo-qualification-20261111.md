@@ -62,3 +62,12 @@ contained the expected synthetic heading and had build digest
 both execution and cleanup exited successfully. Direct invocation as the
 unprivileged `nobody` user failed. This does not test the service's sudo policy,
 privileged installation preflight, independent release provenance or live flow.
+
+A temporary unprivileged system account was then given a `visudo`-validated,
+passwordless rule for only the root-owned helper path under the qualification
+directory. Through that rule it prepared, ran and cleaned up the same synthetic
+compile successfully; direct sudo access to Python and runsc and an unsupported
+job kind were rejected. The temporary account and sudo rule were removed after
+the test, and both existing CI runner services remained active. This validates
+the temporary rule and tested helper on this host, not a persistent production
+installation, independent image provenance, privileged preflight or live flow.

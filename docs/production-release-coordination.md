@@ -106,6 +106,8 @@ and writes the prepared declaration to `.typed-navigation/link.d.ts`;
 `tsconfig.build.json` lists that copy under `files` and excludes the
 regenerated file, so a build that skipped the preparation fails with TS6053
 instead of silently dropping typed-route checks.
+On a fresh checkout, run `next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts` in `apps/web` (or `pnpm typecheck:build`, which also type checks) before a bare `tsc -p tsconfig.build.json`, which otherwise fails with TS6053.
+`typecheck:build` passes `--incremental false` because a stale `.next/cache/tsconfig.build.tsbuildinfo` let an unprepared declaration pass without being re-checked; do not trust an incremental result when verifying this path by hand.
 `build:ci` compiles without type checking, so only a production build
 exercises this path: a TS2589 in a deploy with green PR checks means the two
 have drifted.

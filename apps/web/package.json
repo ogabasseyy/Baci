@@ -15,6 +15,7 @@
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
     "typecheck": "next typegen && node tools/prepare-typed-navigation.mjs && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication && pnpm typecheck:experience",
+    "typecheck:build": "next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && tsc --noEmit --incremental false -p tsconfig.build.json",
     "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",

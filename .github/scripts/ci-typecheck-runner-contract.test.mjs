@@ -13,7 +13,7 @@ function route({ privateRepo = true, enabled = 'true', typecheckEnabled = 'true'
 
 test('typecheck requires explicit private opt-in and trusted repository head', () => {
   assert.deepEqual(route(), ['self-hosted', 'Linux', 'X64', 'baci-private-ci']);
-  assert.equal(job['timeout-minutes'], 30);
+  assert.equal(job['timeout-minutes'], 45);
   for (const value of [{ privateRepo: false }, { privateRepo: null }, { enabled: '' }, { enabled: 'false' }, { typecheckEnabled: '' }, { typecheckEnabled: 'false' }, { head: 'other/fork' }, { head: '' }]) {
     assert.equal(route(value), 'ubuntu-24.04');
   }

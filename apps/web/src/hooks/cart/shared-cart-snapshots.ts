@@ -91,12 +91,23 @@ export function createCartSnapshotActions(context: SharedCartRuntime) {
     // snapshot before the link (import, hydration, send-ready) runs.
     if (adoptOutcomeRef.current === 'unknown') return;
     if (!force && Date.now() - lastFetchRef.current < FETCH_COALESCE_MS) return;
+    // Claim the coalescing window before the read starts. Returning to a
+    // tab fires visibilitychange and focus together; marking the window
+    // only on completion let both through, and each read holds the cart
+    // request lock, delaying the shopper's next edit by a round trip.
+    const previousFetch = lastFetchRef.current;
+    const claimedAt = Date.now();
+    if (!force) lastFetchRef.current = claimedAt;
     const result = await fetchSharedCartSnapshot(
       undefined,
       optionsRef.current.merchantSlug
     );
-    if (generationRef.current !== generation) return;
-    if (!result.ok) return;
+    if (generationRef.current !== generation || !result.ok) {
+      // Give the window back so a failed read never suppresses the retry.
+      if (!force && lastFetchRef.current === claimedAt)
+        lastFetchRef.current = previousFetch;
+      return;
+    }
     lastFetchRef.current = Date.now();
     dispatch({
       generation,

@@ -32,7 +32,12 @@ if [ -z "${PR:-}" ]; then
   exit 0
 fi
 
-pr_json="$(gh api "repos/$REPO/pulls/$PR")"
+# A transient API failure must not turn the job red or overwrite a decided status: keep the
+# previous status; the next event (a reviewer finishing, a push) tallies again.
+if ! pr_json="$(gh api "repos/$REPO/pulls/$PR" 2>/dev/null)"; then
+  echo "::warning::Diff Guardian could not read pull request #$PR; keeping the previous status until the next event re-tallies."
+  exit 0
+fi
 current_sha="$(printf '%s' "$pr_json" | jq -r '.head.sha')"
 if [ -z "${SHA:-}" ]; then
   SHA="$current_sha"

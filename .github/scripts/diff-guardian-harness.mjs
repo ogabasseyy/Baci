@@ -100,10 +100,14 @@ export function runTally(options = {}) {
   try {
     const sha = options.sha ?? SHA;
     const put = (path, value) => writeFileSync(join(dir, `${key(path)}.json`), JSON.stringify(value));
-    put(`repos/${REPO}/pulls/${PR}`, {
-      head: { sha: options.currentSha ?? sha, repo: { full_name: options.headRepo ?? REPO } },
-      labels: (options.labels ?? []).map((name) => ({ name })),
-    });
+    if (options.prError) {
+      writeFileSync(join(dir, `${key(`repos/${REPO}/pulls/${PR}`)}.error`), options.prError);
+    } else {
+      put(`repos/${REPO}/pulls/${PR}`, {
+        head: { sha: options.currentSha ?? sha, repo: { full_name: options.headRepo ?? REPO } },
+        labels: (options.labels ?? []).map((name) => ({ name })),
+      });
+    }
     put(`repos/${REPO}/commits/${sha}/status`, { statuses: options.statuses ?? [] });
     // `gh api --paginate` prints one JSON document per page, back to back.
     const putPages = (path, pages) => writeFileSync(join(dir, `${key(path)}.json`), pages.map((page) => JSON.stringify(page)).join('\n'));

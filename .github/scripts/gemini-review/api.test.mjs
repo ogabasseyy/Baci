@@ -128,13 +128,36 @@ test('classifies auth, bad key, missing model and bad request without retrying',
     [{ status: 401, body: { error: { code: 401, message: 'unauthenticated' } } }, 'auth'],
     [{ status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'API key not valid. Please pass a valid API key.' } } }, 'auth'],
     [{ status: 404, body: { error: { code: 404, status: 'NOT_FOUND', message: 'models/x is not found' } } }, 'model_not_found'],
-    [{ status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Unknown name thinkingLevel' } } }, 'bad_request'],
+    [{ status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Invalid JSON payload received.' } } }, 'bad_request'],
   ];
   for (const [response, kind] of cases) {
     const { calls, run } = harness([response]);
     assert.equal((await run()).kind, kind);
     assert.equal(calls.length, 1);
   }
+});
+
+test('bugfix: a model that rejects the thinking setting is retried once without it, so a GEMINI_MODEL override still reviews', async () => {
+  const rejected = { status: 400, body: { error: { code: 400, status: 'INVALID_ARGUMENT', message: 'Unknown name "thinkingLevel" at generation_config.thinking_config: Cannot find field.' } } };
+  const { calls, sleeps, run } = harness([rejected, { status: 200, body: okBody('{"ok":true}') }]);
+  const result = await run({ model: 'gemini-3.1-flash-lite' });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 2);
+  assert.ok(JSON.parse(calls[0].init.body).generationConfig.thinkingConfig, 'first try asks for low thinking');
+  assert.equal(JSON.parse(calls[1].init.body).generationConfig.thinkingConfig, undefined, 'second try leaves thinking to the model');
+  assert.equal(JSON.parse(calls[1].init.body).generationConfig.responseMimeType, 'application/json', 'the rest of the request is unchanged');
+  assert.deepEqual(sleeps, [], 'no waiting for a configuration error');
+});
+
+test('the thinking fallback happens once, and only for thinking errors', async () => {
+  const thinking = { status: 400, body: { error: { code: 400, message: 'thinking_config is not supported for this model' } } };
+  const always = harness([thinking]);
+  const failed = await always.run();
+  assert.deepEqual({ ok: failed.ok, kind: failed.kind }, { ok: false, kind: 'bad_request' });
+  assert.equal(always.calls.length, 2);
+  const other = harness([{ status: 400, body: { error: { code: 400, message: 'Invalid JSON payload received.' } } }]);
+  assert.equal((await other.run()).kind, 'bad_request');
+  assert.equal(other.calls.length, 1);
 });
 
 test('treats blocked, empty and truncated answers as failures, not as reviews', async () => {

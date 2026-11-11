@@ -17,13 +17,14 @@ export function thinkingConfigFor(model) {
   return /^gemini-2\.5/.test(model) ? { thinkingBudget: 1024 } : { thinkingLevel: 'low' };
 }
 
-export function buildRequest({ prompt, model }) {
+export function buildRequest({ prompt, model, thinking = true }) {
   return {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: 'application/json',
       responseJsonSchema: REVIEW_SCHEMA,
-      thinkingConfig: thinkingConfigFor(model),
+      // Left out when a model rejects it: it then decides how much to think.
+      ...(thinking ? { thinkingConfig: thinkingConfigFor(model) } : {}),
       maxOutputTokens: MAX_OUTPUT_TOKENS,
     },
   };
@@ -130,11 +131,19 @@ export async function callGemini({
     return { ok: false, kind: 'bad_request', detail: 'invalid model name', attempts: 0 };
   }
   const url = `${baseUrl}/models/${model}:generateContent`;
-  const body = JSON.stringify(buildRequest({ prompt, model }));
+  let thinking = true;
   let result;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const body = JSON.stringify(buildRequest({ prompt, model, thinking }));
     result = { ...(await requestOnce({ fetchImpl, url, apiKey, body, timeoutMs, model })), attempts: attempt };
-    const wait = result.ok ? null : retryWaitMs(result, attempt);
+    if (result.ok) break;
+    // A model that does not know the thinking setting answers 400 and names it: ask again once
+    // without it (a configuration error is not worth waiting for).
+    if (thinking && result.kind === 'bad_request' && /thinking/i.test(result.detail ?? '')) {
+      thinking = false;
+      continue;
+    }
+    const wait = retryWaitMs(result, attempt);
     if (wait === null || attempt === maxAttempts) break;
     await sleep(wait);
   }

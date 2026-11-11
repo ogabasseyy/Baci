@@ -4,7 +4,8 @@
 //   duplicate       this exact commit was already reviewed
 //   unchanged       a MERGE commit (main merged in) whose pull request changes equal the last review's
 //   review          call the model
-// A manual `@gemini-cli /review` comment always reviews: someone asked for a fresh answer.
+// A manual `@gemini-cli /review` comment skips the duplicate/unchanged shortcuts (someone asked for
+// a fresh answer); the bypass label and the private-repository guard still apply to it.
 // Env in: GH_TOKEN, GITHUB_REPOSITORY, PR_NUMBER, HEAD_SHA, FINGERPRINT, PR_LABELS (json),
 //   REPO_PRIVATE, PAID_TIER_CONFIRMED, EVENT_NAME, GITHUB_OUTPUT.
 import { isMain, parseJson, setOutputs } from './cli.mjs';

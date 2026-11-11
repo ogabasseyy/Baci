@@ -70,12 +70,14 @@ merged in) and the pull request's own added and removed lines are identical to t
 review (fingerprint in the hidden first line of the review). Normal commits are always reviewed:
 identical changed lines can still mean the same lines moved somewhere else. A skipped push still
 gets a status: the earlier result is carried to the new commit. A manual `@gemini-cli /review`
-comment always reviews.
+comment skips these shortcuts and always asks the model again, but the `bypass-ai-gate` label and the
+private-repository guard still apply to it.
 
 ## Where to change things
 
 - Review rules sent to the model: `.github/scripts/gemini-review/contract.md`.
-- Request shape, retries and error classes: `api.mjs`. Review parsing and rendering: `review.mjs`.
+- Request shape, retries and error classes: `api.mjs` (a model that rejects the thinking setting is
+  asked again once without it, so `GEMINI_MODEL` can be any Gemini model). Review parsing and rendering: `review.mjs`.
 - Posted text is scrubbed (`sanitize.mjs`): no @mentions, images, HTML comments or secret shapes, and
   links are turned into code so nothing the model writes is clickable. A status write that fails is
   retried once and then only warned about (a lost write is an infrastructure miss, not a finding).

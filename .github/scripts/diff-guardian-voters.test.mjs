@@ -265,6 +265,13 @@ test('uses the newest Muse review for the head commit', () => {
   assert.equal(only(result).state, 'success');
 });
 
+test('bugfix: a failed pull request lookup keeps the previous status and does not turn the job red', () => {
+  const result = runTally({ prError: 'gh: Server Error (HTTP 502)', statuses: [GEMINI_FAIL], checks: [MUSE_DONE], reviews: [museReview({ findings: ['high'] })] });
+  assert.deepEqual(result.posted, [], 'no status is overwritten');
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /::warning::/);
+});
+
 test('keeps the existing guards: bypass label, fork PRs, removed bypass label and stale triggers', () => {
   const bypass = runTally({ labels: ['bypass-ai-gate'] });
   assert.equal(only(bypass).state, 'success');

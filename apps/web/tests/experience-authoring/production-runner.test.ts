@@ -58,6 +58,7 @@ import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
+import { sendVerifierTwice } from './verifier-loopback.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
@@ -289,17 +290,9 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     const signature = createHmac('sha256', verifierKey)
       .update(`verifier-attest/v1\n${payload}`)
       .digest('hex');
-    const attestationRequest = () =>
-      new Request('https://verifier.baci-internal.invalid/v1/attest', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-baci-verifier-signature': signature,
-        },
-        body: payload,
-      });
-    expect((await verifierHandler(attestationRequest())).status).toBe(204);
-    expect((await verifierHandler(attestationRequest())).status).toBe(409);
+    expect(
+      await sendVerifierTwice(verifierHandler, payload, signature)
+    ).toEqual([204, 409]);
     const proof = await f.db.pool.query(
       'SELECT effect_digest FROM experience_authorization.approval_checks WHERE intent_id=$1',
       [approval.approvalId]

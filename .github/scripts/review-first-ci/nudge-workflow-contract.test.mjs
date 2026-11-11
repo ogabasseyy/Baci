@@ -52,12 +52,13 @@ describe('the nudge workflow', () => {
     assert.equal(run({ 'github.event_name': 'pull_request_target', 'github.event.action': 'ready_for_review' }), true);
   });
 
-  it('wakes up when the first pass of a CI run finishes successfully (the re-run pass needs no nudge)', () => {
+  it('wakes up when a CI run finishes successfully, including after a failed job was re-run', () => {
     const finished = (event, conclusion, attempt = 1) => ({ 'github.event_name': 'workflow_run', 'github.event.workflow_run.event': event, 'github.event.workflow_run.conclusion': conclusion, 'github.event.workflow_run.run_attempt': attempt });
     assert.equal(run(finished('pull_request', 'success')), true);
     assert.equal(run(finished('pull_request', 'failure')), false);
     assert.equal(run(finished('push', 'success')), false);
-    assert.equal(run(finished('pull_request', 'success', 2)), false);
+    // a flaky quick job re-run by hand finishes as attempt 2 or 3: the nudge must still hear about it
+    assert.equal(run(finished('pull_request', 'success', 2)), true);
   });
 
   it('only wakes up for Codex comments that can change the verdict (a finished review or a clean receipt)', () => {

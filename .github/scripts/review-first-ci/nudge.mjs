@@ -8,7 +8,8 @@ import { evaluatePullRequestStage } from './evaluate-pr-stage.mjs';
 import { normalizeMode } from './stage-decision.mjs';
 
 export const STATUS_CONTEXT = 'Review-first CI';
-export const MAX_ATTEMPTS = 3;
+// Bounds the nudge's own re-runs (a flaky quick job re-run by hand counts as an attempt too).
+export const MAX_ATTEMPTS = 5;
 // The nudge waits this long past the timeout so the re-run's own clock (the pull
 // request update time in its event) has certainly passed it too.
 const TIMEOUT_MARGIN_MINUTES = 2;

@@ -11,9 +11,11 @@ import {
 } from '@/lib/events/event-pipeline-config';
 import { toClientAnalyticsDomainEventName } from '@/lib/events/event-route-registry';
 import { isEventTimestampWithinWindow } from '@/lib/events/event-timestamp-window';
+import { isBotUserAgent } from '@/lib/events/is-bot-user-agent';
 import { minimizeDeliveryData } from '@/lib/events/minimize-delivery-data';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
+import { redactStoredPageUrl } from '@/lib/events/redact-stored-page-url';
 import { generateEventId } from '@/lib/facebook-capi';
 import { logger } from '@/lib/logger';
 import { createClient as createServerClient } from '@/lib/supabase/server';
@@ -69,6 +71,17 @@ export async function POST(request: NextRequest) {
       { error: 'Event timestamp outside allowed window' },
       { status: 400 }
     );
+  }
+  if (
+    input.event_source !== 'server' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
+    logger.debug({ message: 'Skipped crawler conversion event' });
+    return NextResponse.json({
+      event_id: input.event_id,
+      results: {},
+      success: true,
+    });
   }
   const eventType = normalizeEventType(input.event_name);
   if (!eventType) {
@@ -195,7 +208,12 @@ export async function POST(request: NextRequest) {
             createServiceClient('event-pipeline'),
             verifiedMerchantId,
             {
-              custom_data: input.custom_data,
+              custom_data: {
+                ...input.custom_data,
+                ...(input.custom_data.url
+                  ? { url: redactStoredPageUrl(input.custom_data.url) }
+                  : {}),
+              },
               event_id: eventId,
               event_type: eventType,
               merchant_id: verifiedMerchantId,

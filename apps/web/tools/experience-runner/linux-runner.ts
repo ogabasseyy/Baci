@@ -18,7 +18,7 @@ export type LinuxRunnerCommand = (
   input: string | undefined,
   timeoutMs: number
 ) => Promise<string>;
-const runCommand: LinuxRunnerCommand = async (
+export const runCommand: LinuxRunnerCommand = async (
   program,
   args,
   input,

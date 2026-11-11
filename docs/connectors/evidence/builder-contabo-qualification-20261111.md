@@ -80,3 +80,9 @@ The preflight was deliberately synthetic: this is a plumbing test, not an
 installation receipt or independent production provenance. The temporary helper,
 account and sudo rule were removed; both existing CI runner services remained
 active. No public ingress, orders or storefront publication were involved.
+
+An initial temporary privileged preflight test using the same-host observed
+pin did not return within its 300-second deadline while inventory hashing was
+active alongside CI. The temporary user, sudo rule, pin and executable files
+were removed. The startup timeout has been raised for a further test, but no
+successful privileged preflight or production provenance is claimed yet.

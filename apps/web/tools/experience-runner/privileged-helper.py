@@ -92,6 +92,41 @@ def open_jobs():
         raise
 
 
+def verify_trusted_file(parent_fd, name, owner):
+    if not name or name in (".", "..") or "/" in name:
+        raise ValueError("invalid file")
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != owner or metadata.st_mode & 0o022 or metadata.st_nlink != 1:
+            raise ValueError("untrusted file")
+    finally:
+        os.close(fd)
+
+
+def verify_preflight_files():
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        root = os.fstat(fd)
+        if root.st_uid != 0 or root.st_mode & 0o022:
+            raise ValueError("untrusted root")
+        for name in ("usr", "local", "libexec"):
+            child = open_trusted_child(fd, name, 0)
+            os.close(fd)
+            fd = child
+        verify_trusted_file(fd, "baci-experience-node", 0)
+        verify_trusted_file(fd, "baci-experience-preflight.mjs", 0)
+    finally:
+        os.close(fd)
+
+
+def run_preflight():
+    verify_preflight_files()
+    node = "/usr/local/libexec/baci-experience-node"
+    os.execve(node, [node, "/usr/local/libexec/baci-experience-preflight.mjs"],
+              {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"})
+
+
 def valid_name(name):
     return bool(re.fullmatch(
         r"baci-experience-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
@@ -190,6 +225,9 @@ def delete_job(jobs_fd, name, owner):
 def main(args):
     if os.geteuid() != 0:
         raise ValueError("invalid service identity")
+    if args == ["preflight"]:
+        run_preflight()
+        return
     prepare = len(args) == 3 and args[0] == "prepare" and args[1] in JOBS and valid_name(args[2])
     run = len(args) == 2 and args[0] == "run" and valid_name(args[1])
     delete = len(args) == 2 and args[0] == "delete" and valid_name(args[1])

@@ -181,3 +181,28 @@ with patch.object(h.os,'geteuid',return_value=0),patch.object(h,'open_jobs',retu
 `;
   execFileSync('python3', ['-I', '-c', script, helper], { stdio: 'pipe' });
 });
+
+it('rejects replaceable preflight files and invokes only fixed verified executables', () => {
+  const script = `
+import importlib.util,os,tempfile
+from unittest.mock import patch
+spec=importlib.util.spec_from_file_location('helper', __import__('sys').argv[1]);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
+with tempfile.TemporaryDirectory() as d:
+ fd=os.open(d,os.O_RDONLY|os.O_DIRECTORY)
+ try:
+  with open(os.path.join(d,'safe'),'w') as f:f.write('x')
+  os.chmod('safe',0o755,dir_fd=fd);h.verify_trusted_file(fd,'safe',os.getuid())
+  os.symlink('safe','link',dir_fd=fd)
+  os.link('safe','hard',src_dir_fd=fd,dst_dir_fd=fd)
+  for name in ['safe','link','../safe']:
+   try:h.verify_trusted_file(fd,name,os.getuid())
+   except (ValueError,OSError):pass
+   else:raise AssertionError('unsafe file accepted')
+ finally:os.close(fd)
+with patch.object(h,'verify_preflight_files') as verify,patch.object(h.os,'execve') as run:
+ h.run_preflight();verify.assert_called_once()
+ assert run.call_args.args[0]=='/usr/local/libexec/baci-experience-node'
+ assert run.call_args.args[1]==['/usr/local/libexec/baci-experience-node','/usr/local/libexec/baci-experience-preflight.mjs']
+`;
+  execFileSync('python3', ['-I', '-c', script, helper], { stdio: 'pipe' });
+});

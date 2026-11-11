@@ -1,4 +1,5 @@
-import { createHelperLinuxRunner } from './linux-runner';
+import { createHelperPreflight } from './helper-preflight';
+import { createHelperLinuxRunner, runCommand } from './linux-runner';
 import { createRunnerSocket } from './runner-socket';
 
 /** The private listener cannot open until the Linux installation preflight passes. */
@@ -18,5 +19,17 @@ export async function startRunnerService(
   return await dependencies.createSocket({
     socketPath: settings.socketPath,
     handler,
+  });
+}
+
+/** Fixed production path: the service cannot substitute an observed pin. */
+export function startQualifiedRunnerService(settings: {
+  key: Uint8Array;
+  toolchainDigest: string;
+  socketPath: string;
+}) {
+  return startRunnerService({
+    ...settings,
+    verifyInstallation: createHelperPreflight(runCommand),
   });
 }

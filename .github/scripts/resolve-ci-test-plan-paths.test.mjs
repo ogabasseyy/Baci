@@ -14,7 +14,6 @@ const FAMILY_EXAMPLES = {
   'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt': 'replay-registry',
   'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json': 'docs',
   '.github/workflows/pilot-codec-compatibility.yml': 'github-metadata',
-  '.github/filters/ci.yml': 'github-metadata',
   '.github/copilot-instructions.md': 'github-metadata',
   'vps-workers/deploy.sh': 'vps-workers',
   '.jules/atlas.md': 'agent-notes',
@@ -39,6 +38,7 @@ test('each fs-reader family claims its files and leaves code alone', () => {
     'scripts/backfill.ts',
     '.github/scripts/run-ci-web-shard.sh',
     '.github/actions/pnpm-install-cached/action.yml',
+    '.github/filters/ci.yml',
     'pnpm-workspace.yaml',
   ]) {
     assert.equal(isFsReaderFile(code), false, code);

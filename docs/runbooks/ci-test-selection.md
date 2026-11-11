@@ -37,12 +37,14 @@ then the migration readers run.
 The full triggers are listed in `.github/scripts/resolve-ci-test-plan.mjs`; the
 other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
 
-- **Full suite:** CI wiring (`ci.yml`, `.github/actions`, the planner and the
-  Vitest provider), shared packages, any `package.json` (at any depth), any
-  Vite or Vitest config, lockfile, `tsconfig`, test setup files, mobile admin,
-  any unknown path, deleted source files, and every non-PR event. A
-  `package.json` anywhere makes Vitest rerun every test, which a targeted plan
-  would run in one unsharded job, so it goes to the shards.
+- **Full suite:** CI wiring (`ci.yml`, `.github/actions`, the path filters in
+  `.github/filters`, the planner and the Vitest provider), shared packages, any
+  `package.json` (at any depth), any Vite or Vitest config, lockfile,
+  `tsconfig`, test setup files, mobile admin, any unknown path, deleted source
+  files, and every non-PR event. A `package.json` anywhere makes Vitest rerun
+  every test, which a targeted plan would run in one unsharded job, so it goes
+  to the shards. The path filters list themselves in every job group, so a
+  change to them is meant to run every gated job.
 - **Targeted:** `apps/web` source, tools and root `*.test.*` / `*.spec.*` files;
   code files in the three browser-workflow test folders
   (`tests/checkout-browser`, `tests/oxygen-policy-browser`,

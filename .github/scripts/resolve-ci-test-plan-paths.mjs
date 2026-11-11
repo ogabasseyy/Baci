@@ -94,8 +94,9 @@ const MOBILE_STOREFRONT_MODULE_PREFIXES = ['apps/mobile-storefront/__tests__/'];
 //                      docs files have none. Unlike supabase/ (DB replay jobs)
 //                      and vps-workers/ (own test job), nothing backs it up:
 //                      the name match is its only safety net.
-//   - .github metadata workflows other than ci.yml, filters, templates: read by
-//                      a few contract tests; CI wiring itself stays a trigger.
+//   - .github metadata workflows other than ci.yml, templates: read by a few
+//                      contract tests; CI wiring itself stays a trigger (ci.yml,
+//                      actions, the path filters, the planner files).
 //   - vps-workers/     has its own test job (`deploy_scripts` filter).
 //   - markdown, .jules/, .ruler/, root notes, vercel.json.
 export const FS_READER_FAMILIES = [
@@ -115,9 +116,7 @@ export const FS_READER_FAMILIES = [
   {
     id: 'github-metadata',
     matches: (file) =>
-      /^\.github\/(?:workflows|filters|cloudflare|ISSUE_TEMPLATE)\//.test(
-        file
-      ) ||
+      /^\.github\/(?:workflows|cloudflare|ISSUE_TEMPLATE)\//.test(file) ||
       /^\.github\/[^/]+\.(?:md|ya?ml|json|txt)$/.test(file) ||
       file === '.github/CODEOWNERS',
     floor: 2,

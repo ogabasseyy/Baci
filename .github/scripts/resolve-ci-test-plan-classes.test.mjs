@@ -59,7 +59,6 @@ const READ_BY_FEW_OR_NO_TESTS = [
   '.github/copilot-instructions.md',
   '.github/sarif-filter-notes.md',
   '.github/workflows/pilot-codec-compatibility.yml',
-  '.github/filters/deploy.yml',
   'vps-workers/deploy.sh',
   'vercel.json',
   'apps/web/README.md',

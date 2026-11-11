@@ -246,6 +246,8 @@ test('Playwright specs outside the browser-workflow folders keep the full suite'
 test('hard triggers beat every class that skips the full suite', () => {
   for (const trigger of [
     '.github/workflows/ci.yml',
+    '.github/filters/ci.yml',
+    '.github/filters/deploy.yml',
     '.github/actions/pnpm-install-cached/action.yml',
     '.github/scripts/resolve-ci-test-plan-paths.mjs',
     '.github/scripts/resolve-ci-test-plan-classes.test.mjs',

@@ -33,6 +33,9 @@ export const ROOT_FULL_TEST_FILES = new Set([
 
 export const ROOT_FULL_TEST_PREFIXES = [
   '.github/actions/',
+  // The path filters decide which jobs run, and list themselves in every group so
+  // that a change to them runs every gated job: CI wiring, like ci.yml.
+  '.github/filters/',
   // The planner, its path classes and the Vitest provider decide what CI runs.
   '.github/scripts/resolve-ci-test-plan',
   '.github/scripts/vitest-changed-files-provider',

@@ -11,8 +11,12 @@ vi.mock('@/lib/supabase/authenticated-user-client', () => ({
   createAuthenticatedUserClient: userClient,
 }));
 
+import { getInstalledBuilderGateway } from '@/lib/builder-gateway/runtime';
 import { createTransientOutputStore } from '../../../tools/experience-runner/transient-output-store';
-import { createProductionBuilderPorts } from './production-builder-ports';
+import {
+  createProductionBuilderPorts,
+  installProductionBuilderPorts,
+} from './production-builder-ports';
 
 it('uses the same live connection and user-scoped RLS resolution for experience and legacy gateway', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'baci-builder-ports-'));
@@ -70,6 +74,12 @@ it('uses the same live connection and user-scoped RLS resolution for experience 
         recordCapture: vi.fn(),
       },
     });
+    expect(getInstalledBuilderGateway()).toBeUndefined();
+    const service = installProductionBuilderPorts(ports);
+    expect(getInstalledBuilderGateway()).toBeTypeOf('function');
+    expect(() => installProductionBuilderPorts(ports)).toThrow(
+      'PORTS_ALREADY_INSTALLED'
+    );
     const token = await new SignJWT({
       connectionId: connection,
       grantVersion: 1,
@@ -113,7 +123,19 @@ it('uses the same live connection and user-scoped RLS resolution for experience 
     row.status = 'revoked';
     row.revokedAt = new Date().toISOString();
     await expect(ports.composition.authenticate(request())).rejects.toThrow();
-    ports.dispose();
+    service.close();
+    service.close();
+    expect(getInstalledBuilderGateway()).toBeUndefined();
+    expect(() => installProductionBuilderPorts(ports)).toThrow(
+      'PORTS_ALREADY_INSTALLED'
+    );
+    expect(
+      (
+        await service.deliver(
+          new Request('https://output.runtime.test/resource/invalid')
+        )
+      ).status
+    ).toBe(503);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

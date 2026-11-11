@@ -62,6 +62,25 @@ test('production build checks the prepared typed-route declaration, not the one 
   assert.doesNotMatch(manifest.scripts['build:ci'], /typegen/);
 });
 
+test('CI runs the production build type-check path after the normal typecheck', () => {
+  const manifest = JSON.parse(readFileSync(`${web}package.json`, 'utf8'));
+  // Same three steps as `build` before `next build`; build:ci skips type checking, so CI needs this.
+  assert.equal(
+    manifest.scripts['typecheck:build'],
+    'next typegen && node tools/prepare-typed-navigation.mjs --output .typed-navigation/link.d.ts && tsc --noEmit -p tsconfig.build.json'
+  );
+  assert.ok(manifest.scripts.build.startsWith(manifest.scripts['typecheck:build'].replace(' && tsc --noEmit -p tsconfig.build.json', '')));
+  const workflow = YAML.parse(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'));
+  const steps = workflow.jobs['quality-typecheck'].steps;
+  const normal = steps.findIndex(step => step.name === 'Run Typecheck');
+  const prod = steps.findIndex(step => step.name === 'Run production build typecheck');
+  assert.ok(normal >= 0 && prod > normal, 'production build typecheck must follow the normal typecheck');
+  assert.equal(steps[prod].run, 'pnpm run typecheck:build');
+  assert.equal(steps[prod]['working-directory'], 'apps/web');
+  assert.equal(steps[prod]['continue-on-error'], undefined);
+  assert.equal(steps[prod].if, undefined);
+});
+
 test('production budgets the native Go compiler without changing the full CI typecheck', () => {
   const workflow = YAML.parse(readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8'));
   const build = workflow.jobs['deploy-production'].steps.find(step => step.name === 'Build for Vercel');

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +56,10 @@ const reactNativeVectorIconMockPath = path.resolve(
   __dirname,
   'test/mocks/react-native-vector-icon.tsx'
 );
+
+// The test files the `node` project runs: every plain `.ts` test (no `x`).
+// `.tsx` tests render React components and always run in the `jsdom` project.
+const NODE_PROJECT_TEST_GLOB = '**/*.{test,spec}.?(c|m)[jt]s';
 
 export default defineConfig({
   define: {
@@ -125,7 +129,6 @@ export default defineConfig({
     ],
   },
   test: {
-    environment: 'jsdom',
     globals: true,
     // Keep the Expo/jsdom suite from exhausting fork startup capacity when
     // Turborepo runs package tests concurrently.
@@ -143,5 +146,32 @@ export default defineConfig({
         external: [/expo-linear-gradient/, /react-native\//],
       },
     },
+    // The projects share everything above (`extends: true`); only the
+    // environment and the files differ. Every test file belongs to exactly one
+    // project, chosen by its extension:
+    //  - `jsdom`: `.tsx` tests (React components).
+    //  - `node`: plain `.ts` tests. Creating a jsdom environment took most of
+    //    this suite's worker time, so a `.ts` test only gets one when its first
+    //    line says `// @vitest-environment jsdom`. A new `.ts` test that touches
+    //    `window` or `document` without that line fails with a ReferenceError.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'jsdom',
+          environment: 'jsdom',
+          exclude: [...configDefaults.exclude, NODE_PROJECT_TEST_GLOB],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          environment: 'node',
+          include: [NODE_PROJECT_TEST_GLOB],
+          exclude: configDefaults.exclude,
+        },
+      },
+    ],
   },
 });

@@ -42,3 +42,7 @@ These are the only categories where direct platform branching is expected:
 - iOS action sheets: platform-consistent option menus for destructive/choice flows.
 - Android hardware back: explicit back-handler behavior in modal/detail contexts.
 - Platform telemetry: analytics/reporting hooks that need native OS labels.
+
+## Tests
+
+- Plain `.ts` tests run in Node and `.tsx` tests run in jsdom (see `vitest.config.ts`). A `.ts` test that needs `window` or `document`, for example one that calls `renderHook`, must start with `// @vitest-environment jsdom`; without it the test fails with a ReferenceError.

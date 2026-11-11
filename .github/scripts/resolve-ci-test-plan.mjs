@@ -1,5 +1,9 @@
 import { pathToFileURL } from 'node:url';
-import { parseArgs, writeGithubOutput } from './resolve-ci-test-plan-cli.mjs';
+import {
+  parseArgs,
+  singleLine,
+  writeGithubOutput,
+} from './resolve-ci-test-plan-cli.mjs';
 import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import {
   getChangedFiles,
@@ -222,7 +226,7 @@ export function resolveCiTestPlan({
   }
   if (hasReaderFiles && nonWebReaders.length > 0) {
     return fullAffectedPlan(
-      `${NON_WEB_READER_REASON} ${nonWebReaders.slice(0, 3).join(', ')}`
+      `${NON_WEB_READER_REASON} ${nonWebReaders.slice(0, 3).map(singleLine).join(', ')}`
     );
   }
 

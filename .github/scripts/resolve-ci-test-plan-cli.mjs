@@ -33,6 +33,17 @@ export function parseArgs(argv) {
 }
 
 /**
+ * A value on one line. A line break in a file name or a ref would add lines to
+ * the step output file, and each line is a new output.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function singleLine(value) {
+  return String(value).replace(/[\r\n]+/g, ' ');
+}
+
+/**
  * Publishes the plan as step outputs when CI provides an output file.
  *
  * @param {{ mode: string, reason: string, command: string }} plan
@@ -44,6 +55,6 @@ export function writeGithubOutput(plan) {
 
   appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `mode=${plan.mode}\nreason=${plan.reason}\ncommand=${plan.command}\n`
+    `mode=${singleLine(plan.mode)}\nreason=${singleLine(plan.reason)}\ncommand=${singleLine(plan.command)}\n`
   );
 }

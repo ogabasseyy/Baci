@@ -142,11 +142,6 @@ test('code files in the browser test folders skip the full suite', () => {
   ]) {
     assert.equal(plan([file]).mode, 'targeted-web-vitest', file);
   }
-  // The experience-browser folder was already targeted for every file type.
-  assert.equal(
-    plan(['apps/web/tests/experience-browser/fixture.txt']).mode,
-    'targeted-web-vitest'
-  );
 });
 
 test('a Turbo env addition next to a documentation note is no longer forced to the full suite', () => {

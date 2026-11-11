@@ -25,7 +25,6 @@ export const WEB_TARGETED_PREFIXES = [
   'apps/web/src/',
   'apps/web/tools/',
   'apps/web/experience-runtime/',
-  'apps/web/tests/experience-browser/',
 ];
 
 // `vitest --changed` and `jest --changedSince` follow imports, so they can only
@@ -35,14 +34,18 @@ export const WEB_TARGETED_PREFIXES = [
 // there keeps the full suite.
 const MODULE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 // Folders under apps/web/tests whose code `vitest --changed` follows normally
-// (route tests of the checkout harness, support code) and whose Playwright specs
-// (`*.pw.ts`, never run by Vitest) run in checkout-browser.yml on every pull
-// request. A Playwright spec anywhere else is unknown and keeps the full suite. The other test folders are not listed on purpose:
+// (route tests of the checkout harness, support code); only code files count.
+// The Playwright specs (`*.pw.ts`, never run by Vitest) in the first three run in
+// checkout-browser.yml on every pull request. experience-browser has no pull
+// request workflow (its code was already targeted before this planner change; its
+// fixtures now keep the full suite). A Playwright spec anywhere else is unknown
+// and keeps the full suite. The other test folders are not listed on purpose:
 // several are excluded from the default Vitest run (see `exclude` in
 // vitest.config.ts) and run through their own scripts, so they keep the full
 // suite as before.
 const WEB_BROWSER_TEST_FOLDERS = [
   'apps/web/tests/checkout-browser/',
+  'apps/web/tests/experience-browser/',
   'apps/web/tests/oxygen-cookie-harness/',
   'apps/web/tests/oxygen-policy-browser/',
 ];

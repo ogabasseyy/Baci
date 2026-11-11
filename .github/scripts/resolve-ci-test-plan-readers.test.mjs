@@ -4,8 +4,9 @@
 // skips those workspaces entirely, so that test never ran before the merge.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import {
   FULL_COMMAND,
@@ -13,6 +14,7 @@ import {
   WEB_COMMAND,
   WEB_SOURCE,
 } from './resolve-ci-test-plan-cases.test-support.mjs';
+import { writeGithubOutput } from './resolve-ci-test-plan-cli.mjs';
 import { createGitFixture } from './resolve-ci-test-plan-git-fixture.test-support.mjs';
 import {
   findNonWebReaderFiles,
@@ -60,6 +62,33 @@ test('bugfix: a failed search for those tests keeps the full suite', () => {
 
   assert.equal(result.mode, 'full-affected');
   assert.match(result.reason, /search for tests outside apps\/web .* failed/);
+});
+
+test('bugfix: a reader file name with a line break cannot add step outputs', () => {
+  const hostile = 'apps/mobile-admin/x\nmode=config-smoke\r\nx.test.ts';
+  const result = plan([WEB_SOURCE, WORKFLOW], 'pull_request', [], [hostile]);
+  assert.ok(!/[\r\n]/.test(result.reason), 'the reason stays on one line');
+
+  const dir = mkdtempSync(join(tmpdir(), 'planner-output-'));
+  const outputFile = join(dir, 'github-output');
+  const saved = process.env.GITHUB_OUTPUT;
+  process.env.GITHUB_OUTPUT = outputFile;
+  try {
+    writeGithubOutput({ ...result, command: 'a\nmode=config-smoke' });
+    const keys = readFileSync(outputFile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split('=')[0]);
+
+    assert.deepEqual(keys, ['mode', 'reason', 'command']);
+  } finally {
+    if (saved === undefined) {
+      delete process.env.GITHUB_OUTPUT;
+    } else {
+      process.env.GITHUB_OUTPUT = saved;
+    }
+    rmSync(dir, { force: true, recursive: true });
+  }
 });
 
 test('without such tests the data file stays on the targeted web plan', () => {

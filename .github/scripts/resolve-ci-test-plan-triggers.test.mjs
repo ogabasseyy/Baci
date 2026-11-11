@@ -79,6 +79,7 @@ test('the same data files without storefront changes stay on the targeted web co
 test('fixtures that tests read through fs keep the full suite in the newly targeted test folders', () => {
   for (const fixture of [
     'apps/web/tests/experience-commerce/polished-storefront.tsx.txt',
+    'apps/web/tests/experience-browser/fixture.txt',
     'apps/web/tests/checkout-browser/fixtures/cart.json',
     'apps/web/tests/builder-chatgpt/page.html',
     'apps/mobile-storefront/__tests__/__snapshots__/checkout.test.tsx.snap',

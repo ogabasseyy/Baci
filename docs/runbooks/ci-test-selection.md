@@ -46,9 +46,9 @@ other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
   to the shards. The path filters list themselves in every job group, so a
   change to them is meant to run every gated job.
 - **Targeted:** `apps/web` source, tools and root `*.test.*` / `*.spec.*` files;
-  code files in the three browser-workflow test folders
-  (`tests/checkout-browser`, `tests/oxygen-policy-browser`,
-  `tests/oxygen-cookie-harness`); mobile storefront source and the code files in
+  code files in the browser test folders (`tests/checkout-browser`,
+  `tests/oxygen-policy-browser`, `tests/oxygen-cookie-harness`,
+  `tests/experience-browser`); mobile storefront source and the code files in
   `__tests__`. Fixtures there (text, JSON, HTML, snapshots) keep
   the full suite because import-following cannot see them. The other
   `apps/web/tests` folders keep it too: several are excluded from the default
@@ -117,8 +117,9 @@ Playwright specs are never run by Vitest. Those under `tests/checkout-browser`,
 `tests/oxygen-policy-browser` and `tests/oxygen-cookie-harness` run in
 `checkout-browser.yml` on every pull request (a contract test pins that), so
 they are targeted. A Playwright spec anywhere else is unknown and keeps the full
-suite. `tests/experience-browser` has no pull request workflow; it was already
-targeted-only before this change.
+suite. `tests/experience-browser` has no pull request workflow; its code files
+were already targeted-only before this change (its fixtures now keep the full
+suite).
 
 ## Deleted files
 

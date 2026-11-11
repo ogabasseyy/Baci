@@ -188,8 +188,8 @@ jobs:
           fi
       # `build:ci` skips type checking, so only this step exercises the type-check path of the
       # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
-      # Pull requests run it only when the build toolchain or configuration changed; source-only
-      # changes are covered by the typecheck above. Pushes to main always run it.
+      # Pull requests skip it only when they touch nothing in the production program (tests, docs,
+      # mobile apps). Pushes to main always run it.
       - name: Decide production build typecheck
         id: production-typecheck-scope
         env:

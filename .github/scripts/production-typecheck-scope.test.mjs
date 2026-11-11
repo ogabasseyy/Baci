@@ -96,32 +96,48 @@ test('CI runs the production build type-check path after the normal typecheck', 
   assert.match(manifest.devDependencies.typescript, /^~7\./);
 });
 
-test('pull requests skip the production build typecheck only when no build toolchain file changed', () => {
+test('pull requests skip the production build typecheck only when nothing in the production program changed', () => {
   const list = files => () => files;
   const run = (files, baseSha = 'base') => decide({ baseSha, listChangedFiles: list(files) }).run;
   for (const file of [
+    // The 2026-11-10 TS2589 site: source under the production program must always be checked.
+    'apps/web/src/components/storefront/blocks/footer.tsx',
+    'apps/web/src/app/page.tsx',
     'apps/web/package.json',
     'apps/web/tsconfig.build.json',
-    'apps/web/tsconfig.json',
     'apps/web/next.config.ts',
     'apps/web/tools/prepare-typed-navigation.mjs',
     'apps/web/src/config/build-typecheck.ts',
+    'packages/shared/src/index.ts',
     'pnpm-lock.yaml',
     'package.json',
     'turbo.json',
     'tsconfig.base.json',
     'patches/next@16.4.1.patch',
     '.github/workflows/ci.yml',
+    '.github/workflows/deploy.yml',
+    '.github/scripts/run-pinned-vercel.sh',
     '.github/actions/pnpm-install-cached/action.yml',
     '.github/scripts/production-build-typecheck-scope.mjs',
     '.github/scripts/production-typecheck-scope.test.mjs',
   ]) {
     assert.equal(needsProductionTypecheck([file]), true, file);
-    assert.equal(run(['apps/web/src/app/page.tsx', file]), true, file);
+    assert.equal(run(['docs/x.md', file]), true, file);
   }
-  assert.equal(run(['apps/web/src/components/storefront/blocks/footer.tsx', 'docs/x.md']), false);
+  for (const file of [
+    'apps/web/src/app/page.test.tsx',
+    'apps/web/src/lib/__tests__/helper.ts',
+    'apps/web/src/lib/__mocks__/supabase.ts',
+    'apps/web/tests/checkout-browser/contact.pw.ts',
+    'apps/web/README.md',
+    'apps/mobile-admin/app/index.tsx',
+    'docs/production-release-coordination.md',
+    'supabase/migrations/20261111000000_x.sql',
+  ]) {
+    assert.equal(run([file]), false, file);
+  }
   // Fail closed: pushes, an unreadable diff, and an empty diff all run the check.
-  assert.equal(run(['apps/web/src/app/page.tsx'], ''), true);
+  assert.equal(run(['docs/x.md'], ''), true);
   assert.equal(run([]), true);
   assert.equal(decide({ baseSha: 'base', listChangedFiles: () => { throw new Error('git failed'); } }).run, true);
 });

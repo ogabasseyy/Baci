@@ -4,11 +4,9 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /**
- * The production build type check differs from the normal typecheck only through
- * toolchain and configuration: the scripts, the tsconfig files, the typed-route
- * preparation, the Next config and version, and the workflow that runs it. Source
- * changes are already covered by the normal typecheck over a superset of the same
- * files, so pull requests that touch none of these skip the second full pass.
+ * Toolchain and configuration that decide how the production build type checks:
+ * scripts, tsconfig files, the typed-route preparation, the Next config and
+ * version, and the workflows that run or mirror the check.
  */
 export const PRODUCTION_TYPECHECK_TRIGGERS = [
   /^package\.json$/,
@@ -17,18 +15,29 @@ export const PRODUCTION_TYPECHECK_TRIGGERS = [
   /^turbo\.json$/,
   /^tsconfig[^/]*\.json$/,
   /^patches\//,
-  /^apps\/web\/package\.json$/,
-  /^apps\/web\/tsconfig[^/]*\.json$/,
-  /^apps\/web\/next\.config[^/]*$/,
-  /^apps\/web\/tools\/prepare-typed-navigation[^/]*$/,
-  /^apps\/web\/src\/config\/build-typecheck\.ts$/,
-  /^\.github\/workflows\/ci\.yml$/,
+  /^\.github\/workflows\/(?:ci|deploy)\.yml$/,
   /^\.github\/actions\//,
+  /^\.github\/scripts\/run-pinned-vercel\.sh$/,
   /^\.github\/scripts\/production-(?:build-)?typecheck-scope[^/]*$/,
 ];
 
+const PRODUCTION_PROGRAM_ROOTS = /^(?:apps\/web|packages)\//;
+// Mirrors the test roots tsconfig.build.json excludes, plus prose.
+const OUTSIDE_PRODUCTION_PROGRAM =
+  /\.(?:test|spec)\.[cm]?[jt]sx?$|\/(?:__tests__|__mocks__)\/|\.(?:md|mdx)$|^apps\/web\/tests\//;
+
+/**
+ * The production program can report errors the normal typecheck does not (it is a
+ * differently shaped program checked with a different declaration copy), so any
+ * change to code that is part of it runs the check. Only pull requests that touch
+ * nothing in the production program (tests, docs, mobile apps) skip it.
+ */
 export function needsProductionTypecheck(files) {
-  return files.some(file => PRODUCTION_TYPECHECK_TRIGGERS.some(pattern => pattern.test(file)));
+  return files.some(
+    file =>
+      PRODUCTION_TYPECHECK_TRIGGERS.some(pattern => pattern.test(file)) ||
+      (PRODUCTION_PROGRAM_ROOTS.test(file) && !OUTSIDE_PRODUCTION_PROGRAM.test(file))
+  );
 }
 
 /** Anything other than a readable pull request diff runs the check (fail closed). */
@@ -42,8 +51,8 @@ export function decide({ baseSha, listChangedFiles }) {
   }
   if (files.length === 0) return { run: true, reason: 'empty diff' };
   return needsProductionTypecheck(files)
-    ? { run: true, reason: 'build toolchain or configuration changed' }
-    : { run: false, reason: 'no build toolchain or configuration change' };
+    ? { run: true, reason: 'production program or build toolchain changed' }
+    : { run: false, reason: 'nothing in the production program changed' };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

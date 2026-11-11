@@ -177,7 +177,7 @@ export async function runLocalQualification(
         name,
       ],
       input,
-      isBuild ? 60000 : 30000
+      isBuild || kind === 'capture' ? 60000 : 30000
     );
     if (Buffer.byteLength(stdout) > 16 * 1024 * 1024)
       throw new Error('Output budget');

@@ -170,4 +170,21 @@ describe('trackCartAdd', () => {
     await vi.waitFor(() => expect(loadPixels).toHaveBeenCalledTimes(1));
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it('never throws into the cart when the synchronous send throws', () => {
+    const send = vi.fn(() => {
+      throw new Error('send exploded');
+    });
+    const loadPixels = vi.fn();
+
+    expect(() =>
+      trackCartAdd({
+        merchant: { id: 'merchant-1' },
+        product,
+        quantity: 1,
+        loadPixels,
+        send,
+      })
+    ).not.toThrow();
+  });
 });

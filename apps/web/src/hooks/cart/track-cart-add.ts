@@ -57,7 +57,15 @@ function isQuizVoucherAdd(
  * upsells) counts exactly once. Quiz prize vouchers are free redemptions,
  * not shopper adds, and are skipped.
  */
-export function trackCartAdd({
+export function trackCartAdd(input: TrackCartAddInput): void {
+  try {
+    reportCartAdd(input);
+  } catch {
+    // Analytics must never break the cart add that called it.
+  }
+}
+
+function reportCartAdd({
   merchant,
   product,
   quantity,

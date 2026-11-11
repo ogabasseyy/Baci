@@ -71,3 +71,12 @@ job kind were rejected. The temporary account and sudo rule were removed after
 the test, and both existing CI runner services remained active. This validates
 the temporary rule and tested helper on this host, not a persistent production
 installation, independent image provenance, privileged preflight or live flow.
+
+A further temporary-account test exercised the signed Unix-socket service,
+helper transport, narrow sudo rule and offline gVisor compiler together. It
+returned the expected synthetic heading and build digest
+`0a72d6c24a5c6a52a1ab327b64a56b5be27f1b7f8255f7a372a6042f392293f8`.
+The preflight was deliberately synthetic: this is a plumbing test, not an
+installation receipt or independent production provenance. The temporary helper,
+account and sudo rule were removed; both existing CI runner services remained
+active. No public ingress, orders or storefront publication were involved.

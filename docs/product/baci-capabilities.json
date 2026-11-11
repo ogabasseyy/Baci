@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-11T01:49:42+00:00",
-  "source_revision": "f662aea7692182b12eb8666cf31e719cf76ae340",
-  "evidence_digest": "50849b838a3c0d90654681b7bce4ec139f771366a412be13287caa049b1d20a6",
-  "claims_digest": "3b9f236f0cfc024466b091884d4d87119f08992aa6bff388d96b7d8f4d580c5e",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision. Reviewed order-bound wallet recovery and the distinction between store-credit retry and reconciliation.",
+  "reviewed_at": "2026-11-11T04:19:23+00:00",
+  "source_revision": "933711bc87fb2a6a6b25ee869f798034fc79f034",
+  "evidence_digest": "d2743e30ed76bd5bb9c4a02f7183faa9efc2f38df259202e0da6c5ba54c3bf7a",
+  "claims_digest": "153e0ee4cb2346c1fb4693e73c8c7ab3a4226aa0195a14546440eb6daf5a33ad",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Reviewed wallet settlement recovery, duplicate Credit Direct references and provider currency precision. Reviewed order-bound wallet recovery and the distinction between store-credit retry and reconciliation. Wallet recovery uses the actual saved debit when it differs from the requested amount.",
   "capabilities": [
     {
       "id": "payments",
@@ -14,7 +14,7 @@
       "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence. Eligible saved orders can finance the balance after wallet credit using verified funding evidence. Klump is retired for new payments. Ambiguous Credit Direct references require reconciliation. Oxygen retains its admitted funding basis when the merchant records an authorized manual payment. Order recovery retains wallet evidence only for the same order. Store-credit projection distinguishes lock retry from reconciliation.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
-        "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
+        "apps/web/src/components/storefront/ogabassey/pages/checkout/checkout-fingerprints-match.ts",
         "apps/web/src/lib/payments/record-pre-gateway-redemption.ts",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
         "apps/web/src/app/api/payments/credit-direct/sign/route.ts",

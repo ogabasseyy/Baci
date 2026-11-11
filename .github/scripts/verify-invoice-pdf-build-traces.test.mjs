@@ -43,3 +43,23 @@ test('names the route and unreadable file when a trace entry is stale', async (t
     message: `${route} cannot read traced file missing.js`,
   });
 });
+
+test('counts duplicate trace entries toward the deployment budget', async (t) => {
+  const route = await fixture(t);
+  const tracePath = `${route}.nft.json`;
+  const { readFile } = await import('node:fs/promises');
+  const trace = JSON.parse(await readFile(tracePath, 'utf8'));
+  trace.files.push(trace.files[0]);
+  await writeFile(tracePath, JSON.stringify(trace));
+  assert.equal(await verifyInvoicePdfBuildTrace(route), 30);
+});
+
+test('rejects an asset with the right basename in a nested directory', async (t) => {
+  const route = await fixture(t, { omitChromium: true });
+  const tracePath = `${route}.nft.json`;
+  const { readFile } = await import('node:fs/promises');
+  const trace = JSON.parse(await readFile(tracePath, 'utf8'));
+  trace.files.push('node_modules/@sparticuz/chromium/bin/nested/chromium.br');
+  await writeFile(tracePath, JSON.stringify(trace));
+  await assert.rejects(verifyInvoicePdfBuildTrace(route), /missing Chromium assets: chromium.br/);
+});

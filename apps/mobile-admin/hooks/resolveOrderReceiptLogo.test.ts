@@ -13,7 +13,10 @@ const mockFetch = vi.mocked(
   fetch as (...args: Parameters<typeof fetch>) => Promise<Response>
 );
 
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  vi.resetAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWP4z8AAAAMBAQCc479ZAAAAAElFTkSuQmCC';
@@ -174,6 +177,7 @@ describe('resolveOrderReceiptLogo', () => {
     expanded.set(chunk, 33);
     expanded.set(image.subarray(33), 33 + chunk.length);
     mockFetch.mockResolvedValue(new Response(expanded));
+    vi.stubGlobal('btoa', undefined);
 
     const result = await resolveOrderReceiptLogo(logoUrl);
     expect(result.logoUrl).toBe(

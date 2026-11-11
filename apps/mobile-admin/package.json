@@ -45,6 +45,7 @@
     "@tanstack/query-sync-storage-persister": "^5.101.0",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-query-persist-client": "^5.101.0",
+    "base64-js": "1.5.1",
     "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
     "expo": "~58.0.19",

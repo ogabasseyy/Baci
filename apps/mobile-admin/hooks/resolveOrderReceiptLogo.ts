@@ -1,4 +1,5 @@
 import { DEFAULT_MEDIA_CDN_ORIGIN, sanitizeSvg } from '@baci/shared';
+import { fromByteArray } from 'base64-js';
 import { fetch } from 'expo/fetch';
 import { getConfiguredSupabaseUrl } from '@/lib/supabase-config';
 
@@ -234,17 +235,7 @@ export async function resolveOrderReceiptLogo(
       return svgXml ? { logoUrl: null, svgXml } : absent;
     }
 
-    // Split on a multiple of three so only the final block can add padding.
-    const bytesPerBlock = 12 * 1024;
-    const encoded = [];
-    for (let offset = 0; offset < logo.length; offset += bytesPerBlock) {
-      encoded.push(
-        btoa(
-          String.fromCharCode(...logo.subarray(offset, offset + bytesPerBlock))
-        )
-      );
-    }
-    return { logoUrl: `data:${type};base64,${encoded.join('')}` };
+    return { logoUrl: `data:${type};base64,${fromByteArray(logo)}` };
   } catch {
     return absent;
   } finally {

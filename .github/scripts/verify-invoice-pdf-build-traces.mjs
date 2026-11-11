@@ -1,11 +1,10 @@
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // Count the files as deployed, including the stored .br archives.
 // This package budget does not measure runtime extraction disk or browser memory.
 const MAX_FUNCTION_BYTES = 250 * 1024 * 1024;
-const CHROMIUM_BIN = /(?:^|\/)@sparticuz\/chromium\/bin\//;
 const CHROMIUM_FILES = [
   'chromium.br',
   'al2023.tar.br',
@@ -15,8 +14,7 @@ const CHROMIUM_FILES = [
 
 async function readTracedFile(routeFile, file) {
   try {
-    const path = await realpath(resolve(dirname(routeFile), file));
-    return [path, (await stat(path)).size];
+    return (await stat(resolve(dirname(routeFile), file))).size;
   } catch (error) {
     throw new Error(`${routeFile} cannot read traced file ${file}`, { cause: error });
   }
@@ -24,20 +22,19 @@ async function readTracedFile(routeFile, file) {
 
 export async function verifyInvoicePdfBuildTrace(routeFile) {
   const trace = JSON.parse(await readFile(`${routeFile}.nft.json`, 'utf8'));
-  const browserFiles = new Set(
-    trace.files
-      .filter((file) => CHROMIUM_BIN.test(file))
-      .map((file) => file.split('/').at(-1))
+  const missing = CHROMIUM_FILES.filter(
+    (asset) => !trace.files.some((file) =>
+      file.endsWith(`/@sparticuz/chromium/bin/${asset}`)
+    )
   );
-  const missing = CHROMIUM_FILES.filter((file) => !browserFiles.has(file));
   if (missing.length) {
     throw new Error(`${routeFile} is missing Chromium assets: ${missing.join(', ')}`);
   }
 
-  const files = new Map(await Promise.all(
+  const sizes = await Promise.all(
     [resolve(routeFile), ...trace.files].map((file) => readTracedFile(routeFile, file))
-  ));
-  const bytes = [...files.values()].reduce((total, size) => total + size, 0);
+  );
+  const bytes = sizes.reduce((total, size) => total + size, 0);
   if (bytes > MAX_FUNCTION_BYTES) {
     throw new Error(`${routeFile} traces ${bytes} bytes, above the 250 MiB function budget`);
   }

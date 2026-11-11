@@ -32,13 +32,16 @@ export function OxygenPlanForm({
   const bookingLock = useRef(false);
   const limits = oxygenPlanLimits(productAmount, eligibleAmount, minimumAmount);
   const tenureAvailable = Number.isInteger(maxTenure) && (maxTenure ?? 0) > 0;
-  const displayedMaxTenure = offers?.length
-    ? Math.max(...offers.map((offer) => offer.tenure))
+  const availableOffers = offers?.filter(
+    (offer) => offer.tenure <= (maxTenure ?? 0)
+  );
+  const displayedMaxTenure = availableOffers?.length
+    ? Math.max(...availableOffers.map((offer) => offer.tenure))
     : maxTenure;
   const preferred = Math.min(3, maxTenure ?? 1);
   const initialTenure =
-    offers?.find((item) => item.tenure === preferred)?.tenure ??
-    offers?.[0]?.tenure ??
+    availableOffers?.find((item) => item.tenure === preferred)?.tenure ??
+    availableOffers?.[0]?.tenure ??
     preferred;
   const initialOffer = offers?.find((item) => item.tenure === initialTenure);
   const initialLimits = oxygenPlanLimits(
@@ -163,7 +166,7 @@ export function OxygenPlanForm({
         />
         <OxygenTenurePicker
           months={
-            offers?.map((item) => item.tenure).sort((a, b) => a - b) ??
+            availableOffers?.map((item) => item.tenure).sort((a, b) => a - b) ??
             Array.from({ length: maxTenure }, (_, i) => i + 1)
           }
           value={tenure}

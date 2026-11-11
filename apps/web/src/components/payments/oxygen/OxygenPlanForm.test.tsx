@@ -2,6 +2,27 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OxygenPlanForm } from './OxygenPlanForm';
 
+it('does not display a stale offer above the maximum repayment period', () => {
+  render(
+    <OxygenPlanForm
+      busy={false}
+      productAmount={100000}
+      eligibleAmount={100000}
+      minimumAmount={10000}
+      maxTenure={3}
+      submit={vi.fn()}
+      offers={[
+        { tenure: 3, loanAmount: 100000 },
+        { tenure: 6, loanAmount: 100000 },
+      ]}
+    />
+  );
+  expect(screen.getByRole('radio', { name: '3 months' })).toBeVisible();
+  expect(
+    screen.queryByRole('radio', { name: '6 months' })
+  ).not.toBeInTheDocument();
+});
+
 it('uses the overall eligibility cap in the selected offer guidance', () => {
   render(
     <OxygenPlanForm

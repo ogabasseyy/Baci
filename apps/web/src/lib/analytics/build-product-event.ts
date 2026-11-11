@@ -21,7 +21,8 @@ export function buildProductEvent({
     ...(eventId ? { event_id: eventId } : {}),
     event_type: eventType,
     merchant_id: merchantId,
-    product_id: product.id,
+    // Template products can carry numeric ids; /api/events requires a string.
+    product_id: String(product.id),
     product_name: product.name,
     // Joined categories.name first, then the legacy TEXT field.
     product_category: product.categories?.name || product.category || undefined,

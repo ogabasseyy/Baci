@@ -43,4 +43,15 @@ describe('buildProductEvent', () => {
     expect(event).not.toHaveProperty('event_id');
     expect(event.product_category).toBeUndefined();
   });
+
+  it('sends a numeric template product id as a string', () => {
+    const event = buildProductEvent({
+      currency: 'NGN',
+      eventType: 'product_view',
+      merchantId: 'merchant-1',
+      product: { id: 42, name: 'Phone', price: 100 } as never,
+    });
+
+    expect(event.product_id).toBe('42');
+  });
 });

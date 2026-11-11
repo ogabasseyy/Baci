@@ -111,6 +111,22 @@ describe('resolveAdminGiglQuoteFunding', () => {
   });
 });
 
+describe('bugfix: submitted platform charge stays paid by Baci after revocation', () => {
+  it.each([
+    'provider_submitting',
+    'booked',
+  ])('keeps a %s platform charge Baci-paid when the flag is now off', async (status) => {
+    const { supabase, rpc } = client({ data: 'merchant_wallet', error: null });
+    await expect(
+      resolveAdminGiglQuoteFunding(supabase, 'm1', 4500, vi.fn(), {
+        existingChargeFundingSource: 'platform',
+        existingChargeStatus: status,
+      })
+    ).resolves.toMatchObject({ canBook: true, paidByBaci: true });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
 describe('bugfix: platform funding with a non-positive price', () => {
   it('does not mark a zero price as bookable', async () => {
     const { supabase } = client({ data: 'platform', error: null });

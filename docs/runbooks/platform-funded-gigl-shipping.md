@@ -3,17 +3,21 @@
 Flag table: `private.platform_funded_gigl_merchants` (postgres/SQL editor only).
 
 Enable: `INSERT INTO private.platform_funded_gigl_merchants (merchant_id) VALUES ('<merchant uuid>') ON CONFLICT (merchant_id) DO UPDATE SET enabled = true;`
-Disable: `UPDATE private.platform_funded_gigl_merchants SET enabled = false WHERE merchant_id = '<merchant uuid>';`
+Disable (do it when no booking is in progress; an in-flight booking that already reserved may still complete): `UPDATE private.platform_funded_gigl_merchants SET enabled = false WHERE merchant_id = '<merchant uuid>';`
 
 ## Periodic review (spend visibility)
 
 Run these as postgres in the SQL editor (the flag table is unreadable to every API role).
 
 ```sql
-SELECT merchant_id, count(*), sum(charged_amount)
+-- Actual GIG exposure: provider_cost on submitted charges only. charged_amount
+-- is the public quote (it includes platform_margin) and reserved/refunded rows
+-- never reached the provider, so neither is spend.
+SELECT merchant_id, status, count(*), sum(provider_cost)
 FROM public.merchant_shipping_charges
 WHERE funding_source = 'platform' AND created_at > now() - interval '30 days'
-GROUP BY merchant_id;
+  AND status IN ('provider_submitting','booked','needs_reconciliation')
+GROUP BY merchant_id, status;
 SELECT merchant_id, enabled FROM private.platform_funded_gigl_merchants;
 ```
 

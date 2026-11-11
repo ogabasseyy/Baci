@@ -173,6 +173,8 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
         typeof latestCharge?.funding_source === 'string'
           ? latestCharge.funding_source
           : null,
+      existingChargeStatus:
+        typeof latestCharge?.status === 'string' ? latestCharge.status : null,
     }
   );
   if (!funding.ok) {

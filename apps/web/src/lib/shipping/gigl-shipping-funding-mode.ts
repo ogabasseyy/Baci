@@ -41,16 +41,26 @@ export async function resolveAdminGiglQuoteFunding(
   merchantId: string,
   price: number,
   readBalance: () => Promise<number | null>,
-  options: { existingChargeFundingSource?: string | null } = {}
+  options: {
+    existingChargeFundingSource?: string | null;
+    existingChargeStatus?: string | null;
+  } = {}
 ): Promise<AdminGiglQuoteFunding> {
   // An existing wallet reservation keeps its payer. An unconsumed platform
   // reservation is only honoured while the flag is still on (the reserve RPC
   // rejects it otherwise), so a revoked flag falls back to wallet funding.
   const existing = options.existingChargeFundingSource;
+  // Once submission has begun, Baci is committed to the shipment: the live
+  // flag no longer matters and the charge keeps its payer.
+  const submitted =
+    options.existingChargeStatus === 'provider_submitting' ||
+    options.existingChargeStatus === 'booked';
   const mode: GiglShippingFundingMode =
     existing === 'merchant_wallet'
       ? existing
-      : await readGiglShippingFundingMode(supabase, merchantId);
+      : existing === 'platform' && submitted
+        ? 'platform'
+        : await readGiglShippingFundingMode(supabase, merchantId);
   if (mode === 'platform') {
     return {
       ok: true,

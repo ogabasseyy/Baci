@@ -2,11 +2,6 @@ import {
   type CreditGapLedgerWallet,
   piggyvestCreditGapSchemas as schemas,
 } from '@/schemas/piggyvest-credit-gap';
-import type {
-  ProviderCredit,
-  ProviderCreditListing,
-} from './credit-gap-provider-reader';
-
 /**
  * The credit-gap check. It only reads: for each mapped plan wallet it lists
  * the credits PiggyVest made and compares their PVB credit ids with the
@@ -35,35 +30,32 @@ import type {
  *   missing from the list are downgraded to this kind too, instead of
  *   paging `not_on_provider` for every wallet. Confirm list id ===
  *   pvb_reference on the first live credit.
+ * - `list_namespace_unproven` (pages, once per wallet): that downgrade
+ *   happened, so recorded inflows could not be matched at all. The check
+ *   never goes silent because the list changed shape.
  *
  * Interest surplus alone (a wallet holding more than recorded principal) is
  * the balance check's `above_expected` and stays non-paging; this check only
  * pages on a specific PVB credit id.
  */
-export const SETTLE_MS = 6 * 3_600_000;
-/** PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11). */
-const PVB_CREDIT_ID = /^PVB01/;
-/**
- * Wallet-to-wallet categories (our own savings transfers), compared trimmed
- * and lower-cased. Only `p2p` has been observed; an unknown category still
- * pages, which fails loud rather than silently skipping money.
- */
-const INTERNAL_CATEGORIES: ReadonlySet<string> = new Set(['p2p']);
-export const EDGE_MS = 3_600_000;
+import {
+  type CreditGapKind,
+  EDGE_MS,
+  INTERNAL_CATEGORIES,
+  PVB_CREDIT_ID,
+  REVIEW_ONLY,
+  SETTLE_MS,
+} from './credit-gap-kinds';
+import type {
+  ProviderCredit,
+  ProviderCreditListing,
+} from './credit-gap-provider-reader';
 
-export type CreditGapKind =
-  | 'unrecorded_credit'
-  | 'not_on_provider'
-  | 'interest_not_listed'
-  | 'partial_credit'
-  | 'unverified_reference';
-
-/** Findings listed for a person to review that never page on their own. */
-const REVIEW_ONLY: ReadonlySet<CreditGapKind> = new Set([
-  'interest_not_listed',
-  'partial_credit',
-  'unverified_reference',
-]);
+export {
+  type CreditGapKind,
+  EDGE_MS,
+  SETTLE_MS,
+} from './credit-gap-kinds';
 
 export interface CreditGapFinding {
   walletId: string;
@@ -180,10 +172,22 @@ export function compareWalletCredits(
   const settled = credits.filter(isSettled);
   const namespaceUnproven =
     settled.length > 0 && !settled.some((c) => PVB_CREDIT_ID.test(c.id));
+  const before = findings.length;
   reverse(
     wallet.inflow,
     namespaceUnproven ? 'unverified_reference' : 'not_on_provider'
   );
+  // The downgrade must not silence a real gap: one paging line per wallet
+  // says its recorded inflows could not be matched at all.
+  if (namespaceUnproven && findings.length > before)
+    findings.push({
+      walletId: wallet.walletId,
+      reference: 'list ids are not PVB01 credit ids',
+      kind: 'list_namespace_unproven',
+      amountKobo: null,
+      category: null,
+      at: new Date(window.generatedMs).toISOString(),
+    });
   reverse(wallet.interest, 'interest_not_listed');
   return { findings, internalSkipped };
 }

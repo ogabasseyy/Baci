@@ -323,7 +323,14 @@ inflow probe (§7), where the nested internal id 404s on the wallet API.
   earlier stored `destination_wallet` as `wallet_id`; the migration
   re-attributes them to the `pvb_wallet` in their own stored, redacted
   details, so a redelivery of an earlier (e.g. UNMAPPED-failed) payout
-  matches its inbox row instead of quarantining as an event-id conflict. Before this, a real payout would have
+  matches its inbox row instead of quarantining as an event-id conflict.
+  No ledger repair is needed: an interest payout could only have been
+  credited under the old rule if `destination_wallet` (PVB-internal) matched
+  a plan-wallet mapping, which it never does, so those payouts failed
+  `INTEREST_LEDGER_UNMAPPED` (retryable, never quarantined) rather than
+  crediting the wrong wallet. Read-only check before go-live:
+  `SELECT count(*) FROM public.piggyvest_interest_payouts p JOIN public.piggyvest_webhook_inbox i ON i.event_id = p.event_id WHERE i.event_details->>'destination_wallet' = p.wallet_id;`
+  (expected 0). Before this, a real payout would have
   failed `INTEREST_LEDGER_UNMAPPED` → 503 until retries ran out, and interest
   would never have been credited.
 - Primary-wallet paid-interest path (`primary-wallet-paid-interest-signed`):

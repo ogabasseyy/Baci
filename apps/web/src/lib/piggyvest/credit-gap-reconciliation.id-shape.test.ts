@@ -64,9 +64,11 @@ describe('credit-gap guards against an unproven list id namespace', () => {
       window
     );
 
+    // The downgrade never silences the wallet: one paging line survives.
     expect(findings.map((finding) => finding.kind)).toEqual([
       'unverified_reference',
       'unverified_reference',
+      'list_namespace_unproven',
     ]);
   });
 

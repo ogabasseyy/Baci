@@ -32,6 +32,8 @@ const FINDING_TEXT: Record<CreditGapFinding['kind'], string> = {
     'we recorded this interest payout but the transaction list does not show it (review only: the list may not include interest)',
   partial_credit:
     'PiggyVest shows a partial credit we never recorded (review only: check at PiggyVest how much moved)',
+  list_namespace_unproven:
+    "none of this wallet's settled PiggyVest list ids is a PVB01 credit id, so its recorded inflows could not be matched. Check whether the list id format changed before trusting this wallet's results",
   unverified_reference:
     'this PiggyVest list id does not look like a PVB credit id, so it cannot be matched to our records (review only: confirm the list id is the pvb_reference)',
 };

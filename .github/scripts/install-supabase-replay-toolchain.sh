@@ -31,6 +31,9 @@ fi
 test -x /usr/lib/postgresql/18/bin/initdb
 test -x /usr/local/bin/supabase-go
 test "$(supabase --version)" = "${SUPABASE_CLI_VERSION}"
-PSQL_BIN="$(command -v psql)"
+# Pin the lookup to the PostgreSQL 18 tree: with PostgreSQL 16 installed as well, the default
+# `psql` wrapper could resolve to another major, and the replay must run on the asserted binary.
+PSQL_BIN=/usr/lib/postgresql/18/bin/psql
+test -x "$PSQL_BIN"
 "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
 echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"

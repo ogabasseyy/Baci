@@ -48,6 +48,25 @@ test('forks, untrusted events and a disabled switch stay on GitHub-hosted runner
   }
 });
 
+test('the inline trust predicates match the private_ci_trusted output token for token', () => {
+  // silent-revert-guard and the Quality Gate aggregate cannot need `changes`, so they spell the predicate out.
+  const normalize = (text) => text.replace(/\$\{\{|\}\}/g, '').replace(/\s+/g, ' ').trim();
+  const trusted = normalize(workflow.jobs.changes.outputs.private_ci_trusted);
+  for (const job of MOVED_INLINE) {
+    assert.ok(normalize(workflow.jobs[job]['runs-on']).includes(trusted), `${job} must spell the same trust predicate as changes.outputs.private_ci_trusted`);
+  }
+});
+
+test('Disposable SQL never publishes a fixed host port, so concurrent jobs on one server cannot collide', () => {
+  const job = workflow.jobs['quality-disposable-sql'];
+  assert.deepEqual(job.services.postgres.ports, [5432], 'let Docker assign the host port');
+  const users = job.steps.filter((step) => step.env?.PGHOST === 'localhost');
+  assert.ok(users.length >= 3);
+  for (const step of users) {
+    assert.equal(step.env.PGPORT, "${{ job.services.postgres.ports['5432'] }}", step.name);
+  }
+});
+
 test('the changes job holds the capability gate, so it stays a plain unconditional ubuntu-24.04 job', () => {
   // The base-owned capability-gate contract (capability_gate_contract_ci_checks.py) fails the PR otherwise.
   const job = workflow.jobs.changes;
@@ -144,6 +163,10 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.equal(restore.if, "steps.pnpm-store.outputs.persistent != 'true'");
   assert.equal(configure.env.STORE_DIR, '${{ steps.pnpm-store.outputs.dir }}');
   assert.ok(steps.indexOf(select) < steps.indexOf(restore));
+  const prune = steps.find((step) => step.name === 'Prune an oversized persistent pnpm store');
+  assert.equal(prune.if, "steps.pnpm-store.outputs.persistent == 'true'");
+  assert.match(prune.run, /pnpm store prune/);
+  assert.ok(steps.indexOf(configure) < steps.indexOf(prune) && steps.indexOf(prune) < steps.findIndex((step) => step.name === 'Install Dependencies'));
   const run = (persistent, storeDir) => {
     const out = spawnSync('bash', ['-c', `${select.run}\ncat "$GITHUB_OUTPUT"`], {
       encoding: 'utf8',

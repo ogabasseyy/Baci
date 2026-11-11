@@ -48,7 +48,8 @@ runs:
     # The persistent private CI runner keeps its pnpm store outside the workspace.
     # `git clean` at checkout deletes a workspace-relative store, which forced every
     # job to download an ~850 MB cache at ~3 MB/s (about 5 minutes) before installing.
-    # Only the contabo-baci-ci runners qualify. Each runner process has its own tool cache
+    # Only the contabo-baci-ci runners qualify (runner labels are not available inside a composite
+    # action, so the admin-controlled runner name is used, together with self-hosted). Each runner process has its own tool cache
     # directory, so two runners never share a store. The deploy runner shares the production
     # server (tight disk) and runs these installs rarely, so it keeps the GitHub cache path.
     # The cache save below never runs for a persistent store (it would archive the wrong path).
@@ -125,6 +126,22 @@ runs:
           echo "$STORE_DIR"
           echo "${delimiter}"
         } >> "$GITHUB_ENV"
+
+    # Safety valve for the persistent store: it is content-addressed so stale entries are harmless, but
+    # nothing else ever shrinks it. Past the limit, drop unreferenced packages (the next install refills).
+    - name: Prune an oversized persistent pnpm store
+      if: steps.pnpm-store.outputs.persistent == 'true'
+      shell: bash
+      env:
+        STORE_DIR: ${{ steps.pnpm-store.outputs.dir }}
+        MAX_STORE_KB: '16777216'
+      run: |
+        set -euo pipefail
+        size_kb="$(du -sk "$STORE_DIR" | cut -f1)"
+        if [ "$size_kb" -gt "$MAX_STORE_KB" ]; then
+          echo "pnpm store is ${size_kb} KB (limit ${MAX_STORE_KB} KB); pruning unreferenced packages"
+          pnpm store prune
+        fi
 
     - name: Install Dependencies
       shell: bash

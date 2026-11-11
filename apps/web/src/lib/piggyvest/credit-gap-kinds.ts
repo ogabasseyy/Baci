@@ -1,7 +1,11 @@
 /** Finding kinds and matching constants for the credit-gap check (credit-gap-reconciliation.ts). */
 export const SETTLE_MS = 6 * 3_600_000;
-/** PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11). */
-export const PVB_CREDIT_ID = /^PVB01/;
+/**
+ * PVB credit ids are `PVB01…` (PiggyVest, 2026-11-11): the prefix followed
+ * by an alphanumeric body. A bare or malformed `PVB01` value stays
+ * review-only instead of paging.
+ */
+export const PVB_CREDIT_ID = /^PVB01[0-9A-Za-z]{3,}$/;
 /**
  * Wallet-to-wallet categories (our own savings transfers), compared trimmed
  * and lower-cased. Only `p2p` has been observed; an unknown category still

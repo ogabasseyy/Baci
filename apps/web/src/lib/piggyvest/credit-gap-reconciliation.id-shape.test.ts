@@ -118,3 +118,20 @@ describe('credit-gap internal-transfer category match', () => {
     ]);
   });
 });
+
+describe('credit-gap reverse scan settle grace', () => {
+  it('does not page a recorded inflow younger than the settle window', () => {
+    const { findings } = compareWalletCredits(
+      wallet([
+        {
+          reference: 'PVB01RECENT00000000000001',
+          at: '2026-11-11T21:00:00.000Z',
+        },
+      ]),
+      [],
+      window
+    );
+
+    expect(findings).toEqual([]);
+  });
+});

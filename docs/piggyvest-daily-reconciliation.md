@@ -72,7 +72,8 @@ anything is wrong. It resends, settles and releases nothing.
      `failed` credits moved no money and are ignored.
    - An inflow we recorded that PiggyVest does not list as settled (missing,
      pending or failed) **pages**
-     (`not_on_provider`); check it at PiggyVest before acting.
+     (`not_on_provider`) once it is older than the same 6-hour settle window
+     the forward check uses; check it at PiggyVest before acting.
    - A list id without the PVB credit-id shape (`PVB01…`) is a review line
      only (`unverified_reference`): the list may use another id namespace than
      our `pvb_reference`. If none of a wallet's settled list ids is PVB-shaped,

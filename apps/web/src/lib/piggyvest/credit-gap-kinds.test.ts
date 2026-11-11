@@ -8,6 +8,8 @@ import {
 describe('credit-gap kinds', () => {
   it('accepts only the documented PVB01 credit-id prefix', () => {
     expect(PVB_CREDIT_ID.test('PVB01ABC')).toBe(true);
+    expect(PVB_CREDIT_ID.test('PVB01')).toBe(false);
+    expect(PVB_CREDIT_ID.test('PVB01!!!')).toBe(false);
     expect(PVB_CREDIT_ID.test('PVB99ABC')).toBe(false);
     expect(PVB_CREDIT_ID.test('01M2TTNT0N08C81J5BEADH3BY8')).toBe(false);
   });

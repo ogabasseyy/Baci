@@ -147,10 +147,12 @@ export function compareWalletCredits(
   }
   // Only rows well inside the listed window, so clock skew at either edge
   // cannot make a listed credit look missing.
+  // The recent edge waits SETTLE_MS (> EDGE_MS) like the forward scan, so
+  // normal list lag on a just-recorded inflow does not page.
   const inWindow = (at: string) => {
     const atMs = Date.parse(at);
     return (
-      atMs >= window.startMs + EDGE_MS && atMs <= window.generatedMs - EDGE_MS
+      atMs >= window.startMs + EDGE_MS && atMs <= window.generatedMs - SETTLE_MS
     );
   };
   const reverse = (

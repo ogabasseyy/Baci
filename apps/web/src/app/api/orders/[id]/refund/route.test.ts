@@ -4,9 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
+  merchantId: vi.fn(),
   rpc: vi.fn(),
 }));
-vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
+vi.mock('@/lib/api-auth', () => ({
+  authenticateApiRequest: mocks.auth,
+  getMerchantIdForApiUser: mocks.merchantId,
+}));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 
 import { GET, POST } from './route';
@@ -33,6 +37,7 @@ describe('order refund route', () => {
       error: null,
     });
     mocks.csrf.mockResolvedValue({ valid: true });
+    mocks.merchantId.mockResolvedValue('merchant-1');
     mocks.rpc.mockResolvedValue({ data: { status: 'failed' }, error: null });
   });
   it('requires authentication before reading or mutating', async () => {
@@ -113,6 +118,7 @@ describe('order refund route', () => {
       legs: [],
       needsPaystackCheck: true,
       events,
+      cancellationRefundMode: 'unknown',
     });
   });
   it('normalizes a missing Paystack signal to false', async () => {
@@ -258,5 +264,29 @@ describe('order refund route', () => {
       'manage_order_refund',
       expect.objectContaining({ p_note: null })
     );
+  });
+
+  it('adds the persisted cancel mode, scoped to the merchant, after masking', async () => {
+    const eqMerchant = vi.fn(() => ({
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { cancellation_refund_mode: 'manual' },
+        error: null,
+      }),
+    }));
+    mocks.auth.mockResolvedValue({
+      user: { id: 'owner' },
+      supabase: {
+        from: vi.fn(() => ({
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ eq: eqMerchant })) })),
+        })),
+        rpc: mocks.rpc,
+      },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    await expect(response.json()).resolves.toMatchObject({
+      cancellationRefundMode: 'manual',
+    });
+    expect(eqMerchant).toHaveBeenCalledWith('merchant_id', 'merchant-1');
   });
 });

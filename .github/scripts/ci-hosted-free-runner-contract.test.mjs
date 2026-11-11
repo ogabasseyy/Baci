@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +18,8 @@ function scriptText(step) {
 }
 const MOVED_BY_NEEDS = ['cwv-runner-contracts', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc', 'mobile-quality'];
 const MOVED_INLINE = ['silent-revert-guard', 'quality'];
+// Every job that can run on the general private runner (moved by this change or routed there before it).
+const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quality-typecheck', 'quality-test', 'quality-test-web', 'build'];
 
 function values({ privateRepo = true, enabled = 'true', event = 'pull_request', head = 'owner/repo' } = {}) {
   return {
@@ -79,9 +81,13 @@ test('the changes job holds the capability gate, so it stays a plain uncondition
 });
 
 test('no job on the general private runner references repository secrets', () => {
-  for (const job of ['changes', 'silent-revert-guard', 'quality', 'cwv-runner-contracts', 'mobile-quality', 'quality-db-replay', 'quality-disposable-sql', 'quality-misc']) {
+  // These jobs execute branch code on a persistent host. The deploy-runner quiz job is the only job allowed to hold
+  // secrets (it has its own test below); a workflow-level env would reach every job, so it is checked too.
+  for (const job of ['changes', ...PRIVATE_JOBS]) {
+    assert.ok(workflow.jobs[job], `${job} must exist`);
     assert.doesNotMatch(JSON.stringify(workflow.jobs[job]), /\bsecrets\./, job);
   }
+  assert.doesNotMatch(JSON.stringify(workflow.env ?? {}), /\bsecrets\./, 'workflow-level env');
 });
 
 test('the Supabase service-role step lives only in a main-push job on the deploy runner', () => {
@@ -97,7 +103,6 @@ test('the Supabase service-role step lives only in a main-push job on the deploy
   }
 });
 
-const PRIVATE_JOBS = [...MOVED_BY_NEEDS, ...MOVED_INLINE, 'quality-lint', 'quality-typecheck', 'quality-test', 'quality-test-web', 'build'];
 const INSTALLER = '.github/scripts/install-postgresql-hosted.sh';
 // The shared PostgreSQL installer runs sudo and apt-get itself, so calling it counts as privileged too.
 const PRIVILEGED_COMMAND = /\b(sudo|apt-get)\b|install-postgresql-hosted\.sh/;
@@ -243,21 +248,45 @@ test('the private runner keeps a persistent pnpm store and skips the GitHub cach
   assert.equal(prune.if, "steps.pnpm-store.outputs.persistent == 'true'");
   // The prune names the measured store explicitly and is housekeeping only: a failure warns instead of failing the job.
   assert.match(prune.run, /pnpm store prune --store-dir "\$STORE_DIR" \|\| echo "::warning::/);
+  // Measuring the store is housekeeping too: an unreadable size skips the check instead of failing the job.
+  assert.match(prune.run, /could not measure the pnpm store/);
   assert.ok(steps.indexOf(configure) < steps.indexOf(prune) && steps.indexOf(prune) < steps.findIndex((step) => step.name === 'Install Dependencies'));
-  const run = (persistent, storeDir) => {
+  const run = (persistent, storeDir, runnerName = 'contabo-baci-ci') => {
     const out = spawnSync('bash', ['-c', `${select.run}\ncat "$GITHUB_OUTPUT"`], {
       encoding: 'utf8',
-      env: { ...process.env, PERSISTENT_RUNNER: persistent, STORE_DIR: storeDir, TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-${persistent}-${storeDir.replace(/\W/g, '_')}`) },
+      env: { ...process.env, PERSISTENT_RUNNER: persistent, STORE_DIR: storeDir, RUNNER_NAME: runnerName, TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-${persistent}-${runnerName}-${storeDir.replace(/\W/g, '_')}`) },
     });
     return out.stdout;
   };
-  assert.equal(run('true', '.pnpm-store'), `persistent=true\ndir=${tmpdir()}/pnpm-store\n`);
+  assert.equal(run('true', '.pnpm-store'), `persistent=true\ndir=${tmpdir()}/pnpm-store-contabo-baci-ci\n`);
+  // Each runner gets its own store directory, so two runners can never share or prune one store.
+  assert.equal(run('true', '.pnpm-store', 'contabo-baci-ci-2'), `persistent=true\ndir=${tmpdir()}/pnpm-store-contabo-baci-ci-2\n`);
   assert.equal(run('false', '.pnpm-store'), 'persistent=false\ndir=.pnpm-store\n');
   assert.equal(run('true', '/custom/store'), 'persistent=false\ndir=/custom/store\n');
+  const noName = spawnSync('bash', ['-c', select.run], {
+    encoding: 'utf8',
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'RUNNER_NAME')), PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', TOOL_CACHE: tmpdir(), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-no-name`) },
+  });
+  assert.notEqual(noName.status, 0, 'a persistent store without a runner name must fail instead of sharing one directory');
+  // A missing, empty or relative tool cache must fail closed: not a store at the filesystem root, not one in the checkout.
+  const scratchCwd = mkdtempSync(join(tmpdir(), 'store-select-cwd-'));
+  try {
+    for (const toolCache of ['', 'relative/tool']) {
+      const bad = spawnSync('bash', ['-c', select.run], {
+        cwd: scratchCwd,
+        encoding: 'utf8',
+        env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', RUNNER_NAME: 'contabo-baci-ci', TOOL_CACHE: toolCache, GITHUB_OUTPUT: join(scratchCwd, 'out') },
+      });
+      assert.notEqual(bad.status, 0, `tool cache "${toolCache}" must be refused`);
+      assert.match(bad.stdout + bad.stderr, /runner tool cache must be an absolute path/, `tool cache "${toolCache}" needs the explicit refusal message`);
+    }
+  } finally {
+    rmSync(scratchCwd, { recursive: true, force: true });
+  }
   // A persistent store inside the checkout would be wiped by `git clean`; the step must refuse it.
   const inside = spawnSync('bash', ['-c', select.run], {
     encoding: 'utf8',
-    env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', GITHUB_WORKSPACE: join(tmpdir(), 'ws'), TOOL_CACHE: join(tmpdir(), 'ws', 'tool'), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-inside`) },
+    env: { ...process.env, PERSISTENT_RUNNER: 'true', STORE_DIR: '.pnpm-store', RUNNER_NAME: 'contabo-baci-ci', GITHUB_WORKSPACE: join(tmpdir(), 'ws'), TOOL_CACHE: join(tmpdir(), 'ws', 'tool'), GITHUB_OUTPUT: join(tmpdir(), `out-${process.pid}-inside`) },
   });
   assert.notEqual(inside.status, 0);
   assert.match(inside.stdout + inside.stderr, /outside the workspace/);

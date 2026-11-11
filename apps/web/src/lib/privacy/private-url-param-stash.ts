@@ -92,8 +92,9 @@ export function scrubPrivateParamsFromAddressBar(): boolean {
   const { privateEntries, publicSearch } = partitionSensitiveSearch(search);
   if (privateEntries.length === 0) return false;
 
-  const id = crypto.randomUUID();
+  let id: string;
   try {
+    id = crypto.randomUUID();
     const record: StashRecord = {
       pathname,
       publicSearch: canonicalSearch(publicSearch),
@@ -110,6 +111,10 @@ export function scrubPrivateParamsFromAddressBar(): boolean {
     window.history.replaceState(
       { ...currentHistoryState(), [PRIVATE_PARAMS_STATE_KEY]: id },
       '',
+      // Fragments are deliberately left in place: the pages using this hook do
+      // not receive tokens in fragments, and auth libraries may need them
+      // (e.g. `#access_token=...`). `sanitizeTrackingUrl` drops fragments from
+      // anything sent to analytics.
       `${pathname}${publicSearch ? `?${publicSearch}` : ''}${hash}`
     );
   } catch {

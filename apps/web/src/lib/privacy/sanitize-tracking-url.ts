@@ -1,4 +1,4 @@
-import { trackingSafeSearch } from './sensitive-url-params';
+import { partitionSensitiveSearch } from './sensitive-url-params';
 
 /**
  * Removes sensitive and redirect-style query params and the fragment from a URL before it is sent
@@ -13,8 +13,10 @@ export function sanitizeTrackingUrl(url: string): string {
 
   const base = withoutHash.slice(0, queryStart);
   try {
-    const kept = trackingSafeSearch(withoutHash.slice(queryStart + 1));
-    return kept ? `${base}?${kept}` : base;
+    const { publicSearch } = partitionSensitiveSearch(
+      withoutHash.slice(queryStart + 1)
+    );
+    return publicSearch ? `${base}?${publicSearch}` : base;
   } catch {
     return base;
   }

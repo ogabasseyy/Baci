@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   canonicalSearch,
-  isDroppedFromTrackingUrl,
   isSensitiveUrlParam,
   partitionSensitiveSearch,
-  trackingSafeSearch,
 } from './sensitive-url-params';
 
 describe('isSensitiveUrlParam', () => {
@@ -40,7 +38,6 @@ describe('isSensitiveUrlParam', () => {
   it.each([
     'orderId',
     'reference',
-    'redirect',
     'gateway',
     'merchant_slug',
   ])('leaves %s alone', (name) => {
@@ -115,11 +112,10 @@ describe('payment-provider identifiers', () => {
     'orderId',
   ])('does not treat %s as sensitive, callbacks match on it', (name) => {
     expect(isSensitiveUrlParam(name)).toBe(false);
-    expect(isDroppedFromTrackingUrl(name)).toBe(false);
   });
 });
 
-describe('isDroppedFromTrackingUrl', () => {
+describe('redirect-style params', () => {
   it.each([
     'redirect',
     'redirectTo',
@@ -129,24 +125,19 @@ describe('isDroppedFromTrackingUrl', () => {
     'return_to',
     'callbackUrl',
     'Redirect',
-    'token',
-    'email',
-  ])('drops %s from tracking URLs', (name) => {
-    expect(isDroppedFromTrackingUrl(name)).toBe(true);
+  ])('treats %s as private so a claim token inside it leaves the address bar', (name) => {
+    expect(isSensitiveUrlParam(name)).toBe(true);
   });
 
-  it('keeps redirect-style params out of the sensitive (address bar) list', () => {
-    expect(isSensitiveUrlParam('redirect')).toBe(false);
-    expect(isSensitiveUrlParam('next')).toBe(false);
-  });
-});
+  it('moves redirect out of the query and keeps the rest in order', () => {
+    const result = partitionSensitiveSearch(
+      'b=2&redirect=%2Freceipts%2Fclaim%2Fsecret&a=1&next=%2Fx'
+    );
 
-describe('trackingSafeSearch', () => {
-  it('removes sensitive and redirect-style params and keeps the rest in order', () => {
-    expect(
-      trackingSafeSearch(
-        '?b=2&redirect=%2Freceipts%2Fclaim%2Fsecret&token=x&a=1&next=%2Fx'
-      )
-    ).toBe('b=2&a=1');
+    expect(result.publicSearch).toBe('b=2&a=1');
+    expect(result.privateEntries).toEqual([
+      ['redirect', '/receipts/claim/secret'],
+      ['next', '/x'],
+    ]);
   });
 });

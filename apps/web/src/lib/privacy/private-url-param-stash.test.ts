@@ -35,6 +35,22 @@ describe('scrubPrivateParamsFromAddressBar', () => {
     ]);
   });
 
+  it('bugfix: leaves the URL untouched and does not throw when id generation fails', () => {
+    visit('/track-order?token=abc');
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw new Error('no crypto');
+    });
+
+    let scrubbed: boolean | undefined;
+    expect(() => {
+      scrubbed = scrubPrivateParamsFromAddressBar();
+    }).not.toThrow();
+
+    expect(scrubbed).toBe(false);
+    expect(window.location.search).toBe('?token=abc');
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
   it('keeps the hash', () => {
     visit('/track-order?token=abc#details');
 

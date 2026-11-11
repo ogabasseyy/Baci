@@ -215,3 +215,25 @@ describe('bugfix: Back to an earlier order restored the later order token', () =
     expect(result.current.get('token')).toBeNull();
   });
 });
+
+describe('bugfix: login redirect target carrying a receipt claim token stayed in the address bar', () => {
+  it('removes redirect from the address bar after mount but still returns it', () => {
+    visit('/account/login?redirect=%2Freceipts%2Fclaim%2Fsecret-token&a=1');
+
+    const { result } = renderHook(() => usePrivateSearchParams());
+
+    expect(window.location.href).not.toContain('secret-token');
+    expect(window.location.search).toBe('?a=1');
+    expect(result.current.get('redirect')).toBe('/receipts/claim/secret-token');
+  });
+
+  it('still returns the redirect after a reload of the cleaned address', () => {
+    visit('/account/login?redirect=%2Freceipts%2Fclaim%2Fsecret-token');
+    renderHook(() => usePrivateSearchParams()).unmount();
+    expect(window.location.search).toBe('');
+
+    const { result } = renderHook(() => usePrivateSearchParams());
+
+    expect(result.current.get('redirect')).toBe('/receipts/claim/secret-token');
+  });
+});

@@ -38,7 +38,14 @@ jobs:
     # This job holds the capability-gate step, so the base-owned capability-gate
     # contract pins it to a plain, unconditional ubuntu-24.04 runner. Keep it there.
     runs-on: ubuntu-24.04
+    # Read-only. The stage step reads Codex's comments and the pull request labels
+    # (docs/runbooks/review-first-ci.md).
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     outputs:
+      stage: ${{ steps.stage_review.outputs.stage || steps.stage_full.outputs.stage }}
       mobile_admin: ${{ steps.gate.outputs.mobile_admin }}
       mobile_storefront: ${{ steps.gate.outputs.mobile_storefront }}
       test_plan_mode: ${{ steps.test-plan.outputs.mode }}
@@ -108,11 +115,32 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      # Review-first CI (docs/runbooks/review-first-ci.md): a pull request from this repository
+      # runs only the quick checks until Codex reports no major findings for its exact head
+      # commit. Every other run (push, merge_group, manual, fork, switch off) is a plain full run
+      # and never executes a script here. `build` and `quality` are renamed while deferred so
+      # that no skipped job carries a required check name.
+      - name: Resolve CI stage (full CI)
+        id: stage_full
+        if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot')) }}
+        run: |
+          echo "stage=full" >> "$GITHUB_OUTPUT"
+          echo "reason=review-first CI does not apply to this run" >> "$GITHUB_OUTPUT"
+      - name: Resolve CI stage (quick checks now, full CI after Codex review)
+        id: stage_review
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BACI_REVIEW_FIRST_CI: ${{ vars.BACI_REVIEW_FIRST_CI }}
+          BACI_CODEX_WAIT_TIMEOUT_MINUTES: ${{ vars.BACI_CODEX_WAIT_TIMEOUT_MINUTES }}
+        run: bash .github/scripts/review-first-ci/launch-stage.sh
 
   cwv-runner-contracts:
     name: CWV Runner Contracts
     needs: [changes]
-    if: needs.changes.outputs.cwv_runner == 'true'
+    if: needs.changes.outputs.cwv_runner == 'true' && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     steps:
@@ -211,7 +239,7 @@ jobs:
   quality-test:
     name: Quality Gate - Test
     needs: [changes]
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Full web/mobile test fan-out reached ~15 minutes warm, but cold runs
     # (Turbo remote cache unavailable) measure 31m+ on GitHub-hosted runners —
@@ -305,7 +333,7 @@ jobs:
     needs: [changes]
     # Only the full-affected plan runs the complete web suite; targeted plans
     # keep their narrow vitest invocations inside quality-test.
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected'
+    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode == 'full-affected' && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_WEB_TEST_ENABLED == 'true' && 45 || 25 }}
     env:
@@ -339,7 +367,7 @@ jobs:
   quality-db-replay:
     name: Quality Gate - DB Replay
     needs: [changes]
-    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
@@ -425,7 +453,7 @@ jobs:
   quality-disposable-sql:
     name: Quality Gate - Disposable SQL Suites
     needs: [changes]
-    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     services:
@@ -567,6 +595,9 @@ jobs:
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
+      - name: Test review-first CI scripts and workflow contract
+        if: needs.changes.outputs.web == 'true'
+        run: node --test .github/scripts/review-first-ci/*.test.mjs .github/scripts/draft-ci-policy.test.mjs
       - name: Verify iOS native patch contracts
         uses: ./.github/actions/verify-ios-native-patch-contracts
       - name: Run storefront origin cost-contract tests
@@ -813,13 +844,19 @@ jobs:
           node ci_scripts/detect-silent-reverts.mjs
 
   quality:
-    name: Quality Gate
+    # While review-first CI defers the full stage this job is skipped under a DIFFERENT name:
+    # a skipped job named "Quality Gate" would count as a passed required check. The name and
+    # the condition below must stay the same predicate (ci-workflow-contract.test.mjs).
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Quality Gate' || 'Quality Gate (deferred until Codex review)' }}
     needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, quality-quiz-approval, mobile-quality, silent-revert-guard]
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') }}
     # Aggregate must not depend on `changes` outputs: if `changes` fails it still has to report.
     runs-on: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Verify split quality gate results
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -839,46 +876,7 @@ jobs:
           MOBILE_ADMIN_CHANGED: ${{ needs.changes.outputs.mobile_admin }}
           MOBILE_STOREFRONT_CHANGED: ${{ needs.changes.outputs.mobile_storefront }}
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
-        run: |
-          set -euo pipefail
-
-          if [[ "$CHANGES_RESULT" != "success" ]]; then
-            echo "changes job result: $CHANGES_RESULT"
-            exit 1
-          fi
-
-          # A skipped DB gate is success only when no DB paths changed: if
-          # the detector flagged DB changes, replay and the disposable
-          # suites must have actually run (skipped would silently waive
-          # them). Config-smoke mode skips by design and stays exempt.
-          if [[ "$QUIZ_DB_CHANGED" == "true" && "$TEST_PLAN_MODE" != "config-smoke" ]]; then
-            for db_result in "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT"; do
-              if [[ "$db_result" == "skipped" ]]; then
-                echo "DB paths changed but a DB gate was skipped: $db_result"
-                exit 1
-              fi
-            done
-          fi
-
-          # Same rule for lint: a skip is only success when no lintable
-          # web or mobile paths changed.
-          if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBILE_STOREFRONT_CHANGED" == "true" ) && "$TEST_PLAN_MODE" != "config-smoke" && "$LINT_RESULT" == "skipped" ]]; then
-            echo "Web or mobile paths changed but the lint gate was skipped"
-            exit 1
-          fi
-
-          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT" "$QUIZ_APPROVAL_RESULT"; do
-            case "$result" in
-              success|skipped)
-                ;;
-              *)
-                echo "split quality job failed or was cancelled: $result"
-                exit 1
-                ;;
-            esac
-          done
-
-          echo "Split quality gates passed."
+        run: bash .github/scripts/verify-quality-gate.sh
 
   mobile-quality:
     name: Mobile Admin Guardrails
@@ -908,11 +906,13 @@ jobs:
         run: echo "No mobile-admin changes — skipping mobile guardrail checks"
 
   build:
-    name: Build
+    # Deferred under a different name for the same reason as `quality` above.
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') && 'Build' || 'Build (deferred until Codex review)' }}
     # Only `changes` outputs are consumed below. Running in parallel with the
     # quality jobs (instead of after them) halves the critical path of every
     # PR head: max(test, build) instead of test-then-build.
     needs: [changes]
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository || needs.changes.outputs.stage == 'full') }}
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_BUILD_ENABLED == 'true' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Bounded build-time storefront reads can extend page-data collection past
     # 30 minutes on a cold runner. Keep enough headroom for that safe pressure

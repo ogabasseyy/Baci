@@ -2875,14 +2875,18 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
   });
-  it('returns a retryable response for wallet reservation lock contention', async () => {
+  it.each([
+    {
+      data: null,
+      error: { code: '40001', message: 'credit_direct_wallet_retry_required' },
+    },
+    { data: null, error: { code: '08006', message: 'connection failed' } },
+    { data: { invalid: true }, error: null },
+  ])('returns a retryable response when the wallet verification service is unavailable (%j)', async (verification) => {
     vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
     const supabase = createMockSupabaseClient();
     vi.mocked(createServiceClient).mockReturnValue(supabase as never);
-    supabase.rpc.mockResolvedValue({
-      data: null,
-      error: { code: '40001', message: 'credit_direct_wallet_retry_required' },
-    } as never);
+    supabase.rpc.mockResolvedValue(verification as never);
     const chain = supabase.from('orders');
     chain.ilike.mockResolvedValue({
       data: [{ ...mockOrder, wallet_amount_used: 20000, amount_paid: 20000 }],

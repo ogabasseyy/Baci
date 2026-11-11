@@ -36,13 +36,20 @@ export async function verifyCreditDirectWalletEvent({
   );
   if (error) {
     if (error.code === '40001') return 'retry' as const;
+    if (error.message === 'credit_direct_wallet_reconciliation_required')
+      return null;
     logger.warn({
       message: 'Credit Direct wallet verification RPC failed',
       code: error.code,
       orderId,
     });
-    return null;
+    return 'retry' as const;
   }
   const parsed = creditDirectWalletFundingSchema.safeParse(data);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) return parsed.data;
+  logger.warn({
+    message: 'Credit Direct wallet verification returned an invalid response',
+    orderId,
+  });
+  return 'retry' as const;
 }

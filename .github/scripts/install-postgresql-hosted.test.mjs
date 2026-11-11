@@ -9,14 +9,16 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = fileURLToPath(new URL('./install-postgresql-hosted.sh', import.meta.url));
 const BUILD = '18.6-1.pgdg24.04+2';
 const FINGERPRINT = 'B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8';
-// Every apt call is bounded: a few seconds per connection, three tries, and a ceiling for the whole command.
+// Every apt call is bounded: a few seconds per connection, three tries, and a ceiling for the whole command. The
+// ceiling (timeout) runs under sudo, so its signal reaches apt-get itself and not just a sudo wrapped around it.
 const APT_LIMIT_SECONDS = 180;
+const SUDO_APT = `sudo timeout --kill-after=10 ${APT_LIMIT_SECONDS} apt-get`;
 const APT_BOUNDS = '-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60';
 // The first refresh reads only the PGDG source, so an unreachable Ubuntu mirror cannot stall the step.
 const PGDG_ONLY = '-o Dir::Etc::sourcelist=/etc/apt/sources.list.d/pgdg.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0';
-const INSTALL = `sudo apt-get ${APT_BOUNDS} install -y --no-install-recommends postgresql-18=${BUILD} postgresql-client-18=${BUILD}`;
+const INSTALL = `${SUDO_APT} ${APT_BOUNDS} install -y --no-install-recommends postgresql-18=${BUILD} postgresql-client-18=${BUILD}`;
 
-// The script is run for real, but sudo, timeout, curl, gpg and dpkg-query are stand-ins that only
+// The script is run for real, but sudo, curl, gpg and dpkg-query are stand-ins that only
 // write what they were asked to do into a log. Nothing privileged ever runs here.
 const root = mkdtempSync(join(tmpdir(), 'install-postgresql-hosted-'));
 const bin = join(root, 'bin');
@@ -34,7 +36,7 @@ stub('sudo', [
   `if [ "$1" = tee ]; then sed 's/^/  stdin: /' >> "$FAKE_LOG"; fi`,
   // FAKE_APT_INSTALL_FAILURES=1 (or FAKE_APT_UPDATE_FAILURES=1) makes the first apt-get install (or update) fail,
   // the way an unreachable mirror does.
-  `if [ "$1" = apt-get ]; then`,
+  `case " $* " in *' apt-get '*)`,
   `  for argument in "$@"; do`,
   `    if [ "$argument" = install ]; then`,
   `      attempts="$(cat "$FAKE_LOG.installs" 2>/dev/null || echo 0)"; attempts=$((attempts + 1)); echo "$attempts" > "$FAKE_LOG.installs"`,
@@ -44,15 +46,8 @@ stub('sudo', [
   `      attempts="$(cat "$FAKE_LOG.updates" 2>/dev/null || echo 0)"; attempts=$((attempts + 1)); echo "$attempts" > "$FAKE_LOG.updates"`,
   `      if [ "$attempts" -le "\${FAKE_APT_UPDATE_FAILURES:-0}" ]; then exit 100; fi`,
   `    fi`,
-  `  done`,
-  `fi`,
-]);
-// GNU timeout is missing on a Mac; the stand-in records the limit it was given and runs the command.
-stub('timeout', [
-  `while [ "$#" -gt 0 ]; do case "$1" in --kill-after=*) shift ;; *) break ;; esac; done`,
-  `limit="$1"; shift`,
-  `printf 'timeout %s\\n' "$limit" >> "$FAKE_LOG"`,
-  `exec "$@"`,
+  `  done ;;`,
+  `esac`,
 ]);
 stub('curl', [
   `output=''; url=''`,
@@ -130,9 +125,7 @@ test('installs the pinned PostgreSQL 18 build from the signed PGDG repository on
       'sudo install -m 0644 <work>/pgdg.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc',
       'sudo tee /etc/apt/sources.list.d/pgdg.list',
       '  stdin: deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main',
-      `timeout ${APT_LIMIT_SECONDS}`,
-      `sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`,
-      `timeout ${APT_LIMIT_SECONDS}`,
+      `${SUDO_APT} ${APT_BOUNDS} ${PGDG_ONLY} update`,
       INSTALL,
     ]
   );
@@ -196,7 +189,7 @@ test('rejects a key file that carries a second primary key next to the expected 
 test('accepts the expected key together with its subkeys', () => {
   const result = install({ FAKE_GPG_SUBKEY: '1' });
   assert.equal(result.status, 0, result.stderr);
-  assert.ok(result.privileged.some((line) => line.startsWith('sudo apt-get')));
+  assert.ok(result.privileged.some((line) => line.startsWith(SUDO_APT)));
 });
 
 test('stops before any privileged command when the key cannot be downloaded or read', () => {
@@ -214,7 +207,7 @@ test('pins an exact PostgreSQL 18 Ubuntu 24.04 build, not a moving package name'
   assert.match(script, new RegExp(`^PGDG_KEY_FINGERPRINT='${FINGERPRINT}'$`, 'm'));
 });
 
-const aptCommands = (result) => result.privileged.filter((line) => line.startsWith('sudo apt-get'));
+const aptCommands = (result) => result.privileged.filter((line) => line.startsWith(SUDO_APT));
 const isUpdate = (line) => / update$/.test(line);
 
 describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (2026-11-11 outage)', () => {
@@ -224,7 +217,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
   test('refreshes only the PGDG package index, so an unreachable Ubuntu mirror cannot stall a healthy install', () => {
     const result = install();
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(aptCommands(result).filter(isUpdate), [`sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`]);
+    assert.deepEqual(aptCommands(result).filter(isUpdate), [`${SUDO_APT} ${APT_BOUNDS} ${PGDG_ONLY} update`]);
     assert.ok(!result.privileged.some((line) => line.includes('apt-mirrors.txt')), 'a healthy install must leave the mirror list alone');
   });
 
@@ -232,15 +225,16 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     for (const fake of [{}, { FAKE_APT_INSTALL_FAILURES: '1' }]) {
       const result = install(fake);
       assert.equal(result.status, 0, result.stderr);
-      result.commands.forEach((line, index) => {
-        if (!line.startsWith('sudo apt-get')) return;
-        assert.equal(result.commands[index - 1], `timeout ${APT_LIMIT_SECONDS}`, `${line} must run under the time ceiling`);
+      const apt = result.privileged.filter((line) => line.includes(' apt-get '));
+      assert.ok(apt.length >= 2, 'the refresh and the install both go through apt-get');
+      for (const line of apt) {
+        assert.ok(line.startsWith(`${SUDO_APT} `), `${line} must run under the time ceiling, as root`);
         assert.ok(line.includes(APT_BOUNDS), line);
-      });
+      }
     }
     const script = readFileSync(SCRIPT, 'utf8');
     assert.match(script, new RegExp(`^APT_LIMIT_SECONDS=${APT_LIMIT_SECONDS}$`, 'm'));
-    assert.match(script, /timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" sudo apt-get/);
+    assert.match(script, /sudo timeout --kill-after=\d+ "\$APT_LIMIT_SECONDS" apt-get/);
   });
 
   // What the script does after a failed first attempt: independent full mirrors ahead of Canonical's own servers
@@ -252,9 +246,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     '  stdin: https://archive.ubuntu.com/ubuntu/\tpriority:3',
     '  stdin: https://security.ubuntu.com/ubuntu/\tpriority:4',
     '  stdin: https://azure.archive.ubuntu.com/ubuntu/\tpriority:5',
-    `timeout ${APT_LIMIT_SECONDS}`,
-    `sudo apt-get ${APT_BOUNDS} update`,
-    `timeout ${APT_LIMIT_SECONDS}`,
+    `${SUDO_APT} ${APT_BOUNDS} update`,
     INSTALL,
   ];
 
@@ -262,6 +254,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
     const result = install({ FAKE_APT_INSTALL_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /independent and canonical Ubuntu mirrors/);
+    assert.match(result.stdout, /Apt sources that read the mirror list/);
     assert.deepEqual(result.commands.slice(result.commands.indexOf(INSTALL) + 1), FALLBACK);
     // Azure is demoted, not deleted, so the list keeps a second path. Every entry, Azure included, uses https.
     assert.doesNotMatch(result.commands.join('\n'), /http:\/\//);
@@ -277,7 +270,7 @@ describe('bugfix: the install must not hang on an unreachable Ubuntu mirror (202
   test('takes the same fallback when the PGDG-only refresh itself fails, without trying the install first', () => {
     const result = install({ FAKE_APT_UPDATE_FAILURES: '1' });
     assert.equal(result.status, 0, result.stderr);
-    const afterFirstRefresh = result.commands.slice(result.commands.indexOf(`sudo apt-get ${APT_BOUNDS} ${PGDG_ONLY} update`) + 1);
+    const afterFirstRefresh = result.commands.slice(result.commands.indexOf(`${SUDO_APT} ${APT_BOUNDS} ${PGDG_ONLY} update`) + 1);
     assert.deepEqual(afterFirstRefresh, FALLBACK);
   });
 

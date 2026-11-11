@@ -46,6 +46,8 @@ UBUNTU_MIRRORS='/etc/apt/apt-mirrors.txt'
 # (archive.ubuntu.com, security.ubuntu.com) did not answer either, and liburing2, the one package the
 # PostgreSQL 18 build needs from Ubuntu, could not be fetched. apt checks the archive signatures on every
 # mirror, so an independent mirror is as trustworthy as Canonical's. Azure's mirror stays as the last choice.
+# Checked on 2026-11-11: every mirror below answers over https, with a valid certificate, for noble,
+# noble-updates, noble-security and noble-backports (Azure's too, although older documentation lists it as http only).
 FALLBACK_MIRRORS=(
   https://mirrors.edge.kernel.org/ubuntu/
   https://ubuntu.osuosl.org/ubuntu/
@@ -60,8 +62,10 @@ APT_LIMIT_SECONDS=180
 # apt job on a fresh runner, or a command stopped by the ceiling above, may still hold.
 APT_BOUNDS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o DPkg::Lock::Timeout=60)
 
+# timeout runs under sudo, so its signal, and the kill after ten seconds, goes to apt-get itself. Wrapped around
+# sudo it could stop only sudo and leave apt-get running with the dpkg lock held.
 apt_get() {
-  timeout --kill-after=10 "$APT_LIMIT_SECONDS" sudo apt-get "${APT_BOUNDS[@]}" "$@"
+  sudo timeout --kill-after=10 "$APT_LIMIT_SECONDS" apt-get "${APT_BOUNDS[@]}" "$@"
 }
 
 # Recommended extras are skipped. Checked against the noble-pgdg package index for 18.6-1.pgdg24.04+2:
@@ -126,6 +130,9 @@ if ! { apt_get -o Dir::Etc::sourcelist="$PGDG_SOURCE" -o Dir::Etc::sourceparts=-
     echo "Replacing the mirror list ${UBUNTU_MIRRORS}:"
     sed 's/^/  /' "$UBUNTU_MIRRORS"
   fi
+  # The rewrite only helps sources that read the mirror list; the log shows which ones do.
+  echo "Apt sources that read the mirror list:"
+  grep -rl 'mirror+file:' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null | sed 's/^/  /' || true
   # Every entry uses https; Azure's mirror answers over it too.
   priority=0
   for mirror in "${FALLBACK_MIRRORS[@]}"; do

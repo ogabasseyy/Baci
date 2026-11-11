@@ -134,7 +134,8 @@ test('a non-test module counts when it reads files with streams, stat or a glob 
     'apps/web/tools/docs/glob-reader.ts':
       "import { globby } from 'globby';\nawait globby('docs/guides/*.md');",
     'apps/web/tools/docs/stat-reader.ts': "await stat('docs/guides/a.md');",
-    'apps/web/tools/docs/label.ts': "export const label = 'docs/guides/a.md';",
+    'apps/web/tools/docs/label.ts':
+      "export const label = 'see docs/guides/a.md for the steps';",
   });
 
   assert.deepEqual(readers.sort(), [
@@ -142,6 +143,48 @@ test('a non-test module counts when it reads files with streams, stat or a glob 
     'apps/web/tools/docs/stat-reader.ts',
     'apps/web/tools/docs/stream-reader.ts',
   ]);
+});
+
+test('a helper that only builds the path counts, a module that only names it does not', () => {
+  const { readers } = readersOf(['supabase/migrations/20261111090000_x.sql'], {
+    'apps/web/src/lib/test-paths.ts':
+      "import { join } from 'node:path';\nexport const MIGRATIONS = join(ROOT, 'supabase', 'migrations');",
+    'apps/web/src/lib/dirname-paths.ts':
+      "export const MIGRATIONS = __dirname + '/../supabase/migrations';",
+    'apps/web/src/lib/error-message.ts':
+      "throw new Error('apply supabase/migrations first');",
+  });
+
+  assert.deepEqual(readers.sort(), [
+    'apps/web/src/lib/dirname-paths.ts',
+    'apps/web/src/lib/test-paths.ts',
+  ]);
+});
+
+test('a constants-only helper holding the path as a literal counts, a sentence or a bare word does not', () => {
+  const migration = readersOf(['supabase/migrations/20261111090000_x.sql'], {
+    'apps/web/src/lib/paths.ts':
+      "export const MIGRATIONS = '../../supabase/migrations';",
+    'apps/web/src/lib/joined-paths.ts':
+      "export const MIGRATIONS = ['supabase', 'migrations'].join('/');",
+    'apps/web/src/lib/message.ts':
+      "throw new Error('apply supabase/migrations first');",
+    'apps/web/src/lib/comment.ts':
+      '// the files live in supabase/migrations\nexport const x = 1;',
+  }).readers;
+  const docs = readersOf(['docs/guides/a.md'], {
+    'apps/web/src/lib/kind.ts': "export type Kind = 'docs' | 'code';",
+    'apps/web/src/lib/guide-path.ts':
+      "export const GUIDE = 'docs/guides/a.md';",
+    'apps/web/src/lib/help-text.ts':
+      "export const HELP = 'see docs/guides/a.md for details';",
+  }).readers;
+
+  assert.deepEqual(migration.sort(), [
+    'apps/web/src/lib/joined-paths.ts',
+    'apps/web/src/lib/paths.ts',
+  ]);
+  assert.deepEqual(docs, ['apps/web/src/lib/guide-path.ts']);
 });
 
 test('a test file too large to search is assumed to be a reader, a large module is not', () => {

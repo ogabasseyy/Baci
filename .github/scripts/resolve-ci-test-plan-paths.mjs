@@ -91,7 +91,9 @@ const MOBILE_STOREFRONT_MODULE_PREFIXES = ['apps/mobile-storefront/__tests__/'];
 //   - docs/            read by a handful of tests (storefront-edge inventory,
 //                      piggyvest runbooks, ad-tracking guide); the provider
 //                      finds the readers of whichever file changed, and most
-//                      docs files have none.
+//                      docs files have none. Unlike supabase/ (DB replay jobs)
+//                      and vps-workers/ (own test job), nothing backs it up:
+//                      the name match is its only safety net.
 //   - .github metadata workflows other than ci.yml, filters, templates: read by
 //                      a few contract tests; CI wiring itself stays a trigger.
 //   - vps-workers/     has its own test job (`deploy_scripts` filter).

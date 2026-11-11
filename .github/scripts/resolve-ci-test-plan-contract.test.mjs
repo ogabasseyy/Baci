@@ -74,7 +74,7 @@ function plannerModes() {
   const modes = new Set();
   for (const file of PLANNER_SOURCES) {
     for (const match of readFileSync(file, 'utf8').matchAll(
-      /\bmode:\s*'([a-z-]+)'/g
+      /\bmode:\s*['"]([\w-]+)['"]/g
     )) {
       modes.add(match[1]);
     }

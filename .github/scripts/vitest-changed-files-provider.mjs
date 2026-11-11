@@ -14,9 +14,9 @@
 // diff holds no fs-reader file, so ordinary code changes behave as before.
 //
 // What it cannot find: a test that builds the path without writing it as a
-// literal, a non-test module that reads files without importing fs or a glob
-// library, and readers written in shell, Python or SQL (those are not Vitest
-// tests; their own CI jobs run them). Test files too large to search are
+// literal, a non-test module that neither uses fs, builds paths nor holds the
+// path as a literal, and readers written in shell, Python or SQL (those are not
+// Vitest tests; their own CI jobs run them). Test files too large to search are
 // assumed to be readers.
 //
 // Wired in apps/web/vitest.config.ts as `test.experimental.vcsProvider`.
@@ -41,12 +41,15 @@ export const TOO_LARGE = null;
 
 // Tests often hand a path to a helper that does the reading, so a test or test
 // support file counts as a reader as soon as it mentions the path. Any other
-// module must also use fs, which skips the many modules that only name a path
-// in a comment or an error message.
+// module must also use fs, build paths, or hold the path as a literal of its own
+// (a helper that only exports `'supabase/migrations'` or
+// `join(ROOT, 'supabase', 'migrations')` is read through by its importers).
+// That skips the many modules that only name a path in a comment or an error
+// message.
 const TEST_FILE =
   /(?:\.(?:test|spec)\b|[.-](?:support|fixtures?|helpers?|utils)\b|(?:^|\/)(?:__tests__|__mocks__|tests?|test-utils|test-support)\/)/;
 const FILE_ACCESS =
-  /(?:node:)?fs(?:\/promises)?['"]|fs-extra|graceful-fs|fast-glob|globby|tinyglobby|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|lstatSync|accessSync|globSync)\b|\b(?:readFile|readdir|opendir|createReadStream|stat|lstat|access|realpath|glob)\s*\(/;
+  /(?:node:)?fs(?:\/promises)?['"]|fs-extra|graceful-fs|fast-glob|globby|tinyglobby|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|lstatSync|accessSync|globSync)\b|\b(?:readFile|readdir|opendir|createReadStream|stat|lstat|access|realpath|glob)\s*\(|(?:node:)?path['"]|__dirname|import\.meta\.(?:url|dirname)|process\.cwd\(\)/;
 
 // A git failure must stop the run: returning an empty list would tell Vitest
 // that nothing changed and select no tests at all.
@@ -126,6 +129,48 @@ export function normalizeForNeedles(text) {
     .replace(/['"`]\s*,\s*['"`]/g, '/');
 }
 
+const QUOTES = new Set(["'", '"', '`']);
+const MAX_LITERAL_LENGTH = 300;
+
+// Walks from `from` in `step` direction to the nearest quote; whitespace first
+// means the text around it is a sentence, not a path.
+function reachesQuote(text, from, step) {
+  const stop = from + step * MAX_LITERAL_LENGTH;
+  for (let i = from; i !== stop && i >= 0 && i < text.length; i += step) {
+    if (QUOTES.has(text[i])) {
+      return true;
+    }
+    if (/\s/.test(text[i])) {
+      return false;
+    }
+  }
+  return false;
+}
+
+// A path needle is a path constant when it sits in a quoted literal that holds
+// nothing but a path (`'../../supabase/migrations'`), unlike a message such as
+// `'apply supabase/migrations first'`. Bare words (`'docs'`) never qualify.
+function namesPathLiteral(text, needle) {
+  if (!/[/.]/.test(needle.replace(/^['"`]|['"`]$/g, ''))) {
+    return false;
+  }
+  const opensLiteral = QUOTES.has(needle[0]);
+  const closesLiteral = QUOTES.has(needle[needle.length - 1]);
+  for (
+    let at = text.indexOf(needle);
+    at !== -1;
+    at = text.indexOf(needle, at + 1)
+  ) {
+    if (
+      (opensLiteral || reachesQuote(text, at - 1, -1)) &&
+      (closesLiteral || reachesQuote(text, at + needle.length, 1))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function findFsReaders({ changedFiles, listCandidates, readText }) {
   const needles = [...new Set(changedFiles.flatMap(readerNeedlesFor))];
   if (needles.length === 0) {
@@ -145,11 +190,14 @@ export function findFsReaders({ changedFiles, listCandidates, readText }) {
       }
       continue;
     }
-    if (!TEST_FILE.test(candidate) && !FILE_ACCESS.test(text)) {
-      continue;
-    }
     const normalized = normalizeForNeedles(text);
-    if (needles.some((needle) => normalized.includes(needle))) {
+    const named = needles.filter((needle) => normalized.includes(needle));
+    if (
+      named.length > 0 &&
+      (TEST_FILE.test(candidate) ||
+        FILE_ACCESS.test(text) ||
+        named.some((needle) => namesPathLiteral(normalized, needle)))
+    ) {
       readers.push(candidate);
     }
   }

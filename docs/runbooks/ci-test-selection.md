@@ -82,12 +82,18 @@ Limits (what it cannot find):
 
 - a test that builds the path without ever writing it as a literal; write the
   path as a literal, or keep it in a helper that does;
-- a non-test module that reads files without importing `fs` or a glob library;
+- a non-test module that neither imports `fs` (or a glob library), builds paths
+  (`node:path`, `__dirname`, `process.cwd()`) nor holds the path as a quoted
+  literal; a helper that only exports `'supabase/migrations'` or
+  `join(ROOT, 'supabase', 'migrations')` does count, a path inside a sentence or
+  a comment does not;
 - readers written in shell, Python or SQL runners: they are not Vitest tests, so
   their own CI jobs (selected by the `quiz_db`, `deploy_scripts` and similar
   filters) run them.
 
 Test files too large to search (over 1.5 MB) are assumed to be readers.
+`docs/` has no job behind it (migrations have the DB replay jobs, `vps-workers`
+its own tests), so for docs the name match is the only safety net.
 
 Playwright specs are never run by Vitest. Those under `tests/checkout-browser`,
 `tests/oxygen-policy-browser` and `tests/oxygen-cookie-harness` run in

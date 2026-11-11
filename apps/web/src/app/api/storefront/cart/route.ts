@@ -4,9 +4,7 @@ import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
-  type CartRequestContextDeps,
   checkCartQuota,
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   requestUsesDeviceProof,
   resolveCartRequestContext,
@@ -19,36 +17,16 @@ import {
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import { createCartServerTimer } from '@/lib/cart/server-timing';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
   cartSessionCookieMaxAge,
   issueCartSessionProof,
-  verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { voucherAttachmentsValid } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
-import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
-
-function contextDeps(
-  requireScope: CartRequestContextDeps['requireScope'],
-  wrongScopeError: CartRequestContextDeps['wrongScopeError']
-): CartRequestContextDeps {
-  return {
-    merchant: {
-      resolveAlias: getCurrentSlugForAlias,
-      rpcClient: createAnonClient(),
-      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
-    },
-    requireScope,
-    verify: (proof) =>
-      verifyCartSessionProof(proof, {
-        environment: getCartProofEnvironment(),
-      }),
-    wrongScopeError,
-  };
-}
+import { contextDeps } from './context-deps';
 
 /**
  * GET /api/storefront/cart
@@ -62,9 +40,12 @@ function contextDeps(
  */
 export async function GET(request: NextRequest) {
   try {
-    const context = await resolveCartRequestContext(
-      request,
-      contextDeps('session', 'not_found')
+    const timer = createCartServerTimer();
+    const context = await timer.measure('auth', () =>
+      resolveCartRequestContext(
+        request,
+        contextDeps('session', 'not_found', timer)
+      )
     );
     if (!context.ok) {
       if (
@@ -76,20 +57,24 @@ export async function GET(request: NextRequest) {
       return cartErrorResponse(context.error);
     }
 
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'snapshot',
-      subject: context.principal.principalId,
-    });
+    const quota = await timer.measure('quota', () =>
+      checkCartQuota({
+        merchantId: context.merchant.id,
+        operation: 'snapshot',
+        subject: context.principal.principalId,
+      })
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
 
     const client = createCartScopedClient(context.principal);
-    const result = await getCart({
-      client,
-      principal: context.principal,
-    });
+    const result = await timer.measure('cart', () =>
+      getCart({
+        client,
+        principal: context.principal,
+      })
+    );
     if (!result.ok) {
       return cartErrorResponse(
         result.code,
@@ -97,9 +82,8 @@ export async function GET(request: NextRequest) {
       );
     }
     let proof: string | null = null;
-    const upgraded = await upgradeLegacySessionPrincipal(
-      client,
-      context.principal
+    const upgraded = await timer.measure('grant', () =>
+      upgradeLegacySessionPrincipal(client, context.principal)
     );
     if (upgraded && upgraded !== context.principal) {
       try {
@@ -142,7 +126,7 @@ export async function GET(request: NextRequest) {
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }
-    return response;
+    return timer.apply(response);
   } catch (error) {
     console.error('Unexpected error in GET /api/storefront/cart:', {
       message: error instanceof Error ? error.message : 'unknown',

@@ -55,6 +55,10 @@ describe('GET /api/storefront/cart', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('set-cookie')).toBeNull();
+    // Step durations only, in request order, for reading latency live.
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^features;dur=[\d.]+, auth;dur=[\d.]+, quota;dur=[\d.]+, cart;dur=[\d.]+, grant;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     const payload = await response.json();
     expect(payload.cart.cartId).toBe(CART_ID);
     expect(payload.cart.lines).toHaveLength(1);

@@ -1,0 +1,203 @@
+# TEMPORARY DRY RUN of gemini-code-review.yml for the pull request that introduces it.
+# Identical except: the name, the concurrency group, and the trusted-scripts ref (the PR merge
+# commit, because the new scripts are not on the default branch yet). Deleted before merge.
+#
+# Gemini PR reviewer: a second opinion on every non-draft same-repo pull request push, and on
+# demand via an `@gemini-cli /review` comment (owner/member/collaborator only).
+#
+# One direct request to the Gemini API per review: no agent, no tools, no web access. The steps:
+#   1. collect.sh   pull request diff + full changed files + the Baci review contract -> a prompt FILE
+#   2. decide.mjs   skip the paid call when: the bypass-ai-gate label is set, the repository is
+#                   private and the key is not confirmed as a paid one, this commit was already
+#                   reviewed, or the pull request's own changes equal the last review's (a merge
+#                   from main)
+#   3. call.mjs     the single model request (holds the Gemini key, no GitHub token)
+#   4. post.mjs     posts the review and sets the `Gemini review` commit status (holds the GitHub
+#                   token, no Gemini key)
+#
+# The status is the vote Diff Guardian tallies:
+#   success  reviewed, no critical/high finding
+#   failure  reviewed, a critical/high finding on a changed file (the job fails too)
+#   error    Gemini could not review (quota, outage, bad key or model). An abstention: the job
+#            stays green and Diff Guardian ignores it, so an outage never reads as a finding.
+#
+# The scripts come from the DEFAULT branch (trusted-scripts/), never from the pull request being
+# reviewed: an `@gemini-cli /review` comment on a fork PR runs with secrets, so pull request code is
+# only ever READ as data. Script changes take effect after merge; the unit tests under
+# .github/scripts/gemini-review/ validate them before.
+#
+# Prerequisites and cost: .github/gemini-code-review.md
+#   - Secret GEMINI_API_KEY: must be a PAID-tier key. The free tier allows about 5 requests a
+#     minute and a few per day per model, and Google may use free-tier content to improve its
+#     products.
+#   - Optional repository variables: GEMINI_MODEL (default below), GEMINI_PAID_TIER_CONFIRMED=true
+#     (required before a PRIVATE repository is sent to Gemini).
+#   - To make the gate block merges, add the `Gemini review` status to the required checks for
+#     `main` (it is deliberately not required today; Diff Guardian tallies it).
+name: Gemini Code Review (dry run)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  # Scope per event type. Without the event-name suffix, a PR comment's
+  # issue_comment run shares this group with the in-progress automatic
+  # pull_request review and cancel-in-progress kills the auto-run (e.g. a
+  # CodeRabbit comment seconds after a PR opens). Keep them in separate groups
+  # so only a newer push supersedes an in-progress auto-review.
+  group: gemini-code-review-dryrun-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  gemini-review:
+    name: Gemini review
+    # Auto-review same-repo PRs (forks get no secrets, so skip them here), or
+    # run on demand from a trusted author's `@gemini-cli /review` comment.
+    if: >-
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@gemini-cli /review') &&
+      (github.event.comment.author_association == 'OWNER' ||
+      github.event.comment.author_association == 'MEMBER' ||
+      github.event.comment.author_association == 'COLLABORATOR'))
+    runs-on: ubuntu-latest
+    # collect 5 + one model request with retries (3 x 100 s + waits) 8 + the rest.
+    timeout-minutes: 20
+    env:
+      # gemini-3.6-flash by default (stable, healthy when probed on 2026-11-11; gemini-3.7-flash is
+      # no longer offered in AI Studio). Pin another model via the GEMINI_MODEL repository variable.
+      GEMINI_MODEL_RESOLVED: ${{ vars.GEMINI_MODEL != '' && vars.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      SCRIPT_DIR: ${{ github.workspace }}/trusted-scripts/.github/scripts/gemini-review
+
+    steps:
+      - name: Parse review command
+        id: command
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+
+          # pull_request events always review automatically.
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # For comments, require the first non-empty line to be exactly the
+          # trigger so that quoting it in discussion ("don't run @gemini-cli
+          # /review yet") does not start a review.
+          first_line="$(printf '%s\n' "${COMMENT_BODY}" | tr -d '\r' | awk 'NF { print; exit }')"
+
+          if [[ "${first_line}" == '@gemini-cli /review' ]]; then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Skipping Gemini review because the first non-empty line is not exactly '@gemini-cli /review'."
+          fi
+
+      - name: Checkout repository
+        if: steps.command.outputs.should_run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Check out the PR head so changed files are read from the filesystem
+          # instead of one contents-API call per file (avoids GITHUB_TOKEN rate
+          # limits). issue_comment payloads carry no head SHA, so use the
+          # refs/pull/<n>/head ref. PR code is only read into the prompt, never
+          # executed.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+          fetch-depth: 1
+
+      - name: Clear trusted-scripts path
+        if: steps.command.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          # The pull request may track this path; only the default-branch copy below may land here.
+          rm -rf "${GITHUB_WORKSPACE}/trusted-scripts"
+
+      - name: Checkout trusted review scripts
+        if: steps.command.outputs.should_run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Scripts run with secrets, so they come from the DEFAULT branch (reviewed, merged code),
+          # never from the pull request being reviewed. Sparse: only the scripts directory.
+          ref: ${{ github.sha }}
+          path: trusted-scripts
+          fetch-depth: 1
+          sparse-checkout: .github/scripts/gemini-review
+
+      # Every step below is advisory (continue-on-error): the Report step always runs and turns
+      # whatever happened into the `Gemini review` status.
+      - name: Collect PR diff and build prompt
+        id: diff
+        if: steps.command.outputs.should_run == 'true'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: bash "${SCRIPT_DIR}/collect.sh"
+
+      - name: Decide whether to call Gemini
+        id: decide
+        if: steps.command.outputs.should_run == 'true' && steps.diff.outputs.should_review == 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          HEAD_SHA: ${{ steps.diff.outputs.head_sha }}
+          FINGERPRINT: ${{ steps.diff.outputs.fingerprint }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels || github.event.issue.labels) }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+          PAID_TIER_CONFIRMED: ${{ vars.GEMINI_PAID_TIER_CONFIRMED }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: node "${SCRIPT_DIR}/decide.mjs"
+
+      - name: Review with Gemini
+        id: gemini
+        if: steps.decide.outputs.action == 'review'
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          # The only step that sees the Gemini key, and it has no GitHub token.
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ env.GEMINI_MODEL_RESOLVED }}
+          PROMPT_FILE: ${{ steps.diff.outputs.prompt_file }}
+          RESPONSE_FILE: ${{ runner.temp }}/gemini-response.json
+        run: node "${SCRIPT_DIR}/call.mjs"
+
+      - name: Report Gemini review
+        if: ${{ !cancelled() && steps.command.outputs.should_run == 'true' }}
+        timeout-minutes: 3
+        env:
+          # The only step that posts to the pull request, and it has no Gemini key.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          HEAD_SHA: ${{ steps.diff.outputs.head_sha || github.event.pull_request.head.sha }}
+          FINGERPRINT: ${{ steps.diff.outputs.fingerprint }}
+          ACTION: ${{ steps.decide.outputs.action }}
+          CARRY_STATE: ${{ steps.decide.outputs.carry_state }}
+          CARRY_SHA: ${{ steps.decide.outputs.carry_sha }}
+          COLLECT_OUTCOME: ${{ steps.diff.outcome }}
+          SHOULD_REVIEW: ${{ steps.diff.outputs.should_review }}
+          RESPONSE_FILE: ${{ runner.temp }}/gemini-response.json
+          CHANGED_FILES_FILE: ${{ steps.diff.outputs.changed_files_file }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node "${SCRIPT_DIR}/post.mjs"

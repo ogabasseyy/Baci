@@ -55,7 +55,11 @@ other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
   `.jules`, `.ruler`, `vercel.json`, Playwright specs): targeted too, with the
   readers added by the Vitest provider below.
 
-One full trigger or one unknown path in a diff keeps the whole suite.
+One full trigger or one unknown path in a diff keeps the whole suite. So does a
+mobile storefront change next to a file that tests read: the provider feeds
+Vitest only, and Jest's `--changedSince` cannot follow fs reads (for example a
+storefront test that reads a release workflow), so only the full path runs the
+whole storefront test script.
 
 ## The Vitest provider
 

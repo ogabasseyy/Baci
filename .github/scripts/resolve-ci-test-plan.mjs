@@ -73,10 +73,13 @@ const WEB_READER_REASON =
   'Pull request changes are limited to apps/web source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.';
 const WEB_AND_STOREFRONT_REASON =
   'Pull request changes are limited to apps/web and mobile storefront source or test files.';
-const WEB_AND_STOREFRONT_READER_REASON =
-  'Pull request changes are limited to apps/web and mobile storefront source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.';
 const STOREFRONT_REASON =
   'Pull request changes are limited to mobile storefront source or test files.';
+// Jest's `--changedSince` follows imports only and the changed-files provider
+// feeds Vitest alone, so storefront tests that read a data file are not
+// selected: next to a storefront change only the full path runs them.
+const STOREFRONT_READER_REASON =
+  'Mobile storefront changes next to files that tests read keep the full affected test path: storefront Jest cannot follow fs reads.';
 
 function normalizeChangedFile(file) {
   return file
@@ -168,12 +171,14 @@ export function resolveCiTestPlan({
   const runsStorefrontTests = storefrontFiles.length > 0;
   const hasReaderFiles = readerFiles.length > 0;
 
+  if (runsStorefrontTests && hasReaderFiles) {
+    return fullAffectedPlan(STOREFRONT_READER_REASON);
+  }
+
   if (runsWebTests && runsStorefrontTests) {
     return {
       mode: 'targeted-web-and-storefront-tests',
-      reason: hasReaderFiles
-        ? WEB_AND_STOREFRONT_READER_REASON
-        : WEB_AND_STOREFRONT_REASON,
+      reason: WEB_AND_STOREFRONT_REASON,
       command: `${targetedWebCommand(baseRef)} && ${targetedMobileStorefrontCommand(baseRef)}`,
     };
   }

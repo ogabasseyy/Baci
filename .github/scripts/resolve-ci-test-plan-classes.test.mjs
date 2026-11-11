@@ -1,27 +1,16 @@
-// Which pull requests keep the full 6-shard web suite, and which do not.
-// The rule: a path may skip the full suite only if it belongs to a listed
-// class; every unknown path keeps it (fail-safe).
+// Which pull requests leave the full 6-shard web suite. A path may skip the full
+// suite only if it belongs to a listed class (`resolve-ci-test-plan-triggers`
+// covers what keeps it).
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveCiTestPlan } from './resolve-ci-test-plan.mjs';
-
-const WEB_SOURCE = 'apps/web/src/lib/shipping/providers/gigl.booking.ts';
-const FULL_COMMAND = 'pnpm turbo run test --concurrency=3 --log-order=stream';
-const WEB_COMMAND =
-  'pnpm --filter @baci/web exec vitest run --changed origin/main --passWithNoTests';
-const STOREFRONT_COMMAND =
-  'pnpm --filter @baci/mobile-storefront exec jest --changedSince origin/main --runInBand --passWithNoTests';
-const OUTSIDE_SCOPE_REASON =
-  'The diff includes files outside the targeted web test scope.';
-const TRIGGER_REASON =
-  'Shared, package, CI, or test setup changes require the full affected test path.';
-
-function plan(changedFiles, eventName = 'pull_request') {
-  return resolveCiTestPlan({ baseRef: 'origin/main', changedFiles, eventName });
-}
-
-const WEB_SOURCE_REASON =
-  'Pull request changes are limited to apps/web source or test files.';
+import {
+  plan,
+  STOREFRONT_COMMAND,
+  WEB_COMMAND,
+  WEB_SOURCE,
+  WEB_SOURCE_REASON,
+} from './resolve-ci-test-plan-cases.test-support.mjs';
 
 // Test files directly in apps/web (Vitest runs them when they change) and
 // Playwright specs (their own browser workflows run them) used to sit outside
@@ -131,17 +120,6 @@ test('migration-only PR with its replay registry entry stays on the targeted web
   assert.equal(result.mode, 'targeted-web-vitest');
 });
 
-test('a migration PR that also touches the mobile storefront runs both targeted suites', () => {
-  const result = plan([
-    'supabase/migrations/20261111090000_merchant_cancel_order_refund_mode.sql',
-    'apps/mobile-storefront/lib/orders/cancel.ts',
-  ]);
-
-  assert.equal(result.mode, 'targeted-web-and-storefront-tests');
-  assert.equal(result.command, `${WEB_COMMAND} && ${STOREFRONT_COMMAND}`);
-  assert.match(result.reason, /changed-files provider/);
-});
-
 for (const file of [
   'apps/mobile-storefront/__tests__/checkout/contact.test.tsx',
   'apps/mobile-storefront/__mocks__/expo-secure-store.ts',
@@ -155,45 +133,6 @@ for (const file of [
     });
   });
 }
-
-// The storefront package `test` script also runs `node --test config/*.test.mjs`,
-// which Jest's default patterns skip: only the full path runs those suites.
-test('storefront config suites and files keep the full suite', () => {
-  for (const file of [
-    'apps/mobile-storefront/config/android-release-config-loading.test.mjs',
-    'apps/mobile-storefront/config/hosted-staging-push-app-config.json',
-  ]) {
-    assert.deepEqual(plan([file]), {
-      mode: 'full-affected',
-      reason: OUTSIDE_SCOPE_REASON,
-      command: FULL_COMMAND,
-    });
-    assert.equal(plan([WEB_SOURCE, file]).mode, 'full-affected', file);
-  }
-});
-
-// `vitest --changed` and Jest follow imports only: a fixture a test reads
-// through fs (a text file, JSON, a snapshot) is invisible to them, so in the
-// folders this planner newly targets only code files skip the full suite.
-test('fixtures that tests read through fs keep the full suite in the newly targeted test folders', () => {
-  for (const fixture of [
-    'apps/web/tests/experience-commerce/polished-storefront.tsx.txt',
-    'apps/web/tests/checkout-browser/fixtures/cart.json',
-    'apps/web/tests/builder-chatgpt/page.html',
-    'apps/mobile-storefront/__tests__/__snapshots__/checkout.test.tsx.snap',
-    'apps/mobile-storefront/__mocks__/catalog.json',
-  ]) {
-    assert.deepEqual(
-      plan([WEB_SOURCE, fixture]),
-      {
-        mode: 'full-affected',
-        reason: OUTSIDE_SCOPE_REASON,
-        command: FULL_COMMAND,
-      },
-      fixture
-    );
-  }
-});
 
 test('code files in the browser test folders skip the full suite', () => {
   for (const file of [
@@ -209,132 +148,6 @@ test('code files in the browser test folders skip the full suite', () => {
     plan(['apps/web/tests/experience-browser/fixture.txt']).mode,
     'targeted-web-vitest'
   );
-});
-
-// Several of these folders are excluded from the default Vitest run (see
-// `exclude` in apps/web/vitest.config.ts) and run through their own scripts, so
-// a targeted `vitest --changed` run would pass without running them. They keep
-// the full suite exactly as before this change.
-test('the other apps/web/tests folders keep the full suite', () => {
-  for (const file of [
-    'apps/web/tests/builder-chatgpt/widget.test.tsx',
-    'apps/web/tests/builder-chatgpt/experience-upload.test.ts',
-    'apps/web/tests/experience-authoring/draft.ts',
-    'apps/web/tests/experience-commerce/cart.node.test.ts',
-    'apps/web/tests/experience-durable/state.ts',
-    'apps/web/tests/experience-lifecycle/plan.ts',
-    'apps/web/tests/experience-performance/budget.ts',
-    'apps/web/tests/typecheck/cart.tsx',
-  ]) {
-    assert.deepEqual(
-      plan([WEB_SOURCE, file]),
-      {
-        mode: 'full-affected',
-        reason: OUTSIDE_SCOPE_REASON,
-        command: FULL_COMMAND,
-      },
-      file
-    );
-  }
-});
-
-test('mixed diff with one unknown file still gets the full suite', () => {
-  for (const unknown of [
-    'apps/mobile-admin/hooks/useOrders.ts',
-    'tools/staging/primary-wallet-card-custody/package.mjs',
-    'scripts/backfill-products.ts',
-    'infra/cwv-runner/runner.mjs',
-    'apps/web/.gitignore',
-    'apps/web/tsconfig.build.json',
-    'apps/web/sample_orphans.txt',
-    'apps/web/public/fonts/inter.woff2',
-    'patches/next@16.4.1.patch',
-    '.github/scripts/run-ci-web-shard.sh',
-    '.github/scripts/ci-lint-gate-contract.test.mjs',
-  ]) {
-    assert.deepEqual(
-      plan([
-        WEB_SOURCE,
-        '.jules/atlas.md',
-        'docs/audits/seo-aeo-20261025/report.md',
-        'supabase/migrations/20261111090000_merchant_cancel_order_refund_mode.sql',
-        unknown,
-      ]),
-      {
-        mode: 'full-affected',
-        reason: OUTSIDE_SCOPE_REASON,
-        command: FULL_COMMAND,
-      },
-      unknown
-    );
-  }
-});
-
-test('a lone unknown file keeps the full suite even next to documentation', () => {
-  assert.equal(
-    plan(['docs/runbooks/contabo-private-ci.md', 'tools/test/run.mjs']).mode,
-    'full-affected'
-  );
-});
-
-test('markdown and Playwright specs inside workspace packages keep the full suite', () => {
-  for (const unknown of [
-    'apps/mobile-admin/README.md',
-    'apps/mobile-storefront/docs/notes.md',
-    'packages/tiktok-business/README.md',
-    'apps/mobile-admin/e2e/login.pw.ts',
-  ]) {
-    assert.deepEqual(
-      plan([WEB_SOURCE, unknown]),
-      {
-        mode: 'full-affected',
-        reason: OUTSIDE_SCOPE_REASON,
-        command: FULL_COMMAND,
-      },
-      unknown
-    );
-  }
-});
-
-test('hard triggers beat every class that skips the full suite', () => {
-  for (const trigger of [
-    '.github/workflows/ci.yml',
-    '.github/actions/pnpm-install-cached/action.yml',
-    '.github/scripts/resolve-ci-test-plan-paths.mjs',
-    '.github/scripts/resolve-ci-test-plan-classes.test.mjs',
-    '.github/scripts/vitest-changed-files-provider.mjs',
-    '.github/scripts/vitest-changed-files-provider.test.mjs',
-    'packages/shared/src/lib/index.ts',
-    'packages/experience-sdk/src/channel.ts',
-    'apps/web/package.json',
-    'apps/web/vitest.config.ts',
-    'apps/mobile-storefront/jest.setup.ts',
-    'pnpm-lock.yaml',
-    'pnpm-workspace.yaml',
-    'tsconfig.base.json',
-  ]) {
-    assert.deepEqual(
-      plan([
-        'docs/audits/seo-aeo-20261025/report.md',
-        'supabase/migrations/20261111090000_x.sql',
-        trigger,
-      ]),
-      { mode: 'full-affected', reason: TRIGGER_REASON, command: FULL_COMMAND },
-      trigger
-    );
-  }
-});
-
-test('non-pull-request events keep the full suite even for documentation', () => {
-  assert.equal(
-    plan(['docs/audits/seo-aeo-20261025/report.md'], 'push').mode,
-    'full-affected'
-  );
-  assert.equal(plan(['.jules/atlas.md'], 'merge_group').mode, 'full-affected');
-});
-
-test('an empty change list keeps the full suite', () => {
-  assert.equal(plan([]).mode, 'full-affected');
 });
 
 test('a Turbo env addition next to a documentation note is no longer forced to the full suite', () => {

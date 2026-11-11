@@ -16,8 +16,10 @@ const NEW_PLANNER_FILES = [
   '.github/scripts/resolve-ci-test-plan-paths.mjs',
   '.github/scripts/resolve-ci-test-plan-paths.test.mjs',
   '.github/scripts/resolve-ci-test-plan-contract.test.mjs',
+  '.github/scripts/resolve-ci-test-plan-cases.test-support.mjs',
   '.github/scripts/resolve-ci-test-plan-classes.test.mjs',
   '.github/scripts/resolve-ci-test-plan-diff.test.mjs',
+  '.github/scripts/resolve-ci-test-plan-triggers.test.mjs',
   '.github/scripts/resolve-ci-test-plan-git-fixture.test-support.mjs',
   PROVIDER,
   '.github/scripts/vitest-changed-files-provider.test.mjs',
@@ -59,6 +61,7 @@ test('the config suite runs every planner suite', () => {
     'resolve-ci-test-plan-contract.test.mjs',
     'resolve-ci-test-plan-diff.test.mjs',
     'resolve-ci-test-plan-paths.test.mjs',
+    'resolve-ci-test-plan-triggers.test.mjs',
     'vitest-changed-files-provider.test.mjs',
     'vitest-changed-files-provider-git.test.mjs',
   ]) {

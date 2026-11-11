@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { exportJWK, generateKeyPair } from 'jose';
+import {
+  createLocalJWKSet,
+  exportJWK,
+  generateKeyPair,
+  importJWK,
+  jwtVerify,
+  SignJWT,
+} from 'jose';
 import type { Pool, PoolConfig } from 'pg';
 import { startProductionAuthBroker } from './production-service.ts';
 import type { createBuilderAuthRuntime } from './runtime.ts';
@@ -69,6 +76,15 @@ test('starts only after broker construction and closes listener before database'
   assert.deepEqual(service.publicBinding.supabase, config.supabase);
   assert.equal(service.publicBinding.jwks.keys[0].kid, 'fixture');
   assert.equal('d' in service.publicBinding.jwks.keys[0], false);
+  const signingKey = await importJWK(config.signingKeys[0], 'ES256');
+  const token = await new SignJWT({ synthetic: true })
+    .setProtectedHeader({ alg: 'ES256', kid: 'fixture' })
+    .sign(signingKey);
+  const verified = await jwtVerify(
+    token,
+    createLocalJWKSet(service.publicBinding.jwks)
+  );
+  assert.equal(verified.payload.synthetic, true);
   await service.close();
   await service.close();
   assert.deepEqual(events, [

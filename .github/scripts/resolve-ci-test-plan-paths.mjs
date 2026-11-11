@@ -34,7 +34,17 @@ export const WEB_TARGETED_PREFIXES = [
 // the targeted classes by this planner only code files count; any other file
 // there keeps the full suite.
 const MODULE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
-const WEB_TESTS_PREFIX = 'apps/web/tests/';
+// Folders under apps/web/tests whose code `vitest --changed` follows normally
+// (route tests of the checkout harness, support code) and whose browser specs
+// run in checkout-browser.yml. The other test folders are not listed on purpose:
+// several are excluded from the default Vitest run (see `exclude` in
+// vitest.config.ts) and run through their own scripts, so they keep the full
+// suite as before.
+const WEB_BROWSER_TEST_FOLDERS = [
+  'apps/web/tests/checkout-browser/',
+  'apps/web/tests/oxygen-cookie-harness/',
+  'apps/web/tests/oxygen-policy-browser/',
+];
 
 // Test files that sit directly in apps/web (for example
 // `next.config.routing.test.ts`). Vitest runs them when they change.
@@ -145,7 +155,8 @@ export function isTargetableWebFile(file) {
   return (
     WEB_TARGETED_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
     WEB_ROOT_TEST_FILE.test(file) ||
-    (file.startsWith(WEB_TESTS_PREFIX) && MODULE_FILE.test(file))
+    (WEB_BROWSER_TEST_FOLDERS.some((folder) => file.startsWith(folder)) &&
+      MODULE_FILE.test(file))
   );
 }
 
@@ -169,27 +180,45 @@ export function isFsReaderFile(file) {
   return fsReaderFamilyOf(file) !== undefined;
 }
 
+// A bare file name only counts when a path separator or a quote sits right before
+// it (`join(dir, 'config.toml')`, `../vercel.json`), so `wrangler.config.toml` or a
+// word in prose does not select tests.
+function bareNameNeedles(name) {
+  return [`/${name}`, `'${name}`, `"${name}`, `\`${name}`];
+}
+
 // Strings to look for in test sources to find the readers of `file`: the file
 // itself, its ancestor directories down to the family floor, and (for files at
-// the repo or app root) its bare name. Anything inside apps/web is also offered
-// relative to the app root, because tests resolve paths from `process.cwd()`.
+// the repo or app root, or one folder deep) its bare name. Anything inside
+// apps/web is also offered relative to the app root, because tests resolve
+// paths from `process.cwd()`.
 export function readerNeedlesFor(file) {
   const family = fsReaderFamilyOf(file);
   if (!family) {
     return [];
   }
 
-  const needles = new Set([file]);
+  const needles = new Set();
   const segments = file.split('/');
+  if (segments.length === 1) {
+    for (const needle of bareNameNeedles(file)) needles.add(needle);
+  } else {
+    needles.add(file);
+  }
   for (let depth = segments.length - 1; depth >= family.floor; depth -= 1) {
     needles.add(segments.slice(0, depth).join('/'));
   }
-  if (segments.length <= 2) {
-    needles.add(segments.at(-1));
+  if (segments.length === 2) {
+    for (const needle of bareNameNeedles(segments[1])) needles.add(needle);
   }
   for (const needle of [...needles]) {
     if (needle.startsWith('apps/web/')) {
-      needles.add(needle.slice('apps/web/'.length));
+      const relative = needle.slice('apps/web/'.length);
+      if (relative.includes('/')) {
+        needles.add(relative);
+      } else {
+        for (const bare of bareNameNeedles(relative)) needles.add(bare);
+      }
     }
   }
   for (const name of family.names ?? []) {

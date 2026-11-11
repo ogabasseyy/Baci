@@ -57,8 +57,12 @@ test('the reader search covers the file, its folders down to the family floor, a
     'supabase/tests/deep',
     'supabase/tests/deep/run.sql',
   ]);
-  assert.deepEqual(readerNeedlesFor('vercel.json'), ['vercel.json']);
-  assert.deepEqual(readerNeedlesFor('README.md'), ['README.md']);
+  for (const name of ['vercel.json', 'README.md']) {
+    assert.deepEqual(
+      new Set(readerNeedlesFor(name)),
+      new Set([`'${name}`, `"${name}`, `/${name}`, `\`${name}`])
+    );
+  }
 
   const registry = readerNeedlesFor(
     'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt'
@@ -86,6 +90,29 @@ test('the reader search covers the file, its folders down to the family floor, a
   ]) {
     assert.ok(docs.includes(needle), needle);
   }
+});
+
+// A generic file name must not select tests that only contain it inside another
+// name (`wrangler.config.toml`) or prose: a path separator or a quote has to sit
+// right before it.
+test('a bare file name needs a separator or quote before it', () => {
+  const needles = readerNeedlesFor('supabase/config.toml');
+
+  assert.ok(needles.includes('supabase/config.toml'));
+  for (const needle of [
+    "'config.toml",
+    '"config.toml',
+    '/config.toml',
+    '`config.toml',
+  ]) {
+    assert.ok(needles.includes(needle), needle);
+  }
+  assert.equal(needles.includes('config.toml'), false);
+  assert.equal(
+    readerNeedlesFor('apps/web/README.md').includes('README.md'),
+    false
+  );
+  assert.ok(readerNeedlesFor('apps/web/README.md').includes('/README.md'));
 });
 
 test('markdown and Playwright specs outside a directory family are matched by their own path only', () => {

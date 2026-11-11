@@ -41,11 +41,15 @@ other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
   Vitest provider), shared packages, `package.json`, lockfile, `tsconfig`,
   test setup files, mobile admin, any unknown path, and every non-PR event.
 - **Targeted:** `apps/web` source, tools and root `*.test.*` / `*.spec.*` files;
-  code files under `apps/web/tests`; mobile storefront source and the code
-  files in `__tests__` and `__mocks__`. Fixtures there (text, JSON, HTML,
-  snapshots) keep the full suite because import-following cannot see them.
-  Storefront `config/` also keeps it: its `*.test.mjs` suites only run through
-  the package `test` script (`node --test`), which Jest skips.
+  code files in the three browser-workflow test folders
+  (`tests/checkout-browser`, `tests/oxygen-policy-browser`,
+  `tests/oxygen-cookie-harness`); mobile storefront source and the code files in
+  `__tests__` and `__mocks__`. Fixtures there (text, JSON, HTML, snapshots) keep
+  the full suite because import-following cannot see them. The other
+  `apps/web/tests` folders keep it too: several are excluded from the default
+  Vitest run (`exclude` in `vitest.config.ts`) and run through their own
+  scripts. Storefront `config/` also keeps it: its `*.test.mjs` suites only run
+  through the package `test` script (`node --test`), which Jest skips.
 - **Files that tests read through fs** (migrations, SQL tests, the replay
   registry, docs, workflows other than `ci.yml`, `vps-workers`, markdown,
   `.jules`, `.ruler`, `vercel.json`, Playwright specs): targeted too, with the
@@ -61,7 +65,8 @@ wired in `apps/web/vitest.config.ts` as `test.experimental.vcsProvider`. It
 returns Vitest's usual changed files and, when a changed file belongs to the
 families above, also every test or helper whose source names that file or its
 folder. The check is deliberately generous: an extra test is cheap, a missed
-one is not. If the config cannot find the provider file (sparse checkout),
+one is not. A bare file name such as `config.toml` only matches
+when a path separator or a quote sits right before it. If the config cannot find the provider file (sparse checkout),
 Vitest falls back to its own git provider.
 
 Limits (what it cannot find):

@@ -48,12 +48,22 @@ const TEST_FILE =
 const FILE_ACCESS =
   /(?:node:)?fs(?:\/promises)?['"]|fs-extra|graceful-fs|fast-glob|globby|tinyglobby|child_process|import\.meta\.glob|\b(?:readFileSync|readdirSync|existsSync|statSync|lstatSync|accessSync|globSync)\b|\b(?:readFile|readdir|opendir|createReadStream|stat|lstat|access|realpath|glob)\s*\(/;
 
+// A git failure must stop the run: returning an empty list would tell Vitest
+// that nothing changed and select no tests at all.
 function git(args, cwd) {
-  return execFileSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: 256 * 1024 * 1024,
-  });
+  try {
+    return execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    const detail = String(error.stderr ?? error.message).trim();
+    throw new Error(
+      `changed-files provider: git ${args.join(' ')} failed: ${detail}`
+    );
+  }
 }
 
 const lines = (output) => output.split('\n').filter(Boolean);

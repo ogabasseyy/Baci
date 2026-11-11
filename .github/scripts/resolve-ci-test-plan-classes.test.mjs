@@ -195,10 +195,11 @@ test('fixtures that tests read through fs keep the full suite in the newly targe
   }
 });
 
-test('code files in the newly targeted test folders skip the full suite', () => {
+test('code files in the browser test folders skip the full suite', () => {
   for (const file of [
     'apps/web/tests/checkout-browser/support/cart-page.ts',
-    'apps/web/tests/builder-chatgpt/widget.test.tsx',
+    'apps/web/tests/checkout-browser/harness/app/api/orders/route.test.ts',
+    'apps/web/tests/oxygen-cookie-harness/server.ts',
     'apps/web/tests/experience-browser/qualification.pw.ts',
   ]) {
     assert.equal(plan([file]).mode, 'targeted-web-vitest', file);
@@ -208,6 +209,33 @@ test('code files in the newly targeted test folders skip the full suite', () => 
     plan(['apps/web/tests/experience-browser/fixture.txt']).mode,
     'targeted-web-vitest'
   );
+});
+
+// Several of these folders are excluded from the default Vitest run (see
+// `exclude` in apps/web/vitest.config.ts) and run through their own scripts, so
+// a targeted `vitest --changed` run would pass without running them. They keep
+// the full suite exactly as before this change.
+test('the other apps/web/tests folders keep the full suite', () => {
+  for (const file of [
+    'apps/web/tests/builder-chatgpt/widget.test.tsx',
+    'apps/web/tests/builder-chatgpt/experience-upload.test.ts',
+    'apps/web/tests/experience-authoring/draft.ts',
+    'apps/web/tests/experience-commerce/cart.node.test.ts',
+    'apps/web/tests/experience-durable/state.ts',
+    'apps/web/tests/experience-lifecycle/plan.ts',
+    'apps/web/tests/experience-performance/budget.ts',
+    'apps/web/tests/typecheck/cart.tsx',
+  ]) {
+    assert.deepEqual(
+      plan([WEB_SOURCE, file]),
+      {
+        mode: 'full-affected',
+        reason: OUTSIDE_SCOPE_REASON,
+        command: FULL_COMMAND,
+      },
+      file
+    );
+  }
 });
 
 test('mixed diff with one unknown file still gets the full suite', () => {

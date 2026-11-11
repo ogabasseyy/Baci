@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { createGitFixture } from './resolve-ci-test-plan-git-fixture.test-support.mjs';
-import {
+import provider, {
   findChangedFilesWithFsReaders,
   listGitChangedFiles,
 } from './vitest-changed-files-provider.mjs';
@@ -126,6 +126,31 @@ test('a plain source change returns exactly the git changes', () => {
 
     assert.equal(result.length, 1);
     assert.ok(result[0].endsWith('apps/web/src/a.ts'));
+  } finally {
+    repo.cleanup();
+  }
+});
+
+// An empty answer would tell Vitest that nothing changed and select no tests, so
+// a git failure must stop the run with a clear message instead.
+test('an unreadable base ref stops the run instead of selecting nothing', async () => {
+  const repo = createGitFixture();
+  try {
+    repo.write('apps/web/src/a.ts', 'export const a = 1;\n');
+    repo.commit('base');
+
+    assert.throws(
+      () =>
+        listGitChangedFiles({ root: repo.root, changedSince: 'no-such-ref' }),
+      /changed-files provider: git diff .*no-such-ref.*failed/
+    );
+    await assert.rejects(
+      provider.findChangedFiles({
+        root: repo.root,
+        changedSince: 'no-such-ref',
+      }),
+      /changed-files provider: git diff/
+    );
   } finally {
     repo.cleanup();
   }

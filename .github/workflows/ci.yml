@@ -472,13 +472,16 @@ jobs:
           # Pre-installed on the self-hosted CI server, whose runner user has no sudo. RUNNER_ENVIRONMENT is a
           # default variable the runner sets for every job: 'github-hosted' or 'self-hosted'.
           if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
-            sudo apt-get update
-            sudo apt-get install -y postgresql-client postgresql-16
+            bash .github/scripts/install-postgresql-hosted.sh
           fi
-          test -x /usr/lib/postgresql/16/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/pg_ctl
+          # The suites run on these binaries: fail on a server with older ones instead of testing the wrong release.
+          /usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
+          /usr/lib/postgresql/18/bin/psql --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
       - name: Test storefront order explicit delegation
         env:
-          PG_BIN: /usr/lib/postgresql/16/bin
+          PG_BIN: /usr/lib/postgresql/18/bin
         run: |
           TEST_LINE_ENDINGS=lf python3 supabase/tests/run_storefront_order_explicit_columns.py
           TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_storefront_order_explicit_columns.py
@@ -511,7 +514,7 @@ jobs:
 
       - name: Run X token authentication SQL contract
         env:
-          PG_BIN: /usr/lib/postgresql/16/bin
+          PG_BIN: /usr/lib/postgresql/18/bin
         run: |
           set -euo pipefail
           command -v node >/dev/null
@@ -522,7 +525,7 @@ jobs:
 
       - name: Test PiggyVest stuck-funds runbook SQL
         env:
-          PG_BIN: /usr/lib/postgresql/16/bin
+          PG_BIN: /usr/lib/postgresql/18/bin
         run: |
           set -euo pipefail
           python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
@@ -575,29 +578,33 @@ jobs:
       - name: Run PiggyVest legacy runbook SQL against scratch PostgreSQL
         if: needs.changes.outputs.piggyvest_runbook == 'true'
         env:
-          PG_BIN: /usr/lib/postgresql/16/bin
+          PG_BIN: /usr/lib/postgresql/18/bin
           REQUIRE_PG_TESTS: '1'
         run: |
           set -euo pipefail
           # Pre-installed on the self-hosted CI server, whose runner user has no sudo.
           if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
-            sudo apt-get update
-            sudo apt-get install -y postgresql-16
+            bash .github/scripts/install-postgresql-hosted.sh
           fi
-          test -x /usr/lib/postgresql/16/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/pg_ctl
+          /usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
+          /usr/lib/postgresql/18/bin/psql --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
           pnpm --filter @baci/web exec vitest run tools/db/piggyvest-legacy
       - name: Test cart quota guard staging and signed PostgREST
         if: needs.changes.outputs.deploy_scripts == 'true'
         env:
-          PG_BIN: /usr/lib/postgresql/16/bin
+          PG_BIN: /usr/lib/postgresql/18/bin
         run: |
           set -euo pipefail
           # Pre-installed on the self-hosted CI server, whose runner user has no sudo.
           if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
-            sudo apt-get update
-            sudo apt-get install -y postgresql-16
+            bash .github/scripts/install-postgresql-hosted.sh
           fi
-          test -x /usr/lib/postgresql/16/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/initdb
+          test -x /usr/lib/postgresql/18/bin/pg_ctl
+          /usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
+          /usr/lib/postgresql/18/bin/psql --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
           curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 120 \
             -o "$RUNNER_TEMP/postgrest.tar.xz" \
             https://github.com/PostgREST/postgrest/releases/download/v16.4/postgrest-v16.4-linux-static-x86-64.tar.xz

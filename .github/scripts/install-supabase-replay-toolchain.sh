@@ -2,8 +2,10 @@
 # Installs (GitHub-hosted runners) or verifies (self-hosted CI server) the pinned DB replay toolchain:
 # PostgreSQL 18.6 client and server binaries plus the Supabase CLI.
 #
-# Keep the PostgreSQL release in lockstep with apps/web/tools/db/supabase-replay-contract.ts, which asserts
-# the same psql version before any replay runs, and with the two pins below.
+# The hosted PostgreSQL install (repository, key check and the exact pinned build) is the shared
+# install-postgresql-hosted.sh, the one place that pins the release. Keep the psql check below and
+# apps/web/tools/db/supabase-replay-contract.ts, which asserts the same psql version before any replay
+# runs, on that same release.
 set -euo pipefail
 
 # RUNNER_ENVIRONMENT is a default variable the runner sets for every job ("github-hosted" or "self-hosted", see
@@ -15,14 +17,7 @@ set -euo pipefail
 # (Ubuntu 26.04, runner user without administrator rights) has the same pinned toolchain
 # pre-installed (PostgreSQL 18.6 and the Supabase CLI), so only the checks below run there.
 if [ "$RUNNER_ENVIRONMENT" = 'github-hosted' ]; then
-  sudo install -d /usr/share/postgresql-common/pgdg
-  curl --fail --silent --show-error --location \
-    https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-    | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
-  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
-    | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-  sudo apt-get update
-  sudo apt-get install -y postgresql-18=18.6-1.pgdg24.04+2 postgresql-client-18=18.6-1.pgdg24.04+2
+  bash .github/scripts/install-postgresql-hosted.sh
   SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
   curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
     "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \

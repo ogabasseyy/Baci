@@ -64,6 +64,8 @@ SELECT * FROM (VALUES
    'public storefront/feed read; anon-safe projection'),
   ('public.get_merchant_signup_policy_health()',
    'cron health probe via anon client; booleans only'),
+  ('public.get_negotiation_cost_floor_price(uuid,uuid)',
+   'public negotiation read; returns only the derived floor (never products.cost_price), but the floor equals cost*1.1 when cost dominates, so it is a known residual oracle (follow-up: offer-evaluation RPC + rate limit)'),
   ('public.get_order_condition_prices(uuid,uuid[])',
    'public storefront/feed read; anon-safe projection'),
   ('public.get_order_inventory_proof(uuid,text,text)',

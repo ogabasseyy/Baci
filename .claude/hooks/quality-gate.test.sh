@@ -141,4 +141,25 @@ printf '{"transcript_path":"%s"}' "$T/t16" | CLAUDE_PROJECT_DIR="$HOME/.codex/wo
 printf '{"transcript_path":"%s","cwd":"%s"}' "$T/t17" "$R" | QUALITY_GATE_FOREIGN_PREFIXES="$T/wtB" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
 [ ! -s "$CHECK_LOG" ] || fail "custom foreign prefix should be ignored"
 
+# 18. repeated cwd across calls: a later call from the main checkout is not
+#     attributed to the worktree an earlier call cd'd into
+{ tool '{"command":"cd '"$T"'/wtA && ls"}' Bash "$R"; tool '{"command":"printf broken > x.ts"}' Bash "$R"; } > "$T/t18"
+run_gate "$T/t18" >/dev/null
+grep -qx "$R" "$CHECK_LOG" || fail "second call's write in the main checkout must be checked, got: $(cat "$CHECK_LOG")"
+
+# 19. a write BEFORE a later cd in the same command belongs to the original dir
+{ tool '{"command":"printf broken > x.ts; cd '"$T"'/wtA"}' Bash "$R"; } > "$T/t19"
+run_gate "$T/t19" >/dev/null
+grep -qx "$R" "$CHECK_LOG" || fail "write before cd must be attributed to the main checkout, got: $(cat "$CHECK_LOG")"
+
+# 20. sed -i / perl -pi: the file operand is attributed to its worktree
+{ tool '{"command":"sed -i s/a/b/ ../wtB/x"}' Bash "$T/wtA"; } > "$T/t20"
+run_gate "$T/t20" >/dev/null
+grep -qx "$T/wtB" "$CHECK_LOG" || fail "sed -i target in wtB should check wtB, got: $(cat "$CHECK_LOG")"
+
+# 21. fail-closed fallback honours QUALITY_GATE_FOREIGN_PREFIXES
+: > "$CHECK_LOG"
+printf '{"transcript_path":"%s"}' "$T/t16" | QUALITY_GATE_FOREIGN_PREFIXES="$T/wtA" CLAUDE_PROJECT_DIR="$T/wtA" bash "$HOOK_DIR/quality-gate.sh" >/dev/null 2>&1
+[ ! -s "$CHECK_LOG" ] || fail "custom foreign prefix must also be skipped in the fallback"
+
 echo "quality-gate tests: all passed"

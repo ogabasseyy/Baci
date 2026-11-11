@@ -7,13 +7,15 @@
 #   stop_hook_active      = prevents infinite retry loops
 #
 # Which folder is checked: only worktrees this session's transcript shows it
-# touched (cd / git -C / Edit / Write / Read paths) — see
+# touched (cd / git -C / shell writes / Edit / Write paths; reading a file does not count) — see
 # quality-gate-session-worktrees.sh. Other agents' worktrees are never checked,
 # and a session that touched nothing is skipped. Per-worktree checks (changed
 # work only, tests -> lint -> typecheck) live in quality-gate-check-worktree.sh.
 
 INPUT=$(cat)
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=quality-gate-foreign.sh
+source "$HOOK_DIR/quality-gate-foreign.sh"
 
 # Already fixing from a prior block: let it stop (printf, not echo: backslashes).
 if printf '%s\n' "$INPUT" | jq -e '.stop_hook_active == true' >/dev/null 2>&1; then
@@ -39,10 +41,7 @@ unset 'WORKTREES[${#WORKTREES[@]}-1]'
 if [ "$RC" = "rc=3" ] && [ -d "$PROJECT_DIR" ]; then
   top=$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)
   if [ -n "$top" ] && git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null | grep -qxF "worktree $top"; then
-    case "$top" in
-      "$HOME"/.codex/*|"$HOME"/Documents/Codex/*) ;;
-      *) WORKTREES=("$top") ;;
-    esac
+    is_foreign_agent_path "$top" || WORKTREES=("$top")
   fi
 fi
 

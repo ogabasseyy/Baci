@@ -121,8 +121,9 @@ fi
 
 # 4. CodeRabbit on uncommitted + committed-ahead changes. Fail-open: if it crashes, allow stop.
 if { [ -n "$DIRTY" ] || [ "${AHEAD:-0}" != "0" ]; } && command -v coderabbit >/dev/null 2>&1; then
-  CR_TYPE=uncommitted; [ "${AHEAD:-0}" != "0" ] && CR_TYPE=all
-  CR_RESULT=$(coderabbit review --agent -t "$CR_TYPE" 2>&1) || true
+  CR_SCOPE=(--uncommitted)
+  [ "${AHEAD:-0}" != "0" ] && CR_SCOPE=(--base-commit "$BASE")
+  CR_RESULT=$(coderabbit review --agent "${CR_SCOPE[@]}" --include-untracked 2>&1) || true
   CR_FINDINGS=$(echo "$CR_RESULT" | jq -Rr 'fromjson? | select(.type == "complete") | .findings // empty' 2>/dev/null | tail -1)
   if [ "$CR_FINDINGS" -gt 0 ] 2>/dev/null; then
     TRIMMED=$(echo "$CR_RESULT" | grep '"type":"finding"' | tail -30)

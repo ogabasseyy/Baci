@@ -13,10 +13,18 @@
 def unq: gsub("^[\"']|[\"']$"; "");
 def arg: "(\"[^\"]+\"|'[^']+'|[^\\s;&|)<>]+)";
 def pos: "(?:^|[;&|(])\\s*";
+# One ordered scan (not one scan per operator) so a write that happens BEFORE a
+# later `cd` keeps its place in the sequence. Alternatives: (1) cd/pushd/git -C/
+# tee, (2) `>`/`>>` redirect target, (3) in-place editors (sed -i, perl -pi),
+# whose file operand is the last argument.
 def cmd_ops:
-  [ scan(pos + "(cd|pushd|git\\s+-C|tee(?:\\s+-a)?)\\s+(?:--\\s+)?" + arg)
-    | {k: (if .[0] == "cd" or .[0] == "pushd" then "cd" else "p" end), a: (.[1] | unq)} ]
-  + [ scan("(?:^|[^>&0-9<])>>?\\s*" + arg) | {k: "p", a: (.[0] | unq)} ];
+  [ scan("(?:" + pos + "(cd|pushd|git\\s+-C|tee(?:\\s+-a)?)\\s+(?:--\\s+)?" + arg + ")"
+         + "|(?:(?:^|[^>&0-9<])>>?\\s*" + arg + ")"
+         + "|(?:" + pos + "(?:sed\\s+-i\\S*|perl\\s+-pi\\S*)(?:\\s+" + arg + ")+)")
+    | if .[0] != null then
+        {k: (if .[0] == "cd" or .[0] == "pushd" then "cd" else "p" end), a: (.[1] | unq)}
+      elif .[2] != null then {k: "p", a: (.[2] | unq)}
+      else {k: "p", a: (.[3] | unq)} end ];
 def mutates_cmd:
   test(pos + "git\\s+(-C\\s+" + arg + "\\s+)?(add|commit)\\b")
   or test("(?:^|[^>&0-9<])>>?\\s*[^&\\s]")

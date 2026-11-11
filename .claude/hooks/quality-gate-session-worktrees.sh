@@ -23,6 +23,8 @@ project_dir="${2:-}"
 [ -n "$transcript" ] && [ -f "$transcript" ] || exit 3
 
 home="${HOME:-}"
+# shellcheck source=quality-gate-foreign.sh
+source "$(dirname "$0")/quality-gate-foreign.sh"
 worktrees=()
 while IFS= read -r line; do
   case "$line" in
@@ -31,23 +33,13 @@ while IFS= read -r line; do
 done < <(git -C "$project_dir" worktree list --porcelain 2>/dev/null)
 [ ${#worktrees[@]} -gt 0 ] || exit 0
 
-# Other agents' checkouts are never ours. Defaults cover Codex; extend with
-# QUALITY_GATE_FOREIGN_PREFIXES (colon-separated absolute prefixes).
-is_foreign_agent_path() {
-  local pre
-  case "$1" in
-    "$home"/.codex/*|"$home"/Documents/Codex/*) return 0 ;;
-  esac
-  local IFS=:
-  for pre in ${QUALITY_GATE_FOREIGN_PREFIXES:-}; do
-    [ -n "$pre" ] && case "$1" in "$pre"|"$pre"/*) return 0 ;; esac
-  done
-  return 1
-}
-
 # Evidence lines from the transcript (see the .jq file for the format).
 extract_paths() {
-  jq -r -f "$(dirname "$0")/quality-gate-session-paths.jq" "$transcript" 2>/dev/null | awk '!seen[$0]++'
+  jq -r -f "$(dirname "$0")/quality-gate-session-paths.jq" "$transcript" 2>/dev/null |
+    awk -F'\t' '
+      $1 == "S"  { ctx = $0; print; next }
+      $1 == "cd" { ctx = ctx "|" $0; print; next }
+      !seen[ctx "|" $0]++'
 }
 
 # Resolve symlinks (macOS /var -> /private/var) on the deepest existing ancestor.

@@ -134,6 +134,7 @@ test('the no-review-body notice is posted once per pull request, not on every pu
   assert.equal(first.status, 0, first.stderr);
   assert.equal(first.posts.length, 1);
   assert.match(first.posts[0].body, /did not produce a review body/);
+  assert.match(first.posts[0].body, /once per pull request and review mode/);
   assert.equal(first.posts[0].commit_id, PR_HEAD_SHA);
 
   const laterPush = submit({ headSha: LATER_SHA, reviews: [fromBot(first.posts[0].body)] });
@@ -164,13 +165,26 @@ test('a produced review is still posted once per commit after a notice', () => {
   assert.equal(rerun.posts.length, 0);
 });
 
-test('a review that hit the wait limit passes the gate as incomplete instead of being read as a finding', () => {
+test('a Jules run that produced no review passes the gate as incomplete instead of being read as a finding', () => {
   const step = reviewStep('Run Jules review');
   const env = stepEnv(step, { EVENT_NAME: 'pull_request', REVIEW_MODE: 'fast', HEAD_SHA: PR_HEAD_SHA, PR_LABELS: '[]', COMMENT_BODY: '', COMMENT_AUTHOR_ASSOC: '' });
-  const timedOut = runWorkflowStep(step.run, { env, sleepScale: 100 }).runnerFile('jules-review.md');
-  assert.match(timedOut, /did not finish within the workflow polling window/);
+  const failed = [{ createTime: '2026-11-11T00:00:00Z', sessionFailed: { reason: 'Quota exhausted' } }];
+  const bodies = [];
+  for (const [julesState, activities, expected] of [
+    ['IN_PROGRESS', [], /did not finish within the workflow polling window/],
+    ['COMPLETED', [], /did not return a final review message/],
+    ['FAILED', failed, /Quota exhausted/],
+    ['AWAITING_USER_FEEDBACK', [], /manual intervention/],
+    ['PAUSED', [], /manual intervention/],
+  ]) {
+    const body = runWorkflowStep(step.run, { env, julesState, activities, sleepScale: 100 }).runnerFile('jules-review.md');
+    assert.match(body, expected, julesState);
+    assert.match(body, /incomplete, not clean/, julesState);
+    bodies.push(body);
+  }
 
-  const result = runGate(timedOut);
+  // One gate pass over all five: none of them may read as a finding.
+  const result = runGate(bodies.join('\n\n'));
   assert.equal(result.status, 0, result.stdout);
   assert.match(result.stdout, /Jules review passed/);
 });

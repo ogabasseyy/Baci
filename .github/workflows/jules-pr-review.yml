@@ -687,7 +687,7 @@ jobs:
 
           ## Findings
 
-          - low: No actionable review content was returned.
+          - None reported. Jules finished without a review message, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -705,7 +705,7 @@ jobs:
 
           ## Findings
 
-          - medium: ${failure_reason:-No failure reason was returned by the Activities API.}
+          - None reported. The Jules session failed before it produced a review, so this review is incomplete, not clean. Reason: ${failure_reason:-No failure reason was returned by the Activities API.}
 
           ## Suggested next steps
 
@@ -722,7 +722,7 @@ jobs:
 
           ## Findings
 
-          - medium: The session requires manual intervention before it can finish.
+          - None reported. The session requires manual intervention before it can finish, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -852,7 +852,7 @@ jobs:
 
           The workflow did not produce a review body. Check the workflow logs for the failure point.
 
-          This notice is posted once per pull request. Later pushes that get no Jules review will not repeat it.
+          This notice is posted once per pull request and review mode. Later pushes that get no Jules review will not repeat it.
           EOF
           fi
 

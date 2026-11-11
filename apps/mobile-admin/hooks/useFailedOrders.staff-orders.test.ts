@@ -69,6 +69,14 @@ describe('bugfix: staff invoices treated as abandoned checkouts', () => {
         { recorded_by_user_id: 'staff-user-1' },
       ],
       ['a WhatsApp order with a cleared creator', { source: 'whatsapp' }],
+      [
+        'an imported order with an unlisted source',
+        {
+          external_source: 'bumpa',
+          import_job_id: 'job-1',
+          source: 'snap_chat',
+        },
+      ],
     ])('keeps %s out of follow-up', async (_label, overrides) => {
       const row = {
         ...staleCheckout,
@@ -90,10 +98,14 @@ describe('bugfix: staff invoices treated as abandoned checkouts', () => {
     });
   });
 
-  it('still follows up a staff invoice whose payment failed', async () => {
+  it.each([
+    'failed',
+    'expired',
+    'bnpl_pending',
+  ])('still follows up a staff invoice whose payment is %s', async (paymentStatus) => {
     const row = {
       ...staleCheckout,
-      payment_status: 'failed',
+      payment_status: paymentStatus,
       recorded_by_user_id: 'staff-user-1',
       source: 'physical',
     };

@@ -108,6 +108,21 @@ describe('applyOrderListVisibilityFilter', () => {
       ).toBe(true);
     });
 
+    it.each([
+      'snap_chat',
+      'online_store',
+    ])('shows an unpaid imported order with source %s', (source) => {
+      expect(
+        isVisible({
+          ...staffInvoice,
+          external_source: 'bumpa',
+          import_job_id: 'job-1',
+          recorded_by_user_id: null,
+          source,
+        })
+      ).toBe(true);
+    });
+
     it('shows an unpaid staff order recorded against a checkout channel', () => {
       expect(isVisible({ ...staffInvoice, source: 'online_store' })).toBe(true);
     });

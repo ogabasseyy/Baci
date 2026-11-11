@@ -54,15 +54,23 @@ export const STAFF_ORDER_SOURCE_VALUES = [
 
 const STAFF_ORDER_SOURCES = `(${STAFF_ORDER_SOURCE_VALUES.join(',')})`;
 
+// Imported orders (Bumpa and other migrations) carry external_source and
+// usually import_job_id. They are historical records, never abandoned
+// checkouts, whatever source key the import gave them.
+
 /** Conditions for use inside and(): the order is a customer checkout. */
 export const CUSTOMER_CHECKOUT_ORDER_FILTER = [
   'recorded_by_user_id.is.null',
+  'external_source.is.null',
+  'import_job_id.is.null',
   `or(source.is.null,source.not.in.${STAFF_ORDER_SOURCES})`,
 ].join(',');
 
-/** Conditions for use inside or(): the order was entered by staff. */
+/** Conditions for use inside or(): the order was entered or imported by staff. */
 export const STAFF_CREATED_ORDER_FILTER = [
   'recorded_by_user_id.not.is.null',
+  'external_source.not.is.null',
+  'import_job_id.not.is.null',
   `source.in.${STAFF_ORDER_SOURCES}`,
 ].join(',');
 

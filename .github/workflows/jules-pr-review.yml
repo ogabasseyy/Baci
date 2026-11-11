@@ -29,8 +29,12 @@ concurrency:
 jobs:
   window:
     name: Jules availability window
-    # The cutoff is checked when this job runs; a review admitted just before
-    # November 12 UTC may start later if its runner is queued.
+    # Backstop only. Google plans to retire Jules on 2026-12-31, so no new review
+    # starts from 2027-01-01 UTC. Until then Jules keeps reviewing; if Google stops
+    # taking new work sooner, the review job gets no answer and gives up after its
+    # own wait limit (JULES_FAST_WAIT_SECONDS / JULES_DEEP_WAIT_SECONDS below).
+    # The date is checked when this job runs; a review admitted just before
+    # January 1 UTC may start later if its runner is queued.
     # Keep automatic fast reviews same-repo only: forked pull_request runs do not receive
     # JULES_API_KEY, so running them would only post noisy fallback reviews instead of useful output.
     if: >-
@@ -64,11 +68,11 @@ jobs:
             echo 'Invalid UTC date; refusing to start a Jules review.' >&2
             exit 1
           fi
-          if [[ "$today" < '2026-11-12' ]]; then
+          if [[ "$today" < '2027-01-01' ]]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
           else
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            echo 'Jules is read-only after November 11; no review was started.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Google planned to retire Jules on 2026-12-31, so automatic Jules reviews stop from 2027-01-01; no review was started.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
   review:
@@ -76,7 +80,8 @@ jobs:
     needs: [window]
     if: needs.window.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    # Must stay well above the longest wait below (60 minutes) so the notice still gets posted.
+    timeout-minutes: 90
 
     steps:
       - name: Run Jules review
@@ -91,6 +96,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          # How long to wait for Jules before giving up, so a silent Jules cannot hold a runner
+          # (GitHub-hosted jobs are shared, 20 at a time). Fast reviews mostly take 8 to 15
+          # minutes and the slowest of 82 on 2026-11-10/11 to finish took 24, so 30 leaves room.
+          JULES_DEEP_WAIT_SECONDS: 3600
+          JULES_FAST_WAIT_SECONDS: 1800
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REVIEW_MODE: ${{ github.event_name == 'issue_comment' && 'deep' || 'fast' }}
@@ -120,11 +130,11 @@ jobs:
             exit 0
           fi
 
+          # Stop polling well before the job timeout so the fallback review below is still posted.
           if [[ "${REVIEW_MODE}" == "fast" ]]; then
-            poll_deadline_epoch=$(( $(date +%s) + 7200 ))
+            poll_deadline_epoch=$(( $(date +%s) + JULES_FAST_WAIT_SECONDS ))
           else
-            # Stop polling shortly before the 6-hour job timeout so fallback review posting still runs.
-            poll_deadline_epoch=$(( $(date +%s) + 21000 ))
+            poll_deadline_epoch=$(( $(date +%s) + JULES_DEEP_WAIT_SECONDS ))
           fi
 
           if [[ "${REVIEW_MODE}" == "deep" ]]; then
@@ -729,7 +739,7 @@ jobs:
 
           ## Findings
 
-          - low: Final session state was \`${state}\`.
+          - None reported. Jules was still in state \`${state}\` when the workflow stopped waiting, so this review is incomplete, not clean.
 
           ## Suggested next steps
 
@@ -829,6 +839,10 @@ jobs:
           marker="<!-- jules-pr-review mode:${REVIEW_MODE} sha:${reviewed_sha} -->"
 
           if [[ ! -f "${body_file}" ]]; then
+            # Nothing was produced (for example Google stopped taking new Jules sessions). Post this
+            # notice once per pull request and mode, not on every push: its marker names no commit, so
+            # the duplicate check below finds the first notice again on every later push.
+            marker="<!-- jules-pr-review mode:${REVIEW_MODE} notice:no-review-body -->"
             body_file="$RUNNER_TEMP/jules-review-submit-fallback.md"
             cat > "${body_file}" <<EOF
           ${marker}
@@ -837,6 +851,8 @@ jobs:
           Mode: \`${REVIEW_MODE}\`
 
           The workflow did not produce a review body. Check the workflow logs for the failure point.
+
+          This notice is posted once per pull request. Later pushes that get no Jules review will not repeat it.
           EOF
           fi
 

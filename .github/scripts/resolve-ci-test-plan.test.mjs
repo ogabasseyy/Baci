@@ -14,7 +14,8 @@ test('targets Vitest changed tests for pull requests with only local web source 
     }),
     {
       mode: 'targeted-web-vitest',
-      reason: 'Pull request changes are limited to apps/web source or test files.',
+      reason:
+        'Pull request changes are limited to apps/web source or test files.',
       command:
         'pnpm --filter @baci/web exec vitest run --changed origin/main --passWithNoTests',
     }

@@ -13,9 +13,12 @@ const PLANNER_SOURCES = [
 ];
 const PROVIDER = '.github/scripts/vitest-changed-files-provider.mjs';
 const NEW_PLANNER_FILES = [
+  '.github/scripts/resolve-ci-test-plan-cli.mjs',
   '.github/scripts/resolve-ci-test-plan-git.mjs',
   '.github/scripts/resolve-ci-test-plan-paths.mjs',
   '.github/scripts/resolve-ci-test-plan-paths.test.mjs',
+  '.github/scripts/resolve-ci-test-plan-readers.mjs',
+  '.github/scripts/resolve-ci-test-plan-readers.test.mjs',
   '.github/scripts/resolve-ci-test-plan-contract.test.mjs',
   '.github/scripts/resolve-ci-test-plan-cases.test-support.mjs',
   '.github/scripts/resolve-ci-test-plan-classes.test.mjs',
@@ -43,7 +46,9 @@ test('the web and mobile admin gates list the planner modules', () => {
   }
   for (const file of [
     PROVIDER,
+    '.github/scripts/resolve-ci-test-plan-cli.mjs',
     '.github/scripts/resolve-ci-test-plan-paths.mjs',
+    '.github/scripts/resolve-ci-test-plan-readers.mjs',
   ]) {
     assert.ok(
       filters.mobile_admin.includes(file),
@@ -62,6 +67,7 @@ test('the config suite runs every planner suite', () => {
     'resolve-ci-test-plan-contract.test.mjs',
     'resolve-ci-test-plan-diff.test.mjs',
     'resolve-ci-test-plan-paths.test.mjs',
+    'resolve-ci-test-plan-readers.test.mjs',
     'resolve-ci-test-plan-triggers.test.mjs',
     'vitest-changed-files-provider.test.mjs',
     'vitest-changed-files-provider-git.test.mjs',

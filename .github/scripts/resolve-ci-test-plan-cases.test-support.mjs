@@ -25,12 +25,14 @@ export const STOREFRONT_READER_REASON =
 export function plan(
   changedFiles,
   eventName = 'pull_request',
-  deletedFiles = []
+  deletedFiles = [],
+  nonWebReaders = []
 ) {
   return resolveCiTestPlan({
     baseRef: 'origin/main',
     changedFiles,
     deletedFiles,
     eventName,
+    nonWebReaders,
   });
 }

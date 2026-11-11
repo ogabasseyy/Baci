@@ -60,13 +60,26 @@ other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
 - **Files that tests read through fs** (migrations, SQL tests, the replay
   registry, docs, workflows other than `ci.yml`, `vps-workers`, markdown,
   `.jules`, `.ruler`, `vercel.json`): targeted too, with the
-  readers added by the Vitest provider below.
+  readers added by the Vitest provider below, unless a test outside `apps/web`
+  names the changed file (next section).
 
 One full trigger or one unknown path in a diff keeps the whole suite. So does a
 mobile storefront change next to a file that tests read: the provider feeds
 Vitest only, and Jest's `--changedSince` cannot follow fs reads (for example a
 storefront test that reads a release workflow), so only the full path runs the
 whole storefront test script.
+
+## Tests outside apps/web
+
+The provider only reaches tests in `apps/web`. The tests of the mobile apps and
+of the packages run only on the full affected path, so the planner searches
+`apps/mobile-admin`, `apps/mobile-storefront` and `packages/*` itself
+(`resolve-ci-test-plan-readers.mjs`) for a test that names a changed data file,
+by its path or by its bare name next to a quote or separator. Any hit keeps the
+full suite and the reason names the test. A mention of the file's folder does
+not count: those tests read specific old migrations or workflows, and nobody
+outside `apps/web` lists a data folder today. A contract test fails if one
+starts to. If the search itself fails, the plan is the full suite.
 
 ## The Vitest provider
 

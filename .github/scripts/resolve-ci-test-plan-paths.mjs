@@ -260,3 +260,13 @@ export function readerNeedlesFor(file) {
 
   return [...needles];
 }
+
+/**
+ * Strings that name `file` itself rather than one of its folders: its path and
+ * its bare name behind a quote or separator. Tests outside apps/web only run on
+ * the full path, so only a test that names the changed file itself forces it
+ * (a mention of the folder is far too common to be a signal).
+ */
+export function exactReaderNeedlesFor(file) {
+  return [file, ...bareNameNeedles(file.split('/').pop())];
+}

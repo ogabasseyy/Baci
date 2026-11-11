@@ -119,7 +119,7 @@ export function listCandidateSources(top) {
 }
 
 /** The file's text, `TOO_LARGE` over the size cap, or `undefined` when unreadable. */
-function readSource(path) {
+export function readSource(path) {
   try {
     const text = readFileSync(path, 'utf8');
     return text.length > MAX_SOURCE_BYTES ? TOO_LARGE : text;

@@ -63,9 +63,20 @@ it('records independent evidence only after owner effect and build match a secon
     kind: 'draft',
     effectDigest: approval.effectDigest,
     markerDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+    expiresAt: approval.expiresAt,
   });
   await f.verifier.verifyCommitted(client as never, { receiptId: id });
   expect(f.deps.verifyPublic).toHaveBeenCalledWith(client, { receiptId: id });
+});
+it('does not certify when the approval expiry changes during capture', async () => {
+  const f = setup();
+  vi.mocked(loadDraftApproval)
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce({ ...approval, expiresAt: '2098-01-01T00:00:00Z' });
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_MISMATCH');
+  expect(f.deps.record).not.toHaveBeenCalled();
 });
 it('rejects evidence for a different build digest and approval ownership changes', async () => {
   const f = setup();

@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { snapshotKeyDigest } from '@/lib/experience/snapshot-key';
+import { createVerifierApprovalRecorder } from '../../tools/experience-verifier/approval-recorder';
 import { createVerifierCaptureRecorder } from '../../tools/experience-verifier/capture-recorder';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -82,6 +83,68 @@ it('writes a verified capture only through the restricted verifier role', async 
     ).toBe('1');
     await expect(
       pool.query('SELECT * FROM experience_snapshots')
+    ).rejects.toThrow();
+    const intent = randomUUID();
+    const owner = (
+      await f.db.pool.query('SELECT user_id FROM merchants WHERE id=$1', [
+        f.merchantId,
+      ])
+    ).rows[0].user_id;
+    const row = await f.db.pool.query(
+      "INSERT INTO experience_authorization.lifecycle_intents(id,merchant_id,actor_user_id,retry_key,action,payload,effect_digest,snapshot,expires_at) VALUES($1,$2,$3,$4,'draft-only','{}',$5,'{}',statement_timestamp()+interval '90 seconds') RETURNING expires_at",
+      [intent, f.merchantId, owner, randomUUID(), digest]
+    );
+    const recordApproval = await createVerifierApprovalRecorder(pool);
+    await recordApproval({
+      approvalId: intent,
+      kind: 'lifecycle',
+      effectDigest: digest,
+      markerDigest: 'c'.repeat(64),
+      expiresAt: row.rows[0].expires_at.toISOString(),
+    });
+    const proof = await f.db.pool.query(
+      'SELECT effect_digest,expires_at FROM experience_authorization.lifecycle_checks WHERE intent_id=$1',
+      [intent]
+    );
+    expect(proof.rows[0].effect_digest).toBe(digest);
+    expect(proof.rows[0].expires_at.getTime()).toBeLessThanOrEqual(
+      row.rows[0].expires_at.getTime()
+    );
+    const evidenceId = randomUUID();
+    await f.db.pool.query(
+      'INSERT INTO experience_evidence(id,merchant_id,job_id,attempt_nonce,build_digest,receipt_digest,host_origin) SELECT $1,merchant_id,id,attempt_nonce,$3,$3,$4 FROM experience_jobs WHERE id=$2',
+      [evidenceId, job, digest, 'https://shop.synthetic.test']
+    );
+    const draftIntent = randomUUID();
+    const draft = await f.db.pool.query(
+      "INSERT INTO experience_authorization.apply_intents(id,merchant_id,actor_user_id,build_id,evidence_id,expected_version,retry_key,effect_digest,expires_at) VALUES($1,$2,$3,$4,$5,0,$6,$7,statement_timestamp()+interval '90 seconds') RETURNING expires_at",
+      [
+        draftIntent,
+        f.merchantId,
+        owner,
+        build,
+        evidenceId,
+        randomUUID(),
+        digest,
+      ]
+    );
+    await recordApproval({
+      approvalId: draftIntent,
+      kind: 'draft',
+      effectDigest: digest,
+      markerDigest: 'd'.repeat(64),
+      expiresAt: draft.rows[0].expires_at.toISOString(),
+    });
+    const draftProof = await f.db.pool.query(
+      'SELECT effect_digest,expires_at FROM experience_authorization.approval_checks WHERE intent_id=$1',
+      [draftIntent]
+    );
+    expect(draftProof.rows[0].effect_digest).toBe(digest);
+    expect(draftProof.rows[0].expires_at.getTime()).toBeLessThanOrEqual(
+      draft.rows[0].expires_at.getTime()
+    );
+    await expect(
+      pool.query('SELECT * FROM experience_authorization.lifecycle_checks')
     ).rejects.toThrow();
     await expect(createVerifierCaptureRecorder(f.db.pool)).rejects.toThrow(
       'UNSAFE_VERIFIER_DATABASE_SESSION'

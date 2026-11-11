@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { z } from 'zod';
 import {
   experienceCapturedEvidence,
   experienceVerifierDigest,
@@ -24,6 +25,7 @@ export interface IndependentApprovalDependencies {
     kind: 'draft' | 'lifecycle';
     effectDigest: string;
     markerDigest: string;
+    expiresAt: string;
   }): Promise<void>;
   verifyPublic(
     client: SupabaseClient,
@@ -43,6 +45,9 @@ export function createIndependentApprovalVerifier(
       const effectDigest = experienceVerifierDigest.parse(
         approval.effectDigest
       );
+      const expiresAt = z.iso
+        .datetime({ offset: true })
+        .parse(approval.expiresAt);
       const buildId =
         typeof approval.buildId === 'string' ? approval.buildId : undefined;
       const evidence = experienceCapturedEvidence.parse(
@@ -73,6 +78,7 @@ export function createIndependentApprovalVerifier(
         current.status !== 'confirmation-required' ||
         current.effectDigest !== effectDigest ||
         current.merchantId !== approval.merchantId ||
+        current.expiresAt !== expiresAt ||
         (buildId && current.buildId !== buildId)
       )
         throw Error('APPROVAL_MISMATCH');
@@ -81,6 +87,7 @@ export function createIndependentApprovalVerifier(
         kind,
         effectDigest,
         markerDigest: digestBytes(JSON.stringify(evidence)),
+        expiresAt,
       });
     },
     verifyCommitted: deps.verifyPublic,

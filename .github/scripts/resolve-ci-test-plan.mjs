@@ -1,9 +1,14 @@
-import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import {
+  getChangedFiles,
+  getDeletedFiles,
+} from './resolve-ci-test-plan-git.mjs';
+import {
+  isDeletedSourceFile,
   isFsReaderFile,
+  isSharedConfigFile,
   isTargetableMobileStorefrontFile,
   isTargetableWebFile,
 } from './resolve-ci-test-plan-paths.mjs';
@@ -63,7 +68,8 @@ export function isFullAffectedTrigger(file) {
     ROOT_FULL_TEST_FILES.has(file) ||
     WEB_FULL_TEST_FILES.has(file) ||
     MOBILE_STOREFRONT_FULL_TEST_FILES.has(file) ||
-    ROOT_FULL_TEST_PREFIXES.some((prefix) => file.startsWith(prefix))
+    ROOT_FULL_TEST_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
+    isSharedConfigFile(file)
   );
 }
 
@@ -75,11 +81,19 @@ const WEB_AND_STOREFRONT_REASON =
   'Pull request changes are limited to apps/web and mobile storefront source or test files.';
 const STOREFRONT_REASON =
   'Pull request changes are limited to mobile storefront source or test files.';
+const DELETED_SOURCE_REASON =
+  'Deleted or renamed source files keep the full affected test path: unchanged tests may still import them.';
 // Jest's `--changedSince` follows imports only and the changed-files provider
 // feeds Vitest alone, so storefront tests that read a data file are not
 // selected: next to a storefront change only the full path runs them.
 const STOREFRONT_READER_REASON =
   'Mobile storefront changes next to files that tests read keep the full affected test path: storefront Jest cannot follow fs reads.';
+
+export {
+  changedFilesDiffArgs,
+  getChangedFiles,
+  getDeletedFiles,
+} from './resolve-ci-test-plan-git.mjs';
 
 function normalizeChangedFile(file) {
   return file
@@ -104,6 +118,7 @@ export function resolveCiTestPlan({
   baseRef,
   changedFileContents = {},
   changedFiles,
+  deletedFiles = [],
   eventName,
 }) {
   const normalizedFiles = changedFiles
@@ -142,6 +157,10 @@ export function resolveCiTestPlan({
     return fullAffectedPlan(
       'Shared, package, CI, or test setup changes require the full affected test path.'
     );
+  }
+
+  if (deletedFiles.map(normalizeChangedFile).some(isDeletedSourceFile)) {
+    return fullAffectedPlan(DELETED_SOURCE_REASON);
   }
 
   const webFiles = scopedFiles.filter(isTargetableWebFile);
@@ -222,27 +241,6 @@ function parseArgs(argv) {
   return args;
 }
 
-// Deleted files and both sides of a rename are real changes: a PR that deletes
-// a shared file, or moves it out of a package, can break tests that still
-// import it. `--no-renames` lists the old path of a rename as a deletion, and
-// the absence of a `--diff-filter` keeps deletions in the list.
-export function changedFilesDiffArgs(baseRef, headRef) {
-  return ['diff', '--name-only', '--no-renames', `${baseRef}...${headRef}`];
-}
-
-export function getChangedFiles(baseRef, headRef, { cwd } = {}) {
-  try {
-    return execFileSync('git', changedFilesDiffArgs(baseRef, headRef), {
-      cwd,
-      encoding: 'utf8',
-    })
-      .split('\n')
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 function writeGithubOutput(plan) {
   if (!process.env.GITHUB_OUTPUT) {
     return;
@@ -257,6 +255,7 @@ function writeGithubOutput(plan) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const changedFiles = getChangedFiles(args.baseRef, args.headRef);
+  const deletedFiles = getDeletedFiles(args.baseRef, args.headRef);
   const changedFileContents = ciTestPlanConfig.getChangedFileContents(
     changedFiles,
     args.baseRef,
@@ -266,6 +265,7 @@ function main() {
     baseRef: args.baseRef,
     changedFileContents,
     changedFiles,
+    deletedFiles,
     eventName: args.eventName,
   });
 

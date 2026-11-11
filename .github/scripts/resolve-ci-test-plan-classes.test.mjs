@@ -13,8 +13,8 @@ import {
 } from './resolve-ci-test-plan-cases.test-support.mjs';
 
 // Test files directly in apps/web (Vitest runs them when they change) and
-// Playwright specs (their own browser workflows run them) used to sit outside
-// the web allow-list.
+// Playwright specs in the browser-workflow folders (checkout-browser.yml runs
+// them) used to sit outside the web allow-list.
 test('apps/web root test files next to web source no longer force the full suite', () => {
   for (const file of [
     'apps/web/next.config.routing.test.ts',
@@ -33,7 +33,7 @@ test('Playwright specs next to web source no longer force the full suite', () =>
   for (const file of [
     'apps/web/tests/checkout-browser/contact.pw.ts',
     'apps/web/tests/oxygen-policy-browser/policy.pw.ts',
-    'apps/web/e2e/signup.pw.ts',
+    'apps/web/tests/experience-browser/qualification.pw.ts',
   ]) {
     const result = plan([WEB_SOURCE, file]);
 
@@ -122,7 +122,7 @@ test('migration-only PR with its replay registry entry stays on the targeted web
 
 for (const file of [
   'apps/mobile-storefront/__tests__/checkout/contact.test.tsx',
-  'apps/mobile-storefront/__mocks__/expo-secure-store.ts',
+  'apps/mobile-storefront/__tests__/helpers/render-with-providers.tsx',
 ]) {
   test(`${file} runs the targeted storefront Jest command`, () => {
     assert.deepEqual(plan([file]), {

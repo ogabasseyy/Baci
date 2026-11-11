@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DELETED_SOURCE_REASON,
   FULL_COMMAND,
   OUTSIDE_SCOPE_REASON,
   plan,
@@ -82,6 +83,7 @@ test('fixtures that tests read through fs keep the full suite in the newly targe
     'apps/web/tests/builder-chatgpt/page.html',
     'apps/mobile-storefront/__tests__/__snapshots__/checkout.test.tsx.snap',
     'apps/mobile-storefront/__mocks__/catalog.json',
+    'apps/mobile-storefront/__mocks__/expo-secure-store.js',
   ]) {
     assert.deepEqual(plan([WEB_SOURCE, fixture]), FULL_OUTSIDE_SCOPE, fixture);
   }
@@ -103,6 +105,77 @@ test('the other apps/web/tests folders keep the full suite', () => {
     'apps/web/tests/typecheck/cart.tsx',
   ]) {
     assert.deepEqual(plan([WEB_SOURCE, file]), FULL_OUTSIDE_SCOPE, file);
+  }
+});
+
+// Vitest reruns its whole suite when any package.json or Vite/Vitest config is in
+// the changed list. A targeted plan would run every test in the single unsharded
+// job (about 10,800 tests), so these go to the sharded full path wherever they sit.
+test('any package.json or Vite/Vitest config keeps the sharded full suite', () => {
+  for (const file of [
+    'vps-workers/package.json',
+    'apps/web/tools/builder-auth/package.json',
+    'apps/web/mcp-server/widgets/package.json',
+    'apps/web/tests/checkout-browser/harness/package.json',
+    'docs/examples/package.json',
+    'apps/web/vite.config.ts',
+    'apps/web/tools/experience-runner/vitest.config.mjs',
+  ]) {
+    assert.deepEqual(
+      plan([WEB_SOURCE, file]),
+      { mode: 'full-affected', reason: TRIGGER_REASON, command: FULL_COMMAND },
+      file
+    );
+  }
+});
+
+// Neither `vitest --changed` nor Jest can select an unchanged test that still
+// imports a deleted module (the import no longer resolves), so the deletion of
+// source code keeps the full suite. The old filter hid deletions altogether.
+test('deleting or renaming away a source file keeps the full suite', () => {
+  for (const removed of [
+    'apps/web/src/lib/old-module.ts',
+    'apps/web/tools/cost/old-helper.ts',
+    'apps/mobile-storefront/components/OldCard.tsx',
+    'apps/web/src/lib/__fixtures__/catalog.json',
+  ]) {
+    assert.deepEqual(
+      plan([WEB_SOURCE, removed], 'pull_request', [removed]),
+      {
+        mode: 'full-affected',
+        reason: DELETED_SOURCE_REASON,
+        command: FULL_COMMAND,
+      },
+      removed
+    );
+  }
+  // A deletion-only pull request is no exception.
+  assert.equal(
+    plan(['apps/web/src/lib/old-module.ts'], 'pull_request', [
+      'apps/web/src/lib/old-module.ts',
+    ]).mode,
+    'full-affected'
+  );
+});
+
+test('deleting tests, docs, migrations or registry entries does not keep the full suite', () => {
+  const expectedMode = {
+    'apps/web/src/lib/old-module.test.ts': 'targeted-web-vitest',
+    'apps/mobile-storefront/__tests__/old.test.tsx':
+      'targeted-web-and-storefront-tests',
+    'docs/audits/old-report.md': 'targeted-web-vitest',
+    'supabase/migrations/20261111090000_never_applied.sql':
+      'targeted-web-vitest',
+    'apps/web/tools/db/replay-registry/20261111090000_x/sql-checks.txt':
+      'targeted-web-vitest',
+  };
+
+  for (const [removed, mode] of Object.entries(expectedMode)) {
+    assert.equal(
+      plan([WEB_SOURCE, removed], 'pull_request', [removed]).mode,
+      mode,
+      removed
+    );
   }
 });
 
@@ -149,6 +222,17 @@ test('markdown and Playwright specs inside workspace packages keep the full suit
     'apps/mobile-admin/e2e/login.pw.ts',
   ]) {
     assert.deepEqual(plan([WEB_SOURCE, unknown]), FULL_OUTSIDE_SCOPE, unknown);
+  }
+});
+
+// A Playwright spec is validated by the browser workflow, which only covers the
+// folders it lists (a contract test pins that); a spec anywhere else is unknown.
+test('Playwright specs outside the browser-workflow folders keep the full suite', () => {
+  for (const file of [
+    'apps/web/e2e/signup.pw.ts',
+    'apps/web/playwright/cart.pw.ts',
+  ]) {
+    assert.deepEqual(plan([WEB_SOURCE, file]), FULL_OUTSIDE_SCOPE, file);
   }
 });
 

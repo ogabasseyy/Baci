@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   FS_READER_FAMILIES,
@@ -9,26 +8,25 @@ import {
   readerNeedlesFor,
 } from './resolve-ci-test-plan-paths.mjs';
 
+const FAMILY_EXAMPLES = {
+  'supabase/migrations/20261111090000_x.sql': 'supabase',
+  'supabase/config.toml': 'supabase',
+  'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt': 'replay-registry',
+  'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json': 'docs',
+  '.github/workflows/pilot-codec-compatibility.yml': 'github-metadata',
+  '.github/filters/ci.yml': 'github-metadata',
+  '.github/copilot-instructions.md': 'github-metadata',
+  'vps-workers/deploy.sh': 'vps-workers',
+  '.jules/atlas.md': 'agent-notes',
+  '.ruler/01-critical-rules.md': 'agent-notes',
+  '.coderabbit.yaml': 'agent-notes',
+  'AGENTS.md': 'markdown',
+  'apps/web/src/lib/x/notes.md': 'markdown',
+  'vercel.json': 'vercel',
+};
+
 test('each fs-reader family claims its files and leaves code alone', () => {
-  const expected = {
-    'supabase/migrations/20261111090000_x.sql': 'supabase',
-    'supabase/config.toml': 'supabase',
-    'apps/web/tools/db/replay-registry/2026_x/sql-checks.txt':
-      'replay-registry',
-    'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json': 'docs',
-    '.github/workflows/pilot-codec-compatibility.yml': 'github-metadata',
-    '.github/filters/ci.yml': 'github-metadata',
-    '.github/copilot-instructions.md': 'github-metadata',
-    'vps-workers/deploy.sh': 'vps-workers',
-    '.jules/atlas.md': 'agent-notes',
-    '.ruler/01-critical-rules.md': 'agent-notes',
-    '.coderabbit.yaml': 'agent-notes',
-    'AGENTS.md': 'markdown',
-    'apps/web/src/lib/x/notes.md': 'markdown',
-    'vercel.json': 'vercel',
-    'apps/web/tests/checkout-browser/contact.pw.ts': 'playwright',
-  };
-  for (const [file, family] of Object.entries(expected)) {
+  for (const [file, family] of Object.entries(FAMILY_EXAMPLES)) {
     assert.equal(fsReaderFamilyOf(file)?.id, family, file);
   }
 
@@ -115,19 +113,17 @@ test('a bare file name needs a separator or quote before it', () => {
   assert.ok(readerNeedlesFor('apps/web/README.md').includes('/README.md'));
 });
 
-test('markdown and Playwright specs outside a directory family are matched by their own path only', () => {
+test('markdown outside a directory family is matched by its own path only', () => {
   assert.deepEqual(readerNeedlesFor('apps/web/src/lib/x/notes.md'), [
     'apps/web/src/lib/x/notes.md',
     'src/lib/x/notes.md',
   ]);
-  assert.deepEqual(
-    readerNeedlesFor('apps/web/tests/checkout-browser/contact.pw.ts'),
-    [
-      'apps/web/tests/checkout-browser/contact.pw.ts',
-      'tests/checkout-browser/contact.pw.ts',
-    ]
-  );
   assert.deepEqual(readerNeedlesFor('apps/web/src/lib/a.ts'), []);
+  // Playwright specs are no reader family: the browser workflow validates them.
+  assert.equal(
+    isFsReaderFile('apps/web/tests/checkout-browser/contact.pw.ts'),
+    false
+  );
 });
 
 test('no search string is broad enough to select a large part of the suite', () => {
@@ -168,13 +164,14 @@ test('no search string is broad enough to select a large part of the suite', () 
   }
 });
 
-test('every family documents why it is safe to hand to the provider', () => {
-  const header = readFileSync(
-    '.github/scripts/resolve-ci-test-plan-paths.mjs',
-    'utf8'
-  );
-  for (const { id } of FS_READER_FAMILIES) {
-    assert.ok(typeof id === 'string' && id.length > 0);
+// A new family without an example (and so without a test of what it claims) must
+// fail here instead of passing unnoticed.
+test('every fs-reader family has an example in the table above', () => {
+  const covered = new Set(Object.values(FAMILY_EXAMPLES));
+
+  for (const { id, floor, matches } of FS_READER_FAMILIES) {
+    assert.equal(typeof matches, 'function', id);
+    assert.ok(Number.isFinite(floor) || floor === Number.POSITIVE_INFINITY, id);
+    assert.ok(covered.has(id), `${id} needs an example in FAMILY_EXAMPLES`);
   }
-  assert.match(header, /Why each family is safe/);
 });

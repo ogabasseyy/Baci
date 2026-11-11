@@ -13,6 +13,7 @@ const PLANNER_SOURCES = [
 ];
 const PROVIDER = '.github/scripts/vitest-changed-files-provider.mjs';
 const NEW_PLANNER_FILES = [
+  '.github/scripts/resolve-ci-test-plan-git.mjs',
   '.github/scripts/resolve-ci-test-plan-paths.mjs',
   '.github/scripts/resolve-ci-test-plan-paths.test.mjs',
   '.github/scripts/resolve-ci-test-plan-contract.test.mjs',
@@ -81,13 +82,32 @@ function plannerModes() {
   return modes;
 }
 
+// The step of `quality-test` that branches on the planner mode. It is found by
+// what it does, not by its name, so renaming the step does not break the test.
+function modeStepScript() {
+  const step = workflow.jobs['quality-test'].steps.find(
+    (candidate) =>
+      typeof candidate.run === 'string' &&
+      candidate.run.includes('TEST_PLAN_MODE')
+  );
+  assert.ok(
+    step,
+    'quality-test needs a step whose script branches on $TEST_PLAN_MODE'
+  );
+  return step.run;
+}
+
+// `if [ "$TEST_PLAN_MODE" = "mode" ]` in any quoting; returns where it starts.
+function modeBranchStart(script, mode) {
+  const pattern = new RegExp(`TEST_PLAN_MODE["']?\\s*==?\\s*["']?${mode}["']?`);
+  return script.search(pattern);
+}
+
 // ci.yml hard-codes what each mode runs and ignores the planner's `command`.
 // A mode it does not know falls through to the non-web path and the web suite
 // would silently not run at all, so every mode must be handled there.
 test('ci.yml handles every mode the planner can return', () => {
-  const runTests = workflow.jobs['quality-test'].steps.find(
-    (step) => step.name === 'Run Tests'
-  ).run;
+  const runTests = modeStepScript();
   const modes = plannerModes();
 
   assert.deepEqual(
@@ -99,7 +119,7 @@ test('ci.yml handles every mode the planner can return', () => {
       'targeted-web-and-storefront-tests',
       'targeted-web-vitest',
     ],
-    'a new planner mode needs a branch in the ci.yml "Run Tests" step first'
+    'a new planner mode needs a branch in the ci.yml mode step first'
   );
   for (const mode of modes) {
     if (mode === 'full-affected') {
@@ -110,7 +130,7 @@ test('ci.yml handles every mode the planner can return', () => {
       assert.match(runTests, /run-ci-non-web-tests\.mjs/);
     } else {
       assert.ok(
-        runTests.includes(`"$TEST_PLAN_MODE" = "${mode}"`),
+        modeBranchStart(runTests, mode) !== -1,
         `ci.yml has no branch for ${mode}`
       );
     }
@@ -118,21 +138,19 @@ test('ci.yml handles every mode the planner can return', () => {
 });
 
 test('the targeted web branches keep the changed-files run the provider plugs into', () => {
-  const runTests = workflow.jobs['quality-test'].steps.find(
-    (step) => step.name === 'Run Tests'
-  ).run;
+  const runTests = modeStepScript();
   for (const mode of [
     'targeted-web-vitest',
     'targeted-web-and-storefront-tests',
   ]) {
-    const branch = runTests
-      .split(/\n\s*if \[ "\$TEST_PLAN_MODE" = /)
-      .find((block) => block.startsWith(`"${mode}"`));
-    assert.ok(branch, mode);
-    assert.ok(
-      branch.includes(
-        'pnpm --filter @baci/web exec vitest run --changed "$TURBO_SCM_BASE" --passWithNoTests'
-      ),
+    const start = modeBranchStart(runTests, mode);
+    assert.ok(start !== -1, `ci.yml has no branch for ${mode}`);
+    // Each branch ends with `exit 0`.
+    const end = runTests.indexOf('exit 0', start);
+    const branch = runTests.slice(start, end === -1 ? undefined : end);
+    assert.match(
+      branch,
+      /vitest run --changed "\$TURBO_SCM_BASE" --passWithNoTests/,
       `${mode} must run vitest --changed so the provider is used`
     );
   }
@@ -145,19 +163,24 @@ test('the web Vitest config uses the changed-files provider', async () => {
     config,
     /const changedFilesProvider = path\.resolve\(\s*__dirname,\s*'\.\.\/\.\.\/\.github\/scripts\/vitest-changed-files-provider\.mjs'/
   );
-  // A missing file must not stop Vitest from starting (sparse checkouts).
   assert.match(
     config,
-    /existsSync\(changedFilesProvider\)\s*\?\s*\{\s*experimental:\s*\{\s*vcsProvider:\s*changedFilesProvider/
+    /const changedFilesPaths = path\.resolve\(\s*__dirname,\s*'\.\.\/\.\.\/\.github\/scripts\/resolve-ci-test-plan-paths\.mjs'/
+  );
+  // Vitest loads the provider on every run, and the provider imports the path
+  // classes: a sparse checkout without either file must not stop Vitest.
+  assert.match(
+    config,
+    /existsSync\(changedFilesProvider\)\s*&&\s*existsSync\(changedFilesPaths\)\s*\?\s*\{\s*experimental:\s*\{\s*vcsProvider:\s*changedFilesProvider/
   );
   const provider = await import(new URL(`../../${PROVIDER}`, import.meta.url));
   assert.equal(typeof provider.default.findChangedFiles, 'function');
 });
 
-// Playwright specs are in a reader family because Vitest never runs them. Their
-// validation is the browser workflow, so it must really run for every pull
-// request and cover every spec folder. experience-browser has no pull request
-// workflow today; it was already targeted-only before this planner change.
+// Vitest never runs Playwright specs. Their validation is the browser workflow,
+// so it must really run for every pull request and cover every spec folder that
+// the planner targets. experience-browser has no pull request workflow today; it
+// was already targeted-only before this planner change.
 test('every Playwright spec folder is run by the browser workflow on every pull request, or is listed as having none', () => {
   const browser = YAML.parse(
     readFileSync('.github/workflows/checkout-browser.yml', 'utf8')

@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   changedFilesDiffArgs,
   getChangedFiles,
+  getDeletedFiles,
   resolveCiTestPlan,
 } from './resolve-ci-test-plan.mjs';
 import { createGitFixture } from './resolve-ci-test-plan-git-fixture.test-support.mjs';
@@ -141,6 +142,82 @@ test('an unreadable base ref yields no files so the planner keeps the full suite
 
     assert.deepEqual(files, []);
     assert.equal(planFor(files).mode, 'full-affected');
+  } finally {
+    repo.cleanup();
+  }
+});
+
+// bugfix: with deletions now visible, a deleted module that an unchanged test
+// still imports looked like a harmless web change: `vitest --changed` cannot
+// select that test because the import no longer resolves.
+test('bugfix: a deleted module with an unchanged importer keeps the full suite', () => {
+  const repo = createGitFixture();
+  try {
+    repo.write('apps/web/src/lib/b.ts', 'export const b = 1;\n');
+    repo.write(
+      'apps/web/src/lib/b.test.ts',
+      "import { b } from './b';\nit('b', () => expect(b).toBe(1));\n"
+    );
+    repo.write('apps/web/src/lib/other.ts', 'export const other = 1;\n');
+    repo.commit('base');
+    repo.branch('feature');
+    repo.remove('apps/web/src/lib/b.ts');
+    repo.write('apps/web/src/lib/other.ts', 'export const other = 2;\n');
+    repo.commit('feature');
+
+    const changedFiles = getChangedFiles('main', 'HEAD', { cwd: repo.root });
+    const deletedFiles = getDeletedFiles('main', 'HEAD', { cwd: repo.root });
+
+    assert.deepEqual(deletedFiles, ['apps/web/src/lib/b.ts']);
+    // Without the deleted list the plan would be targeted and skip b.test.ts.
+    assert.equal(
+      resolveCiTestPlan({
+        baseRef: 'main',
+        changedFiles: changedFiles.filter(
+          (file) => !deletedFiles.includes(file)
+        ),
+        deletedFiles: [],
+        eventName: 'pull_request',
+      }).mode,
+      'targeted-web-vitest'
+    );
+    assert.equal(
+      resolveCiTestPlan({
+        baseRef: 'main',
+        changedFiles,
+        deletedFiles,
+        eventName: 'pull_request',
+      }).mode,
+      'full-affected'
+    );
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('deleted files are the deletions and the old side of renames, not edits or additions', () => {
+  const repo = createGitFixture();
+  try {
+    repo.write('apps/web/src/gone.ts', 'export const gone = 1;\n');
+    repo.write('apps/web/src/moved.ts', 'export const moved = 1;\n');
+    repo.write('apps/web/src/edited.ts', 'export const edited = 1;\n');
+    repo.commit('base');
+    repo.branch('feature');
+    repo.remove('apps/web/src/gone.ts');
+    repo.remove('apps/web/src/moved.ts');
+    repo.write('apps/web/src/moved-to.ts', 'export const moved = 1;\n');
+    repo.write('apps/web/src/edited.ts', 'export const edited = 2;\n');
+    repo.write('apps/web/src/added.ts', 'export const added = 1;\n');
+    repo.commit('feature');
+
+    assert.deepEqual(
+      getDeletedFiles('main', 'HEAD', { cwd: repo.root }).sort(),
+      ['apps/web/src/gone.ts', 'apps/web/src/moved.ts']
+    );
+    assert.deepEqual(
+      getDeletedFiles('no-such-ref', 'HEAD', { cwd: repo.root }),
+      []
+    );
   } finally {
     repo.cleanup();
   }

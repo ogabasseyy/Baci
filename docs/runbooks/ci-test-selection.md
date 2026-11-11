@@ -38,21 +38,26 @@ The full triggers are listed in `.github/scripts/resolve-ci-test-plan.mjs`; the
 other classes live in `.github/scripts/resolve-ci-test-plan-paths.mjs`.
 
 - **Full suite:** CI wiring (`ci.yml`, `.github/actions`, the planner and the
-  Vitest provider), shared packages, `package.json`, lockfile, `tsconfig`,
-  test setup files, mobile admin, any unknown path, and every non-PR event.
+  Vitest provider), shared packages, any `package.json` (at any depth), any
+  Vite or Vitest config, lockfile, `tsconfig`, test setup files, mobile admin,
+  any unknown path, deleted source files, and every non-PR event. A
+  `package.json` anywhere makes Vitest rerun every test, which a targeted plan
+  would run in one unsharded job, so it goes to the shards.
 - **Targeted:** `apps/web` source, tools and root `*.test.*` / `*.spec.*` files;
   code files in the three browser-workflow test folders
   (`tests/checkout-browser`, `tests/oxygen-policy-browser`,
   `tests/oxygen-cookie-harness`); mobile storefront source and the code files in
-  `__tests__` and `__mocks__`. Fixtures there (text, JSON, HTML, snapshots) keep
+  `__tests__`. Fixtures there (text, JSON, HTML, snapshots) keep
   the full suite because import-following cannot see them. The other
   `apps/web/tests` folders keep it too: several are excluded from the default
   Vitest run (`exclude` in `vitest.config.ts`) and run through their own
   scripts. Storefront `config/` also keeps it: its `*.test.mjs` suites only run
-  through the package `test` script (`node --test`), which Jest skips.
+  through the package `test` script (`node --test`), which Jest skips, and
+  `__mocks__` too: Jest wires those files through its config, which
+  `--changedSince` cannot map back to tests.
 - **Files that tests read through fs** (migrations, SQL tests, the replay
   registry, docs, workflows other than `ci.yml`, `vps-workers`, markdown,
-  `.jules`, `.ruler`, `vercel.json`, Playwright specs): targeted too, with the
+  `.jules`, `.ruler`, `vercel.json`): targeted too, with the
   readers added by the Vitest provider below.
 
 One full trigger or one unknown path in a diff keeps the whole suite. So does a
@@ -84,17 +89,21 @@ Limits (what it cannot find):
 
 Test files too large to search (over 1.5 MB) are assumed to be readers.
 
-Playwright specs belong to a family only because Vitest never runs them. Those
-under `tests/checkout-browser`, `tests/oxygen-policy-browser` and
-`tests/oxygen-cookie-harness` run in `checkout-browser.yml` on every pull
-request (a contract test pins that). `tests/experience-browser` has no pull
-request workflow; it was already targeted-only before this change.
+Playwright specs are never run by Vitest. Those under `tests/checkout-browser`,
+`tests/oxygen-policy-browser` and `tests/oxygen-cookie-harness` run in
+`checkout-browser.yml` on every pull request (a contract test pins that), so
+they are targeted. A Playwright spec anywhere else is unknown and keeps the full
+suite. `tests/experience-browser` has no pull request workflow; it was already
+targeted-only before this change.
 
 ## Deleted files
 
 The planner lists deleted files and both sides of a rename (`git diff
---no-renames`, no `--diff-filter`), so removing a shared file next to a web
-edit still runs the full suite.
+--name-only --no-renames`, no `--diff-filter`). Deleting or renaming away a
+source file keeps the full suite: an unchanged test may still import it, and
+neither `vitest --changed` nor Jest can select that test because the import no
+longer resolves. Deleting a test, a doc, a migration or a registry entry does
+not: nothing imports a test, and the provider finds the readers of a data file.
 
 ## Changing this
 

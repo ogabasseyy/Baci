@@ -35,8 +35,9 @@ export const WEB_TARGETED_PREFIXES = [
 // there keeps the full suite.
 const MODULE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 // Folders under apps/web/tests whose code `vitest --changed` follows normally
-// (route tests of the checkout harness, support code) and whose browser specs
-// run in checkout-browser.yml. The other test folders are not listed on purpose:
+// (route tests of the checkout harness, support code) and whose Playwright specs
+// (`*.pw.ts`, never run by Vitest) run in checkout-browser.yml on every pull
+// request. A Playwright spec anywhere else is unknown and keeps the full suite. The other test folders are not listed on purpose:
 // several are excluded from the default Vitest run (see `exclude` in
 // vitest.config.ts) and run through their own scripts, so they keep the full
 // suite as before.
@@ -50,9 +51,6 @@ const WEB_BROWSER_TEST_FOLDERS = [
 // `next.config.routing.test.ts`). Vitest runs them when they change.
 const WEB_ROOT_TEST_FILE =
   /^apps\/web\/[^/]+\.(?:test|spec)\.(?:[cm]?[jt]s|[jt]sx)$/;
-
-// Playwright specs are executed by their own browser workflows, never by Vitest.
-const PLAYWRIGHT_SPEC = /^apps\/web\/.*\.pw\.[jt]sx?$/;
 
 // Markdown in a workspace package marks that package as changed for Turbo, whose
 // non-web test run would then include it; those paths stay unknown (full suite).
@@ -71,14 +69,13 @@ export const MOBILE_STOREFRONT_TARGETED_PREFIXES = [
   'apps/mobile-storefront/stores/',
 ];
 
-// Jest test folders. Only code files: snapshots and fixtures keep the full
-// suite. `config/` is deliberately NOT here: its `*.test.mjs` suites run through
-// the storefront package's `test` script (node --test), which Jest's default
-// patterns skip, so only the full path runs them.
-const MOBILE_STOREFRONT_MODULE_PREFIXES = [
-  'apps/mobile-storefront/__mocks__/',
-  'apps/mobile-storefront/__tests__/',
-];
+// Jest test folder. Only code files: snapshots and fixtures keep the full suite.
+// `config/` is deliberately NOT here: its `*.test.mjs` suites run through the
+// storefront package's `test` script (node --test), which Jest's default
+// patterns skip, so only the full path runs them. `__mocks__/` is not here
+// either: Jest wires those files through `setupFiles` and `moduleNameMapper`,
+// which `--changedSince` cannot map back to the tests that use them.
+const MOBILE_STOREFRONT_MODULE_PREFIXES = ['apps/mobile-storefront/__tests__/'];
 
 // Data files that tests read through fs. `floor` is the shallowest ancestor
 // directory (counted in path segments) the provider searches for in test
@@ -98,7 +95,7 @@ const MOBILE_STOREFRONT_MODULE_PREFIXES = [
 //   - .github metadata workflows other than ci.yml, filters, templates: read by
 //                      a few contract tests; CI wiring itself stays a trigger.
 //   - vps-workers/     has its own test job (`deploy_scripts` filter).
-//   - markdown, .jules/, .ruler/, root notes, vercel.json, Playwright specs.
+//   - markdown, .jules/, .ruler/, root notes, vercel.json.
 export const FS_READER_FAMILIES = [
   { id: 'supabase', matches: (file) => file.startsWith('supabase/'), floor: 2 },
   {
@@ -144,11 +141,6 @@ export const FS_READER_FAMILIES = [
     floor: Number.POSITIVE_INFINITY,
   },
   { id: 'vercel', matches: (file) => file === 'vercel.json', floor: 1 },
-  {
-    id: 'playwright',
-    matches: (file) => PLAYWRIGHT_SPEC.test(file),
-    floor: Number.POSITIVE_INFINITY,
-  },
 ];
 
 export function isTargetableWebFile(file) {
@@ -169,6 +161,32 @@ export function isTargetableMobileStorefrontFile(file) {
       file.startsWith(prefix)
     ) &&
       MODULE_FILE.test(file))
+  );
+}
+
+// Vitest reruns its whole suite when any package.json or Vite/Vitest config is in
+// the changed list (its default `forceRerunTriggers`). Routed to a targeted plan
+// that would put every test in the single unsharded job, so these files go to
+// the sharded full path instead, wherever they sit.
+const PACKAGE_JSON = /(?:^|\/)package\.json$/;
+const VITE_CONFIG = /(?:^|\/)(?:vitest|vite)\.config\.[^/]+$/;
+
+export function isSharedConfigFile(file) {
+  return PACKAGE_JSON.test(file) || VITE_CONFIG.test(file);
+}
+
+const TEST_FILE_NAME = /\.(?:test|spec)\.[^/]+$/;
+
+// A deleted (or renamed-away) source file can leave unchanged tests that still
+// import it. Neither `vitest --changed` nor Jest can select those tests, because
+// the import no longer resolves, so such a deletion keeps the full suite. Deleted
+// tests and deleted data files (docs, migrations, ...) do not: nothing imports a
+// test, and the provider finds the readers of a data file by name.
+export function isDeletedSourceFile(file) {
+  return (
+    (isTargetableWebFile(file) || isTargetableMobileStorefrontFile(file)) &&
+    !isFsReaderFile(file) &&
+    !TEST_FILE_NAME.test(file)
   );
 }
 

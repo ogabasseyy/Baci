@@ -40,6 +40,22 @@ test('join arguments, slashes and Windows separators read the same', () => {
   );
 });
 
+test('a regex-escaped path in a test still names the folder', () => {
+  assert.ok(
+    normalizeForNeedles(
+      '/^supabase\\/migrations\\/(\\d{14})_x[.]sql$/'
+    ).includes('supabase/migrations/')
+  );
+
+  const { readers } = readersOf(['supabase/migrations/20261111090000_x.sql'], {
+    'apps/web/tools/db/verify-sources.ts':
+      "import { readdirSync } from 'node:fs';\nconst MIGRATION = /^supabase\\/migrations\\/(\\d{14})_[a-z0-9_]+[.]sql$/;",
+    'apps/web/tools/db/unrelated.ts': 'const OTHER = /^docs\\/guides\\/x$/;',
+  });
+
+  assert.deepEqual(readers, ['apps/web/tools/db/verify-sources.ts']);
+});
+
 test('no source is listed or read when the diff holds no fs-reader file', () => {
   const { listed, readers } = readersOf(
     ['apps/web/src/lib/a.ts', 'apps/web/src/lib/a.test.ts'],

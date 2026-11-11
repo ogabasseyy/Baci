@@ -117,9 +117,13 @@ function readSource(path) {
   }
 }
 
-// `join('a', 'b')` and `'a/b'` must look the same, and so must Windows slashes.
+// `join('a', 'b')`, `'a/b'`, Windows slashes and a regex-escaped `a\/b` must all
+// look the same.
 export function normalizeForNeedles(text) {
-  return text.replace(/\\/g, '/').replace(/['"`]\s*,\s*['"`]/g, '/');
+  return text
+    .replace(/\\/g, '/')
+    .replace(/\/{2,}/g, '/')
+    .replace(/['"`]\s*,\s*['"`]/g, '/');
 }
 
 export function findFsReaders({ changedFiles, listCandidates, readText }) {

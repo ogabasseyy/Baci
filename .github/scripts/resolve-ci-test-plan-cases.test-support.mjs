@@ -17,9 +17,20 @@ export const TRIGGER_REASON =
   'Shared, package, CI, or test setup changes require the full affected test path.';
 export const WEB_SOURCE_REASON =
   'Pull request changes are limited to apps/web source or test files.';
+export const DELETED_SOURCE_REASON =
+  'Deleted or renamed source files keep the full affected test path: unchanged tests may still import them.';
 export const STOREFRONT_READER_REASON =
   'Mobile storefront changes next to files that tests read keep the full affected test path: storefront Jest cannot follow fs reads.';
 
-export function plan(changedFiles, eventName = 'pull_request') {
-  return resolveCiTestPlan({ baseRef: 'origin/main', changedFiles, eventName });
+export function plan(
+  changedFiles,
+  eventName = 'pull_request',
+  deletedFiles = []
+) {
+  return resolveCiTestPlan({
+    baseRef: 'origin/main',
+    changedFiles,
+    deletedFiles,
+    eventName,
+  });
 }

@@ -37,11 +37,16 @@ const reactDomTestUtilsPath = appRequire.resolve('react-dom/test-utils');
 const reactDomServerPath = appRequire.resolve('react-dom/server');
 // `vitest --changed` follows imports only. This provider also selects the tests
 // that read a changed data file (SQL, docs, workflows) through fs. It lives in
-// .github/scripts, which a sparse checkout may leave out; Vitest then falls back
-// to its own git provider instead of failing to start.
+// .github/scripts together with the path classes it imports; a sparse checkout
+// may leave them out, and Vitest then falls back to its own git provider
+// instead of failing to start (it loads the provider on every run).
 const changedFilesProvider = path.resolve(
   __dirname,
   '../../.github/scripts/vitest-changed-files-provider.mjs'
+);
+const changedFilesPaths = path.resolve(
+  __dirname,
+  '../../.github/scripts/resolve-ci-test-plan-paths.mjs'
 );
 const sharedPackagePath = path.resolve(__dirname, '../../packages/shared/src');
 const sharedAliases = [
@@ -139,7 +144,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,
-    ...(existsSync(changedFilesProvider)
+    ...(existsSync(changedFilesProvider) && existsSync(changedFilesPaths)
       ? { experimental: { vcsProvider: changedFilesProvider } }
       : {}),
     setupFiles: [path.join(__dirname, 'vitest.setup.ts')],

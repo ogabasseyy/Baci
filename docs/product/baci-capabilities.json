@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T20:07:51+00:00",
-  "source_revision": "c69653d2e34d035c6fb22e4d085669488e47e9c6",
-  "evidence_digest": "d27a97ee8d9029e5cd2fd6ece103fdcc7ec42d2268cfbad3cd84d6d60c6b8d50",
-  "claims_digest": "c1a7ecade749c33bfc183970a468117ddcd896acaa59f546a67d0d19942b353e",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Wallet-funded financing was reviewed for exact provider references, retryable reservation locks, kobo rounding and saved-order recovery. Klump is retired for new checkout and hidden in mobile merchant settings. Historical reconciliation remains available. Live lender and deployment outcomes remain unverified.",
+  "reviewed_at": "2026-11-10T23:42:19+00:00",
+  "source_revision": "f43e6cff2387fb6b24f6c06183b875047a113df1",
+  "evidence_digest": "4fed12e5b3b8341d41b51f4059c8304a54064fb6077f9a8ce76506f371a1175e",
+  "claims_digest": "bfcd17d5afb08998699ee61f59961f67d225fe7790f105714420579c75d63891",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence. Wallet-funded Credit Direct excludes platform-retained shipping and requires verified reservations for new settlement. Oxygen requires an admitted funding snapshot. Unresolved legacy attempts require authoritative recovery. Klump is retired for new checkout.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout supports local staging and a policy-controlled production rollout when its runtime and merchant binding are enabled; pilot admission does not establish production transaction readiness. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
@@ -20,15 +20,7 @@
         "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
         "apps/web/src/config/oxygen-storefront-staging.ts",
         "apps/web/src/app/api/payments/oxygen/storefront-availability/route.ts",
-        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql",
-        "apps/mobile-admin/components/payment-methods/payment-methods.ts",
-        "apps/web/src/app/api/payments/initialize/retired-gateway.ts",
-        "apps/web/src/app/api/payments/credit-direct/webhook/route.ts",
-        "apps/web/src/components/payments/oxygen/OxygenStorefrontCheckout.tsx",
-        "apps/web/src/components/storefront/ogabassey/pages/checkout/pending-checkout-oxygen-fence.ts",
-        "supabase/migrations/20261107161000_oxygen_wallet_remainder_funding.sql",
-        "supabase/migrations/20261107165000_credit_direct_wallet_attempt_reservation.sql",
-        "supabase/migrations/20261110170000_allow_captured_credit_direct_wallet_cancellation.sql"
+        "supabase/migrations/20261106210000_oxygen_storefront_pilot_availability.sql"
       ]
     },
     {
@@ -81,14 +73,20 @@
       "title": "Staff-entered orders",
       "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
-      "limitations": "Network and permissions are required. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
+      "limitations": "Network and permissions are required. For a paid order with an outstanding external payment (planned from the ledger by one shared function; when the ledger cannot be read the prompt falls back to offering the choice and the server decides), the web order page and the mobile order-details screen let the merchant choose an automatic refund or a cancel-only path with a manual refund (owner or refund permission). The automatic option is hidden when an outstanding leg is not a Paystack leg with a reference, and the mobile list-screen status dropdown always uses the automatic default. The automatic path is queued and depends on the provider accepting it, so do not claim every cancellation refunds the customer. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
       "source_refs": [
         "apps/web/src/app/dashboard/orders/create/page.tsx",
         "apps/mobile-admin/app/(admin)/order/new.tsx",
         "apps/mobile-admin/hooks/orders/useRecordPayment.ts",
         "apps/web/src/app/dashboard/orders/create/create-order-form.tsx",
         "apps/mobile-admin/hooks/useNewOrderController.ts",
-        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts"
+        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts",
+        "supabase/migrations/20261111090100_merchant_cancel_order_refund_mode.sql",
+        "packages/shared/src/lib/cancel-refund-plan.ts",
+        "apps/web/src/app/api/orders/[id]/cancelled/route.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/use-order-cancellation.ts",
+        "apps/web/src/app/dashboard/orders/[orderId]/cancel-order-dialog.tsx",
+        "apps/mobile-admin/hooks/createOrderDetailsStatusActions.ts"
       ]
     },
     {

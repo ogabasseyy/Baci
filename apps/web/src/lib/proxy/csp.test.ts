@@ -71,6 +71,23 @@ it.each([
     'https://checkout.creditdirect.ng'
   );
 });
+it.each([
+  false,
+  true,
+])('lets storefronts open the Supabase Realtime socket for shared-cart live updates (local=%s)', (isLocal) => {
+  // Browsers do not treat an https: source as covering wss:, so the cart's
+  // private Realtime channel needs its own source. Without it the browser
+  // blocks the connection and shoppers never receive cart-change notices.
+  const sources = directive(generateCSP('storefront', isLocal), 'connect-src');
+  expect(sources).toContain('wss://*.supabase.co');
+  expect(sources).toContain('https://*.supabase.co');
+  // No blanket WebSocket allowance: only the Supabase project hosts.
+  expect(sources).not.toContain('wss:');
+  expect(sources.filter((source) => source.startsWith('wss:'))).toEqual([
+    'wss://*.supabase.co',
+  ]);
+});
+
 it('permits consent-gated social SDKs and collectors only on storefronts', () => {
   const policy = generateCSP('storefront', false);
   expect(directive(policy, 'script-src')).toEqual(

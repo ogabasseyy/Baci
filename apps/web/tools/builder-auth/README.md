@@ -31,7 +31,13 @@ route only the intended broker endpoints. The listener is not started by
 importing or constructing the runtime and does not provision an ingress.
 
 `startProductionAuthBroker` accepts trusted operator configuration and opens a
-TLS-verified pool only for the dedicated auth-storage role. It rejects secret
+TLS-verified pool using the dedicated `baci_builder_auth_login` login, with
+`baci_builder_auth_storage` as the effective database role. The login must be
+NOINHERIT, non-superuser, non-bypass-RLS, and a member only of that storage
+role. Startup verifies both identities and fails closed on broader privileges.
+Use a direct connection or the Supabase session pooler on port 5432; transaction
+pooling is rejected because this broker relies on session state and locks. The
+login and its secret are not provisioned by this code. It rejects secret
 Supabase keys, mismatched upstream origins, unsafe callback/socket paths and
 reused key material, then starts the private socket only after runtime checks
 pass. It closes the listener and pool on shutdown. The Linux non-root entrypoint

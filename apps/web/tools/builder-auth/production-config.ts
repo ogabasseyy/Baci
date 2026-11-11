@@ -50,12 +50,13 @@ export function parseProductionAuthConfig(input: unknown) {
       db.protocol !== 'postgresql:' ||
       !db.password ||
       !db.hostname ||
+      (db.port !== '' && db.port !== '5432') ||
       db.pathname !== '/postgres' ||
       db.search ||
       db.hash ||
       !(
-        role === 'baci_builder_auth_storage' ||
-        /^baci_builder_auth_storage\.[a-z0-9]+$/.test(role)
+        role === 'baci_builder_auth_login' ||
+        /^baci_builder_auth_login\.[a-z0-9]+$/.test(role)
       )
     )
       throw Error();

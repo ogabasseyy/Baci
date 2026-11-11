@@ -17,7 +17,7 @@ async function fixture() {
   const key = await generateKeyPair('ES256', { extractable: true });
   return {
     databaseUrl:
-      'postgresql://baci_builder_auth_storage.fixture:password@pooler.example.test:5432/postgres',
+      'postgresql://baci_builder_auth_login.fixture:password@pooler.example.test:5432/postgres',
     socketPath: '/run/baci-builder-auth/broker.sock',
     clientId: 'baci-chatgpt-builder-v1',
     callback: 'https://chatgpt.com/connector_platform_oauth_redirect',
@@ -42,6 +42,20 @@ async function fixture() {
   };
 }
 
+const safeIdentity = () =>
+  Promise.resolve({
+    rows: [
+      {
+        login: 'baci_builder_auth_login',
+        role: 'baci_builder_auth_storage',
+        unsafe: false,
+        authenticated_member: false,
+        storage_member: true,
+        extra_memberships: false,
+      },
+    ],
+  });
+
 test('starts only after broker construction and closes listener before database', async () => {
   const events: string[] = [];
   let poolConfig: PoolConfig | undefined;
@@ -50,6 +64,7 @@ test('starts only after broker construction and closes listener before database'
     createPool: (settings) => {
       poolConfig = settings;
       return {
+        query: safeIdentity,
         end: async () => {
           events.push('pool-close');
         },
@@ -73,6 +88,7 @@ test('starts only after broker construction and closes listener before database'
   });
   assert.deepEqual(poolConfig?.ssl, { rejectUnauthorized: true });
   assert.equal(poolConfig?.max, 4);
+  assert.equal(poolConfig?.options, '-c role=baci_builder_auth_storage');
   assert.deepEqual(service.publicBinding.supabase, config.supabase);
   assert.equal(service.publicBinding.jwks.keys[0].kid, 'fixture');
   assert.equal('d' in service.publicBinding.jwks.keys[0], false);
@@ -103,6 +119,7 @@ test('invalid config creates no pool and startup failure closes its pool', async
     createPool: () => {
       created++;
       return {
+        query: safeIdentity,
         end: async () => {
           closed++;
         },
@@ -159,6 +176,7 @@ test('closes the pool and redacts listener errors during shutdown', async () => 
   const service = await startProductionAuthBroker(await fixture(), {
     createPool: () =>
       ({
+        query: safeIdentity,
         end: async () => {
           closed = true;
         },
@@ -176,5 +194,39 @@ test('closes the pool and redacts listener errors during shutdown', async () => 
     service.close(),
     (error: Error) => error.message === 'AUTH_BROKER_SHUTDOWN_FAILED'
   );
+  assert.equal(closed, true);
+});
+
+test('refuses a broad or misconfigured database session before starting the runtime', async () => {
+  let started = false;
+  let closed = false;
+  await assert.rejects(
+    startProductionAuthBroker(await fixture(), {
+      createPool: () =>
+        ({
+          query: async () => ({
+            rows: [
+              {
+                login: 'postgres',
+                role: 'baci_builder_auth_storage',
+                unsafe: true,
+                authenticated_member: true,
+                storage_member: true,
+                extra_memberships: true,
+              },
+            ],
+          }),
+          end: async () => {
+            closed = true;
+          },
+        }) as unknown as Pool,
+      createRuntime: async () => {
+        started = true;
+        throw Error('unexpected');
+      },
+    }),
+    /AUTH_BROKER_STARTUP_FAILED/
+  );
+  assert.equal(started, false);
   assert.equal(closed, true);
 });

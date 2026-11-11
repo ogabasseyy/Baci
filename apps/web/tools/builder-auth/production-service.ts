@@ -1,5 +1,6 @@
 import { Pool, type PoolConfig } from 'pg';
 import { parseProductionAuthConfig } from './production-config.ts';
+import { verifyProductionAuthDatabaseRole } from './production-role.ts';
 import { createBuilderAuthRuntime } from './runtime.ts';
 
 type RuntimeSettings = Parameters<typeof createBuilderAuthRuntime>[0];
@@ -25,7 +26,9 @@ export async function startProductionAuthBroker(
       ssl: { rejectUnauthorized: true },
       max: 4,
       connectionTimeoutMillis: 10000,
+      options: '-c role=baci_builder_auth_storage',
     });
+    await verifyProductionAuthDatabaseRole(pool);
     const runtime = await deps.createRuntime({
       pool,
       provider: config.provider,

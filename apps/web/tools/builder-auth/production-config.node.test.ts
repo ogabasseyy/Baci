@@ -8,7 +8,7 @@ async function fixture() {
   const key = await generateKeyPair('ES256', { extractable: true });
   return {
     databaseUrl:
-      'postgresql://baci_builder_auth_storage.fixture:password@pooler.example.test:5432/postgres',
+      'postgresql://baci_builder_auth_login.fixture:password@pooler.example.test:5432/postgres',
     socketPath: '/run/baci-builder-auth/broker.sock',
     clientId: 'baci-chatgpt-builder-v1',
     callback: 'https://chatgpt.com/connector_platform_oauth_redirect',
@@ -53,6 +53,11 @@ test('rejects broad database roles, insecure transport and mismatched upstreams'
         'postgresql://postgres:password@pooler.example.test/postgres',
     },
     { ...config, databaseUrl: `${config.databaseUrl}?sslmode=disable` },
+    {
+      ...config,
+      databaseUrl:
+        'postgresql://baci_builder_auth_login.fixture:password@pooler.example.test:6543/postgres',
+    },
     { ...config, callback: 'http://chatgpt.com/callback' },
     { ...config, socketPath: '/run/baci-builder-auth/../other.sock' },
     {
@@ -82,4 +87,24 @@ test('rejects missing or reused vault keys and unknown configuration', async () 
     { ...config, extra: 'unexpected' },
   ])
     assert.throws(() => parseProductionAuthConfig(bad), /INVALID_AUTH_CONFIG/);
+});
+
+test('accepts only the dedicated login principal instead of the NOLOGIN storage role', async () => {
+  const config = await fixture();
+  assert.doesNotThrow(() =>
+    parseProductionAuthConfig({
+      ...config,
+      databaseUrl:
+        'postgresql://baci_builder_auth_login.fixture:password@pooler.example.test:5432/postgres',
+    })
+  );
+  assert.throws(
+    () =>
+      parseProductionAuthConfig({
+        ...config,
+        databaseUrl:
+          'postgresql://baci_builder_auth_storage.fixture:password@pooler.example.test:5432/postgres',
+      }),
+    /INVALID_AUTH_CONFIG/
+  );
 });

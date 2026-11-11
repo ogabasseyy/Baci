@@ -226,3 +226,26 @@ describe('review hardening: destination matching', () => {
     expect(result.status).toBe('pickup_scheduled');
   });
 });
+
+describe('bugfix: MSHC after an explicit out-for-delivery scan is not demoted to pickup', () => {
+  it.each([
+    'WC',
+    'OFDU',
+  ])('keeps out_for_delivery for %s followed by MSHC with no earlier transit scans', (code) => {
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W12',
+        MobileShipmentTrackings: [
+          event(code, '10:00:00'),
+          event('MSHC', '11:00:00'),
+        ],
+      },
+      'W12',
+      OBSERVED_AT
+    );
+    expect(result.status).toBe('out_for_delivery');
+    expect(result.events.some((e) => e.status === 'pickup_scheduled')).toBe(
+      false
+    );
+  });
+});

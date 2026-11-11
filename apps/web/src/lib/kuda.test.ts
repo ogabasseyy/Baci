@@ -183,45 +183,8 @@ describe('Kuda API Client', () => {
       expect(result.message).toBe('Insufficient balance');
     });
 
-    it('returns a timeout error when the purchase request stalls', async () => {
-      const { purchaseAirtime } = await import('./kuda');
-      vi.useFakeTimers();
-
-      globalThis.fetch = vi.fn().mockImplementation((url, options) => {
-        if (url.toString().includes('GetToken')) {
-          return Promise.resolve({
-            ok: true,
-            text: () => Promise.resolve('token'),
-          } as Response);
-        }
-
-        const signal = options?.signal as AbortSignal;
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener(
-            'abort',
-            () => reject(new DOMException('Aborted', 'AbortError')),
-            { once: true }
-          );
-        });
-      });
-
-      const purchasePromise = purchaseAirtime(
-        '08030000000',
-        500,
-        NetworkProvider.MTN
-      );
-
-      await vi.advanceTimersByTimeAsync(15000);
-
-      const result = await purchasePromise;
-
-      expect(result.success).toBe(false);
-      expect(result.message).toBe('Purchase failed');
-      // Codex R102 P1: a timeout after Kuda accepts still lands the
-      // vend — pending routes to BILL_TSQ reconciliation instead of
-      // refunding on top of delivered value.
-      expect(result.status).toBe('pending');
-    });
+    // The purchase-request timeout tests (airtime and data) live in
+    // kuda-purchase-timeout.test.ts.
 
     it('fails outright when the GetToken request stalls (pre-dispatch)', async () => {
       // Codex R103 P1: the token fetch threw before any provider

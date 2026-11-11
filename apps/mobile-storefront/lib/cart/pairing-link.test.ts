@@ -48,16 +48,40 @@ it('keeps a valid pending pairing when a later invalid link arrives', () => {
   }
 });
 
-it('reduces non-pairing absolute URLs to the in-app cart route', () => {
+it('opens the app on its normal start screen, not the cart, for a home-screen launch', () => {
+  // Expo Router hands redirectSystemPath the app's own root URL
+  // (Linking.createURL('/')) when the app is opened from its icon.
+  for (const path of ['ogabassey:///', 'ogabassey://', 'baci:///']) {
+    expect(captureCartPairingLink(path, config)).toBe(path);
+  }
+  expect(peekCartPairingLink()).toBeNull();
+});
+
+it('leaves non-pairing deep links for the router instead of sending them to the cart', () => {
   for (const path of [
+    'ogabassey://product/phone?color=blue',
+    'ogabassey:///orders/123',
+    'https://shop.example.com/product/phone',
+    'https://alpha.usebaci.com/track-order',
     'https://evil.example/phish',
     '//evil.example/phish',
     'baci://evil.example/phish',
     'intent://evil.example/#Intent;scheme=https;end',
+    '/(tabs)/shop',
   ]) {
-    expect(captureCartPairingLink(path, config)).toBe('/cart');
+    expect(captureCartPairingLink(path, config)).toBe(path);
   }
-  expect(captureCartPairingLink('/(tabs)/shop', config)).toBe('/(tabs)/shop');
+  expect(peekCartPairingLink()).toBeNull();
+});
+
+it('sends an oversized non-pairing delivery to the start screen', () => {
+  const oversized = `ogabassey://product/${'a'.repeat(10001)}`;
+  expect(captureCartPairingLink(oversized, config)).toBe('/');
+  // A delivery that cannot be parsed as a URL is capped the same way.
+  const malformed = `https://[${'a'.repeat(10001)}`;
+  expect(captureCartPairingLink(malformed, config)).toBe('/');
+  expect(captureCartPairingLink('https://[bad', config)).toBe('https://[bad');
+  expect(peekCartPairingLink()).toBeNull();
 });
 
 it('captures a valid token when the global atob is unavailable', () => {

@@ -3149,7 +3149,7 @@ describe('POST /api/orders — wallet response shape', () => {
 
     const response = await POST(request);
     expect(response.status).toBe(status);
-    expect(await response.json()).toMatchObject({ code });
+    expect(await response.json()).toMatchObject({ code, orderId: 'order-id' });
   });
 
   it('partial wallet redemption surfaces wallet { amountUsed, newBalance, transactionId } and residual amountDueToGateway', async () => {

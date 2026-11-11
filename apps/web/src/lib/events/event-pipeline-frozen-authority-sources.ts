@@ -129,7 +129,7 @@ export const eventPipelineFrozenRoutes = {
   // Wallet projection uses the authenticated order client and distinguishes
   // contention from reconciliation. Existing event and credential authority is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '799b92f33aa5538330e2916dcc2eb01dac9e9c54bf05742fd9e3700b5d02372a',
+    'f72ef93bdd6cad7653d179d0eeb5a8f0bf25e4b4e33b5d8d6fb8474e212e3ac6',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

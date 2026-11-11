@@ -3062,7 +3062,11 @@ export async function POST(request: NextRequest) {
       );
       if (projectionFailure) {
         return NextResponse.json(
-          { error: projectionFailure.message, code: projectionFailure.code },
+          {
+            error: projectionFailure.message,
+            code: projectionFailure.code,
+            orderId: order.id,
+          },
           { status: projectionFailure.status }
         );
       }

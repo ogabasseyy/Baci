@@ -80,8 +80,10 @@ export function renderHtmlToPdf(
   );
   return new Promise((resolve, reject) => {
     const timeout = remainingTime(deadline);
-    if (waitingRenders.length + Number(rendering) >= MAX_PENDING_RENDERS)
-      throw new ReceiptPdfUnavailableError('Invoice PDF renderer is busy');
+    if (waitingRenders.length + Number(rendering) >= MAX_PENDING_RENDERS) {
+      reject(new ReceiptPdfUnavailableError('Invoice PDF renderer is busy'));
+      return;
+    }
     const controller = new AbortController();
     const run = async () => {
       try {

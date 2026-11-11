@@ -83,6 +83,14 @@ test('discovers a PDP and builds only the five exact origin HTML canaries', () =
   );
 });
 
+test('refuses canary hosts that carry a cdn label anywhere, not only a leading cdn.', () => {
+  for (const base of ['https://cdn.ogabassey.com', 'https://assets.cdn.ogabassey.com']) {
+    assert.throws(() => buildCanaryUrls(base, PDP_PATH), /five origin HTML canaries/, base);
+  }
+  // Only a label EQUAL to cdn is refused; names that merely start with the letters are fine.
+  assert.equal(buildCanaryUrls('https://cdn-store.example.com', PDP_PATH).length, 5);
+});
+
 test('delegates whole-site purge then verifies browser and Googlebot canaries', async () => {
   const { calls, fetchImpl } = makeSuccessfulFetch();
   const purgeCalls = [];
@@ -114,6 +122,7 @@ test('delegates whole-site purge then verifies browser and Googlebot canaries', 
 
 test('fails after purge when a stale products response does not reach the configured marker', async () => {
   let purgeCalls = 0;
+  let hostPurgeCalls = 0;
   const { fetchImpl } = makeSuccessfulFetch({
     fetchImpl: async (url) => {
       const parsed = new URL(url);
@@ -127,6 +136,10 @@ test('fails after purge when a stale products response does not reach the config
       runReleaseCoherence({
         env: ENV,
         fetchImpl,
+        hostPurgeImpl: async () => {
+          hostPurgeCalls += 1;
+          return { skipped: false };
+        },
         logger: { log: () => {}, warn: () => {} },
         releasePurgeImpl: async () => {
           purgeCalls += 1;
@@ -134,9 +147,18 @@ test('fails after purge when a stale products response does not reach the config
         },
         requestId: 'request-marker-skew',
       }),
-    /browser https:\/\/ogabassey\.com\/products: expected release_123, received other_release/
+    (error) => {
+      assert.match(
+        error.message,
+        /browser https:\/\/ogabassey\.com\/products: expected release_123, received other_release/
+      );
+      // Here the origin itself serves the wrong release, so a Cloudflare purge cannot fix it.
+      assert.match(error.message, /origin itself serves other_release on \/products/);
+      return true;
+    }
   );
   assert.equal(purgeCalls, 1);
+  assert.equal(hostPurgeCalls, 0);
 });
 
 test('fails after bounded retries when a canonical response keeps an old marker', async () => {
@@ -161,8 +183,10 @@ test('fails after bounded retries when a canonical response keeps an old marker'
   await assert.rejects(
     () =>
       runReleaseCoherence({
-        env: ENV,
+        // One verification attempt after the hostname-purge fallback keeps the arithmetic simple.
+        env: { ...ENV, STOREFRONT_RELEASE_ESCALATION_ATTEMPTS: '1' },
         fetchImpl,
+        hostPurgeImpl: async () => ({ skipped: false }),
         logger: { log: () => {}, warn: () => {} },
         releasePurgeImpl: successfulReleasePurge,
         requestId: 'request-old-canonical',
@@ -172,7 +196,8 @@ test('fails after bounded retries when a canonical response keeps an old marker'
       }),
     /browser https:\/\/ogabassey\.com\/products: expected release_123, received old_release/
   );
-  assert.equal(staleCalls, 2);
+  // 2 normal attempts + 1 attempt after the hostname purge; one wait between the normal attempts.
+  assert.equal(staleCalls, 3);
   assert.equal(sleepCalls, 1);
 });
 

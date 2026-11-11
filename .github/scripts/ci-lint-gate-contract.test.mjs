@@ -269,3 +269,10 @@ test('stays wired into the CI contract run', async () => {
     )
   );
 });
+
+test('quality aggregation executes the extracted helper after checkout', () => {
+  const steps = workflow.jobs.quality.steps;
+  const verify = steps.findIndex((step) => step.name === 'Verify split quality gate results');
+  assert.equal(steps[verify].run, 'bash .github/scripts/verify-quality-gate.sh');
+  assert.ok(steps.slice(0, verify).some((step) => step.uses?.startsWith('actions/checkout@')));
+});

@@ -14,9 +14,14 @@ on:
         description: 'iOS build number override (leave empty for auto)'
         required: false
         type: string
+      testflight_only:
+        description: 'Upload to TestFlight without submitting for App Review'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
-  group: ios-storefront-release-${{ github.ref }}
+  group: ios-storefront-release-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && '-testflight' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -45,9 +50,10 @@ jobs:
     # with ios-storefront-submit.yml so the two submission paths can never race
     # to cancel the same review or rename the same version. This is job-level on
     # purpose: the workflow-level group above keeps cancelling superseded
-    # release builds, which this must not undo.
+    # release builds, which this must not undo. TestFlight-only uploads use
+    # their own queue so they cannot replace a pending production submission.
     concurrency:
-      group: ios-storefront-app-store-submission
+      group: ${{ (github.event_name == 'workflow_dispatch' && inputs.testflight_only) && 'ios-storefront-testflight-upload' || 'ios-storefront-app-store-submission' }}
       cancel-in-progress: false
 
     steps:
@@ -320,7 +326,7 @@ jobs:
         # !cancelled() drops the implicit success() so a transient failure of the
         # preceding artifact-upload step can't skip submission once the build is
         # already on TestFlight; gate purely on the fastlane release outcome.
-        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.fastlane_release.outcome == 'success' && !(github.event_name == 'workflow_dispatch' && inputs.testflight_only) }}
         working-directory: ${{ env.WORKING_DIR }}
         env:
           CI: '1'

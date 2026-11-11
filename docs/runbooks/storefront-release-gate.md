@@ -57,6 +57,22 @@ Start from the Actions tab on `main`, or push a tag on a commit that is on
 | iOS | "iOS Storefront Production Release": builds, uploads to TestFlight and submits for App Review with automatic release. Leave the build number empty to use the next one. | `v<build>-storefront-ios`: the number becomes the build number and must be higher than the last one |
 | Android | "Android Storefront Production Release" with `publish_to_play` on and the `internal` track, to test first. | `v<version code>-storefront`: publishes straight to 100% of production; the number must be higher than every version code already uploaded, including the internal test build |
 
+For an iOS device test, run "iOS Storefront Production Release" on `main`
+with `testflight_only` enabled. It uploads the signed build to TestFlight
+without submitting it for App Review. Select the build in TestFlight on the
+device after processing and tester assignment. Record the tested app version
+and build number. To submit that exact build later, enter both values in
+"iOS Storefront Submit for Review". Check the latest App Store release date
+and confirm that App Store Connect still offers the tested build. If a release
+since the upload makes the build unavailable, rebuild and retest. Use a newer
+version if the tested version has already gone live.
+[Apple's build selection rules](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit/).
+
+Check the submit step's
+result even when the workflow succeeds. If another build occupies the App
+Review slot, submission is skipped unless the owner explicitly selects
+`cancel_review_for_resubmit` to withdraw the existing review.
+
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".
 

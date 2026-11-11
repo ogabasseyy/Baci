@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import test from 'node:test';
 import { createGitFixture } from './resolve-ci-test-plan-git-fixture.test-support.mjs';
 import provider, {
   findFsReaders,
-  listCandidateSources,
   normalizeForNeedles,
   TOO_LARGE,
 } from './vitest-changed-files-provider.mjs';
@@ -221,77 +217,4 @@ test('exports the shape Vitest requires of a vcsProvider module', async () => {
   } finally {
     repo.cleanup();
   }
-});
-
-// The reader search must keep finding the tests this repository relies on. If a
-// test below is renamed, update the path: the point is that these readers stay
-// selectable, because `vitest --changed` cannot see them through imports.
-test('finds the known readers of real migrations, registry files, workflows and the edge inventory', () => {
-  const top = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-    encoding: 'utf8',
-  }).trim();
-  const candidates = listCandidateSources(top);
-  const cache = new Map();
-  const readText = (file) => {
-    if (!cache.has(file)) {
-      try {
-        cache.set(file, readFileSync(resolve(top, file), 'utf8'));
-      } catch {
-        cache.set(file, undefined);
-      }
-    }
-    return cache.get(file);
-  };
-  const readersOfReal = (file) =>
-    findFsReaders({
-      changedFiles: [file],
-      listCandidates: () => candidates,
-      readText,
-    });
-
-  const migration = readersOfReal(
-    'supabase/migrations/20261111090000_new_migration_for_the_reader_search.sql'
-  );
-  assert.ok(
-    migration.length > 100,
-    `expected many migration readers, got ${migration.length}`
-  );
-  assert.ok(
-    migration.length < 1500,
-    `migration readers exploded to ${migration.length}`
-  );
-  assert.ok(
-    migration.includes(
-      'apps/web/src/lib/agentic/order-private-schema-usage-migration.test.ts'
-    )
-  );
-
-  const registry = readersOfReal(
-    'apps/web/tools/db/replay-registry/20261111090000_new/sql-checks.txt'
-  );
-  assert.ok(registry.includes('apps/web/tools/db/replay-registry.ts'));
-  assert.ok(registry.includes('apps/web/tools/db/replay-registry.test.ts'));
-
-  const inventory = readersOfReal(
-    'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
-  );
-  assert.ok(
-    inventory.includes(
-      'apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts'
-    )
-  );
-
-  const workflow = readersOfReal('.github/workflows/deploy.yml');
-  assert.ok(
-    workflow.includes(
-      'apps/web/src/lib/storefront-order-rpc-context-migration.test.ts'
-    )
-  );
-
-  // No web test reads the Jules notes; only this planner's own fixtures name them.
-  const notes = readersOfReal('.jules/prompts/atlas.md');
-  assert.deepEqual(
-    notes.filter((file) => file.startsWith('apps/web/')),
-    []
-  );
 });

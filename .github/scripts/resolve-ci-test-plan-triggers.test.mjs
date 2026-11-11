@@ -138,6 +138,8 @@ test('deleting or renaming away a source file keeps the full suite', () => {
     'apps/web/tools/cost/old-helper.ts',
     'apps/mobile-storefront/components/OldCard.tsx',
     'apps/web/src/lib/__fixtures__/catalog.json',
+    // A helper next to the Playwright specs is imported by them, unlike a spec.
+    'apps/web/tests/checkout-browser/cart-helpers.ts',
   ]) {
     assert.deepEqual(
       plan([WEB_SOURCE, removed], 'pull_request', [removed]),
@@ -167,6 +169,11 @@ test('deleting tests, docs, migrations or registry entries does not keep the ful
     'supabase/migrations/20261111090000_never_applied.sql':
       'targeted-web-vitest',
     'apps/web/tools/db/replay-registry/20261111090000_x/sql-checks.txt':
+      'targeted-web-vitest',
+    'apps/web/tests/checkout-browser/cart.pw.ts': 'targeted-web-vitest',
+    'apps/web/tests/oxygen-policy-browser/oxygen-policy.pw.ts':
+      'targeted-web-vitest',
+    'apps/web/tests/oxygen-cookie-harness/oxygen-cookie.pw.ts':
       'targeted-web-vitest',
   };
 

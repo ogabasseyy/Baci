@@ -17,7 +17,9 @@
 // literal, a non-test module that neither uses fs, builds paths nor holds the
 // path as a literal, and readers written in shell, Python or SQL (those are not
 // Vitest tests; their own CI jobs run them). Test files too large to search are
-// assumed to be readers.
+// assumed to be readers. Other modules too large to search are skipped, because
+// the realistic case is a generated types file (it reads nothing, and treating it
+// as a reader would select every test that imports it); they are named in the log.
 //
 // Wired in apps/web/vitest.config.ts as `test.experimental.vcsProvider`.
 import { execFileSync } from 'node:child_process';
@@ -207,11 +209,23 @@ export function findFsReaders({ changedFiles, listCandidates, readText }) {
 
 export function findChangedFilesWithFsReaders({ root, changedSince }) {
   const { top, files } = listGitChangedFiles({ root, changedSince });
+  const unsearched = [];
   const readers = findFsReaders({
     changedFiles: files,
     listCandidates: () => listCandidateSources(top),
-    readText: (file) => readSource(resolve(top, file)),
+    readText: (file) => {
+      const text = readSource(resolve(top, file));
+      if (text === TOO_LARGE && !TEST_FILE.test(file)) {
+        unsearched.push(file);
+      }
+      return text;
+    },
   });
+  if (unsearched.length > 0) {
+    console.error(
+      `changed-files provider: ${unsearched.length} module(s) over ${MAX_SOURCE_BYTES} bytes were not searched (for example ${unsearched.slice(0, 3).join(', ')})`
+    );
+  }
   const added = readers.filter((file) => !files.includes(file));
   if (added.length > 0) {
     const sample = added.slice(0, 3).join(', ');

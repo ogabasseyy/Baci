@@ -91,7 +91,10 @@ Limits (what it cannot find):
   their own CI jobs (selected by the `quiz_db`, `deploy_scripts` and similar
   filters) run them.
 
-Test files too large to search (over 1.5 MB) are assumed to be readers.
+Test files too large to search (over 1.5 MB) are assumed to be readers. Any
+other module over that size is skipped and named in the log: the realistic case
+is a generated types file, which reads nothing (the largest source file today is
+`apps/web/src/types/supabase.ts`, about 0.7 MB, and none is over the cap).
 `docs/` has no job behind it (migrations have the DB replay jobs, `vps-workers`
 its own tests), so for docs the name match is the only safety net.
 

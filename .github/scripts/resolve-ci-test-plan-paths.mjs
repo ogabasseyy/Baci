@@ -177,7 +177,8 @@ export function isSharedConfigFile(file) {
   return PACKAGE_JSON.test(file) || VITE_CONFIG.test(file);
 }
 
-const TEST_FILE_NAME = /\.(?:test|spec)\.[^/]+$/;
+// Unit tests and Playwright specs (`*.pw.ts`) are leaf files: nothing imports them.
+const TEST_FILE_NAME = /\.(?:test|spec|pw)\.[^/]+$/;
 
 // A deleted (or renamed-away) source file can leave unchanged tests that still
 // import it. Neither `vitest --changed` nor Jest can select those tests, because

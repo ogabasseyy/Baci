@@ -7,10 +7,13 @@ import { loadOwnerPreviewBootstrap } from '@/lib/experience/owner-preview-bootst
 import { createOwnerPreviewUserClientResolver } from '@/lib/experience/owner-preview-user-client';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
 import { loadLifecycleApproval } from '@/lib/experience/publication-service';
-import type { createRunnerExecutor } from '../experience-runner/runner-transport';
+import { createRunnerExecutor } from '../experience-runner/runner-transport';
 import { createApprovalCapture } from './approval-capture';
 import { createVerifierApprovalRecorder } from './approval-recorder';
 import { createVerifierAttestationHandler } from './attestation-handler';
+import { createVerifierBuildHandler } from './build-handler';
+import { createVerifierBuildRecorder } from './build-recorder';
+import { createIndependentBuildVerifier } from './build-verifier';
 import { createVerifierCaptureWorker } from './capture-worker';
 import { startVerifierListener } from './listener';
 import { createVerifierNonceStore } from './nonce-store';
@@ -42,6 +45,7 @@ export async function startVerifierService(settings: {
   });
   const consumeNonce = await createVerifierNonceStore(settings.pool);
   const record = await createVerifierApprovalRecorder(settings.pool);
+  const recordBuild = await createVerifierBuildRecorder(settings.pool);
   const resolveUserClient = createOwnerPreviewUserClientResolver(
     settings.supabase
   );
@@ -125,7 +129,24 @@ export async function startVerifierService(settings: {
     resolveUserClient,
     attest: verifier.attest,
   });
-  const listener = await startVerifierListener(handler, settings.port);
+  const buildHandler = createVerifierBuildHandler({
+    key: settings.key,
+    consumeNonce,
+    resolveUserClient,
+    verify: createIndependentBuildVerifier({
+      execute: createRunnerExecutor({ ...settings.runner, lane: 'owner' }),
+      bootstrap: loadOwnerPreviewBootstrap,
+      canonicalBase: settings.canonicalBase,
+      previewOrigin: settings.previewOrigin,
+      executionOrigin: settings.executionOrigin,
+      record: recordBuild,
+    }),
+  });
+  const listener = await startVerifierListener(
+    handler,
+    settings.port,
+    buildHandler
+  );
   return {
     async close() {
       await listener.close();

@@ -15,6 +15,7 @@ type Broker = {
 /** Trusted co-located process startup; never invoke from an HTTP request. */
 export async function startProductionBuilderHost(settings: {
   integration: PortsSettings['integration'];
+  buildVerifier?: PortsSettings['buildVerifier'];
   startBroker(): Promise<Broker>;
 }) {
   let broker: Broker | undefined;
@@ -25,6 +26,7 @@ export async function startProductionBuilderHost(settings: {
       broker: broker.runtime,
       supabase: broker.publicBinding.supabase,
       integration: settings.integration,
+      buildVerifier: settings.buildVerifier,
     });
     const installed = installProductionBuilderPorts(ports);
     let closing: Promise<void> | undefined;

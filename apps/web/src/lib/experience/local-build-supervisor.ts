@@ -219,14 +219,17 @@ export async function runExperienceBuild(
         proofs,
       })
     );
-    await deps.recordVerifiedEvidence({
-      merchantId: ctx.merchantId,
-      jobId: job.id,
-      attemptNonce: job.attempt_nonce,
-      buildDigest: candidate.digest,
-      receiptDigest,
-      hostOrigin,
-    });
+    await deps.recordVerifiedEvidence(
+      {
+        merchantId: ctx.merchantId,
+        jobId: job.id,
+        attemptNonce: job.attempt_nonce,
+        buildDigest: candidate.digest,
+        receiptDigest,
+        hostOrigin,
+      },
+      ctx
+    );
     const result = await finalizeExperienceBuild(ctx, input, {
       jobId: job.id,
       attemptNonce: job.attempt_nonce,

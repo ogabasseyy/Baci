@@ -21,10 +21,11 @@ async function listen(server: Server, port: number) {
 
 /** Start the co-located gateway and MCP transport on loopback only. */
 export async function startProductionBuilderStack(settings: {
-  host: Parameters<typeof startProductionBuilderHost>[0];
+  host: Omit<Parameters<typeof startProductionBuilderHost>[0], 'buildVerifier'>;
   port: number;
   deliveryPort: number;
   verifierPort?: number;
+  verifierKey?: Uint8Array;
   ownerBridge?: {
     key: Uint8Array;
     consumeNonce(nonce: string, expiresAt: number): Promise<boolean>;
@@ -59,11 +60,36 @@ export async function startProductionBuilderStack(settings: {
     )
       throw Error('INVALID_OWNER_BRIDGE_CONFIG');
   }
+  if (settings.verifierKey) {
+    const key = settings.verifierKey;
+    const runnerKey = settings.host.integration.runner.key;
+    const buildKey = settings.host.integration.build.key;
+    const previewKey = settings.ownerBridge?.key;
+    if (
+      !settings.verifierPort ||
+      key.length !== 32 ||
+      (runnerKey.length === 32 && timingSafeEqual(key, runnerKey)) ||
+      (buildKey.length === 32 && timingSafeEqual(key, buildKey)) ||
+      (previewKey?.length === 32 && timingSafeEqual(key, previewKey))
+    )
+      throw Error('INVALID_VERIFIER_CONFIG');
+  }
   let host: Awaited<ReturnType<typeof startProductionBuilderHost>> | undefined;
   let listener: ReturnType<typeof createProductionBuilderListener> | undefined;
   let delivery: ReturnType<typeof createProductionDeliveryListener> | undefined;
   try {
-    host = await startProductionBuilderHost(settings.host);
+    host = await startProductionBuilderHost({
+      integration: settings.host.integration,
+      startBroker: settings.host.startBroker,
+      ...(settings.verifierKey && settings.verifierPort
+        ? {
+            buildVerifier: {
+              key: settings.verifierKey,
+              port: settings.verifierPort,
+            },
+          }
+        : {}),
+    });
     const ownerPreview = settings.ownerBridge
       ? createOwnerPreviewBridge({
           ...settings.ownerBridge,

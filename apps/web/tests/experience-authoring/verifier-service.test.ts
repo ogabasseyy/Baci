@@ -10,6 +10,9 @@ const f = vi.hoisted(() => ({
   load: vi.fn(),
   worker: vi.fn(),
   capture: vi.fn(),
+  buildRecord: vi.fn(),
+  buildHandler: vi.fn(),
+  buildVerifier: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('../../tools/experience-verifier/nonce-store', () => ({
@@ -42,6 +45,15 @@ vi.mock('../../tools/experience-verifier/capture-worker', () => ({
 vi.mock('../../tools/experience-verifier/approval-capture', () => ({
   createApprovalCapture: f.capture,
 }));
+vi.mock('../../tools/experience-verifier/build-recorder', () => ({
+  createVerifierBuildRecorder: f.buildRecord,
+}));
+vi.mock('../../tools/experience-verifier/build-handler', () => ({
+  createVerifierBuildHandler: f.buildHandler,
+}));
+vi.mock('../../tools/experience-verifier/build-verifier', () => ({
+  createIndependentBuildVerifier: f.buildVerifier,
+}));
 
 import { startVerifierService } from '../../tools/experience-verifier/service';
 
@@ -52,9 +64,11 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   const close = vi.fn();
   f.nonce.mockResolvedValueOnce(nonce);
   f.record.mockResolvedValueOnce(record);
+  f.buildRecord.mockResolvedValueOnce(vi.fn());
   f.resolver.mockReturnValueOnce(vi.fn());
   f.verifier.mockReturnValueOnce({ attest: vi.fn() });
   f.handler.mockReturnValueOnce(handler);
+  f.buildHandler.mockReturnValueOnce(vi.fn());
   f.listen.mockResolvedValueOnce({ close });
   const config = {
     pool: {},
@@ -77,7 +91,7 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   expect(f.handler).toHaveBeenCalledWith(
     expect.objectContaining({ key: config.key, consumeNonce: nonce })
   );
-  expect(f.listen).toHaveBeenCalledWith(handler, 8891);
+  expect(f.listen).toHaveBeenCalledWith(handler, 8891, expect.any(Function));
   const capture = f.verifier.mock.calls.at(-1)?.[0].capture;
   const id = '11111111-1111-4111-8111-111111111111';
   const binding = {

@@ -156,6 +156,62 @@ it('refuses an owner bridge key reused for the runner before starting the host',
   expect(f.host).not.toHaveBeenCalled();
 });
 
+it('requires a separate verifier key and passes it only to trusted host startup', async () => {
+  const server = () => ({
+    listen: vi.fn((_port, _host, callback) => callback()),
+    once: vi.fn(),
+    off: vi.fn(),
+  });
+  f.host.mockResolvedValue({
+    publicJwks: { keys: [] },
+    deliver: vi.fn(),
+    close: vi.fn(async () => {}),
+  });
+  f.listener.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  f.delivery.mockReturnValue({
+    server: server(),
+    close: vi.fn(async () => {}),
+  });
+  const runnerKey = new Uint8Array(32).fill(5);
+  const host = {
+    integration: {
+      executionOrigin: 'https://output.runtime.test',
+      runner: { key: runnerKey },
+      build: { key: new Uint8Array(32).fill(6) },
+    },
+    startBroker: vi.fn(),
+  } as never;
+  await expect(
+    startProductionBuilderStack({
+      host,
+      port: 8790,
+      deliveryPort: 8791,
+      verifierPort: 8792,
+      verifierKey: runnerKey,
+    })
+  ).rejects.toThrow('INVALID_VERIFIER_CONFIG');
+  const verifierKey = new Uint8Array(32).fill(7);
+  const stack = await startProductionBuilderStack({
+    host,
+    port: 8790,
+    deliveryPort: 8791,
+    verifierPort: 8792,
+    verifierKey,
+  });
+  try {
+    expect(f.host).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        buildVerifier: { key: verifierKey, port: 8792 },
+      })
+    );
+  } finally {
+    await stack.close();
+  }
+});
+
 it('starts isolated output delivery alongside MCP and shuts down before the host', async () => {
   const calls: string[] = [];
   const server = () => ({

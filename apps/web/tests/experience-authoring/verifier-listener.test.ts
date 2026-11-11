@@ -88,3 +88,40 @@ it('waits for an accepted verification to finish even if its caller disconnects'
   await closing;
   expect(closed).toBe(true);
 });
+
+it('only exposes build verification when the worker is installed', async () => {
+  const build = vi.fn(async () => new Response(null, { status: 204 }));
+  const listener = await startVerifierListener(
+    async () => new Response(null, { status: 403 }),
+    0,
+    build
+  );
+  try {
+    const address = listener.server.address();
+    if (!address || typeof address === 'string') throw Error('NO_LISTENER');
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/v1/build',
+          method: 'POST',
+          headers: {
+            host: 'verifier.baci-internal.invalid',
+            'content-type': 'application/json',
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        }
+      );
+      req.on('error', reject);
+      req.end('{}');
+    });
+    expect(status).toBe(204);
+    expect(build).toHaveBeenCalledOnce();
+  } finally {
+    await listener.close();
+  }
+});

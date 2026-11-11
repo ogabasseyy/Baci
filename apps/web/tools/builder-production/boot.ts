@@ -23,6 +23,7 @@ export async function startProductionBuilderFromPrivateConfig(
       port: settings.port,
       deliveryPort: settings.deliveryPort,
       verifierPort: settings.verifierPort,
+      verifierKey: settings.verifierKey,
       ownerBridge: settings.ownerBridge,
       host: {
         integration: {

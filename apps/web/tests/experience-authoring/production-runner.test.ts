@@ -60,12 +60,16 @@ import { createVerifierNonceStore } from '../../tools/experience-verifier/nonce-
 import { experienceDataFixture } from './data-fixture.test-support';
 import { confirmSyntheticDraft } from './owner-approval-loopback.test-support';
 import { launchThroughOwnerBridge } from './production-preview-bridge.test-support';
+import { setupBuildVerification } from './verifier-build-loopback.test-support';
 import { sendVerifierTwice } from './verifier-loopback.test-support';
 import { setupVerifierPool } from './verifier-pool.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
   let verifierPool: Pool | undefined;
+  let buildVerification:
+    | Awaited<ReturnType<typeof setupBuildVerification>>
+    | undefined;
   try {
     const hostOrigin = 'https://shop.synthetic.test';
     const previewOrigin = 'https://builder.synthetic-baci.test';
@@ -170,6 +174,13 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       executionOrigin,
       record: await createVerifierBuildRecorder(verifierPool),
     });
+    const verifierKey = randomBytes(32);
+    buildVerification = await setupBuildVerification({
+      f,
+      pool: verifierPool,
+      key: verifierKey,
+      verify: verifyBuild,
+    });
     const dependencies: Parameters<typeof runExperienceBuild>[2] = {
       profile: 'production',
       previewOrigin,
@@ -180,13 +191,10 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       execute,
       prerenderArtifacts: artifacts,
       bootstrap: async () => bootstrap,
-      recordVerifiedEvidence: async ({ merchantId, ...receipt }) => {
-        if (merchantId !== f.merchantId) throw Error('INVALID_MERCHANT');
-        await verifyBuild(f.owner, receipt);
-      },
+      recordVerifiedEvidence: buildVerification.client,
     };
     const build = await runExperienceBuild(
-      f.owner,
+      buildVerification.ctx,
       { jobId: job.jobId, idempotencyKey: randomUUID() },
       dependencies
     );
@@ -250,7 +258,6 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         throw Error('NOT_AVAILABLE_IN_LOCAL_TEST');
       },
     });
-    const verifierKey = randomBytes(32);
     const verifierHandler = createVerifierAttestationHandler({
       key: verifierKey,
       consumeNonce: await createVerifierNonceStore(verifierPool),
@@ -376,6 +383,7 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
         .rows[0].count
     ).toBe('0');
   } finally {
+    await buildVerification?.close();
     await verifierPool?.end();
     await f.close();
   }

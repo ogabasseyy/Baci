@@ -6,6 +6,7 @@ import {
   BUILDER_ISSUER,
   BUILDER_RESOURCE,
 } from '../../../builder-mcp-server/metadata';
+import { createVerifierBuildClient } from '../../../tools/experience-verifier/build-client';
 import { composeExperienceRuntime } from './compose-runtime';
 import { createProductionExperienceIntegration } from './production-integration';
 
@@ -23,10 +24,14 @@ export function createProductionBuilderPorts(settings: {
   broker: Pick<GatewaySettings['auth'], 'readConnection'> &
     Pick<GatewaySettings['linked'], 'resolveLinkedAccessToken'>;
   supabase: GatewaySettings['linked']['supabase'];
+  buildVerifier?: { key: Uint8Array; port: number };
   integration: Omit<
     ExperienceSettings,
-    'authenticate' | 'resolveUserClient' | 'legacyGateway'
-  >;
+    'authenticate' | 'resolveUserClient' | 'legacyGateway' | 'build'
+  > & {
+    build: Omit<ExperienceSettings['build'], 'recordVerifiedEvidence'> &
+      Partial<Pick<ExperienceSettings['build'], 'recordVerifiedEvidence'>>;
+  };
 }) {
   const auth = {
     key: settings.signingKey,
@@ -41,8 +46,16 @@ export function createProductionBuilderPorts(settings: {
     issuer: BUILDER_ISSUER,
     audience: BUILDER_RESOURCE,
   });
+  const recordVerifiedEvidence = settings.buildVerifier
+    ? createVerifierBuildClient({
+        ...settings.buildVerifier,
+        resolveLinkedAccessToken: settings.broker.resolveLinkedAccessToken,
+      })
+    : settings.integration.build.recordVerifiedEvidence;
+  if (!recordVerifiedEvidence) throw Error('VERIFIER_NOT_CONFIGURED');
   return createProductionExperienceIntegration({
     ...settings.integration,
+    build: { ...settings.integration.build, recordVerifiedEvidence },
     authenticate,
     resolveUserClient: createBuilderUserClientResolver(linked),
     legacyGateway: createBuilderGatewayRuntime({ auth, linked }),

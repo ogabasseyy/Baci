@@ -4,11 +4,8 @@ const monitor = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('./negotiation-cost-floor-monitor', () => ({
   monitorNegotiationCostFloor: monitor,
 }));
-vi.mock('next/server', () => ({
-  after: (callback: () => unknown) => {
-    void callback();
-  },
-}));
+const afterMock = vi.hoisted(() => vi.fn());
+vi.mock('next/server', () => ({ after: afterMock }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn() } }));
 
 import { computeOrderNegotiationDiscount } from './order-negotiation-discount';
@@ -54,7 +51,13 @@ const run = (price: number, monitorCostFloor?: boolean) =>
   });
 
 describe('computeOrderNegotiationDiscount cost-floor monitor gate', () => {
-  beforeEach(() => monitor.mockClear());
+  beforeEach(() => {
+    monitor.mockClear();
+    afterMock.mockReset();
+    afterMock.mockImplementation((callback: () => unknown) => {
+      void callback();
+    });
+  });
 
   it('observes an accepted discount when the route says it will be charged', async () => {
     await run(980, true);
@@ -65,6 +68,14 @@ describe('computeOrderNegotiationDiscount cost-floor monitor gate', () => {
         { productId: 'p1', catalogUnitPrice: 1000, clientUnitPrice: 980 },
       ],
     });
+  });
+
+  it('runs the monitor detached when after() throws outside a request scope', async () => {
+    afterMock.mockImplementation(() => {
+      throw new Error('outside request scope');
+    });
+    await expect(run(980, true)).resolves.toBeTruthy();
+    expect(monitor).toHaveBeenCalledTimes(1);
   });
 
   it('does not observe when the discount will not be charged (flag off by default)', async () => {

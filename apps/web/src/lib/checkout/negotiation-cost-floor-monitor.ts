@@ -29,7 +29,9 @@ function positiveCost(value: number | string | null | undefined) {
  * failure or an idempotent retry still logs), so size exposure from them
  * as an upper bound, not as realized losses. Lines beyond the per-order cap
  * and lines with no readable cost are not evaluated; both are reported as a
- * coverage-gap warning so they are not mistaken for zero exposure. They are also an incomplete
+ * coverage-gap warning so they are not mistaken for zero exposure. Idempotent
+ * offer replays re-charge a stored discount and are not re-observed (the
+ * original order was observed when first placed). They are also an incomplete
  * sample: `after()` has no durable-job guarantee, so a timeout or load
  * shedding can drop a run and undercount breaches.
  * Logs when a below-catalog negotiated unit price falls

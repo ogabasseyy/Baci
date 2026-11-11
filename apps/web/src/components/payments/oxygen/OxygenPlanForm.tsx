@@ -62,7 +62,9 @@ export function OxygenPlanForm({
   const offer = offers?.find((item) => item.tenure === tenure);
   const offerLimits = oxygenPlanLimits(
     productAmount,
-    offer?.loanAmount,
+    offer && eligibleAmount !== undefined
+      ? Math.min(offer.loanAmount, eligibleAmount)
+      : offer?.loanAmount,
     minimumAmount
   );
   const amountValid =

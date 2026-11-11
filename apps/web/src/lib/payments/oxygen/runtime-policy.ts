@@ -5,6 +5,7 @@ import type {
   OxygenRuntimeAction,
 } from '@/schemas/oxygen-runtime';
 import type { OxygenWorkflowStage } from '@/schemas/oxygen-workflow';
+import { bookedPlanIsOffered } from './booked-plan-offer';
 import { oxygenEligibilityPrerequisites } from './eligibility-prerequisites';
 export function requireValue<T>(value: T | undefined | null): T {
   if (value === undefined || value === null)
@@ -82,7 +83,6 @@ export function oxygenActionAllowed(
             (!c.state.offers &&
               ['booked', 'approval_required'].includes(stage) &&
               c.state.booking?.status === 'BOOKED' &&
-              !c.state.activityToken &&
               !c.state.paymentComplete &&
               !c.state.setupComplete))
       );
@@ -116,7 +116,9 @@ export function oxygenActionAllowed(
     case 'trigger_approval_otp':
     case 'approve_booking':
       return (
-        stage === 'approval_required' && c.state.kyc?.address_status === 'DONE'
+        stage === 'approval_required' &&
+        c.state.kyc?.address_status === 'DONE' &&
+        bookedPlanIsOffered(c.state)
       );
     case 'cancel_booking':
       return Boolean(

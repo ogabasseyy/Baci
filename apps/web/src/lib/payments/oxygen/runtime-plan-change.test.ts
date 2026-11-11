@@ -62,6 +62,34 @@ const context: OxygenProviderContext = {
   },
 };
 const action = { action: 'book' as const, equityPercentage: 35, tenure: 6 };
+it('does not start or submit approval for a booked plan without a matching offer', () => {
+  const legacy = { ...context, state: { ...context.state, offers: undefined } };
+  expect(oxygenActionAllowed(legacy, { action: 'trigger_approval_otp' })).toBe(
+    false
+  );
+  expect(
+    oxygenActionAllowed(legacy, {
+      action: 'approve_booking',
+      otp: '123456',
+      accepted: true,
+    })
+  ).toBe(false);
+});
+
+it('only allows approval when the booked principal fits its tenure and overall caps', () => {
+  const withOffer = (loanAmount: number, eligibleAmount = 400000) => ({
+    ...context,
+    state: {
+      ...context.state,
+      eligibleAmount,
+      offers: [{ tenure: 3, loanAmount }],
+    },
+  });
+  const approve = { action: 'trigger_approval_otp' as const };
+  expect(oxygenActionAllowed(withOffer(260000), approve)).toBe(true);
+  expect(oxygenActionAllowed(withOffer(259999), approve)).toBe(false);
+  expect(oxygenActionAllowed(withOffer(400000, 259999), approve)).toBe(false);
+});
 it('allows an unapproved legacy booking to refresh offers but protects approval and payment states', () => {
   const refresh = { action: 'refresh_eligibility' as const };
   const legacy = { ...context, state: { ...context.state, offers: undefined } };
@@ -71,7 +99,7 @@ it('allows an unapproved legacy booking to refresh offers but protects approval 
       { ...legacy, state: { ...legacy.state, activityToken: 'pending' } },
       refresh
     )
-  ).toBe(false);
+  ).toBe(true);
   expect(
     oxygenActionAllowed(
       { ...legacy, state: { ...legacy.state, paymentComplete: true } },

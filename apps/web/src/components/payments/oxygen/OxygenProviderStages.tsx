@@ -189,10 +189,10 @@ export function OxygenProviderStages({
             }
             approvePlan={approval.approvePlan}
             approvalBusy={disabled}
+            approvalCodeStarted={snapshot.approvalOtpReady}
             refreshOffers={
               snapshot.stage === 'approval_required' &&
               !snapshot.pending &&
-              !snapshot.approvalOtpReady &&
               !s.offers &&
               !s.paymentComplete &&
               !s.setupComplete

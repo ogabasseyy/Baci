@@ -2,6 +2,26 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OxygenPlanForm } from './OxygenPlanForm';
 
+it('uses the overall eligibility cap in the selected offer guidance', () => {
+  render(
+    <OxygenPlanForm
+      busy={false}
+      productAmount={100000}
+      eligibleAmount={50000}
+      minimumAmount={10000}
+      maxTenure={1}
+      submit={vi.fn()}
+      offers={[{ tenure: 1, loanAmount: 90000 }]}
+    />
+  );
+  fireEvent.change(screen.getByLabelText('Your down payment'), {
+    target: { value: '30000' },
+  });
+  expect(
+    screen.getByText(/increase your down payment to at least 50%/i)
+  ).toBeVisible();
+});
+
 it('does not suggest an impossible down payment when the offer is below the minimum loan', () => {
   render(
     <OxygenPlanForm

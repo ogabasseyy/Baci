@@ -35,6 +35,10 @@ DO $$ DECLARE r jsonb; BEGIN
   PERFORM public.oxygen_runtime('finish','efae0000-0000-4000-8000-000000000081','{"commandId":"efae0000-0000-4000-8000-000000000081","outcome":"succeeded","stage":"plan_required","state":{"offers":[{"loanAmount":68000,"tenure":1},{"loanAmount":189000,"tenure":1}]}}');
   RAISE EXCEPTION 'Duplicate tenure accepted';
  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN
+  PERFORM public.oxygen_runtime('finish','efae0000-0000-4000-8000-000000000081','{"commandId":"efae0000-0000-4000-8000-000000000081","outcome":"succeeded","stage":"plan_required","state":{"maxTenure":2,"offers":[{"loanAmount":189000,"tenure":3}]}}');
+  RAISE EXCEPTION 'Offer longer than maximum tenure accepted';
+ EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
  PERFORM public.oxygen_runtime('finish','efae0000-0000-4000-8000-000000000081','{"commandId":"efae0000-0000-4000-8000-000000000081","outcome":"succeeded","stage":"plan_required","state":{"applicationReference":"efae0000-0000-4000-8000-000000000071","offers":[{"loanAmount":68000,"tenure":1},{"loanAmount":189000,"tenure":3}]}}');
 END $$;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000002',true);

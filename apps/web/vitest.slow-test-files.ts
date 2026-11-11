@@ -15,8 +15,8 @@
  * not depend on test order. Keep the list short and longest first: the first
  * entries start together, one per worker. Durations are from the hosted web
  * shards of CI run 42946728461 (3 workers per shard, Vitest 4.1.12).
- * vitest.sequencer.test.ts fails when an entry no longer exists, so a rename
- * cannot silently drop a file out of the list.
+ * tests/vitest-projects/slow-test-files.test.ts fails when an entry no longer
+ * exists, so a rename cannot silently drop a file out of the list.
  */
 export const SLOW_TEST_FILES_FIRST: readonly string[] = [
   // Whole-repository TypeScript scan: 148-182 s, one test.

@@ -19,6 +19,7 @@ const NEW_PLANNER_FILES = [
   '.github/scripts/resolve-ci-test-plan-paths.test.mjs',
   '.github/scripts/resolve-ci-test-plan-readers.mjs',
   '.github/scripts/resolve-ci-test-plan-readers.test.mjs',
+  '.github/scripts/resolve-ci-test-plan-reasons.mjs',
   '.github/scripts/resolve-ci-test-plan-contract.test.mjs',
   '.github/scripts/resolve-ci-test-plan-cases.test-support.mjs',
   '.github/scripts/resolve-ci-test-plan-classes.test.mjs',
@@ -49,6 +50,7 @@ test('the web and mobile admin gates list the planner modules', () => {
     '.github/scripts/resolve-ci-test-plan-cli.mjs',
     '.github/scripts/resolve-ci-test-plan-paths.mjs',
     '.github/scripts/resolve-ci-test-plan-readers.mjs',
+    '.github/scripts/resolve-ci-test-plan-reasons.mjs',
   ]) {
     assert.ok(
       filters.mobile_admin.includes(file),

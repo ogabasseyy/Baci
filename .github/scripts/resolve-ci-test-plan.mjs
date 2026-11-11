@@ -17,6 +17,17 @@ import {
   isTargetableWebFile,
 } from './resolve-ci-test-plan-paths.mjs';
 import { findNonWebReaders } from './resolve-ci-test-plan-readers.mjs';
+import {
+  DELETED_SOURCE_REASON,
+  DELETED_UNKNOWN_REASON,
+  NON_WEB_READER_REASON,
+  READER_SEARCH_FAILED_REASON,
+  STOREFRONT_READER_REASON,
+  STOREFRONT_REASON,
+  WEB_AND_STOREFRONT_REASON,
+  WEB_READER_REASON,
+  WEB_SOURCE_REASON,
+} from './resolve-ci-test-plan-reasons.mjs';
 
 const FULL_AFFECTED_COMMAND =
   'pnpm turbo run test --concurrency=3 --log-order=stream';
@@ -90,29 +101,6 @@ export function isFullAffectedTrigger(file) {
   );
 }
 
-const WEB_SOURCE_REASON =
-  'Pull request changes are limited to apps/web source or test files.';
-const WEB_READER_REASON =
-  'Pull request changes are limited to apps/web source or test files and files that tests read; the Vitest changed-files provider adds the tests that read them.';
-const WEB_AND_STOREFRONT_REASON =
-  'Pull request changes are limited to apps/web and mobile storefront source or test files.';
-const STOREFRONT_REASON =
-  'Pull request changes are limited to mobile storefront source or test files.';
-const DELETED_SOURCE_REASON =
-  'Deleted or renamed source files keep the full affected test path: unchanged tests may still import them.';
-// Jest's `--changedSince` follows imports only and the changed-files provider
-// feeds Vitest alone, so storefront tests that read a data file are not
-// selected: next to a storefront change only the full path runs them.
-const STOREFRONT_READER_REASON =
-  'Mobile storefront changes next to files that tests read keep the full affected test path: storefront Jest cannot follow fs reads.';
-
-// Only the full path runs the tests of the mobile apps and the packages, and the
-// Vitest provider cannot select them: a data file that one of them names keeps it.
-const NON_WEB_READER_REASON =
-  'Files that tests outside apps/web read changed, so CI keeps the full affected test path:';
-const READER_SEARCH_FAILED_REASON =
-  'The search for tests outside apps/web that read the changed files failed, so CI keeps the full affected test path.';
-
 export {
   changedFilesDiffArgs,
   getChangedFiles,
@@ -142,7 +130,8 @@ function fullAffectedPlan(reason) {
  * Picks the tests a CI run executes. Only listed classes of files get a targeted
  * plan; an unknown path, a full trigger, a non-pull-request event or an empty
  * diff keeps the full affected test path. `changedFiles` includes deletions and
- * the old side of a rename; `deletedFiles` is the part that no longer exists;
+ * the old side of a rename; `deletedFiles` is the part that no longer exists
+ * (`null` when it could not be read);
  * `nonWebReaders` are tests outside apps/web that name a changed data file
  * (`null` when that search failed).
  */
@@ -192,6 +181,9 @@ export function resolveCiTestPlan({
     );
   }
 
+  if (deletedFiles === null) {
+    return fullAffectedPlan(DELETED_UNKNOWN_REASON);
+  }
   if (deletedFiles.map(normalizeChangedFile).some(isDeletedSourceFile)) {
     return fullAffectedPlan(DELETED_SOURCE_REASON);
   }

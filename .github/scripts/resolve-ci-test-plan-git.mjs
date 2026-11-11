@@ -27,16 +27,16 @@ export function changedFilesDiffArgs(baseRef, headRef, options = []) {
 }
 
 /**
- * Runs the diff and returns one path per line. A git failure returns no files,
- * which the planner reads as "unknown change" and answers with the full suite.
+ * Runs the diff and returns one path per line, or `onFailure` when git fails.
  *
  * @param {string} baseRef
  * @param {string} headRef
  * @param {string[]} options
  * @param {string | undefined} cwd
- * @returns {string[]}
+ * @param {null | string[]} onFailure
+ * @returns {string[] | null}
  */
-function listDiffFiles(baseRef, headRef, options, cwd) {
+function listDiffFiles(baseRef, headRef, options, cwd, onFailure) {
   try {
     return execFileSync(
       'git',
@@ -46,13 +46,14 @@ function listDiffFiles(baseRef, headRef, options, cwd) {
       .split('\n')
       .filter(Boolean);
   } catch {
-    return [];
+    return onFailure;
   }
 }
 
 /**
  * Every file the head changes against the base, deletions and rename sources
- * included.
+ * included. A git failure returns no files, which the planner reads as an empty
+ * diff and answers with the full suite.
  *
  * @param {string} baseRef
  * @param {string} headRef
@@ -60,19 +61,20 @@ function listDiffFiles(baseRef, headRef, options, cwd) {
  * @returns {string[]}
  */
 export function getChangedFiles(baseRef, headRef, { cwd } = {}) {
-  return listDiffFiles(baseRef, headRef, [], cwd);
+  return listDiffFiles(baseRef, headRef, [], cwd, []);
 }
 
 /**
  * The subset of `getChangedFiles` that no longer exists in the head: deleted
  * files and the old side of a rename (`--no-renames` turns a rename into a
- * deletion plus an addition).
+ * deletion plus an addition). `null` when git fails: "no deletions" would switch
+ * the deletion guard off, so the planner keeps the full suite instead.
  *
  * @param {string} baseRef
  * @param {string} headRef
  * @param {{ cwd?: string }} [location]
- * @returns {string[]}
+ * @returns {string[] | null}
  */
 export function getDeletedFiles(baseRef, headRef, { cwd } = {}) {
-  return listDiffFiles(baseRef, headRef, ['--diff-filter=D'], cwd);
+  return listDiffFiles(baseRef, headRef, ['--diff-filter=D'], cwd, null);
 }

@@ -130,7 +130,9 @@ neither `vitest --changed` nor Jest can select that test because the import no
 longer resolves; the same goes for a fixture deleted next to the code in a
 targeted folder. Deleting a test, or a file of the reader families (a doc, a
 migration, a workflow, a registry entry), does not: nothing imports a test, and
-the provider finds the readers of such a file by name.
+the provider finds the readers of such a file by name. If git fails while the
+deleted files are listed, the plan is the full suite (an unreadable list must not
+read as "no deletions").
 
 ## Changing this
 

@@ -227,10 +227,36 @@ test('deleted files are the deletions and the old side of renames, not edits or 
       getDeletedFiles('main', 'HEAD', { cwd: repo.root }).sort(),
       ['apps/web/src/gone.ts', 'apps/web/src/moved.ts']
     );
-    assert.deepEqual(
+    // A failed diff is unknown, not "no deletions".
+    assert.equal(
       getDeletedFiles('no-such-ref', 'HEAD', { cwd: repo.root }),
-      []
+      null
     );
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('bugfix: a failed deleted-files diff keeps the full suite instead of switching the deletion guard off', () => {
+  const repo = createGitFixture();
+  try {
+    repo.write('apps/web/src/page.ts', 'export const page = 1;\n');
+    repo.commit('base');
+
+    // Both lists come from the same diff, but only the second one failed here.
+    const deletedFiles = getDeletedFiles('does-not-exist', 'HEAD', {
+      cwd: repo.root,
+    });
+    const result = resolveCiTestPlan({
+      baseRef: 'main',
+      changedFiles: ['apps/web/src/page.ts'],
+      deletedFiles,
+      eventName: 'pull_request',
+    });
+
+    assert.equal(deletedFiles, null);
+    assert.equal(result.mode, 'full-affected');
+    assert.match(result.reason, /list of deleted files could not be read/);
   } finally {
     repo.cleanup();
   }

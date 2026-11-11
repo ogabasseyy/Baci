@@ -122,7 +122,9 @@ export function sessionFailures(
   return failures;
 }
 
-const DIRECT_HOST = /^db\.[a-z0-9]{20}\.supabase\.co$/;
+// Supabase's direct host is db.<project-ref>.supabase.co; the ref length is
+// not part of the contract, so any lowercase alphanumeric ref is accepted.
+const DIRECT_HOST = /^db\.[a-z0-9]+\.supabase\.co$/;
 const DIRECT_PORTS = new Set(['', '5432']);
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 

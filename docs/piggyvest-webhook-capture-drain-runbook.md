@@ -264,8 +264,8 @@ of `piggyvest_webhook_capture_operator` only. Never use `postgres`,
 `service_role`, the drain login or the intake login, and never add an operator
 login to `piggyvest_webhook_capture_worker` or `piggyvest_webhook_intake`: the
 tool refuses those logins by name and refuses any login that also holds a
-pipeline role, so one person cannot both requeue and drain. The database
-function enforces the same session checks (operator role only, no pipeline
+pipeline role, so one person cannot both requeue and drain. Both database
+functions (list and requeue) enforce the same session checks (operator role only, no pipeline
 grants, no direct table access, encrypted or local connection), so calling it
 directly from `psql` cannot skip them.
 

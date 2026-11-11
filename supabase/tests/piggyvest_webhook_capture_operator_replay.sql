@@ -401,6 +401,14 @@ BEGIN
     v_refused := v_refused + 1;
   END;
   RESET SESSION AUTHORIZATION;
+  -- The listing applies the same checks.
+  BEGIN
+    SET LOCAL SESSION AUTHORIZATION pv_operator_dual;
+    PERFORM piggyvest_capture_operator.list_review_captures(10);
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_refused := v_refused + 1;
+  END;
+  RESET SESSION AUTHORIZATION;
   -- A superuser borrowing the operator group with SET ROLE.
   BEGIN
     SET LOCAL ROLE piggyvest_webhook_capture_operator;
@@ -409,8 +417,8 @@ BEGIN
     v_refused := v_refused + 1;
   END;
   RESET ROLE;
-  IF v_refused <> 2 THEN
-    RAISE EXCEPTION 'database did not refuse % of 2 bad operator sessions', 2 - v_refused;
+  IF v_refused <> 3 THEN
+    RAISE EXCEPTION 'database did not refuse % of 3 bad operator calls', 3 - v_refused;
   END IF;
   IF (SELECT processing_state FROM public.piggyvest_webhook_captures WHERE id = v_row)
       IS DISTINCT FROM 'needs_review'

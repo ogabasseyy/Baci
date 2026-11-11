@@ -172,6 +172,10 @@ describe('readOperatorConnection', () => {
         'postgresql://ops@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=verify-full'
       )
     ).toEqual({ loopback: false });
+    // The project ref length is not fixed.
+    expect(
+      readOperatorConnection('postgres://ops@db.shortref.supabase.co/postgres')
+    ).toEqual({ loopback: false });
     expect(
       readOperatorConnection(
         'postgres://ops@127.0.0.1:5432/postgres?sslmode=disable'

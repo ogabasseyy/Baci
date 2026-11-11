@@ -140,11 +140,19 @@ GRANT USAGE ON SCHEMA piggyvest_capture_operator TO piggyvest_webhook_capture_op
 -- Review metadata, newest first. Never bodies, signatures or headers.
 CREATE OR REPLACE FUNCTION piggyvest_capture_operator.list_review_captures(p_limit integer)
 RETURNS jsonb
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
+DECLARE
+  v_refusal text := piggyvest_capture_operator.session_refusal();
+BEGIN
+  -- Same in-database session checks as requeue (session_refusal is below).
+  IF v_refusal <> '' THEN
+    RAISE EXCEPTION 'operator session refused: %', v_refusal USING ERRCODE = '42501';
+  END IF;
+  RETURN (
   SELECT COALESCE(pg_catalog.jsonb_agg(r ORDER BY r."receivedAt" DESC, r."captureId"), '[]'::jsonb)
   FROM (
     SELECT c.id AS "captureId",
@@ -164,7 +172,8 @@ AS $$
     WHERE c.processing_state = 'needs_review'
     ORDER BY c.received_at DESC, c.id
     LIMIT least(greatest(COALESCE(p_limit, 50), 1), 200)
-  ) AS r
+  ) AS r);
+END
 $$;
 
 -- Requeue one parked capture. Outcomes (jsonb {"outcome": ...}):

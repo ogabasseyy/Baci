@@ -96,10 +96,15 @@ describe('recordPreGatewayRedemption', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('rejects invalid or excessive requested totals', async () => {
+  it('routes invalid combined amounts to review before querying the ledger', async () => {
     await expect(
-      recordPreGatewayRedemption('order-1', 10000, 0, 20000, { rpc: mocks.rpc })
-    ).rejects.toThrow('Store credit could not be confirmed');
+      recordPreGatewayRedemption('order-1', 10000, 6000, 5000, {
+        rpc: mocks.rpc,
+      })
+    ).resolves.toMatchObject({
+      status: 409,
+      code: 'STORE_CREDIT_REVIEW_REQUIRED',
+    });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });

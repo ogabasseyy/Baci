@@ -6,6 +6,7 @@ import {
 } from '@baci/shared/contracts';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
+import { withConfirmedWalletDebit } from '../checkout-fingerprints-match';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
@@ -225,7 +226,11 @@ export async function runCheckoutOrderLifecycle({
     merchantId: customer.merchantId,
     customerEmail: customer.email,
     customerPhone: customer.phone,
-    checkoutFingerprint: fingerprint,
+    checkoutFingerprint:
+      walletAmountUsed && walletAmountUsed > 0 &&
+      (reuse.paymentMethod === 'credit_direct' || reuse.paymentMethod === 'oxygen')
+        ? withConfirmedWalletDebit(fingerprint, walletAmountUsed)
+        : fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
     ...(walletAmountUsed && walletAmountUsed > 0 ? { walletAmountUsed } : {}),

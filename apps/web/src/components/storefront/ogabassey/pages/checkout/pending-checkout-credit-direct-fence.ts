@@ -32,7 +32,9 @@ export async function resolveWalletCreditDirectFence(
 ): Promise<ResolvePendingCheckoutOrderResult | null> {
   if (!hasWalletCreditDirectOrder(input) || !input.pendingOrder) return null;
   const pendingOrder = input.pendingOrder;
-  // Method changes still pass through the server's durable reservation guard.
+  // A match continues through the normal saved-order status lookup and
+  // /api/orders/reuse. Only the server may authorize a method change, including
+  // when the wallet selection was cleared after a confirmed debit.
   if (
     pendingOrder.trackingToken &&
     checkoutFingerprintsMatch(

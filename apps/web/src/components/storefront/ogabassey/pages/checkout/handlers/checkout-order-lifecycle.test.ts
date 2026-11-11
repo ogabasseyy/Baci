@@ -318,20 +318,25 @@ describe('runCheckoutOrderLifecycle', () => {
     );
   });
   it.each([
-    { freshDebit: true, orderId: 'order-1', expectedWallet: 30 },
-    { freshDebit: false, orderId: 'order-1', expectedWallet: 30 },
-    { freshDebit: false, orderId: 'replacement-order', expectedWallet: undefined },
-  ])('binds the wallet debit to the submitted order ($orderId, fresh: $freshDebit)', async ({ freshDebit, orderId, expectedWallet }) => {
+    { paymentMethod: 'credit_direct', freshDebit: true, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'oxygen', freshDebit: true, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'credit_direct', freshDebit: false, orderId: 'order-1', expectedWallet: 30 },
+    { paymentMethod: 'credit_direct', freshDebit: false, orderId: 'replacement-order', expectedWallet: undefined },
+  ] as const)('binds the $paymentMethod wallet debit to the submitted order ($orderId, fresh: $freshDebit)', async ({ paymentMethod, freshDebit, orderId, expectedWallet }) => {
     const input = lifecycleOptions();
-    input.paymentMethod = 'credit_direct';
-    input.reuse.paymentMethod = 'credit_direct';
-    if (!freshDebit) input.reuse.pendingOrder = { orderId: 'order-1', merchantId: 'merchant-1', customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint', paymentMethod: 'credit_direct', walletAmountUsed: 30, amountDueToGateway: 70, createdAt: '2026-11-07' };
+    input.fingerprint = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 50 });
+    input.paymentMethod = paymentMethod;
+    input.reuse.paymentMethod = paymentMethod;
+    if (!freshDebit) input.reuse.pendingOrder = { orderId: 'order-1', merchantId: 'merchant-1', customerEmail: 'ada@example.com', customerPhone: '', checkoutFingerprint: 'fingerprint', paymentMethod, walletAmountUsed: 30, amountDueToGateway: 70, createdAt: '2026-11-07' };
     vi.mocked(recoverPendingCheckoutOrder).mockResolvedValue({ kind: 'submit', pendingOrder: { reusableOrder: null, clearStoredOrder: false } });
     vi.mocked(submitCheckoutOrder).mockResolvedValue({ order: { id: orderId }, wallet: freshDebit ? { amountUsed: 30, newBalance: 0 } : null, amountDueToGateway: 70 });
     await runCheckoutOrderLifecycle(input);
     const snapshot = vi.mocked(persistPendingCheckoutOrder).mock.lastCall?.[0];
-    expect(snapshot).toMatchObject({ orderId, paymentMethod: 'credit_direct' });
+    expect(snapshot).toMatchObject({ orderId, paymentMethod });
     expect(snapshot?.walletAmountUsed).toBe(expectedWallet);
+    expect(JSON.parse(snapshot?.checkoutFingerprint ?? '{}')).toMatchObject({
+      walletAmountUsed: expectedWallet ?? 50,
+    });
   });
 
 });

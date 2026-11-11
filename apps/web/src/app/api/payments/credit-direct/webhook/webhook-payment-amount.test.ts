@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
 import {
+  calculateMerchantAmount,
+  calculatePlatformFee,
+} from '@/lib/credit-direct';
+import {
   getWebhookWalletProductsTotal,
   matchesRecordedFinancedAmount,
 } from './webhook-payment-amount';
@@ -39,4 +43,16 @@ it('rejects an unsafe accumulated kobo total', () => {
   expect(
     getWebhookWalletProductsTotal(products(50000000000000, 50000000000000))
   ).toBeNull();
+});
+
+it('matches the paid replay with the original fractional-kobo fee split', () => {
+  const financed = 19.99;
+  const fee = calculatePlatformFee(financed);
+  expect(Number.isInteger(fee * 100)).toBe(false);
+  expect(
+    matchesRecordedFinancedAmount(
+      products(financed),
+      calculateMerchantAmount(financed) + fee
+    )
+  ).toBe(true);
 });

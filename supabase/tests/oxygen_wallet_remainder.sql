@@ -138,6 +138,13 @@ SELECT public.test_reject($q$SELECT public.oxygen_reconcile_activation('52ab6696
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
 INSERT INTO public.transactions(order_id,transaction_type) VALUES('00000000-0000-4000-8000-000000000014','payment');
 SELECT public.test_reject($q$SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000014')$q$,'oxygen_gateway_payment_in_use');
+-- Satisfy the independent credit checks before testing the recorded-gateway
+-- method guard, including the full-replay case with a failed card payment.
+INSERT INTO public.orders(id,merchant_id,customer_id,total,currency,payment_method)
+ VALUES('00000000-0000-4000-8000-000000000027','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',50000,'NGN','paystack');
+INSERT INTO public.transactions(order_id,transaction_type,status)
+ VALUES('00000000-0000-4000-8000-000000000027','payment','failed');
+SELECT public.test_reject($q$UPDATE public.orders SET payment_method='oxygen' WHERE id='00000000-0000-4000-8000-000000000027'$q$,'oxygen_gateway_payment_in_use');
 INSERT INTO public.orders(id,merchant_id,customer_id,total,currency,payment_method)
  VALUES('00000000-0000-4000-8000-000000000022','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',50000,'NGN','oxygen');
 SELECT public.oxygen_start_workflow('00000000-0000-4000-8000-000000000022');

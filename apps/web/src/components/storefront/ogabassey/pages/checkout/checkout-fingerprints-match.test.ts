@@ -86,11 +86,28 @@ it('matches a confirmed wallet refresh even when saved properties were serialize
 
 it.each([
   [false, 20000],
-  [true, 10000],
+  [true, 30000],
   [true, 0],
   [true, Number.NaN],
 ])('rejects wallet refresh for saved selection %s and unconfirmed debit %s', (useWalletCredit, confirmedDebit) => {
   const saved = JSON.stringify({ useWalletCredit, walletAmountUsed: 20000 });
   const refreshed = JSON.stringify({ useWalletCredit: false, walletAmountUsed: 0 });
   expect(checkoutFingerprintsMatch(saved, refreshed, confirmedDebit)).toBe(false);
+});
+
+it.each([0, 10000])('recovers a legacy requested wallet amount against the confirmed debit with current selection %s', (amount) => {
+  const saved = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000, items: ['same'] });
+  const refreshed = JSON.stringify({ useWalletCredit: amount > 0, walletAmountUsed: amount, items: ['same'] });
+  expect(checkoutFingerprintsMatch(saved, refreshed, 10000)).toBe(true);
+  expect(checkoutFingerprintsMatch(saved, refreshed, 30000)).toBe(false);
+  expect(checkoutFingerprintsMatch(saved, refreshed.replace('same', 'changed'), 10000)).toBe(false);
+});
+
+it.each([
+  { useWalletCredit: true, walletAmountUsed: 5000 },
+  { useWalletCredit: false, walletAmountUsed: 10000 },
+  { useWalletCredit: 'false', walletAmountUsed: 0 },
+])('does not normalize a conflicting current selection %j', (selection) => {
+  const saved = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000 });
+  expect(checkoutFingerprintsMatch(saved, JSON.stringify(selection), 10000)).toBe(false);
 });

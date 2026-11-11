@@ -92,3 +92,19 @@ it.each([false, true])('reuses the same saved order after a wallet refresh (wall
   expect(fetchImpl).toHaveBeenCalledTimes(2);
   expect(fetchImpl.mock.calls[1][0]).toBe('/api/orders/reuse');
 });
+
+it('consults the server reservation before switching a partially redeemed order after a wallet refresh', async () => {
+  const before = JSON.stringify({ useWalletCredit: true, walletAmountUsed: 20000 });
+  const after = JSON.stringify({ useWalletCredit: false, walletAmountUsed: 0 });
+  const fetchImpl = vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json({ id: 'order-1', payment_status: 'unpaid', total: 50000 }))
+    .mockResolvedValueOnce(Response.json({ error: 'Order is no longer reusable' }, { status: 409 }));
+  await expect(resolvePendingCheckoutOrder({
+    ...input,
+    pendingOrder: { ...pendingOrder, walletAmountUsed: 10000, checkoutFingerprint: before },
+    checkoutFingerprint: after,
+    paymentMethod: 'paystack',
+    fetchImpl,
+  })).rejects.toThrow('Failed to reopen pending checkout order');
+  expect(fetchImpl.mock.calls[1]?.[0]).toBe('/api/orders/reuse');
+});

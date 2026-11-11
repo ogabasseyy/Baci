@@ -34,7 +34,7 @@ export async function recordPreGatewayRedemption(
     walletAmountUsed < 0 ||
     savingsAmountUsed + walletAmountUsed > orderTotal
   )
-    throw new Error(failure);
+    return reconciliationFailure;
 
   const { data, error } = await supabase.rpc('record_order_store_credit', {
     p_order_id: orderId,

@@ -40,7 +40,26 @@ export function checkoutFingerprintsMatch(
   );
 }
 
-/** A refresh may clear wallet selection after a confirmed debit consumed the balance. */
+function readFingerprint(value: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Save the ledger-confirmed debit on a financing checkpoint. */
+export function withConfirmedWalletDebit(fingerprint: string, debit: number): string {
+  const checkout = readFingerprint(fingerprint);
+  return checkout
+    ? stableStringify({ ...checkout, useWalletCredit: true, walletAmountUsed: debit })
+    : fingerprint;
+}
+
+/** A refresh may clear the selection or show the actual debit instead of the request. */
 function matchesConfirmedWalletDebit(
   savedFingerprint: string,
   currentFingerprint: string,
@@ -53,35 +72,21 @@ function matchesConfirmedWalletDebit(
   ) {
     return false;
   }
-  try {
-    const before: unknown = JSON.parse(savedFingerprint);
-    const after: unknown = JSON.parse(currentFingerprint);
-    if (
-      !before ||
-      !after ||
-      typeof before !== 'object' ||
-      typeof after !== 'object' ||
-      Array.isArray(before) ||
-      Array.isArray(after)
-    )
-      return false;
-    const oldCheckout = before as Record<string, unknown>;
-    const newCheckout = after as Record<string, unknown>;
-    return (
-      oldCheckout.useWalletCredit === true &&
-      typeof newCheckout.useWalletCredit === 'boolean' &&
-      oldCheckout.walletAmountUsed === confirmedWalletDebit &&
-      newCheckout.walletAmountUsed === 0 &&
-      checkoutFingerprintsMatch(
-        JSON.stringify(oldCheckout),
-        JSON.stringify({
-          ...newCheckout,
-          useWalletCredit: true,
-          walletAmountUsed: confirmedWalletDebit,
-        })
-      )
-    );
-  } catch {
+  const saved = readFingerprint(savedFingerprint);
+  const current = readFingerprint(currentFingerprint);
+  if (
+    !saved || !current ||
+    saved.useWalletCredit !== true ||
+    typeof saved.walletAmountUsed !== 'number' ||
+    saved.walletAmountUsed < confirmedWalletDebit ||
+    typeof current.useWalletCredit !== 'boolean' ||
+    (current.walletAmountUsed !== 0 &&
+      (current.useWalletCredit !== true || current.walletAmountUsed !== confirmedWalletDebit))
+  ) {
     return false;
   }
+  return checkoutFingerprintsMatch(
+    withConfirmedWalletDebit(savedFingerprint, confirmedWalletDebit),
+    withConfirmedWalletDebit(currentFingerprint, confirmedWalletDebit)
+  );
 }

@@ -89,6 +89,8 @@ export function getReceiptStyles({
   .info-name { font-size: 15px; font-weight: 700; color: #111827; margin-bottom: 2px; }
   .info-detail { font-size: 12px; color: #6b7280; line-height: 1.5; }
 
+  .items-table thead { display: table-header-group; }
+  .items-table tr, .bank-grid, .summary, .footer-area { break-inside: avoid; }
   .items-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
   .items-table thead th {
     font-size: 10px;

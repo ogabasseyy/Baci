@@ -62,7 +62,7 @@ function renderPaymentInstructions(options: ReceiptOptions): string {
 }
 
 describe('renderBankDetailsHtml', () => {
-  it('renders safe HTTP payment links', () => {
+  it('renders HTTPS payment links', () => {
     const html = renderPaymentInstructions({
       paymentLink: 'https://pay.example.com/checkout?order=ORD-123',
     });
@@ -71,6 +71,14 @@ describe('renderBankDetailsHtml', () => {
       'href="https://pay.example.com/checkout?order=ORD-123"'
     );
     expect(html).toContain('Pay Now');
+  });
+
+  it('drops cleartext HTTP payment links', () => {
+    expect(
+      renderPaymentInstructions({
+        paymentLink: 'http://pay.example.com/checkout',
+      })
+    ).toBe('');
   });
 
   it('does not render unsafe payment link schemes as hrefs', () => {
@@ -108,6 +116,26 @@ describe('renderBankDetailsHtml', () => {
 
     expect(html).toBe('');
     expect(html).not.toContain('Transfer here for instant order confirmation');
+  });
+
+  it('shows the manual account when the merchant bank name is unknown', () => {
+    const html = renderBankDetailsHtml({
+      order: createReceiptOrder(),
+      merchant: createReceiptMerchant({
+        bank_code: 'unknown-code',
+        bank_account_number: '1234567890',
+      }),
+      options: {},
+      brandPrimary: '#111827',
+      brandAccent: '#d10f1f',
+      contactEmail: null,
+      contactPhone: null,
+      isPaid: false,
+    });
+
+    expect(html).toContain('Manual Confirmation');
+    expect(html).toContain('1234567890');
+    expect(html).toContain('Bank name unavailable');
   });
 
   it('renders manual merchant bank details for invoice payments', () => {

@@ -1,5 +1,6 @@
 export * from './airport-delivery';
 export * from './countries';
+export * from './media-cdn';
 export * from './merchant-countries';
 export * from './order-status';
 export * from './quiz';

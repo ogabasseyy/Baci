@@ -18,12 +18,14 @@ interface BanksResponse {
  * Uses the canonical /api/paystack/banks route (public, no auth required).
  * Deduplicates banks by code to prevent duplicate entries in the picker.
  */
-export function usePaystackBanks() {
-  return useQuery({
-    queryKey: ['paystack-banks'],
+export function paystackBanksQueryOptions(timeout?: number) {
+  return {
+    queryKey:
+      timeout === undefined ? ['paystack-banks'] : ['paystack-banks', timeout],
     queryFn: async () => {
       const data = await apiClient<BanksResponse>('/api/paystack/banks', {
         requiresAuth: false,
+        ...(timeout === undefined ? {} : { timeout }),
       });
       const seen = new Set<string>();
       return (data.banks ?? []).filter((bank) => {
@@ -33,5 +35,9 @@ export function usePaystackBanks() {
       });
     },
     staleTime: 60 * 60 * 1000, // bank list changes rarely; cache for 1 hour
-  });
+  };
+}
+
+export function usePaystackBanks() {
+  return useQuery(paystackBanksQueryOptions());
 }

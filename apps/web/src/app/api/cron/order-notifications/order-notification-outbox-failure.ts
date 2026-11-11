@@ -22,6 +22,22 @@ export interface FailedOrRetrySummary {
   skipped: number;
 }
 
+export async function deferUndispatchedOutboxRow(
+  supabase: SupabaseClientLike,
+  row: FailedOrRetryRow
+) {
+  await updateOutboxStatus(
+    supabase,
+    row,
+    {
+      attempt_count: Math.max(0, row.attempt_count - 1),
+      next_attempt_at: new Date(Date.now() + retryDelayMs(1)).toISOString(),
+      status: 'pending' satisfies OrderNotificationOutboxStatus,
+    },
+    { undispatchedAttemptCount: row.attempt_count }
+  );
+}
+
 export async function markFailedOrRetry(
   supabase: SupabaseClientLike,
   row: FailedOrRetryRow,

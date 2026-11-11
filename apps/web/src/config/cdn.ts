@@ -1,4 +1,7 @@
-export const DEFAULT_MEDIA_CDN_ORIGIN = 'https://cdn.ogabassey.com';
+// The Next config loader needs a path relative to this file for shared source.
+import { DEFAULT_MEDIA_CDN_ORIGIN } from '../../../../packages/shared/src/constants/media-cdn';
+
+export { DEFAULT_MEDIA_CDN_ORIGIN };
 export const DEFAULT_BLOG_MEDIA_CDN_ORIGIN = DEFAULT_MEDIA_CDN_ORIGIN;
 
 /**

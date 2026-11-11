@@ -11,7 +11,7 @@ import type {
   DispatchTransaction,
 } from '@/lib/mark-manual-document-dispatch-started';
 import {
-  generateReceiptPDF,
+  generateReceiptBlob,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
 import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
@@ -70,7 +70,9 @@ export async function renderManualOrderDocumentPdf({
   isPaid,
   pdfDocumentKind,
   invoiceTypeCode,
+  renderDeadline,
 }: {
+  renderDeadline?: number;
   taxRows: readonly unknown[];
   transactionRows: readonly unknown[];
   order: z.infer<typeof manualDocumentOrderSchema>;
@@ -197,7 +199,7 @@ export async function renderManualOrderDocumentPdf({
       )
     : null;
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-  const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
+  const pdf = await generateReceiptBlob(receiptOrder, receiptMerchant, {
     buyerReference: order.buyer_reference,
     documentKind: pdfDocumentKind,
     dueDate: order.payment_due_date,
@@ -211,6 +213,7 @@ export async function renderManualOrderDocumentPdf({
         : (order.invoice_issue_date ?? order.transaction_date)) ||
       order.created_at,
     logoDataUri,
+    ...(renderDeadline !== undefined ? { renderDeadline } : {}),
     invoiceNotes: order.invoice_note || order.notes || undefined,
     taxSubtotals: renderTaxSubtotals,
   });

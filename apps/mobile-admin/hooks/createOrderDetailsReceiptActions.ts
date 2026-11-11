@@ -1,8 +1,13 @@
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
-import { generateReceiptHtml, sanitizeSvg } from '@baci/shared';
+import type { ReceiptOrder } from '@baci/shared';
+import { generateReceiptHtml } from '@baci/shared';
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
 import { supabase } from '@/lib/supabase';
+import {
+  buildOrderReceiptMerchant,
+  type ReceiptMerchantDetails,
+} from './buildOrderReceiptMerchant';
+import { resolveOrderReceiptLogo } from './resolveOrderReceiptLogo';
 import { resolveOrderReceiptVirtualAccount } from './resolveOrderReceiptVirtualAccount';
 import { resolveReceiptItemFulfillmentDetails } from './resolveReceiptItemFulfillmentDetails';
 
@@ -24,28 +29,6 @@ async function loadNativeModules() {
   } catch {
     console.debug('[OrderDetails] Native export modules unavailable');
   }
-}
-
-interface ReceiptMerchantDetails {
-  bank_account_name?: string | null;
-  bank_account_number?: string | null;
-  bank_code?: string | null;
-  brand_colors?: ReceiptMerchant['brand_colors'];
-  business_address?: string | null;
-  business_name?: string | null;
-  cac_rc_number?: string | null;
-  email?: string | null;
-  id: string;
-  legal_entity_name?: string | null;
-  logo_url?: string | null;
-  pages?: Record<string, unknown> | null;
-  phone?: string | null;
-  social_media?: ReceiptMerchant['social_media'];
-  support_email?: string | null;
-  support_phone?: string | null;
-  tax_identification_number?: string | null;
-  vat_rate?: number | null;
-  vat_registration_status?: string | null;
 }
 
 interface CreateOrderDetailsReceiptActionsParams {
@@ -72,14 +55,6 @@ function resolveMerchantPages(
   }
 
   return null;
-}
-
-function isSvgLogoUrl(logoUrl: string) {
-  try {
-    return new URL(logoUrl).pathname.toLowerCase().endsWith('.svg');
-  } catch {
-    return false;
-  }
 }
 
 function getOrderReceiptDate(order: OrderDetailsRecord | undefined) {
@@ -164,60 +139,15 @@ export function createOrderDetailsReceiptActions({
         // Ignore merchant-page refresh failures and fall back to the local merchant payload.
       }
 
-      let logoUrl = merchant.logo_url ?? null;
-      let svgXml: string | undefined;
-
-      if (logoUrl?.startsWith('https://')) {
-        if (isSvgLogoUrl(logoUrl)) {
-          try {
-            const response = await fetch(logoUrl);
-            if (response.ok) {
-              svgXml = sanitizeSvg(await response.text());
-            }
-          } catch (error) {
-            console.warn('[OrderDetails] SVG fetch failed', error);
-          }
-        } else {
-          try {
-            const { File, Paths } = await import('expo-file-system');
-            const destination = new File(
-              Paths.cache,
-              `receipt_logo_${Date.now()}.png`
-            );
-            const downloaded = await File.downloadFileAsync(
-              logoUrl,
-              destination,
-              {
-                idempotent: true,
-              }
-            );
-            const base64 = await downloaded.base64();
-            logoUrl = `data:${downloaded.type || 'image/png'};base64,${base64}`;
-          } catch {
-            logoUrl = null;
-          }
-        }
-      }
-
-      const receiptMerchant: ReceiptMerchant = {
-        bank_account_number: merchant.bank_account_number ?? null,
-        bank_code: merchant.bank_code ?? null,
-        brand_colors: merchant.brand_colors ?? undefined,
-        business_address: merchant.business_address ?? null,
-        business_name: merchant.business_name || 'Baci',
-        cac_rc_number: merchant.cac_rc_number ?? null,
-        email: merchant.email || '',
-        legal_entity_name: merchant.legal_entity_name ?? null,
-        logo_url: logoUrl,
-        pages: merchantPages,
-        phone: merchant.phone ?? null,
-        social_media: merchant.social_media ?? null,
-        support_email: merchant.support_email ?? null,
-        support_phone: merchant.support_phone ?? null,
-        tax_identification_number: merchant.tax_identification_number ?? null,
-        vat_rate: merchant.vat_rate ?? null,
-        vat_registration_status: merchant.vat_registration_status ?? null,
-      };
+      const { logoUrl, svgXml } = await resolveOrderReceiptLogo(
+        merchant.logo_url
+      );
+      const receiptMerchant = await buildOrderReceiptMerchant(
+        merchant,
+        logoUrl,
+        merchantPages ?? undefined,
+        order.payment_status !== 'paid' && receiptOrder.balance > 0
+      );
 
       setReceiptHtml(
         generateReceiptHtml(receiptOrder, receiptMerchant, {

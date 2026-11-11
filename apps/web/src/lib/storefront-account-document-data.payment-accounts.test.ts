@@ -31,6 +31,39 @@ describe('storefront account document payment accounts', () => {
     expect(result.order.virtual_account?.account_number).toBe('2222222222');
   });
 
+  it('avoids unpaid DVAs expiring within the delivery buffer', async () => {
+    const now = Date.now();
+    const { supabase } = createStorefrontDocumentSupabaseMock({
+      paymentAccounts: [
+        {
+          id: 'expiring',
+          account_name: 'Expiring DVA',
+          account_number: '1111111111',
+          bank_name: 'Paystack',
+          provider: 'paystack',
+          created_at: new Date(now - 60_000).toISOString(),
+          expires_at: new Date(now + 5 * 60_000).toISOString(),
+        },
+        {
+          id: 'fallback',
+          account_name: 'Legacy account',
+          account_number: '2222222222',
+          bank_name: 'Korapay',
+          provider: 'korapay',
+          created_at: new Date(now - 120_000).toISOString(),
+          expires_at: null,
+        },
+      ],
+    });
+    const result = await getStorefrontAccountDocumentData({
+      supabase,
+      userId: 'user-1',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-1',
+    });
+    expect(result.order.virtual_account?.account_number).toBe('2222222222');
+  });
+
   it('uses the DVA recorded on the paid transaction when aliases are historical', async () => {
     const { supabase } = createStorefrontDocumentSupabaseMock({
       orderPatch: { payment_status: 'paid' },

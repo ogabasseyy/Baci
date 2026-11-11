@@ -785,6 +785,8 @@ jobs:
             [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid commit SHA' >&2; exit 1; }
             git cat-file -e "${sha}^{commit}"
           done
+      - name: Verify CI setup contracts
+        run: node --test ci_scripts/detect-silent-reverts.test.mjs ci_scripts/db-replay-toolchain.test.mjs
       - name: Detect silent reverts of recent main commits
         env:
           ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
@@ -939,6 +941,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
           SUPABASE_JWT_SECRET: placeholder-jwt-secret
+      - name: Verify Chromium assets and size in invoice PDF build traces
+        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: node .github/scripts/verify-invoice-pdf-build-traces.mjs
+      - name: Smoke test packaged Chromium runtime
+        if: runner.os == 'Linux' && needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: bash .github/scripts/smoke-invoice-pdf-runtime.sh
       - name: Save Next.js build cache (main branch only)
         if: >
           runner.environment == 'github-hosted' &&

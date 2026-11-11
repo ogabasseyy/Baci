@@ -203,25 +203,29 @@ export async function buildImmediateInvoiceArtifacts(
         peppolInvoiceData.items
       ),
     };
-    const pdfBlob = generateReceiptBlob(invoiceReceiptOrder, receiptMerchant, {
-      buyerReference: peppolInvoiceData.buyer_reference,
-      complianceNote: peppolInvoiceXml
-        ? PEPPOL_BIS_BILLING_COMPLIANCE_NOTE
-        : undefined,
-      documentDate: peppolInvoiceData.issue_date,
-      documentKind:
-        peppolInvoiceData.invoice_type_code === '325'
-          ? 'proforma_invoice'
-          : 'invoice',
-      dueDate: peppolInvoiceData.due_date,
-      firsCsid: peppolInvoiceData.firs_csid,
-      firsIrn: peppolInvoiceData.firs_irn,
-      invoiceTypeCode: peppolInvoiceData.invoice_type_code,
-      invoiceNotes: peppolInvoiceData.notes,
-      logoDataUri,
-      paymentTerms: peppolInvoiceData.payment_terms,
-      taxSubtotals: peppolInvoiceData.tax_subtotals,
-    });
+    const pdfBlob = await generateReceiptBlob(
+      invoiceReceiptOrder,
+      receiptMerchant,
+      {
+        buyerReference: peppolInvoiceData.buyer_reference,
+        complianceNote: peppolInvoiceXml
+          ? PEPPOL_BIS_BILLING_COMPLIANCE_NOTE
+          : undefined,
+        documentDate: peppolInvoiceData.issue_date,
+        documentKind:
+          peppolInvoiceData.invoice_type_code === '325'
+            ? 'proforma_invoice'
+            : 'invoice',
+        dueDate: peppolInvoiceData.due_date,
+        firsCsid: peppolInvoiceData.firs_csid,
+        firsIrn: peppolInvoiceData.firs_irn,
+        invoiceTypeCode: peppolInvoiceData.invoice_type_code,
+        invoiceNotes: peppolInvoiceData.notes,
+        logoDataUri,
+        paymentTerms: peppolInvoiceData.payment_terms,
+        taxSubtotals: peppolInvoiceData.tax_subtotals,
+      }
+    );
     const arrayBuffer = await pdfBlob.arrayBuffer();
     const base64Content = Buffer.from(arrayBuffer).toString('base64');
     emailedInvoiceTypeCode = peppolInvoiceData.invoice_type_code;

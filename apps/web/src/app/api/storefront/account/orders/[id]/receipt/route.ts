@@ -3,7 +3,11 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limiter';
-import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
+import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
+import {
+  generateReceiptBlob,
+  resolveReceiptLogoDataUri,
+} from '@/lib/receipt-pdf-generator';
 import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
@@ -87,16 +91,31 @@ export async function GET(
       );
     }
 
+    let logoDataUri: string | null = null;
+    try {
+      logoDataUri = await resolveReceiptLogoDataUri(data.receiptMerchant);
+    } catch {
+      logger.warn({
+        message: 'Failed to resolve storefront receipt logo; using seller name',
+        orderId: parsedParams.data.id,
+      });
+    }
+
     // The eligibility gate above already established receipt kind: pass it
     // explicitly instead of letting the generator infer from the payment
     // flag, which stays non-paid on settled manual balances. Date the same
     // way: the completing payment, not the untouched order dates.
-    const blob = generateReceiptBlob(data.receiptOrder, data.receiptMerchant, {
-      documentKind: 'receipt',
-      documentDate:
-        (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
-        data.receiptOrder.created_at,
-    });
+    const blob = await generateReceiptBlob(
+      data.receiptOrder,
+      data.receiptMerchant,
+      {
+        documentKind: 'receipt',
+        logoDataUri,
+        documentDate:
+          (data.receiptCompletionDate ?? data.receiptOrder.transaction_date) ||
+          data.receiptOrder.created_at,
+      }
+    );
 
     return new NextResponse(blob, {
       headers: {
@@ -109,6 +128,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return toErrorResponse(error);
+    return receiptPdfUnavailableResponse(error) ?? toErrorResponse(error);
   }
 }

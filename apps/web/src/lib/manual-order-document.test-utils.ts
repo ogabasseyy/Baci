@@ -128,7 +128,7 @@ export function database(
           });
         return Promise.resolve({ data: 'claim-1', error: null });
       }
-      if (fn === 'mark_manual_document_dispatch_started') {
+      if (fn === 'mark_manual_document_dispatch_started_v2') {
         const status = options.dispatchStatus ?? 'marked';
         if (status === 'marked') dispatchMarked = true;
         return Promise.resolve({ data: { status }, error: null });

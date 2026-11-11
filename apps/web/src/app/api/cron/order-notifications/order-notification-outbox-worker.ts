@@ -11,7 +11,10 @@ import {
   isPostAcceptanceLeaseReset,
   markCorrectiveRetry,
 } from './order-notification-outbox-corrective-retry';
-import { markFailedOrRetry } from './order-notification-outbox-failure';
+import {
+  deferUndispatchedOutboxRow,
+  markFailedOrRetry,
+} from './order-notification-outbox-failure';
 import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
@@ -109,7 +112,8 @@ async function markDeliveryOutcomeUnknown(
 async function processClaimedRow(
   supabase: SupabaseClientLike,
   row: ClaimedOrderNotificationOutboxRow,
-  summary: OrderNotificationCronSummary
+  summary: OrderNotificationCronSummary,
+  invocationDeadline?: number
 ) {
   try {
     const shipmentMetadata = resolveOrderNotificationOutboxShipmentMetadata(
@@ -125,6 +129,7 @@ async function processClaimedRow(
       ? await sendManualOrderDocument({
           supabase,
           row: { ...row, event_type: eventType },
+          ...(invocationDeadline !== undefined ? { invocationDeadline } : {}),
         })
       : await sendOrderFulfillmentNotification({
           beforeProviderDispatch: () =>
@@ -154,6 +159,12 @@ async function processClaimedRow(
           trackingNumber: shipmentMetadata.trackingNumber,
           trackingToken: shipmentMetadata.trackingToken,
         });
+
+    if (result.status === 'deferred') {
+      await deferUndispatchedOutboxRow(supabase, row);
+      summary.retried += 1;
+      return;
+    }
 
     if (result.status === 'sent') {
       try {
@@ -245,7 +256,8 @@ function groupRowsByOrderId(rows: ClaimedOrderNotificationOutboxRow[]) {
 export async function processClaimedOrderNotificationRows(
   supabase: SupabaseClientLike,
   rows: ClaimedOrderNotificationOutboxRow[],
-  summary: OrderNotificationCronSummary
+  summary: OrderNotificationCronSummary,
+  invocationDeadline?: number
 ) {
   const groups = groupRowsByOrderId(rows);
   let nextGroupIndex = 0;
@@ -256,7 +268,7 @@ export async function processClaimedOrderNotificationRows(
         const group = groups[nextGroupIndex];
         nextGroupIndex += 1;
         for (const row of group ?? [])
-          await processClaimedRow(supabase, row, summary);
+          await processClaimedRow(supabase, row, summary, invocationDeadline);
       }
     })
   );

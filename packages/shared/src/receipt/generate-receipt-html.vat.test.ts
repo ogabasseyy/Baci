@@ -6,6 +6,43 @@ import { receiptTestFactory } from './receipt-test-factory';
 const { createReceiptMerchant, createReceiptOrder } = receiptTestFactory;
 
 describe('generateReceiptHtml VAT summary', () => {
+  it('labels historical VAT with the persisted rate when the merchant rate changed', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        subtotal: 100,
+        tax_amount: 20,
+        total: 120,
+        tax_subtotals: [{ vat_rate: 20, tax_amount: 20, taxable_amount: 100 }],
+      }),
+      createReceiptMerchant({
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      }),
+      { documentKind: 'invoice' }
+    );
+    expect(html).toContain('VAT (20%)');
+    expect(html).not.toContain('VAT (7.5%)');
+  });
+
+  it('keeps paid receipts independent of mutable invoice tax rows', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        subtotal: 100,
+        tax_amount: 20,
+        total: 120,
+        amount_paid: 120,
+        payment_status: 'paid',
+        tax_subtotals: [{ vat_rate: 20, tax_amount: 20, taxable_amount: 100 }],
+      }),
+      createReceiptMerchant({
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+      })
+    );
+    expect(html).toContain('<span>VAT</span><span>₦20.00</span>');
+    expect(html).not.toContain('VAT (20%)');
+  });
+
   it('does not show stale VAT when the order total excludes the tax amount', () => {
     const html = generateReceiptHtml(
       createReceiptOrder({
@@ -36,7 +73,7 @@ describe('generateReceiptHtml VAT summary', () => {
       })
     );
 
-    expect(html).toContain('VAT (7.5%)');
+    expect(html).toContain('<span>VAT</span>');
     expect(html).toContain('₦935,000.00');
     expect(html).toContain('₦70,125.00');
     expect(html).toContain('₦1,005,125.00');
@@ -55,7 +92,7 @@ describe('generateReceiptHtml VAT summary', () => {
       })
     );
 
-    expect(html).toContain(`VAT (${DEFAULT_NG_VAT_RATE}%)`);
+    expect(html).toContain('<span>VAT</span>');
     expect(html).toContain('₦935,000.00');
     expect(html).toContain('₦70,125.00');
     expect(html).toContain('₦1,005,125.00');
@@ -74,7 +111,7 @@ describe('generateReceiptHtml VAT summary', () => {
       })
     );
 
-    expect(html).toContain('VAT (7.5%)');
+    expect(html).toContain('<span>VAT</span>');
     expect(html).toContain('₦930.00');
     expect(html).toContain('₦70.00');
     expect(html).toContain('₦1,000.00');
@@ -112,7 +149,7 @@ describe('generateReceiptHtml VAT summary', () => {
       })
     );
 
-    expect(html).toContain('VAT (7.5%)');
+    expect(html).toContain('<span>VAT</span>');
     expect(html).toContain('₦935,000.00');
     expect(html).toContain('₦70,125.00');
     expect(html).toContain('₦1,005,125.00');

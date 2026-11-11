@@ -13,7 +13,7 @@ const TRANSPORT_ATTEMPT_WORST_MS = 30_000;
 const AUDIT_WRITE_MARGIN_MS = 8_000;
 // Callers abort the send 10s before their deadline (signal + deadline
 // race); admission budgets must leave that buffer on top of the loop.
-const SEND_CUTOFF_BUFFER_MS = 10_000;
+export const ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS = 10_000;
 
 /** Clamp a per-sender attempt cap into the configured retry loop. */
 export function clampZeptomailAttemptsPerSender(
@@ -45,7 +45,9 @@ export function senderLoopWorstMs(maxAttempts: number): number {
 export function zeptomailSendAdmissionBudgetMs(
   maxAttemptsPerSender: number = ZEPTOMAIL_MAX_RETRIES + 1
 ): number {
-  return senderLoopWorstMs(maxAttemptsPerSender) + SEND_CUTOFF_BUFFER_MS;
+  return (
+    senderLoopWorstMs(maxAttemptsPerSender) + ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS
+  );
 }
 
 export interface ZeptomailFallbackAdmission {
@@ -91,15 +93,6 @@ export function admitZeptomailPlatformFallback({
     }),
   });
 }
-
-/**
- * Static platform-fallback ceiling for manual-order document sends: they
- * run inside the 60s cron worker with no caller deadline, so without a
- * cap a slow fallback would overrun the worker mid-dispatch. Covers one
- * worst-case attempt plus the audit margin, keeping the retry budget for
- * the outbox path instead of the transport.
- */
-export const MANUAL_DOC_FALLBACK_CEILING_MS = 45_000;
 
 export function resolveZeptomailFallbackAdmission({
   attemptsPerSender,

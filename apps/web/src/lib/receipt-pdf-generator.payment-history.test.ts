@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatReceiptDate } from '@/lib/receipt-pdf-formatters';
-import {
-  type generateReceiptBlob,
-  generateReceiptPDF,
-} from '@/lib/receipt-pdf-generator';
+import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
+
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async (html: string) =>
+    new TextEncoder().encode(html)
+  ),
+}));
 
 const baseMerchant = {
   business_name: 'Ogabassey',
@@ -45,18 +48,8 @@ const baseOrder = {
   customer_phone: '+2348012345678',
 };
 
-function getPdfText(
-  order: Parameters<typeof generateReceiptBlob>[0],
-  merchant: Parameters<typeof generateReceiptBlob>[1],
-  options?: Parameters<typeof generateReceiptPDF>[2]
-) {
-  return generateReceiptPDF(order, merchant, options)
-    .output()
-    .replaceAll(String.fromCharCode(0), '');
-}
-
-describe('generateReceiptPDF payment history', () => {
-  it('renders the payment-history table from order transactions', () => {
+describe('generateReceiptBlob payment history', () => {
+  it('renders the payment-history table from order transactions', async () => {
     const order = {
       ...baseOrder,
       items: [
@@ -81,9 +74,11 @@ describe('generateReceiptPDF payment history', () => {
         },
       ],
     };
-    const pdfText = getPdfText(order, baseMerchant);
+    const pdfText = await (
+      await generateReceiptBlob(order, baseMerchant)
+    ).text();
 
-    expect(pdfText).toContain('Payment Date');
+    expect(pdfText).toContain('Payment History');
     expect(pdfText).toContain('transfer');
     expect(pdfText).toContain('Payment');
     expect(pdfText).toContain(formatReceiptDate('2026-03-20T10:00:00Z'));

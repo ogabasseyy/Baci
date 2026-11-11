@@ -6,6 +6,7 @@ import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item
 import { logger } from '@/lib/logger';
 import { generatePeppolInvoiceXml } from '@/lib/peppol-ubl-invoice';
 import { checkRateLimit } from '@/lib/rate-limiter';
+import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
 import {
   generateReceiptBlob,
   resolveReceiptLogoDataUri,
@@ -140,7 +141,7 @@ export async function GET(
         data.invoiceData.items
       ),
     };
-    const blob = generateReceiptBlob(receiptOrder, data.receiptMerchant, {
+    const blob = await generateReceiptBlob(receiptOrder, data.receiptMerchant, {
       buyerReference: data.invoiceData.buyer_reference,
       documentDate: data.invoiceData.issue_date,
       documentKind:
@@ -168,6 +169,6 @@ export async function GET(
       },
     });
   } catch (error) {
-    return toErrorResponse(error);
+    return receiptPdfUnavailableResponse(error) ?? toErrorResponse(error);
   }
 }

@@ -5,8 +5,11 @@ import { serializedInventorySqlParser } from './serialized_variant_inventory_con
 const { dollarQuoteAt, escapeRegex, maskSqlLiterals } =
   serializedInventorySqlParser;
 const { renderFormatInvocation } = serializedInventoryDynamicRender;
-const { assignedExecutePayloads, executesUntracedDefinitionTransform } =
-  serializedInventoryDynamicTaint;
+const {
+  assignedExecutePayloads,
+  canScopeFrozenInvoiceAcl,
+  executesUntracedDefinitionTransform,
+} = serializedInventoryDynamicTaint;
 
 function identifierPattern(identifier) {
   return identifier
@@ -229,6 +232,7 @@ const dynamicPrivilegeOperationPattern =
 
 function hasDynamicPrivilegeDdl(source, functionSignature) {
   const masked = serializedInventorySqlParser.maskSqlLiterals(source);
+  const scopeInvoiceAcl = canScopeFrozenInvoiceAcl(source, functionSignature);
   const privilege = dynamicPrivilegePattern(functionSignature);
   const schemaPrivilege = dynamicSchemaPrivilegePattern(functionSignature);
   const matchesPrivilege = (text) =>
@@ -256,7 +260,12 @@ function hasDynamicPrivilegeDdl(source, functionSignature) {
     }
     if (
       normalized.hasUnknownPrivilegeTarget &&
-      dynamicPrivilegeOperationPattern.test(normalized.operationText)
+      dynamicPrivilegeOperationPattern.test(normalized.operationText) &&
+      // The exact frozen source only concatenates the v2 name with a catalog type list.
+      !(
+        scopeInvoiceAcl &&
+        /\|\| shared_dispatch_name \|\| signature \|\|/.test(payload)
+      )
     ) {
       return true;
     }

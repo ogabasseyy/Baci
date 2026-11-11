@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-10T23:42:19+00:00",
-  "source_revision": "f43e6cff2387fb6b24f6c06183b875047a113df1",
-  "evidence_digest": "4fed12e5b3b8341d41b51f4059c8304a54064fb6077f9a8ce76506f371a1175e",
-  "claims_digest": "bfcd17d5afb08998699ee61f59961f67d225fe7790f105714420579c75d63891",
-  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate.",
+  "reviewed_at": "2026-11-11T08:44:52+00:00",
+  "source_revision": "3a6c47bf695ed9723b24381267989e2c5a34955d",
+  "evidence_digest": "ba52b4ac58fba00c94916357274051f14fc3eed2c6bb0ced2eba02f3ec14a975",
+  "claims_digest": "3cd8636fe17fbca200f3f30ff69b31ad778479efa8f634542da865f8771f7dbe",
+  "review_scope": "Source evidence only. Preserves current main’s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Invoice previews and PDFs share the merchant template. Dispatch rechecks both displayed bank accounts and seller registration. Chromium archives have a Turbopack trace regression test.",
   "capabilities": [
     {
       "id": "payments",
@@ -98,7 +98,11 @@
       "source_refs": [
         "apps/web/src/lib/invoice-generator.ts",
         "apps/web/src/lib/receipt-pdf-generator.ts",
-        "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts"
+        "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts",
+        "packages/shared/src/receipt/generate-receipt-html.ts",
+        "packages/shared/src/receipt/receipt-payment-instructions.ts",
+        "apps/web/src/lib/receipt-html-to-pdf.ts",
+        "supabase/migrations/20261110150000_recheck_both_invoice_payment_cards.sql"
       ]
     },
     {

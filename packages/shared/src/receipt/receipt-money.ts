@@ -151,10 +151,7 @@ export function shouldShowVatLine(
   order: VatBreakdownOrder,
   merchant: VatBreakdownMerchant
 ): boolean {
-  if (
-    merchant.vat_registration_status !== 'registered' ||
-    order.tax_amount <= 0
-  ) {
+  if (order.tax_amount <= 0) {
     return false;
   }
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { findSilentReverts, parseRawDiff } from './detect-silent-reverts.mjs';
 
@@ -86,4 +87,19 @@ describe('findSilentReverts', () => {
 
     assert.deepEqual(findings, []);
   });
+});
+
+it('uses the full checkout for the private-repository revert guard', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/ci.yml', import.meta.url),
+    'utf8'
+  );
+  const guard =
+    workflow
+      .split('    name: Silent Revert Guard')[1]
+      ?.split('\n  quality:')[0] ?? '';
+  assert.match(guard, /fetch-depth: 0/);
+  assert.match(guard, /persist-credentials: false/);
+  assert.match(guard, /BASE_SHA:.*pull_request.base.sha/);
+  assert.doesNotMatch(guard, /git fetch/);
 });

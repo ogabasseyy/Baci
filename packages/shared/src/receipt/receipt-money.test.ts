@@ -88,20 +88,22 @@ describe('receipt VAT visibility', () => {
     ).toBe(934000);
   });
 
-  it.each([
-    [
-      'unregistered merchant',
-      createReceiptMerchant({ vat_registration_status: null }),
-    ],
-    ['zero tax amount', createReceiptMerchant()],
-  ])('hides VAT for %s', (_label, merchant) => {
+  it('discloses stored VAT even when the merchant is no longer registered', () => {
     const order = createReceiptOrder({
-      subtotal: 935000,
-      tax_amount: merchant.vat_registration_status === 'registered' ? 0 : 70125,
-      total: 1005125,
+      subtotal: 100,
+      shipping_fee: 0,
+      tax_amount: 7.5,
+      total: 107.5,
     });
-
-    expect(shouldShowVatLine(order, merchant)).toBe(false);
+    expect(
+      shouldShowVatLine(
+        order,
+        createReceiptMerchant({ vat_registration_status: null })
+      )
+    ).toBe(true);
+    expect(
+      shouldShowVatLine({ ...order, tax_amount: 0 }, createReceiptMerchant())
+    ).toBe(false);
   });
 
   it('returns the raw subtotal for clean tax-exclusive totals', () => {

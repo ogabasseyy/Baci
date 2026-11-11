@@ -8,6 +8,7 @@ export interface ReceiptDocumentParams {
   merchant: ReceiptMerchant;
   addressParts: string[];
   bankDetailsHtml: string;
+  complianceNote?: string;
   brandCardBorder: string;
   brandLight: string;
   brandPrimary: string;
@@ -148,6 +149,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
 
     ${invoiceTermsHtml}
     ${vatBreakdownHtml}
+    ${params.complianceNote ? `<div class="section-block">${escapeHtml(params.complianceNote)}</div>` : ''}
     ${paymentHistoryHtml}
     ${bankDetailsHtml}
     ${qrHtml}

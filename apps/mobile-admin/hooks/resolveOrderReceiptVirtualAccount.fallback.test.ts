@@ -52,117 +52,37 @@ describe('resolveOrderReceiptVirtualAccount fallbacks', () => {
     ).toBeNull();
   });
 
-  it('ignores a virtual account without an account number and uses an existing terminal', async () => {
+  it('does not promote a staff terminal or merchant bank to automatic confirmation', async () => {
     authenticate();
-    mocks.fetch.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce(
-      okJson({
-        terminals: [
-          {
-            active: true,
-            account_name: 'Generated Account',
-            account_number: '1234567890',
-            bank_name: 'Generated Bank',
-          },
-        ],
-      })
-    );
-
-    const account = await resolveOrderReceiptVirtualAccount({
-      merchant: null,
-      order: makeOrder({
-        virtual_account: {
-          account_name: 'Broken',
-          account_number: '',
-          bank_name: 'Broken Bank',
-        },
-      }),
-    });
-
-    expect(account).toEqual({
-      account_name: 'Generated Account',
-      account_number: '1234567890',
-      bank_name: 'Generated Bank',
-    });
-    expect(mocks.fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it('ignores a staff terminal without an account number and falls back to the merchant account', async () => {
-    authenticate();
-    mocks.fetch
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce(okJson({ account_name: 'Baci Ltd' }));
-
+    mocks.fetch.mockResolvedValue({ ok: false });
     const account = await resolveOrderReceiptVirtualAccount({
       merchant: {
-        bank_account_name: '',
-        bank_account_number: '0123456789',
-        bank_code: '044',
-        business_name: 'Baci',
+        bank_account_name: 'Manual Merchant',
+        bank_account_number: '2222222222',
+        bank_code: '058',
+        business_name: 'Merchant',
       },
       order: makeOrder({
         staff_terminal: {
-          account_name: 'Broken Terminal',
-          account_number: '',
-          bank_name: 'Broken Bank',
+          account_name: 'Staff',
+          account_number: '1111111111',
+          bank_name: 'Terminal bank',
         },
       }),
     });
-
-    expect(account).toMatchObject({
-      account_name: 'Baci Ltd',
-      account_number: '0123456789',
-    });
+    expect(account).toBeNull();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch.mock.calls[0][0]).toContain('/generate-dva');
   });
-
-  it('skips active terminals without account numbers when selecting a receipt fallback', async () => {
+  it('leaves malformed or rejected provider responses out of the automatic slot', async () => {
     authenticate();
-    mocks.fetch.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce(
-      okJson({
-        terminals: [
-          { active: true, account_name: 'Placeholder' },
-          {
-            active: true,
-            account_name: 'Paystack Terminal',
-            account_number: '1234567890',
-            bank: 'Test Bank',
-          },
-        ],
+    mocks.fetch.mockResolvedValue(okJson({ virtualAccount: [] }));
+    expect(
+      await resolveOrderReceiptVirtualAccount({
+        merchant: null,
+        order: makeOrder(),
       })
-    );
-
-    const account = await resolveOrderReceiptVirtualAccount({
-      merchant: null,
-      order: makeOrder(),
-    });
-
-    expect(account).toEqual({
-      account_name: 'Paystack Terminal',
-      account_number: '1234567890',
-      bank_name: 'Test Bank',
-    });
-  });
-
-  it('ignores malformed API payloads and falls back to the merchant account', async () => {
-    authenticate();
-    mocks.fetch
-      .mockResolvedValueOnce(okJson({ virtualAccount: [] }))
-      .mockResolvedValueOnce(okJson({ terminals: {} }))
-      .mockResolvedValueOnce(okJson({ account_name: 'Baci Ltd' }));
-
-    const account = await resolveOrderReceiptVirtualAccount({
-      merchant: {
-        bank_account_name: '',
-        bank_account_number: '0123456789',
-        bank_code: '044',
-        business_name: 'Baci',
-      },
-      order: makeOrder(),
-    });
-
-    expect(account).toMatchObject({
-      account_name: 'Baci Ltd',
-      account_number: '0123456789',
-    });
+    ).toBeNull();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 });

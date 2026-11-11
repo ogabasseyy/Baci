@@ -64,7 +64,7 @@ describe('resolveOrderReceiptVirtualAccount provisioning', () => {
     }
   });
 
-  it('falls back to the merchant bank account when no virtual account exists', async () => {
+  it('does not label the merchant bank account as automatic when provisioning has no account', async () => {
     authenticate();
     mocks.fetch.mockResolvedValue(okJson({ account_name: 'Baci Ltd' }));
 
@@ -78,10 +78,7 @@ describe('resolveOrderReceiptVirtualAccount provisioning', () => {
       order: makeOrder(),
     });
 
-    expect(account).toMatchObject({
-      account_name: 'Baci Ltd',
-      account_number: '0123456789',
-    });
+    expect(account).toBeNull();
   });
 
   it('provisions automatic confirmation for an unpaid manual invoice', async () => {
@@ -126,7 +123,7 @@ describe('resolveOrderReceiptVirtualAccount provisioning', () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('revalidates an order Paystack account before using a staff terminal fallback', async () => {
+  it('revalidates an order Paystack account without using a staff terminal fallback', async () => {
     authenticate();
     mocks.fetch.mockResolvedValue(
       okJson({
@@ -187,10 +184,7 @@ describe('resolveOrderReceiptVirtualAccount provisioning', () => {
       }),
     });
 
-    expect(account).toMatchObject({
-      account_name: 'Manual Account',
-      account_number: '0123456789',
-    });
+    expect(account).toBeNull();
     expect(mocks.fetch).toHaveBeenCalledWith(
       'https://example.com/api/orders/order-1/generate-dva',
       expect.anything()

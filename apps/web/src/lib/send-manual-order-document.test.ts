@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async (html: string) =>
+    new TextEncoder().encode(`%PDF-TEST\n${html}`)
+  ),
+}));
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
 vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
@@ -15,7 +20,6 @@ vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
 
 import { database, row } from './manual-order-document.test-utils';
 import { sendManualOrderDocument } from './send-manual-order-document';
-import { MANUAL_DOC_FALLBACK_CEILING_MS } from './zeptomail-send-budget';
 
 describe('send manual order document', () => {
   beforeEach(() => {
@@ -26,7 +30,7 @@ describe('send manual order document', () => {
     });
   });
 
-  it('sends a real PDF receipt, a claim link and tenant-scoped email audit metadata', async () => {
+  it('sends the shared receipt PDF attachment, a claim link and tenant-scoped email audit metadata', async () => {
     const db = database();
     const result = await sendManualOrderDocument({ supabase: db.client, row });
     expect(result.status).toBe('sent');
@@ -38,12 +42,6 @@ describe('send manual order document', () => {
     });
     const message = sendEmail.mock.calls[0][0];
     expect(message.to).toBe('ada@example.com');
-    // The platform fallback is bounded by a static single-attempt ceiling
-    // past the 60s worker: without it the fallback would run unbounded.
-    expect(message.fallbackDeadlineMs).toBeGreaterThan(Date.now());
-    expect(message.fallbackDeadlineMs).toBeLessThanOrEqual(
-      Date.now() + MANUAL_DOC_FALLBACK_CEILING_MS
-    );
     expect(message.subject).toBe('Your receipt is ready - #ORD-42');
     expect(message.htmlContent).toMatch(
       /https:\/\/ogabassey.usebaci.com\/receipts\/claim\/[a-f0-9]{64}/
@@ -60,7 +58,7 @@ describe('send manual order document', () => {
     });
     const pdf = Buffer.from(attachment.content, 'base64').toString('latin1');
     expect(pdf.startsWith('%PDF-')).toBe(true);
-    expect(pdf).toContain('RECEIPT');
+    expect(pdf).toContain('Receipt');
     expect(pdf).toContain('28 Sept 2026');
     expect(pdf).toContain('Pixel 10 Pro XL');
     const claimCall = db.rpc.mock.calls.find(
@@ -100,7 +98,7 @@ describe('send manual order document', () => {
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );
-    expect(pdf).toContain('INVOICE');
+    expect(pdf).toContain('Invoice');
     expect(pdf).toContain('26 Sept 2026');
     expect(message.textContent).toMatch(/not.*proof of payment/i);
   });
@@ -121,7 +119,7 @@ describe('send manual order document', () => {
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );
-    expect(pdf).toContain('PROFORMA INVOICE');
+    expect(pdf).toContain('Proforma Invoice');
   });
 
   it('attaches the assigned virtual account to invoice payment instructions', async () => {
@@ -187,7 +185,7 @@ describe('send manual order document', () => {
       error: 'missing ZeptoMail token',
     });
     expect(db.rpc.mock.calls.map(([fn]) => fn)).not.toContain(
-      'mark_manual_document_dispatch_started'
+      'mark_manual_document_dispatch_started_v2'
     );
   });
 

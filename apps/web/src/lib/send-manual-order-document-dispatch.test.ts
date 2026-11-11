@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendEmail = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/receipt-html-to-pdf', () => ({
+  renderHtmlToPdf: vi.fn(async (html: string) =>
+    new TextEncoder().encode(`%PDF-TEST\n${html}`)
+  ),
+}));
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
 vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
@@ -143,7 +148,7 @@ describe('send manual order document dispatch', () => {
     ).rejects.toThrow('order changed before dispatch');
     expect(
       db.rpc.mock.calls.some(
-        ([fn]) => fn === 'mark_manual_document_dispatch_started'
+        ([fn]) => fn === 'mark_manual_document_dispatch_started_v2'
       )
     ).toBe(true);
   });
@@ -171,7 +176,7 @@ describe('send manual order document dispatch', () => {
     const pdf = Buffer.from(message.attachments[0].content, 'base64').toString(
       'latin1'
     );
-    expect(pdf).toContain('RECEIPT');
+    expect(pdf).toContain('Receipt');
     expect(pdf).not.toContain('PROFORMA');
   });
 

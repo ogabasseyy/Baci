@@ -96,6 +96,14 @@ function appendAddressPart(
   parts.push(displayValue);
 }
 
+const INVOICE_TITLES = new Map([
+  ['381', 'Credit Note'],
+  ['383', 'Debit Note'],
+  ['384', 'Corrected Invoice'],
+  ['386', 'Prepayment Invoice'],
+  ['389', 'Self-billed Invoice'],
+]);
+
 export function generateReceiptHtml(
   order: ReceiptOrder,
   merchant: ReceiptMerchant,
@@ -111,14 +119,17 @@ export function generateReceiptHtml(
 
   const isPaid = order.payment_status === 'paid';
   const statusConfig = getReceiptStatusConfig(order.payment_status);
-  // A proforma is by definition unpaid; a paid order always renders the
-  // commercial receipt even if a stale proforma kind travels with it.
+  // Explicit invoices can describe paid orders. Proformas apply only to unpaid
+  // orders. The default is a receipt for paid orders and an invoice otherwise.
   const isProforma = options.documentKind === 'proforma' && !isPaid;
-  const docTitle = isPaid
-    ? 'Receipt'
-    : isProforma
-      ? 'Proforma Invoice'
-      : 'Invoice';
+  const forceInvoice = options.documentKind === 'invoice';
+  const invoiceTitle =
+    INVOICE_TITLES.get(options.invoiceTypeCode ?? '') ?? 'Invoice';
+  const docTitle = isProforma
+    ? 'Proforma Invoice'
+    : isPaid && !forceInvoice
+      ? 'Receipt'
+      : invoiceTitle;
 
   const currencyCode = order.currency || 'NGN';
   const formatMoney = createMoneyFormatter(currencyCode);
@@ -127,23 +138,26 @@ export function generateReceiptHtml(
   const hasIssueDate = Boolean(order.invoice_issue_date);
   const dateStr = order.invoice_issue_date
     ? formatReceiptCalendarDate(order.invoice_issue_date)
-    : orderDate.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'Africa/Lagos',
-      });
+    : Number.isNaN(orderDate.getTime())
+      ? '—'
+      : orderDate.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'Africa/Lagos',
+        });
   // A persisted issue date is a legal calendar date with no time component.
   // Pairing it with the Lagos transaction time mixes two different moments
   // for backdated invoices and two timezones for non-Nigerian merchants, so
   // render the issue date without a time.
-  const timeStr = hasIssueDate
-    ? ''
-    : orderDate.toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Africa/Lagos',
-      });
+  const timeStr =
+    hasIssueDate || Number.isNaN(orderDate.getTime())
+      ? ''
+      : orderDate.toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Africa/Lagos',
+        });
 
   const storeName =
     merchant.legal_entity_name || merchant.business_name || 'Store';
@@ -163,9 +177,27 @@ export function generateReceiptHtml(
   appendAddressPart(addressParts, addr?.postal_code);
   appendAddressPart(addressParts, addr?.country, { isCountry: true });
 
+  const registeredAddress = merchant.registered_address;
+  const invoiceAddress = registeredAddress
+    ? [
+        registeredAddress.street,
+        registeredAddress.city,
+        registeredAddress.state,
+        registeredAddress.postal_code,
+        registeredAddress.country,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : '';
+  const displayMerchant =
+    docTitle === 'Receipt' || !invoiceAddress
+      ? merchant
+      : { ...merchant, business_address: invoiceAddress };
+
   return renderReceiptDocument({
     order,
-    merchant,
+    merchant: displayMerchant,
+    complianceNote: options.complianceNote,
     addressParts,
     bankDetailsHtml: renderBankDetailsHtml({
       order,
@@ -191,11 +223,15 @@ export function generateReceiptHtml(
     itemRows: renderItemRows(
       order,
       formatMoney,
-      isPaid ? 'receipt' : isProforma ? 'proforma' : 'invoice'
+      isPaid && !forceInvoice ? 'receipt' : isProforma ? 'proforma' : 'invoice'
     ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
-    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid),
-    vatBreakdownHtml: renderVatBreakdownHtml(order, formatMoney, isPaid),
+    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid && !forceInvoice),
+    vatBreakdownHtml: renderVatBreakdownHtml(
+      order,
+      formatMoney,
+      isPaid && !forceInvoice
+    ),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),
     socialItems: buildSocialItems(merchant.social_media),
@@ -205,7 +241,8 @@ export function generateReceiptHtml(
       merchant,
       formatMoney,
       statusConfig.color,
-      isPaid
+      isPaid,
+      isPaid && !forceInvoice
     ),
     termsHtml: renderTermsHtml(merchant, options),
     timeStr,

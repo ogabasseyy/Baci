@@ -9,7 +9,6 @@ import {
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildPdfContentDisposition } from '@/lib/download-filename';
 import {
   buildAssuranceInvoiceLineItem,
   nextInvoiceLineId,
@@ -24,16 +23,11 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
-import {
-  generatePeppolInvoiceXml,
-  PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
-} from '@/lib/peppol-ubl-invoice';
-import {
-  generateReceiptBlob,
-  resolveReceiptLogoDataUri,
-} from '@/lib/receipt-pdf-generator';
+import { checkRateLimit } from '@/lib/rate-limiter';
+import { receiptPdfUnavailableResponse } from '@/lib/receipt-html-to-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
+import { buildInvoicePdfResponse } from './build-invoice-pdf-response';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
@@ -108,6 +102,19 @@ export async function GET(
       return NextResponse.json(
         { error: 'Invalid order ID', code: 'INVALID_ID' },
         { status: 400 }
+      );
+    }
+    const isAllowed = await checkRateLimit(
+      supabase,
+      user.id,
+      'merchant_invoice_download',
+      10,
+      1
+    );
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': '60' } }
       );
     }
     const orderId = parsed.data.id;
@@ -563,8 +570,8 @@ export async function GET(
           merchant.tax_identification_number || undefined,
         cac_rc_number: merchant.cac_rc_number || undefined,
         vat_registration_status:
-          merchant.vat_registration_status || 'not_registered',
-        vat_rate: merchant.vat_rate || 7.5,
+          merchant.vat_registration_status || 'unregistered',
+        vat_rate: merchant.vat_rate ?? 0,
         registered_address: merchant.registered_address || undefined,
         support_email: merchant.support_email || undefined,
         support_phone: merchant.support_phone || undefined,
@@ -622,6 +629,7 @@ export async function GET(
     };
 
     const receiptOrder: ReceiptOrder = {
+      invoice_issue_date: order.invoice_issue_date,
       order_number: invoiceData.invoice_number,
       created_at: String(order.created_at),
       currency: invoiceData.currency,
@@ -701,68 +709,15 @@ export async function GET(
       social_media: merchant.social_media,
       pages: merchant.pages,
     };
-    let complianceNote: string | undefined;
-    // Peppol UBL is a commercial-invoice artifact: proforma (325)
-    // documents skip the XML call and carry no compliance note.
-    if (invoiceData.invoice_type_code !== '325') {
-      try {
-        generatePeppolInvoiceXml(invoiceData);
-        complianceNote = PEPPOL_BIS_BILLING_COMPLIANCE_NOTE;
-      } catch (peppolError) {
-        console.error(
-          'Failed to generate Peppol UBL invoice XML:',
-          peppolError
-        );
-      }
-    }
-
-    // Generate the branded PDF
-    let logoDataUri: string | null = null;
-    try {
-      logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
-    } catch (logoError) {
-      console.warn(
-        'Failed to resolve invoice logo; using fallback PDF branding',
-        {
-          orderId,
-          error: logoError,
-        }
-      );
-    }
-
-    const pdfBlob = generateReceiptBlob(receiptOrder, receiptMerchant, {
-      buyerReference: invoiceData.buyer_reference,
-      complianceNote,
-      documentDate: invoiceData.issue_date,
-      documentKind:
-        invoiceData.invoice_type_code === '325'
-          ? 'proforma_invoice'
-          : 'invoice',
-      dueDate: invoiceData.due_date,
-      firsCsid: invoiceData.firs_csid,
-      firsIrn: invoiceData.firs_irn,
-      invoiceTypeCode: invoiceData.invoice_type_code,
-      invoiceNotes: invoiceData.notes,
-      logoDataUri,
-      paymentTerms: invoiceData.payment_terms,
-      taxSubtotals: invoiceData.tax_subtotals,
-    });
-
-    // Return the PDF as a response
-    const pdfArrayBuffer = await pdfBlob.arrayBuffer();
-
-    return new NextResponse(pdfArrayBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': buildPdfContentDisposition(
-          invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
-          invoiceData.invoice_number
-        ),
-        'Cache-Control': 'no-cache',
-      },
-    });
+    return await buildInvoicePdfResponse(
+      orderId,
+      invoiceData,
+      receiptOrder,
+      receiptMerchant
+    );
   } catch (error) {
+    const unavailable = receiptPdfUnavailableResponse(error);
+    if (unavailable) return unavailable;
     console.error('Error generating invoice:', error);
     return NextResponse.json(
       { error: 'Failed to generate invoice' },

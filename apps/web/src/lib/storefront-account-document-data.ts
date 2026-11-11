@@ -207,6 +207,7 @@ export async function getStorefrontAccountDocumentData({
       new Date(),
       {
         allowExpiredPaystackAccount: paymentReceived,
+        expiryBufferMs: paymentReceived ? undefined : 15 * 60 * 1000,
         preferredPaystackAccountNumber: paymentReceived
           ? getPaystackDvaAccountNumberFromTransactions(transactionRows)
           : null,

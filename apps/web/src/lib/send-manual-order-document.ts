@@ -33,7 +33,21 @@ import { reportFailedManualDocumentSend } from '@/lib/report-failed-manual-docum
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
-import { MANUAL_DOC_FALLBACK_CEILING_MS } from '@/lib/zeptomail-send-budget';
+import {
+  ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS,
+  zeptomailSendAdmissionBudgetMs,
+} from '@/lib/zeptomail-send-budget';
+
+const EMAIL_ATTEMPTS_PER_SENDER = 1;
+const EMAIL_ADMISSION_MS = zeptomailSendAdmissionBudgetMs(
+  EMAIL_ATTEMPTS_PER_SENDER
+);
+
+const DEFERRED = { status: 'deferred' } as const;
+
+function emailFits(invocationDeadline: number) {
+  return invocationDeadline - Date.now() > EMAIL_ADMISSION_MS;
+}
 
 export type ManualOrderDocumentEventType =
   | 'manual_order_receipt'
@@ -46,22 +60,21 @@ interface DocumentRow {
   event_type: ManualOrderDocumentEventType;
 }
 export type ManualOrderDocumentResult =
+  | typeof DEFERRED
   | { status: 'sent'; messageId?: string }
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string; deliveryOutcome?: 'unknown' };
 
 // Only a CRON_SECRET-authenticated outbox worker calls this helper. No customer
 // request constructs a privileged client or chooses the recipient/tenant.
-// The dispatch capability is RPC-only (ManualDocumentDispatchDb): the
-// loader fetches one claim-bound snapshot RPC and every helper below
-// selects from those rows in memory. No table is touched directly here,
-// and the type forbids adding any.
 export async function sendManualOrderDocument({
   supabase,
   row,
+  invocationDeadline = Date.now() + 60_000,
 }: {
   supabase: Pick<SupabaseClient, 'rpc' | 'from'>;
   row: DocumentRow;
+  invocationDeadline?: number;
 }): Promise<ManualOrderDocumentResult> {
   const loaded = await loadManualDocumentDispatch({ supabase, row });
   if (loaded.status !== 'ready') return loaded;
@@ -72,16 +85,12 @@ export async function sendManualOrderDocument({
   const rawMerchantBrandColors = (
     snapshot.merchant as { brand_colors?: unknown }
   ).brand_colors;
-  // A fully-covered balance is substantively paid even under a non-paid
-  // label: mirror the trigger so settled orders render receipts.
   const isPaid = paymentStatus === 'paid' || order.amount_paid >= order.total;
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };
   if (isPaid && order.amount_paid < order.total)
     return { status: 'skipped', reason: 'paid_balance_outstanding' };
-  // Invoice-method orders render as proforma (Peppol 325) like the
-  // account view, so the emailed document agrees with it.
   const invoiceTypeCode = isPaid
     ? null
     : resolveInvoiceTypeCode({
@@ -94,7 +103,6 @@ export async function sendManualOrderDocument({
       });
   const pdfDocumentKind =
     invoiceTypeCode === '325' ? 'proforma_invoice' : documentKind;
-  // Attach the assigned virtual account so instructions name the exact account.
   const preferredPaymentAccount = isPaid
     ? null
     : selectInvoicePaymentAccountForRows(
@@ -108,11 +116,10 @@ export async function sendManualOrderDocument({
         }[],
         false
       );
-  // Staff-recorded orders may omit the customer name; fall back instead of
-  // throwing. The name is header-adjacent (toName): strip line breaks.
   const displayCustomerName = sanitizeEmailDisplayName(
     order.customer_name || 'there'
   );
+  if (!emailFits(invocationDeadline)) return DEFERRED;
   let rendered: Awaited<ReturnType<typeof renderManualOrderDocumentPdf>>;
   try {
     rendered = await renderManualOrderDocumentPdf({
@@ -125,16 +132,16 @@ export async function sendManualOrderDocument({
       isPaid,
       pdfDocumentKind,
       invoiceTypeCode,
+      renderDeadline: invocationDeadline - EMAIL_ADMISSION_MS,
     });
   } catch (error) {
-    // Deterministic shape failures skip (later triggers re-arm) instead of
-    // throwing into max_attempts retries — same contract as the order and
-    // merchant schema failures above.
     if (error instanceof ManualDocumentValidationError) {
       return { status: 'skipped', reason: error.reason };
     }
+    if (!emailFits(invocationDeadline)) return DEFERRED;
     throw error;
   }
+  if (!emailFits(invocationDeadline)) return DEFERRED;
   const { pdf, taxSubtotals, transactions } = rendered;
   const claimStep = await prepareManualDocumentClaim({
     supabase,
@@ -146,10 +153,7 @@ export async function sendManualOrderDocument({
   });
   if (claimStep.status === 'skipped') return claimStep;
   const { prepared, claim, customDomain } = claimStep;
-  // The slug supplies the claim host only when no safe custom domain
-  // wins (mirroring buildReceiptClaimUrl's normalization): an unsafe
-  // legacy slug skips only on the fallback path, never when the custom
-  // domain resolves.
+  // Only the fallback claim host depends on the legacy slug.
   const customDomainHost = customDomain
     ?.trim()
     .toLowerCase()
@@ -175,7 +179,9 @@ export async function sendManualOrderDocument({
     }),
   });
   let dispatchStarted = false;
+  let attemptedTransport = false;
   let providerAccepted = false;
+  let deferredBeforeTransport = false;
   async function persistDispatch(started: boolean) {
     await persistManualDocumentDispatch(
       supabase,
@@ -199,8 +205,13 @@ export async function sendManualOrderDocument({
       started
     );
     dispatchStarted = started;
+    attemptedTransport ||= started;
   }
   try {
+    const attachment = Buffer.from(await pdf.arrayBuffer()).toString('base64');
+    if (!emailFits(invocationDeadline)) return DEFERRED;
+    const transportDeadline =
+      invocationDeadline - ZEPTOMAIL_SEND_CUTOFF_BUFFER_MS;
     const result = await sendEmail({
       ...content,
       to: recipient.email,
@@ -208,27 +219,25 @@ export async function sendManualOrderDocument({
       attachments: [
         {
           name: `${pdfDocumentKind}-${order.order_number.replace(/[^\w.-]/g, '_')}.pdf`,
-          content: Buffer.from(pdf.output('arraybuffer')).toString('base64'),
+          content: attachment,
           mime_type: 'application/pdf',
         },
       ],
       emailType: 'orders',
-      // Single attempt per sender: this runs inside the 60s cron worker,
-      // so a slow provider must fail fast into the outbox retry path
-      // instead of overrunning the function mid-dispatch. Transient
-      // failures reschedule via markFailedOrRetry; the platform-sender
-      // fallback still applies once on definite rejections.
-      maxAttemptsPerSender: 1,
-      // Static fallback ceiling: without a caller deadline the platform
-      // fallback would run unbounded past the 60s worker.
-      fallbackDeadlineMs: Date.now() + MANUAL_DOC_FALLBACK_CEILING_MS,
+      maxAttemptsPerSender: EMAIL_ATTEMPTS_PER_SENDER,
+      fallbackDeadlineMs: transportDeadline,
+      signal: AbortSignal.timeout(transportDeadline - Date.now()),
       fromName: sanitizeEmailDisplayName(
         resolveManualDocumentFromName(merchant)
       ),
       // merchant.email is the private login address: never a reply target.
       replyTo: resolveNotificationReplyTo(merchant.support_email),
       clientReference: `order:${order.id}:${row.event_type}`,
-      beforeTransportDispatch: () => persistDispatch(true),
+      beforeTransportDispatch: () => {
+        if (emailFits(invocationDeadline)) return persistDispatch(true);
+        deferredBeforeTransport = !attemptedTransport;
+        throw new Error('Manual document email transport budget exhausted');
+      },
       resetTransportDispatch: () => persistDispatch(false),
       auditContext: {
         merchantId: row.merchant_id,
@@ -238,6 +247,7 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
+      if (deferredBeforeTransport) return DEFERRED;
       return reportFailedManualDocumentSend(result, () =>
         resetStartedDispatchMarker(dispatchStarted, persistDispatch)
       );
@@ -250,20 +260,19 @@ export async function sendManualOrderDocument({
         merchantId: row.merchant_id,
         mailedTokenHash: claim.tokenHash,
       });
-    // A data change reset the marker after dispatch: the PDF is stale,
-    // so fail for a bounded corrective retry instead of recording sent.
+    // A reset during transport requires a bounded corrective retry.
     const lease = await checkManualDocumentDispatchLease(
       supabase,
       row.id,
       row.claim_owner
     );
+    if (!(await recordAcceptedToken()))
+      return {
+        status: 'failed',
+        error: 'sent_claim_marker_failed',
+        deliveryOutcome: 'unknown',
+      };
     if (lease === 'unknown') {
-      if (!(await recordAcceptedToken()))
-        return {
-          status: 'failed',
-          error: 'sent_claim_marker_failed',
-          deliveryOutcome: 'unknown',
-        };
       return {
         status: 'failed',
         error: 'dispatch_lease_check_failed',
@@ -271,24 +280,13 @@ export async function sendManualOrderDocument({
       };
     }
     if (lease === 'reset') {
-      if (!(await recordAcceptedToken()))
-        return {
-          status: 'failed',
-          error: 'sent_claim_marker_failed',
-          deliveryOutcome: 'unknown',
-        };
       return { status: 'failed', error: 'document_changed_during_send' };
     }
-    if (!(await recordAcceptedToken()))
-      return {
-        status: 'failed',
-        error: 'sent_claim_marker_failed',
-        deliveryOutcome: 'unknown',
-      };
     return { status: 'sent', messageId: result.messageId };
   } catch (error) {
     // Never re-dispatch after a lost provider response or an accepted send whose
     // database marker could not be persisted. Tokens/PDFs are not logged here.
+    if (deferredBeforeTransport) return DEFERRED;
     if (dispatchStarted || providerAccepted)
       return {
         status: 'failed',

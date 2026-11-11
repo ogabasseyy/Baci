@@ -11,13 +11,13 @@ import {
 } from './render-manual-order-document-pdf';
 
 vi.mock('@/lib/receipt-pdf-generator', () => ({
-  generateReceiptPDF: vi.fn(() => ({ output: () => 'pdf-bytes' })),
+  generateReceiptBlob: vi.fn(async () => new Blob(['pdf-bytes'])),
   resolveReceiptLogoDataUri: vi.fn(async () => null),
 }));
 
-import { generateReceiptPDF } from '@/lib/receipt-pdf-generator';
+import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
 
-const mockedPdf = vi.mocked(generateReceiptPDF);
+const mockedPdf = vi.mocked(generateReceiptBlob);
 
 describe('render manual order document pdf child-row validation', () => {
   beforeEach(() => {

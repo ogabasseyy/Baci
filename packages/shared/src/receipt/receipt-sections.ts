@@ -1,4 +1,4 @@
-import { escapeHtml, escapeJsString } from './escape-html';
+import { escapeHtml } from './escape-html';
 import { canonicalizeTransactionPaymentMethod } from './manual-order-document-gates';
 import {
   reconcileAssuranceTaxSubtotals,
@@ -6,7 +6,6 @@ import {
 } from './receipt-assurance';
 import {
   getReceiptDisplaySubtotal,
-  getReceiptVatRate,
   type MoneyFormatter,
   shouldShowVatLine,
 } from './receipt-money';
@@ -22,19 +21,16 @@ export function renderLogoHtml(
   svgXml: string | undefined
 ): string {
   const safeStoreName = escapeHtml(storeName);
+  const sellerName = `<div class="logo-fallback">${safeStoreName}</div>`;
   if (svgXml) {
-    return `<div class="logo-svg">${sanitizeSvg(svgXml)}</div>`;
+    return `<div class="logo-svg">${sanitizeSvg(svgXml)}</div>${sellerName}`;
   }
 
   if (merchant.logo_url) {
-    const fallbackLogoUrl = `https://placehold.co/200x80?text=${encodeURIComponent(
-      storeName
-    )}`;
-    const fallbackLogoUrlForJs = escapeHtml(escapeJsString(fallbackLogoUrl));
-    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;" onerror="this.src='${fallbackLogoUrlForJs}'">`;
+    return `<img src="${escapeHtml(merchant.logo_url)}" alt="${safeStoreName}" class="logo-img" style="display: block !important;">${sellerName}`;
   }
 
-  return `<div class="logo-fallback">${safeStoreName}</div>`;
+  return sellerName;
 }
 
 export function renderFinancialSummaryLines(
@@ -42,7 +38,8 @@ export function renderFinancialSummaryLines(
   merchant: ReceiptMerchant,
   formatMoney: MoneyFormatter,
   statusColor: string,
-  isPaid: boolean
+  isPaid: boolean,
+  isReceipt: boolean
 ): string[] {
   const summaryLines: string[] = [
     `<div class="sum-row"><span>Subtotal</span><span>${formatMoney(getReceiptDisplaySubtotal(order, merchant))}</span></div>`,
@@ -65,8 +62,19 @@ export function renderFinancialSummaryLines(
   }
 
   if (shouldShowVatLine(order, merchant)) {
-    const vatRate = getReceiptVatRate(merchant, order.currency);
-    const vatLabel = escapeHtml(vatRate !== null ? `VAT (${vatRate}%)` : 'VAT');
+    // Receipts disclose the stored amount only. Invoice tax rows are mutable.
+    const chargedRows = isReceipt
+      ? undefined
+      : order.tax_subtotals?.filter((row) => row && (row.tax_amount ?? 0) > 0);
+    const vatRate = chargedRows?.[0]?.vat_rate;
+    const singleHistoricalRate =
+      typeof vatRate === 'number' &&
+      Number.isFinite(vatRate) &&
+      vatRate > 0 &&
+      chargedRows?.every((row) => row?.vat_rate === vatRate);
+    const vatLabel = escapeHtml(
+      singleHistoricalRate ? `VAT (${vatRate}%)` : 'VAT'
+    );
     summaryLines.push(
       `<div class="sum-row"><span>${vatLabel}</span><span>${formatMoney(order.tax_amount)}</span></div>`
     );

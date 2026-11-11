@@ -19,75 +19,11 @@ import {
   processClaimedOrderNotificationRows,
 } from './order-notification-outbox-worker';
 
-function createSupabase(
-  errors: unknown[],
-  liveMetadata: Record<string, unknown> = {},
-  classifyRow: Record<string, unknown> | null = null,
-  classifyError: unknown = null,
-  reclaimRow: Record<string, unknown> | null = {
-    dispatch_started_at: null,
-    last_error: null,
-  },
-  reclaimError: unknown = null
-) {
-  const updateErrors = [...errors];
-  const select = vi.fn();
-  // The sent path re-reads the live row (select metadata) before the status
-  // update (select id); resolve each from its own source. The manual path
-  // classifies a 0-row sent update with a second read, and reclaims a
-  // clear-failed marker before dispatching.
-  const maybeSingle = vi.fn(async () => {
-    const lastSelect = select.mock.calls[select.mock.calls.length - 1]?.[0];
-    if (lastSelect === 'metadata' || lastSelect === 'metadata, updated_at') {
-      return {
-        data: {
-          id: row.id,
-          metadata: liveMetadata,
-          updated_at: '2026-10-03T00:00:00Z',
-        },
-        error: null,
-      };
-    }
-    if (lastSelect === 'dispatch_started_at, last_error') {
-      return { data: reclaimError ? null : reclaimRow, error: reclaimError };
-    }
-    if (typeof lastSelect === 'string' && lastSelect.includes('locked_by')) {
-      return { data: classifyError ? null : classifyRow, error: classifyError };
-    }
-    const error = updateErrors.shift();
-    if (error === 'zero-rows') {
-      return { data: null, error: null };
-    }
-    return { data: error ? null : { id: row.id }, error: error ?? null };
-  });
-  const builder = {
-    eq: vi.fn(() => builder),
-    is: vi.fn(() => builder),
-    match: vi.fn(() => builder),
-    maybeSingle,
-    not: vi.fn(() => builder),
-    select,
-    update: vi.fn((_values: Record<string, unknown>) => builder),
-  };
-  select.mockImplementation(() => builder);
-  return { client: { from: vi.fn(() => builder) }, builder };
-}
-
-const row = {
-  attempt_count: 1,
-  claim_owner: 'worker-1',
-  event_type: 'order_shipped' as const,
-  id: '10000000-0000-4000-8000-000000000001',
-  max_attempts: 5,
-  merchant_id: '10000000-0000-4000-8000-000000000002',
-  order_id: '10000000-0000-4000-8000-000000000003',
-};
-
-function finalAttempt(
-  eventType: 'manual_order_invoice' | 'manual_order_receipt'
-) {
-  return { ...row, event_type: eventType, attempt_count: 5, max_attempts: 5 };
-}
+import {
+  createSupabase,
+  finalAttempt,
+  row,
+} from './order-notification-outbox-worker-manual-documents.test-support';
 
 describe('order notification outbox worker manual documents', () => {
   beforeEach(() => {
@@ -117,6 +53,40 @@ describe('order notification outbox worker manual documents', () => {
     expect(builder.not).toHaveBeenCalledWith('dispatch_started_at', 'is', null);
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('returns a late final-attempt row to pending without charging the claim', async () => {
+    const { client, builder } = createSupabase([null]);
+    const claimed = finalAttempt('manual_order_invoice');
+    sendDocument.mockResolvedValue({ status: 'deferred' });
+    const summary = createOrderNotificationCronSummary(1);
+
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [claimed],
+      summary
+    );
+
+    expect(summary).toMatchObject({ failed: 0, retried: 1, sent: 0 });
+    expect(builder.eq).toHaveBeenCalledWith(
+      'attempt_count',
+      claimed.attempt_count
+    );
+    expect(builder.is).toHaveBeenCalledWith('dispatch_started_at', null);
+    expect(builder.match).toHaveBeenCalledWith({
+      id: claimed.id,
+      locked_by: claimed.claim_owner,
+      status: 'processing',
+    });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt_count: claimed.attempt_count - 1,
+        status: 'pending',
+        locked_by: null,
+        locked_at: null,
+        next_attempt_at: expect.any(String),
+      })
     );
   });
 

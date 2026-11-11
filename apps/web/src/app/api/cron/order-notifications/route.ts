@@ -85,12 +85,9 @@ async function deadLetterCorruptOutboxRow(
 }
 
 const DEFAULT_BATCH_SIZE = 1;
-// Manual PDF sends fully buffer the PDF plus a ~33% larger base64 copy in
-// memory per row (see send-manual-order-document.ts), inside a 60s tick:
-// keep the manual batch ceiling conservative and the default at 1. Peak
-// render memory is the per-row buffer times PROCESS_CONCURRENCY (5 order
-// groups render at once), not times the batch size — size function memory
-// for 5 concurrent renders before raising either ceiling.
+// Up to five order groups can hold PDF and base64 buffers during email
+// delivery. Chromium renders are serialized per instance, and each cron
+// batch keeps a low default size to leave time for sending and persistence.
 const MAX_BATCH_SIZE = 10;
 const batchSizeSchema = createCronBatchSizeSchema({
   defaultSize: DEFAULT_BATCH_SIZE,
@@ -98,6 +95,7 @@ const batchSizeSchema = createCronBatchSizeSchema({
 });
 
 export async function GET(request: Request) {
+  const invocationDeadline = Date.now() + maxDuration * 1000;
   if (!hasValidCronSecret(request.headers, getCronSecret())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -184,7 +182,12 @@ export async function GET(request: Request) {
     });
   }
   try {
-    await processClaimedOrderNotificationRows(supabase, rows, summary);
+    await processClaimedOrderNotificationRows(
+      supabase,
+      rows,
+      summary,
+      invocationDeadline
+    );
   } catch (error) {
     logger.error({
       message: 'Failed to persist order notification outcome',

@@ -50,7 +50,7 @@ function listSpecs(): Spec[] {
   // A fresh Vitest must not believe it is nested inside this test's worker.
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (key.startsWith('VITEST') || key === 'TEST') {
+    if (key.startsWith('VITEST')) {
       Reflect.deleteProperty(env, key);
     }
   }
@@ -114,29 +114,43 @@ describe('mobile admin node/jsdom Vitest project partition', () => {
   });
 
   it('keeps the component tests in jsdom', () => {
-    const componentTests = specs.filter((spec) => spec.file.endsWith('.tsx'));
+    const componentTests = specs.filter((spec) =>
+      /\.(tsx|jsx)$/.test(spec.file)
+    );
 
     expect(componentTests.length).toBeGreaterThan(0);
     expect(componentTests.every((spec) => spec.project === 'jsdom')).toBe(true);
   });
 });
 
+// Every kind of test file name Vitest's default include knows (`test` and `spec`
+// times each script extension), plus names that must not match.
+const TEST_FILE_KINDS = ['test', 'spec'];
+const SCRIPT_EXTENSIONS = [
+  'ts',
+  'mts',
+  'cts',
+  'js',
+  'mjs',
+  'cjs',
+  'tsx',
+  'jsx',
+];
+const SAMPLE_FILES = [
+  ...TEST_FILE_KINDS.flatMap((kind) =>
+    SCRIPT_EXTENSIONS.map((extension) => `a.${kind}.${extension}`)
+  ),
+  'dir/nested/a.test.ts',
+  'dir/nested/a.spec.tsx',
+  'a.test.ts.snap',
+  'a.ts',
+  'test.ts',
+];
+
 describe('node project test file rule', () => {
-  it.each([
-    'a.test.ts',
-    'a.spec.ts',
-    'a.test.mts',
-    'a.test.cts',
-    'a.test.js',
-    'a.spec.mjs',
-    'dir/nested/a.test.ts',
-    'a.test.tsx',
-    'a.spec.tsx',
-    'a.test.jsx',
-    'a.test.ts.snap',
-    'a.ts',
-    'test.ts',
-  ])('classifies %s the same way as the shared glob', (file) => {
+  it.each(
+    SAMPLE_FILES
+  )('classifies %s the same way as the shared glob', (file) => {
     expect(NODE_PROJECT_TEST_FILE.test(file)).toBe(
       path.matchesGlob(file, NODE_PROJECT_TEST_GLOB)
     );

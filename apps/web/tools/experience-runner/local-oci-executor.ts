@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import { makeOCISpec } from './oci-policy';
 
-const ROOT = '/var/tmp/baci-experience-checkpoint-a';
-const REMOVE_BUNDLE = `import pathlib,re,shutil,sys
+export const ROOT = '/var/tmp/baci-experience-checkpoint-a';
+export const REMOVE_BUNDLE = `import pathlib,re,shutil,sys
 name=sys.argv[1]
 if not re.fullmatch(r'baci-experience-[a-z0-9-]+',name):raise ValueError('bad name')
 shutil.rmtree(pathlib.Path('${ROOT}/jobs')/name)`;
-const PREPARE = `import json,sys,pathlib,re
+export const PREPARE = `import json,sys,pathlib,re
 r=json.load(sys.stdin);name=r['name']
 if not re.fullmatch(r'baci-experience-[a-z0-9-]+',name):raise ValueError('bad name')
 b=pathlib.Path('${ROOT}/jobs')/name;b.mkdir(parents=True,exist_ok=False)

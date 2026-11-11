@@ -3,6 +3,9 @@ import { promisify } from 'node:util';
 import {
   type LocalTransport,
   outputBudgetExceeded,
+  PREPARE,
+  REMOVE_BUNDLE,
+  ROOT,
   runLocalQualification,
 } from './local-oci-executor';
 import { createRunnerHandler } from './runner-transport';
@@ -56,11 +59,43 @@ export function createDirectOCITransport(
   command: LinuxRunnerCommand = runCommand
 ): LocalTransport {
   return async (args, input, timeoutMs = 10000) => {
+    const name = (value: string | undefined) =>
+      typeof value === 'string' &&
+      /^baci-experience-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value
+      );
+    const parts = args.slice(3);
+    const prepare =
+      parts.length === 3 &&
+      parts[0] === 'python3' &&
+      parts[1] === '-c' &&
+      parts[2] === PREPARE;
+    const remove =
+      parts.length === 4 &&
+      parts[0] === 'python3' &&
+      parts[1] === '-c' &&
+      parts[2] === REMOVE_BUNDLE &&
+      name(parts[3]);
+    const run =
+      parts.length === 6 &&
+      parts[0] === '/usr/local/bin/runsc' &&
+      parts[1] === `--root=${ROOT}/state` &&
+      parts[2] === '--network=none' &&
+      parts[3] === 'run' &&
+      name(parts[5]) &&
+      parts[4] === `--bundle=${ROOT}/jobs/${parts[5]}`;
+    const removeContainer =
+      parts.length === 5 &&
+      parts[0] === '/usr/local/bin/runsc' &&
+      parts[1] === `--root=${ROOT}/state` &&
+      parts[2] === 'delete' &&
+      parts[3] === '--force' &&
+      name(parts[4]);
     if (
       args[0] !== 'ssh' ||
       args[1] !== '--' ||
       args[2] !== 'sudo' ||
-      !['python3', '/usr/local/bin/runsc'].includes(args[3])
+      !(prepare || remove || run || removeContainer)
     )
       throw Error('INVALID_RUNNER_COMMAND');
     return await command(

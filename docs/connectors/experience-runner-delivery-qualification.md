@@ -31,6 +31,19 @@ configuration are still operator responsibilities: the socket does not provide
 TLS, provision a trusted pin or authorize access on its own. The signed runner
 handler remains responsible for request limits, replay protection and lanes.
 
+**Production privilege blocker:** on the Contabo host, an unprivileged account
+cannot execute the verifier's `chroot` version checks. The current direct OCI
+transport also invokes `sudo python3 -c` with a spec on standard input. Its
+in-process command allowlist prevents accidental calls through that adapter but
+does not constrain what a compromised service account could invoke through a
+broad sudo rule, nor independently validate a supplied OCI spec. Do not grant
+the service account general Python or runsc sudo access, and do not start the
+socket with those privileges. Production needs a separately reviewed,
+root-owned fixed helper that enforces the complete OCI policy independently,
+plus a narrowly authorized privileged preflight and tests of the actual OS
+permission boundary. The existing runner remains qualification-only until
+that boundary is implemented and verified.
+
 ## Baci boot and database boundaries
 
 Use `createProductionExperienceIntegration` with the established connector authenticator, normal user-client resolver, normal anonymous public client, trusted canonical merchant-domain resolver, owner bootstrap reader, scoped evidence verifier/recorder, retained artifact directory and normal owner-intent/approval callbacks. Do not supply a service-role client or accept merchant identity/approval/renderer bytes from MCP arguments.

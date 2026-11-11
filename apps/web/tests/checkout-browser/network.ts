@@ -173,6 +173,8 @@ export const test = base.extend<{
         const responses: Record<string, unknown> = {
           '/api/cart/validate': { invalidProductIds: [], priceChanges: [] },
           '/api/csrf': { token: 'fixture-csrf-token' },
+          // Funnel analytics (begin_checkout) are stubbed, never stored.
+          '/api/events': { success: true },
           '/api/storefront/auth/session': { authenticated: false },
           '/api/storefront/imei-remediation/orders': {
             orders: [

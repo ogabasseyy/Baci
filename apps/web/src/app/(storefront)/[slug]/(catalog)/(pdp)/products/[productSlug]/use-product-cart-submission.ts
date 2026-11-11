@@ -1,7 +1,6 @@
 import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
-import { trackEvent } from '@/lib/event-tracking';
 import type { Product, ProductVariant } from '@/lib/products';
 import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
@@ -12,7 +11,6 @@ export type ProductOfferSelection = NonNullable<Product['offers']>[number];
 export interface ProductCartSubmissionInput {
   product: Product;
   merchant: ReturnType<typeof useMerchant>['merchant'];
-  currencyCode: string;
   currentVariantSelection: { variant: ProductVariant } | null;
   selectedOffer: ProductOfferSelection | null;
   selectedCondition: ProductCondition;
@@ -24,12 +22,11 @@ export interface ProductCartSubmissionInput {
 /**
  * Builds the PDP add-to-cart handler from the current selection: carries
  * the exact option availability onto the cart line, requires a variant
- * choice for variant products, then tracks and confirms the add.
+ * choice for variant products, then confirms the add (the cart action tracks it).
  */
 export function useProductCartSubmission({
   product,
   merchant,
-  currencyCode,
   currentVariantSelection,
   selectedOffer,
   selectedCondition,
@@ -105,10 +102,8 @@ export function useProductCartSubmission({
       return;
     }
 
-    // Track add to cart for merchant analytics
-    if (merchant?.id) {
-      trackEvent.addToCart(merchant.id, productToAdd, quantity, currencyCode);
-    }
+    // add_to_cart is reported once by the shared cart action
+    // (hooks/cart/track-cart-add), not here, so the PDP never double-counts.
 
     const variantInfo = variantForCart
       ? ` (${Object.values(effectiveVariantAttributes).join(', ')})`

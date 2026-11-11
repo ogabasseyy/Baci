@@ -42,6 +42,14 @@ export async function startProductionAuthBroker(
     let closing: Promise<void> | undefined;
     return {
       runtime,
+      publicBinding: {
+        supabase: config.supabase,
+        jwks: {
+          keys: config.provider.jwks.keys.map(
+            ({ kty, crv, x, y, alg, kid }) => ({ kty, crv, x, y, alg, kid })
+          ),
+        },
+      },
       close() {
         closing ??= (async () => {
           try {

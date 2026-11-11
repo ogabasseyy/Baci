@@ -38,7 +38,8 @@ async function fixture() {
 test('starts only after broker construction and closes listener before database', async () => {
   const events: string[] = [];
   let poolConfig: PoolConfig | undefined;
-  const service = await startProductionAuthBroker(await fixture(), {
+  const config = await fixture();
+  const service = await startProductionAuthBroker(config, {
     createPool: (settings) => {
       poolConfig = settings;
       return {
@@ -65,6 +66,9 @@ test('starts only after broker construction and closes listener before database'
   });
   assert.deepEqual(poolConfig?.ssl, { rejectUnauthorized: true });
   assert.equal(poolConfig?.max, 4);
+  assert.deepEqual(service.publicBinding.supabase, config.supabase);
+  assert.equal(service.publicBinding.jwks.keys[0].kid, 'fixture');
+  assert.equal('d' in service.publicBinding.jwks.keys[0], false);
   await service.close();
   await service.close();
   assert.deepEqual(events, [

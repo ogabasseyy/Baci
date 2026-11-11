@@ -1,6 +1,7 @@
 import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
 import type { AnalyticsEventRequest } from '@/schemas/analytics-event';
 import { clientMarketingTargets } from './client-marketing-targets';
+import { redactStoredPageUrl } from './redact-stored-page-url';
 
 function assignDefined(
   target: Record<string, unknown>,
@@ -22,8 +23,16 @@ export function buildAnalyticsEventData(
     });
   assignDefined(eventData, 'session_id', input.session_id);
   assignDefined(eventData, 'user_agent', input.user_agent);
-  assignDefined(eventData, 'referrer', input.referrer);
-  assignDefined(eventData, 'page_url', input.page_url);
+  assignDefined(
+    eventData,
+    'referrer',
+    input.referrer ? redactStoredPageUrl(input.referrer) : input.referrer
+  );
+  assignDefined(
+    eventData,
+    'page_url',
+    input.page_url ? redactStoredPageUrl(input.page_url) : input.page_url
+  );
 
   if (
     [

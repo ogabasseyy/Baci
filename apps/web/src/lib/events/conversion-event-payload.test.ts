@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { conversionEventPayload } from './conversion-event-payload';
 
 describe('conversionEventPayload', () => {
-  it('prefers the first forwarded address and preserves provider matching data', () => {
+  it('uses the trusted shopper address and preserves provider matching data', () => {
     const request = new NextRequest('https://usebaci.com/api/events', {
       headers: {
         'user-agent': 'test-agent',
-        'x-forwarded-for': '203.0.113.1, 10.0.0.1',
+        'x-forwarded-for': '203.0.113.1',
       },
     });
     const payload = conversionEventPayload.deliveryData(

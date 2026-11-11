@@ -80,3 +80,15 @@ Launch the Android dev client with `pnpm --filter baci-mobile-admin android:laun
 - Hosted on **Vercel**; production deploys use a local/prebuilt CI build and must finish with `vercel deploy --prebuilt --prod`. The default runner is the VPS prebuilt flow on `bassey@82.29.190.219`; owner-approved emergency fallback may use a GitHub-hosted runner for the same prebuilt flow.
 - Cron jobs in `vercel.json`
 - Database on Supabase (always-on PostgreSQL)
+
+## Pull Request Workflow (review-first CI)
+
+Owner decision 2026-11-11: the expensive CI no longer starts on every push. For a pull request from this repository, CI runs in two passes (details and switch: `docs/runbooks/review-first-ci.md`).
+
+- **Push, then wait.** Every push runs only the quick checks (change detection, lint, typecheck, misc guards, mobile guardrails, silent-revert guard) and `Semgrep SAST`. `Build` and `Quality Gate` do not exist yet: the PR shows them as "Expected - waiting", and the jobs that would carry those names are skipped under the name "(deferred until Codex review)". Merge and auto-merge stay blocked.
+- **Codex starts the full CI.** Codex reviews each push. When it reports no major findings for the exact head commit, the `Review-first CI nudge` workflow re-runs the PR's CI run and the full suite (web test shards, mobile and shared tests, `Build`, DB replay, SQL suites, CWV contracts, checkout browser regression) starts by itself. Do not start CI by hand and do not re-run jobs to "get CI going".
+- **Findings:** fix them and push; a new head commit needs a new Codex pass. Resolving a thread is not a clean verdict.
+- **Break-glass, only when needed:** if Codex is down, rate limited or hung, or you have answered a finding with a recorded reason and no further pass will come, add the label `ci-now` (or comment `/ci-now`) and say why in the pull request. With no Codex verdict at all for 60 minutes the full CI starts anyway (a warning shows on the `changes` job).
+- **Syncing with `main`** keeps Codex's verdict only when the PR's own diff is byte-identical; otherwise wait for a fresh Codex pass.
+- **Never arm auto-merge (or merge) before Codex is clean on the final head.** The required checks only appear once the full CI starts, but a `ci-now` or timeout run can make them green without a Codex verdict.
+- Switch: repository variable `BACI_REVIEW_FIRST_CI` (`on`; `pilot` = only PRs labelled `review-first-ci`; unset = the old behaviour, full CI on every push).

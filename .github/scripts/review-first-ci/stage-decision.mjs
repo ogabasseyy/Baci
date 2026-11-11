@@ -55,5 +55,5 @@ export function decideStage(input) {
   if (unrecognized.length > 0) {
     return result('quick', 'waiting', `Codex wrote items that are not understood (${unrecognized.join('; ')}); failing closed. ${verdict.reason}`, true);
   }
-  return result('quick', 'waiting', `waiting for Codex: ${verdict?.reason ?? 'no verdict yet'}`);
+  return result('quick', 'waiting', verdict?.reason ?? 'no Codex verdict yet');
 }

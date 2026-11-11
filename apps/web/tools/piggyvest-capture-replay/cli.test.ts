@@ -74,6 +74,16 @@ describe('capture replay CLI', () => {
     expect(store.requeue).not.toHaveBeenCalled();
   });
 
+  it('does not suggest a blind --yes for an id the preview cannot show', async () => {
+    const unseen = '11111111-2222-4333-8444-555555555555';
+    expect(
+      await run(['requeue', unseen, '--reason', 'fix #4199 deployed'])
+    ).toBe(1);
+    expect(out[0]).toContain('Check the id with `list`');
+    expect(out[0]).not.toContain('--yes');
+    expect(store.requeue).not.toHaveBeenCalled();
+  });
+
   it('requeues with --yes', async () => {
     store.requeue.mockResolvedValue({
       outcome: 'requeued',

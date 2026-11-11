@@ -105,6 +105,18 @@ BEGIN
   IF v_fn IS NOT NULL THEN
     RAISE EXCEPTION 'operator role can execute pipeline function %', v_fn;
   END IF;
+  -- Also by schema/name, which covers access through PUBLIC's default EXECUTE.
+  SELECT p.oid::regprocedure::text INTO v_fn
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE (n.nspname = 'piggyvest_webhook_intake'
+      OR (n.nspname = 'public' AND p.proname ~ 'piggyvest_webhook_capture'))
+    AND pg_catalog.has_function_privilege(
+      'piggyvest_webhook_capture_operator', p.oid, 'EXECUTE')
+  LIMIT 1;
+  IF v_fn IS NOT NULL THEN
+    RAISE EXCEPTION 'operator role can execute pipeline function % (by name)', v_fn;
+  END IF;
 END
 $$;
 

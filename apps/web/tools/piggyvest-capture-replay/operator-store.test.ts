@@ -233,6 +233,9 @@ describe('readOperatorConnection', () => {
       'only sslmode is allowed',
     ],
     ['postgres://ops@127.0.0.1/postgres?port=6543', 'only sslmode is allowed'],
+    // 'localhost' is a name that could resolve anywhere: it gets no TLS
+    // exemption and is not the direct host, so it is refused.
+    ['postgres://ops@localhost:5432/postgres', 'not the pooler'],
     // Allowlist: any other host or port is refused, pooler-looking or not.
     ['postgres://ops@db-proxy.corp.internal:5432/postgres', 'not the pooler'],
     [

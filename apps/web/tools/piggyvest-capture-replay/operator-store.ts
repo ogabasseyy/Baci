@@ -46,6 +46,11 @@ export const OPERATOR_VERIFY_SESSION_SQL = `SELECT SESSION_USER::text AS login_n
       CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) g
       JOIN pg_catalog.pg_roles r ON r.oid = g.grantee
     WHERE r.rolname = ANY ($2::text[]) AND g.privilege_type = 'EXECUTE'
+      AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE'))
+  OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE (n.nspname = 'piggyvest_webhook_intake'
+        OR (n.nspname = 'public' AND p.proname ~ 'piggyvest_webhook_capture'))
       AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE')) AS pipeline_function_access,
   (pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_captures',
       'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
@@ -127,7 +132,9 @@ export function sessionFailures(
 const DIRECT_HOST = /^db\.[a-z0-9]+\.supabase\.co$/;
 const DIRECT_PORTS = new Set(['', '5432']);
 const ALLOWED_PARAMS = new Set(['sslmode']);
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// IP literals only: a 'localhost' name could resolve elsewhere, and loopback
+// skips TLS, so the password would leave in clear before any server check.
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 
 /**
  * node-postgres lets connection-string parameters override the explicit

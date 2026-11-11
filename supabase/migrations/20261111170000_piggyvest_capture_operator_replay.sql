@@ -218,6 +218,13 @@ AS $$
             AND g.privilege_type = 'EXECUTE'
             AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE'))
         THEN 'the session login can run capture pipeline functions'
+      -- By name too, so access through PUBLIC's default EXECUTE is caught.
+      WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+          JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+          WHERE (n.nspname = 'piggyvest_webhook_intake'
+              OR (n.nspname = 'public' AND p.proname ~ 'piggyvest_webhook_capture'))
+            AND pg_catalog.has_function_privilege(SESSION_USER, p.oid, 'EXECUTE'))
+        THEN 'the session login can run capture pipeline functions'
       WHEN pg_catalog.has_table_privilege(SESSION_USER, 'public.piggyvest_webhook_captures',
           'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
         OR pg_catalog.has_table_privilege(SESSION_USER,

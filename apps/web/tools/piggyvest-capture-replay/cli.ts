@@ -117,9 +117,9 @@ export async function main(
       io.out(
         match
           ? `Would requeue ${match.captureId} (${match.eventType ?? 'unknown event'}, ${match.lastError ?? 'no error'}) with reason "${command.reason}". Re-run with --yes to do it.`
-          : `${command.captureId} is not among the 200 newest parked captures; with --yes the database decides. Nothing changed.`
+          : `${command.captureId} is not among the 200 newest parked captures. Check the id with \`list\` before requeueing. Nothing changed.`
       );
-      return 0;
+      return match ? 0 : 1;
     }
 
     const result = await store.requeue(command.captureId, command.reason);

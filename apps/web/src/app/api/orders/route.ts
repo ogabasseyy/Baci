@@ -3053,13 +3053,19 @@ export async function POST(request: NextRequest) {
     // settled by the finalize RPCs below, and pre-writing amount_paid there
     // would make a failed finalization look like nothing is due.
     if (amountDueToGateway > 0) {
-      await recordPreGatewayRedemption(
+      const projectionFailure = await recordPreGatewayRedemption(
         order.id,
         orderTotal,
         savingsAmountUsed,
         walletAmountUsed,
         supabase
       );
+      if (projectionFailure) {
+        return NextResponse.json(
+          { error: projectionFailure.message, code: projectionFailure.code },
+          { status: projectionFailure.status }
+        );
+      }
     }
 
     // If wallet fully covers the order, mark as paid immediately (2025 best practice)

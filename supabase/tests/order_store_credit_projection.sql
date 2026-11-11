@@ -10,7 +10,7 @@ BEGIN
   BEGIN
    PERFORM public.record_order_store_credit(('00000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid);
    RAISE EXCEPTION 'unsafe credit admitted for case %',n;
-  EXCEPTION WHEN check_violation OR serialization_failure THEN NULL;
+  EXCEPTION WHEN check_violation THEN NULL;
   END;
  END LOOP;
 END $$;

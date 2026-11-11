@@ -216,6 +216,8 @@ export async function runCheckoutOrderLifecycle({
     total: order.total ?? fallbackTotal,
     orderNumber: createdOrderNumber,
   };
+  const walletAmountUsed = wallet?.amountUsed ??
+    (reuse.pendingOrder?.orderId === order.id ? reuse.pendingOrder.walletAmountUsed : undefined);
   const snapshot: PendingCheckoutOrderSnapshot = {
     orderId: order.id,
     orderNumber: order.order_number,
@@ -226,9 +228,7 @@ export async function runCheckoutOrderLifecycle({
     checkoutFingerprint: fingerprint,
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
-    ...((wallet?.amountUsed ?? reuse.pendingOrder?.walletAmountUsed ?? 0) > 0
-      ? { walletAmountUsed: wallet?.amountUsed ?? reuse.pendingOrder?.walletAmountUsed }
-      : {}),
+    ...(walletAmountUsed && walletAmountUsed > 0 ? { walletAmountUsed } : {}),
     createdAt: new Date().toISOString(),
     ...(redvaultReview.enabled &&
     submit.orderRequest.shared_cart &&

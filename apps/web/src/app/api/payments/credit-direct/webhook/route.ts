@@ -250,12 +250,17 @@ export async function POST(request: NextRequest) {
 
     // Find the order by Credit Direct transaction ID
     // We store this in order notes when the checkout is initiated
-    const { data: orders, error: orderError } = await supabase
+    const {
+      data: orders,
+      error: orderError,
+      count: referenceCandidateCount,
+    } = await supabase
       .from('orders')
       .select(
-        'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes'
+        'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes',
+        { count: 'exact' }
       )
-      .in('payment_method', ['credit_direct', 'klump'])
+      .eq('payment_method', 'credit_direct')
       .ilike(
         'notes',
         `%${sanitizeLikePattern(JSON.stringify(payload.checkoutTransactionId))}%`
@@ -278,9 +283,14 @@ export async function POST(request: NextRequest) {
       payload.checkoutTransactionId,
       payload.metaData ?? undefined
     );
-    if (referenceMatch === null) {
+    // PostgREST may cap returned rows. Ambiguity cannot be ruled out on
+    // a truncated candidate set, even if the visible match looks exact.
+    if (
+      referenceMatch === null ||
+      (referenceCandidateCount ?? 0) > (orders?.length ?? 0)
+    ) {
       logger.error({
-        message: 'Multiple orders have the active Credit Direct reference',
+        message: 'Credit Direct reference candidates are ambiguous',
         transactionId: payload.checkoutTransactionId,
       });
       return NextResponse.json(
@@ -315,8 +325,12 @@ export async function POST(request: NextRequest) {
           'id, merchant_id, total, amount_paid, wallet_amount_used, payment_status, shipping_status, payment_method, customer_email, customer_name, order_number, notes'
         )
         .eq('id', payload.metaData)
+        .eq('payment_method', 'credit_direct')
         .single();
-      if (orderById?.id === payload.metaData) {
+      if (
+        orderById?.id === payload.metaData &&
+        orderById.payment_method === 'credit_direct'
+      ) {
         order = orderById;
       }
     }
@@ -375,6 +389,9 @@ export async function POST(request: NextRequest) {
       Number.isFinite(signedAtMs) &&
       Number.isFinite(payloadTimeMs) &&
       payloadTimeMs < signedAtMs - CLOCK_SKEW_TOLERANCE_MS;
+    // The signed provider webhook echoes our order ID alongside the popup
+    // transaction ID. That ID differs from the signing session ID. Wallet
+    // events must additionally bind it to the durable reservation below.
     const acceptsUnpersistedPopupReference =
       !hasPersistedPopupTransaction &&
       activeSessionId !== null &&

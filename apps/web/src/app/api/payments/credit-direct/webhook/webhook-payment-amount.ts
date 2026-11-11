@@ -29,16 +29,18 @@ export function getWebhookProductsTotal(
   return total;
 }
 
-export function getWebhookWalletProductsTotal(
-  products: CreditDirectWebhookPayload['products']
-) {
+type WalletProductAmounts = readonly { productAmount: number | string }[];
+
+export function getWebhookWalletProductsTotal(products: WalletProductAmounts) {
   let totalKobo = 0;
   for (const product of products) {
-    const amount = readProductAmount(product.productAmount);
-    if (amount === null || amount < 0) return null;
+    const decimal = String(product.productAmount).trim();
+    const parts = /^(\d+)(?:\.(\d{1,2})0*)?$/.exec(decimal);
+    if (!parts) return null;
 
-    const kobo = Math.round(amount * 100);
-    if (!Number.isSafeInteger(kobo) || kobo / 100 !== amount) return null;
+    const kobo =
+      Number(parts[1]) * 100 + Number((parts[2] ?? '').padEnd(2, '0'));
+    if (!Number.isSafeInteger(kobo)) return null;
     totalKobo += kobo;
     if (!Number.isSafeInteger(totalKobo)) return null;
   }
@@ -46,7 +48,7 @@ export function getWebhookWalletProductsTotal(
 }
 
 export function matchesRecordedFinancedAmount(
-  products: CreditDirectWebhookPayload['products'],
+  products: WalletProductAmounts,
   recordedAmount: number
 ): boolean {
   // The recorded fee split can include fractional kobo before summation.

@@ -5,6 +5,18 @@ interface StoreCreditProjectionClient {
   ): PromiseLike<{ data: unknown; error: unknown }>;
 }
 
+const reconciliationFailure = {
+  status: 409,
+  code: 'STORE_CREDIT_REVIEW_REQUIRED',
+  message: 'Store credit requires payment review.',
+} as const;
+
+const contentionFailure = {
+  status: 503,
+  code: 'STORE_CREDIT_RETRY_REQUIRED',
+  message: 'Store credit is temporarily busy. Retry the same order shortly.',
+} as const;
+
 /** Confirm the durable debit before any provider can charge the residual. */
 export async function recordPreGatewayRedemption(
   orderId: string,
@@ -12,7 +24,7 @@ export async function recordPreGatewayRedemption(
   savingsAmountUsed: number,
   walletAmountUsed: number,
   supabase: StoreCreditProjectionClient
-): Promise<void> {
+) {
   if (savingsAmountUsed === 0 && walletAmountUsed === 0) return;
   const failure = 'Store credit could not be confirmed';
   if (
@@ -27,6 +39,15 @@ export async function recordPreGatewayRedemption(
   const { data, error } = await supabase.rpc('record_order_store_credit', {
     p_order_id: orderId,
   });
+  if (error && typeof error === 'object' && 'code' in error) {
+    if (error.code === '23514') return reconciliationFailure;
+    if (error.code === '40001') {
+      const needsReview =
+        'message' in error &&
+        error.message === 'Store credit reconciliation required';
+      return needsReview ? reconciliationFailure : contentionFailure;
+    }
+  }
   const credit: unknown = data;
   if (
     error ||

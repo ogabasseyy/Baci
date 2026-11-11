@@ -3133,6 +3133,25 @@ describe('POST /api/orders — wallet response shape', () => {
     );
   });
 
+  it.each([
+    [503, 'STORE_CREDIT_RETRY_REQUIRED'],
+    [409, 'STORE_CREDIT_REVIEW_REQUIRED'],
+  ])('stops checkout on an unconfirmed store credit projection (%s)', async (status, code) => {
+    mockRecordPreGatewayRedemption.mockResolvedValueOnce({
+      status,
+      code,
+      message: 'Payment review',
+    });
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify(baseOrderPayload),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ code });
+  });
+
   it('partial wallet redemption surfaces wallet { amountUsed, newBalance, transactionId } and residual amountDueToGateway', async () => {
     // Pin the partial-coverage response shape that the mobile checkout's
     // success screen consumes (wallet.amountUsed + amountDueToGateway).

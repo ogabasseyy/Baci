@@ -46,6 +46,32 @@ describe('recordPreGatewayRedemption', () => {
     ).rejects.toThrow('Store credit could not be confirmed');
   });
 
+  it.each([
+    [
+      '40001',
+      'Store credit retry required',
+      503,
+      'STORE_CREDIT_RETRY_REQUIRED',
+    ],
+    [
+      '40001',
+      'Store credit reconciliation required',
+      409,
+      'STORE_CREDIT_REVIEW_REQUIRED',
+    ],
+    [
+      '23514',
+      'Store credit reconciliation required',
+      409,
+      'STORE_CREDIT_REVIEW_REQUIRED',
+    ],
+  ])('maps store credit error %s (%s) to %s', async (code, message, status, responseCode) => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code, message } });
+    await expect(
+      recordPreGatewayRedemption('order-1', 50000, 0, 20000, { rpc: mocks.rpc })
+    ).resolves.toMatchObject({ status, code: responseCode });
+  });
+
   it('accepts a confirmed combined savings and wallet debit', async () => {
     mocks.rpc.mockResolvedValue({
       data: { wallet: 20000, savings: 5000 },

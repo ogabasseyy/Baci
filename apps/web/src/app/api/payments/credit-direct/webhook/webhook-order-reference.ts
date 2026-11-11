@@ -43,5 +43,9 @@ export function findCreditDirectWebhookOrder<
   // the active reference or the signed unpersisted-popup case before writing.
   return exactMatches.length === 1
     ? exactMatches[0]
-    : orders.find((order) => order.id === metadataOrderId);
+    : orders.find(
+        (order) =>
+          order.payment_method === 'credit_direct' &&
+          order.id === metadataOrderId
+      );
 }

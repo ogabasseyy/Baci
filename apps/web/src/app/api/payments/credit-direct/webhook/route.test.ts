@@ -437,10 +437,10 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
       expect(response.status).toBe(200);
       expect(data).toEqual({ received: true, warning: 'Order not found' });
-      expect(mockChain.in).toHaveBeenCalledWith('payment_method', [
-        'credit_direct',
-        'klump',
-      ]);
+      expect(mockChain.eq).toHaveBeenCalledWith(
+        'payment_method',
+        'credit_direct'
+      );
       expect(logger.warn).toHaveBeenCalledWith({
         message: 'Order not found for Credit Direct webhook',
         transactionId: 'txn_123456789',
@@ -495,6 +495,26 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       expect(supabase.from).toHaveBeenCalledTimes(1);
       expect(chain.update).not.toHaveBeenCalled();
       expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it('requires review when the reference search returns only part of its candidates', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+      const supabase = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabase as never);
+      const chain = supabase.from('orders');
+      chain.ilike.mockResolvedValue({
+        data: [mockOrder],
+        error: null,
+        count: 2,
+      });
+
+      const response = await POST(createMockRequest(merchantPaymentPayload));
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: 'CREDIT_DIRECT_REFERENCE_REVIEW_REQUIRED',
+      });
+      expect(chain.update).not.toHaveBeenCalled();
     });
 
     it('escapes the reference search and finds the exact active match after a decoy', async () => {
@@ -774,7 +794,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
         const updateChain = { ...createMockSupabaseClient().from(table) };
         updateChain.update = updateSpy.mockReturnValue(updateChain);
-        updateChain.eq = vi.fn().mockResolvedValue({ data: null, error: null });
+        updateChain.eq = vi.fn().mockReturnValue(updateChain);
         return updateChain;
       });
 
@@ -789,10 +809,8 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
       expect(updateSpy).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith({
-        message: 'Ignoring stale Credit Direct webhook for inactive session',
-        orderId: 'order_abc',
-        orderPaymentMethod: 'klump',
-        activeReference: 'txn_123456789',
+        message: 'Order not found for Credit Direct webhook',
+        metaData: 'order_abc',
         transactionId: 'txn_123456789',
       });
     });

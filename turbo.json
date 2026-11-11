@@ -141,6 +141,9 @@
         "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
+    "typecheck:build": {
+      "cache": false
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",

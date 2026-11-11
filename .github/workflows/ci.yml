@@ -158,8 +158,9 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_TYPECHECK_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
-    # Cold hosted runs can exceed 15 minutes while installing and typechecking.
-    timeout-minutes: 30
+    # Cold hosted runs can exceed 15 minutes for install plus the normal typecheck; the production
+    # build typecheck adds a second pass (~7 min warm, capped at 15 by its own step timeout).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,6 +186,24 @@ jobs:
           else
             pnpm turbo typecheck
           fi
+      # `build:ci` skips type checking, so only this step exercises the type-check path of the
+      # production `build` script (typegen -> prepared typed routes -> tsconfig.build.json).
+      # Pull requests skip it only when they touch nothing in the production program (tests, docs,
+      # mobile apps). Pushes to main always run it.
+      - name: Decide production build typecheck
+        id: production-typecheck-scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/production-build-typecheck-scope.mjs
+      - name: Run production build typecheck
+        if: steps.production-typecheck-scope.outputs.run == 'true'
+        # A break here can end in a slow compiler abort; fail within the step instead of the job.
+        timeout-minutes: 15
+        env:
+          # Same soft GC budget as the deploy build. apps/web pins typescript ~7.0.2, the native Go
+          # compiler (only the repo root aliases `typescript` to TypeScript 6), so NODE_OPTIONS does not apply.
+          GOMEMLIMIT: 6GiB
+        run: pnpm turbo typecheck:build --filter=@baci/web
 
   quality-test:
     name: Quality Gate - Test

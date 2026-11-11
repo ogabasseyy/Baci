@@ -179,33 +179,61 @@ describe('nudgePullRequest', () => {
 describe('sweepRecentRuns', () => {
   const since = '2026-11-11T08:00:00.000Z';
   const sweepPath = `/repos/${REPO}/actions/workflows/ci.yml/runs?event=pull_request&status=completed&created=${encodeURIComponent(`>=${since}`)}`;
-
-  it('visits the newest successful run of each pull request and survives a failing one', async () => {
-    const routes = {
-      ...routesFor(),
-      [`GET ${sweepPath}`]: [
-        run({ id: 1, run_number: 1, pull_requests: [{ number: 7 }] }),
-        run({ id: 2, run_number: 2, pull_requests: [{ number: 7 }] }),
-        run({ id: 3, run_number: 3, conclusion: 'failure', pull_requests: [{ number: 8 }] }),
-        run({ id: 4, run_number: 4, pull_requests: [{ number: 9 }] }),
-        run({ id: 5, run_number: 5, pull_requests: [] }),
-      ],
-    };
+  const eventsPath = (page) => `GET /repos/${REPO}/issues/events?per_page=100&page=${page}`;
+  const sweep = (routes, nudge = async () => ({ action: 'wait', reason: 'x' })) => {
     const client = fakeGithub(routes);
     const seen = [];
-    const results = await sweepRecentRuns({
-      client,
-      repository: REPO,
-      since,
-      nudge: async (prNumber) => {
-        seen.push(prNumber);
-        if (prNumber === 9) throw new Error('boom');
-        return { action: 'wait', reason: 'x' };
+    return sweepRecentRuns({ client, repository: REPO, since, nudge: async (n) => { seen.push(n); return nudge(n); }, log: () => {} }).then((results) => ({ results, seen, client }));
+  };
+
+  it('visits the newest successful run of each pull request and survives a failing one', async () => {
+    const { results, seen } = await sweep(
+      {
+        [`GET ${sweepPath}`]: [
+          run({ id: 1, run_number: 1, pull_requests: [{ number: 7 }] }),
+          run({ id: 2, run_number: 2, pull_requests: [{ number: 7 }] }),
+          run({ id: 3, run_number: 3, conclusion: 'failure', pull_requests: [{ number: 8 }] }),
+          run({ id: 4, run_number: 4, pull_requests: [{ number: 9 }] }),
+          run({ id: 5, run_number: 5, pull_requests: [] }),
+        ],
+        [eventsPath(1)]: [],
       },
-      log: () => {},
-    });
+      async (n) => {
+        if (n === 9) throw new Error('boom');
+        return { action: 'wait', reason: 'x' };
+      }
+    );
     assert.deepEqual(seen, [7, 9]);
     assert.equal(results.length, 2);
     assert.equal(results[1].action, 'error');
+  });
+
+  it('bugfix: also visits a pull request that was marked ready recently even if its run is old', async () => {
+    const recent = '2026-11-11T09:30:00Z';
+    const { seen } = await sweep({
+      [`GET ${sweepPath}`]: [],
+      [eventsPath(1)]: [
+        { event: 'ready_for_review', created_at: recent, issue: { number: 11, pull_request: {} } },
+        { event: 'labeled', created_at: recent, issue: { number: 12, pull_request: {} } },
+        { event: 'ready_for_review', created_at: recent, issue: { number: 13 } },
+        { event: 'ready_for_review', created_at: '2026-11-11T07:00:00Z', issue: { number: 14, pull_request: {} } },
+      ],
+    });
+    assert.deepEqual(seen, [11]);
+  });
+
+  it('stops reading events once they are older than the window and does not repeat a pull request', async () => {
+    const fresh = '2026-11-11T09:30:00Z';
+    const { seen, client } = await sweep({
+      [`GET ${sweepPath}`]: [run({ id: 1, run_number: 1, pull_requests: [{ number: 11 }] })],
+      [eventsPath(1)]: [{ event: 'ready_for_review', created_at: fresh, issue: { number: 11, pull_request: {} } }, { event: 'closed', created_at: '2026-11-11T07:00:00Z', issue: { number: 1 } }],
+    });
+    assert.deepEqual(seen, [11]);
+    assert.equal(client.calls.filter((call) => call.includes('/issues/events')).length, 1);
+  });
+
+  it('still sweeps the runs when the events cannot be read', async () => {
+    const { seen } = await sweep({ [`GET ${sweepPath}`]: [run({ id: 1, run_number: 1, pull_requests: [{ number: 7 }] })], [eventsPath(1)]: new Error('HTTP 502') });
+    assert.deepEqual(seen, [7]);
   });
 });

@@ -29,6 +29,7 @@ const USAGE_LIMIT = /(reached your Codex usage limits|Codex usage limits have be
 const FULL_SHA = /^[0-9a-f]{40}$/i;
 
 const KNOWN_VERSION = '1';
+const MAX_UNKNOWN_FORMAT_REPORTED = 2;
 
 export function isCodexAuthor(user) {
   return Boolean(user) && user.login === CODEX_LOGIN && (user.type === undefined || user.type === 'Bot');
@@ -100,6 +101,13 @@ export function evidenceFromIssueComment(item) {
   if (USAGE_LIMIT.test(body)) {
     return { evidence: [{ kind: 'unavailable', sha: null, time: item.created_at, source: 'notice', id: item.id }], unrecognized: [] };
   }
+  // A Codex comment with none of the markers we know (for example the task-style
+  // "## Review Result" answer seen on 2026-11-11) is never read as a verdict, but it is
+  // reported so a run that finds nothing else can say that Codex did write something.
+  if (!/<!--\s*codex-/i.test(body)) {
+    const start = body.replace(/\s+/g, ' ').trim().slice(0, 60);
+    return { evidence: [], unrecognized: [`comment ${item.id}: Codex comment in an unknown format (starts with "${start}")`] };
+  }
   return none();
 }
 
@@ -142,5 +150,10 @@ export function collectEvidence({ issueComments = [], reviews = [], reviewCommen
     ...reviewComments.map(evidenceFromReviewComment),
   ];
   const evidence = parts.flatMap((part) => part.evidence).sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-  return { evidence, unrecognized: parts.flatMap((part) => part.unrecognized) };
+  // Everything that is not understood is reported, except that only the newest few
+  // unknown-format comments are listed (they are informational and can pile up).
+  const unrecognized = parts.flatMap((part) => part.unrecognized);
+  const unknownFormat = unrecognized.filter((entry) => entry.includes('unknown format'));
+  const keepUnknown = new Set(unknownFormat.slice(-MAX_UNKNOWN_FORMAT_REPORTED));
+  return { evidence, unrecognized: unrecognized.filter((entry) => !entry.includes('unknown format') || keepUnknown.has(entry)) };
 }

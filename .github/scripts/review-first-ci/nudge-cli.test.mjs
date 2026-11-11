@@ -98,9 +98,9 @@ describe('runNudge', () => {
     const now = Date.parse(NOW);
     const since = new Date(now - (720 + 150) * 60000).toISOString();
     const path = `/repos/${REPO}/actions/workflows/ci.yml/runs?event=pull_request&status=completed&created=${encodeURIComponent(`>=${since}`)}`;
-    const client = fakeGithub({ [`GET ${path}`]: [] });
+    const client = fakeGithub({ [`GET ${path}`]: [], [`GET /repos/${REPO}/issues/events?per_page=100&page=1`]: [] });
     await runNudge({ env: env('schedule', {}, { BACI_CODEX_WAIT_TIMEOUT_MINUTES: '720' }), client, now, log: () => {} });
-    assert.deepEqual(client.calls, [`GET ${path}`]);
+    assert.equal(client.calls[0], `GET ${path}`);
   });
 
   it('reports nothing to do for events without a pull request', async () => {

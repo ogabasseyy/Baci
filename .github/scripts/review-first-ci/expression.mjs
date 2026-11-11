@@ -1,4 +1,4 @@
-// Test support: evaluates the small subset of GitHub Actions expressions used by the
+// Test support ONLY (never call it with untrusted input; it is not a sandbox): evaluates the small subset of GitHub Actions expressions used by the
 // review-first CI workflows (==, !=, &&, ||, !, parentheses, string literals and
 // startsWith / contains / fromJSON / always). Same approach as
 // ci-private-runner-contract-utils.mjs: context values are substituted as JSON
@@ -7,7 +7,8 @@
 // evaluate to null, like a missing property in a real run.
 import assert from 'node:assert/strict';
 
-const SAFE = /^[\s()'"\w=!&|,.[\]\/\-:@${}+<>]+$/;
+// the backslash is allowed because context values are substituted as JSON strings (\" inside)
+const SAFE = /^[\s()'"\w=!&|,.[\]\/\\\-:@${}+<>]+$/;
 const ALLOWED_WORDS = new Set(['true', 'false', 'null', 'always', 'startsWith', 'contains']);
 
 function lowerEqualityLiterals(source) {

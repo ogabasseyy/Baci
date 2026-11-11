@@ -75,7 +75,7 @@ export async function nudgePullRequest({ client, repository, prNumber, mode, now
   }
 
   const ageMinutes = (now - Date.parse(ci.run.created_at)) / 60000;
-  const { decision } = await evaluatePullRequestStage({ client, repository, prNumber, headSha: sha, eventName: 'pull_request', mode, ageMinutes, timeoutMinutes, now, marginMinutes: TIMEOUT_MARGIN_MINUTES });
+  const { decision } = await evaluatePullRequestStage({ client, repository, prNumber, headSha: sha, eventName: 'pull_request', mode, ageMinutes, timeoutMinutes, now, marginMinutes: TIMEOUT_MARGIN_MINUTES, pullRequest: pr });
 
   if (decision.stage !== 'full') {
     await setStatus({ ...status, state: 'pending', description: `Quick checks passed. ${decision.reason}` });
@@ -90,6 +90,29 @@ export async function nudgePullRequest({ client, repository, prNumber, mode, now
   return { action: 'rerun', reason: decision.code, detail: decision.reason, runs: targets.map((target) => target.id) };
 }
 
+// Pull requests marked ready in the window. A draft can sit for hours before that, so its run may
+// be far older than the window; the ready event is what starts its no-verdict clock.
+async function recentReadyPullRequests(client, repository, sinceMs) {
+  const numbers = [];
+  try {
+    for (let page = 1; page <= 5; page += 1) {
+      const events = await client.get(`/repos/${repository}/issues/events?per_page=100&page=${page}`);
+      for (const event of events) {
+        if (Date.parse(event.created_at) < sinceMs) return numbers;
+        if (event.event === 'ready_for_review' && event.issue?.pull_request) numbers.push(event.issue.number);
+      }
+      if (events.length < 100) break;
+    }
+  } catch {
+    // informational: the run-based part of the sweep still works
+  }
+  return numbers;
+}
+
+// Below this many remaining API requests the sweep stops: every workflow shares one hourly
+// budget for the default token (1,000 per repository), and the event-driven paths matter more.
+const MIN_API_BUDGET = 150;
+
 export async function sweepRecentRuns({ client, repository, since, nudge, log = console.log }) {
   const runs = await client.paginate(
     `/repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&status=completed&created=${encodeURIComponent(`>=${since}`)}`,
@@ -100,8 +123,14 @@ export async function sweepRecentRuns({ client, repository, since, nudge, log = 
     const number = run.pull_requests?.[0]?.number;
     if (run.conclusion === 'success' && number) numbers.add(number);
   }
+  for (const number of await recentReadyPullRequests(client, repository, Date.parse(since))) numbers.add(number);
   const results = [];
   for (const prNumber of numbers) {
+    const remaining = client.rateRemaining?.();
+    if (remaining != null && remaining < MIN_API_BUDGET) {
+      log(`sweep stopped: only ${remaining} GitHub API requests left this hour`);
+      break;
+    }
     try {
       results.push({ prNumber, ...(await nudge(prNumber)) });
     } catch (error) {

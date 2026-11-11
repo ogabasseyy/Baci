@@ -6,6 +6,7 @@ const PAGE_SIZE = 100;
 export function createGithubClient({ token, apiUrl = 'https://api.github.com', fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
   if (!token) throw new Error('GitHub token is required (GITHUB_TOKEN)');
 
+  let remaining = null;
   const headers = {
     accept: 'application/vnd.github+json',
     authorization: `Bearer ${token}`,
@@ -23,6 +24,8 @@ export function createGithubClient({ token, apiUrl = 'https://api.github.com', f
           await sleep(1000);
           continue;
         }
+        const left = Number.parseInt(response.headers?.get?.('x-ratelimit-remaining') ?? '', 10);
+        if (Number.isFinite(left)) remaining = left;
         if (!response.ok) throw new Error(`HTTP ${response.status} for ${path}`);
         const text = await response.text();
         return text ? JSON.parse(text) : {};
@@ -38,6 +41,8 @@ export function createGithubClient({ token, apiUrl = 'https://api.github.com', f
   const withPage = (path, page) => `${path}${path.includes('?') ? '&' : '?'}per_page=${PAGE_SIZE}&page=${page}`;
 
   return {
+    // requests left in the current hour for this token, as last reported by GitHub (null = unknown)
+    rateRemaining: () => remaining,
     get: (path) => send('GET', path),
     post: (path, body) => send('POST', path, body),
     async paginate(path, key) {

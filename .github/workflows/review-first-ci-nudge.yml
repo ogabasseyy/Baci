@@ -3,7 +3,7 @@ name: Review-first CI nudge
 # Review-first CI (docs/runbooks/review-first-ci.md): a pull request's CI run does only the
 # quick checks until Codex reports no major findings for the exact head commit. This workflow
 # notices when that changes (a Codex comment, the ci-now label or /ci-now comment, a finished
-# quick run, or the half-hourly sweep for the no-verdict timeout) and RE-RUNS the pull
+# quick run, or the sweep every 15 minutes for the no-verdict timeout) and RE-RUNS the pull
 # request's own CI run. The re-run's `changes` job reads the verdict again and decides by
 # itself, so a wrong or early nudge cannot start the heavy suite.
 #
@@ -16,12 +16,12 @@ on:
   issue_comment:
     types: [created, edited]
   pull_request_target:
-    types: [labeled]
+    types: [labeled, ready_for_review]
   workflow_run:
-    workflows: ['CI Quality Gate', 'Checkout browser regression']
+    workflows: ['CI Quality Gate']
     types: [completed]
   schedule:
-    - cron: '17,47 * * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
       pr_number:
@@ -42,10 +42,10 @@ jobs:
       (vars.BACI_REVIEW_FIRST_CI == 'on' || vars.BACI_REVIEW_FIRST_CI == 'pilot') && (
         github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success') ||
-        (github.event_name == 'pull_request_target' && (github.event.label.name == 'ci-now' || github.event.label.name == 'review-first-ci')) ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.run_attempt == 1) ||
+        (github.event_name == 'pull_request_target' && (github.event.action == 'ready_for_review' || github.event.label.name == 'ci-now' || github.event.label.name == 'review-first-ci')) ||
         (github.event_name == 'issue_comment' && github.event.issue.pull_request && (
-          github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
+          (github.event.comment.user.login == 'chatgpt-codex-connector[bot]' && (contains(github.event.comment.body, '"status":"completed"') || contains(github.event.comment.body, 'find any major issues'))) ||
           (startsWith(github.event.comment.body, '/ci-now') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
         ))
       )

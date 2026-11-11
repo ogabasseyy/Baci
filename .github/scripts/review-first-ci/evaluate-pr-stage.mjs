@@ -21,15 +21,15 @@ async function lastReadyForReview(client, repository, prNumber) {
 
 // ageMinutes: minutes since the push (or the run). marginMinutes is subtracted from every wait
 // so the nudge, which asks a little later than the run itself, never disagrees with it.
-export async function evaluatePullRequestStage({ client, repository, prNumber, headSha, eventName, mode, ageMinutes, timeoutMinutes, sameRepo = true, now = Date.now(), marginMinutes = 0 }) {
+export async function evaluatePullRequestStage({ client, repository, prNumber, headSha, eventName, mode, ageMinutes, timeoutMinutes, sameRepo = true, now = Date.now(), marginMinutes = 0, pullRequest = null }) {
   const facts = { eventName, mode, sameRepo, headSha, timeoutMinutes };
 
   const offline = decideStage({ ...facts, verdict: { state: 'none', reason: '' }, ageMinutes: 0 });
   if (DECIDED_OFFLINE.has(offline.code)) return { decision: offline, verdict: null };
 
-  let pr;
+  let pr = pullRequest;
   try {
-    pr = await client.get(`/repos/${repository}/pulls/${prNumber}`);
+    pr ??= await client.get(`/repos/${repository}/pulls/${prNumber}`);
   } catch (error) {
     // Without the pull request we cannot tell a draft from a ready one: no timeout either.
     return { decision: decideStage({ ...facts, ageMinutes: 0, apiError: error.message }), verdict: null };

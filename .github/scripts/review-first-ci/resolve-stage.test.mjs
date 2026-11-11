@@ -81,8 +81,8 @@ describe('runResolveStage', () => {
   });
 
   it('takes the timeout from the environment and ignores nonsense', async () => {
-    const event = { pull_request: { number: 7, updated_at: '2026-11-11T13:05:00Z', head: { sha: HEAD, repo: { full_name: REPO } } } };
-    const short = setup({ event, env: { BACI_CODEX_WAIT_TIMEOUT_MINUTES: '30' } });
+    const event = { pull_request: { number: 7, updated_at: '2026-11-11T13:45:00Z', head: { sha: HEAD, repo: { full_name: REPO } } } };
+    const short = setup({ event, env: { BACI_CODEX_WAIT_TIMEOUT_MINUTES: '10' } });
     await short.run();
     assert.equal(short.outputs().code, 'timeout');
     const nonsense = setup({ event, env: { BACI_CODEX_WAIT_TIMEOUT_MINUTES: 'soon' } });

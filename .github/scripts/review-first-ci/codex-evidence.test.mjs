@@ -148,6 +148,28 @@ describe('real Codex clean receipt comment (codex-review-receipt:v1)', () => {
   });
 });
 
+describe('bugfix: a Codex comment in a format nobody has seen is reported, never read as a verdict', () => {
+  const taskStyle = comment('## Review Result\n\nNo actionable findings. The throwaway workflow is narrowly scoped.\n\n**Checks**\n* git diff --check');
+
+  it('is not clean, but is listed so the run can warn loudly', () => {
+    const result = evidenceFromIssueComment(taskStyle);
+    assert.deepEqual(result.evidence, []);
+    assert.equal(result.unrecognized.length, 1);
+    assert.match(result.unrecognized[0], /unknown format/);
+    assert.match(result.unrecognized[0], /Review Result/);
+  });
+
+  it('does not report the usage-limit notice or the clean receipt as unknown', () => {
+    assert.deepEqual(evidenceFromIssueComment(comment('You have reached your Codex usage limits for code reviews.')).unrecognized, []);
+    assert.deepEqual(evidenceFromIssueComment(receiptClean).unrecognized, []);
+  });
+
+  it('keeps only the newest few unknown items when collecting', () => {
+    const many = Array.from({ length: 6 }, (_, index) => comment(`## Review Result ${index}`, { id: 100 + index }));
+    assert.equal(collectEvidence({ issueComments: many }).unrecognized.length, 2);
+  });
+});
+
 describe('authorship', () => {
   it('ignores clean-looking text from anyone but the Codex bot', () => {
     const human = comment("Didn't find any major issues\n**Reviewed commit:** `63e12ea2bf`", {

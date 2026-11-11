@@ -235,11 +235,11 @@ describe('the nudge workflow', () => {
 
   it('listens to exactly the events it handles', () => {
     assert.deepEqual(Object.keys(nudge.on).sort(), ['issue_comment', 'pull_request_target', 'schedule', 'workflow_dispatch', 'workflow_run']);
-    // Both workflows have a deferred full stage, so a finished run of either one can need a nudge.
-    assert.deepEqual(nudge.on.workflow_run.workflows, ['CI Quality Gate', 'Checkout browser regression']);
+    // The CI run finishing is the signal; the browser regression is picked up by the same nudge and by the sweep.
+    assert.deepEqual(nudge.on.workflow_run.workflows, ['CI Quality Gate']);
     assert.equal(ci.name, 'CI Quality Gate');
-    assert.equal(browser.name, 'Checkout browser regression');
-    assert.deepEqual(nudge.on.pull_request_target.types, ['labeled']);
+    assert.deepEqual(nudge.on.pull_request_target.types, ['labeled', 'ready_for_review']);
+    assert.deepEqual(nudge.on.schedule, [{ cron: '7,22,37,52 * * * *' }]);
   });
 
   it('does nothing while the switch is off', () => {
@@ -249,8 +249,8 @@ describe('the nudge workflow', () => {
   });
 
   it('wakes up for Codex comments on pull requests only', () => {
-    assert.equal(run(comment('chatgpt-codex-connector[bot]', 'x')), true);
-    assert.equal(run(comment('chatgpt-codex-connector[bot]', 'x', 'NONE', false)), false);
+    assert.equal(run(comment('chatgpt-codex-connector[bot]', '"status":"completed"')), true);
+    assert.equal(run(comment('chatgpt-codex-connector[bot]', '"status":"completed"', 'NONE', false)), false);
     assert.equal(run(comment('github-actions[bot]', 'Muse review')), false);
     assert.equal(run(comment('ogabasseyy', 'looks good')), false);
   });
@@ -262,18 +262,27 @@ describe('the nudge workflow', () => {
     assert.equal(run(comment('someone', '/ci-now', 'CONTRIBUTOR')), false);
   });
 
-  it('wakes up for the break-glass and pilot labels only', () => {
-    const label = (name) => ({ 'github.event_name': 'pull_request_target', 'github.event.label.name': name });
+  it('wakes up for the break-glass and pilot labels and for a draft marked ready, nothing else', () => {
+    const label = (name) => ({ 'github.event_name': 'pull_request_target', 'github.event.action': 'labeled', 'github.event.label.name': name });
     assert.equal(run(label('ci-now')), true);
     assert.equal(run(label('review-first-ci')), true);
     assert.equal(run(label('bug')), false);
+    assert.equal(run({ 'github.event_name': 'pull_request_target', 'github.event.action': 'ready_for_review' }), true);
   });
 
-  it('wakes up when a pull request run finishes successfully', () => {
-    const finished = (event, conclusion) => ({ 'github.event_name': 'workflow_run', 'github.event.workflow_run.event': event, 'github.event.workflow_run.conclusion': conclusion });
+  it('wakes up when the first pass of a CI run finishes successfully (the re-run pass needs no nudge)', () => {
+    const finished = (event, conclusion, attempt = 1) => ({ 'github.event_name': 'workflow_run', 'github.event.workflow_run.event': event, 'github.event.workflow_run.conclusion': conclusion, 'github.event.workflow_run.run_attempt': attempt });
     assert.equal(run(finished('pull_request', 'success')), true);
     assert.equal(run(finished('pull_request', 'failure')), false);
     assert.equal(run(finished('push', 'success')), false);
+    assert.equal(run(finished('pull_request', 'success', 2)), false);
+  });
+
+  it('only wakes up for Codex comments that can change the verdict (a finished review or a clean receipt)', () => {
+    const body = (text) => comment('chatgpt-codex-connector[bot]', text);
+    assert.equal(run(body('<!-- x --> {"status":"completed"} -->')), true);
+    assert.equal(run(body("Codex Review: Didn't find any major issues.")), true);
+    assert.equal(run(body('<!-- x --> {"status":"running"} -->')), false);
   });
 
   it('never runs pull-request code and only gets the permissions it needs', () => {

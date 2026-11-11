@@ -77,13 +77,17 @@ run):
   job each time), so remove it when Codex is back. Agents may use it when Codex is down, rate limited, or when the
   author has answered a finding and wants CI to prove the fix. Without the helper workflow, re-run the latest run
   by hand: `gh run rerun <run-id>` after adding the label.
-* **Timeout:** if there is no Codex verdict at all (nothing, "running", or a usage-limit message) 60 minutes after
-  the push, the full suite starts and the job summary says why. The minutes can be changed with the repository
-  variable `BACI_CODEX_WAIT_TIMEOUT_MINUTES` (whole minutes, at most 1440). A pull request with Codex findings never
-  times out (someone must fix or override). Draft pull requests never time out, and a draft that is marked ready
-  starts its 60 minutes at that moment, not at the push. **This is a deliberate bypass:** after the timeout the
-  required checks can go green without a Codex verdict, so the rule "no merge before Codex is clean on the final
-  head" stays a rule for agents and the owner, as it is today.
+* **Timeout:** if there is no Codex verdict at all (nothing, "running", or a usage-limit message) **30 minutes**
+  after the push, the full suite starts and the job summary says why. Why 30: Codex answered in 2 to 10 minutes on
+  every pull request observed on 2026-11-11, so 30 leaves a wide margin without letting a Codex outage hold pull
+  requests for an hour. It is one constant, `DEFAULT_TIMEOUT_MINUTES` in `stage-decision.mjs`; the repository
+  variable `BACI_CODEX_WAIT_TIMEOUT_MINUTES` (whole minutes, at most 1440) overrides it without a code change. The
+  nudge workflow sweeps every 15 minutes, so the full suite starts 32 to 47 minutes after the push in that case. A pull
+  request with Codex findings never times out (someone must fix or override). Draft pull requests never time out, and
+  a draft that is marked ready starts its 30 minutes at that moment, not at the push. **This is a deliberate bypass:**
+  after the timeout the required checks can go green without a Codex verdict, so the rule "no merge before Codex is
+  clean on the final head" stays a rule for agents and the owner, as it is today. Muse is advisory and does not start
+  anything; if the owner wants a clean Muse review to shorten the wait, that needs Muse's verdict wording pinned first.
 * **Kill switch:** delete the variable `BACI_REVIEW_FIRST_CI` (or set it to anything but `on` / `pilot`). The next
   run of every pull request is a normal full run, no code change needed.
 

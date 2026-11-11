@@ -8,10 +8,14 @@
 
 export const BREAK_GLASS_LABEL = 'ci-now';
 export const PILOT_LABEL = 'review-first-ci';
-export const DEFAULT_TIMEOUT_MINUTES = 60;
+// How long a pull request waits for a Codex verdict before the full CI starts anyway. THE one
+// place to change the default; the repository variable BACI_CODEX_WAIT_TIMEOUT_MINUTES overrides
+// it without a code change. Codex normally answers in 2 to 10 minutes (observed 2026-11-11), so 30
+// leaves a wide margin while keeping a Codex outage from holding pull requests for long.
+export const DEFAULT_TIMEOUT_MINUTES = 30;
 const MAX_TIMEOUT_MINUTES = 1440;
 // The sweep must still see a run after the timeout has passed: the timeout, the nudge's
-// 2 minute margin and a couple of half-hourly sweeps.
+// 2 minute margin and a couple of quarter-hourly sweeps.
 const SWEEP_MARGIN_MINUTES = 150;
 const MIN_SWEEP_LOOKBACK_MINUTES = 360;
 

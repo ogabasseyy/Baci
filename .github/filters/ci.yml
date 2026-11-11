@@ -353,6 +353,8 @@ web:
   - '.github/scripts/run-ci-web-shard.sh'
   - '.github/scripts/reclaim-hosted-build-space.sh'
   - '.github/scripts/ci-hosted-free-runner-contract.test.mjs'
+  - '.github/scripts/ci-hosted-postgresql-contract.test.mjs'
+  - '.github/scripts/ci-step-script-text.mjs'
   - '.github/scripts/install-postgresql-hosted.sh'
   - '.github/scripts/install-postgresql-hosted.test.mjs'
   - '.github/scripts/dependency-review-availability.test.mjs'

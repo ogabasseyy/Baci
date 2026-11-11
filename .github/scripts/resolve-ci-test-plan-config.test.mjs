@@ -11,6 +11,7 @@ import './ci-builder-container-labels.test.mjs';
 import '../../supabase/tests/shipping-ci-container-labels.test.mjs';
 import './ci-build-runner-contract.test.mjs';
 import './ci-hosted-free-runner-contract.test.mjs';
+import './ci-hosted-postgresql-contract.test.mjs';
 import './install-postgresql-hosted.test.mjs';
 import './dependency-review-availability.test.mjs';
 import './codeql-private-availability.test.mjs';

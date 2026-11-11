@@ -25,6 +25,15 @@ it('writes a verified capture only through the restricted verifier role', async 
       )
     );
     await f.db.pool.query(
+      readFileSync(
+        new URL(
+          '../../../../supabase/migrations/20261112002500_experience_capture_idempotency.sql',
+          import.meta.url
+        ),
+        'utf8'
+      )
+    );
+    await f.db.pool.query(
       'CREATE ROLE baci_experience_verifier_login LOGIN NOINHERIT; GRANT baci_experience_verifier TO baci_experience_verifier_login'
     );
     pool = new Pool({
@@ -59,6 +68,7 @@ it('writes a verified capture only through the restricted verifier role', async 
       assets: 'b'.repeat(64),
       catalog: null,
       path: '/',
+      state: `preview:${randomUUID()}:${'a'.repeat(32)}`,
     };
     const bytes = Buffer.from('synthetic screenshot');
     const capture = {
@@ -87,6 +97,18 @@ it('writes a verified capture only through the restricted verifier role', async 
         .rows[0].count
     ).toBe('0');
     await record(capture);
+    const conflictingKey = {
+      ...key,
+      state: key.state.slice(0, 45) + 'b'.repeat(32),
+    };
+    await expect(
+      record({
+        ...capture,
+        id: randomUUID(),
+        snapshot: { ...capture.snapshot, key: conflictingKey },
+        keyDigest: snapshotKeyDigest(conflictingKey),
+      })
+    ).rejects.toThrow();
     expect(
       (await f.db.pool.query('SELECT count(*) FROM experience_snapshots'))
         .rows[0].count

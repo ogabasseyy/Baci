@@ -35,6 +35,7 @@ function fixture() {
       bytes: `\\x${Buffer.from(value).toString('hex')}`,
       digest: digestBytes(value),
     })),
+    experience_snapshots: [],
   };
   const eq = vi.fn();
   const from = vi.fn((table: string) => {
@@ -44,6 +45,7 @@ function fixture() {
         eq(table, key, value);
         return q;
       },
+      like: () => q,
       maybeSingle: async () => ({ data: rows[table], error: null }),
       limit: async () => ({ data: rows[table], error: null }),
     };
@@ -55,21 +57,45 @@ function fixture() {
     error: null,
   }));
   const ctx = { merchantId, supabase: { from, rpc, auth: { getUser } } };
-  const record = vi.fn(async () => {});
+  const record = vi.fn(
+    async (capture: {
+      id: string;
+      buildId: string;
+      buildDigest: string;
+      keyDigest: string;
+      snapshot: { key: unknown };
+    }) => {
+      rows.experience_snapshots = [
+        {
+          id: capture.id,
+          build_id: capture.buildId,
+          build_digest: capture.buildDigest,
+          key_digest: capture.keyDigest,
+          snapshot_key: capture.snapshot.key,
+        },
+      ];
+    }
+  );
   const capture = vi.fn(async () => ({
     snapshot: {
       key: {
         build: buildDigest,
-        assets: 'a'.repeat(64),
+        assets: digestBytes(JSON.stringify([])),
         catalog: 'revision',
         path: '/',
+        viewport: '390',
+        locale: 'en-NG',
+        browser: 'chromium',
         extractor: 'semantic-v1',
       },
       text: 'synthetic',
     },
     evidence: { bytes: Buffer.from('synthetic-image') },
   }));
-  const bootstrap = vi.fn(async () => ({ merchant: { id: merchantId } }));
+  const bootstrap = vi.fn(async () => ({
+    catalog: { revision: 'revision' },
+    route: { canonicalPath: '/' },
+  }));
   const run = createPrivateExperienceCapture({
     hostOrigin: 'http://localhost:43174',
     record,
@@ -108,8 +134,20 @@ it('captures merchant/build-bound evidence through the normal owner client and r
   for (const table of Object.keys(f.rows))
     expect(f.eq).toHaveBeenCalledWith(table, 'merchant_id', merchantId);
   expect(f.eq).toHaveBeenCalledWith('experience_builds', 'id', buildId);
-  expect(f.getUser).toHaveBeenCalledTimes(3);
+  expect(f.getUser).toHaveBeenCalledTimes(4);
   expect(first.previewUrl).toContain(`merchant=${merchantId}&build=${buildId}`);
+});
+it('does not reuse evidence after its catalog changes, even before restart', async () => {
+  const f = fixture();
+  await f.run(f.ctx as never, input);
+  f.bootstrap.mockResolvedValueOnce({
+    catalog: { revision: 'changed' },
+    route: { canonicalPath: '/' },
+  });
+  await expect(f.run(f.ctx as never, input)).rejects.toThrow(
+    'IDEMPOTENCY_CONFLICT'
+  );
+  expect(f.capture).toHaveBeenCalledOnce();
 });
 
 it('rejects owner authorization before reads, including cached replay', async () => {
@@ -181,6 +219,9 @@ it('does not persist evidence when owner authorization is revoked during capture
           assets: 'a'.repeat(64),
           catalog: 'revision',
           path: '/',
+          viewport: '390',
+          locale: 'en-NG',
+          browser: 'chromium',
           extractor: 'semantic-v1',
         },
         text: 'synthetic',

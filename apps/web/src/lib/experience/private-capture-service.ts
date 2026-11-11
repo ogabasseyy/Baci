@@ -12,6 +12,12 @@ import {
   requireExperienceOwner,
 } from './authorization';
 import { digestBytes } from './manifest-digest';
+import {
+  captureReplayState,
+  findCaptureReplay,
+  loadCaptureReplay,
+  validateCaptureReplay,
+} from './private-capture-replay';
 import { productionOrigin } from './production-origins';
 import type { ExperienceSnapshot } from './snapshot-freshness';
 import { snapshotKeyDigest } from './snapshot-key';
@@ -56,7 +62,6 @@ export function createPrivateExperienceCapture(deps: {
     string,
     {
       fingerprint: string;
-      expires: number;
       value: Promise<{
         evidenceId: string;
         buildId: string;
@@ -72,7 +77,6 @@ export function createPrivateExperienceCapture(deps: {
     experienceId.parse(input.buildId);
     experienceId.parse(input.idempotencyKey);
     const ctx = await requireExperienceOwner(inputCtx);
-    for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);
     const key = [
       ctx.merchantId,
       ctx.actorUserId,
@@ -89,6 +93,11 @@ export function createPrivateExperienceCapture(deps: {
     }
     if (cache.size >= capacity) throw Error('QUOTA_EXCEEDED');
     const value = (async () => {
+      const priorBinding = await loadCaptureReplay(
+        ctx.supabase,
+        ctx.merchantId,
+        input
+      );
       const build = await ctx.supabase
         .from('experience_builds')
         .select('id,build_digest,job_id,host_origin')
@@ -101,6 +110,7 @@ export function createPrivateExperienceCapture(deps: {
         build.data.host_origin !== deps.hostOrigin
       )
         throw Error('NOT_FOUND');
+      const buildData = build.data;
       const job = await ctx.supabase
         .from('experience_jobs')
         .select('artifact_id,status')
@@ -148,6 +158,43 @@ export function createPrivateExperienceCapture(deps: {
           )
         : [];
       const bootstrap = await deps.bootstrap(ctx, manifest, input.routeId);
+      const assetsDigest = digestBytes(
+        JSON.stringify(assets.map((a) => a.digest))
+      );
+      const state = captureReplayState(input);
+      const expectedKey = snapshotKeyDigest({
+        build: build.data.build_digest,
+        assets: assetsDigest,
+        catalog: bootstrap.catalog.revision,
+        path: bootstrap.route.canonicalPath,
+        viewport: '390',
+        locale: 'en-NG',
+        browser: 'chromium',
+        state,
+      });
+      const findReplay = () =>
+        findCaptureReplay(
+          ctx.supabase,
+          ctx.merchantId,
+          input,
+          buildData.build_digest,
+          expectedKey
+        );
+      const priorEvidence = validateCaptureReplay(
+        priorBinding,
+        build.data.build_digest,
+        expectedKey
+      );
+      const result = (evidenceId: string) => ({
+        evidenceId,
+        buildId: input.buildId,
+        buildDigest: buildData.build_digest,
+        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId, routeId: input.routeId })}`,
+      });
+      if (priorEvidence) {
+        await requireExperienceOwner(ctx);
+        return result(priorEvidence);
+      }
       const captured = await (deps.capture ?? captureExperience)({
         manifest,
         hostOrigin: deps.hostOrigin,
@@ -156,41 +203,44 @@ export function createPrivateExperienceCapture(deps: {
         assets,
         engine: 'chromium',
         width: 390,
-        assetsDigest: digestBytes(JSON.stringify(assets.map((a) => a.digest))),
+        assetsDigest,
       });
       const snapshot = {
         ...captured.snapshot,
         key: {
           ...captured.snapshot.key,
-          state: `preview:${input.idempotencyKey}`,
+          state,
         },
       };
       const bytes = captured.evidence.bytes;
       const id = randomUUID();
       await requireExperienceOwner(ctx);
-      await deps.record({
-        id,
-        merchantId: ctx.merchantId,
-        buildId: input.buildId,
-        buildDigest: build.data.build_digest,
-        snapshot,
-        keyDigest: snapshotKeyDigest(snapshot.key),
-        bytes,
-        evidenceDigest: digestBytes(bytes),
-      });
-      return {
-        evidenceId: id,
-        buildId: input.buildId,
-        buildDigest: build.data.build_digest,
-        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId, routeId: input.routeId })}`,
-      };
+      if (snapshotKeyDigest(snapshot.key) !== expectedKey)
+        throw Error('BUILD_FAILED');
+      try {
+        await deps.record({
+          id,
+          merchantId: ctx.merchantId,
+          buildId: input.buildId,
+          buildDigest: build.data.build_digest,
+          snapshot,
+          keyDigest: expectedKey,
+          bytes,
+          evidenceDigest: digestBytes(bytes),
+        });
+      } catch (error) {
+        const recovered = await findReplay();
+        if (!recovered) throw error;
+        await requireExperienceOwner(ctx);
+        return result(recovered);
+      }
+      return result(id);
     })();
-    cache.set(key, { fingerprint, expires: Date.now() + 600000, value });
+    cache.set(key, { fingerprint, value });
     try {
       return await value;
-    } catch (e) {
-      cache.delete(key);
-      throw e;
+    } finally {
+      if (cache.get(key)?.value === value) cache.delete(key);
     }
   };
 }

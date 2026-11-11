@@ -235,11 +235,33 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     expect(committed.error).toBeNull();
     expect(committed.data).toHaveLength(1);
 
-    const captured = await buildVerification.capture(buildVerification.ctx, {
+    const captureInput = {
       buildId: build.buildId,
       routeId: 'home',
       idempotencyKey: randomUUID(),
+    };
+    const captured = await buildVerification.capture(
+      buildVerification.ctx,
+      captureInput
+    );
+    const replayFetch = vi.fn<typeof fetch>();
+    const restartedCapture = await createVerifierCaptureWorker({
+      pool: verifierPool,
+      hostOrigin,
+      previewOrigin,
+      bootstrap: async () => bootstrap,
+      runner: {
+        endpoint: 'https://runner.baci-offline.invalid/v1/execute',
+        key,
+        toolchainDigest,
+        fetch: replayFetch,
+      },
     });
+    expect(await restartedCapture(f.owner, captureInput)).toEqual(captured);
+    await expect(
+      restartedCapture(f.owner, { ...captureInput, routeId: '/' })
+    ).rejects.toThrow('IDEMPOTENCY_CONFLICT');
+    expect(replayFetch).not.toHaveBeenCalled();
     const snapshot = await f.owner.supabase
       .from('experience_snapshots')
       .select('id,build_id')

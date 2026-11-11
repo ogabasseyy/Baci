@@ -141,7 +141,10 @@ test('jobs that need PostgreSQL verify the pre-installed toolchain on the privat
     assert.match(afterGuard, new RegExp(`test -x /usr/lib/postgresql/18/bin/${program}\\n`), program);
   }
   assert.match(afterGuard, /\/usr\/lib\/postgresql\/18\/bin\/postgres --version \| grep -Eq '\^postgres /);
-  assert.match(afterGuard, /test -x \/usr\/local\/bin\/supabase-go/);
+  // CLI 3.x is one executable in a versioned folder that the script also puts on PATH for the later steps.
+  assert.doesNotMatch(replay, /supabase-go/);
+  assert.match(afterGuard, /test -x "\$\{SUPABASE_CLI_DIR\}\/supabase"/);
+  assert.match(afterGuard, /echo "\$\{SUPABASE_CLI_DIR\}" >> "\$GITHUB_PATH"/);
   assert.match(afterGuard, /supabase --version/);
   for (const [job, name] of [['quality-disposable-sql', 'Install PostgreSQL client and server binaries'], ['quality-misc', 'Run PiggyVest legacy runbook SQL against scratch PostgreSQL'], ['quality-misc', 'Test cart quota guard staging and signed PostgREST']]) {
     const script = scriptOf(job, name);

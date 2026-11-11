@@ -353,8 +353,8 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Install Supabase replay toolchain
         env:
-          SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
-          SUPABASE_CLI_VERSION: 2.111.0
+          SUPABASE_CLI_SHA256: dbe9fd66771337fc198727da86b9d3551302f87a7091cd8781be2a4cd0c8ac4d
+          SUPABASE_CLI_VERSION: 3.1.0
         run: bash .github/scripts/install-supabase-replay-toolchain.sh
       - name: Test reviewed commerce cart checkout product names
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py

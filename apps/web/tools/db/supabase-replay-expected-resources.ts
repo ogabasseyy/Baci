@@ -210,8 +210,9 @@ export function assertSupabaseReplayResources(
       options.projectId,
       options.allowPartial,
       'volume',
-      // CLI 2.111 may create this best-effort pg-delta cache volume while
-      // bootstrapping. It carries the same exact project ownership label.
+      // CLI 2.x may create this best-effort pg-delta cache volume while
+      // bootstrapping; CLI 3.x documents none, so it stays optional. It
+      // carries the same exact project ownership label.
       [`supabase_edge_runtime_${options.projectId}`]
     );
     assertResourceList(

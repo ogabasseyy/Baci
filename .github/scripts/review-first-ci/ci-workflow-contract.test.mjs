@@ -212,8 +212,10 @@ describe('the nudge workflow', () => {
 
   it('listens to exactly the events it handles', () => {
     assert.deepEqual(Object.keys(nudge.on).sort(), ['issue_comment', 'pull_request_target', 'schedule', 'workflow_dispatch', 'workflow_run']);
-    assert.deepEqual(nudge.on.workflow_run.workflows, ['CI Quality Gate']);
+    // Both workflows have a deferred full stage, so a finished run of either one can need a nudge.
+    assert.deepEqual(nudge.on.workflow_run.workflows, ['CI Quality Gate', 'Checkout browser regression']);
     assert.equal(ci.name, 'CI Quality Gate');
+    assert.equal(browser.name, 'Checkout browser regression');
     assert.deepEqual(nudge.on.pull_request_target.types, ['labeled']);
   });
 

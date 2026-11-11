@@ -21,12 +21,15 @@ const run = (overrides = {}) => ({
 });
 const skippedJob = (name) => ({ name, conclusion: 'skipped' });
 
-function routesFor({ issueComments = [summaryClean], ciRuns = [run()], browserRuns = [run({ id: 600, run_number: 3 })], jobs = [skippedJob('Build (deferred until Codex review)')], pr = pullRequest() } = {}) {
+const browserJob = (conclusion) => ({ name: 'Checkout - Chromium and WebKit', conclusion });
+
+function routesFor({ issueComments = [summaryClean], ciRuns = [run()], browserRuns = [run({ id: 600, run_number: 3 })], jobs = [skippedJob('Build (deferred until Codex review)')], browserJobs = [browserJob('skipped')], pr = pullRequest() } = {}) {
   return {
     ...codexRoutes({ issueComments, pr }),
     [`GET ${ciRunsPath}`]: ciRuns,
     [`GET ${browserRunsPath}`]: browserRuns,
     [`GET /repos/${REPO}/actions/runs/500/jobs?filter=latest`]: jobs,
+    [`GET /repos/${REPO}/actions/runs/600/jobs?filter=latest`]: browserJobs,
     [`POST /repos/${REPO}/actions/runs/500/rerun`]: {},
     [`POST /repos/${REPO}/actions/runs/600/rerun`]: {},
     [`POST /repos/${REPO}/statuses/${HEAD}`]: {},
@@ -66,7 +69,7 @@ describe('nudgePullRequest', () => {
   });
 
   it('skips while the quick run is still in progress (the completion event comes back)', async () => {
-    const { result, client } = await nudge(routesFor({ ciRuns: [run({ status: 'in_progress', conclusion: null })] }));
+    const { result, client } = await nudge(routesFor({ ciRuns: [run({ status: 'in_progress', conclusion: null })], browserRuns: [] }));
     assert.equal(result.action, 'skip');
     assert.equal(result.reason, 'in-progress');
     assert.deepEqual(posted(client), []);
@@ -77,10 +80,45 @@ describe('nudgePullRequest', () => {
     assert.equal(result.reason, 'quick-checks-did-not-pass');
   });
 
-  it('skips when the heavy jobs already ran in this run', async () => {
-    const { result, client } = await nudge(routesFor({ jobs: [{ name: 'Build', conclusion: 'success' }] }));
+  it('skips when the heavy jobs already ran in both workflows', async () => {
+    const { result, client } = await nudge(routesFor({ jobs: [{ name: 'Build', conclusion: 'success' }], browserJobs: [browserJob('success')] }));
     assert.equal(result.reason, 'already-full');
     assert.deepEqual(posted(client), []);
+  });
+
+  it('bugfix: re-runs the browser regression alone when the CI run is already full', async () => {
+    const { result, client } = await nudge(routesFor({ jobs: [{ name: 'Build', conclusion: 'success' }] }));
+    assert.equal(result.action, 'rerun');
+    assert.deepEqual(result.runs, [600]);
+    assert.deepEqual(posted(client).filter((call) => call.includes('/rerun')), [`POST /repos/${REPO}/actions/runs/600/rerun`]);
+  });
+
+  it('bugfix: still re-runs a finished browser regression while the CI run is in progress', async () => {
+    const { result } = await nudge(routesFor({ ciRuns: [run({ status: 'in_progress', conclusion: null })] }));
+    assert.equal(result.action, 'rerun');
+    assert.deepEqual(result.runs, [600]);
+  });
+
+  it('re-runs CI only while the browser regression is still running', async () => {
+    const { result } = await nudge(routesFor({ browserRuns: [run({ id: 600, run_number: 3, status: 'in_progress', conclusion: null })] }));
+    assert.equal(result.action, 'rerun');
+    assert.deepEqual(result.runs, [500]);
+  });
+
+  it('re-runs CI only when there is no browser run for the head', async () => {
+    const { result } = await nudge(routesFor({ browserRuns: [] }));
+    assert.deepEqual(result.runs, [500]);
+  });
+
+  it('does nothing while both workflows are still running', async () => {
+    const running = { status: 'in_progress', conclusion: null };
+    const { result } = await nudge(routesFor({ ciRuns: [run(running)], browserRuns: [run({ id: 600, run_number: 3, ...running })] }));
+    assert.equal(result.reason, 'in-progress');
+  });
+
+  it('does not re-run the browser regression when the quick checks failed', async () => {
+    const { result } = await nudge(routesFor({ ciRuns: [run({ conclusion: 'failure' })] }));
+    assert.equal(result.reason, 'quick-checks-did-not-pass');
   });
 
   it('does not treat a skipped Build as proof that the full CI ran', async () => {
@@ -89,7 +127,7 @@ describe('nudgePullRequest', () => {
   });
 
   it('stops re-running after the attempt cap', async () => {
-    const { result, client } = await nudge(routesFor({ ciRuns: [run({ run_attempt: MAX_ATTEMPTS })] }));
+    const { result, client } = await nudge(routesFor({ ciRuns: [run({ run_attempt: MAX_ATTEMPTS })], browserRuns: [run({ id: 600, run_number: 3, run_attempt: MAX_ATTEMPTS })] }));
     assert.equal(result.reason, 'attempt-cap');
     assert.deepEqual(posted(client).filter((call) => call.includes('/rerun')), []);
   });

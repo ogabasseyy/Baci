@@ -104,6 +104,14 @@ describe('evaluatePullRequestStage', () => {
     assert.match(decision.reason, /not understood/);
   });
 
+  it('bugfix: a failed pull request lookup in pilot mode stays quick instead of starting the full CI', async () => {
+    const client = fakeGithub({ [`GET /repos/${REPO}/pulls/7`]: new Error('HTTP 502') });
+    const { decision } = await evaluate(client, { mode: 'pilot' });
+    assert.equal(decision.stage, 'quick');
+    assert.equal(decision.code, 'api-error');
+    assert.equal(decision.warn, true);
+  });
+
   it('never starts for a closed pull request', async () => {
     const { decision } = await evaluate(fakeGithub(codexRoutes({ pr: pullRequest({ state: 'closed' }), issueComments: [summaryClean] })));
     assert.equal(decision.code, 'closed');

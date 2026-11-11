@@ -4,9 +4,8 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createGithubClient } from './github-api.mjs';
 import { nudgePullRequest, sweepRecentRuns } from './nudge.mjs';
-import { BREAK_GLASS_LABEL, DEFAULT_TIMEOUT_MINUTES } from './stage-decision.mjs';
+import { BREAK_GLASS_LABEL, parseTimeoutMinutes, sweepLookbackMs } from './stage-decision.mjs';
 
-const SWEEP_WINDOW_MS = 6 * 60 * 60 * 1000;
 const MAY_BREAK_GLASS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
 export function pullRequestTargets(eventName, payload) {
@@ -37,7 +36,7 @@ export function isCiNowCommand(payload) {
 export async function runNudge({ env, client, now = Date.now(), log = console.log }) {
   const payload = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
   const targets = pullRequestTargets(env.EVENT_NAME, payload);
-  const timeout = Number.parseInt(env.BACI_CODEX_WAIT_TIMEOUT_MINUTES ?? '', 10);
+  const timeoutMinutes = parseTimeoutMinutes(env.BACI_CODEX_WAIT_TIMEOUT_MINUTES);
   const repository = env.GITHUB_REPOSITORY;
   const github = client ?? createGithubClient({ token: env.GITHUB_TOKEN, apiUrl: env.GITHUB_API_URL });
   const nudge = (prNumber) =>
@@ -47,13 +46,13 @@ export async function runNudge({ env, client, now = Date.now(), log = console.lo
       prNumber,
       mode: env.BACI_REVIEW_FIRST_CI,
       now,
-      timeoutMinutes: timeout > 0 ? timeout : DEFAULT_TIMEOUT_MINUTES,
+      timeoutMinutes,
       dryRun: env.DRY_RUN === 'true',
       log,
     });
 
   if (targets === 'sweep') {
-    return sweepRecentRuns({ client: github, repository, since: new Date(now - SWEEP_WINDOW_MS).toISOString(), nudge, log });
+    return sweepRecentRuns({ client: github, repository, since: new Date(now - sweepLookbackMs(timeoutMinutes)).toISOString(), nudge, log });
   }
   const results = [];
   for (const prNumber of targets) {

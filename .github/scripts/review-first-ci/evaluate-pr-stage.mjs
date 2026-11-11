@@ -14,7 +14,7 @@ const DECIDED_OFFLINE = new Set(['not-pull-request', 'fork', 'mode-off']);
 export async function evaluatePullRequestStage({ client, repository, prNumber, headSha, eventName, mode, ageMinutes, timeoutMinutes, sameRepo = true }) {
   const facts = { eventName, mode, sameRepo, headSha, ageMinutes, timeoutMinutes };
 
-  const offline = decideStage({ ...facts, labels: [], verdict: { state: 'none', reason: '' }, ageMinutes: 0 });
+  const offline = decideStage({ ...facts, verdict: { state: 'none', reason: '' }, ageMinutes: 0 });
   if (DECIDED_OFFLINE.has(offline.code)) return { decision: offline, verdict: null };
 
   let pr;

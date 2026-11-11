@@ -94,6 +94,15 @@ describe('runNudge', () => {
     assert.equal(client.calls.includes(`POST /repos/${REPO}/issues/7/labels`), false);
   });
 
+  it('bugfix: the scheduled sweep looks back past a long no-verdict timeout', async () => {
+    const now = Date.parse(NOW);
+    const since = new Date(now - (720 + 150) * 60000).toISOString();
+    const path = `/repos/${REPO}/actions/workflows/ci.yml/runs?event=pull_request&status=completed&created=${encodeURIComponent(`>=${since}`)}`;
+    const client = fakeGithub({ [`GET ${path}`]: [] });
+    await runNudge({ env: env('schedule', {}, { BACI_CODEX_WAIT_TIMEOUT_MINUTES: '720' }), client, now, log: () => {} });
+    assert.deepEqual(client.calls, [`GET ${path}`]);
+  });
+
   it('reports nothing to do for events without a pull request', async () => {
     const client = fakeGithub({});
     assert.deepEqual(await runNudge({ env: env('workflow_run', { workflow_run: { pull_requests: [] } }), client, now: Date.parse(NOW), log: () => {} }), []);

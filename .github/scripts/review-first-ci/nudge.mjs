@@ -11,14 +11,32 @@ export const MAX_ATTEMPTS = 3;
 // The nudge waits this long past the timeout so the re-run's own clock (the pull
 // request update time in its event) has certainly passed it too.
 const TIMEOUT_MARGIN_MINUTES = 2;
-const REQUIRED_NAMES = new Set(['Build', 'Quality Gate']);
 const short = (sha) => String(sha).slice(0, 7);
+
+// The two workflows that have a deferred full stage, and the job whose conclusion tells
+// whether that stage ran (a skipped one means "still deferred").
+const WORKFLOWS = [
+  { file: 'ci.yml', heavyJobs: new Set(['Build', 'Quality Gate']) },
+  { file: 'checkout-browser.yml', heavyJobs: new Set(['Checkout - Chromium and WebKit']) },
+];
 
 const skip = (reason) => ({ action: 'skip', reason });
 
 async function latestRun(client, repository, workflow, sha) {
   const runs = await client.paginate(`/repos/${repository}/actions/workflows/${workflow}/runs?head_sha=${sha}&event=pull_request`, 'workflow_runs');
   return runs.reduce((best, run) => (!best || run.run_number > best.run_number ? run : best), null);
+}
+
+// Where does the pull request's run of one workflow stand?
+//   in-progress | did-not-pass | quick (finished, heavy jobs still deferred) | full (heavy jobs ran)
+async function inspect(client, repository, workflow, sha) {
+  const run = await latestRun(client, repository, workflow.file, sha);
+  if (!run) return null;
+  if (run.status !== 'completed') return { run, state: 'in-progress' };
+  if (run.conclusion !== 'success') return { run, state: 'did-not-pass' };
+  const jobs = await client.paginate(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest`, 'jobs');
+  const ran = jobs.some((job) => workflow.heavyJobs.has(job.name) && job.conclusion !== 'skipped');
+  return { run, state: ran ? 'full' : 'quick' };
 }
 
 async function setStatus({ client, repository, sha, state, description, url, dryRun, log }) {
@@ -40,21 +58,22 @@ export async function nudgePullRequest({ client, repository, prNumber, mode, now
   if (pr.base?.ref !== 'main') return skip('not-main');
   const sha = pr.head.sha;
 
-  const run = await latestRun(client, repository, 'ci.yml', sha);
-  if (!run) return skip('no-ci-run-for-head');
-  if (run.status !== 'completed') return skip('in-progress');
-  if (run.conclusion !== 'success') return skip('quick-checks-did-not-pass');
+  // Each workflow is tracked on its own: the browser regression can still be deferred while the
+  // CI run is already full (or the other way round), and each finished run needs its own re-run.
+  const [ci, browser] = await Promise.all(WORKFLOWS.map((workflow) => inspect(client, repository, workflow, sha)));
+  if (!ci) return skip('no-ci-run-for-head');
+  if (ci.state === 'did-not-pass') return skip('quick-checks-did-not-pass');
+  const deferred = [ci, browser].filter((entry) => entry?.state === 'quick');
+  if (deferred.length === 0) return skip([ci, browser].some((entry) => entry?.state === 'in-progress') ? 'in-progress' : 'already-full');
 
-  const jobs = await client.paginate(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest`, 'jobs');
-  if (jobs.some((job) => REQUIRED_NAMES.has(job.name) && job.conclusion !== 'skipped')) return skip('already-full');
-
-  const status = { client, repository, sha, url: run.html_url, dryRun, log };
-  if (run.run_attempt >= MAX_ATTEMPTS) {
+  const status = { client, repository, sha, url: ci.run.html_url, dryRun, log };
+  const targets = deferred.filter((entry) => entry.run.run_attempt < MAX_ATTEMPTS).map((entry) => entry.run);
+  if (targets.length === 0) {
     await setStatus({ ...status, state: 'error', description: `Re-run limit reached for ${short(sha)}; add the ci-now label and re-run by hand` });
     return skip('attempt-cap');
   }
 
-  const ageMinutes = (now - Date.parse(run.created_at)) / 60000 - TIMEOUT_MARGIN_MINUTES;
+  const ageMinutes = (now - Date.parse(ci.run.created_at)) / 60000 - TIMEOUT_MARGIN_MINUTES;
   const { decision } = await evaluatePullRequestStage({ client, repository, prNumber, headSha: sha, eventName: 'pull_request', mode, ageMinutes, timeoutMinutes });
 
   if (decision.stage !== 'full') {
@@ -62,8 +81,6 @@ export async function nudgePullRequest({ client, repository, prNumber, mode, now
     return { action: 'wait', reason: decision.code, detail: decision.reason };
   }
 
-  const browser = await latestRun(client, repository, 'checkout-browser.yml', sha);
-  const targets = [run, ...(browser?.status === 'completed' ? [browser] : [])];
   for (const target of targets) {
     if (dryRun) log(`[dry-run] would re-run run ${target.id}`);
     else await client.post(`/repos/${repository}/actions/runs/${target.id}/rerun`, {});

@@ -8,14 +8,9 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { evaluatePullRequestStage } from './evaluate-pr-stage.mjs';
 import { createGithubClient } from './github-api.mjs';
-import { BREAK_GLASS_LABEL, DEFAULT_TIMEOUT_MINUTES } from './stage-decision.mjs';
+import { BREAK_GLASS_LABEL, parseTimeoutMinutes } from './stage-decision.mjs';
 
 const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim();
-
-function timeoutFrom(value) {
-  const minutes = Number.parseInt(value ?? '', 10);
-  return Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_TIMEOUT_MINUTES;
-}
 
 function summaryFor(decision, headSha, timeoutMinutes) {
   const heading = decision.stage === 'full' ? 'Review-first CI: full CI' : 'Review-first CI: quick checks only';
@@ -38,7 +33,7 @@ export async function runResolveStage({ env, client, now = Date.now(), log = con
   const pullRequest = event.pull_request ?? {};
   const headSha = pullRequest.head?.sha ?? '';
   const updatedAt = Date.parse(pullRequest.updated_at ?? '');
-  const timeoutMinutes = timeoutFrom(env.BACI_CODEX_WAIT_TIMEOUT_MINUTES);
+  const timeoutMinutes = parseTimeoutMinutes(env.BACI_CODEX_WAIT_TIMEOUT_MINUTES);
 
   const { decision } = await evaluatePullRequestStage({
     client: client ?? createGithubClient({ token: env.GITHUB_TOKEN, apiUrl: env.GITHUB_API_URL }),

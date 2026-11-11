@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { BREAK_GLASS_LABEL, PILOT_LABEL, decideStage } from './stage-decision.mjs';
+import { BREAK_GLASS_LABEL, DEFAULT_TIMEOUT_MINUTES, PILOT_LABEL, decideStage, parseTimeoutMinutes, sweepLookbackMs } from './stage-decision.mjs';
 
 const clean = { state: 'clean', carried: false, reason: 'Codex is clean for the head commit' };
 const none = { state: 'none', carried: false, reason: 'no Codex verdict yet' };
@@ -147,5 +147,40 @@ describe('failing closed', () => {
     assert.equal(result.stage, 'quick');
     assert.equal(result.warn, true);
     assert.match(result.reason, /not understood/);
+  });
+});
+
+describe('bugfix: an unreadable pull request in pilot mode must not look like "not selected"', () => {
+  it('stays quick with an API warning when the labels are unknown (never the full CI)', () => {
+    const result = stageOf({ mode: 'pilot', labels: undefined, apiError: 'HTTP 502', verdict: null });
+    assert.equal(result.stage, 'quick');
+    assert.equal(result.code, 'api-error');
+    assert.equal(result.warn, true);
+  });
+
+  it('still lets the timeout start the full CI when the labels are unknown', () => {
+    assert.equal(stageOf({ mode: 'pilot', labels: undefined, apiError: 'HTTP 502', verdict: null, ageMinutes: 90 }).code, 'timeout');
+  });
+
+  it('only concludes "not selected" when the labels were actually read', () => {
+    assert.equal(stageOf({ mode: 'pilot', labels: [] }).code, 'pilot-not-selected');
+  });
+});
+
+describe('timeout settings', () => {
+  it('reads minutes and falls back to the default for nonsense', () => {
+    assert.equal(parseTimeoutMinutes('45'), 45);
+    for (const value of [undefined, '', 'soon', '0', '-5', '1.5x']) assert.equal(parseTimeoutMinutes(value), DEFAULT_TIMEOUT_MINUTES, String(value));
+  });
+
+  it('caps absurdly long timeouts so the sweep can always reach them', () => {
+    assert.equal(parseTimeoutMinutes('99999'), 1440);
+  });
+
+  it('looks back at least six hours and always past the timeout plus the sweep margin', () => {
+    const minutes = (ms) => ms / 60000;
+    assert.equal(minutes(sweepLookbackMs(60)), 360);
+    assert.ok(minutes(sweepLookbackMs(720)) >= 720 + 150);
+    assert.ok(minutes(sweepLookbackMs(1440)) >= 1440 + 150);
   });
 });

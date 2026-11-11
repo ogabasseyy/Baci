@@ -162,6 +162,25 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("quarantines a new pvb_reference reusing a legacy row's internal id when its audit fields differ", async () => {
+    // Legacy row (no pvb_reference, matched by internal id only): keep the
+    // strict pre-change comparison instead of calling it a duplicate.
+    const { client, rows } = fakeLedger();
+    await recordInflowCredit(client, delivery());
+    rows[0] = { ...rows[0], pvb_reference: null };
+    const other = delivery({
+      eventId: 'evt-synthetic-007',
+      pvbReference: 'PVB01OTHERCREDIT',
+    });
+    other.eventData = { ...other.eventData, reference: 'faas-ref-other' };
+
+    await expect(recordInflowCredit(client, other)).rejects.toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['reference'] },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
   it('quarantines a different pvb_reference that reuses an internal transaction_id', async () => {
     const { client, rows } = fakeLedger();
     await recordInflowCredit(client, delivery());

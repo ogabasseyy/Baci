@@ -42,6 +42,25 @@ describe('alertCreditAuditDrift', () => {
     expect(emit).toHaveBeenCalledTimes(2);
   });
 
+  it('evicts only the least recently seen reference at the bound', () => {
+    const drift = (pvbReference: string) =>
+      alertCreditAuditDrift({
+        eventType: 'interest-payout.success',
+        pvbReference,
+        driftedFields: ['batch_id'],
+      });
+    for (let index = 0; index < 1000; index += 1) drift(`PVB01REF${index}`);
+    drift('PVB01REF0'); // refreshed: now most recently seen
+    drift('PVB01NEW'); // evicts PVB01REF1, the oldest
+    emit.mockReset();
+
+    drift('PVB01REF0');
+    drift('PVB01REF500');
+    drift('PVB01REF1');
+
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+
   it('stays silent when nothing drifted', () => {
     alertCreditAuditDrift({
       eventType: 'bank-transfer.inflow.success',

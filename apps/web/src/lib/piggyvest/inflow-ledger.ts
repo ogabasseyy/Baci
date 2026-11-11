@@ -4,8 +4,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BankTransferInflowSuccessEvent } from '@/schemas/piggyvest/events';
 import { storedPvbCreditRowSchemas } from '@/schemas/piggyvest/stored-pvb-credit-rows';
 import { alertCreditAuditDrift } from './credit-audit-drift';
+import { InflowLedgerError } from './inflow-ledger-error';
 import { resolvePlanWalletMapping } from './plan-wallet-mapping';
-import { readStoredPvbCredit } from './stored-pvb-credit';
+import {
+  creditWriteFailureMessage,
+  readStoredPvbCredit,
+} from './stored-pvb-credit';
 
 /**
  * Verified bank-transfer inflow ledger.
@@ -56,32 +60,10 @@ import { readStoredPvbCredit } from './stored-pvb-credit';
 
 export type RecordInflowCreditOutcome = 'credited' | 'duplicate';
 
-export type InflowLedgerConflict = {
-  providerTransactionId: string;
-  mismatchedFields: string[];
-  bodyDigest: string;
-};
-
-export class InflowLedgerError extends Error {
-  readonly code:
-    | 'INFLOW_LEDGER_INVALID'
-    | 'INFLOW_LEDGER_UNMAPPED'
-    | 'INFLOW_LEDGER_CONFLICT'
-    | 'INFLOW_LEDGER_UNRESOLVED'
-    | 'INFLOW_LEDGER_STORAGE_ERROR';
-  readonly conflict?: InflowLedgerConflict;
-
-  constructor(
-    code: InflowLedgerError['code'],
-    message: string,
-    conflict?: InflowLedgerConflict
-  ) {
-    super(message);
-    this.name = 'InflowLedgerError';
-    this.code = code;
-    this.conflict = conflict;
-  }
-}
+export {
+  type InflowLedgerConflict,
+  InflowLedgerError,
+} from './inflow-ledger-error';
 
 export async function recordInflowCredit(
   supabase: SupabaseClient,
@@ -139,7 +121,7 @@ export async function recordInflowCredit(
   if (error) {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_STORAGE_ERROR',
-      'Inflow credit record failed'
+      creditWriteFailureMessage(error, 'Inflow credit record failed')
     );
   }
   if (inserted !== null && inserted.length > 0) {
@@ -199,11 +181,23 @@ export async function recordInflowCredit(
   if (stored.amount_kobo !== detail.amount)
     mismatchedFields.push('amount_kobo');
   if (stored.fee_kobo !== detail.fee) mismatchedFields.push('fee_kobo');
-  // eventData.reference, session_id, id and timestamp are stored for audit
-  // only. pvb_reference identifies the credit (PiggyVest, 2026-11-11) and
-  // PiggyVest guarantees none of these internals stable across retries, so
-  // a drift there is the same credit redelivered, not a conflict. With no
-  // resend endpoint, a false conflict would strand the delivery.
+  // eventData internals are audit-only: pvb_reference identifies the credit
+  // (PiggyVest, 2026-11-11) and they are not promised stable across
+  // retries, so drift is the same credit redelivered (paged below), not a
+  // conflict that would strand it. A legacy row (NULL pvb_reference) was
+  // matched by its internal id alone, so it keeps the strict pre-change
+  // comparison: drift there may be another credit reusing the id.
+  const driftedFields = [
+    stored.provider_transaction_id !== detail.transaction_id &&
+      'provider_transaction_id',
+    stored.event_data_id !== detail.id && 'event_data_id',
+    stored.reference !== detail.reference && 'reference',
+    (stored.session_id ?? null) !== (detail.session_id ?? null) && 'session_id',
+    new Date(stored.credited_at).getTime() !==
+      new Date(detail.timestamp).getTime() && 'credited_at',
+  ].filter((field): field is string => typeof field === 'string');
+  if ((stored.pvb_reference ?? null) === null)
+    mismatchedFields.push(...driftedFields);
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')
       .update(
@@ -231,20 +225,10 @@ export async function recordInflowCredit(
       }
     );
   }
-  // Same credit: page (never conflict) if its audit-only internals drifted.
   alertCreditAuditDrift({
     eventType: 'bank-transfer.inflow.success',
     pvbReference: event.pvb_reference,
-    driftedFields: [
-      stored.provider_transaction_id !== detail.transaction_id &&
-        'provider_transaction_id',
-      stored.event_data_id !== detail.id && 'event_data_id',
-      stored.reference !== detail.reference && 'reference',
-      (stored.session_id ?? null) !== (detail.session_id ?? null) &&
-        'session_id',
-      new Date(stored.credited_at).getTime() !==
-        new Date(detail.timestamp).getTime() && 'credited_at',
-    ].filter((field): field is string => typeof field === 'string'),
+    driftedFields,
   });
   // Redeliveries retry the projection: the first delivery may have
   // credited-then-thrown on ambiguity, and only a later delivery can

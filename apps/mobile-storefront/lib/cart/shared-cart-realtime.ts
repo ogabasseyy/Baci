@@ -26,7 +26,9 @@ export interface SharedCartRealtimeOptions {
 }
 
 const RETRY_MS = 15000;
+/** The server caps a grant near 300s; beyond this the grant is not trusted at all. */
 const MAX_TTL_MS = 301000;
+const IMPLAUSIBLE_TTL_MS = 3600000;
 
 /**
  * Push channel for the native shared cart. A broadcast is only a hint to run
@@ -111,17 +113,19 @@ export function startSharedCartRealtime(
     if (!cartId || !live(run)) return;
     try {
       const access = await deps.loadAccess();
-      const ttl = access
+      const rawTtl = access
         ? Date.parse(access.expiresAt) - Date.now()
         : Number.NaN;
+      // A device clock behind the server's makes a valid grant look longer; clamp.
+      const ttl = Math.min(rawTtl, MAX_TTL_MS);
       if (
         !live(run) ||
         !access ||
         access.topic.toLowerCase() !==
           `cart:${options.merchantId}:${cartId}`.toLowerCase() ||
-        !Number.isFinite(ttl) ||
+        !Number.isFinite(rawTtl) ||
         ttl < 1000 ||
-        ttl > MAX_TTL_MS
+        rawTtl > IMPLAUSIBLE_TTL_MS
       )
         return;
       const identity = { merchantId: options.merchantId, cartId };

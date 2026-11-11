@@ -16,6 +16,10 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    {
+      "path": "components/checkout/checkout-identity/components/CheckoutSheetPresentation.tsx",
+      "justification": "Android presents the checkout sheet in the current window to avoid the native Modal opening stall and handles hardware Back there. Other platforms retain native Modal presentation."
+    },
     "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",

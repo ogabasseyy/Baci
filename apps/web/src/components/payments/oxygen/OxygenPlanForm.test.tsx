@@ -2,6 +2,24 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { OxygenPlanForm } from './OxygenPlanForm';
 
+it('selects the same fallback tenure regardless of Oxygen offer ordering', () => {
+  render(
+    <OxygenPlanForm
+      busy={false}
+      productAmount={100000}
+      eligibleAmount={100000}
+      minimumAmount={10000}
+      maxTenure={6}
+      submit={vi.fn()}
+      offers={[
+        { tenure: 1, loanAmount: 100000 },
+        { tenure: 6, loanAmount: 100000 },
+      ]}
+    />
+  );
+  expect(screen.getByRole('radio', { name: '6 months' })).toBeChecked();
+});
+
 it('does not display a stale offer above the maximum repayment period', () => {
   render(
     <OxygenPlanForm

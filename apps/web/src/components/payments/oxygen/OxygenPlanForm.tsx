@@ -41,7 +41,9 @@ export function OxygenPlanForm({
   const preferred = Math.min(3, maxTenure ?? 1);
   const initialTenure =
     availableOffers?.find((item) => item.tenure === preferred)?.tenure ??
-    availableOffers?.[0]?.tenure ??
+    (availableOffers?.length
+      ? Math.max(...availableOffers.map((item) => item.tenure))
+      : undefined) ??
     preferred;
   const initialOffer = offers?.find((item) => item.tenure === initialTenure);
   const initialLimits = oxygenPlanLimits(

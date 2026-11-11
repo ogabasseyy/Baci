@@ -5,6 +5,7 @@ import type {
   OxygenProviderState,
 } from '@/schemas/oxygen-runtime';
 import { OxygenLocalValidationError } from './local-validation-diagnostic';
+import { toOxygenMinorUnits } from './money';
 import type { OxygenProvider } from './provider';
 import { requireValue } from './runtime-policy';
 
@@ -56,6 +57,11 @@ export async function refreshOxygenEligibility(
       }
       const seen = new Set<number>();
       for (const offer of response.offers) {
+        try {
+          toOxygenMinorUnits(offer.loan_amount, 'NGN');
+        } catch {
+          throw new Error('Invalid eligibility offers');
+        }
         if (seen.has(offer.tenor) || offer.tenor > state.maxTenure) {
           throw new Error('Invalid eligibility offers');
         }

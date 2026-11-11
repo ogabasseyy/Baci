@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';

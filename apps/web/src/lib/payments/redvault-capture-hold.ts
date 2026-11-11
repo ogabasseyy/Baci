@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { redvaultOrderPaymentMethodRowsSchema } from '@/schemas/redvault-order-payment-method';
 
 const captureHoldOutcomeSchema = z.object({
   duplicate: z.boolean(),
@@ -14,10 +15,6 @@ const captureEvidenceReviewOutcomeSchema = z.object({
   kind: z.literal('capture_evidence_review'),
   reason: z.string().min(1),
 });
-
-const classificationRowsSchema = z.array(
-  z.object({ payment_method: z.string().nullable() })
-);
 
 type RedvaultCaptureHoldRpcClient = Pick<SupabaseClient, 'rpc'>;
 
@@ -56,7 +53,8 @@ export async function captureOrHoldRedvaultPayment({
     throw classificationError;
   }
 
-  const classificationRows = classificationRowsSchema.safeParse(classification);
+  const classificationRows =
+    redvaultOrderPaymentMethodRowsSchema.safeParse(classification);
   if (!classificationRows.success) {
     throw new Error('redvault_capture_hold_classification_invalid');
   }

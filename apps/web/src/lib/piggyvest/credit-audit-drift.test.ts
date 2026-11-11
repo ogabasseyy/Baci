@@ -24,7 +24,7 @@ describe('alertCreditAuditDrift', () => {
     expect(emit).toHaveBeenCalledWith('PIGGYVEST_CREDIT_AUDIT_DRIFT', {
       eventType: 'interest-payout.success',
       operationId: 'PVB01SYNTHETIC',
-      reason: 'same pvb_reference, audit fields differ: batch_id, paid_at',
+      reason: 'audit fields differ: batch_id, paid_at',
     });
   });
 

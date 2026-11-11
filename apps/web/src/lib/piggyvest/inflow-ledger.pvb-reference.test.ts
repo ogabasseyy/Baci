@@ -138,7 +138,7 @@ describe('bugfix: inflow credits deduped on internal transaction_id', () => {
     // The drifted internal id is paged by name, never silently acked.
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining(
-        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"same pvb_reference, audit fields differ: provider_transaction_id"'
+        'PIGGYVEST_CREDIT_AUDIT_DRIFT {"reason":"audit fields differ: provider_transaction_id"'
       )
     );
     alerts.mockRestore();

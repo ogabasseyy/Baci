@@ -7,7 +7,9 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  * treats it as a duplicate: PiggyVest names pvb_reference as the unique
  * credit key (2026-11-11) and does not promise its internals stable across
  * retries. The page keeps a reused pvb_reference or provider bug visible.
- * Only field names leave this function, never values.
+ * Only field names leave this function, never values. The reason stays
+ * well under the alert's 120-character clip even with every field listed
+ * (longest: 5 inflow fields, about 95 characters).
  */
 // Page the first drift per pvb_reference per instance: if PiggyVest rotates
 // internals on every retry, later redeliveries of the same credit would
@@ -37,6 +39,6 @@ export function alertCreditAuditDrift(input: {
   emitPiggyvestWebhookAlert('PIGGYVEST_CREDIT_AUDIT_DRIFT', {
     eventType: input.eventType,
     operationId: input.pvbReference,
-    reason: `same pvb_reference, audit fields differ: ${input.driftedFields.join(', ')}`,
+    reason: `audit fields differ: ${input.driftedFields.join(', ')}`,
   });
 }

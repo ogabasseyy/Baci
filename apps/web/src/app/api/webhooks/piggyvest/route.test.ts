@@ -221,9 +221,10 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
+  // A changed internal transaction_id alone is no longer a conflict: the
+  // credit identity is pvb_reference (route.pvb-reference-retry.test.ts).
   it.each([
     { amount: 1 },
-    { transaction_id: 'provider-txn-synthetic-002' },
   ])('quarantines same-identity conflicting deliveries without crediting: %j', async (changedDetail) => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     // Stored envelope keeps the original amount while the redelivery

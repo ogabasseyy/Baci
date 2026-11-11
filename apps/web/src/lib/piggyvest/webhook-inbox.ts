@@ -103,20 +103,23 @@ export async function recordPiggyvestEvent(
   if (!stored.success) {
     throw new Error('PiggyVest stored receipt is invalid');
   }
-  const identityField =
-    parsed.eventType === 'bank-transfer.inflow.success'
-      ? 'transaction_id'
-      : parsed.eventType === 'interest-payout.success'
-        ? 'payout_id'
-        : null;
-  const providerIdentity = identityField
-    ? parsed.details?.[identityField]
-    : null;
+  // Credit events are identified by pvb_reference (PiggyVest, 2026-11-11);
+  // the internal transaction/payout id may drift across retries of the same
+  // event, so it is not compared here (the ledgers page that drift). Rows
+  // stored before pvb_reference entered event_details fall back to the
+  // inbox reference column, which has always held it. Missing evidence on
+  // either side fails closed as a conflict.
+  const isCredit =
+    parsed.eventType === 'bank-transfer.inflow.success' ||
+    parsed.eventType === 'interest-payout.success';
+  const incomingIdentity = parsed.details?.pvb_reference;
+  const storedIdentity =
+    stored.data.event_details?.pvb_reference ?? stored.data.reference;
   const providerIdentityMatches =
-    identityField === null ||
-    (typeof providerIdentity === 'string' &&
-      providerIdentity.length > 0 &&
-      stored.data.event_details?.[identityField] === providerIdentity);
+    !isCredit ||
+    (typeof incomingIdentity === 'string' &&
+      incomingIdentity.length > 0 &&
+      storedIdentity === incomingIdentity);
   const matches =
     providerIdentityMatches &&
     stored.data.event_type === parsed.eventType &&

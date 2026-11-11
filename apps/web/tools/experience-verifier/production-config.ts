@@ -1,6 +1,11 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
 import { runnerEndpoint } from '../experience-runner/runner-transport';
+import {
+  resolveVerifierCanonicalBase,
+  validateVerifierRootDomain,
+} from './canonical-domain';
 
 const bytes32 = z
   .string()
@@ -25,7 +30,7 @@ const schema = z.strictObject({
     url: z.string().max(1000),
     anonKey: z.string().max(8192),
   }),
-  canonicalTemplate: z.string().min(1).max(1000),
+  rootDomain: z.string().min(1).max(253),
 });
 
 /** Operator input only; errors never contain credentials or configuration. */
@@ -62,17 +67,14 @@ export function parseVerifierProductionConfig(input: unknown) {
       !/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(config.supabase.anonKey)
     )
       throw Error();
-    if (config.canonicalTemplate.split('{slug}').length !== 2) throw Error();
-    const sample = new URL(
-      config.canonicalTemplate.replace('{slug}', 'synthetic-merchant')
-    );
-    if (sample.username || sample.password || sample.search || sample.hash)
-      throw Error();
+    validateVerifierRootDomain(config.rootDomain);
     productionDeliveryOrigins({
       executionOrigin: config.executionOrigin,
-      hostOrigins: [config.previewOrigin, sample.origin],
+      hostOrigins: [
+        config.previewOrigin,
+        `https://synthetic-merchant.${config.rootDomain}`,
+      ],
     });
-    const template = config.canonicalTemplate;
     return {
       ...config,
       key: Buffer.from(config.key, 'base64url'),
@@ -80,11 +82,8 @@ export function parseVerifierProductionConfig(input: unknown) {
         ...config.runner,
         key: Buffer.from(config.runner.key, 'base64url'),
       },
-      canonicalBase: (slug: string) => {
-        if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug))
-          throw Error('INVALID_MERCHANT_SLUG');
-        return template.replace('{slug}', slug);
-      },
+      canonicalBase: (slug: string, client: SupabaseClient) =>
+        resolveVerifierCanonicalBase(client, slug, config.rootDomain),
     };
   } catch {
     throw Error('INVALID_VERIFIER_CONFIG');

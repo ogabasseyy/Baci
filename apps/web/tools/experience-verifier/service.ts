@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Pool } from 'pg';
 import { loadDraftApproval } from '@/lib/experience/approval-service';
 import { createIndependentApprovalVerifier } from '@/lib/experience/independent-approval-verifier';
@@ -23,7 +24,7 @@ export async function startVerifierService(settings: {
   previewOrigin: string;
   executionOrigin: string;
   supabase: { url: string; anonKey: string };
-  canonicalBase(slug: string): string;
+  canonicalBase(slug: string, client: SupabaseClient): string | Promise<string>;
 }) {
   if (
     settings.key.length !== 32 ||
@@ -85,7 +86,7 @@ export async function startVerifierService(settings: {
         !build.data
       )
         throw Error('APPROVAL_MISMATCH');
-      const canonical = new URL(settings.canonicalBase(slug));
+      const canonical = new URL(await settings.canonicalBase(slug, client));
       if (
         canonical.username ||
         canonical.password ||

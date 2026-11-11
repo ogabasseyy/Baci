@@ -18,13 +18,15 @@ const valid = {
     url: 'https://project.supabase.co',
     anonKey: 'sb_publishable_synthetic',
   },
-  canonicalTemplate: 'https://{slug}.merchant.test/',
+  rootDomain: 'merchant.test',
 };
-it('parses explicit isolated origins and a fixed merchant template', () => {
+it('parses explicit isolated origins and resolves the merchant domain', async () => {
   const parsed = parseVerifierProductionConfig(valid);
-  expect(parsed.canonicalBase('synthetic')).toBe(
-    'https://synthetic.merchant.test/'
-  );
+  await expect(
+    parsed.canonicalBase('synthetic', {
+      rpc: async () => ({ data: null, error: null }),
+    } as never)
+  ).resolves.toBe('https://synthetic.merchant.test');
   expect(parsed.key).toHaveLength(32);
 });
 it.each([
@@ -34,8 +36,8 @@ it.each([
       'postgresql://baci_experience_verifier_login:password@db.test:6543/postgres',
   },
   { key: valid.runner.key },
-  { canonicalTemplate: 'http://{slug}.merchant.test/' },
-  { canonicalTemplate: 'https://evil.test/?slug={slug}' },
+  { rootDomain: 'http://merchant.test' },
+  { rootDomain: 'merchant.test/path' },
   { executionOrigin: 'https://output.merchant.test' },
   {
     supabase: {

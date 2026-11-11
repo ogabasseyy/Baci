@@ -18,10 +18,12 @@ tallies. Muse, Codex and CodeRabbit are separate reviewers and are not affected.
 `error` also covers cases where a clean answer would prove nothing: the pull request diff could not
 be read (GitHub refuses very large diffs; no paid call is made), the changed-file list is empty or
 unreadable, or a changed file has control characters in its name (such a file cannot be listed or
-shown in full, so a clean answer proves nothing). In that last case a critical or high finding on a
-file the pull request is known to change is still `failure`. A finding on a path that is not in the
-list (it may be the unlisted file itself) cannot be verified, so it is no vote either way: the
-review is still posted, with a note, for a person to read.
+shown in full, so a clean answer proves nothing). If the diff or the list cannot be read, nothing is
+posted (there is nothing to check the findings against) and only the status is written. With control
+characters in a file name, a critical or high finding on a file the pull request is known to change
+is still `failure`, and a finding on a path that is not in the list (it may be the unlisted file
+itself) cannot be verified, so it is no vote either way: the review is still posted, with a note,
+for a person to read.
 
 `error` is an abstention for Diff Guardian and for the job, but GitHub itself treats the `error`
 state like a failure. So **never make `Gemini review` a required check** (a Gemini outage would then
@@ -74,7 +76,10 @@ The `decide` step skips the model when the `bypass-ai-gate` label is set, the re
 and unconfirmed, this exact commit was already reviewed, or the new commit is a **merge commit** (main
 merged in) and the pull request's own added and removed lines are identical to those of the last
 review (fingerprint in the hidden first line of the review). Normal commits are always reviewed:
-identical changed lines can still mean the same lines moved somewhere else. A skipped push still
+identical changed lines can still mean the same lines moved somewhere else. A merge commit is the
+one exception, because the fingerprint ignores unchanged surrounding code (main's own changes shift
+it all the time), so a hand-resolved merge conflict that only moves lines is skipped too; comment
+`@gemini-cli /review` to force a fresh review after one. A skipped push still
 gets a status: the earlier result is carried to the new commit. A manual `@gemini-cli /review`
 comment skips these shortcuts and always asks the model again, but the `bypass-ai-gate` label and the
 private-repository guard still apply to it.

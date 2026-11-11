@@ -570,8 +570,8 @@ export async function GET(
           merchant.tax_identification_number || undefined,
         cac_rc_number: merchant.cac_rc_number || undefined,
         vat_registration_status:
-          merchant.vat_registration_status || 'not_registered',
-        vat_rate: merchant.vat_rate || 7.5,
+          merchant.vat_registration_status || 'unregistered',
+        vat_rate: merchant.vat_rate ?? 0,
         registered_address: merchant.registered_address || undefined,
         support_email: merchant.support_email || undefined,
         support_phone: merchant.support_phone || undefined,

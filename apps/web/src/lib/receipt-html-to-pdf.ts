@@ -169,6 +169,7 @@ async function renderDocument(
       waitUntil: 'load',
       timeout: remainingTime(deadline),
     });
+    // A blocked template asset is a document error, not temporary capacity.
     if (blockedResource) {
       throw new Error('Invoice contains an unsupported external resource');
     }

@@ -70,7 +70,7 @@ export async function buildInvoicePdfResponse(
         invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
         invoiceData.invoice_number
       ),
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'private, no-store',
     },
   });
 }

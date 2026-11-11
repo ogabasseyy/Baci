@@ -101,6 +101,7 @@ describe('buildInvoicePdfResponse', () => {
       'proforma-PF-100.pdf'
     );
     expect(response.headers.get('content-type')).toBe('application/pdf');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(await response.text()).toBe('%PDF');
   });
 });

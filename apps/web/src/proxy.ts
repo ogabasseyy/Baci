@@ -38,6 +38,11 @@ import {
   getRequestSubdomain,
   runSubdomainRouting,
 } from '@/lib/proxy/subdomain-routing';
+import { createServerTimer, type ServerTimer } from '@/lib/server-timing';
+
+// Durations of the awaited proxy stages, on a header of its own so a route's
+// `Server-Timing` is never replaced. Durations only; no request data.
+const PROXY_TIMING_HEADER = 'x-baci-proxy-timing';
 
 /** Coordinates ordered proxy stages; each stage owns its former early returns. */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
@@ -55,6 +60,19 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const timer = createServerTimer({ header: PROXY_TIMING_HEADER });
+  return timer.apply(
+    await runProxyStages(request, pathname, hostname, userAgent, timer)
+  );
+}
+
+async function runProxyStages(
+  request: NextRequest,
+  pathname: string,
+  hostname: string,
+  userAgent: string,
+  timer: ServerTimer
+): Promise<NextResponse> {
   for (const prefix of CASE_PRESERVING_PREFIXES) {
     const normalized = normalizeLeadingPrefix(pathname, prefix);
     if (normalized) {
@@ -87,7 +105,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     apiSecurityContext.apiRateLimitPathname.startsWith('/api') ||
     (apiSecurityContext.isAliasApiShaped && apiSecurityContext.aliasApiShape)
   ) {
-    const response = await runApiSecurityStage(request, apiSecurityContext);
+    const response = await timer.measure('api-security', () =>
+      runApiSecurityStage(request, apiSecurityContext)
+    );
     if (response) return response;
   }
 
@@ -100,11 +120,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (legacyResponse) return legacyResponse;
 
   if (isPlatformSpecialRoutingEligible(pathname, hostname)) {
-    const response = await runPlatformRoutingStage(
-      request,
-      pathname,
-      hostname,
-      userAgent
+    const response = await timer.measure('platform', () =>
+      runPlatformRoutingStage(request, pathname, hostname, userAgent)
     );
     if (response) return response;
   }
@@ -116,23 +133,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (platformResponse) return platformResponse;
 
   if (isSessionRoutingEligible(pathname)) {
-    const response = await runSessionRoutingStage(
-      request,
-      pathname,
-      hostname,
-      userAgent
+    const response = await timer.measure('session', () =>
+      runSessionRoutingStage(request, pathname, hostname, userAgent)
     );
     if (response) return response;
   }
 
   const subdomain = getRequestSubdomain(hostname);
   if (subdomain) {
-    const response = await runSubdomainRouting(
-      request,
-      pathname,
-      hostname,
-      userAgent,
-      subdomain
+    const response = await timer.measure('subdomain', () =>
+      runSubdomainRouting(request, pathname, hostname, userAgent, subdomain)
     );
     if (response) return response;
   } else if (
@@ -140,27 +150,24 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     !isVercelPreview(hostname) &&
     isValidCustomDomain(hostname)
   ) {
-    const context = await resolveCustomDomainContext(request, hostname);
+    const context = await timer.measure('domain-context', () =>
+      resolveCustomDomainContext(request, hostname)
+    );
     if (context) {
-      return runCustomDomainRouting(
-        request,
-        pathname,
-        hostname,
-        userAgent,
-        context
+      return timer.measure('domain-routing', () =>
+        runCustomDomainRouting(request, pathname, hostname, userAgent, context)
       );
     }
   }
 
-  const slugResponse = await runSlugRoutingStage(
-    request,
-    pathname,
-    hostname,
-    userAgent
+  const slugResponse = await timer.measure('slug', () =>
+    runSlugRoutingStage(request, pathname, hostname, userAgent)
   );
   if (slugResponse) return slugResponse;
 
-  return buildFinalProxyResponse(request, pathname, hostname, userAgent);
+  return timer.measure('final', () =>
+    buildFinalProxyResponse(request, pathname, hostname, userAgent)
+  );
 }
 
 export const config = {

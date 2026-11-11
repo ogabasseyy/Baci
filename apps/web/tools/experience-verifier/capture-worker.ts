@@ -23,6 +23,7 @@ export async function createVerifierCaptureWorker(settings: {
     previewOrigin: settings.previewOrigin,
     bootstrap: settings.bootstrap,
     record,
+    maxPendingCaptures: 128,
     capture: (input) => captureExperience(input, execute),
   });
 }

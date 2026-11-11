@@ -46,6 +46,7 @@ it('uses the restricted recorder and a fixed runner to produce evidence internal
   const config = f.captureService.mock.calls.at(-1)?.[0];
   expect(config.record).toBe(record);
   expect(config.profile).toBe('production');
+  expect(config.maxPendingCaptures).toBe(128);
   const input = { synthetic: true };
   await config.capture(input);
   expect(f.capture).toHaveBeenCalledWith(input, execute);

@@ -30,6 +30,8 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 
 import { POST as previewPost } from '@/app/api/builder-experience/preview/route';
 import { queueExperienceBuild } from '@/lib/experience/build-service';
+import { requestDraftApply } from '@/lib/experience/draft-apply';
+import { createIndependentApprovalVerifier } from '@/lib/experience/independent-approval-verifier';
 import { runExperienceBuild } from '@/lib/experience/local-build-supervisor';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
@@ -48,6 +50,8 @@ import {
   createRunnerHandler,
 } from '../../tools/experience-runner/runner-transport';
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
+import { createApprovalCapture } from '../../tools/experience-verifier/approval-capture';
+import { createVerifierApprovalRecorder } from '../../tools/experience-verifier/approval-recorder';
 import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
 import { experienceDataFixture } from './data-fixture.test-support';
@@ -240,6 +244,25 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       .maybeSingle();
     expect(snapshot.error).toBeNull();
     expect(snapshot.data?.build_id).toBe(build.buildId);
+    const approval = await requestDraftApply(f.owner, {
+      buildId: build.buildId,
+      evidenceId: captured.evidenceId,
+      expectedVersion: 0,
+      idempotencyKey: randomUUID(),
+    });
+    const verifier = createIndependentApprovalVerifier({
+      capture: createApprovalCapture(capture),
+      record: await createVerifierApprovalRecorder(verifierPool),
+      verifyPublic: async () => {
+        throw Error('NOT_AVAILABLE_IN_LOCAL_TEST');
+      },
+    });
+    await verifier.attest(f.owner.supabase, approval.approvalId, 'draft');
+    const proof = await f.db.pool.query(
+      'SELECT effect_digest FROM experience_authorization.approval_checks WHERE intent_id=$1',
+      [approval.approvalId]
+    );
+    expect(proof.rows).toEqual([{ effect_digest: approval.effectDigest }]);
 
     const vault = createPreviewVault({
       origin: executionOrigin,

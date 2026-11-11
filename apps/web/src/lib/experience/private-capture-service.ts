@@ -36,7 +36,11 @@ export function createPrivateExperienceCapture(deps: {
   ): Promise<PublicBootstrap>;
   record(capture: RecordedPrivateCapture): Promise<void>;
   capture?: typeof captureExperience;
+  maxPendingCaptures?: number;
 }) {
+  const capacity = deps.maxPendingCaptures ?? 32;
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 128)
+    throw Error('INVALID_CAPTURE_CAPACITY');
   const origin = new URL(deps.hostOrigin);
   if (deps.profile === 'production') {
     productionOrigin(deps.hostOrigin);
@@ -83,7 +87,7 @@ export function createPrivateExperienceCapture(deps: {
         throw Error('IDEMPOTENCY_CONFLICT');
       return prior.value;
     }
-    if (cache.size >= 32) throw Error('QUOTA_EXCEEDED');
+    if (cache.size >= capacity) throw Error('QUOTA_EXCEEDED');
     const value = (async () => {
       const build = await ctx.supabase
         .from('experience_builds')

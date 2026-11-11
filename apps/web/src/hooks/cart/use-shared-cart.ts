@@ -37,6 +37,11 @@ export function useSharedCart(
     version: state.confirmed?.version ?? 0,
     generation: runtime.sessionGeneration,
     onRefresh: () => snapshots.refreshNow(true),
+    isOwnOperation: (operationId) =>
+      runtime.stateRef.current.queue.some(
+        (entry) =>
+          entry.operationId === operationId && entry.state === 'sending'
+      ),
   });
   const provisioning = createCartProvisioning({ ...runtime, ...snapshots });
   useCartLinkLifecycle({

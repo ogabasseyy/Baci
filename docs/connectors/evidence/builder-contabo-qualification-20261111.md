@@ -52,3 +52,13 @@ The public `mcp.usebaci.com` discovery endpoint still returned the Supabase
 issuer when checked, rather than the dedicated builder issuer. Production
 routing and the actual OpenAI authorization flow therefore remain unqualified;
 do not treat the domain verification as evidence of a working connection.
+
+The fixed-policy helper at SHA-256
+`1b59ca7125964391e454aff4713db3dcf13cb7db66c589f6944f899995bf7d5b`
+was run as root on Contabo without installing it or changing sudo policy. It
+prepared, executed and removed one synthetic offline gVisor compile. The output
+contained the expected synthetic heading and had build digest
+`1dbf6030be64ac229f42973c259292aad0a3f160cd4461c1b5a7ba765de2b9bf`;
+both execution and cleanup exited successfully. Direct invocation as the
+unprivileged `nobody` user failed. This does not test the service's sudo policy,
+privileged installation preflight, independent release provenance or live flow.

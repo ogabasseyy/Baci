@@ -463,6 +463,9 @@ describe('POST /api/storefront/cart/commands', () => {
     });
 
     expect(response.status).toBe(403);
+    expect(response.headers.get('Server-Timing')).toMatch(
+      /^csrf;dur=[\d.]+, total;dur=[\d.]+$/
+    );
     expect((await response.json()).code).toBe('forbidden');
   });
 

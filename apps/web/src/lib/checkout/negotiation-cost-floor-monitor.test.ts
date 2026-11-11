@@ -161,6 +161,36 @@ describe('monitorNegotiationCostFloor', () => {
     expect(warn.mock.calls[0][0].breaches[0]).toMatchObject({ quantity: 10 });
   });
 
+  it('reports a coverage gap for lines without a readable product cost (regression: silent skip)', async () => {
+    const { client } = clientReturning({
+      products: { data: [], error: null },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: [line(98)],
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatchObject({
+      message: 'Negotiation cost-floor monitor coverage gap',
+      unreadableProductLines: 1,
+      truncatedLines: 0,
+    });
+  });
+
+  it('reports lines dropped by the per-order cap', async () => {
+    const { client } = clientReturning({
+      products: { data: [{ id: 'p1', cost_price: 60 }], error: null },
+    });
+    await monitorNegotiationCostFloor({
+      supabase: client,
+      merchantId: 'm1',
+      lines: Array.from({ length: 22 }, () => line(98)),
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatchObject({ truncatedLines: 2 });
+  });
+
   it('stays silent when the price clears the cost floor', async () => {
     const { client } = clientReturning({
       products: { data: [{ id: 'p1', cost_price: 60 }], error: null },

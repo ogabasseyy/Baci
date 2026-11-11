@@ -27,7 +27,9 @@ function positiveCost(value: number | string | null | undefined) {
 /**
  * Observation only. Log counts are CANDIDATE orders (a later payment/RPC
  * failure or an idempotent retry still logs), so size exposure from them
- * as an upper bound, not as realized losses. They are also an incomplete
+ * as an upper bound, not as realized losses. Lines beyond the per-order cap
+ * and lines with no readable cost are not evaluated; both are reported as a
+ * coverage-gap warning so they are not mistaken for zero exposure. They are also an incomplete
  * sample: `after()` has no durable-job guarantee, so a timeout or load
  * shedding can drop a run and undercount breaches.
  * Logs when a below-catalog negotiated unit price falls
@@ -36,7 +38,8 @@ function positiveCost(value: number | string | null | undefined) {
  * Never throws and never changes the order: the cost column is a private
  * merchant value, so a failed lookup must not break checkout. Cost figures
  * are deliberately NOT logged: only product/variant ids, the shopper-visible
- * prices and a belowCost boolean.
+ * prices and a belowCost boolean. A breach still implies a cost range, so
+ * read this as 'no literal cost values' and keep log access privileged.
  */
 export async function monitorNegotiationCostFloor({
   supabase,
@@ -48,15 +51,15 @@ export async function monitorNegotiationCostFloor({
   lines: NegotiatedLineForCostMonitor[];
 }): Promise<void> {
   try {
-    const discounted = lines
-      .filter(
-        (line) =>
-          line.negotiable &&
-          Number.isFinite(line.clientUnitPrice) &&
-          Number.isFinite(line.catalogUnitPrice) &&
-          line.clientUnitPrice < line.catalogUnitPrice
-      )
-      .slice(0, MAX_MONITORED_LINES);
+    const allDiscounted = lines.filter(
+      (line) =>
+        line.negotiable &&
+        Number.isFinite(line.clientUnitPrice) &&
+        Number.isFinite(line.catalogUnitPrice) &&
+        line.clientUnitPrice < line.catalogUnitPrice
+    );
+    const discounted = allDiscounted.slice(0, MAX_MONITORED_LINES);
+    const truncatedLines = allDiscounted.length - discounted.length;
     if (discounted.length === 0) return;
 
     const productIds = Array.from(new Set(discounted.map((l) => l.productId)));
@@ -113,6 +116,7 @@ export async function monitorNegotiationCostFloor({
       belowCost: boolean;
     }> = [];
     let unreadableVariantLines = 0;
+    let unreadableProductLines = 0;
     for (const line of discounted) {
       if (line.variantId && !variantCost.has(line.variantId)) {
         // Shopper-scoped clients cannot read variant rows under RLS: report
@@ -130,7 +134,11 @@ export async function monitorNegotiationCostFloor({
         (line.variantId ? variantCost.get(line.variantId) : null) ??
         productCost.get(line.productId) ??
         null;
-      if (cost === null) continue;
+      if (cost === null) {
+        // No readable positive cost (row filtered out, null or zero cost).
+        unreadableProductLines += 1;
+        continue;
+      }
       // Compare in whole minor units so an exact 10% margin is not flagged
       // by floating-point error (e.g. 100 * 1.1 = 110.00000000000001).
       const floorMinor = Math.round(cost * (1 + MIN_PROFIT_MARGIN) * 100);
@@ -150,6 +158,14 @@ export async function monitorNegotiationCostFloor({
         message: 'Negotiation cost-floor monitor could not read variant cost',
         merchantId,
         unreadableVariantLines,
+      });
+    }
+    if (truncatedLines > 0 || unreadableProductLines > 0) {
+      logger.warn({
+        message: 'Negotiation cost-floor monitor coverage gap',
+        merchantId,
+        truncatedLines,
+        unreadableProductLines,
       });
     }
     // One aggregated entry per order (multi-line orders must not spam logs).

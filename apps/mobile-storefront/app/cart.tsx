@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,6 +12,7 @@ import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
+import { useCartCheckoutIdentityRecovery } from '@/components/cart/use-cart-checkout-identity-recovery';
 import { useCartCheckoutRecovery } from '@/components/cart/use-cart-checkout-recovery';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
@@ -42,8 +43,6 @@ export default function CartScreen() {
   const { light: triggerHaptic } = useHaptics();
   const { isOpen: isIdentityModalOpen, open: openCheckoutIdentity } =
     useCheckoutIdentityOverlay();
-  const checkoutRecoveryRef = useRef<(() => Promise<void>) | null>(null);
-  const [resumeCheckoutAfterAuth, setResumeCheckoutAfterAuth] = useState(false);
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
   // Keep CART_MPU unmounted until the iOS price-change modal's fade and
   // native dismissal complete.
@@ -116,17 +115,13 @@ export default function CartScreen() {
     if (isAuthenticated) {
       router.push('/checkout');
     } else {
-      openCheckoutIdentity(() => setResumeCheckoutAfterAuth(true));
+      openCheckoutIdentity(onCheckoutIdentityVerified);
     }
   });
-  useLayoutEffect(() => {
-    checkoutRecoveryRef.current = recoverCheckout;
-  }, [recoverCheckout]);
-  useEffect(() => {
-    if (!resumeCheckoutAfterAuth || !isAuthenticated) return;
-    setResumeCheckoutAfterAuth(false);
-    void checkoutRecoveryRef.current?.();
-  }, [isAuthenticated, resumeCheckoutAfterAuth]);
+  const onCheckoutIdentityVerified = useCartCheckoutIdentityRecovery(
+    isAuthenticated,
+    recoverCheckout
+  );
   const handleCheckout = () => {
     triggerHaptic();
     void recoverCheckout();

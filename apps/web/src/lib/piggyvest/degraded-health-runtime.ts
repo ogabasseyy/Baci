@@ -31,13 +31,6 @@ const claimedPages = new Set<string>();
 export interface DegradedHealthDeps {
   readRuntime: typeof readPrimaryWalletSavingsRecoveryRuntime;
   createExecutor: typeof createPrimaryWalletEvidenceExecutor;
-  /**
-   * Goal-wallet setups still unfinished after the cutoff. No read-only
-   * aggregate exists for piggyvest_primary.goal_wallet_intents yet (the
-   * evidence login has no grant and the executor allows no such statement),
-   * so the default reports it as unread rather than guessing.
-   */
-  readStalledGoalWallets: () => Promise<number | null>;
   emitAlert: typeof emitPiggyvestWebhookAlert;
   nowMs: () => number;
 }
@@ -46,7 +39,6 @@ function defaultDeps(): DegradedHealthDeps {
   return {
     readRuntime: readPrimaryWalletSavingsRecoveryRuntime,
     createExecutor: createPrimaryWalletEvidenceExecutor,
-    readStalledGoalWallets: async () => null,
     emitAlert: emitPiggyvestWebhookAlert,
     nowMs: () => Date.now(),
   };
@@ -56,7 +48,6 @@ export type DegradedHealthResult =
   | { status: 'disabled' }
   | {
       status: 'checked';
-      stalledGoalWallets: number | null;
       indeterminateTransfers: number | null;
       /** The transfers read failed: reported, never mistaken for healthy. */
       readFailed: boolean;
@@ -104,14 +95,10 @@ export async function runPiggyvestDegradedHealth(
   if (!isPiggyvestFeatureFlagSet('degraded_alerts', env))
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
-  const [stalledGoalWallets, transfersRead] = await Promise.all([
-    deps.readStalledGoalWallets().catch(() => null),
-    readIndeterminateTransfers(deps, env),
-  ]);
+  const transfersRead = await readIndeterminateTransfers(deps, env);
   const readFailed = transfersRead === 'failed';
   const indeterminateTransfers = readFailed ? null : transfersRead;
   const alerts: DegradedAlert[] = decideDegradedAlerts({
-    stalledGoalWallets,
     indeterminateTransfers,
   });
   const hour = Math.floor(deps.nowMs() / MS_PER_HOUR);
@@ -136,7 +123,6 @@ export async function runPiggyvestDegradedHealth(
   }
   return {
     status: 'checked',
-    stalledGoalWallets,
     indeterminateTransfers,
     readFailed,
     alerts: alerts.length,

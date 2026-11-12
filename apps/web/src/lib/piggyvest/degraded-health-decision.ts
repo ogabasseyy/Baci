@@ -1,21 +1,19 @@
 /**
  * Decides which PiggyVest degraded-health alerts to raise from aggregate
  * counts only (no ids, no customer data). Pure: the runtime reads the counts
- * and rate-limits; this only applies the thresholds.
+ * and rate-limits; this only applies the threshold.
+ *
+ * Today it watches stuck savings transfers only. A "goal-wallet setup
+ * stalled" reason needs a read-only aggregate over goal_wallet_intents that
+ * the evidence login cannot read yet; it is a follow-up, not shipped dark.
  */
 export const DEGRADED_TRANSFER_THRESHOLD = 3;
-/** Same rule as transfers: one customer's hiccup never pages on its own. */
-export const DEGRADED_GOAL_WALLET_THRESHOLD = 3;
-/** A goal-wallet setup older than this (seconds) counts as stalled. */
+/** A transfer still in flight after this many seconds counts as stuck. */
 export const DEGRADED_STALE_AFTER_SECONDS = 600;
 
-export type DegradedReason =
-  | 'goal_wallet_setup_stalled'
-  | 'transfers_indeterminate';
+export type DegradedReason = 'transfers_indeterminate';
 
 export interface DegradedCounts {
-  /** Goal-wallet setups not finished after the stale cutoff; null = unread. */
-  stalledGoalWallets: number | null;
   /** Savings transfers still reserved or sent after the stale cutoff. */
   indeterminateTransfers: number | null;
 }
@@ -26,24 +24,12 @@ export interface DegradedAlert {
 }
 
 export function decideDegradedAlerts(counts: DegradedCounts): DegradedAlert[] {
-  const alerts: DegradedAlert[] = [];
-  const { stalledGoalWallets: wallets, indeterminateTransfers: transfers } =
-    counts;
+  const transfers = counts.indeterminateTransfers;
   if (
-    Number.isSafeInteger(wallets) &&
-    (wallets as number) >= DEGRADED_GOAL_WALLET_THRESHOLD
-  )
-    alerts.push({
-      reason: 'goal_wallet_setup_stalled',
-      attempts: wallets as number,
-    });
-  if (
+    typeof transfers === 'number' &&
     Number.isSafeInteger(transfers) &&
-    (transfers as number) >= DEGRADED_TRANSFER_THRESHOLD
+    transfers >= DEGRADED_TRANSFER_THRESHOLD
   )
-    alerts.push({
-      reason: 'transfers_indeterminate',
-      attempts: transfers as number,
-    });
-  return alerts;
+    return [{ reason: 'transfers_indeterminate', attempts: transfers }];
+  return [];
 }

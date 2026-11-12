@@ -33,7 +33,6 @@ function deps(over: Partial<DegradedHealthDeps> & { stuck?: number } = {}) {
       reconciliationConfiguration: {},
     })),
     createExecutor: vi.fn(() => execute),
-    readStalledGoalWallets: vi.fn(async () => 0),
     emitAlert,
     nowMs: () => 1_800_000_000_000,
     ...over,
@@ -60,13 +59,13 @@ describe('runPiggyvestDegradedHealth', () => {
   });
 
   it('pages once per hour per reason with a counts-only detail', async () => {
-    const d = deps({ stuck: 4, readStalledGoalWallets: async () => 3 });
+    const d = deps({ stuck: 4 });
     const env = testEnv({ PIGGYVEST_DEGRADED_ALERTS_ENABLED: 'true' });
     const first = await runPiggyvestDegradedHealth({ env, deps: d.value });
     const second = await runPiggyvestDegradedHealth({ env, deps: d.value });
-    expect(first).toMatchObject({ alerts: 2, paged: 2 });
-    expect(second).toMatchObject({ alerts: 2, paged: 0 });
-    expect(d.emitAlert).toHaveBeenCalledTimes(2);
+    expect(first).toMatchObject({ alerts: 1, paged: 1 });
+    expect(second).toMatchObject({ alerts: 1, paged: 0 });
+    expect(d.emitAlert).toHaveBeenCalledTimes(1);
     for (const [code, detail] of d.emitAlert.mock.calls) {
       expect(code).toBe('PIGGYVEST_DEGRADED');
       expect(Object.keys(detail).sort()).toEqual([

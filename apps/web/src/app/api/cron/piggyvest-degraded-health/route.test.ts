@@ -36,11 +36,10 @@ describe('GET /api/cron/piggyvest-degraded-health', () => {
   it('returns counts only when enabled', async () => {
     const body = {
       status: 'checked',
-      stalledGoalWallets: 1,
       indeterminateTransfers: 3,
       readFailed: false,
-      alerts: 2,
-      paged: 2,
+      alerts: 1,
+      paged: 1,
     };
     run.mockResolvedValue(body);
     expect(await (await call('cron-secret')).json()).toEqual(body);

@@ -24,6 +24,10 @@ export const GOAL_COMPLETE_STEP_COPY = {
   doneTitle: 'Request sent',
   doneBody: (amount: string, goalTitle: string) =>
     `${amount} is in your wallet. Our team will contact you soon to finish your ${goalTitle} order.`,
+  unknownSplit:
+    'Everything in this goal, including any interest earned, moves to your wallet.',
+  doneBodyUnknown: (goalTitle: string) =>
+    `Your savings are in your wallet. Our team will contact you soon to finish your ${goalTitle} order.`,
   done: 'Done',
   close: 'Close',
   checkAgain: GOAL_LIFECYCLE_COPY.checkAgain,

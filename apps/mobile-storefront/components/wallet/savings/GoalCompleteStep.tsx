@@ -25,8 +25,11 @@ type Flow = Pick<
 /** Completing keeps the interest: everything in the goal moves to the wallet. */
 export function goalCompleteBreakdown(goal: WalletActiveSavingsGoal) {
   const total = goal.current_amount;
+  // Without the stored balance the interest split (and so the exact amount
+  // PiggyVest moves) is unknown: show no figures rather than guess.
+  const known = goal.principal_amount !== undefined;
   const saved = Math.min(goal.principal_amount ?? total, total);
-  return { saved, interest: Math.max(0, total - saved), total };
+  return { known, saved, interest: Math.max(0, total - saved), total };
 }
 
 /**
@@ -49,7 +52,7 @@ export function GoalCompleteStep({
   onNotNow: () => void;
   onSignIn: () => void;
 }) {
-  const { saved, interest, total } = goalCompleteBreakdown(goal);
+  const { known, saved, interest, total } = goalCompleteBreakdown(goal);
   const done = flow.step === 'done';
   // A plan can also be completed at its end date without reaching the target.
   const reachedTarget = total >= goal.target_amount;
@@ -149,12 +152,18 @@ export function GoalCompleteStep({
       </Text>
       <Text style={[styles.body, { color: colors.textSecondary }]}>
         {done
-          ? COPY.doneBody(formatNgnCurrency(total), goal.title)
+          ? known
+            ? COPY.doneBody(formatNgnCurrency(total), goal.title)
+            : COPY.doneBodyUnknown(goal.title)
           : reachedTarget
             ? COPY.subtitle(goal.title)
             : COPY.maturedSubtitle(goal.title)}
       </Text>
-      {done ? null : (
+      {done ? null : !known ? (
+        <Text style={[styles.note, { color: colors.textSecondary }]}>
+          {COPY.unknownSplit}
+        </Text>
+      ) : (
         <View style={[styles.card, { borderColor: colors.border }]}>
           <Row colors={colors} label={COPY.saved} value={saved} />
           {interest > 0 ? (

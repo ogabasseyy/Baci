@@ -41,11 +41,17 @@ export function useInSheetGoalCancel(
   // "Check again" refreshes again, once.
   const refreshed = useRef<string | null>(null);
   const outcomeKey = settled ? `${attempt}:${flow.step}` : null;
+  // A sheet closed mid-save keeps its goal only until the action settles.
+  const closedInFlight = useRef<number | null>(null);
   useEffect(() => {
     if (!outcomeKey || refreshed.current === outcomeKey) return;
     refreshed.current = outcomeKey;
     void refreshRef.current?.();
-  }, [outcomeKey]);
+    if (closedInFlight.current === attempt) {
+      closedInFlight.current = null;
+      setHeld(null);
+    }
+  }, [outcomeKey, attempt]);
 
   return {
     goal: active,
@@ -64,6 +70,7 @@ export function useInSheetGoalCancel(
      */
     closed: () => {
       if (!IN_FLIGHT.has(flow.step)) setHeld(null);
+      else closedInFlight.current = attempt;
     },
   };
 }

@@ -54,6 +54,7 @@ function renderStep(flow = makeFlow()) {
 describe('Complete goal inside the savings sheet, server off', () => {
   it('keeps the interest: everything in the goal moves to the wallet', () => {
     expect(goalCompleteBreakdown(goal)).toEqual({
+      known: true,
       saved: 780000,
       interest: 9360,
       total: 789360,
@@ -70,6 +71,27 @@ describe('Complete goal inside the savings sheet, server off', () => {
     expect(screen.getByText('₦789,360')).toBeOnTheScreen();
     expect(
       screen.getByText('Our team contacts you to finish your order')
+    ).toBeOnTheScreen();
+  });
+
+  it('shows no figures when the interest split is unknown', () => {
+    const { principal_amount: _p, ...noSplit } = goal;
+    const handlers = {
+      onDone: jest.fn(),
+      onNotNow: jest.fn(),
+      onSignIn: jest.fn(),
+    };
+    render(
+      <GoalCompleteStep
+        colors={Colors.light}
+        flow={makeFlow()}
+        goal={noSplit}
+        {...handlers}
+      />
+    );
+    expect(screen.queryByText('Moves to your wallet')).toBeNull();
+    expect(
+      screen.getByText(/including any interest earned, moves to your wallet/)
     ).toBeOnTheScreen();
   });
 

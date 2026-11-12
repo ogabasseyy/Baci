@@ -26,4 +26,10 @@ describe('hasRetainedPrimaryCardFunding (server off)', () => {
       hasRetainedPrimaryCardFunding(MERCHANT, undefined)
     ).resolves.toBe(false);
   });
+
+  it('is false for ids the card client would never save under', async () => {
+    await expect(
+      hasRetainedPrimaryCardFunding('merchant-1', 'user-1')
+    ).resolves.toBe(false);
+  });
 });

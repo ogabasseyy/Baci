@@ -1,4 +1,5 @@
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
+import { primaryWalletCardSchemas } from '@/schemas/primary-wallet-card';
 
 const client = createPrimaryWalletCardFundingClient();
 
@@ -12,9 +13,14 @@ export async function hasRetainedPrimaryCardFunding(
   merchantId: string | undefined,
   userId: string | undefined
 ): Promise<boolean> {
-  if (!merchantId || !userId) return false;
+  // A scope the card client rejects can never have saved a funding.
+  const scope = primaryWalletCardSchemas.scope.safeParse({
+    merchantId,
+    userId,
+  });
+  if (!scope.success) return false;
   try {
-    return (await client.readPending({ merchantId, userId })) !== null;
+    return (await client.readPending(scope.data)) !== null;
   } catch {
     // Unreadable storage: assume something may be saved, so the primary
     // path (which re-reads and recovers or reports) handles it.

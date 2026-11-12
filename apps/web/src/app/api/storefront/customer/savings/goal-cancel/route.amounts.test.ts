@@ -112,3 +112,19 @@ it('answers a cancel that owes interest with no interest wallet as a temporary o
   expect(response.status).toBe(503);
   expect((await response.json()).code).toBe('WALLET_UNAVAILABLE');
 });
+
+describe('bugfix: a cancel refused for a missing interest wallet read as a PiggyVest rejection', () => {
+  it('a status check of a released attempt says nothing was sent, without blaming PiggyVest', async () => {
+    // A split refused before anything moved (no interest wallet configured)
+    // and a real provider rejection both end released with savings unchanged.
+    mocks.status.mockResolvedValue({ status: 'released' });
+    const response = await patch({ merchantId, operationId });
+    expect(response.status).toBe(409);
+    const payload = await response.json();
+    expect(payload.code).toBe('CANCEL_REJECTED');
+    expect(payload.error).toBe(
+      'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.'
+    );
+    expect(payload.error).not.toMatch(/PiggyVest/);
+  });
+});

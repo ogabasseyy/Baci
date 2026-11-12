@@ -114,9 +114,12 @@ const PUBLIC_STATUSES: ReadonlySet<string> = new Set([
   'not_started',
 ]);
 
+// One truthful answer for every released attempt: a provider rejection and a
+// cancel refused before anything moved (for example no interest wallet
+// configured) both leave the savings untouched, and the customer can retry.
 const REJECTED = (): NextResponse =>
   refuse(
-    'PiggyVest did not accept the refund. Your savings are unchanged.',
+    'This cancellation did not go through. Nothing was moved and your savings are unchanged. You can try again later.',
     'CANCEL_REJECTED',
     409
   );

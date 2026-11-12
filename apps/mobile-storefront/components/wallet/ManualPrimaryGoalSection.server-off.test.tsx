@@ -23,7 +23,7 @@ jest.mock('./WalletSavingsContributionFlow', () => ({
   },
 }));
 
-it('shows a branded wait state without mounting contribution actions while loading', () => {
+it('shows the amount form at once while the goal wallet is confirmed in the background', () => {
   const goal: WalletActiveSavingsGoal = {
     contribution_amount: 1000,
     contribution_frequency: 'weekly',
@@ -54,6 +54,8 @@ it('shows a branded wait state without mounting contribution actions while loadi
     />
   );
 
-  expect(screen.getByText('Almost ready')).toBeOnTheScreen();
-  expect(screen.queryByText('contribution-actions')).toBeNull();
+  // No loading panel: the server refuses the transfer until the goal
+  // wallet exists, so the form need not wait for that answer.
+  expect(screen.queryByText('Almost ready')).toBeNull();
+  expect(screen.getByText('contribution-actions')).toBeOnTheScreen();
 });

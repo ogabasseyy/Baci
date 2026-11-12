@@ -3,6 +3,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { StartSavingsPreviewModal } from './StartSavingsPreviewModal';
+import { createStartSavingsController } from './start-savings-controller.test-support';
 import type { StartSavingsController } from './start-savings-controller.types';
 
 describe('savings preview display (server off)', () => {
@@ -41,5 +42,24 @@ describe('savings preview display (server off)', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Edit plan' }));
     expect(setShowPreviewModal).toHaveBeenCalledWith(false);
     expect(setShowFundingModal).toHaveBeenCalledWith(false);
+  });
+
+  describe('bugfix: a long review sheet could not be scrolled', () => {
+    it('puts the review in a height-capped scroll view', () => {
+      render(
+        <StartSavingsPreviewModal
+          colors={Colors.light}
+          controller={createStartSavingsController({
+            showPreviewModal: true,
+            sourceMode: 'auto_debit',
+          })}
+        />
+      );
+      const scroll = screen.getByTestId('start-savings-review-scroll');
+      expect(scroll.props.style).toEqual(
+        expect.objectContaining({ maxHeight: expect.any(Number) })
+      );
+      expect(screen.getByText('Check your plan')).toBeOnTheScreen();
+    });
   });
 });

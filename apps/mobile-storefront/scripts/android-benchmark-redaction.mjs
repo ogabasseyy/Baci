@@ -28,7 +28,7 @@ export function redactPrivateValues(output, privateValues) {
     for (const variant of getPrivateValueVariants(value)) {
       variants.add(variant);
     }
-    if (value.length >= 8) {
+    if (value.length >= 8 && value.length <= 256) {
       wrappedPatterns.push(
         new RegExp(
           value.split('').map(escapeRegExp).join('(?:\\r\\n|\\r|\\n)*'),

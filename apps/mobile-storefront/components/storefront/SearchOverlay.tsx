@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInputInstance } from 'react-native';
 import {
@@ -17,6 +17,7 @@ import Animated, {
   SlideOutDown,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { dismissKeyboardForNavigation } from '@/components/ui/dismiss-keyboard-for-navigation';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -43,6 +44,9 @@ export function SearchOverlay({
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
+  const navigation = useNavigation();
+  const categoryNavigationPending = useRef(false);
+  const categoryNavigationGeneration = useRef(0);
   const inputRef = useRef<TextInputInstance>(null);
 
   const [query, setQuery] = useState(initialQuery);
@@ -58,6 +62,7 @@ export function SearchOverlay({
   const { data: categories = [] } = useCategories();
 
   useEffect(() => {
+    if (!isVisible) categoryNavigationGeneration.current += 1;
     if (isVisible) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
@@ -88,9 +93,29 @@ export function SearchOverlay({
     saveSearch(suggestion);
   };
 
-  const handleCategoryPress = (slug: string) => {
-    onClose();
-    router.push({ pathname: '/category/[slug]', params: { slug } });
+  const handleCategoryPress = async (slug: string) => {
+    if (
+      !isVisible ||
+      categoryNavigationPending.current ||
+      !navigation.isFocused()
+    ) {
+      return;
+    }
+    categoryNavigationPending.current = true;
+    const generation = categoryNavigationGeneration.current;
+    try {
+      await dismissKeyboardForNavigation();
+      if (
+        generation !== categoryNavigationGeneration.current ||
+        !navigation.isFocused()
+      ) {
+        return;
+      }
+      onClose();
+      router.push({ pathname: '/category/[slug]', params: { slug } });
+    } finally {
+      categoryNavigationPending.current = false;
+    }
   };
 
   if (!isVisible) return null;

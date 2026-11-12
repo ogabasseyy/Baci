@@ -80,17 +80,24 @@ it('holds the final scene until the app has laid out, then fades without another
 });
 
 it('keeps the JS splash visible and exposes recovery when native hide fails', async () => {
-  mockHide.mockRejectedValue(new Error('native hide failed'));
+  mockHide
+    .mockRejectedValueOnce(new Error('transient native hide failure'))
+    .mockResolvedValueOnce(undefined);
   const { result } = renderHook(() =>
     useNativeSplashHandoff({ initialVisible: true, ready: true })
   );
 
   await act(async () => intro.resolve(true));
   act(() => result.current.onFirstLayout());
-  await waitFor(() => expect(result.current.hideFailed).toBe(true));
+  await waitFor(() => expect(result.current.showSplash).toBe(false));
 
-  expect(result.current.showSplash).toBe(true);
-  expect(SplashMotion.hide).toHaveBeenCalledTimes(1);
+  expect(result.current.hideFailed).toBe(false);
+  expect(SplashMotion.hide).toHaveBeenCalledTimes(2);
+  expect(SplashMotion.hide).toHaveBeenLastCalledWith({
+    waitForLoop: false,
+    minDuration: 0,
+    fade: 0,
+  });
 });
 
 it('keeps holding after intro and layout while initialization is not ready', async () => {
@@ -116,8 +123,8 @@ it('releases rendering safely if the native intro API fails', async () => {
   act(() => result.current.onFirstLayout());
   await waitFor(() =>
     expect(mockHide).toHaveBeenCalledWith({
-      waitForLoop: true,
-      minDuration: 2500,
+      waitForLoop: false,
+      minDuration: 0,
       fade: 220,
     })
   );

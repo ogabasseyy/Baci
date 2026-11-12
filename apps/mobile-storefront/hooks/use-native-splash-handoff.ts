@@ -42,21 +42,27 @@ export function useNativeSplashHandoff({
       hidePromiseRef.current = Promise.resolve()
         .then(() =>
           SplashMotion.hide({
-            waitForLoop: !timedOut && !intro.completed,
-            minDuration: timedOut || intro.completed ? 0 : 2500,
+            waitForLoop: false,
+            minDuration: 0,
             fade: 220,
           })
         )
+        .catch(() => {
+          recordCrashBreadcrumb('root_layout:native_splash_hide_failed');
+          markStartupTiming('splash_hide_failed');
+          // A transient bridge error should not strand recovery behind native UI.
+          return SplashMotion.hide({
+            waitForLoop: false,
+            minDuration: 0,
+            fade: 0,
+          });
+        })
         .then(
           () => {
             markStartupTiming('splash_hide_completed');
             return true;
           },
-          () => {
-            recordCrashBreadcrumb('root_layout:native_splash_hide_failed');
-            markStartupTiming('splash_hide_failed');
-            return false;
-          }
+          () => false
         );
     }
     void hidePromiseRef.current.then((hidden) => {
@@ -70,7 +76,7 @@ export function useNativeSplashHandoff({
     return () => {
       active = false;
     };
-  }, [showSplash, timedOut, ready, hasLayout, intro.settled, intro.completed]);
+  }, [showSplash, timedOut, ready, hasLayout, intro.settled]);
 
   const onFirstLayout = () => {
     if (firstLayoutRecorded.current) return;

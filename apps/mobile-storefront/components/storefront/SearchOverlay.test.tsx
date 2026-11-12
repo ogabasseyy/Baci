@@ -1,9 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SearchOverlay } from './SearchOverlay';
+
+const mockRouterPush = jest.fn();
+const mockDismissKeyboardForNavigation = jest.fn(() => Promise.resolve());
+let mockCategories: { slug: string; name: string }[] = [];
 
 jest.mock('expo-router', () => ({
   useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
-  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  useRouter: jest.fn(() => ({ push: mockRouterPush })),
   useIsFocused: () => true,
 }));
 
@@ -43,9 +47,13 @@ jest.mock('@/hooks/use-search-storage', () => ({
   }),
 }));
 
+jest.mock('@/components/ui/dismiss-keyboard-for-navigation', () => ({
+  dismissKeyboardForNavigation: () => mockDismissKeyboardForNavigation(),
+}));
+
 jest.mock('@/hooks', () => ({
   useProducts: () => ({ products: [], isLoading: false }),
-  useCategories: () => ({ data: [] }),
+  useCategories: () => ({ data: mockCategories }),
   useDebounce: (v: unknown) => v,
 }));
 
@@ -53,6 +61,7 @@ const mockOnClose = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCategories = [];
 });
 
 describe('SearchOverlay', () => {
@@ -114,6 +123,28 @@ describe('SearchOverlay', () => {
       name: /Close search/i,
     });
     expect(closeSearchButtons).toHaveLength(0);
+  });
+
+  it('waits for keyboard dismissal before navigating to a category', async () => {
+    mockCategories = [{ slug: 'phones', name: 'Phones' }];
+    let finishKeyboardDismissal!: () => void;
+    mockDismissKeyboardForNavigation.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishKeyboardDismissal = resolve;
+      })
+    );
+    render(<SearchOverlay isVisible onClose={mockOnClose} />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Phones' }));
+
+    expect(mockDismissKeyboardForNavigation).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    await act(async () => finishKeyboardDismissal());
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/category/[slug]',
+      params: { slug: 'phones' },
+    });
   });
 
   it('returns null when not visible', () => {

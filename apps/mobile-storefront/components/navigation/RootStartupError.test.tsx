@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import SplashMotion from 'react-native-splash-motion';
 import Colors from '@/constants/Colors';
 import { RootStartupError } from './RootStartupError';
@@ -44,49 +38,43 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-it('keeps the native intro until it completes and the error screen lays out', async () => {
-  let finishIntro!: (value: boolean) => void;
-  jest.mocked(SplashMotion.waitForIntro).mockReturnValue(
-    new Promise((resolve) => {
-      finishIntro = resolve;
-    })
-  );
-  jest.mocked(SplashMotion.hide).mockResolvedValue();
-  render(
-    <RootStartupError error={new Error('Broken startup')} retry={jest.fn()} />
-  );
-  expect(screen.queryByText('Something went wrong')).toBeNull();
-  expect(SplashMotion.hide).not.toHaveBeenCalled();
-  await act(async () => finishIntro(true));
-  expect(screen.getByText('Something went wrong')).toBeTruthy();
-  expect(SplashMotion.hide).not.toHaveBeenCalled();
-  fireEvent(screen.getByTestId('root-startup-error'), 'layout', {});
-  await waitFor(() => expect(SplashMotion.hide).toHaveBeenCalledTimes(1));
-});
-
-it('releases the native splash at the startup deadline without a second layout', async () => {
-  jest.useFakeTimers();
+it('shows the startup error immediately and dismisses the native splash', async () => {
   jest.mocked(SplashMotion.waitForIntro).mockReturnValue(
     new Promise(() => {
-      /* Simulate the error fallback replacing an already-laid-out placeholder. */
+      /* A crash fallback must not wait on another intro promise. */
     })
   );
   jest.mocked(SplashMotion.hide).mockResolvedValue();
-
   render(
     <RootStartupError error={new Error('Broken startup')} retry={jest.fn()} />
   );
 
-  await act(async () => {
-    jest.advanceTimersByTime(8000);
-  });
+  expect(screen.getByText('Something went wrong')).toBeTruthy();
+  expect(SplashMotion.waitForIntro).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(SplashMotion.hide).toHaveBeenCalledWith({
+      waitForLoop: false,
+      minDuration: 0,
+      fade: 220,
+    })
+  );
+});
+
+it('keeps the error visible and records a failed native hide', async () => {
+  const { recordCrashBreadcrumb } = jest.requireMock('@/lib/crash-diagnostics');
+  jest
+    .mocked(SplashMotion.hide)
+    .mockRejectedValue(new Error('Native hide failed'));
+  render(
+    <RootStartupError error={new Error('Broken startup')} retry={jest.fn()} />
+  );
 
   expect(screen.getByText('Something went wrong')).toBeTruthy();
-  expect(SplashMotion.hide).toHaveBeenCalledWith({
-    waitForLoop: false,
-    minDuration: 0,
-    fade: 220,
-  });
+  await waitFor(() =>
+    expect(recordCrashBreadcrumb).toHaveBeenCalledWith(
+      'root_startup_error:native_splash_hide_failed'
+    )
+  );
 });
 
 it('updates the visible startup error when the system appearance changes', async () => {

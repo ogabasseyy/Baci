@@ -391,7 +391,12 @@ describe('RootLayout storage boot gate', () => {
     await waitFor(() =>
       expect(screen.getByTestId('startup-recovery')).toBeOnTheScreen()
     );
-    expect(mockHideSplash).toHaveBeenCalledTimes(1);
+    expect(mockHideSplash).toHaveBeenCalledTimes(2);
+    expect(mockHideSplash).toHaveBeenLastCalledWith({
+      waitForLoop: false,
+      minDuration: 0,
+      fade: 0,
+    });
     expect(screen.queryByTestId('root-layout-nav')).toBeNull();
     expect(mockUseAppTrackingTransparency).toHaveBeenLastCalledWith({
       enabled: false,

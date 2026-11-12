@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useColorScheme, View } from 'react-native';
+import SplashMotion from 'react-native-splash-motion';
 import { ErrorFallbackView } from '@/components/ErrorFallbackView';
 import {
   classifyError,
@@ -7,7 +8,8 @@ import {
   logError,
 } from '@/components/error-boundary-content';
 import Colors from '@/constants/Colors';
-import { useNativeSplashHandoff } from '@/hooks/use-native-splash-handoff';
+import { recordCrashBreadcrumb } from '@/lib/crash-diagnostics';
+import { markStartupTiming } from '@/lib/startup-timing';
 
 interface RootStartupErrorProps {
   error: Error;
@@ -15,28 +17,32 @@ interface RootStartupErrorProps {
 }
 
 export function RootStartupError({ error, retry }: RootStartupErrorProps) {
-  // Expo Router replaces the failed root tree with this boundary, so it must
-  // own its own layout callback. The native controller shares its intro latch
-  // across waiters and coalesces hide calls while a hide is in flight.
-  const { onFirstLayout, shouldRenderApp } = useNativeSplashHandoff({
-    initialVisible: true,
-    ready: true,
-  });
+  // A crash fallback should be visible immediately; a fresh intro waiter here
+  // would add another timeout after the root screen has already failed.
+  useEffect(() => {
+    try {
+      void Promise.resolve(
+        SplashMotion.hide({ waitForLoop: false, minDuration: 0, fade: 220 })
+      ).then(
+        () => markStartupTiming('splash_hide_completed'),
+        () => {
+          recordCrashBreadcrumb('root_startup_error:native_splash_hide_failed');
+          markStartupTiming('splash_hide_failed');
+        }
+      );
+    } catch {
+      recordCrashBreadcrumb('root_startup_error:native_splash_hide_failed');
+      markStartupTiming('splash_hide_failed');
+    }
+  }, []);
   const systemScheme = useColorScheme();
   const colors = Colors[systemScheme === 'dark' ? 'dark' : 'light'];
   useEffect(() => {
     logError(error, undefined, 'expo-router-fallback');
   }, [error]);
 
-  if (!shouldRenderApp) return <View style={{ flex: 1 }} />;
-
   return (
-    <View
-      key={shouldRenderApp ? 'startup-error' : 'startup-placeholder'}
-      testID="root-startup-error"
-      onLayout={onFirstLayout}
-      style={{ flex: 1 }}
-    >
+    <View testID="root-startup-error" style={{ flex: 1 }}>
       <ErrorFallbackView
         colors={colors}
         content={getErrorContent(classifyError(error))}

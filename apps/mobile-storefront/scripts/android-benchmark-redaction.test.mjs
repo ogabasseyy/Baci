@@ -22,3 +22,14 @@ test('redacts literal, URL-encoded, base64 and line-wrapped private values', () 
 test('leaves output unchanged when no private values are supplied', () => {
   assert.equal(redactPrivateValues('build failed', []), 'build failed');
 });
+
+
+test('keeps wrapped-pattern work bounded for long secrets in large logs', () => {
+  const secret = 'x'.repeat(2048);
+  const log = `${'noise\n'.repeat(100_000)}${secret}`;
+  const start = performance.now();
+  const redacted = redactPrivateValues(log, [secret]);
+
+  assert.ok(performance.now() - start < 2000);
+  assert.ok(redacted.endsWith('[REDACTED]'));
+});

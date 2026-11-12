@@ -100,6 +100,42 @@ it('keeps the JS splash visible and exposes recovery when native hide fails', as
   });
 });
 
+it('retries one more time after both native hide attempts fail', async () => {
+  mockHide
+    .mockRejectedValueOnce(new Error('native hide failed'))
+    .mockRejectedValueOnce(new Error('native hide fallback failed'))
+    .mockResolvedValueOnce(undefined);
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
+  );
+
+  await act(async () => intro.resolve(true));
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(result.current.showSplash).toBe(false));
+
+  expect(result.current.hideFailed).toBe(false);
+  expect(mockHide).toHaveBeenCalledTimes(3);
+  expect(mockHide).toHaveBeenLastCalledWith({
+    waitForLoop: false,
+    minDuration: 0,
+    fade: 0,
+  });
+});
+
+it('keeps persistent native hide failures bounded before exposing recovery', async () => {
+  mockHide.mockRejectedValue(new Error('native hide unavailable'));
+  const { result } = renderHook(() =>
+    useNativeSplashHandoff({ initialVisible: true, ready: true })
+  );
+
+  await act(async () => intro.resolve(true));
+  act(() => result.current.onFirstLayout());
+  await waitFor(() => expect(mockHide).toHaveBeenCalledTimes(3));
+
+  expect(result.current.showSplash).toBe(true);
+  expect(result.current.hideFailed).toBe(true);
+});
+
 it('keeps holding after intro and layout while initialization is not ready', async () => {
   const { result, rerender } = renderHook(
     ({ ready }: { ready: boolean }) =>

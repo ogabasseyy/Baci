@@ -3,6 +3,7 @@ import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import type { TextInputInstance } from 'react-native';
 import {
+  AppState,
   Keyboard,
   Pressable,
   StyleSheet,
@@ -103,6 +104,15 @@ export function SearchOverlay({
     }
     categoryNavigationPending.current = true;
     const generation = categoryNavigationGeneration.current;
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      categoryNavigationGeneration.current += 1;
+    });
+    const appStateSubscription = AppState.addEventListener(
+      'change',
+      (state) => {
+        if (state !== 'active') categoryNavigationGeneration.current += 1;
+      }
+    );
     try {
       await dismissKeyboardForNavigation();
       if (
@@ -114,6 +124,8 @@ export function SearchOverlay({
       onClose();
       router.push({ pathname: '/category/[slug]', params: { slug } });
     } finally {
+      unsubscribeBlur();
+      appStateSubscription.remove();
       categoryNavigationPending.current = false;
     }
   };

@@ -70,6 +70,10 @@ export function useNativeSplashHandoff({
       if (hidden) {
         setShowSplash(false);
       } else {
+        // A one-off bridge failure can still be recoverable. Leave the cached
+        // promise clear so the bounded recovery attempt below can call native
+        // hide again.
+        hidePromiseRef.current = null;
         setHideFailed(true);
       }
     });
@@ -77,6 +81,39 @@ export function useNativeSplashHandoff({
       active = false;
     };
   }, [showSplash, timedOut, ready, hasLayout, intro.settled]);
+
+  useEffect(() => {
+    if (!showSplash || !hideFailed) return;
+    let active = true;
+    recordCrashBreadcrumb('root_layout:native_splash_hide_recovery_requested');
+    hidePromiseRef.current = Promise.resolve()
+      .then(() =>
+        SplashMotion.hide({
+          waitForLoop: false,
+          minDuration: 0,
+          fade: 0,
+        })
+      )
+      .then(
+        () => true,
+        () => false
+      );
+    void hidePromiseRef.current.then((hidden) => {
+      if (!active) return;
+      if (hidden) {
+        markStartupTiming('splash_hide_completed');
+        setHideFailed(false);
+        setShowSplash(false);
+      } else {
+        // Keep this as one bounded retry; a persistent native failure falls
+        // through to StartupRecoveryScreen and the native watchdog.
+        hidePromiseRef.current = null;
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [showSplash, hideFailed]);
 
   const onFirstLayout = () => {
     if (firstLayoutRecorded.current) return;

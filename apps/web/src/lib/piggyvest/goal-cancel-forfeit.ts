@@ -39,7 +39,9 @@ interface Ports {
   ) => Promise<'released' | 'needs_review' | 'not_released'>;
   // Hands a claimed forfeit back unsent (same reference): retryable, never a
   // rejection, for a destination check that fails or can not run.
-  unclaim: (forfeitId: string) => Promise<'unclaimed' | 'not_released'>;
+  unclaim: (
+    forfeitId: string
+  ) => Promise<'unclaimed_first' | 'unclaimed' | 'not_released'>;
   // Evidence-side status read of a dispatched forfeit (settle or release
   // from a verified provider record). Absent: the outcome stays pending.
   reconcile?: (forfeitId: string) => Promise<{ status: string }>;

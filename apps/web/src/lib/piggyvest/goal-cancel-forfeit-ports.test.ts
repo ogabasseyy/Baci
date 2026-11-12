@@ -130,6 +130,27 @@ it("accepts only Ogabassey's own active wallet in this business as the interest 
     mocks.retrieve.mockResolvedValue({ ...ownWallet, ...wrong });
     expect(await ports.verifyDestination(forfeit)).toBe(false);
   }
+  // The check itself never pages; the hand-back does, once.
+  expect(mocks.alert).not.toHaveBeenCalled();
+});
+
+it('pages once per forfeit when a failed wallet check hands it back', async () => {
+  const unclaim = vi
+    .fn()
+    .mockResolvedValueOnce('unclaimed_first')
+    .mockResolvedValueOnce('unclaimed');
+  const ports = forfeitDriverPorts({
+    claim: vi.fn(),
+    release: vi.fn(),
+    unclaim,
+    provider,
+    evidence: null,
+    operationId,
+    expectedDestinationWalletId: 'interest-wallet',
+  });
+  await ports.unclaim(forfeit.operationId);
+  await ports.unclaim(forfeit.operationId);
+  expect(mocks.alert).toHaveBeenCalledOnce();
   expect(mocks.alert).toHaveBeenCalledWith(
     'PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE',
     { reason: 'interest_wallet_not_ours', operationId }

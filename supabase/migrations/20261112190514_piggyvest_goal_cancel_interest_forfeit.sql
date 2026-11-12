@@ -649,7 +649,9 @@ $$;
 -- Hands a claimed forfeit back unsent (dispatched -> reserved, same
 -- reference: nothing was POSTed under it). Used when the destination check
 -- fails or can not run before the POST: retryable, never a rejection. Merges
--- with an unsent forfeit planned meanwhile. Caller holds the intent lock.
+-- with an unsent forfeit planned meanwhile. Answers 'unclaimed_first' the
+-- first time for a forfeit (stamps alerted_at, so the caller pages once) and
+-- 'unclaimed' after that. Caller holds the intent lock.
 CREATE FUNCTION piggyvest_primary.unclaim_goal_cancel_forfeit_row(p_forfeit_id uuid)
 RETURNS text
 LANGUAGE plpgsql
@@ -679,6 +681,10 @@ BEGIN
        SET state = 'reserved', dispatched_at = NULL
      WHERE id = v_forfeit.id;
   END IF;
+  UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+     SET alerted_at = pg_catalog.clock_timestamp()
+   WHERE id = v_forfeit.id AND alerted_at IS NULL;
+  IF FOUND THEN RETURN 'unclaimed_first'; END IF;
   RETURN 'unclaimed';
 END;
 $$;

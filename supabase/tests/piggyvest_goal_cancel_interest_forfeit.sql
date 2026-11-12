@@ -602,8 +602,9 @@ BEGIN
     PERFORM pg_temp.gc_assert(
       CASE WHEN v_round % 2 = 0
         THEN piggyvest_primary.unclaim_goal_cancel_forfeit_worker(c_integration, 'staging', v_forfeit::uuid)
-        ELSE piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') END = 'unclaimed',
-      'round ' || v_round || ' was not handed back');
+        ELSE piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'unclaim') END
+        = CASE WHEN v_round = 1 THEN 'unclaimed_first' ELSE 'unclaimed' END,
+      'round ' || v_round || ' was not handed back, or paged more than once');
     PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'reserved'
       AND pg_temp.gf_forfeit(v_op, 'reference') = v_ref
       AND pg_temp.gf_forfeit(v_op, 'dispatched_at') IS NULL,

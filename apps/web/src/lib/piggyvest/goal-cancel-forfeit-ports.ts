@@ -71,11 +71,7 @@ export function forfeitDriverPorts(input: {
         wallet.api_customer_id !== forfeit.providerCustomerId &&
         wallet.currency === 'NGN' &&
         wallet.status === 'active';
-      if (!ours)
-        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
-          reason: 'interest_wallet_not_ours',
-          operationId,
-        });
+      // Not paged here: the hand-back that follows pages once per forfeit.
       return ours;
     },
     transfer: async (forfeit) =>
@@ -95,7 +91,17 @@ export function forfeitDriverPorts(input: {
         token: provider.token,
         baseUrl: provider.baseUrl,
       }),
-    unclaim: input.unclaim,
+    unclaim: async (id) => {
+      const unclaimed = await input.unclaim(id);
+      // The database stamps the first hand-back of a forfeit, so a lasting
+      // wallet mismatch (or check outage) pages once, not on every attempt.
+      if (unclaimed === 'unclaimed_first')
+        emitPiggyvestWebhookAlert('PIGGYVEST_GOAL_CANCEL_FORFEIT_UNAVAILABLE', {
+          reason: 'interest_wallet_not_ours',
+          operationId,
+        });
+      return unclaimed;
+    },
     release: async (id) => {
       const released = await input.release(id);
       if (released === 'needs_review')

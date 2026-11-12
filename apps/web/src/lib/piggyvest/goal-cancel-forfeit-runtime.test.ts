@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { PiggyvestApiError } from './client';
 import {
   sweepGoalCancelForfeit,
   withGoalCancelAmounts,
@@ -36,7 +37,7 @@ const provider = { token: 'token', baseUrl: 'https://example.test' };
 function store(claim: unknown) {
   return {
     claimForfeit: vi.fn().mockResolvedValue(claim),
-    releaseForfeit: vi.fn().mockResolvedValue(true),
+    releaseForfeit: vi.fn().mockResolvedValue('needs_review'),
     readAmounts: vi
       .fn()
       .mockResolvedValue({ principalKobo: 1, forfeitedInterestKobo: 0 }),
@@ -137,4 +138,24 @@ it('attaches the server amounts only to answers with a dispatched attempt behind
   ).toEqual({
     status: 'released',
   });
+});
+
+it('pages once when the third rejected forfeit is capped into review', async () => {
+  mocks.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  mocks.lookup.mockResolvedValue('not_found');
+  expect(
+    await sweepGoalCancelForfeit({
+      store: store({ status: 'claimed', forfeit }),
+      provider,
+      evidence: null,
+      operationId,
+    })
+  ).toBe('needs_review');
+  expect(mocks.alert).toHaveBeenCalledOnce();
+  expect(mocks.alert).toHaveBeenCalledWith(
+    'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+    { reason: 'forfeit_rejected_three_times', operationId }
+  );
 });

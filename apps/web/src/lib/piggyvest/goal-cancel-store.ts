@@ -111,7 +111,7 @@ export function createGoalCancelStore(input: {
         schemas.operationId.parse(forfeitId),
         'release',
       ]);
-      return schemas.acknowledgement.parse(result.rows)[0].result;
+      return forfeitSchemas.releaseRows.parse(result.rows)[0].result;
     },
     async cancelBeforeDispatch(operationId: string) {
       return await manage(operationId, 'cancel', null);

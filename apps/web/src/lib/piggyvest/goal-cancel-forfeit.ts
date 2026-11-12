@@ -27,7 +27,11 @@ interface Ports {
   lookupTransfer: (
     forfeit: GoalCancelForfeit
   ) => Promise<TransferReferenceLookup>;
-  release: (forfeitId: string) => Promise<boolean>;
+  // The forfeit's new state; 'needs_review' when this was the third
+  // rejection (the caller pages), 'not_released' when it was not dispatched.
+  release: (
+    forfeitId: string
+  ) => Promise<'released' | 'needs_review' | 'not_released'>;
   // Evidence-side status read of a dispatched forfeit (settle or release
   // from a verified provider record). Absent: the outcome stays pending.
   reconcile?: (forfeitId: string) => Promise<{ status: string }>;
@@ -56,9 +60,7 @@ export async function driveGoalCancelForfeit(
     const response = await ports.transfer(forfeit);
     if (response.accepted !== true) throw new Error('Invalid acceptance');
   } catch (error) {
-    if (await releaseIfDefinitivelyRejected(forfeit, error, ports))
-      return 'released';
-    return 'pending';
+    return await releaseIfDefinitivelyRejected(forfeit, error, ports);
   }
   return await readStatus(forfeit.operationId, ports);
 }
@@ -76,14 +78,15 @@ async function releaseIfDefinitivelyRejected(
   forfeit: GoalCancelForfeit,
   error: unknown,
   ports: Pick<Ports, 'lookupTransfer' | 'release'>
-): Promise<boolean> {
-  if (!isDefinitiveNoTransferRejection(error)) return false;
+): Promise<'released' | 'needs_review' | 'pending'> {
+  if (!isDefinitiveNoTransferRejection(error)) return 'pending';
   let lookup: TransferReferenceLookup;
   try {
     lookup = await ports.lookupTransfer(forfeit);
   } catch {
-    return false;
+    return 'pending';
   }
-  if (lookup !== 'not_found') return false;
-  return await ports.release(forfeit.operationId);
+  if (lookup !== 'not_found') return 'pending';
+  const released = await ports.release(forfeit.operationId);
+  return released === 'not_released' ? 'pending' : released;
 }

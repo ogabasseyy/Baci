@@ -481,7 +481,11 @@ BEGIN
   SELECT pg_catalog.count(*) INTO v_released FROM piggyvest_primary.goal_cancel_interest_forfeits AS prior
    WHERE prior.cancel_operation_id = v_forfeit.cancel_operation_id AND prior.state = 'released';
   IF v_released >= 2 THEN
-    UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'needs_review' WHERE id = v_forfeit.id;
+    -- Stamped as alerted: the caller of this transition pages, so later
+    -- claims do not page again.
+    UPDATE piggyvest_primary.goal_cancel_interest_forfeits
+       SET state = 'needs_review', alerted_at = pg_catalog.clock_timestamp()
+     WHERE id = v_forfeit.id;
     RETURN 'needs_review';
   END IF;
   UPDATE piggyvest_primary.goal_cancel_interest_forfeits SET state = 'released' WHERE id = v_forfeit.id;
@@ -588,8 +592,10 @@ $$;
 
 -- 'release': dispatched -> released (or needs_review on the third), after a
 -- definitive provider rejection with no transfer on record for the reference.
+-- Returns the new state ('released' or 'needs_review', so the caller pages on
+-- the cap), or 'not_released' when the forfeit was not dispatched.
 CREATE FUNCTION piggyvest_primary.manage_goal_cancel_forfeit(scope jsonb, forfeit_id uuid, action text)
-RETURNS boolean
+RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
@@ -608,9 +614,8 @@ BEGIN
    WHERE forfeit.id = manage_goal_cancel_forfeit.forfeit_id AND forfeit.intent_id = v_intent_id
      AND forfeit.integration_id = (scope ->> 'integrationId')::uuid
      FOR UPDATE;
-  IF NOT FOUND OR v_forfeit.state <> 'dispatched' THEN RETURN false; END IF;
-  PERFORM piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
-  RETURN true;
+  IF NOT FOUND OR v_forfeit.state <> 'dispatched' THEN RETURN 'not_released'; END IF;
+  RETURN piggyvest_primary.release_goal_cancel_forfeit_row(v_forfeit.id);
 END;
 $$;
 
@@ -820,9 +825,11 @@ BEGIN
 END;
 $$;
 
--- 8. A customer leg that is released (before or after dispatch) takes its
--- unsent forfeit with it: interest is only ever forfeited for a cancel that
--- happened.
+-- 8. A customer leg that is released (before or after dispatch), or whose
+-- review an operator clears ('reviewed': the operator resolves what the goal
+-- wallet still holds, and a later cancel plans its own forfeit), takes its
+-- unsent forfeit with it: interest is only ever forfeited automatically for a
+-- cancel that was confirmed.
 CREATE FUNCTION piggyvest_primary.release_unsent_goal_cancel_forfeit()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -838,7 +845,7 @@ END;
 $$;
 CREATE TRIGGER release_unsent_goal_cancel_forfeit
   AFTER UPDATE OF state ON piggyvest_primary.goal_cancel_operations
-  FOR EACH ROW WHEN (NEW.state = 'released' AND OLD.state IS DISTINCT FROM 'released')
+  FOR EACH ROW WHEN (NEW.state IN ('released', 'reviewed') AND OLD.state IS DISTINCT FROM NEW.state)
   EXECUTE FUNCTION piggyvest_primary.release_unsent_goal_cancel_forfeit();
 
 -- A customer may not be deleted while a forfeit transfer is in flight:

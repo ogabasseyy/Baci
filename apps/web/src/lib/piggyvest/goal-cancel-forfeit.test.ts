@@ -19,7 +19,7 @@ function ports() {
     claim: vi.fn().mockResolvedValue({ status: 'claimed', forfeit }),
     transfer: vi.fn().mockResolvedValue({ accepted: true }),
     lookupTransfer: vi.fn().mockResolvedValue('not_found'),
-    release: vi.fn().mockResolvedValue(true),
+    release: vi.fn().mockResolvedValue('released'),
     reconcile: vi.fn().mockResolvedValue({ status: 'pending' }),
   };
 }
@@ -111,4 +111,13 @@ it('answers pending without a status read when no reconciler is bound', async ()
   const p = ports();
   const { reconcile: _reconcile, ...rest } = p;
   expect(await driveGoalCancelForfeit(operationId, rest)).toBe('pending');
+});
+
+it('reports needs_review when the database caps a third rejected forfeit', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.release.mockResolvedValue('needs_review');
+  expect(await driveGoalCancelForfeit(operationId, p)).toBe('needs_review');
 });

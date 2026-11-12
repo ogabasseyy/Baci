@@ -126,8 +126,8 @@ describe('forfeit leg', () => {
   });
 
   it('releases a rejected forfeit through the fixed statement', async () => {
-    const { execute, store: s } = store([{ result: true }]);
-    expect(await s.releaseForfeit(forfeitId)).toBe(true);
+    const { execute, store: s } = store([{ result: 'needs_review' }]);
+    expect(await s.releaseForfeit(forfeitId)).toBe('needs_review');
     expect(execute).toHaveBeenCalledWith(forfeitSql.manage, [
       scopeText,
       forfeitId,

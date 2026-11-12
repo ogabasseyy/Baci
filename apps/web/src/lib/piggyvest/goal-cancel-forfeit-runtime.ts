@@ -67,7 +67,20 @@ export async function sweepGoalCancelForfeit(input: {
           token: provider.token,
           baseUrl: provider.baseUrl,
         }),
-      release: (id) => store.releaseForfeit(id),
+      release: async (id) => {
+        const released = await store.releaseForfeit(id);
+        // The third rejection: the database moved it to review and stamped
+        // it as alerted, so this is the one page for it.
+        if (released === 'needs_review')
+          emitPiggyvestWebhookAlert(
+            'PIGGYVEST_GOAL_CANCEL_FORFEIT_NEEDS_REVIEW',
+            {
+              reason: 'forfeit_rejected_three_times',
+              operationId,
+            }
+          );
+        return released;
+      },
       ...(evidence === null
         ? {}
         : {

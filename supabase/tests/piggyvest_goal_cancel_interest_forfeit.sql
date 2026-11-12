@@ -226,6 +226,21 @@ BEGIN
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'none',
     'a rejected cancel still had a sendable forfeit');
 
+  -- A cancel settled into review whose review an operator clears retires its
+  -- unsent forfeit too (no unreachable reserved row is left behind).
+  BEGIN
+    v_op := pg_temp.gc_reserved('review-cleared');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'split for review');
+    PERFORM pg_temp.gc_assert(
+      pg_temp.gc_settle(pg_temp.gc_proof(v_op) || '{"residualKobo":20000}'::jsonb) = 'conflict', 'review settle');
+    PERFORM pg_temp.gc_assert(piggyvest_primary.clear_goal_cancel_review(v_op::uuid, 'checked'), 'clear');
+    PERFORM pg_temp.gc_assert(pg_temp.gf_forfeit(v_op, 'state') = 'released'
+      AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid) ->> 'status' = 'none',
+      'a cleared review left its forfeit live');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+
   -- References are never reused: the next forfeit takes a fresh suffix.
   v_op := pg_temp.gc_reserved('forfeit-rejected');
   PERFORM pg_temp.gc_assert(pg_temp.gf_split(v_op, 262000) ->> 'status' = 'dispatched', 'second split');
@@ -266,8 +281,10 @@ BEGIN
       PERFORM pg_temp.gc_assert(piggyvest_primary.release_failed_goal_cancel_forfeit(c_integration, 'staging',
           pg_temp.gf_forfeit_proof(v_forfeit, 'failed')) = 'duplicate', 'an evidence release replay was not a duplicate');
     ELSE
-      PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release'),
-        'round ' || v_round || ' release refused');
+      -- The third rejection answers needs_review so the caller pages.
+      PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release')
+          = CASE WHEN v_round < 3 THEN 'released' ELSE 'needs_review' END,
+        'round ' || v_round || ' release answered wrongly');
     END IF;
     PERFORM pg_temp.gc_assert(
       (SELECT state FROM piggyvest_primary.goal_cancel_interest_forfeits WHERE id = v_forfeit::uuid)
@@ -278,12 +295,11 @@ BEGIN
                               WHERE cancel_operation_id = v_op::uuid) = 3
     AND (SELECT pg_catalog.count(DISTINCT reference) FROM piggyvest_primary.goal_cancel_interest_forfeits) = 4
     AND piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
-      = '{"status":"needs_review","alert":true}'::jsonb,
-    'forfeit replacements are unbounded or reuse references');
-  -- A stuck forfeit pages once, not on every status poll.
-  PERFORM pg_temp.gc_assert(piggyvest_primary.claim_goal_cancel_forfeit(v_scope, v_op::uuid)
       = '{"status":"needs_review"}'::jsonb,
-    'a stuck forfeit asked for a second page');
+    'forfeit replacements are unbounded or reuse references, or the cap paged twice');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.manage_goal_cancel_forfeit(v_scope, v_forfeit::uuid, 'release') = 'not_released',
+    'an undispatched forfeit was released');
 
   -- 12. Grants: customer-side functions for the authorizer, settlement for the
   --     evidence login, nothing for anyone else.

@@ -78,5 +78,12 @@ export const piggyvestGoalCancelForfeitSchemas = {
       })
     )
     .length(1),
+  releaseRows: z
+    .array(
+      z.strictObject({
+        result: z.enum(['released', 'needs_review', 'not_released']),
+      })
+    )
+    .length(1),
   reference: z.string().regex(/^pvb-forfeit-[0-9a-f-]{36}(-[1-9][0-9]{0,5})?$/),
 };

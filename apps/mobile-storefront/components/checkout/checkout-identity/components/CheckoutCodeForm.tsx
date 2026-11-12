@@ -14,10 +14,10 @@ import { styles } from './CheckoutCodeForm.styles';
 import { CheckoutCodeFormActions } from './CheckoutCodeFormActions';
 import type { OtpSendResult } from './checkout-otp-state';
 import {
+  clearOtpState,
   getInFlightOtpSend,
   getResendCooldown,
   hasPendingOtp,
-  pendingOtpEmails,
   sendOtpOnce,
 } from './checkout-otp-state';
 import { ErrorAlert } from './ErrorAlert';
@@ -161,7 +161,7 @@ export function CheckoutCodeForm({
         successfulSendCooldown = outcome.cooldownUntil;
       }
       if (result.success && sentTo && !resend) {
-        pendingOtpEmails.delete(sentTo);
+        clearOtpState(sentTo);
       }
       if (!active.current) return;
       if (!result.success) {

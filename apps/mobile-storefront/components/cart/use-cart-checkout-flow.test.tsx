@@ -104,6 +104,20 @@ it('keeps a deferred reprice review fenced after the identity sheet opens', () =
   expect(mockRouterPush).not.toHaveBeenCalled();
 });
 
+it('keeps authenticated checkout fenced when reprice appears during recovery', () => {
+  const { rerender } = renderHook(
+    ({ isPriceChangeVisible }: { isPriceChangeVisible: boolean }) =>
+      useCartCheckoutFlow({ isAuthenticated: true, isPriceChangeVisible }),
+    { initialProps: { isPriceChangeVisible: false } }
+  );
+
+  const checkoutReady = mockOnReady;
+  rerender({ isPriceChangeVisible: true });
+  act(() => checkoutReady?.());
+
+  expect(mockRouterPush).not.toHaveBeenCalled();
+});
+
 it('closes the cart-owned overlay when the route loses focus', () => {
   mockIsFocused = false;
   mockIsIdentityOpen = true;

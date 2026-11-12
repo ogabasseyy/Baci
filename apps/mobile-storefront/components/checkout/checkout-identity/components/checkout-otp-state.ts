@@ -14,17 +14,23 @@ export const resendCooldownsByEmail = new Map<string, number>();
 export const pendingOtpEmails = new Map<string, number>();
 const inFlightOtpSends = new Map<string, Promise<OtpSendOutcome>>();
 
-export function getResendCooldown(email: string): number | null {
-  const until = resendCooldownsByEmail.get(email);
-  if (!until) return null;
-  if (until > Date.now()) return until;
-  return null;
-}
-
 function pruneExpired(entries: Map<string, number>, now: number) {
   for (const [email, expiresAt] of entries) {
     if (expiresAt <= now) entries.delete(email);
   }
+}
+
+export function clearOtpState(email: string) {
+  resendCooldownsByEmail.delete(email);
+  pendingOtpEmails.delete(email);
+}
+
+export function getResendCooldown(email: string): number | null {
+  const now = Date.now();
+  pruneExpired(resendCooldownsByEmail, now);
+  pruneExpired(pendingOtpEmails, now);
+  const until = resendCooldownsByEmail.get(email);
+  return until ?? null;
 }
 
 function setBoundedExpiry(
@@ -51,8 +57,11 @@ function startResendCooldown(email: string): number {
 }
 
 export function hasPendingOtp(email: string): boolean {
+  const now = Date.now();
+  pruneExpired(pendingOtpEmails, now);
+  pruneExpired(resendCooldownsByEmail, now);
   const expiresAt = pendingOtpEmails.get(email);
-  return expiresAt !== undefined && expiresAt > Date.now();
+  return expiresAt !== undefined;
 }
 
 export function sendOtpOnce(

@@ -30,7 +30,7 @@ export function useCartCheckoutFlow({
   }, [closeCheckoutIdentity, isIdentityModalOpen, isRouteFocused]);
 
   const { recoverCheckout, isPreparing } = useCartCheckoutRecovery(() => {
-    if (isPriceChangeVisible) return;
+    if (isPriceChangeVisibleRef.current) return;
     if (isAuthenticated) {
       router.push('/checkout');
       return;
